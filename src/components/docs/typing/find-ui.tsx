@@ -22,18 +22,20 @@ function useFind(editor: Editor) {
     editor,
     selector: ({ editor: e }) => {
       const f = findState(e.state);
-      return { open: f.open, query: f.query, options: f.options, count: f.results.length, current: f.current };
+      return { query: f.query, options: f.options, count: f.results.length, current: f.current };
     },
-    equalityFn: (a, b) =>
-      !!b &&
-      a.open === b.open &&
-      a.query === b.query &&
-      a.count === b.count &&
-      a.current === b.current &&
-      a.options.matchCase === b.options.matchCase &&
-      a.options.regex === b.options.regex &&
-      a.options.ignoreDiacritics === b.options.ignoreDiacritics,
   });
+}
+
+/** The field's words: what the reader types, and the query when the search sets it. */
+function useDraft(query: string) {
+  const [draft, setDraft] = useState(query);
+  const [prev, setPrev] = useState(query);
+  if (prev !== query) {
+    setPrev(query);
+    setDraft(query);
+  }
+  return [draft, setDraft] as const;
 }
 
 function Counter({ count, current, query }: { count: number; current: number; query: string }) {
@@ -92,29 +94,24 @@ export function FindBar({
   const find = useFind(editor);
   const inputRef = useRef<HTMLInputElement>(null);
   const pos = useBarPosition(editor, open);
-  const [draft, setDraft] = useState(find.query);
-  const [prevQuery, setPrevQuery] = useState(find.query);
-  if (prevQuery !== find.query) {
-    setPrevQuery(find.query);
-    setDraft(find.query);
-  }
+  const [draft, setDraft] = useDraft(find.query);
 
   const placed = pos !== null;
   useEffect(() => {
     if (!open || !placed) return;
-    const input = inputRef.current;
-    if (!input) return;
-    input.focus();
-    input.select();
+    inputRef.current?.focus();
+    inputRef.current?.select();
   }, [open, focusToken, placed]);
 
   if (!open || typeof document === "undefined") return null;
   const view = editor.view;
-  const search = (query: string) => {
-    setDraft(query);
-    searchFrom(view, { query });
-  };
   const none = find.count === 0;
+  const buttons = [
+    { label: t("docsTyping.previous"), icon: <ExpandLessIcon />, run: () => stepResult(view, -1), off: none },
+    { label: t("docsTyping.next"), icon: <ExpandMoreIcon />, run: () => stepResult(view, 1), off: none },
+    { label: t("docsTyping.moreOptions"), icon: <MoreVertIcon />, run: onMore, off: false },
+    { label: t("docs.close"), icon: <CloseIcon />, run: onClose, off: false },
+  ];
   return createPortal(
     <div
       role="search"
@@ -124,13 +121,16 @@ export function FindBar({
       data-docs-typing
       onMouseUp={(e) => e.stopPropagation()}
     >
-      <div className="docs-find-field">
+      <div className="docs-outlined">
         <input
           ref={inputRef}
           value={draft}
           placeholder={t("docsTyping.findInDocument")}
           aria-label={t("docsTyping.findInDocument")}
-          onChange={(e) => search(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            searchFrom(view, { query: e.target.value });
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -141,70 +141,42 @@ export function FindBar({
               onClose();
             }
           }}
-          className="docs-find-input"
           spellCheck={false}
         />
         <Counter count={find.count} current={find.current} query={find.query} />
       </div>
       <div className="docs-find-buttons">
-        <button
-          type="button"
-          className="docs-find-btn"
-          aria-label={t("docsTyping.previous")}
-          data-tip={t("docsTyping.previous")}
-          disabled={none}
-          onMouseDown={keepFocus}
-          onClick={() => stepResult(view, -1)}
-        >
-          <ExpandLessIcon />
-        </button>
-        <button
-          type="button"
-          className="docs-find-btn"
-          aria-label={t("docsTyping.next")}
-          data-tip={t("docsTyping.next")}
-          disabled={none}
-          onMouseDown={keepFocus}
-          onClick={() => stepResult(view, 1)}
-        >
-          <ExpandMoreIcon />
-        </button>
-        <button
-          type="button"
-          className="docs-find-btn"
-          aria-label={t("docsTyping.moreOptions")}
-          data-tip={t("docsTyping.moreOptions")}
-          onMouseDown={keepFocus}
-          onClick={onMore}
-        >
-          <MoreVertIcon />
-        </button>
-        <button
-          type="button"
-          className="docs-find-btn"
-          aria-label={t("docsTyping.close")}
-          data-tip={t("docsTyping.close")}
-          onMouseDown={keepFocus}
-          onClick={onClose}
-        >
-          <CloseIcon />
-        </button>
+        {buttons.map((b) => (
+          <button
+            key={b.label}
+            type="button"
+            className="docs-icon-btn"
+            aria-label={b.label}
+            data-tip={b.label}
+            disabled={b.off}
+            onMouseDown={keepFocus}
+            onClick={b.run}
+          >
+            {b.icon}
+          </button>
+        ))}
       </div>
     </div>,
     document.body,
   );
 }
 
+const OPTIONS = [
+  ["matchCase", "docsTyping.matchCase"],
+  ["regex", "docsTyping.useRegex"],
+  ["ignoreDiacritics", "docsTyping.ignoreDiacritics"],
+] as const;
+
 export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; open: boolean; onClose: () => void }) {
   const t = useT();
   const find = useFind(editor);
   const findRef = useRef<HTMLInputElement>(null);
-  const [draft, setDraft] = useState(find.query);
-  const [prevQuery, setPrevQuery] = useState(find.query);
-  if (prevQuery !== find.query) {
-    setPrevQuery(find.query);
-    setDraft(find.query);
-  }
+  const [draft, setDraft] = useDraft(find.query);
   const [replacement, setReplacement] = useState("");
   const [message, setMessage] = useState("");
 
@@ -217,11 +189,6 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
   if (!open || typeof document === "undefined") return null;
   const view = editor.view;
   const none = find.count === 0;
-  const search = (query: string) => {
-    setDraft(query);
-    setMessage("");
-    searchFrom(view, { query });
-  };
   const setOption = (patch: Partial<FindOptions>) => {
     setMessage("");
     searchFrom(view, { options: { ...find.options, ...patch } });
@@ -248,7 +215,7 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
     >
       <div className="docs-replace-head">
         <h2>{t("docsTyping.findAndReplace")}</h2>
-        <button type="button" className="docs-find-btn" aria-label={t("docsTyping.close")} onClick={onClose}>
+        <button type="button" className="docs-icon-btn" aria-label={t("docs.close")} onClick={onClose}>
           <CloseIcon size={24} />
         </button>
       </div>
@@ -258,7 +225,11 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
           <input
             ref={findRef}
             value={draft}
-            onChange={(e) => search(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setMessage("");
+              searchFrom(view, { query: e.target.value });
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -274,22 +245,12 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
           <input value={replacement} onChange={(e) => setReplacement(e.target.value)} spellCheck={false} />
         </label>
         <div className="docs-replace-checks">
-          <label className="docs-ty-check">
-            <input type="checkbox" checked={find.options.matchCase} onChange={(e) => setOption({ matchCase: e.target.checked })} />
-            {t("docsTyping.matchCase")}
-          </label>
-          <label className="docs-ty-check">
-            <input type="checkbox" checked={find.options.regex} onChange={(e) => setOption({ regex: e.target.checked })} />
-            {t("docsTyping.useRegex")}
-          </label>
-          <label className="docs-ty-check">
-            <input
-              type="checkbox"
-              checked={find.options.ignoreDiacritics}
-              onChange={(e) => setOption({ ignoreDiacritics: e.target.checked })}
-            />
-            {t("docsTyping.ignoreDiacritics")}
-          </label>
+          {OPTIONS.map(([key, label]) => (
+            <label key={key} className="docs-ty-check">
+              <input type="checkbox" checked={find.options[key]} onChange={(e) => setOption({ [key]: e.target.checked })} />
+              {t(label)}
+            </label>
+          ))}
         </div>
         <p className="docs-replace-message" aria-live="polite">
           {message}

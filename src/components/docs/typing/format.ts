@@ -7,7 +7,6 @@ import { applyFormatting, captureFormatting, type Formatting } from "@/component
 
 /** Small caps on or off (a textStyle attribute). */
 export function toggleSmallCaps(editor: Editor): boolean {
-  if (!editor.isEditable || !editor.state.schema.marks.textStyle) return false;
   const on = editor.getAttributes("textStyle").fontVariant === "small-caps";
   editor
     .chain()
@@ -19,7 +18,6 @@ export function toggleSmallCaps(editor: Editor): boolean {
 
 /** Ctrl+Alt+Enter: the checklist line under the caret ticks or unticks. */
 export function toggleCheckbox(editor: Editor): boolean {
-  if (!editor.isEditable) return true;
   const { state } = editor;
   const { $from } = state.selection;
   for (let d = $from.depth; d > 0; d--) {
@@ -45,6 +43,6 @@ export function copyFormatting(editor: Editor): boolean {
     format applies it. */
 export function pasteFormatting(editor: Editor): boolean {
   const formatting = copied.get(editor);
-  if (formatting && editor.isEditable) applyFormatting(editor, formatting);
+  if (formatting) applyFormatting(editor, formatting);
   return true;
 }

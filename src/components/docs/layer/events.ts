@@ -10,6 +10,12 @@ export const PAGE_FLASH_EVENT = "docs:flash";
     toolbar over the old words closes. */
 export const PAGE_EDITED_EVENT = "docs:edited";
 
+/** Raised on the page's text by View > Comments, with how the pane shows
+    its comments: "all" and "minimized" as their icons (Show all comments
+    also opens the Annotations tab), "hidden" not at all. */
+export const COMMENTS_EVENT = "docs:comments";
+export type CommentsView = "all" | "minimized" | "hidden";
+
 /** Flash an element of the page's text; false when it is not in a page. */
 export function flashInPage(el: Element): boolean {
   if (!el.closest("[data-docs-body]")) return false;

@@ -5,6 +5,7 @@ import { Selection, TextSelection, type EditorState, type Transaction } from "@t
 import { liftListItem, sinkListItem } from "@tiptap/pm/schema-list";
 import { canSplit } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
+import { atMenuState } from "@/components/docs/insert/at-plugin";
 import { blockText, previousTextblock, runAutocorrect, runCodeFence } from "@/components/docs/typing/autocorrect";
 import { firstGraphemeLength, lastGraphemeLength, wordEndAfter, wordStartBefore } from "@/components/docs/typing/chars";
 import { isList, isListItem } from "@/components/docs/typing/lists";
@@ -20,20 +21,6 @@ const MAX_LEVEL = 8;
 
 function isCell(node: PMNode | null | undefined): boolean {
   return node?.type.name === "tableCell" || node?.type.name === "tableHeader";
-}
-
-/** A pending "@" or ":" menu (any @tiptap/suggestion plugin) owns the keys. */
-function suggestionActive(state: EditorState): boolean {
-  return state.plugins.some((plugin) => {
-    const value: unknown = plugin.getState(state);
-    return (
-      typeof value === "object" &&
-      value !== null &&
-      (value as { active?: unknown }).active === true &&
-      "range" in value &&
-      "query" in value
-    );
-  });
 }
 
 // ── Undo grouping ───────────────────────────────────────────────────────
@@ -110,7 +97,7 @@ function dispatch(view: EditorView, tr: Transaction): void {
 export function enter(editor: Editor): boolean {
   const view = editor.view;
   const state = view.state;
-  if (!view.editable || suggestionActive(state)) return false;
+  if (atMenuState(state).active) return false;
   const sel = state.selection;
   if (!(sel instanceof TextSelection)) return false;
   if (sel.$from.parent.type.spec.code || sel.$to.parent.type.spec.code) return false;
@@ -189,7 +176,7 @@ function afterBreak(view: EditorView, trigger: string): void {
 export function lineBreak(editor: Editor): boolean {
   const view = editor.view;
   const state = view.state;
-  if (!view.editable || suggestionActive(state)) return false;
+  if (atMenuState(state).active) return false;
   const { $from } = state.selection;
   const tr = state.tr;
   groupEdit(view, tr, "insert");
@@ -287,7 +274,7 @@ type DeleteMode = "char" | "word" | "line";
 export function backspace(editor: Editor, mode: DeleteMode): boolean {
   const view = editor.view;
   const state = view.state;
-  if (!view.editable || suggestionActive(state)) return false;
+  if (atMenuState(state).active) return false;
   const sel = state.selection;
   if (!(sel instanceof TextSelection) || !sel.empty) {
     lastKind.set(view, "delete");
@@ -421,7 +408,7 @@ function removeBullet(view: EditorView, $from: ResolvedPos, item: ItemAt): boole
 export function deleteForward(editor: Editor, word: boolean, mac: boolean): boolean {
   const view = editor.view;
   const state = view.state;
-  if (!view.editable || suggestionActive(state)) return false;
+  if (atMenuState(state).active) return false;
   const sel = state.selection;
   if (!(sel instanceof TextSelection) || !sel.empty) {
     lastKind.set(view, "delete");
@@ -530,7 +517,7 @@ function nest(view: EditorView, item: ItemAt, shift: boolean): true {
 export function tab(editor: Editor, shift: boolean): boolean {
   const view = editor.view;
   const state = view.state;
-  if (!view.editable || suggestionActive(state)) return false;
+  if (atMenuState(state).active) return false;
   const sel = state.selection;
   if (inTable(sel.$from)) {
     if (shift) {
@@ -549,7 +536,7 @@ export function tab(editor: Editor, shift: boolean): boolean {
   const first = blocks[0];
   const whole =
     !sel.empty && blocks.length === 1 && first && sel.from <= first.pos + 1 && sel.to >= first.pos + 1 + first.node.content.size;
-  if (blocks.length > 1 || whole) return indentMany(view, shift);
+  if (blocks.length > 1 || whole) return indentMany(view, blocks, shift);
   const $from = sel.$from;
   const atStart = $from.parentOffset === 0;
   const item = listItemAt($from);
@@ -568,9 +555,8 @@ export function tab(editor: Editor, shift: boolean): boolean {
 /** Rule 1: every paragraph moves: list lines nest one level, other
     paragraphs move half an inch. Shift+Tab moves nothing when a paragraph
     would go past the margin. */
-function indentMany(view: EditorView, shift: boolean): true {
+function indentMany(view: EditorView, blocks: { node: PMNode; pos: number }[], shift: boolean): true {
   const state = view.state;
-  const blocks = touchedBlocks(state);
   const plain = blocks.filter((b) => !listItemAt(state.doc.resolve(b.pos + 1)));
   const listed = blocks.length - plain.length;
   if (shift && plain.some((b) => num(b.node.attrs.indentLeft) < STEP_PT)) return true;
@@ -603,7 +589,6 @@ function indentMany(view: EditorView, shift: boolean): true {
 export function moveParagraphs(editor: Editor, dir: -1 | 1): boolean {
   const view = editor.view;
   const state = view.state;
-  if (!view.editable) return false;
   const sel = state.selection;
   const $a = sel.$from;
   const $b = sel.$to;
@@ -743,12 +728,10 @@ function moveHead(view: EditorView, sel: TextSelection, target: number, extend: 
   return true;
 }
 
-/** Ctrl+← and → (Option on a Mac), a word at a time by Docs' character
-    classes, so don't and well-known are one word: ← stops at a word's
-    start; → at the next word's start (a Mac: at the word's end). At a
-    paragraph's edge the caret goes on to the next paragraph. Shift extends
-    the selection. A selected object and right-to-left text are the
-    browser's. */
+/** Ctrl+← and → (Option on a Mac) by Docs' words (don't, well-known): ← to
+    a word's start, → to the next word's start (a Mac: the word's end), on
+    across paragraph edges. Shift extends. Objects and right-to-left text
+    are the browser's. */
 export function moveWord(editor: Editor, dir: -1 | 1, extend: boolean, mac: boolean): boolean {
   const view = editor.view;
   const state = view.state;

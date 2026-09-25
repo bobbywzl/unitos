@@ -45,19 +45,6 @@ export const DOCS_FONTS: DocsFont[] = [
   { name: "Verdana", fallback: "'DejaVu Sans', sans-serif", web: false, weights: W2 },
 ];
 
-/** The weights by name, as the weight submenu lists them. */
-export const WEIGHT_NAMES: Record<number, string> = {
-  100: "Thin",
-  200: "Extra Light",
-  300: "Light",
-  400: "Normal",
-  500: "Medium",
-  600: "Semi Bold",
-  700: "Bold",
-  800: "Extra Bold",
-  900: "Black",
-};
-
 const BY_NAME = new Map(DOCS_FONTS.map((f) => [f.name.toLowerCase(), f]));
 
 /** The generic family a Google Fonts category falls back to. */
@@ -76,7 +63,8 @@ const MY_FONTS_KEY = "unitos-docs-my-fonts";
 const RECENT_KEY = "unitos-docs-recent-fonts";
 /** The font menu's RECENT section shows at most this many. */
 const RECENT_MAX = 5;
-const FONT_NAME = /^[\w\s'\-.]{1,80}$/;
+/** A face's name as a run or a named style stores it. */
+export const FONT_NAME = /^[\w\s'\-.]{1,80}$/;
 
 function readList(key: string): unknown[] {
   try {

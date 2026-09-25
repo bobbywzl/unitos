@@ -28,9 +28,10 @@ function formatBorder(b: BorderSpec): string {
   return `${Math.max(0, Math.min(99, Math.round(b.width * 100) / 100))} ${b.dash} ${b.color}`;
 }
 
-/** Which borders the border buttons change: Google Docs' 3 × 3 selector. */
-export type BorderTarget = "all" | "inner" | "outer" | "top" | "innerH" | "bottom" | "left" | "innerV" | "right";
-export const BORDER_TARGETS: BorderTarget[] = ["all", "inner", "outer", "top", "innerH", "bottom", "left", "innerV", "right"];
+/** Which borders the border buttons change, Google Docs' 3 × 3 selector,
+    each with its edges: top, bottom, left, right, inner h, inner v. */
+export const BORDER_TARGETS = { all: "tblrhv", inner: "hv", outer: "tblr", top: "t", innerH: "h", bottom: "b", left: "l", innerV: "v", right: "r" };
+export type BorderTarget = keyof typeof BORDER_TARGETS;
 
 export type VAlign = "top" | "middle" | "bottom";
 
@@ -634,24 +635,13 @@ function bordersTransaction(state: EditorState, rect: TableRect, target: BorderT
     entry[side] = true;
     edits.set(rel, entry);
   };
-  const want = (edge: "top" | "bottom" | "left" | "right" | "innerH" | "innerV") => {
-    switch (target) {
-      case "all":
-        return true;
-      case "inner":
-        return edge === "innerH" || edge === "innerV";
-      case "outer":
-        return edge === "top" || edge === "bottom" || edge === "left" || edge === "right";
-      default:
-        return target === edge;
-    }
-  };
+  const want = (edge: string) => BORDER_TARGETS[target].includes(edge);
   for (let row = rect.top; row < rect.bottom; row++) {
     for (let col = rect.left; col < rect.right; col++) {
-      const top = row === rect.top ? "top" : "innerH";
-      const bottom = row === rect.bottom - 1 ? "bottom" : "innerH";
-      const left = col === rect.left ? "left" : "innerV";
-      const right = col === rect.right - 1 ? "right" : "innerV";
+      const top = row === rect.top ? "t" : "h";
+      const bottom = row === rect.bottom - 1 ? "b" : "h";
+      const left = col === rect.left ? "l" : "v";
+      const right = col === rect.right - 1 ? "r" : "v";
       if (want(top)) {
         mark(row, col, "borderTop");
         mark(row - 1, col, "borderBottom");

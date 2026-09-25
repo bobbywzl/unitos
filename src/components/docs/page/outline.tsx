@@ -7,6 +7,7 @@ import { useT } from "@/components/lang-provider";
 import { DocIcon, OutlineIcon } from "@/components/docs/icons";
 import { ArrowBackIcon } from "@/components/docs/insert/icons";
 import { scrollParent } from "@/components/docs/page/geometry";
+import { usePageRect } from "@/components/docs/page/ruler";
 import { OUTLINE_MAX, OUTLINE_MIN, usePageState, type PageStore } from "@/components/docs/page/store";
 
 // The tabs & outlines panel (SPEC.md §29), Google Docs' left panel: the
@@ -105,13 +106,25 @@ function goTo(editor: Editor, item: OutlineItem, viewTop: number) {
   if (scroller) scroller.scrollTop += dom.getBoundingClientRect().top - viewTop - 24;
 }
 
-export function OutlineButton({ store, left }: { store: PageStore; left: number }) {
+/** Show tabs & outlines, at Google Docs' place at the canvas's top left
+    (32 px in beside the vertical ruler, else 50). It never covers the page:
+    while the page would come under it (the cards move the page left), it
+    moves left with the page, and it hides when the page leaves no room. */
+export function OutlineButton({ editor, store, ruler }: { editor: Editor; store: PageStore; ruler: boolean }) {
   const t = useT();
+  const setup = usePageState(store, (s) => s.setup);
+  const scale = usePageState(store, (s) => s.scale);
+  const page = usePageRect(editor, [setup, scale]);
+  const home = ruler ? 32 : 50;
+  const left = page ? Math.min(home, page.x - 16 - 36) : home;
+  const hidden = left < (ruler ? 20 : 4);
   return (
     <button
       type="button"
       className="docs-outline-open"
       style={{ left }}
+      data-hidden={hidden || undefined}
+      tabIndex={hidden ? -1 : undefined}
       aria-label={t("docsPage.showOutline")}
       data-tip={t("docsPage.showOutline")}
       data-track="docs:outline-open"

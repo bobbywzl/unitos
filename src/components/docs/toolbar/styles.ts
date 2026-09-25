@@ -3,7 +3,7 @@ import type { Mark, Node as PMNode } from "@tiptap/pm/model";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { z } from "zod";
 import type { DocStyle } from "@/components/docs/extensions";
-import { firstFamily, fontStack } from "@/components/docs/fonts";
+import { firstFamily, FONT_NAME, fontStack } from "@/components/docs/fonts";
 
 // The document's named styles (SPEC.md §29): Google Docs' defaults, and what
 // the document changed ("Update 'Heading 1' to match") stored on the doc
@@ -66,7 +66,6 @@ export const STYLE_ATTR: Record<DocStyle, string> = {
   h6: "namedStyleH6",
 };
 
-const FONT_NAME = /^[\w\s'\-.]{1,80}$/;
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 /** One style's changes, as stored. Anything else in the JSON is dropped. */
@@ -344,33 +343,46 @@ export function savedDefaultStyles(): Partial<Record<DocStyle, StyleChanges>> {
   }
 }
 
-/** The variables that draw the document's changes, and the flags that
-    turn their rules on: a style's name when it changed anything but its
-    color, "<style>-color" when it changed its color (css/toolbar.css). */
-export function styleVariables(doc: PMNode): { style: string; flags: string } {
+/** Where each named style's paragraphs are in the page. */
+const STYLE_SELECTOR: Record<DocStyle, string> = {
+  normal: "p:not([data-doc-style])",
+  title: 'p[data-doc-style="title"]',
+  subtitle: 'p[data-doc-style="subtitle"]',
+  h1: "h1",
+  h2: "h2",
+  h3: "h3",
+  h4: "h4",
+  h5: "h5",
+  h6: "h6",
+};
+
+/** The CSS that draws the document's changes to its named styles in the
+    editor `root` (a selector); an unchanged style leaves the page's own
+    rules. Normal text's face, size, and color go on the root, so lists,
+    tables, and headings without a face of their own take them. A
+    paragraph's own spacing and alignment still win: they are inline. */
+export function namedStyleSheet(doc: PMNode, root: string): string {
   const changes = readChanges(doc);
-  const decls: string[] = [];
-  const flags: string[] = [];
+  const rules: string[] = [];
+  const rule = (selector: string, decls: (string | false | undefined)[]) => {
+    const list = decls.filter(Boolean);
+    if (list.length > 0) rules.push(`${root} ${selector} { ${list.join("; ")} }`);
+  };
   for (const style of STYLE_ORDER) {
     const c = changes[style];
-    const values: [string, string | undefined][] = [
-      ["font", c.font && fontStack(c.font)],
-      ["size", c.size === undefined ? undefined : `${c.size}pt`],
-      ["weight", c.bold === undefined ? undefined : c.bold ? "700" : "400"],
-      ["italic", c.italic === undefined ? undefined : c.italic ? "italic" : "normal"],
-      ["underline", c.underline === undefined ? undefined : c.underline ? "underline" : "none"],
-      ["ls", c.lineSpacing === undefined ? undefined : String(c.lineSpacing)],
-      ["before", c.spaceBefore === undefined ? undefined : `${c.spaceBefore}pt`],
-      ["after", c.spaceAfter === undefined ? undefined : `${c.spaceAfter}pt`],
-      ["align", c.align],
+    const face = [c.font && `font-family: ${fontStack(c.font)}`, c.size !== undefined && `font-size: ${c.size}pt`, c.color && `color: ${c.color}`];
+    const paragraph = [
+      c.bold !== undefined && `font-weight: ${c.bold ? 700 : 400}`,
+      c.italic !== undefined && `font-style: ${c.italic ? "italic" : "normal"}`,
+      c.underline !== undefined && `text-decoration-line: ${c.underline ? "underline" : "none"}`,
+      c.lineSpacing !== undefined && `line-height: calc(var(--docs-ls, ${c.lineSpacing}) * 1.15)`,
+      c.spaceBefore !== undefined && `padding-top: ${c.spaceBefore}pt`,
+      c.spaceAfter !== undefined && `padding-bottom: ${c.spaceAfter}pt`,
+      c.align && `text-align: ${c.align}`,
     ];
-    const set = values.filter((v): v is [string, string] => Boolean(v[1]));
-    for (const [prop, value] of set) decls.push(`--docs-${style}-${prop}: ${value}`);
-    if (set.length > 0) flags.push(style);
-    if (c.color) {
-      decls.push(`--docs-${style}-color: ${c.color}`);
-      flags.push(`${style}-color`);
-    }
+    if (style === "normal") rule("", face);
+    rule(STYLE_SELECTOR[style], style === "normal" ? paragraph : [...face, ...paragraph]);
   }
-  return { style: decls.join("; "), flags: flags.join(" ") };
+  if (rules.length > 0) rules.push(`${root} > :first-child { padding-top: 0 }`);
+  return rules.join("\n");
 }

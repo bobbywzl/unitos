@@ -9,6 +9,16 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useLang, useT } from "@/components/lang-provider";
 
+/** When a reply, or the comment it answers, was written, as the thread prints it. */
+export function replyTime(iso: string, lang: string): string {
+  return new Date(iso).toLocaleString(lang === "zh" ? "zh-CN" : undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 // The discussion under one note (notes and annotations alike), one edit, or
 // one link — how collaborators comment on each other's work. Open replies
 // always show; resolved ones collapse behind a count. Any editor resolves a
@@ -16,9 +26,13 @@ import { useLang, useT } from "@/components/lang-provider";
 export function ReplyThread({
   target,
   replies,
+  onChange,
 }: {
   target: { noteId: string } | { blockEditId: string } | { docLinkId: string };
   replies: ReplyView[];
+  /** Runs after a reply is sent, resolved, reopened, or deleted: a caller
+      that loaded the replies itself loads them again. */
+  onChange?: () => void;
 }) {
   const router = useRouter();
   const t = useT();
@@ -36,7 +50,6 @@ export function ReplyThread({
   // own note is a dated update under it.
   if (replies.length === 0 && (!authOn || !canEdit)) return null;
 
-  const dateLocale = lang === "zh" ? "zh-CN" : undefined;
   const openReplies = replies.filter((r) => r.resolvedById === null);
   const resolvedReplies = replies.filter((r) => r.resolvedById !== null);
 
@@ -47,6 +60,7 @@ export function ReplyThread({
     try {
       await fn();
       router.refresh();
+      onChange?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
@@ -79,12 +93,7 @@ export function ReplyThread({
               {person?.name ?? "?"}
             </span>
             <span suppressHydrationWarning className="text-[10px] text-sand-500">
-              {new Date(reply.createdAt).toLocaleString(dateLocale, {
-                month: "short",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {replyTime(reply.createdAt, lang)}
             </span>
             <span className="ml-auto flex items-center gap-2">
               {canEdit && (

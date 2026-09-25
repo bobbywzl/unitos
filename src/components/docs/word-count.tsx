@@ -3,10 +3,12 @@
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useLang, useT } from "@/components/lang-provider";
-import { DOCS_EVENT } from "@/components/docs/extensions";
-import { CheckIcon, DropDownIcon } from "@/components/docs/icons";
+import { DropDownIcon } from "@/components/docs/icons";
+import { insertContext } from "@/components/docs/insert/context";
+import { DropdownPanel, keepFocus, MenuItem, MenuSeparator } from "@/components/docs/menu";
 import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { countRange, type Counts } from "@/components/docs/typing/count";
+import { TYPING_EVENT } from "@/components/docs/typing/events";
 import { serverTypingPrefs, setTypingPrefs, subscribeTypingPrefs, typingPrefs, type TypingPrefs } from "@/components/docs/typing/prefs";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -138,7 +140,7 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
   const [draftShow, setDraftShow] = useState(false);
   const [menu, setMenu] = useState(false);
   const prefs = useSyncExternalStore(subscribeTypingPrefs, typingPrefs, serverTypingPrefs);
-  const pageless = editor.storage.docsTyping?.pageless ?? false;
+  const pageless = insertContext(editor)?.pageSetup.pageless ?? false;
   const metric: Metric = pageless && prefs.counterMetric === "pages" ? "words" : prefs.counterMetric;
   const snap = useCounts(editor, open || show);
   const counterRef = useRef<HTMLButtonElement>(null);
@@ -149,27 +151,9 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
       setDraftShow(readShow());
       setOpen(true);
     };
-    window.addEventListener(DOCS_EVENT.wordCount, onOpen);
-    return () => window.removeEventListener(DOCS_EVENT.wordCount, onOpen);
+    window.addEventListener(TYPING_EVENT.wordCount, onOpen);
+    return () => window.removeEventListener(TYPING_EVENT.wordCount, onOpen);
   }, []);
-
-  useEffect(() => {
-    if (!menu) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as Element | null;
-      if (target?.closest("[data-docs-wc-menu]") || counterRef.current?.contains(target)) return;
-      setMenu(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenu(false);
-    };
-    document.addEventListener("mousedown", onDown, true);
-    document.addEventListener("keydown", onKey, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown, true);
-      document.removeEventListener("keydown", onKey, true);
-    };
-  }, [menu]);
 
   const closeDialog = () => {
     setOpen(false);
@@ -196,7 +180,7 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
             className="docs-wc-widget"
             aria-haspopup="menu"
             aria-expanded={menu}
-            onMouseDown={(e) => e.preventDefault()}
+            onMouseDown={keepFocus}
             onClick={() => setMenu((m) => !m)}
           >
             <span className="docs-wc-caption">
@@ -204,44 +188,30 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
             </span>
             <DropDownIcon size={20} />
           </button>
-          {menu && (
-            <div role="menu" className="docs-wc-menu" data-docs-wc-menu>
-              {metrics.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={m === metric}
-                  className="docs-wc-item"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    setTypingPrefs({ counterMetric: m });
-                    setMenu(false);
-                  }}
-                >
-                  <span className="docs-wc-check">{m === metric ? <CheckIcon size={18} /> : null}</span>
-                  <span>
-                    <Bold {...metricText(t, m, { ...snap, part: null }, format)} />
-                  </span>
-                </button>
-              ))}
-              <div role="separator" className="docs-wc-sep" />
-              <button
-                type="button"
-                role="menuitem"
-                className="docs-wc-item"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
+          <DropdownPanel open={menu} anchorRef={counterRef} onClose={() => setMenu(false)}>
+            {metrics.map((m) => (
+              <MenuItem
+                key={m}
+                checked={m === metric}
+                onSelect={() => {
+                  setTypingPrefs({ counterMetric: m });
                   setMenu(false);
-                  setShow(false);
-                  writeShow(false);
                 }}
               >
-                <span className="docs-wc-check" />
-                <span>{t("docsTyping.hideWordCount")}</span>
-              </button>
-            </div>
-          )}
+                <Bold {...metricText(t, m, { ...snap, part: null }, format)} />
+              </MenuItem>
+            ))}
+            <MenuSeparator />
+            <MenuItem
+              onSelect={() => {
+                setMenu(false);
+                setShow(false);
+                writeShow(false);
+              }}
+            >
+              {t("docsTyping.hideWordCount")}
+            </MenuItem>
+          </DropdownPanel>
         </div>
       )}
       {open && (
@@ -251,7 +221,7 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
           className="docs-wc-dialog"
           actions={
             <>
-              <DialogButton onClick={closeDialog}>{t("docsTyping.cancel")}</DialogButton>
+              <DialogButton onClick={closeDialog}>{t("docs.cancel")}</DialogButton>
               <DialogButton
                 primary
                 onClick={() => {
@@ -260,7 +230,7 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
                   closeDialog();
                 }}
               >
-                {t("docsTyping.ok")}
+                {t("docs.ok")}
               </DialogButton>
             </>
           }

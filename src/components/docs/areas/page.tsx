@@ -3,12 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
-import { useLang } from "@/components/lang-provider";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import type { Zoom } from "@/components/docs/toolbar";
 import { hostPagination, paginateNow, repaginate } from "@/components/docs/ext/page";
 import { stepZoom } from "@/components/docs/page/commands";
-import { PAGE_PITCH_EXTRA, PAGELESS_TOP, pageFrame, pagelessWidth, scrollParent } from "@/components/docs/page/geometry";
+import { PAGE_PITCH_EXTRA, PAGELESS_TOP, pageAt, pageFrame, pagelessWidth, scrollParent } from "@/components/docs/page/geometry";
 import {
   HeaderFooterLayer,
   HeaderFooterText,
@@ -21,7 +20,7 @@ import { PageIndicator } from "@/components/docs/page/indicator";
 import { OutlineButton, OutlinePanel } from "@/components/docs/page/outline";
 import type { PaginationConfig } from "@/components/docs/page/paginate";
 import { HorizontalRuler, VerticalRuler } from "@/components/docs/page/ruler";
-import { lengthUnitFor, PageSetupDialog, readPageDefault } from "@/components/docs/page/setup-dialog";
+import { PageSetupDialog, readPageDefault } from "@/components/docs/page/setup-dialog";
 import { PAGE_EVENT, pageStore, usePageState, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
 import { DEFAULT_PAGE_SETUP } from "@/lib/docs/schema";
 
@@ -38,12 +37,10 @@ const FIT_GUTTER = 24;
 const CANVAS_TOP = 11;
 
 /** The ruler row under the toolbar. */
-export function PageRuler({ editor, documentId, pageSetup, editing }: DocsAreaProps & { zoom: Zoom }) {
-  const lang = useLang();
+export function PageRuler({ editor, documentId, pageSetup, editing }: DocsAreaProps) {
   const store = pageStore(editor, documentId, pageSetup);
   const showRuler = usePageState(store, (s) => s.showRuler);
-  if (!showRuler) return null;
-  return <HorizontalRuler editor={editor} store={store} editing={editing} unit={lengthUnitFor(lang)} />;
+  return showRuler ? <HorizontalRuler editor={editor} store={store} editing={editing} /> : null;
 }
 
 /** The header's height and the room under it: the side's rulers and panel
@@ -91,7 +88,6 @@ export function PageCanvas({
   onPageClick: (e: React.MouseEvent) => void;
   children: ReactNode;
 }) {
-  const lang = useLang();
   const store = pageStore(editor, documentId, pageSetup);
   const setup = usePageState(store, (s) => s.setup);
   const pages = usePageState(store, (s) => s.pages);
@@ -131,6 +127,13 @@ export function PageCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The title row, the toolbar, and the ruler stay over the pane's top: a
+  // caret scrolled into view stops below them.
+  useEffect(() => {
+    const margin = { top: view.header + 8, right: 5, bottom: 8, left: 5 };
+    editor.setOptions({ editorProps: { ...editor.options.editorProps, scrollMargin: margin, scrollThreshold: margin } });
+  }, [editor, view.header]);
+
   // The zoom is DocsEditor's; the commands and the shortcuts change it here.
   useEffect(() => {
     store.bindZoom(onZoom);
@@ -162,12 +165,12 @@ export function PageCanvas({
     const text = full.height - full.top - full.bottom;
     return { ...full, height: text, top: 0, bottom: 0, pitch: text };
   }, [setup, compact]);
-  // Fit: the page fills the canvas's width, beside the outline when it is
-  // open.
+  // The canvas's left edge for the page: past the outline while it is
+  // open, so the page never goes under it. Fit fills the rest.
   const vruler = showRuler && !pageless && !compact;
   const outlineLeft = vruler ? 16 : 0;
-  const fitRoom = canvasWidth - FIT_GUTTER - (outlineOpen ? outlineLeft + outlineWidth + 16 : FIT_GUTTER);
-  const fitScale = canvasWidth > 0 ? fitRoom / frame.width : 1;
+  const side = outlineOpen ? outlineLeft + outlineWidth + 16 : FIT_GUTTER;
+  const fitScale = canvasWidth > 0 ? (canvasWidth - FIT_GUTTER - side) / frame.width : 1;
   const scale = zoom === "fit" ? (pageless ? 1 : Math.max(0.25, Math.min(4, fitScale))) : zoom / 100;
   const columnWidth = pageless ? pagelessWidth(canvasWidth || frame.width, scale, textWidth) : frame.width;
 
@@ -337,33 +340,13 @@ export function PageCanvas({
     };
   }, [pageless, white, setup.color]);
 
-  /** The page under a point, and whether the point is in its header, body,
-      or footer. */
-  const hitPage = (clientY: number): { page: number; zone: HeaderArea | "body" } | null => {
-    const el = pageRef.current;
-    if (!el || pageless || compact) return null;
-    const r = el.getBoundingClientRect();
-    const s = el.offsetWidth > 0 ? r.width / el.offsetWidth : 1;
-    const y = (clientY - r.top) / s;
-    const page = Math.floor(y / frame.pitch);
-    if (page < 0 || page >= pages) return null;
-    const local = y - page * frame.pitch;
-    if (local > frame.height) return null;
-    const a = area(page);
-    return { page, zone: local < a.top ? "header" : local > a.bottom ? "footer" : "body" };
-  };
-
   // Insert > Header / Footer and the chords (hold Ctrl+Alt, press O then H
   // or F) edit the header or footer of the page that holds the caret.
   useEffect(() => {
     const caretPage = () => {
       const el = pageRef.current;
-      if (!el) return 0;
       try {
-        const c = editor.view.coordsAtPos(editor.state.selection.head);
-        const r = el.getBoundingClientRect();
-        const s = el.offsetWidth > 0 ? r.width / el.offsetWidth : 1;
-        return Math.max(0, Math.floor((c.top - r.top) / s / frame.pitch));
+        return el ? Math.max(0, pageAt(el, frame.pitch, editor.view.coordsAtPos(editor.state.selection.head).top).page) : 0;
       } catch {
         return 0;
       }
@@ -431,10 +414,17 @@ export function PageCanvas({
     if (e.shiftKey) editor.chain().focus().setTextSelection({ from, to: hit.pos }).run();
     else editor.chain().focus().setTextSelection(hit.pos).run();
   };
+  // A double-click in a page's top or bottom margin edits its header or
+  // footer.
   const onPageDoubleClick = (e: React.MouseEvent) => {
+    const el = pageRef.current;
+    if (!el || pageless || compact || !editor.isEditable) return;
     if ((e.target as Element).closest("[data-docs-hf], [data-edit-control]")) return;
-    const hit = hitPage(e.clientY);
-    if (hit && hit.zone !== "body" && editor.isEditable) store.set({ editing: { area: hit.zone, page: hit.page } });
+    const { page, y } = pageAt(el, frame.pitch, e.clientY);
+    if (page < 0 || page >= pages || y > frame.height) return;
+    const a = area(page);
+    if (y < a.top) store.set({ editing: { area: "header", page } });
+    else if (y > a.bottom) store.set({ editing: { area: "footer", page } });
   };
 
   const firstTop = pageless ? 0 : area(0).top;
@@ -454,10 +444,10 @@ export function PageCanvas({
         "--docs-print-h": `${pages * frame.height}px`,
       };
 
-  // The outline sits right of the vertical ruler; while it would cover the
-  // page, the page moves right past it.
+  // The page stands centered in the canvas while the room left of it holds
+  // the outline; else it moves right, past the outline.
   const pageVisual = columnWidth * scale;
-  const outlinePush = outlineOpen && outlineLeft + outlineWidth + 8 > (canvasWidth - pageVisual) / 2;
+  const centered = (canvasWidth - pageVisual) / 2 >= side;
 
   // A new, empty document opens the outline, as Google Docs does, when the
   // pane has the room for it beside the page.
@@ -465,11 +455,10 @@ export function PageCanvas({
   useEffect(() => {
     if (autoOpened.current || store.outlineChosen || canvasWidth === 0) return;
     autoOpened.current = true;
-    const room = (canvasWidth - pageVisual) / 2 >= outlineLeft + outlineWidth + 8;
+    const room = (canvasWidth - pageVisual) / 2 >= outlineLeft + outlineWidth + 16;
     if (editor.isEmpty && room && !pageless) store.set({ outlineOpen: true });
   }, [canvasWidth, editor, store, pageVisual, outlineLeft, outlineWidth, pageless]);
 
-  const unit = lengthUnitFor(lang);
   const closeDialog = () => {
     store.set({ dialog: null });
     if (!store.get().editing) editor.commands.focus();
@@ -483,19 +472,18 @@ export function PageCanvas({
         data-pageless={pageless || undefined}
         style={{ "--docs-header-h": `${view.header}px` } as React.CSSProperties}
       >
-        {vruler && <VerticalRuler editor={editor} store={store} editing={editing} unit={unit} top={view.top} height={view.height} />}
+        {vruler && <VerticalRuler editor={editor} store={store} editing={editing} top={view.top} height={view.height} />}
         {outlineOpen ? (
           <OutlinePanel editor={editor} store={store} left={outlineLeft} height={view.height} viewTop={view.top} />
         ) : (
-          <OutlineButton store={store} left={outlineLeft + 50} />
+          <OutlineButton editor={editor} store={store} ruler={vruler} />
         )}
       </div>
       <div
         ref={canvasRef}
         className="docs-canvas"
         data-pageless={pageless || undefined}
-        data-outline-push={outlinePush || undefined}
-        style={{ "--docs-outline-w": `${outlineLeft + outlineWidth}px` } as React.CSSProperties}
+        style={{ "--docs-pad-l": `${side}px`, "--docs-pad-r": `${centered ? side : FIT_GUTTER}px` } as React.CSSProperties}
       >
         <article
           ref={pageRef}
@@ -510,12 +498,6 @@ export function PageCanvas({
           {!pageless && (
             <div className="docs-sheets" aria-hidden>
               {Array.from({ length: pages }, (_, i) => {
-                const headerSlot = slotFor(setup, "header", i);
-                const footerSlot = slotFor(setup, "footer", i);
-                const header = setup[headerSlot];
-                const footer = setup[footerSlot];
-                const ctx = { page: i, pages, start };
-                const hidden = (a: HeaderArea) => editingHf?.page === i && editingHf.area === a;
                 return (
                   <div
                     key={i}
@@ -524,38 +506,30 @@ export function PageCanvas({
                     data-white={white || undefined}
                     style={{ top: i * frame.pitch, height: frame.height, "--docs-sheet-i": i } as React.CSSProperties}
                   >
-                    {!compact && header && hasText(header) && (
-                      <div
-                        className="docs-hf"
-                        data-hf-slot={headerSlot}
-                        style={{ top: frame.headerMargin, left: frame.left, right: frame.right, visibility: hidden("header") ? "hidden" : undefined }}
-                      >
-                        <HeaderFooterText doc={header} ctx={ctx} />
-                      </div>
-                    )}
-                    {!compact && footer && hasText(footer) && (
-                      <div
-                        className="docs-hf"
-                        data-hf-slot={footerSlot}
-                        style={{ bottom: frame.footerMargin, left: frame.left, right: frame.right, visibility: hidden("footer") ? "hidden" : undefined }}
-                      >
-                        <HeaderFooterText doc={footer} ctx={ctx} />
-                      </div>
-                    )}
+                    {(["header", "footer"] as const).map((a) => {
+                      const slot = slotFor(setup, a, i);
+                      const doc = setup[slot];
+                      if (compact || !doc || !hasText(doc)) return null;
+                      const edge = a === "header" ? { top: frame.headerMargin } : { bottom: frame.footerMargin };
+                      const hidden = editingHf?.page === i && editingHf.area === a;
+                      return (
+                        <div
+                          key={a}
+                          className="docs-hf"
+                          data-hf-slot={slot}
+                          style={{ ...edge, left: frame.left, right: frame.right, visibility: hidden ? "hidden" : undefined }}
+                        >
+                          <HeaderFooterText doc={doc} ctx={{ page: i, pages, start }} />
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
             </div>
           )}
           {!pageless && !compact && (
-            <HeaderFooterLayer
-              store={store}
-              frame={frame}
-              pages={pages}
-              pitch={frame.pitch}
-              bodyTop={(i) => area(i).top}
-              bodyBottom={(i) => area(i).bottom}
-            />
+            <HeaderFooterLayer store={store} frame={frame} pages={pages} area={area} />
           )}
           {children}
         </article>

@@ -1,6 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import { Fragment, Slice, type Mark, type ResolvedPos, type Schema } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
+import { insertT, toast } from "@/components/docs/insert/context";
 import { fragmentToMarkdown, markdownToHtml } from "@/components/docs/typing/markdown";
 import { uploadImage } from "@/lib/images";
 
@@ -9,9 +10,6 @@ import { uploadImage } from "@/lib/images";
 // the caret; Ctrl+Shift+V pastes the plain text alone; an image pasted or
 // dropped from the computer is uploaded and goes in as an image. With Enable
 // Markdown on, Paste from Markdown and Copy as Markdown work too.
-
-/** Messages the paste code shows, in the page's language (set by the typing area). */
-export const pasteMessages = { uploadFailed: "Couldn't add the image", noClipboard: "Couldn't read the clipboard", copied: "Copied" };
 
 let lastPasteAt = 0;
 let plainArmedAt = 0;
@@ -53,10 +51,6 @@ export function armPlainPaste(view: EditorView): void {
   }, 150);
 }
 
-function toast(text: string): void {
-  window.dispatchEvent(new CustomEvent("dissect:toast", { detail: { text } }));
-}
-
 /** The image files among `files`. */
 export function imageFiles(files: FileList | null | undefined): File[] {
   return Array.from(files ?? []).filter((f) => f.type.startsWith("image/"));
@@ -76,7 +70,7 @@ export async function insertImageFiles(editor: Editor, files: File[], pos?: numb
         at = editor.state.selection.to;
       }
     } catch (err) {
-      toast(err instanceof Error && err.message ? err.message : pasteMessages.uploadFailed);
+      toast(err instanceof Error && err.message ? err.message : insertT(editor)("docsTyping.uploadFailed"));
     }
   }
 }
@@ -87,7 +81,7 @@ export async function pasteMarkdown(editor: Editor): Promise<void> {
     const text = await navigator.clipboard.readText();
     if (text && editor.isEditable) editor.chain().focus().insertContent(markdownToHtml(text)).run();
   } catch {
-    toast(pasteMessages.noClipboard);
+    toast(insertT(editor)("docsTyping.pasteNoClipboard"));
   }
 }
 
@@ -97,8 +91,8 @@ export async function copyMarkdown(editor: Editor): Promise<void> {
   if (empty) return;
   try {
     await navigator.clipboard.writeText(fragmentToMarkdown(editor.state.doc.slice(from, to).content));
-    toast(pasteMessages.copied);
+    toast(insertT(editor)("docsTyping.copied"));
   } catch {
-    toast(pasteMessages.noClipboard);
+    toast(insertT(editor)("docsTyping.pasteNoClipboard"));
   }
 }

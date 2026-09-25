@@ -4,9 +4,9 @@ import type { Editor } from "@tiptap/react";
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { facesInUse } from "@/components/docs/ext/toolbar";
 import {
   DOCS_FONTS,
-  firstFamily,
   fontStack,
   fontWeights,
   loadFontInUse,
@@ -14,7 +14,6 @@ import {
   pushRecentFont,
   recentFonts,
   userFonts,
-  WEIGHT_NAMES,
 } from "@/components/docs/fonts";
 import { AddFontsIcon } from "@/components/docs/icons";
 import { MenuHeader, MenuItem, MenuSeparator } from "@/components/docs/menu";
@@ -42,21 +41,6 @@ const WEIGHT_KEYS: Record<number, TKey> = {
   800: "docs.weightExtraBold",
   900: "docs.weightBlack",
 };
-
-/** Every face the document's runs use. */
-function documentFonts(editor: Editor): string[] {
-  const faces = new Set<string>();
-  editor.state.doc.descendants((node) => {
-    if (!node.isText) return true;
-    for (const mark of node.marks) {
-      if (mark.type.name !== "textStyle") continue;
-      const face = firstFamily(mark.attrs.fontFamily as string | undefined);
-      if (face) faces.add(face);
-    }
-    return false;
-  });
-  return [...faces];
-}
 
 /** The weight at the caret: its own, Bold's 700, or 400. */
 function currentWeight(editor: Editor): number {
@@ -101,7 +85,7 @@ export function FontSelect({ editor, font }: { editor: Editor; font: string | nu
           const names = new Map<string, string>();
           for (const f of DOCS_FONTS) names.set(f.name.toLowerCase(), f.name);
           for (const f of userFonts()) names.set(f.name.toLowerCase(), f.name);
-          for (const f of documentFonts(editor)) if (!names.has(f.toLowerCase())) names.set(f.toLowerCase(), f);
+          for (const f of facesInUse(editor.state.doc).keys()) if (!names.has(f.toLowerCase())) names.set(f.toLowerCase(), f);
           const all = [...names.values()].sort((a, b) => a.localeCompare(b));
           const weight = currentWeight(editor);
           const item = (name: string, key: string) => {
@@ -124,13 +108,13 @@ export function FontSelect({ editor, font }: { editor: Editor; font: string | nu
                         <MenuItem
                           key={w}
                           checked={on && weight === w}
-                          label={`${name} ${WEIGHT_NAMES[w] ?? w}`}
+                          label={`${name} ${t(WEIGHT_KEYS[w])}`}
                           onSelect={() => {
                             close();
                             pick(name, w);
                           }}
                         >
-                          <span style={{ fontFamily: fontStack(name), fontWeight: w }}>{t(WEIGHT_KEYS[w] ?? "docs.weightNormal")}</span>
+                          <span style={{ fontFamily: fontStack(name), fontWeight: w }}>{t(WEIGHT_KEYS[w])}</span>
                         </MenuItem>
                       ))
                     : undefined
@@ -161,7 +145,7 @@ export function FontSelect({ editor, font }: { editor: Editor; font: string | nu
                   <MenuSeparator />
                 </>
               )}
-              <div className="docs-fontmenu-fonts">{all.map((name) => item(name, name))}</div>
+              {all.map((name) => item(name, name))}
             </>
           );
         }}

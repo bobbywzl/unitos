@@ -3,6 +3,8 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { NodeSelection, Plugin, TextSelection, type EditorState } from "@tiptap/pm/state";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
 import { emitInsert, insertContext, toast } from "@/components/docs/insert/context";
+import { PX_PER_PT } from "@/components/docs/page/geometry";
+import type { ImageSource } from "@/components/docs/toolbar/image-menu";
 import { insertImageFiles } from "@/components/docs/typing/paste";
 import { uploadImage } from "@/lib/images";
 
@@ -18,7 +20,6 @@ type ImageAlign = "left" | "center" | "right";
 export type Recolor = "none" | "grayscale" | "sepia" | "negative";
 export type Dash = "solid" | "dotted" | "dashed";
 
-const PX_PER_PT = 96 / 72;
 const MIN_SIZE = 16;
 const MIN_CROP = 0.05;
 
@@ -79,15 +80,6 @@ const RESET_ATTRS = {
   brightness: 0,
   contrast: 0,
 } as const;
-
-declare module "@tiptap/core" {
-  interface Commands<ReturnType> {
-    docsImage: {
-      /** Change the selected image's attributes. */
-      updateImage: (attrs: Record<string, unknown>) => ReturnType;
-    };
-  }
-}
 
 /** The text column's width in CSS pixels at 100%. */
 export function textWidthPx(editor: Editor): number {
@@ -301,19 +293,13 @@ class ImageView implements NodeView {
     return typeof pos === "number" ? pos : null;
   }
 
-  /** Write attributes and keep the image selected. */
   private commit(attrs: Record<string, unknown>) {
     const pos = this.pos();
-    if (pos === null) return;
-    const node = this.view.state.doc.nodeAt(pos);
-    if (!node) return;
-    const tr = this.view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attrs });
-    tr.setSelection(NodeSelection.create(tr.doc, pos));
-    this.view.dispatch(tr);
+    if (pos !== null) setImageAttrs(this.view, pos, attrs);
   }
 
   /** The box's size as drawn, at 100% zoom. */
-  private drawnSize(): { w: number; h: number } {
+  drawnSize(): { w: number; h: number } {
     return { w: this.box.offsetWidth, h: this.box.offsetHeight };
   }
 
@@ -575,35 +561,34 @@ class ImageView implements NodeView {
 }
 
 /** Insert an image from an address or a file at the selection. */
-export function insertImageFrom(editor: Editor, source: { url: string } | { file: File }): void {
+export function insertImageFrom(editor: Editor, source: ImageSource): void {
   if ("file" in source) void insertImageFiles(editor, [source.file]);
   else editor.chain().focus().setImage({ src: source.url }).run();
 }
 
+/** Set attributes of the image at `pos`; the image stays selected. */
+export function setImageAttrs(view: EditorView, pos: number, attrs: Record<string, unknown>): boolean {
+  const node = view.state.doc.nodeAt(pos);
+  if (node?.type.name !== "image") return false;
+  const tr = view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attrs });
+  view.dispatch(tr.setSelection(NodeSelection.create(tr.doc, pos)));
+  return true;
+}
+
 /** Replace the image's picture; the new one keeps the width, at its own ratio. */
-export async function replaceImage(editor: Editor, pos: number, source: { url: string } | { file: File }): Promise<void> {
-  let url = "";
+export async function replaceImage(editor: Editor, pos: number, source: ImageSource): Promise<void> {
   try {
-    url = "file" in source ? (await uploadImage(source.file)).url : source.url;
+    const src = "file" in source ? (await uploadImage(source.file)).url : source.url;
+    const node = editor.state.doc.nodeAt(pos);
+    if (node) setImageAttrs(editor.view, pos, { ...RESET_ATTRS, src, width: imageAttrs(node).width });
   } catch (err) {
     toast(err instanceof Error ? err.message : "");
-    return;
   }
-  const node = editor.state.doc.nodeAt(pos);
-  if (node?.type.name !== "image") return;
-  const width = imageAttrs(node).width;
-  const tr = editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...RESET_ATTRS, src: url, width });
-  tr.setSelection(NodeSelection.create(tr.doc, pos));
-  editor.view.dispatch(tr);
 }
 
 /** Reset image: no crop, no turn, no adjustments, its own size. */
 export function resetImage(editor: Editor, pos: number): void {
-  const node = editor.state.doc.nodeAt(pos);
-  if (node?.type.name !== "image") return;
-  const tr = editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...RESET_ATTRS });
-  tr.setSelection(NodeSelection.create(tr.doc, pos));
-  editor.view.dispatch(tr);
+  setImageAttrs(editor.view, pos, RESET_ATTRS);
 }
 
 /** Resize or turn the selected image from the keys (Google Docs' Ctrl+Alt+K
@@ -611,11 +596,9 @@ export function resetImage(editor: Editor, pos: number): void {
 function nudge(editor: Editor, fn: (a: ImageAttrs, w: number, h: number) => Record<string, unknown>): boolean {
   const hit = selectedImage(editor.state);
   if (!hit) return false;
-  const view = imageViewAt(editor.view, hit.pos);
   const a = imageAttrs(hit.node);
-  const w = a.width ?? view?.dom.querySelector<HTMLElement>(".docs-img-box")?.offsetWidth ?? 100;
-  const h = a.height ?? view?.dom.querySelector<HTMLElement>(".docs-img-box")?.offsetHeight ?? 100;
-  return editor.commands.updateImage(fn(a, w, h));
+  const box = imageViewAt(editor.view, hit.pos)?.drawnSize();
+  return setImageAttrs(editor.view, hit.pos, fn(a, a.width ?? box?.w ?? 100, a.height ?? box?.h ?? 100));
 }
 
 function scaled(sx: number, sy: number) {
@@ -672,40 +655,24 @@ export const DocsImage = Extension.create({
       },
     ];
   },
-  addCommands() {
-    return {
-      updateImage:
-        (attrs) =>
-        ({ state, dispatch }) => {
-          const hit = selectedImage(state);
-          if (!hit) return false;
-          if (dispatch) {
-            const tr = state.tr.setNodeMarkup(hit.pos, undefined, { ...hit.node.attrs, ...attrs });
-            tr.setSelection(NodeSelection.create(tr.doc, hit.pos));
-            dispatch(tr);
-          }
-          return true;
-        },
-    };
-  },
   addKeyboardShortcuts() {
-    const withImage = (fn: () => boolean) => () => (selectedImage(this.editor.state) ? fn() : false);
+    const key = (fn: (a: ImageAttrs, w: number, h: number) => Record<string, unknown>) => () => nudge(this.editor, fn);
     return {
       "Mod-Alt-y": () => {
         if (!selectedImage(this.editor.state)) return false;
         emitInsert(this.editor, { type: "image-options", section: "alt" });
         return true;
       },
-      "Mod-Alt-k": withImage(() => nudge(this.editor, scaled(1.1, 1.1))),
-      "Mod-Alt-j": withImage(() => nudge(this.editor, scaled(1 / 1.1, 1 / 1.1))),
-      "Mod-Alt-b": withImage(() => nudge(this.editor, scaled(1.1, 1))),
-      "Mod-Alt-w": withImage(() => nudge(this.editor, scaled(1 / 1.1, 1))),
-      "Mod-Alt-i": withImage(() => nudge(this.editor, scaled(1, 1.1))),
-      "Mod-Alt-q": withImage(() => nudge(this.editor, scaled(1, 1 / 1.1))),
-      "Alt-ArrowRight": withImage(() => nudge(this.editor, turned(15))),
-      "Alt-ArrowLeft": withImage(() => nudge(this.editor, turned(-15))),
-      "Alt-Shift-ArrowRight": withImage(() => nudge(this.editor, turned(1))),
-      "Alt-Shift-ArrowLeft": withImage(() => nudge(this.editor, turned(-1))),
+      "Mod-Alt-k": key(scaled(1.1, 1.1)),
+      "Mod-Alt-j": key(scaled(1 / 1.1, 1 / 1.1)),
+      "Mod-Alt-b": key(scaled(1.1, 1)),
+      "Mod-Alt-w": key(scaled(1 / 1.1, 1)),
+      "Mod-Alt-i": key(scaled(1, 1.1)),
+      "Mod-Alt-q": key(scaled(1, 1 / 1.1)),
+      "Alt-ArrowRight": key(turned(15)),
+      "Alt-ArrowLeft": key(turned(-15)),
+      "Alt-Shift-ArrowRight": key(turned(1)),
+      "Alt-Shift-ArrowLeft": key(turned(-1)),
       Escape: () => {
         const hit = selectedImage(this.editor.state);
         if (!hit) return false;

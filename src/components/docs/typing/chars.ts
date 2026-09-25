@@ -26,10 +26,6 @@ export function isWhitespace(ch: string | undefined): boolean {
   return ch !== undefined && WHITESPACE.has(ch);
 }
 
-export function isTransparent(ch: string | undefined): boolean {
-  return ch !== undefined && TRANSPARENT.has(ch);
-}
-
 /** CJK ideographs: a boundary for substitutions and spelling. */
 function isCjkIdeograph(ch: string): boolean {
   return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(ch);

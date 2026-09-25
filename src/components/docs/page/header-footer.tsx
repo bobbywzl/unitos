@@ -8,13 +8,12 @@ import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { useLang, useT } from "@/components/lang-provider";
 import { DocsFontFamily, fontStack } from "@/components/docs/fonts";
 import { DropDownIcon } from "@/components/docs/icons";
 import { DropdownPanel, MenuItem } from "@/components/docs/menu";
-import { DEFAULT_HF_MARGIN_PT, formatLength, parseLength, type PageFrame } from "@/components/docs/page/geometry";
-import { lengthUnitFor } from "@/components/docs/page/setup-dialog";
+import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { DEFAULT_HF_MARGIN_PT, formatLength, lengthUnitFor, parseLength, type PageFrame } from "@/components/docs/page/geometry";
 import { PAGE_EVENT, usePageState, type HeaderArea, type PageStore } from "@/components/docs/page/store";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 
@@ -44,10 +43,6 @@ export function hasText(doc: RichNode | null | undefined): boolean {
 
 type FieldContext = { page: number; pages: number; start: number };
 
-function Field({ kind, ctx }: { kind: "pageNumber" | "pageCount"; ctx: FieldContext }) {
-  return <span className="docs-hf-field">{kind === "pageNumber" ? ctx.start + ctx.page : ctx.pages}</span>;
-}
-
 function markStyle(attrs: Record<string, unknown> | undefined): CSSProperties {
   const style: CSSProperties = {};
   if (typeof attrs?.color === "string") style.color = attrs.color;
@@ -58,7 +53,13 @@ function markStyle(attrs: Record<string, unknown> | undefined): CSSProperties {
 
 function inline(node: RichNode, key: number, ctx: FieldContext): ReactNode {
   if (node.type === "hardBreak") return <br key={key} />;
-  if (node.type === "pageNumber" || node.type === "pageCount") return <Field key={key} kind={node.type} ctx={ctx} />;
+  if (node.type === "pageNumber" || node.type === "pageCount") {
+    return (
+      <span key={key} className="docs-hf-field">
+        {node.type === "pageNumber" ? ctx.start + ctx.page : ctx.pages}
+      </span>
+    );
+  }
   if (node.type !== "text") return (node.content ?? []).map((c, i) => inline(c, i, ctx));
   let out: ReactNode = node.text ?? "";
   for (const mark of node.marks ?? []) {
@@ -93,6 +94,7 @@ export function HeaderFooterText({ doc, ctx }: { doc: RichNode; ctx: FieldContex
 /** The page number and page count fields in the header editor: each draws
     the number of the page being edited. */
 function fieldNode(name: "pageNumber" | "pageCount") {
+  const attr = name === "pageNumber" ? "data-page-number" : "data-page-count";
   return Node.create<{ value: () => string }>({
     name,
     group: "inline",
@@ -103,10 +105,10 @@ function fieldNode(name: "pageNumber" | "pageCount") {
       return { value: () => "1" };
     },
     parseHTML() {
-      return [{ tag: `span[data-${name === "pageNumber" ? "page-number" : "page-count"}]` }];
+      return [{ tag: `span[${attr}]` }];
     },
     renderHTML({ HTMLAttributes }) {
-      return ["span", mergeAttributes(HTMLAttributes, { [`data-${name === "pageNumber" ? "page-number" : "page-count"}`]: "", class: "docs-hf-field" })];
+      return ["span", mergeAttributes(HTMLAttributes, { [attr]: "", class: "docs-hf-field" })];
     },
     addNodeView() {
       return () => {
@@ -209,17 +211,13 @@ export function HeaderFooterLayer({
   store,
   frame,
   pages,
-  bodyTop,
-  bodyBottom,
-  pitch,
+  area: bodyArea,
 }: {
   store: PageStore;
   frame: PageFrame;
   pages: number;
   /** Page i's text top and bottom, px from the page's top. */
-  bodyTop: (page: number) => number;
-  bodyBottom: (page: number) => number;
-  pitch: number;
+  area: (page: number) => { top: number; bottom: number };
 }) {
   const t = useT();
   const setup = usePageState(store, (s) => s.setup);
@@ -255,7 +253,7 @@ export function HeaderFooterLayer({
   const doc = setup[slot] ?? EMPTY_DOC;
   const start = setup.pageNumberStart ?? 1;
   const ctx = { page, pages, start };
-  const top = page * pitch;
+  const top = page * frame.pitch;
   const label =
     slot === "firstHeader"
       ? t("docsPage.firstPageHeader")
@@ -279,8 +277,8 @@ export function HeaderFooterLayer({
   // footer, never over their text.
   const barTop =
     area === "header"
-      ? top + Math.max(bodyTop(page) - barHeight, frame.headerMargin + textHeight + 2)
-      : top + Math.min(bodyBottom(page), frame.height - frame.footerMargin - textHeight - barHeight - 2);
+      ? top + Math.max(bodyArea(page).top - barHeight, frame.headerMargin + textHeight + 2)
+      : top + Math.min(bodyArea(page).bottom, frame.height - frame.footerMargin - textHeight - barHeight - 2);
 
   return (
     <div className="docs-hf-layer" data-docs-hf data-edit-control>
@@ -373,7 +371,7 @@ export function PageNumbersDialog({ store, onClose }: { store: PageStore; onClos
         <label className="docs-setup-margin">
           <span>{t("docsPage.startAt")}</span>
           <input
-            className="docs-setup-input docs-setup-short"
+            className="docs-field docs-setup-short"
             type="number"
             min={0}
             max={999}
@@ -389,8 +387,7 @@ export function PageNumbersDialog({ store, onClose }: { store: PageStore; onClos
 /** Headers & footers: their margins, and Different first page. */
 export function HeaderFormatDialog({ store, onClose }: { store: PageStore; onClose: () => void }) {
   const t = useT();
-  const lang = useLang();
-  const unit = lengthUnitFor(lang);
+  const unit = lengthUnitFor(useLang());
   const setup = usePageState(store, (s) => s.setup);
   const [header, setHeader] = useState(formatLength(setup.headerMargin ?? DEFAULT_HF_MARGIN_PT, unit));
   const [footer, setFooter] = useState(formatLength(setup.footerMargin ?? DEFAULT_HF_MARGIN_PT, unit));
@@ -406,14 +403,14 @@ export function HeaderFormatDialog({ store, onClose }: { store: PageStore; onClo
         <legend className="docs-setup-label">
           {t(unit === "in" ? "docsPage.marginsInches" : "docsPage.marginsCentimeters")}
         </legend>
-        <div className="docs-setup-margins docs-setup-two">
+        <div className="docs-setup-margins">
           <label className="docs-setup-margin">
             <span>{t("docsPage.header")}</span>
-            <input className="docs-setup-input" inputMode="decimal" value={header} onChange={(e) => setHeader(e.target.value.slice(0, 8))} />
+            <input className="docs-field" inputMode="decimal" value={header} onChange={(e) => setHeader(e.target.value.slice(0, 8))} />
           </label>
           <label className="docs-setup-margin">
             <span>{t("docsPage.footer")}</span>
-            <input className="docs-setup-input" inputMode="decimal" value={footer} onChange={(e) => setFooter(e.target.value.slice(0, 8))} />
+            <input className="docs-field" inputMode="decimal" value={footer} onChange={(e) => setFooter(e.target.value.slice(0, 8))} />
           </label>
         </div>
       </fieldset>
@@ -428,6 +425,7 @@ export function HeaderFormatDialog({ store, onClose }: { store: PageStore; onClo
   );
 }
 
+/** A page area dialog: Enter in a field applies it. */
 function SmallDialog({
   title,
   onClose,
@@ -440,42 +438,32 @@ function SmallDialog({
   children: ReactNode;
 }) {
   const t = useT();
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    ref.current?.focus();
-  }, []);
-  if (typeof document === "undefined") return null;
-  return createPortal(
-    <div
-      className="docs-dialog-backdrop"
-      data-edit-control
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.stopPropagation();
-          onClose();
-        } else if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") {
-          e.preventDefault();
-          onApply();
-        }
-      }}
+  return (
+    <ToolbarDialog
+      title={title}
+      onClose={onClose}
+      className="docs-small-dialog"
+      closeButton={false}
+      actions={
+        <>
+          <DialogButton onClick={onClose}>{t("docs.cancel")}</DialogButton>
+          <DialogButton primary onClick={onApply}>
+            {t("docs.apply")}
+          </DialogButton>
+        </>
+      }
     >
-      <div ref={ref} role="dialog" aria-modal="true" aria-label={title} className="docs-setup-dialog docs-small-dialog" tabIndex={-1}>
-        <h2 className="docs-setup-title">{title}</h2>
-        <div className="docs-setup-body">{children}</div>
-        <div className="docs-setup-actions">
-          <span className="docs-setup-spacer" />
-          <button type="button" className="docs-setup-text-btn" onClick={onClose}>
-            {t("docsPage.cancel")}
-          </button>
-          <button type="button" className="docs-button-primary" onClick={onApply}>
-            {t("docsPage.apply")}
-          </button>
-        </div>
+      <div
+        className="docs-setup-body"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
+            e.preventDefault();
+            onApply();
+          }
+        }}
+      >
+        {children}
       </div>
-    </div>,
-    document.body,
+    </ToolbarDialog>
   );
 }

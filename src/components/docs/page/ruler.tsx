@@ -3,11 +3,13 @@
 import type { Editor } from "@tiptap/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useT } from "@/components/lang-provider";
+import { useLang, useT } from "@/components/lang-provider";
 import {
   MIN_TEXT_PT,
   PT_PER_UNIT,
   PX_PER_PT,
+  lengthUnitFor,
+  pageAt,
   pageFrame,
   scrollParent,
   type LengthUnit,
@@ -25,8 +27,8 @@ import type { PageSetup } from "@/lib/docs/schema";
 // at the left does the same for the top and bottom margins of the page that
 // holds the caret. Both follow the zoom.
 
-/** The page's place on screen, client px. */
-type PageRect = { left: number; top: number; width: number; height: number; scale: number };
+/** The page's place on screen, client px; x is its left from the canvas's. */
+type PageRect = { left: number; top: number; width: number; height: number; scale: number; x: number };
 
 /** Ticks closer than this draw only the major ones; numbers need more. */
 const MIN_TICK = 5;
@@ -34,7 +36,7 @@ const MIN_NUMBER_TICK = 7;
 
 /** Where the page is on screen, kept up to date through scrolling, resizing,
     zooming, and the page's moves. */
-function usePageRect(editor: Editor, deps: unknown[]): PageRect | null {
+export function usePageRect(editor: Editor, deps: unknown[]): PageRect | null {
   const [rect, setRect] = useState<PageRect | null>(null);
   useEffect(() => {
     const page = editor.view.dom.closest<HTMLElement>("[data-docs-page]");
@@ -47,10 +49,11 @@ function usePageRect(editor: Editor, deps: unknown[]): PageRect | null {
       frame = 0;
       const r = page.getBoundingClientRect();
       const scale = page.offsetWidth > 0 ? r.width / page.offsetWidth : 1;
+      const x = r.left - (canvas?.getBoundingClientRect().left ?? 0);
       setRect((prev) =>
-        prev && prev.left === r.left && prev.top === r.top && prev.width === r.width && prev.height === r.height
+        prev && prev.left === r.left && prev.top === r.top && prev.width === r.width && prev.height === r.height && prev.x === x
           ? prev
-          : { left: r.left, top: r.top, width: r.width, height: r.height, scale },
+          : { left: r.left, top: r.top, width: r.width, height: r.height, scale, x },
       );
       if (moving > 0) frame = requestAnimationFrame(measure);
     };
@@ -107,42 +110,47 @@ function snapPt(pt: number, unit: LengthUnit): number {
   return Math.round(pt / step) * step;
 }
 
-type Tick = { at: number; kind: "minor" | "major" | "unit"; label: string | null; active: boolean };
+type Tick = { at: number; major: boolean; label: string | null; active: boolean };
 
 /** The ticks along a ruler `length` px long whose 0 sits at `origin` px, in
     px at the page's zoom; `active` is the text column [from, to]. */
 function ticks(unit: LengthUnit, scale: number, origin: number, length: number, from: number, to: number): Tick[] {
-  const unitPx = PT_PER_UNIT[unit] * PX_PER_PT * scale;
   const sub = unit === "in" ? 8 : 4;
-  const majorEvery = unit === "in" ? 4 : 2;
-  const step = unitPx / sub;
+  const majorEvery = sub / 2;
+  const step = (PT_PER_UNIT[unit] * PX_PER_PT * scale) / sub;
+  // Crowded ticks draw only the major ones, spaced out by 4, then 2, and so on.
   let every = 1;
-  let onlyMajor = false;
   if (step <= MIN_TICK) {
-    onlyMajor = true;
     every = majorEvery;
-    // Majors crowded too: space them out by 4, then 2, and so on.
-    let factor = 4;
-    while (step * every <= MIN_TICK) {
-      every *= factor;
-      factor = factor === 4 ? 2 : 4;
-    }
+    for (let factor = 4; step * every <= MIN_TICK; factor = factor === 4 ? 2 : 4) every *= factor;
   }
-  const numbers = !onlyMajor && step > MIN_NUMBER_TICK;
+  const numbers = every === 1 && step > MIN_NUMBER_TICK;
   const out: Tick[] = [];
-  const first = Math.ceil(-origin / step);
-  const last = Math.floor((length - origin) / step);
-  for (let k = first; k <= last; k++) {
+  for (let k = Math.ceil(-origin / step); k <= Math.floor((length - origin) / step); k++) {
     if (k % every !== 0) continue;
     const at = origin + k * step;
-    const isUnit = k % sub === 0;
-    const isMajor = k % majorEvery === 0;
-    const active = at >= from - 0.5 && at <= to + 0.5;
-    if (isUnit && k !== 0 && numbers) out.push({ at, kind: "unit", label: String(Math.abs(k / sub)), active });
-    else if (isUnit && k === 0) out.push({ at, kind: "unit", label: null, active });
-    else out.push({ at, kind: isMajor || onlyMajor ? "major" : "minor", label: null, active });
+    const label = numbers && k % sub === 0 && k !== 0 ? String(Math.abs(k / sub)) : null;
+    out.push({
+      at,
+      major: k !== 0 && !label && (every > 1 || k % majorEvery === 0),
+      label,
+      active: at >= from - 0.5 && at <= to + 0.5,
+    });
   }
   return out;
+}
+
+/** The ticks of either ruler. */
+function Ticks({ list, vertical }: { list: Tick[]; vertical?: boolean }) {
+  return list.map((tick, i) => (
+    <span
+      key={i}
+      className={`${vertical ? "docs-vruler-tick" : "docs-ruler-tick"}${tick.major ? " docs-ruler-major" : ""}${tick.active ? " docs-ruler-active" : ""}`}
+      style={vertical ? { top: tick.at } : { left: tick.at }}
+    >
+      {tick.label && <span className="docs-ruler-number">{tick.label}</span>}
+    </span>
+  ));
 }
 
 type DragTip = { x: number; y: number; text: string; vertical: boolean; guide: number } | null;
@@ -299,18 +307,9 @@ function setIndents(editor: Editor, patch: { indentLeft?: number; indentFirstLin
 
 /** The ruler row under the toolbar: the corner with Page setup, then the
     horizontal ruler. */
-export function HorizontalRuler({
-  editor,
-  store,
-  editing,
-  unit,
-}: {
-  editor: Editor;
-  store: PageStore;
-  editing: boolean;
-  unit: LengthUnit;
-}) {
+export function HorizontalRuler({ editor, store, editing }: { editor: Editor; store: PageStore; editing: boolean }) {
   const t = useT();
+  const unit = lengthUnitFor(useLang());
   const setup = usePageState(store, (s) => s.setup);
   const pages = usePageState(store, (s) => s.pages);
   const scale = usePageState(store, (s) => s.scale);
@@ -318,7 +317,7 @@ export function HorizontalRuler({
   const frame = useMemo(() => pageFrame(setup), [setup]);
   const page = usePageRect(editor, [setup, scale, pages, textWidth]);
   const stripRef = useRef<HTMLDivElement>(null);
-  const [strip, setStrip] = useState<{ left: number; width: number; bottom: number } | null>(null);
+  const [strip, setStrip] = useState<{ left: number; bottom: number } | null>(null);
   const indents = useIndents(editor, frame);
   const [tip, setTip] = useState<DragTip>(null);
   // While a marker moves: its place, px at the page's zoom from the page's left.
@@ -329,7 +328,7 @@ export function HorizontalRuler({
     if (!el) return;
     const measure = () => {
       const r = el.getBoundingClientRect();
-      setStrip((prev) => (prev && prev.left === r.left && prev.width === r.width && prev.bottom === r.bottom ? prev : { left: r.left, width: r.width, bottom: r.bottom }));
+      setStrip((prev) => (prev && prev.left === r.left && prev.bottom === r.bottom ? prev : { left: r.left, bottom: r.bottom }));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -418,36 +417,26 @@ export function HorizontalRuler({
   const marginRightAt = draft?.key === "margin-right" ? draft.at : pageWidth - marginRight;
 
   return (
-    <div className="docs-ruler-row" data-pageless={pageless || undefined}>
-      <div className="docs-ruler-corner">
-        {editing && (
-          <button
-            type="button"
-            className="docs-ruler-corner-btn"
-            aria-label={t("docsPage.pageSetup")}
-            data-tip={t("docsPage.pageSetup")}
-            data-track="docs:page-setup-corner"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => store.set({ dialog: "setup" })}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden focusable="false">
-              <path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 19c0 1.1.89 2 1.99 2H17c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H7V5h10v14z" />
-            </svg>
-          </button>
-        )}
-      </div>
+    <div className="docs-ruler-row">
+      {editing && (
+        <button
+          type="button"
+          className="docs-ruler-corner"
+          aria-label={t("docsPage.pageSetup")}
+          data-tip={t("docsPage.pageSetup")}
+          data-track="docs:page-setup-corner"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => store.set({ dialog: "setup" })}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden focusable="false">
+            <path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 19c0 1.1.89 2 1.99 2H17c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H7V5h10v14z" />
+          </svg>
+        </button>
+      )}
       <div ref={stripRef} className="docs-ruler" role="presentation" aria-label={t("docsPage.ruler")}>
         {strip && page && (
           <div className="docs-ruler-face" style={{ left: pageLeft, width: pageWidth }}>
-            {list.map((tick, i) => (
-              <span
-                key={i}
-                className={`docs-ruler-tick docs-ruler-${tick.kind}${tick.active ? " docs-ruler-active" : ""}`}
-                style={{ left: tick.at }}
-              >
-                {tick.label && <span className="docs-ruler-number">{tick.label}</span>}
-              </span>
-            ))}
+            <Ticks list={list} />
             {!pageless && (
               <>
                 <span
@@ -520,19 +509,18 @@ export function VerticalRuler({
   editor,
   store,
   editing,
-  unit,
   top,
   height,
 }: {
   editor: Editor;
   store: PageStore;
   editing: boolean;
-  unit: LengthUnit;
   /** The ruler's top on screen, client px. */
   top: number;
   height: number;
 }) {
   const t = useT();
+  const unit = lengthUnitFor(useLang());
   const setup = usePageState(store, (s) => s.setup);
   const pages = usePageState(store, (s) => s.pages);
   const scale = usePageState(store, (s) => s.scale);
@@ -547,17 +535,18 @@ export function VerticalRuler({
   const readCaretPage = useCallback(() => {
     const art = editor.view.dom.closest<HTMLElement>("[data-docs-page]");
     if (!art) return;
-    const r = art.getBoundingClientRect();
-    const s = art.offsetWidth > 0 ? r.width / art.offsetWidth : 1;
-    const pageAt = (clientY: number) => Math.max(0, Math.min(pages - 1, Math.floor((clientY - r.top) / s / frame.pitch)));
+    const at = (clientY: number) => Math.max(0, Math.min(pages - 1, pageAt(art, frame.pitch, clientY).page));
+    const middle = at(top + height / 2);
     try {
-      const c = editor.view.coordsAtPos(editor.state.selection.head);
-      const caret = pageAt(c.top);
-      const pageTop = r.top + caret * frame.pitch * s;
-      const visible = pageTop < top + height && pageTop + frame.height * s > top;
-      setCaretPage(visible ? caret : pageAt(top + height / 2));
+      const caretTop = editor.view.coordsAtPos(editor.state.selection.head).top;
+      const caret = at(caretTop);
+      // The caret's page shows while any of it is in view.
+      const { y } = pageAt(art, frame.pitch, caretTop);
+      const s = art.getBoundingClientRect().width / (art.offsetWidth || 1);
+      const pageTop = caretTop - y * s;
+      setCaretPage(pageTop < top + height && pageTop + frame.height * s > top ? caret : middle);
     } catch {
-      setCaretPage(pageAt(top + height / 2));
+      setCaretPage(middle);
     }
   }, [editor, pages, frame.pitch, frame.height, top, height]);
 
@@ -609,24 +598,16 @@ export function VerticalRuler({
   return (
     <div className="docs-vruler" style={{ height }} aria-label={t("docsPage.verticalRuler")}>
       <div className="docs-vruler-face" style={{ top: pageTop, height: pageHeight }}>
-        {list.map((tick, i) => (
-          <span
-            key={i}
-            className={`docs-vruler-tick docs-ruler-${tick.kind}${tick.active ? " docs-ruler-active" : ""}`}
-            style={{ top: tick.at }}
-          >
-            {tick.label && <span className="docs-ruler-number">{tick.label}</span>}
-          </span>
-        ))}
+        <Ticks list={list} vertical />
         <span
-          className="docs-vruler-margin docs-vruler-margin-start"
+          className="docs-ruler-margin docs-ruler-margin-start"
           style={{ top: 0, height: Math.max(0, topAt) }}
           data-tip={draft ? undefined : t("docsPage.topMargin")}
           onPointerDown={onMargin("top")}
           data-edit={editing || undefined}
         />
         <span
-          className="docs-vruler-margin docs-vruler-margin-end"
+          className="docs-ruler-margin docs-ruler-margin-end"
           style={{ top: bottomAt, height: Math.max(0, pageHeight - bottomAt) }}
           data-tip={draft ? undefined : t("docsPage.bottomMargin")}
           onPointerDown={onMargin("bottom")}

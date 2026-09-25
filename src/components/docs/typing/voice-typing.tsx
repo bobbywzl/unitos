@@ -9,12 +9,9 @@ import { keepFocus } from "@/components/docs/menu";
 import { DragIcon } from "@/components/docs/insert/icons";
 
 // Voice typing (Ctrl+Shift+S), as Google Docs does it (SPEC.md §29, typing):
-// a small microphone box at the left of the page; a click on the microphone
-// starts listening (it turns red and pulses) and a second click stops it.
-// What is heard goes in at the caret, which the reader may move while it
-// listens. "period", "comma", "question mark", "exclamation point", "new
-// line", and "new paragraph" type what they name. The browser's speech
-// service hears; where there is none, the box says so.
+// a microphone box at the left of the page; a click starts or stops
+// listening. What the browser's speech service hears goes in at the caret;
+// "period", "comma", "new line", and the like type what they name.
 
 type Recognition = {
   lang: string;
@@ -231,8 +228,8 @@ export function VoiceTyping({ editor, open, onClose }: { editor: Editor; open: b
         <DragIcon size={18} />
         <button
           type="button"
-          className="docs-find-btn"
-          aria-label={t("docsTyping.close")}
+          className="docs-icon-btn"
+          aria-label={t("docs.close")}
           onPointerDown={(e) => e.stopPropagation()}
           onMouseDown={keepFocus}
           onClick={() => {

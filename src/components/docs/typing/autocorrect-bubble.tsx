@@ -1,11 +1,11 @@
 "use client";
 
 import { useEditorState, type Editor } from "@tiptap/react";
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { MoreVertIcon, UndoIcon } from "@/components/docs/icons";
-import { keepFocus } from "@/components/docs/menu";
+import { DropdownPanel, keepFocus, MenuItem } from "@/components/docs/menu";
 import { TYPING_EVENT, fireTyping } from "@/components/docs/typing/events";
 import { traceAtCaret, undoCorrection } from "@/components/docs/typing/trace";
 
@@ -17,11 +17,8 @@ import { traceAtCaret, undoCorrection } from "@/components/docs/typing/trace";
 export function AutocorrectBubble({ editor }: { editor: Editor }) {
   const t = useT();
   const [menu, setMenu] = useState(false);
-  const trace = useEditorState({
-    editor,
-    selector: ({ editor: e }) => (e.isEditable ? traceAtCaret(e.state) : null),
-    equalityFn: (a, b) => a?.from === b?.from && a?.to === b?.to && a?.original === b?.original,
-  });
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const trace = useEditorState({ editor, selector: ({ editor: e }) => (e.isEditable ? traceAtCaret(e.state) : null) });
   // The bubble follows its word when the page scrolls.
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   useEffect(() => {
@@ -48,23 +45,17 @@ export function AutocorrectBubble({ editor }: { editor: Editor }) {
   }
   const undo = () => undoCorrection(editor.view, trace);
   return createPortal(
-    <div
-      className="docs-ac-bubble"
-      style={{ left: box.left, top: box.top }}
-      data-edit-control
-      data-docs-typing
-      onMouseDown={keepFocus}
-      onMouseUp={(e) => e.stopPropagation()}
-    >
-      <span className="docs-sr-only" aria-live="polite">
+    <div className="docs-ac-bubble" style={box} data-edit-control data-docs-typing onMouseDown={keepFocus} onMouseUp={(e) => e.stopPropagation()}>
+      <span className="sr-only" aria-live="polite">
         {t("docsTyping.autocorrectedTo", { word: trace.fixed })}
       </span>
-      <button type="button" className="docs-find-btn" aria-label={t("docsTyping.undoAutocorrect")} data-tip={t("docsTyping.undoAutocorrect")} onClick={undo}>
+      <button type="button" className="docs-icon-btn" aria-label={t("docs.undo")} data-tip={t("docs.undo")} onClick={undo}>
         <UndoIcon size={18} />
       </button>
       <button
+        ref={moreRef}
         type="button"
-        className="docs-find-btn"
+        className="docs-icon-btn"
         aria-label={t("docsTyping.moreOptions")}
         aria-haspopup="menu"
         aria-expanded={menu}
@@ -73,24 +64,17 @@ export function AutocorrectBubble({ editor }: { editor: Editor }) {
       >
         <MoreVertIcon size={18} />
       </button>
-      {menu && (
-        <div role="menu" className="docs-ac-menu">
-          <button type="button" role="menuitem" className="docs-wc-item" onClick={undo}>
-            {t("docsTyping.stopCorrecting", { word: trace.original })}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="docs-wc-item"
-            onClick={() => {
-              setMenu(false);
-              fireTyping(TYPING_EVENT.preferences);
-            }}
-          >
-            {t("docsTyping.autocorrectOptions")}
-          </button>
-        </div>
-      )}
+      <DropdownPanel open={menu} anchorRef={moreRef} onClose={() => setMenu(false)} className="docs-menu-plain">
+        <MenuItem onSelect={undo}>{t("docsTyping.stopCorrecting", { word: trace.original })}</MenuItem>
+        <MenuItem
+          onSelect={() => {
+            setMenu(false);
+            fireTyping(TYPING_EVENT.preferences);
+          }}
+        >
+          {t("docsTyping.autocorrectOptions")}
+        </MenuItem>
+      </DropdownPanel>
     </div>,
     document.body,
   );

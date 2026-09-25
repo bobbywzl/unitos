@@ -5,10 +5,10 @@ import { MoreVertIcon } from "@/components/docs/icons";
 import { DropdownPanel, keepFocus } from "@/components/docs/menu";
 import { OPEN_MENU_EVENT, Sep } from "@/components/docs/toolbar/controls";
 
-// The toolbar's row (SPEC.md §29). When the controls do not fit, the mode
-// switcher's name folds first, then whole groups move, right to left, into
-// More (⋮). The row is one Tab stop: Left and Right move between controls,
-// Escape goes back to the page.
+// The toolbar's row (SPEC.md §29). When the controls do not fit, the right
+// end's captions fold first — the mode's name, and Extract to its symbol —
+// then whole groups move, right to left, into More (⋮). The row is one Tab
+// stop: Left and Right move between controls, Escape goes back to the page.
 
 export type ToolbarGroup = {
   key: string;
@@ -19,9 +19,10 @@ export type ToolbarGroup = {
   menus?: string[];
 };
 
-/** The mode switcher's name box, open and folded, with its 2 px padding. */
+/** The mode's name box, open and folded, and Extract folded (css/toolbar.css). */
 const CAPTION_OPEN = 122;
 const CAPTION_FOLDED = 26;
+const UNITOS_FOLDED = 30;
 /** More (⋮) with its margins. */
 const MORE = 32;
 
@@ -33,16 +34,14 @@ function focusTarget(item: HTMLElement): HTMLElement | null {
 export function ToolbarRow({
   groups,
   right,
-  foldable,
   label,
   moreLabel,
   pageless,
   onEscape,
 }: {
   groups: ToolbarGroup[];
-  /** The right end: the mode switcher (folded or not) and Hide the menus. */
-  right: (folded: boolean) => ReactNode;
-  foldable: boolean;
+  /** The right end: the Unitos tools (in .docs-tb-unitos), the mode, and Hide the menus. */
+  right: ReactNode;
   label: string;
   moreLabel: string;
   pageless: boolean;
@@ -53,6 +52,7 @@ export function ToolbarRow({
   const rightRef = useRef<HTMLDivElement>(null);
   const groupRefs = useRef(new Map<string, HTMLDivElement>());
   const widths = useRef(new Map<string, number>());
+  const unitosOpen = useRef(0);
   const moreRef = useRef<HTMLButtonElement>(null);
   const [shown, setShown] = useState(groups.length);
   const [folded, setFolded] = useState(false);
@@ -73,31 +73,31 @@ export function ToolbarRow({
     for (const [key, el] of groupRefs.current) widths.current.set(key, el.offsetWidth);
     const style = getComputedStyle(bar);
     const inner = bar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 2;
-    // The name box's width animates; the rest of the right end does not.
+    // The right end without the boxes that fold (the name's width animates),
+    // then with them open and folded.
     const caption = rightEl.querySelector<HTMLElement>(".docs-mode-caption");
-    const base = rightEl.offsetWidth + 4 - (caption ? caption.offsetWidth + 2 : 0);
-    const rightOpen = base + (caption ? CAPTION_OPEN : 0);
-    const rightFolded = base + (caption ? CAPTION_FOLDED : 0);
+    const unitos = rightEl.querySelector<HTMLElement>(".docs-tb-unitos");
+    if (unitos && !rightEl.hasAttribute("data-folded")) unitosOpen.current = unitos.offsetWidth;
+    const base = rightEl.offsetWidth + 4 - (caption?.offsetWidth ?? 0) - (unitos?.offsetWidth ?? 0);
+    const rightOpen = base + (caption ? CAPTION_OPEN : 0) + (unitos ? unitosOpen.current : 0);
+    const rightFolded = base + (caption ? CAPTION_FOLDED : 0) + (unitos ? UNITOS_FOLDED : 0);
     const list = groups.map((g) => widths.current.get(g.key) ?? 0);
     const total = list.reduce((a, b) => a + b, 0);
+    const nextFolded = total > inner - rightOpen;
     let nextShown = count;
-    let nextFolded = false;
-    if (total > inner - rightOpen) {
-      nextFolded = foldable;
-      const room = inner - (foldable ? rightFolded : rightOpen);
-      if (total > room) {
-        let used = 0;
-        nextShown = 0;
-        for (let i = 0; i < count; i++) {
-          if (used + list[i] + MORE > room) break;
-          used += list[i];
-          nextShown = i + 1;
-        }
+    const room = inner - rightFolded;
+    if (total > room) {
+      let used = 0;
+      nextShown = 0;
+      for (let i = 0; i < count; i++) {
+        if (used + list[i] + MORE > room) break;
+        used += list[i];
+        nextShown = i + 1;
       }
     }
     setShown((s) => (s === nextShown ? s : nextShown));
     setFolded((f) => (f === nextFolded ? f : nextFolded));
-  }, [groups, count, foldable]);
+  }, [groups, count]);
   const fitRef = useRef(fit);
 
   useLayoutEffect(() => {
@@ -175,11 +175,10 @@ export function ToolbarRow({
   return (
     <div
       ref={barRef}
-      className="docs-toolbar"
+      className={`docs-toolbar${pageless ? " docs-tb-pageless" : ""}`}
       role="toolbar"
       aria-label={label}
       data-edit-control
-      data-pageless={pageless ? "" : undefined}
       onKeyDown={onKeyDown}
     >
       <div className="docs-tb-left">
@@ -218,11 +217,11 @@ export function ToolbarRow({
               anchorRef={moreRef}
               onClose={() => setMoreOpen(false)}
               placement="below-right"
-              className="docs-tb-bubble"
+              className={`docs-tb-bubble${pageless ? " docs-tb-pageless" : ""}`}
               label={moreLabel}
               keys={false}
             >
-              <div className="docs-tb-bubble-row" data-pageless={pageless ? "" : undefined} role="toolbar" aria-label={moreLabel}>
+              <div className="docs-tb-bubble-row" role="toolbar" aria-label={moreLabel}>
                 {hidden.map((g, i) => (
                   <Fragment key={g.key}>
                     {i > 0 && g.sep && <Sep />}
@@ -234,8 +233,8 @@ export function ToolbarRow({
           </>
         )}
       </div>
-      <div ref={rightRef} className="docs-tb-right">
-        {right(folded)}
+      <div ref={rightRef} className="docs-tb-right" data-folded={folded ? "" : undefined}>
+        {right}
       </div>
     </div>
   );

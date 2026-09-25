@@ -8,6 +8,7 @@ import { LineSpacingIcon } from "@/components/docs/icons";
 import { MenuItem, MenuSeparator } from "@/components/docs/menu";
 import { DropBtn } from "@/components/docs/toolbar/controls";
 import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Line & paragraph spacing (SPEC.md §29): Single, 1.15, 1.5, Double, and
 // Custom: N for any other value; add or remove the space before and after
@@ -36,7 +37,7 @@ export const LINE_SPACINGS = [
   { value: 2, key: "docs.spacingDouble" },
 ] as const;
 
-export const PARAGRAPH_FLAGS: { flag: ParagraphFlag; key: "docs.keepWithNext" | "docs.keepLinesTogether" | "docs.preventSingleLines" | "docs.pageBreakBefore" }[] = [
+export const PARAGRAPH_FLAGS: { flag: ParagraphFlag; key: TKey }[] = [
   { flag: "keepWithNext", key: "docs.keepWithNext" },
   { flag: "keepLinesTogether", key: "docs.keepLinesTogether" },
   { flag: "preventSingleLines", key: "docs.preventSingleLines" },

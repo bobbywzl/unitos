@@ -3,6 +3,7 @@ import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/p
 import { ReplaceStep } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { insertLayerOn, insertT } from "@/components/docs/insert/context";
+import { typingPrefs } from "@/components/docs/typing/prefs";
 
 // The "@" menu's trigger (SPEC.md §29): "@" at a line start or after a
 // space, a tab, "(" or "[" opens the menu, and the words typed after it are
@@ -94,6 +95,7 @@ function typedTrigger(tr: Transaction, next: EditorState): { from: number; char:
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (ch !== "@" && ch !== ":") continue;
+    if (ch === ":" && !typingPrefs().colonEmoji) continue;
     const ok = i === 0 ? prefixOk(next, later) : PREFIXES.has(text[i - 1]);
     if (ok) return { from: later + i, char: ch };
   }

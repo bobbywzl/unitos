@@ -3,21 +3,19 @@
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { moveTableColumn, moveTableRow, TableMap } from "@tiptap/pm/tables";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { AddIcon, DropDownIcon } from "@/components/docs/icons";
 import { MenuItem } from "@/components/docs/menu";
+import { PX_PER_PT } from "@/components/docs/page/geometry";
 import { DropBtn } from "@/components/docs/toolbar/controls";
 import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
-import { Swatches } from "@/components/docs/insert/colors";
+import { BorderButtons, ColorButton } from "@/components/docs/insert/colors";
 import { onInsert, type InsertContext } from "@/components/docs/insert/context";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
-  BorderColorIcon,
-  BorderDashIcon,
-  BorderWeightIcon,
   DragHorizontalIcon,
   DragIcon,
   FillIcon,
@@ -28,17 +26,8 @@ import {
   TableRowIcon,
   UnpinIcon,
 } from "@/components/docs/insert/icons";
-import { BORDER_WEIGHTS, DashRow, DASHES, WeightRow } from "@/components/docs/insert/image-controls";
-import {
-  BORDER_TARGETS,
-  cellBorder,
-  pinnedCount,
-  selectedCells,
-  tableRectOf,
-  type BorderTarget,
-  type VAlign,
-} from "@/components/docs/insert/table";
-import { FloatingBox, keepSelection, PanelSection, SidePanel, useEditorTick, useViewportTick } from "@/components/docs/insert/ui";
+import { BORDER_TARGETS, cellBorder, pinnedCount, selectedCells, tableRectOf, type BorderTarget, type VAlign } from "@/components/docs/insert/table";
+import { FloatingBox, keepSelection, LengthField, PanelSection, Seg, SidePanel, useEditorTick, useViewportTick } from "@/components/docs/insert/ui";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // A table's controls (SPEC.md §29), Google Docs' way: the row and column
@@ -46,47 +35,31 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // selector in the caret's cell, the Split cell dialog, and the Table
 // options panel.
 
-const PX_PER_PT = 96 / 72;
-const PX_PER_IN = 96;
-
 type Hover = { tablePos: number; row: number; col: number; rowRect: DOMRect; colRect: DOMRect; tableRect: DOMRect };
 
 /** Where the pointer is over a table: its row and column, and their boxes. */
 function hoverAt(editor: Editor, cell: HTMLElement): Hover | null {
   const view = editor.view;
-  const wrapper = cell.closest<HTMLElement>(".tableWrapper");
-  const tableEl = wrapper?.querySelector("table");
+  const tableEl = cell.closest(".tableWrapper")?.querySelector("table");
   const rowEl = cell.closest("tr");
-  if (!wrapper || !tableEl || !rowEl) return null;
-  let cellPos: number;
+  if (!tableEl || !rowEl) return null;
   try {
-    cellPos = view.posAtDOM(cell, 0) - 1;
-  } catch {
-    return null;
-  }
-  const $cell = view.state.doc.resolve(cellPos);
-  let tablePos = -1;
-  for (let d = $cell.depth; d > 0; d--) {
-    if ($cell.node(d).type.name === "table") {
-      tablePos = $cell.before(d);
-      break;
+    const cellPos = view.posAtDOM(cell, 0) - 1;
+    const $cell = view.state.doc.resolve(cellPos);
+    for (let d = $cell.depth; d > 0; d--) {
+      if ($cell.node(d).type.name !== "table") continue;
+      const tablePos = $cell.before(d);
+      const rect = TableMap.get($cell.node(d)).findCell(cellPos - tablePos - 1);
+      const cellRect = cell.getBoundingClientRect();
+      const tableRect = tableEl.getBoundingClientRect();
+      // The column's box: the whole column under the cell.
+      const colRect = new DOMRect(cellRect.left, tableRect.top, cellRect.width, tableRect.height);
+      return { tablePos, row: rect.top, col: rect.left, rowRect: rowEl.getBoundingClientRect(), colRect, tableRect };
     }
-  }
-  if (tablePos < 0) return null;
-  const table = view.state.doc.nodeAt(tablePos);
-  if (!table) return null;
-  const map = TableMap.get(table);
-  let rect;
-  try {
-    rect = map.findCell(cellPos - tablePos - 1);
   } catch {
-    return null;
+    // Not a cell of the document.
   }
-  // The column's box: the whole column under the cell's left edge.
-  const cellRect = cell.getBoundingClientRect();
-  const tableRect = tableEl.getBoundingClientRect();
-  const colRect = new DOMRect(cellRect.left, tableRect.top, cellRect.width, tableRect.height);
-  return { tablePos, row: rect.top, col: rect.left, rowRect: rowEl.getBoundingClientRect(), colRect, tableRect };
+  return null;
 }
 
 /** Put the caret in a cell of the table, so the table commands act there. */
@@ -95,8 +68,7 @@ function caretInCell(editor: Editor, tablePos: number, row: number, col: number)
   if (!table) return;
   const map = TableMap.get(table);
   const rel = map.map[Math.min(row, map.height - 1) * map.width + Math.min(col, map.width - 1)];
-  const pos = tablePos + 1 + rel + 1;
-  editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(editor.state.doc.resolve(pos))));
+  editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(editor.state.doc.resolve(tablePos + rel + 2))));
 }
 
 export function TableControlsHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
@@ -128,7 +100,7 @@ export function TableControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
       setHover((h) => (h && next && h.tablePos === next.tablePos && h.row === next.row && h.col === next.col ? h : next));
     };
     const onLeave = (e: MouseEvent) => {
-      if ((e.relatedTarget as Element | null)?.closest?.("[data-docs-table-pill]")) return;
+      if ((e.relatedTarget as Element | null)?.closest?.("[data-docs-table-pill], [data-docs-menu]")) return;
       hideTimer.current = window.setTimeout(() => setHover(null), 400);
     };
     dom.addEventListener("mousemove", onMove);
@@ -139,47 +111,36 @@ export function TableControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
     };
   }, [editor, ctx.editing]);
 
-  const keep = () => {
-    if (hideTimer.current) window.clearTimeout(hideTimer.current);
-  };
-  const leave = () => {
-    hideTimer.current = window.setTimeout(() => setHover(null), 400);
-  };
-
-  const closePanel = useCallback(() => setPanel(false), []);
-
   return (
     <>
-      {ctx.editing && hover && <Pills editor={editor} hover={hover} onEnter={keep} onLeave={leave} onDone={() => setHover(null)} />}
+      {ctx.editing && hover && (
+        <Pills
+          editor={editor}
+          hover={hover}
+          onEnter={() => hideTimer.current && window.clearTimeout(hideTimer.current)}
+          onLeave={() => {
+            hideTimer.current = window.setTimeout(() => setHover(null), 400);
+          }}
+          onDone={() => setHover(null)}
+        />
+      )}
       {ctx.editing && inTable && <BorderSelector editor={editor} />}
       {ctx.editing && <RowResizer editor={editor} />}
-      {panel && inTable && <TableOptionsPanel editor={editor} onClose={closePanel} />}
+      {panel && inTable && <TableOptionsPanel editor={editor} onClose={() => setPanel(false)} />}
       {split && inTable && <SplitDialog editor={editor} onClose={() => setSplit(false)} />}
     </>
   );
 }
 
 /** The row and column pills of the hovered cell. */
-function Pills({
-  editor,
-  hover,
-  onEnter,
-  onLeave,
-  onDone,
-}: {
-  editor: Editor;
-  hover: Hover;
-  onEnter: () => void;
-  onLeave: () => void;
-  onDone: () => void;
-}) {
+function Pills({ editor, hover, onEnter, onLeave, onDone }: { editor: Editor; hover: Hover; onEnter: () => void; onLeave: () => void; onDone: () => void }) {
   const t = useT();
-  const [sortOpen, setSortOpen] = useState(false);
   const [drag, setDrag] = useState<{ axis: "row" | "col"; line: number } | null>(null);
   const table = editor.state.doc.nodeAt(hover.tablePos);
   if (!table || typeof document === "undefined") return null;
   const pinned = pinnedCount(table);
   const rowPinned = hover.row < pinned;
+  const pinLabel = t(rowPinned ? (pinned > 1 ? "docsInsert.unpinHeaderRows" : "docsInsert.unpinHeaderRow") : "docsInsert.pinHeaderUpToRow");
   const run = (fn: () => void) => {
     caretInCell(editor, hover.tablePos, hover.row, hover.col);
     fn();
@@ -191,21 +152,15 @@ function Pills({
     e.preventDefault();
     const tableEl = editor.view.nodeDOM(hover.tablePos) as HTMLElement | null;
     const rows = tableEl ? [...tableEl.querySelectorAll("tr")] : [];
-    const firstRowCells = rows[0] ? [...rows[0].children] : [];
-    const edges =
-      axis === "row"
-        ? [...rows.map((r) => r.getBoundingClientRect().top), rows.length ? rows[rows.length - 1].getBoundingClientRect().bottom : 0]
-        : [...firstRowCells.map((c) => c.getBoundingClientRect().left), firstRowCells.length ? firstRowCells[firstRowCells.length - 1].getBoundingClientRect().right : 0];
+    const parts = axis === "row" ? rows : [...(rows[0]?.children ?? [])];
+    const boxes = parts.map((el) => el.getBoundingClientRect());
+    const edges = axis === "row" ? [...boxes.map((r) => r.top), boxes[boxes.length - 1]?.bottom ?? 0] : [...boxes.map((r) => r.left), boxes[boxes.length - 1]?.right ?? 0];
     const from = axis === "row" ? hover.row : hover.col;
     let gap = from;
     const onMove = (ev: MouseEvent) => {
       const at = axis === "row" ? ev.clientY : ev.clientX;
-      let best = 0;
-      edges.forEach((edge, i) => {
-        if (Math.abs(edge - at) < Math.abs(edges[best] - at)) best = i;
-      });
-      gap = best;
-      setDrag({ axis, line: edges[best] });
+      gap = edges.reduce((best, edge, i) => (Math.abs(edge - at) < Math.abs(edges[best] - at) ? i : best), 0);
+      setDrag({ axis, line: edges[gap] });
     };
     const onUp = () => {
       window.removeEventListener("mousemove", onMove, true);
@@ -213,9 +168,8 @@ function Pills({
       setDrag(null);
       const to = gap > from ? gap - 1 : gap;
       if (to === from) return;
-      const pos = hover.tablePos + 1;
-      const command = axis === "row" ? moveTableRow({ from, to, pos, select: false }) : moveTableColumn({ from, to, pos, select: false });
-      command(editor.state, editor.view.dispatch);
+      const move = axis === "row" ? moveTableRow : moveTableColumn;
+      move({ from, to, pos: hover.tablePos + 1, select: false })(editor.state, editor.view.dispatch);
       onDone();
       editor.view.focus();
     };
@@ -223,115 +177,84 @@ function Pills({
     window.addEventListener("mouseup", onUp, true);
   };
 
-  const tableRect = hover.tableRect;
+  const pill = (axis: "row" | "col", style: React.CSSProperties, buttons: React.ReactNode) => (
+    <div
+      className={`docs-table-pill docs-table-pill-${axis}`}
+      data-docs-table-pill
+      data-docs-insert-popover
+      data-edit-control
+      data-selection-popover
+      onMouseDown={keepSelection}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      style={style}
+    >
+      <button
+        type="button"
+        className="docs-pill-btn docs-pill-drag"
+        aria-label={t(axis === "row" ? "docsInsert.dragRow" : "docsInsert.dragColumn")}
+        data-tip={t(axis === "row" ? "docsInsert.dragRow" : "docsInsert.dragColumn")}
+        onMouseDown={(e) => startDrag(axis, e)}
+      >
+        {axis === "row" ? <DragIcon size={16} /> : <DragHorizontalIcon size={16} />}
+      </button>
+      {buttons}
+    </div>
+  );
+  const plus = (label: TKey, fn: () => void) => (
+    <button type="button" className="docs-pill-btn" aria-label={t(label)} data-tip={t(label)} onClick={() => run(fn)}>
+      <AddIcon size={16} />
+    </button>
+  );
+  const { tableRect } = hover;
   return createPortal(
     <>
-      <div
-        className="docs-table-pill docs-table-pill-row"
-        data-docs-table-pill
-        data-docs-insert-popover
-        data-edit-control
-        data-selection-popover
-        onMouseDown={keepSelection}
-        onMouseEnter={onEnter}
-        onMouseLeave={onLeave}
-        style={{ left: tableRect.left - 30, top: hover.rowRect.top + hover.rowRect.height / 2 }}
-      >
-        <button type="button" className="docs-pill-btn docs-pill-drag" aria-label={t("docsInsert.dragRow")} data-tip={t("docsInsert.dragRow")} onMouseDown={(e) => startDrag("row", e)}>
-          <DragIcon size={16} />
-        </button>
-        <button
-          type="button"
-          className="docs-pill-btn"
-          aria-label={t(rowPinned ? (pinned > 1 ? "docsInsert.unpinHeaderRows" : "docsInsert.unpinHeaderRow") : "docsInsert.pinHeaderUpToRow")}
-          data-tip={t(rowPinned ? (pinned > 1 ? "docsInsert.unpinHeaderRows" : "docsInsert.unpinHeaderRow") : "docsInsert.pinHeaderUpToRow")}
-          onClick={() => run(() => editor.commands.pinHeaderRows(rowPinned ? 0 : hover.row + 1))}
-        >
-          {rowPinned ? <UnpinIcon size={16} /> : <PinIcon size={16} />}
-        </button>
-        <button
-          type="button"
-          className="docs-pill-btn"
-          aria-label={t("docsInsert.insertOneRowBelow")}
-          data-tip={t("docsInsert.insertOneRowBelow")}
-          onClick={() => run(() => editor.commands.insertRows("after", 1))}
-        >
-          <AddIcon size={16} />
-        </button>
-      </div>
-      <div
-        className="docs-table-pill docs-table-pill-col"
-        data-docs-table-pill
-        data-docs-insert-popover
-        data-edit-control
-        data-selection-popover
-        onMouseDown={keepSelection}
-        onMouseEnter={onEnter}
-        onMouseLeave={onLeave}
-        style={{ left: hover.colRect.left + 4, top: tableRect.top - 30 }}
-      >
-        <button type="button" className="docs-pill-btn docs-pill-drag" aria-label={t("docsInsert.dragColumn")} data-tip={t("docsInsert.dragColumn")} onMouseDown={(e) => startDrag("col", e)}>
-          <DragHorizontalIcon size={16} />
-        </button>
-        <button
-          type="button"
-          className="docs-pill-btn"
-          aria-label={t("docsInsert.sortTable")}
-          data-tip={t("docsInsert.sortTable")}
-          aria-expanded={sortOpen}
-          onClick={() => setSortOpen((o) => !o)}
-        >
-          <SortIcon size={16} />
-        </button>
-        <button
-          type="button"
-          className="docs-pill-btn"
-          aria-label={t("docsInsert.insertOneColumnRight")}
-          data-tip={t("docsInsert.insertOneColumnRight")}
-          onClick={() => run(() => editor.commands.insertColumns("after", 1))}
-        >
-          <AddIcon size={16} />
-        </button>
-        {sortOpen && (
-          <div className="docs-pill-menu" role="menu">
-            <button
-              type="button"
-              role="menuitem"
-              className="docs-dd-option"
-              onClick={() => {
-                setSortOpen(false);
-                run(() => editor.commands.sortTable(1));
-              }}
-            >
-              <span className="docs-dd-check">
-                <ArrowUpIcon size={18} />
-              </span>
-              {t("docsInsert.sortAscending")}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="docs-dd-option"
-              onClick={() => {
-                setSortOpen(false);
-                run(() => editor.commands.sortTable(-1));
-              }}
-            >
-              <span className="docs-dd-check">
-                <ArrowDownIcon size={18} />
-              </span>
-              {t("docsInsert.sortDescending")}
-            </button>
-          </div>
-        )}
-      </div>
+      {pill(
+        "row",
+        { left: tableRect.left - 30, top: hover.rowRect.top + hover.rowRect.height / 2 },
+        <>
+          <button
+            type="button"
+            className="docs-pill-btn"
+            aria-label={pinLabel}
+            data-tip={pinLabel}
+            onClick={() => run(() => editor.commands.pinHeaderRows(rowPinned ? 0 : hover.row + 1))}
+          >
+            {rowPinned ? <UnpinIcon size={16} /> : <PinIcon size={16} />}
+          </button>
+          {plus("docsInsert.insertOneRowBelow", () => editor.commands.insertRows("after", 1))}
+        </>,
+      )}
+      {pill(
+        "col",
+        { left: hover.colRect.left + 4, top: tableRect.top - 30 },
+        <>
+          <DropBtn label={t("docsInsert.sortTable")} track="table-sort" arrow={false} className="docs-pill-btn" face={<SortIcon size={16} />}>
+            {(close) =>
+              ([1, -1] as const).map((direction) => (
+                <MenuItem
+                  key={direction}
+                  icon={direction === 1 ? <ArrowUpIcon size={18} /> : <ArrowDownIcon size={18} />}
+                  onSelect={() => {
+                    close();
+                    run(() => editor.commands.sortTable(direction));
+                  }}
+                >
+                  {t(direction === 1 ? "docsInsert.sortAscending" : "docsInsert.sortDescending")}
+                </MenuItem>
+              ))
+            }
+          </DropBtn>
+          {plus("docsInsert.insertOneColumnRight", () => editor.commands.insertColumns("after", 1))}
+        </>,
+      )}
       {drag && (
         <div
-          className={`docs-table-drop-line docs-table-drop-${drag.axis}`}
+          className="docs-table-drop-line"
           style={
             drag.axis === "row"
-              ? { left: tableRect.left, width: tableRect.width, top: drag.line - 1 }
-              : { top: tableRect.top, height: tableRect.height, left: drag.line - 1 }
+              ? { left: tableRect.left, width: tableRect.width, top: drag.line - 1, height: 2 }
+              : { top: tableRect.top, height: tableRect.height, left: drag.line - 1, width: 2 }
           }
         />
       )}
@@ -352,40 +275,23 @@ const TARGET_LABEL: Record<BorderTarget, TKey> = {
   right: "docsInsert.borderRight",
 };
 
-/** A small drawing of the lines a border choice changes. */
+/** The lines of a cell's square, and a border choice's drawn solid. */
+const LINES: [string, number, number, number, number][] = [
+  ["t", 2, 2, 18, 2],
+  ["b", 2, 18, 18, 18],
+  ["l", 2, 2, 2, 18],
+  ["r", 18, 2, 18, 18],
+  ["h", 2, 10, 18, 10],
+  ["v", 10, 2, 10, 18],
+];
+
 function TargetGlyph({ target }: { target: BorderTarget }) {
-  const on = (edge: string) => {
-    switch (target) {
-      case "all":
-        return true;
-      case "inner":
-        return edge === "h" || edge === "v";
-      case "outer":
-        return ["t", "b", "l", "r"].includes(edge);
-      case "top":
-        return edge === "t";
-      case "bottom":
-        return edge === "b";
-      case "left":
-        return edge === "l";
-      case "right":
-        return edge === "r";
-      case "innerH":
-        return edge === "h";
-      case "innerV":
-        return edge === "v";
-    }
-  };
-  const stroke = (edge: string) => (on(edge) ? "currentColor" : "#c4c7c5");
-  const dash = (edge: string) => (on(edge) ? undefined : "2 2");
   return (
     <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden>
-      <line x1="2" y1="2" x2="18" y2="2" stroke={stroke("t")} strokeDasharray={dash("t")} strokeWidth="2" />
-      <line x1="2" y1="18" x2="18" y2="18" stroke={stroke("b")} strokeDasharray={dash("b")} strokeWidth="2" />
-      <line x1="2" y1="2" x2="2" y2="18" stroke={stroke("l")} strokeDasharray={dash("l")} strokeWidth="2" />
-      <line x1="18" y1="2" x2="18" y2="18" stroke={stroke("r")} strokeDasharray={dash("r")} strokeWidth="2" />
-      <line x1="2" y1="10" x2="18" y2="10" stroke={stroke("h")} strokeDasharray={dash("h")} strokeWidth="2" />
-      <line x1="10" y1="2" x2="10" y2="18" stroke={stroke("v")} strokeDasharray={dash("v")} strokeWidth="2" />
+      {LINES.map(([edge, x1, y1, x2, y2]) => {
+        const on = BORDER_TARGETS[target].includes(edge);
+        return <line key={edge} x1={x1} y1={y1} x2={x2} y2={y2} strokeWidth="2" stroke={on ? "currentColor" : "#c4c7c5"} strokeDasharray={on ? undefined : "2 2"} />;
+      })}
     </svg>
   );
 }
@@ -407,10 +313,8 @@ function BorderSelector({ editor }: { editor: Editor }) {
     if (!corner || r.top < corner.top - 1 || (Math.abs(r.top - corner.top) <= 1 && r.right > corner.right)) corner = r;
   }
   if (!corner) return null;
-  const border = cellBorder(editor.state, target === "bottom" ? "borderBottom" : target === "left" ? "borderLeft" : target === "right" ? "borderRight" : "borderTop");
+  const side = target === "bottom" ? "borderBottom" : target === "left" ? "borderLeft" : target === "right" ? "borderRight" : "borderTop";
   const background = (cells[0].node.attrs.backgroundColor as string | null) ?? null;
-  const apply = (spec: { width?: number; dash?: "solid" | "dotted" | "dashed"; color?: string }) =>
-    editor.chain().focus().setTableBorders(target, spec).run();
   return createPortal(
     <>
       <button
@@ -436,13 +340,13 @@ function BorderSelector({ editor }: { editor: Editor }) {
           label={t("docsInsert.selectBorders")}
         >
           <div className="docs-border-grid" role="radiogroup" aria-label={t("docsInsert.selectBorders")}>
-            {BORDER_TARGETS.map((b) => (
+            {(Object.keys(BORDER_TARGETS) as BorderTarget[]).map((b) => (
               <button
                 key={b}
                 type="button"
                 role="radio"
                 aria-checked={target === b}
-                className={`docs-icon-btn docs-border-target${target === b ? " is-on" : ""}`}
+                className="docs-icon-btn"
                 aria-label={t(TARGET_LABEL[b])}
                 data-tip={t(TARGET_LABEL[b])}
                 onClick={() => setTarget(b)}
@@ -452,50 +356,15 @@ function BorderSelector({ editor }: { editor: Editor }) {
             ))}
           </div>
           <div className="docs-border-tools">
-            <DropBtn label={t("docsInsert.backgroundColor")} track="table-background" face={<FillIcon size={20} />}>
-              {(close) => (
-                <Swatches
-                  current={background}
-                  onPick={(hex) => {
-                    editor.chain().focus().setCellsAttrs({ backgroundColor: hex }).run();
-                    close();
-                  }}
-                  onNone={() => {
-                    editor.chain().focus().setCellsAttrs({ backgroundColor: null }).run();
-                    close();
-                  }}
-                />
-              )}
-            </DropBtn>
-            <DropBtn label={t("docsInsert.borderColor")} track="table-border-color" face={<BorderColorIcon size={20} />}>
-              {(close) => (
-                <Swatches
-                  current={border.color}
-                  onPick={(hex) => {
-                    apply({ color: hex });
-                    close();
-                  }}
-                />
-              )}
-            </DropBtn>
-            <DropBtn label={t("docsInsert.borderWeight")} track="table-border-width" face={<BorderWeightIcon size={20} />}>
-              {() =>
-                BORDER_WEIGHTS.map((w) => (
-                  <MenuItem key={w} checked={border.width === w} onSelect={() => apply({ width: w })}>
-                    <WeightRow width={w} />
-                  </MenuItem>
-                ))
-              }
-            </DropBtn>
-            <DropBtn label={t("docsInsert.borderDash")} track="table-border-dash" face={<BorderDashIcon size={20} />}>
-              {() =>
-                DASHES.map(({ dash, label }) => (
-                  <MenuItem key={dash} checked={border.dash === dash} onSelect={() => apply({ dash })}>
-                    <DashRow dash={dash} label={t(label)} />
-                  </MenuItem>
-                ))
-              }
-            </DropBtn>
+            <ColorButton
+              label={t("docsInsert.backgroundColor")}
+              track="table-background"
+              face={<FillIcon />}
+              current={background}
+              onPick={(hex) => editor.chain().focus().setCellsAttrs({ backgroundColor: hex }).run()}
+              onNone={() => editor.chain().focus().setCellsAttrs({ backgroundColor: null }).run()}
+            />
+            <BorderButtons track="table" border={cellBorder(editor.state, side)} onChange={(spec) => editor.chain().focus().setTableBorders(target, spec).run()} />
           </div>
         </FloatingBox>
       )}
@@ -510,18 +379,12 @@ function RowResizer({ editor }: { editor: Editor }) {
   useEffect(() => {
     const dom = editor.view.dom;
     let armed: { row: HTMLTableRowElement; cell: HTMLElement } | null = null;
-    const near = (e: MouseEvent) => {
-      const cell = (e.target as Element | null)?.closest<HTMLElement>("td, th");
-      const row = cell?.closest("tr");
-      if (!cell || !row || !dom.contains(cell)) return null;
-      const r = row.getBoundingClientRect();
-      return Math.abs(e.clientY - r.bottom) <= 3 ? { row, cell } : null;
-    };
     const onMove = (e: MouseEvent) => {
       if (e.buttons) return;
-      const hit = near(e);
-      armed = hit;
-      dom.classList.toggle("docs-row-resize", Boolean(hit));
+      const cell = (e.target as Element | null)?.closest<HTMLElement>("td, th");
+      const row = cell?.closest("tr");
+      armed = cell && row && dom.contains(cell) && Math.abs(e.clientY - row.getBoundingClientRect().bottom) <= 3 ? { row, cell } : null;
+      dom.classList.toggle("docs-row-resize", Boolean(armed));
     };
     const onDown = (e: MouseEvent) => {
       if (!armed || e.button !== 0) return;
@@ -561,7 +424,7 @@ function RowResizer({ editor }: { editor: Editor }) {
     };
   }, [editor]);
   if (!guide || typeof document === "undefined") return null;
-  return createPortal(<div className="docs-table-drop-line docs-table-drop-row" style={{ left: guide.left, width: guide.width, top: guide.top }} />, document.body);
+  return createPortal(<div className="docs-table-drop-line" style={{ ...guide, height: 2 }} />, document.body);
 }
 
 function SplitDialog({ editor, onClose }: { editor: Editor; onClose: () => void }) {
@@ -569,6 +432,13 @@ function SplitDialog({ editor, onClose }: { editor: Editor; onClose: () => void 
   const [cols, setCols] = useState(2);
   const [rows, setRows] = useState(1);
   const valid = cols >= 1 && rows >= 1 && cols <= 20 && rows <= 20 && !(cols === 1 && rows === 1);
+  const field = (label: TKey, icon: React.ReactNode, value: number, set: (n: number) => void) => (
+    <label className="docs-split-field">
+      {icon}
+      <span>{t(label)}</span>
+      <input className="docs-field" type="number" min={1} max={20} value={value} onChange={(e) => set(Math.round(Number(e.target.value)))} />
+    </label>
+  );
   return (
     <ToolbarDialog
       title={t("docsInsert.splitCell")}
@@ -590,129 +460,71 @@ function SplitDialog({ editor, onClose }: { editor: Editor; onClose: () => void 
         </>
       }
     >
-      <div className="docs-split-fields">
-        <label className="docs-split-field">
-          <TableColumnIcon size={20} />
-          <span>{t("docsInsert.columns")}</span>
-          <input className="docs-field" type="number" min={1} max={20} value={cols} onChange={(e) => setCols(Math.round(Number(e.target.value)))} />
-        </label>
-        <label className="docs-split-field">
-          <TableRowIcon size={20} />
-          <span>{t("docsInsert.rows")}</span>
-          <input className="docs-field" type="number" min={1} max={20} value={rows} onChange={(e) => setRows(Math.round(Number(e.target.value)))} />
-        </label>
-      </div>
+      {field("docsInsert.columns", <TableColumnIcon />, cols, setCols)}
+      {field("docsInsert.rows", <TableRowIcon />, rows, setRows)}
     </ToolbarDialog>
   );
-}
-
-function inchesOfPt(pt: number): string {
-  return (Math.round((pt / 72) * 1000) / 1000).toString();
 }
 
 /** Table options: Table, Column, Row, Cell, Color, applied as they change. */
 function TableOptionsPanel({ editor, onClose }: { editor: Editor; onClose: () => void }) {
   const t = useT();
-  const [open, setOpen] = useState({ table: true, column: true, row: true, cell: true, color: true });
   const rect = tableRectOf(editor.state);
   if (!rect) return null;
-  const toggle = (k: keyof typeof open) => setOpen((o) => ({ ...o, [k]: !o[k] }));
+  const chain = () => editor.chain().focus();
   const table = rect.table;
-  const align = (table.attrs.tableAlign as string) || "left";
+  const align = ((table.attrs.tableAlign as string | null) ?? "left") as "left" | "center" | "right";
   const indent = typeof table.attrs.tableIndent === "number" ? table.attrs.tableIndent : 0;
-  const cells = selectedCells(editor.state);
-  const first = cells[0]?.node;
+  const first = selectedCells(editor.state)[0]?.node;
   const colwidth = (first?.attrs.colwidth as number[] | null) ?? null;
-  const rowNode = table.child(rect.top);
-  const minHeight = typeof rowNode.attrs.minHeight === "number" ? rowNode.attrs.minHeight : null;
+  const minHeight = table.child(rect.top).attrs.minHeight as number | null;
   const pinned = pinnedCount(table);
-  const valign = ((first?.attrs.valign as VAlign | null) ?? "top") as VAlign;
+  const valign = (first?.attrs.valign as VAlign | null) ?? "top";
   const padding = typeof first?.attrs.padding === "number" ? first.attrs.padding : 5;
-  const border = cellBorder(editor.state);
   const background = (first?.attrs.backgroundColor as string | null) ?? null;
-  const tableDom = editor.view.nodeDOM(rect.tableStart - 1) as HTMLElement | null;
-  const colEls = tableDom?.querySelectorAll("col");
 
-  const setColumnWidth = (inches: number | null) => {
-    const widths: number[] = [];
-    const count = rect.map.width;
-    for (let i = 0; i < count; i++) {
-      const el = colEls?.[i] as HTMLElement | undefined;
-      const current = el ? el.getBoundingClientRect().width : 100;
-      widths.push(current);
-    }
-    if (inches === null) {
-      editor.chain().focus().distributeColumns().run();
+  const setColumnWidth = (pt: number | null) => {
+    if (pt === null) {
+      chain().distributeColumns().run();
       return;
     }
-    for (let c = rect.left; c < rect.right; c++) widths[c] = inches * PX_PER_IN;
-    editor.chain().focus().setColumnWidths(widths).run();
+    const cols = editor.view.nodeDOM(rect.tableStart - 1);
+    const widths = [...(cols instanceof HTMLElement ? cols.querySelectorAll("col") : [])].map((el) => el.getBoundingClientRect().width);
+    for (let c = rect.left; c < rect.right; c++) widths[c] = pt * PX_PER_PT;
+    chain().setColumnWidths(widths).run();
   };
 
   return (
-    <SidePanel title={t("docsInsert.tableOptions")} icon={<ImageOptionsIcon size={20} />} onClose={onClose}>
-      <PanelSection title={t("docsInsert.sectionTable")} open={open.table} onToggle={() => toggle("table")}>
+    <SidePanel title={t("docsInsert.tableOptions")} icon={<ImageOptionsIcon />} onClose={onClose}>
+      <PanelSection title={t("docsInsert.sectionTable")}>
         <span className="docs-side-label">{t("docsInsert.alignment")}</span>
-        <div className="docs-seg" role="group" aria-label={t("docsInsert.alignment")}>
-          {(["left", "center", "right"] as const).map((a) => (
-            <button key={a} type="button" aria-pressed={align === a} onClick={() => editor.chain().focus().setTableAttrs({ tableAlign: a === "left" ? null : a }).run()}>
-              {t(a === "left" ? "docsInsert.alignLeft" : a === "center" ? "docsInsert.alignCenter" : "docsInsert.alignRight")}
-            </button>
-          ))}
-        </div>
-        <label className="docs-side-row">
-          <span className="docs-side-label">{t("docsInsert.leftIndent")}</span>
-          <input
-            key={`indent${indent}`}
-            className="docs-field"
-            type="number"
-            step="0.1"
-            min="0"
-            defaultValue={inchesOfPt(indent)}
-            disabled={align !== "left"}
-            onBlur={(e) => editor.chain().focus().setTableAttrs({ tableIndent: Math.max(0, Number(e.target.value) * 72) || null }).run()}
-          />
-        </label>
+        <Seg
+          label={t("docsInsert.alignment")}
+          value={align}
+          options={[
+            ["left", t("docsInsert.alignLeft")],
+            ["center", t("docsInsert.alignCenter")],
+            ["right", t("docsInsert.alignRight")],
+          ]}
+          onChange={(a) => chain().setTableAttrs({ tableAlign: a === "left" ? null : a }).run()}
+        />
+        {align === "left" && <LengthField label={t("docsInsert.leftIndent")} pt={indent} onChange={(pt) => chain().setTableAttrs({ tableIndent: pt || null }).run()} />}
       </PanelSection>
-      <PanelSection title={t("docsInsert.sectionColumn")} open={open.column} onToggle={() => toggle("column")}>
+      <PanelSection title={t("docsInsert.sectionColumn")}>
         <label className="docs-side-check">
-          <input type="checkbox" checked={Boolean(colwidth)} onChange={(e) => setColumnWidth(e.target.checked ? 1.5 : null)} />
+          <input type="checkbox" checked={Boolean(colwidth)} onChange={(e) => setColumnWidth(e.target.checked ? 108 : null)} />
           {t("docsInsert.columnWidth")}
         </label>
-        {colwidth && (
-          <input
-            key={`cw${colwidth.join(",")}`}
-            className="docs-field docs-side-num"
-            type="number"
-            step="0.1"
-            min="0.3"
-            defaultValue={(Math.round((colwidth[0] / PX_PER_IN) * 100) / 100).toString()}
-            onBlur={(e) => setColumnWidth(Math.max(0.3, Number(e.target.value) || 1))}
-          />
-        )}
+        {colwidth && <LengthField bare label={t("docsInsert.columnWidth")} pt={colwidth[0] / PX_PER_PT} onChange={(pt) => setColumnWidth(Math.max(22, pt))} />}
       </PanelSection>
-      <PanelSection title={t("docsInsert.sectionRow")} open={open.row} onToggle={() => toggle("row")}>
+      <PanelSection title={t("docsInsert.sectionRow")}>
         <label className="docs-side-check">
-          <input
-            type="checkbox"
-            checked={minHeight !== null}
-            onChange={(e) => editor.chain().focus().setRowsMinHeight(e.target.checked ? 36 : null).run()}
-          />
+          <input type="checkbox" checked={minHeight !== null} onChange={(e) => chain().setRowsMinHeight(e.target.checked ? 36 : null).run()} />
           {t("docsInsert.minRowHeight")}
         </label>
-        {minHeight !== null && (
-          <input
-            key={`mh${minHeight}`}
-            className="docs-field docs-side-num"
-            type="number"
-            step="0.1"
-            min="0.1"
-            defaultValue={inchesOfPt(minHeight)}
-            onBlur={(e) => editor.chain().focus().setRowsMinHeight(Math.max(1, Number(e.target.value) * 72)).run()}
-          />
-        )}
+        {minHeight !== null && <LengthField bare label={t("docsInsert.minRowHeight")} pt={minHeight} onChange={(pt) => chain().setRowsMinHeight(Math.max(1, pt)).run()} />}
         <label className="docs-side-check">
-          <input type="checkbox" checked={pinned > 0} onChange={(e) => editor.chain().focus().pinHeaderRows(e.target.checked ? 1 : 0).run()} />
+          <input type="checkbox" checked={pinned > 0} onChange={(e) => chain().pinHeaderRows(e.target.checked ? 1 : 0).run()} />
           {t("docsInsert.pinHeaderRows")}
         </label>
         {pinned > 0 && (
@@ -722,79 +534,38 @@ function TableOptionsPanel({ editor, onClose }: { editor: Editor; onClose: () =>
             min="1"
             max={table.childCount}
             value={pinned}
-            onChange={(e) => editor.chain().focus().pinHeaderRows(Math.max(1, Math.min(table.childCount, Number(e.target.value) || 1))).run()}
+            onChange={(e) => chain().pinHeaderRows(Math.max(1, Math.min(table.childCount, Number(e.target.value) || 1))).run()}
           />
         )}
       </PanelSection>
-      <PanelSection title={t("docsInsert.sectionCell")} open={open.cell} onToggle={() => toggle("cell")}>
+      <PanelSection title={t("docsInsert.sectionCell")}>
         <span className="docs-side-label">{t("docsInsert.cellVerticalAlignment")}</span>
-        <div className="docs-seg" role="group" aria-label={t("docsInsert.cellVerticalAlignment")}>
-          {(["top", "middle", "bottom"] as const).map((v) => (
-            <button key={v} type="button" aria-pressed={valign === v} onClick={() => editor.chain().focus().setCellsAttrs({ valign: v === "top" ? null : v }).run()}>
-              {t(v === "top" ? "docsInsert.vTop" : v === "middle" ? "docsInsert.vMiddle" : "docsInsert.vBottom")}
-            </button>
-          ))}
-        </div>
-        <label className="docs-side-row">
-          <span className="docs-side-label">{t("docsInsert.cellPadding")}</span>
-          <input
-            key={`pad${padding}`}
-            className="docs-field"
-            type="number"
-            step="0.01"
-            min="0"
-            defaultValue={inchesOfPt(padding)}
-            onBlur={(e) => editor.chain().focus().setCellsAttrs({ padding: Math.max(0, Math.min(72, Number(e.target.value) * 72)) }).run()}
-          />
-        </label>
+        <Seg
+          label={t("docsInsert.cellVerticalAlignment")}
+          value={valign}
+          options={[
+            ["top", t("docsInsert.vTop")],
+            ["middle", t("docsInsert.vMiddle")],
+            ["bottom", t("docsInsert.vBottom")],
+          ]}
+          onChange={(v) => chain().setCellsAttrs({ valign: v === "top" ? null : v }).run()}
+        />
+        <LengthField label={t("docsInsert.cellPadding")} pt={padding} onChange={(pt) => chain().setCellsAttrs({ padding: Math.min(72, pt) }).run()} />
       </PanelSection>
-      <PanelSection title={t("docsInsert.sectionColor")} open={open.color} onToggle={() => toggle("color")}>
+      <PanelSection title={t("docsInsert.sectionColor")}>
         <span className="docs-side-label">{t("docsInsert.tableBorder")}</span>
         <div className="docs-side-row">
-          <DropBtn label={t("docsInsert.borderColor")} track="table-options-border" face={<span className="docs-color-chip" style={{ backgroundColor: border.color }} />}>
-            {(close) => (
-              <Swatches
-                current={border.color}
-                onPick={(hex) => {
-                  editor.chain().focus().setTableBorders("all", { color: hex }).run();
-                  close();
-                }}
-              />
-            )}
-          </DropBtn>
-          <select
-            className="docs-select"
-            value={String(border.width)}
-            aria-label={t("docsInsert.borderWeight")}
-            onChange={(e) => editor.chain().focus().setTableBorders("all", { width: Number(e.target.value) }).run()}
-          >
-            {BORDER_WEIGHTS.map((w) => (
-              <option key={w} value={String(w)}>
-                {w} pt
-              </option>
-            ))}
-          </select>
+          <BorderButtons track="table-options" border={cellBorder(editor.state)} onChange={(spec) => chain().setTableBorders("all", spec).run()} />
         </div>
         <span className="docs-side-label">{t("docsInsert.cellBackground")}</span>
-        <DropBtn
+        <ColorButton
           label={t("docsInsert.cellBackground")}
           track="table-options-background"
-          face={<span className="docs-color-chip" style={{ backgroundColor: background ?? "transparent" }} />}
-        >
-          {(close) => (
-            <Swatches
-              current={background}
-              onPick={(hex) => {
-                editor.chain().focus().setCellsAttrs({ backgroundColor: hex }).run();
-                close();
-              }}
-              onNone={() => {
-                editor.chain().focus().setCellsAttrs({ backgroundColor: null }).run();
-                close();
-              }}
-            />
-          )}
-        </DropBtn>
+          face={<FillIcon />}
+          current={background}
+          onPick={(hex) => chain().setCellsAttrs({ backgroundColor: hex }).run()}
+          onNone={() => chain().setCellsAttrs({ backgroundColor: null }).run()}
+        />
       </PanelSection>
     </SidePanel>
   );

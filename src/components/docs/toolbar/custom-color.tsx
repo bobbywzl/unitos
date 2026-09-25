@@ -136,7 +136,7 @@ export function CustomColorDialog({
     >
       <div
         className="docs-color-area"
-        style={{ background: `hsl(${hsv.h} 100% 50%)` }}
+        style={{ backgroundColor: `hsl(${hsv.h} 100% 50%)` }}
         onPointerDown={(e) => drag(e, (x, y) => setColor({ ...hsv, s: x, v: 1 - y }))}
         role="slider"
         aria-label={t("docs.customColorPicker")}
@@ -157,8 +157,6 @@ export function CustomColorDialog({
           setColor({ ...hsv, ...move });
         }}
       >
-        <span className="docs-color-area-white" />
-        <span className="docs-color-area-black" />
         <span className="docs-color-handle" style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`, background: hex }} />
       </div>
       <div className="docs-color-row">
@@ -166,7 +164,7 @@ export function CustomColorDialog({
         {hasEyeDropper() && (
           <button
             type="button"
-            className="docs-color-eyedropper"
+            className="docs-palette-tool docs-color-eyedropper"
             aria-label={t("docs.eyedropper")}
             data-tip={t("docs.eyedropper")}
             onClick={() => {

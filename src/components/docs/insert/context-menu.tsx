@@ -53,7 +53,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // Shift+right-click keeps the browser's menu; Shift+F10, Ctrl+Shift+X, and
 // Ctrl+Shift+\ open it from the keys.
 
-type Entry = { key: string; label: string; icon?: ReactNode; shortcut?: string; disabled?: boolean; run?: () => void; submenu?: Entry[] } | "sep";
+type Entry = { label: string; icon?: ReactNode; shortcut?: string; disabled?: boolean; run?: () => void; submenu?: Entry[] } | "sep";
 
 type Place = { x: number; y: number; byKeys: boolean };
 
@@ -186,18 +186,19 @@ function ContextMenu({ editor, ctx, place, onClose }: { editor: Editor; ctx: Ins
         const shown = i > 0 && list[i - 1] !== "sep" && i < list.length - 1;
         return shown ? <MenuSeparator key={`sep${i}`} /> : null;
       }
+      const { run } = entry;
       return (
         <MenuItem
-          key={entry.key}
+          key={entry.label}
           icon={entry.icon}
           shortcut={entry.shortcut}
           disabled={entry.disabled}
           submenu={entry.submenu ? items(entry.submenu) : undefined}
           onSelect={
-            entry.run &&
+            run &&
             (() => {
               onClose();
-              entry.run?.();
+              run();
             })
           }
         >
@@ -225,164 +226,92 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
   const toc = sel instanceof NodeSelection && sel.node.type.name === "tableOfContents" ? sel : null;
   const rect = tableRectOf(state);
   const textSelected = hasSelection && !image && !toc && state.doc.textBetween(sel.from, sel.to, " ", " ").trim().length > 0;
+  const item = (label: TKey, icon: ReactNode, run: () => void, extra?: Omit<Exclude<Entry, "sep">, "label">): Entry => ({ label: t(label), icon, run, ...extra });
+  const chain = () => editor.chain().focus();
   const paste = (plain: boolean) => () =>
     void pasteFromClipboard(editor, plain).then((ok) => ok || emitInsert(editor, { type: "clipboard-blocked" }));
+  const copyLink = (url: string) => () =>
+    void navigator.clipboard.writeText(url).then(
+      () => toast(t("docs.linkCopied")),
+      () => emitInsert(editor, { type: "clipboard-blocked" }),
+    );
   // With Enable Markdown on (Tools > Preferences), the Markdown copy and paste.
   const markdown = typingPrefs().markdown;
   const out: Entry[] = [
-    { key: "cut", label: t("docsInsert.cut"), icon: <CutIcon />, shortcut: keys("Mod+X"), disabled: !hasSelection || !editing, run: () => execClipboard(editor, "cut") },
-    { key: "copy", label: t("docsInsert.copy"), icon: <CopyIcon />, shortcut: keys("Mod+C"), disabled: !hasSelection, run: () => execClipboard(editor, "copy") },
-    ...(markdown
-      ? [{ key: "copy-markdown", label: t("docsTyping.copyAsMarkdown"), icon: <CopyIcon />, disabled: !hasSelection, run: () => void copyMarkdown(editor) }]
-      : []),
-    { key: "paste", label: t("docsInsert.paste"), icon: <PasteIcon />, shortcut: keys("Mod+V"), disabled: !editing, run: paste(false) },
-    {
-      key: "paste-plain",
-      label: t("docsInsert.pastePlain"),
-      icon: <PastePlainIcon />,
-      shortcut: keys("Mod+Shift+V"),
-      disabled: !editing,
-      run: paste(true),
-    },
-    ...(markdown
-      ? [{ key: "paste-markdown", label: t("docsTyping.pasteFromMarkdown"), icon: <PasteIcon />, disabled: !editing, run: () => void pasteMarkdown(editor) }]
-      : []),
-    {
-      key: "delete",
-      label: t("docsInsert.delete"),
-      icon: <DeleteIcon />,
-      disabled: !hasSelection || !editing,
-      run: () => editor.chain().focus().deleteSelection().run(),
-    },
+    item("docsInsert.cut", <CutIcon />, () => execClipboard(editor, "cut"), { shortcut: keys("Mod+X"), disabled: !hasSelection || !editing }),
+    item("docsInsert.copy", <CopyIcon />, () => execClipboard(editor, "copy"), { shortcut: keys("Mod+C"), disabled: !hasSelection }),
+    ...(markdown ? [item("docsTyping.copyAsMarkdown", <CopyIcon />, () => void copyMarkdown(editor), { disabled: !hasSelection })] : []),
+    item("docsInsert.paste", <PasteIcon />, paste(false), { shortcut: keys("Mod+V"), disabled: !editing }),
+    item("docsInsert.pastePlain", <PastePlainIcon />, paste(true), { shortcut: keys("Mod+Shift+V"), disabled: !editing }),
+    ...(markdown ? [item("docsTyping.pasteFromMarkdown", <PasteIcon />, () => void pasteMarkdown(editor), { disabled: !editing })] : []),
+    item("common.delete", <DeleteIcon />, () => chain().deleteSelection().run(), { disabled: !hasSelection || !editing }),
     "sep",
   ];
 
   if (image && editing) {
     const pos = image.pos;
-    out.push(
-      { key: "crop", label: t("docsInsert.cropImage"), icon: <CropIcon />, run: () => imageViewAt(editor.view, pos)?.startCrop() },
-      { key: "replace", label: t("docsInsert.replaceImage"), icon: <ResetIcon />, run: () => emitInsert(editor, { type: "image-replace" }) },
-      { key: "image-options", label: t("docsInsert.imageOptions"), icon: <ImageOptionsIcon />, run: () => emitInsert(editor, { type: "image-options" }) },
-      {
-        key: "alt",
-        label: t("docsInsert.altText"),
-        icon: <AltTextIcon />,
-        shortcut: keys("Mod+Alt+Y"),
-        run: () => emitInsert(editor, { type: "image-options", section: "alt" }),
-      },
-      { key: "reset", label: t("docsInsert.resetImage"), icon: <RefreshIcon />, run: () => resetImage(editor, pos) },
-    );
-    return out;
+    return [
+      ...out,
+      item("docsInsert.cropImage", <CropIcon />, () => imageViewAt(editor.view, pos)?.startCrop()),
+      item("docsInsert.replaceImage", <ResetIcon />, () => emitInsert(editor, { type: "image-replace" })),
+      item("docsInsert.imageOptions", <ImageOptionsIcon />, () => emitInsert(editor, { type: "image-options" })),
+      item("docsInsert.altText", <AltTextIcon />, () => emitInsert(editor, { type: "image-options", section: "alt" }), { shortcut: keys("Mod+Alt+Y") }),
+      item("docsInsert.resetImage", <RefreshIcon />, () => resetImage(editor, pos)),
+    ];
   }
 
   if (toc && editing) {
-    out.push(
-      { key: "toc-update", label: t("docsInsert.updateToc"), icon: <RefreshIcon />, run: () => refreshTocs(editor.view) },
-      { key: "toc-delete", label: t("docsInsert.deleteToc"), icon: <DeleteIcon />, run: () => editor.chain().focus().deleteSelection().run() },
-      { key: "toc-options", label: t("docsInsert.tocOptions"), icon: <OutlineIcon />, run: () => emitInsert(editor, { type: "toc-options", pos: toc.from }) },
-    );
-    return out;
+    return [
+      ...out,
+      item("docsInsert.updateToc", <RefreshIcon />, () => refreshTocs(editor.view)),
+      item("docsInsert.deleteToc", <DeleteIcon />, () => chain().deleteSelection().run()),
+      item("docsInsert.tocOptions", <OutlineIcon />, () => emitInsert(editor, { type: "toc-options", pos: toc.from })),
+    ];
   }
 
   if (rect && editing) {
     const rows = rect.bottom - rect.top;
     const cols = rect.right - rect.left;
     const pinned = pinnedCount(rect.table);
-    const plural = (n: number, one: TKey, many: TKey) => (n > 1 ? t(many, { n }) : t(one));
+    // "Insert row above", or "Insert 3 rows above" for three selected rows.
+    const counted = (n: number, one: TKey, many: TKey, icon: ReactNode, run: () => void): Entry => ({
+      label: n > 1 ? t(many, { n }) : t(one),
+      icon,
+      run,
+    });
     const cell = rect.table.nodeAt(rect.map.map[rect.top * rect.map.width + rect.left]);
     const merged = Boolean(cell && ((Number(cell.attrs.colspan) || 1) > 1 || (Number(cell.attrs.rowspan) || 1) > 1));
     const several = sel instanceof CellSelection && (rows > 1 || cols > 1);
-    const table = (fn: () => void) => () => {
-      fn();
-      editor.view.focus();
-    };
     out.push(
-      {
-        key: "row-above",
-        label: plural(rows, "docsInsert.insertRowAbove", "docsInsert.insertRowsAbove"),
-        icon: <AddIcon />,
-        run: () => editor.chain().focus().insertRows("before", rows).run(),
-      },
-      {
-        key: "row-below",
-        label: plural(rows, "docsInsert.insertRowBelow", "docsInsert.insertRowsBelow"),
-        icon: <AddIcon />,
-        run: () => editor.chain().focus().insertRows("after", rows).run(),
-      },
-      {
-        key: "col-left",
-        label: plural(cols, "docsInsert.insertColumnLeft", "docsInsert.insertColumnsLeft"),
-        icon: <AddIcon />,
-        run: () => editor.chain().focus().insertColumns("before", cols).run(),
-      },
-      {
-        key: "col-right",
-        label: plural(cols, "docsInsert.insertColumnRight", "docsInsert.insertColumnsRight"),
-        icon: <AddIcon />,
-        run: () => editor.chain().focus().insertColumns("after", cols).run(),
-      },
+      counted(rows, "docsInsert.insertRowAbove", "docsInsert.insertRowsAbove", <AddIcon />, () => chain().insertRows("before", rows).run()),
+      counted(rows, "docsInsert.insertRowBelow", "docsInsert.insertRowsBelow", <AddIcon />, () => chain().insertRows("after", rows).run()),
+      counted(cols, "docsInsert.insertColumnLeft", "docsInsert.insertColumnsLeft", <AddIcon />, () => chain().insertColumns("before", cols).run()),
+      counted(cols, "docsInsert.insertColumnRight", "docsInsert.insertColumnsRight", <AddIcon />, () => chain().insertColumns("after", cols).run()),
       "sep",
-      {
-        key: "delete-row",
-        label: plural(rows, "docsInsert.deleteRow", "docsInsert.deleteRows"),
-        icon: <DeleteIcon />,
-        run: () => editor.chain().focus().deleteRow().run(),
-      },
-      {
-        key: "delete-col",
-        label: plural(cols, "docsInsert.deleteColumn", "docsInsert.deleteColumns"),
-        icon: <DeleteIcon />,
-        run: () => editor.chain().focus().deleteColumn().run(),
-      },
-      { key: "delete-table", label: t("docsInsert.deleteTable"), icon: <DeleteIcon />, run: () => editor.chain().focus().deleteTable().run() },
+      counted(rows, "docsInsert.deleteRow", "docsInsert.deleteRows", <DeleteIcon />, () => chain().deleteRow().run()),
+      counted(cols, "docsInsert.deleteColumn", "docsInsert.deleteColumns", <DeleteIcon />, () => chain().deleteColumn().run()),
+      item("docsInsert.deleteTable", <DeleteIcon />, () => chain().deleteTable().run()),
       "sep",
       pinned > 0 && rect.top < pinned
-        ? {
-            key: "unpin",
-            label: t(pinned > 1 ? "docsInsert.unpinHeaderRows" : "docsInsert.unpinHeaderRow"),
-            icon: <UnpinIcon />,
-            run: () => editor.chain().focus().pinHeaderRows(0).run(),
-          }
-        : {
-            key: "pin",
-            label: t("docsInsert.pinHeaderUpToRow"),
-            icon: <PinIcon />,
-            run: () => editor.chain().focus().pinHeaderRows(rect.bottom).run(),
-          },
+        ? item(pinned > 1 ? "docsInsert.unpinHeaderRows" : "docsInsert.unpinHeaderRow", <UnpinIcon />, () => chain().pinHeaderRows(0).run())
+        : item("docsInsert.pinHeaderUpToRow", <PinIcon />, () => chain().pinHeaderRows(rect.bottom).run()),
       several
-        ? {
-            key: "merge",
-            label: t("docsInsert.mergeCells"),
-            icon: <MergeIcon />,
-            disabled: !mergeCells(state),
-            run: table(() => mergeCells(editor.state, editor.view.dispatch)),
-          }
+        ? item("docsInsert.mergeCells", <MergeIcon />, () => mergeCells(editor.state, editor.view.dispatch), { disabled: !mergeCells(state) })
         : merged
-          ? {
-              key: "unmerge",
-              label: t("docsInsert.unmergeCells"),
-              icon: <SplitIcon />,
-              run: table(() => splitCell(editor.state, editor.view.dispatch)),
-            }
-          : { key: "split", label: t("docsInsert.splitCell"), icon: <SplitIcon />, run: () => emitInsert(editor, { type: "split-cell" }) },
+          ? item("docsInsert.unmergeCells", <SplitIcon />, () => splitCell(editor.state, editor.view.dispatch))
+          : item("docsInsert.splitCell", <SplitIcon />, () => emitInsert(editor, { type: "split-cell" })),
       {
-        key: "sort",
         label: t("docsInsert.sortTable"),
         icon: <SortIcon />,
         disabled: !editor.can().sortTable(1),
         submenu: [
-          { key: "sort-asc", label: t("docsInsert.sortAscending"), icon: <ArrowUpIcon />, run: () => editor.chain().focus().sortTable(1).run() },
-          { key: "sort-desc", label: t("docsInsert.sortDescending"), icon: <ArrowDownIcon />, run: () => editor.chain().focus().sortTable(-1).run() },
+          item("docsInsert.sortAscending", <ArrowUpIcon />, () => chain().sortTable(1).run()),
+          item("docsInsert.sortDescending", <ArrowDownIcon />, () => chain().sortTable(-1).run()),
         ],
       },
-      { key: "dist-rows", label: t("docsInsert.distributeRows"), icon: <DistributeRowsIcon />, run: () => distributeRows(editor) },
-      {
-        key: "dist-cols",
-        label: t("docsInsert.distributeColumns"),
-        icon: <DistributeColumnsIcon />,
-        run: () => editor.chain().focus().distributeColumns().run(),
-      },
-      { key: "table-options", label: t("docsInsert.tableOptions"), icon: <ImageOptionsIcon />, run: () => emitInsert(editor, { type: "table-options" }) },
+      item("docsInsert.distributeRows", <DistributeRowsIcon />, () => distributeRows(editor)),
+      item("docsInsert.distributeColumns", <DistributeColumnsIcon />, () => chain().distributeColumns().run()),
+      item("docsInsert.tableOptions", <ImageOptionsIcon />, () => emitInsert(editor, { type: "table-options" })),
       "sep",
     );
   }
@@ -390,76 +319,37 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
   // The Unitos tools on the selected words; the reader layer answers.
   const tool = (name: "add-to-notes" | "explain" | "assistant") => () =>
     window.dispatchEvent(new CustomEvent("docs:unitos-tool", { detail: { documentId: ctx.documentId, tool: name } }));
-  out.push(
-    {
-      key: "comment",
-      label: t("docsInsert.comment"),
-      icon: <AddCommentIcon />,
-      shortcut: keys("Mod+Alt+M"),
-      run: () => window.dispatchEvent(new CustomEvent(DOCS_EVENT.comment)),
-    },
-    { key: "add-to-notes", label: t("docsInsert.addToNotes"), icon: <NotesIcon size={18} />, disabled: !textSelected, run: tool("add-to-notes") },
-    { key: "explain", label: t("docsInsert.explain"), icon: <QuestionIcon size={18} />, disabled: !textSelected, run: tool("explain") },
-    { key: "assistant", label: t("docsInsert.askAssistant"), icon: <SparkleIcon size={18} />, disabled: !textSelected, run: tool("assistant") },
-    "sep",
-  );
-
   const openLinkBox = () => window.dispatchEvent(new CustomEvent(DOCS_EVENT.link));
   const href = editor.isActive("link") ? (editor.getAttributes("link").href as string | undefined) : undefined;
-  if (href) {
-    out.push(
-      { key: "open-link", label: t("docsInsert.openLink"), icon: <OpenInNewIcon />, shortcut: keys("Alt+Enter"), run: () => openLinkHref(editor, href, ctx) },
-      { key: "edit-link", label: t("docs.editLink"), icon: <EditIcon />, shortcut: keys("Mod+K"), disabled: !editing, run: openLinkBox },
-      {
-        key: "remove-link",
-        label: t("docs.removeLink"),
-        icon: <LinkOffIcon />,
-        disabled: !editing,
-        run: () => editor.chain().focus().extendMarkRange("link").unsetLink().run(),
-      },
-    );
-  } else {
-    out.push({ key: "insert-link", label: t("docs.insertLink"), icon: <LinkIcon />, shortcut: keys("Mod+K"), disabled: !editing, run: openLinkBox });
-  }
   const parent = sel.$from.parent;
-  if (parent.type.name === "heading" && typeof parent.attrs.blockId === "string") {
-    const url = `${window.location.origin}${window.location.pathname}${window.location.search}#heading=${parent.attrs.blockId}`;
-    out.push({
-      key: "heading-link",
-      label: t("docsInsert.copyHeadingLink"),
-      icon: <LinkIcon />,
-      run: () =>
-        void navigator.clipboard.writeText(url).then(
-          () => toast(t("docs.linkCopied")),
-          () => emitInsert(editor, { type: "clipboard-blocked" }),
-        ),
-    });
-  }
   const style = blockStyle(parent);
   out.push(
+    item("docsInsert.comment", <AddCommentIcon />, () => window.dispatchEvent(new CustomEvent(DOCS_EVENT.comment)), { shortcut: keys("Mod+Alt+M") }),
+    item("docsInsert.addToNotes", <NotesIcon size={18} />, tool("add-to-notes"), { disabled: !textSelected }),
+    item("docsInsert.explain", <QuestionIcon size={18} />, tool("explain"), { disabled: !textSelected }),
+    item("docsInsert.askAssistant", <SparkleIcon size={18} />, tool("assistant"), { disabled: !textSelected }),
+    "sep",
+    ...(href
+      ? [
+          item("docsInsert.openLink", <OpenInNewIcon />, () => openLinkHref(editor, href, ctx), { shortcut: keys("Alt+Enter") }),
+          item("docs.editLink", <EditIcon />, openLinkBox, { shortcut: keys("Mod+K"), disabled: !editing }),
+          item("docs.removeLink", <LinkOffIcon />, () => chain().extendMarkRange("link").unsetLink().run(), { disabled: !editing }),
+        ]
+      : [item("docs.insertLink", <LinkIcon />, openLinkBox, { shortcut: keys("Mod+K"), disabled: !editing })]),
+    ...(parent.type.name === "heading" && typeof parent.attrs.blockId === "string"
+      ? [item("docsInsert.copyHeadingLink", <LinkIcon />, copyLink(`${window.location.origin}${window.location.pathname}${window.location.search}#heading=${parent.attrs.blockId}`))]
+      : []),
     "sep",
     {
-      key: "format-options",
       label: t("docsInsert.formatOptions"),
       icon: <TextFormatIcon />,
       disabled: !editing || !parent.isTextblock,
       submenu: [
-        { key: "select-matching", label: t("docsInsert.selectAllMatching"), run: () => selectAllMatching(editor) },
-        {
-          key: "update-style",
-          label: t("docsInsert.updateStyleToMatch", { style: t(STYLE_LABEL[style]) }),
-          run: () => updateStyleToMatch(editor, style),
-        },
+        { label: t("docsInsert.selectAllMatching"), run: () => selectAllMatching(editor) },
+        { label: t("docsInsert.updateStyleToMatch", { style: t(STYLE_LABEL[style]) }), run: () => updateStyleToMatch(editor, style) },
       ],
     },
-    {
-      key: "clear-formatting",
-      label: t("docs.clearFormatting"),
-      icon: <ClearFormattingIcon />,
-      shortcut: keys("Mod+\\"),
-      disabled: !editing,
-      run: () => editor.chain().focus().clearFormatting().run(),
-    },
+    item("docs.clearFormatting", <ClearFormattingIcon />, () => chain().clearFormatting().run(), { shortcut: keys("Mod+\\"), disabled: !editing }),
   );
   return out;
 }
@@ -487,7 +377,7 @@ export function ClipboardDialogHost({ editor }: { editor: Editor }) {
       }
     >
       <p>{t("docsInsert.clipboardBody")}</p>
-      <ul className="docs-clipboard-keys">
+      <ul>
         <li>{t("docsInsert.clipboardCopy", { keys: keys("Mod+C") })}</li>
         <li>{t("docsInsert.clipboardCut", { keys: keys("Mod+X") })}</li>
         <li>{t("docsInsert.clipboardPaste", { keys: keys("Mod+V") })}</li>

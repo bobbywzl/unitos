@@ -16,62 +16,64 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // equation and the five symbol menus) over the field where the TeX is
 // typed. Enter or Escape goes back to the text; an empty equation goes.
 
-type Symbol = { tex: string; show?: string };
+/** TeX commands by name: "alpha beta" gives \alpha and \beta. */
+const commands = (names: string) => names.split(" ").map((name) => `\\${name}`);
 
-const GREEK: Symbol[] = [
-  "alpha", "beta", "gamma", "delta", "epsilon", "varepsilon", "zeta", "eta", "theta", "vartheta", "iota", "kappa",
-  "lambda", "mu", "nu", "xi", "pi", "varpi", "rho", "varrho", "sigma", "varsigma", "tau", "upsilon", "phi", "varphi",
-  "chi", "psi", "omega", "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega",
-].map((name) => ({ tex: `\\${name}` }));
-
-const MISC: Symbol[] = [
-  "times", "div", "cdot", "pm", "mp", "ast", "star", "circ", "bullet", "oplus", "ominus", "oslash", "otimes", "odot",
-  "dagger", "ddagger", "vee", "wedge", "cap", "cup", "aleph", "Re", "Im", "top", "bot", "infty", "partial", "forall",
-  "exists", "neg", "triangle", "diamond",
-].map((name) => ({ tex: `\\${name}` }));
-
-const RELATIONS: Symbol[] = [
-  "leq", "geq", "prec", "succ", "preceq", "succeq", "ll", "gg", "equiv", "sim", "simeq", "asymp", "approx", "ne",
-  "subset", "supset", "subseteq", "supseteq", "in", "ni", "notin",
-].map((name) => ({ tex: `\\${name}` }));
-
-const MATH: Symbol[] = [
-  { tex: "\\frac{a}{b}" },
-  { tex: "\\sqrt{x}" },
-  { tex: "\\sqrt[n]{x}" },
-  { tex: "x^{2}" },
-  { tex: "x_{i}" },
-  { tex: "x_{i}^{2}" },
-  { tex: "\\overline{x}" },
-  { tex: "\\widehat{x}" },
-  { tex: "\\bigcap" },
-  { tex: "\\bigcup" },
-  { tex: "\\prod" },
-  { tex: "\\coprod" },
-  { tex: "\\left( x \\right)" },
-  { tex: "\\left[ x \\right]" },
-  { tex: "\\left\\{ x \\right\\}" },
-  { tex: "\\left| x \\right|" },
-  { tex: "\\int" },
-  { tex: "\\oint" },
-  { tex: "\\sum" },
-  { tex: "\\lim_{x \\to a}" },
-  { tex: "\\sum_{a}^{b}" },
-  { tex: "\\int_{a}^{b}" },
-  { tex: "\\prod_{a}^{b}" },
-];
-
-const ARROWS: Symbol[] = [
-  "leftarrow", "rightarrow", "leftrightarrow", "Leftarrow", "Rightarrow", "Leftrightarrow", "uparrow", "downarrow",
-  "updownarrow", "Uparrow", "Downarrow", "Updownarrow",
-].map((name) => ({ tex: `\\${name}` }));
-
-const MENUS: { label: TKey; face: string; symbols: Symbol[] }[] = [
-  { label: "docsInsert.greekLetters", face: "αβΔ", symbols: GREEK },
-  { label: "docsInsert.miscOperations", face: "×÷∃", symbols: MISC },
-  { label: "docsInsert.relations", face: "<≠⊃", symbols: RELATIONS },
-  { label: "docsInsert.mathOperations", face: "√x", symbols: MATH },
-  { label: "docsInsert.arrows", face: "←↑⇔", symbols: ARROWS },
+/** The symbol menus: a face, and the TeX each symbol inserts. */
+const MENUS: { label: TKey; face: string; cols: number; symbols: string[] }[] = [
+  {
+    label: "docsInsert.greekLetters",
+    face: "αβΔ",
+    cols: 6,
+    symbols: commands(
+      "alpha beta gamma delta epsilon varepsilon zeta eta theta vartheta iota kappa lambda mu nu xi pi varpi rho varrho sigma varsigma tau upsilon phi varphi chi psi omega Gamma Delta Theta Lambda Xi Pi Sigma Upsilon Phi Psi Omega",
+    ),
+  },
+  {
+    label: "docsInsert.miscOperations",
+    face: "×÷∃",
+    cols: 6,
+    symbols: commands(
+      "times div cdot pm mp ast star circ bullet oplus ominus oslash otimes odot dagger ddagger vee wedge cap cup aleph Re Im top bot infty partial forall exists neg triangle diamond",
+    ),
+  },
+  {
+    label: "docsInsert.relations",
+    face: "<≠⊃",
+    cols: 6,
+    symbols: commands("leq geq prec succ preceq succeq ll gg equiv sim simeq asymp approx ne subset supset subseteq supseteq in ni notin"),
+  },
+  {
+    label: "docsInsert.mathOperations",
+    face: "√x",
+    cols: 4,
+    symbols: [
+      "\\frac{a}{b}",
+      "\\sqrt{x}",
+      "\\sqrt[n]{x}",
+      "x^{2}",
+      "x_{i}",
+      "x_{i}^{2}",
+      "\\overline{x}",
+      "\\widehat{x}",
+      ...commands("bigcap bigcup prod coprod"),
+      "\\left( x \\right)",
+      "\\left[ x \\right]",
+      "\\left\\{ x \\right\\}",
+      "\\left| x \\right|",
+      ...commands("int oint sum"),
+      "\\lim_{x \\to a}",
+      "\\sum_{a}^{b}",
+      "\\int_{a}^{b}",
+      "\\prod_{a}^{b}",
+    ],
+  },
+  {
+    label: "docsInsert.arrows",
+    face: "←↑⇔",
+    cols: 6,
+    symbols: commands("leftarrow rightarrow leftrightarrow Leftarrow Rightarrow Leftrightarrow uparrow downarrow updownarrow Uparrow Downarrow Updownarrow"),
+  },
 ];
 
 function renderTex(tex: string): string {
@@ -192,19 +194,21 @@ function EquationBox({
             face={<span className="docs-tb-caption docs-equation-face">{menu.face}</span>}
           >
             {(close) => (
-              <div className={`docs-symbol-grid${menu.symbols === MATH ? " is-wide" : ""}`}>
-                {menu.symbols.map((s) => (
+              <div className="docs-symbol-grid" data-grid-cols={menu.cols}>
+                {menu.symbols.map((tex) => (
                   <button
-                    key={s.tex}
+                    key={tex}
                     type="button"
+                    data-menu-item
+                    tabIndex={-1}
                     className="docs-symbol"
-                    aria-label={s.tex}
-                    data-tip={s.tex}
+                    aria-label={tex}
+                    data-tip={tex}
                     onClick={() => {
-                      insertTex(s.tex);
+                      insertTex(tex);
                       close();
                     }}
-                    dangerouslySetInnerHTML={{ __html: renderTex(s.tex) }}
+                    dangerouslySetInnerHTML={{ __html: renderTex(tex) }}
                   />
                 ))}
               </div>

@@ -1,11 +1,14 @@
 "use client";
 
 import type { Editor } from "@tiptap/core";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
-import { AddIcon, CheckIcon, EditIcon } from "@/components/docs/icons";
-import { DeleteIcon, DragIcon } from "@/components/docs/insert/icons";
+import { AddIcon, EditIcon } from "@/components/docs/icons";
+import { DropdownPanel, MenuHeader, MenuItem, MenuSeparator } from "@/components/docs/menu";
+import { DropBtn } from "@/components/docs/toolbar/controls";
+import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { documentDropdowns, dropdownChips } from "@/components/docs/insert/chips";
+import { emitInsert } from "@/components/docs/insert/context";
 import {
   DROPDOWN_COLORS,
   optionColor,
@@ -16,49 +19,47 @@ import {
   type Dropdown,
   type DropdownOption,
 } from "@/components/docs/insert/dropdowns";
-import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { DeleteIcon, DragIcon } from "@/components/docs/insert/icons";
 import { newBlockId } from "@/lib/docs/schema";
 
 // Dropdown chips' windows (SPEC.md §29), as Google Docs draws them: the
 // picker, the chip's menu of options, and the Dropdown options dialog.
 
-function OptionPill({ option, selected }: { option: DropdownOption; selected?: boolean }) {
+function OptionPill({ option }: { option: DropdownOption }) {
   const color = optionColor(option.color);
   return (
     <span className="docs-option-pill" style={{ backgroundColor: color, color: optionTextColor(color) }}>
-      {selected && <CheckIcon size={14} />}
       {option.label}
     </span>
   );
 }
 
+/** New dropdown, the document's dropdowns, and the presets; resting on one
+    shows its options beside the list. `onEdit(null)` is New dropdown. */
 export function DropdownPicker({
   editor,
   onPick,
-  onNew,
   onEdit,
 }: {
   editor: Editor;
   onPick: (dropdown: Dropdown) => void;
-  onNew: () => void;
-  onEdit: (dropdownId: string) => void;
+  onEdit: (dropdownId: string | null) => void;
 }) {
   const t = useT();
   const mine: Dropdown[] = documentDropdowns(editor.state.doc).map((d) => ({ id: d.id, name: d.name, options: readOptions(d.options) }));
-  const presets = presetDropdowns(t);
   const [hover, setHover] = useState<Dropdown | null>(null);
   const row = (d: Dropdown, key: string) => (
     <div key={key} className="docs-dd-row" onMouseEnter={() => setHover(d)}>
-      <button type="button" className="docs-at-row docs-dd-pick" onClick={() => onPick(d)}>
+      <button type="button" className="docs-at-row" onClick={() => onPick(d)}>
         <span className="docs-at-label">{d.name || t("docsInsert.itemDropdown")}</span>
       </button>
       {d.id && (
         <button
           type="button"
-          className="docs-icon-btn docs-dd-edit"
+          className="docs-icon-btn"
           aria-label={t("docsInsert.editDropdown")}
           data-tip={t("docsInsert.editDropdown")}
-          onClick={() => onEdit(d.id as string)}
+          onClick={() => onEdit(d.id)}
         >
           <EditIcon size={16} />
         </button>
@@ -68,84 +69,76 @@ export function DropdownPicker({
   return (
     <div className="docs-dd-picker" onMouseLeave={() => setHover(null)}>
       <div className="docs-dd-list">
-        <button type="button" className="docs-at-row docs-dd-new" onClick={onNew} onMouseEnter={() => setHover(null)}>
+        <button type="button" className="docs-at-row docs-dd-new" onClick={() => onEdit(null)} onMouseEnter={() => setHover(null)}>
           <span className="docs-at-icon">
-            <AddIcon size={20} />
+            <AddIcon />
           </span>
           <span className="docs-at-label">{t("docsInsert.newDropdown")}</span>
         </button>
         {mine.length > 0 && <div className="docs-at-section">{t("docsInsert.documentDropdowns")}</div>}
         {mine.map((d) => row(d, d.id ?? d.name))}
         <div className="docs-at-section">{t("docsInsert.presetDropdowns")}</div>
-        {presets.map((d, i) => row(d, `preset-${i}`))}
+        {presetDropdowns(t).map((d, i) => row(d, `preset-${i}`))}
       </div>
       {hover && (
         <div className="docs-dd-preview">
           <div className="docs-at-section">{t("docsInsert.dropdownOptions")}</div>
-          <div className="docs-dd-pills">
-            {hover.options.map((o, i) => (
-              <OptionPill key={i} option={o} />
-            ))}
-          </div>
+          {hover.options.map((o, i) => (
+            <OptionPill key={i} option={o} />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-/** The chip's menu: each option, the current one checked, then Add / Edit options. */
-export function DropdownChipMenu({
-  options,
-  current,
-  onChoose,
-  onEdit,
-}: {
-  options: DropdownOption[];
-  current: string;
-  onChoose: (option: DropdownOption) => void;
-  onEdit: () => void;
-}) {
+/** A dropdown chip's menu under the chip: each option, the chip's checked,
+    then Add / Edit options. */
+export function DropdownChipMenu({ editor, pos, chip, onClose }: { editor: Editor; pos: number; chip: HTMLElement; onClose: () => void }) {
   const t = useT();
-  return (
-    <div className="docs-dd-menu" role="menu">
-      {options.map((o, i) => (
-        <button key={i} type="button" role="menuitemradio" aria-checked={o.label === current} className="docs-dd-option" onClick={() => onChoose(o)}>
-          <span className="docs-dd-check">{o.label === current ? <CheckIcon size={18} /> : null}</span>
-          <OptionPill option={o} />
-        </button>
-      ))}
-      <div className="docs-menu-sep" />
-      <button type="button" role="menuitem" className="docs-dd-option docs-dd-addedit" onClick={onEdit}>
-        <span className="docs-dd-check">
-          <AddIcon size={18} />
-        </span>
-        {t("docsInsert.addEditOptions")}
-      </button>
-    </div>
-  );
-}
-
-/** Set the chip at `pos` to an option. */
-export function chooseOption(editor: Editor, pos: number, option: DropdownOption) {
+  const anchorRef = useRef(chip);
   const node = editor.state.doc.nodeAt(pos);
-  if (!node || node.type.name !== "dropdownChip") return;
-  const tr = editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, label: option.label, backgroundColor: optionColor(option.color) });
-  editor.view.dispatch(tr);
-  editor.view.focus();
+  if (node?.type.name !== "dropdownChip") return null;
+  const run = (fn: () => void) => () => {
+    onClose();
+    fn();
+  };
+  return (
+    <DropdownPanel open anchorRef={anchorRef} onClose={onClose} label={String(node.attrs.name ?? "")}>
+      {readOptions(node.attrs.dropdownOptions).map((o, i) => (
+        <MenuItem
+          key={i}
+          checked={o.label === node.attrs.label}
+          onSelect={run(() => {
+            editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, label: o.label, backgroundColor: o.color }));
+            editor.view.focus();
+          })}
+        >
+          <OptionPill option={o} />
+        </MenuItem>
+      ))}
+      <MenuSeparator />
+      <MenuItem
+        icon={<AddIcon size={18} />}
+        className="docs-dd-addedit"
+        onSelect={run(() => emitInsert(editor, { type: "dropdown-dialog", dropdownId: String(node.attrs.dropdownId ?? "") }))}
+      >
+        {t("docsInsert.addEditOptions")}
+      </MenuItem>
+    </DropdownPanel>
+  );
 }
 
 /** Save a dropdown's options onto every chip that has it; a chip whose
     option is gone shows the first. */
 export function saveDropdown(editor: Editor, dropdown: Dropdown & { id: string }) {
-  const options = dropdown.options.filter((o) => o.label.trim());
-  if (options.length === 0) return;
   const tr = editor.state.tr;
   for (const { node, pos } of dropdownChips(editor.state.doc, dropdown.id)) {
-    const kept = options.find((o) => o.label === node.attrs.label) ?? options[0];
+    const kept = dropdown.options.find((o) => o.label === node.attrs.label) ?? dropdown.options[0];
     tr.setNodeMarkup(pos, undefined, {
       ...node.attrs,
       name: dropdown.name,
-      dropdownOptions: writeOptions(options),
+      dropdownOptions: writeOptions(dropdown.options),
       label: kept.label,
       backgroundColor: optionColor(kept.color),
     });
@@ -167,10 +160,9 @@ export function DropdownDialog({
   const [options, setOptions] = useState<DropdownOption[]>(
     initial.options.length > 0 ? initial.options : [{ label: t("docsInsert.optionN", { n: 1 }), color: DROPDOWN_COLORS[0] }],
   );
-  const [colorFor, setColorFor] = useState<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const set = (i: number, patch: Partial<DropdownOption>) => setOptions((list) => list.map((o, j) => (j === i ? { ...o, ...patch } : o)));
-  const canSave = options.some((o) => o.label.trim());
+  const kept = options.filter((o) => o.label.trim());
   return (
     <ToolbarDialog
       title={t("docsInsert.dropdownOptions")}
@@ -179,12 +171,8 @@ export function DropdownDialog({
       actions={
         <>
           <DialogButton onClick={onClose}>{t("common.cancel")}</DialogButton>
-          <DialogButton
-            primary
-            disabled={!canSave}
-            onClick={() => onSave({ id: initial.id ?? newBlockId(), name: name.trim(), options: options.filter((o) => o.label.trim()) })}
-          >
-            {t("docsInsert.save")}
+          <DialogButton primary disabled={kept.length === 0} onClick={() => onSave({ id: initial.id ?? newBlockId(), name: name.trim(), options: kept })}>
+            {t("common.save")}
           </DialogButton>
         </>
       }
@@ -197,19 +185,18 @@ export function DropdownDialog({
         {options.map((o, i) => (
           <li
             key={i}
-            className={`docs-dd-option-row${dragging === i ? " is-dragging" : ""}`}
+            className={dragging === i ? "is-dragging" : undefined}
             onDragOver={(e) => {
               if (dragging === null) return;
               e.preventDefault();
-              if (dragging !== i) {
-                setOptions((list) => {
-                  const next = [...list];
-                  const [moved] = next.splice(dragging, 1);
-                  next.splice(i, 0, moved);
-                  return next;
-                });
-                setDragging(i);
-              }
+              if (dragging === i) return;
+              setOptions((list) => {
+                const next = [...list];
+                const [moved] = next.splice(dragging, 1);
+                next.splice(i, 0, moved);
+                return next;
+              });
+              setDragging(i);
             }}
           >
             <span
@@ -226,38 +213,39 @@ export function DropdownDialog({
             >
               <DragIcon size={18} />
             </span>
-            <span className="docs-dd-color-wrap">
-              <button
-                type="button"
-                className="docs-dd-color"
-                aria-label={t("docsInsert.optionColor")}
-                data-tip={t("docsInsert.optionColor")}
-                style={{ backgroundColor: optionColor(o.color) }}
-                onClick={() => setColorFor(colorFor === i ? null : i)}
-              />
-              {colorFor === i && (
-                <div className="docs-dd-colors" role="menu">
-                  <div className="docs-at-section">{t("docsInsert.colors")}</div>
-                  <div className="docs-dd-color-grid">
+            <DropBtn
+              label={t("docsInsert.optionColor")}
+              track="dropdown-option-color"
+              menuClassName="docs-dd-colors"
+              face={<span className="docs-dd-swatch" style={{ backgroundColor: optionColor(o.color) }} />}
+            >
+              {(close) => (
+                <>
+                  <MenuHeader>{t("docsInsert.colors")}</MenuHeader>
+                  <div className="docs-dd-swatches" data-grid-cols={8}>
                     {DROPDOWN_COLORS.map((c) => (
                       <button
                         key={c}
                         type="button"
-                        className={`docs-dd-swatch${optionColor(o.color) === c ? " is-on" : ""}`}
-                        style={{ backgroundColor: c }}
+                        role="menuitemradio"
+                        aria-checked={optionColor(o.color) === c}
                         aria-label={c}
+                        data-menu-item
+                        tabIndex={-1}
+                        className="docs-dd-swatch"
+                        style={{ backgroundColor: c }}
                         onClick={() => {
+                          close();
                           set(i, { color: c });
-                          setColorFor(null);
                         }}
                       />
                     ))}
                   </div>
-                </div>
+                </>
               )}
-            </span>
+            </DropBtn>
             <input
-              className="docs-field docs-dd-label"
+              className="docs-field"
               value={o.label}
               onChange={(e) => set(i, { label: e.target.value })}
               aria-label={t("docsInsert.optionN", { n: i + 1 })}
@@ -277,12 +265,9 @@ export function DropdownDialog({
       </ol>
       <button
         type="button"
-        className="docs-text-btn docs-dd-add"
+        className="docs-text-btn"
         onClick={() =>
-          setOptions((list) => [
-            ...list,
-            { label: t("docsInsert.optionN", { n: list.length + 1 }), color: DROPDOWN_COLORS[list.length % 8] },
-          ])
+          setOptions((list) => [...list, { label: t("docsInsert.optionN", { n: list.length + 1 }), color: DROPDOWN_COLORS[list.length % 8] }])
         }
       >
         <AddIcon size={18} />

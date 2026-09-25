@@ -5,13 +5,13 @@ import { useEffect, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands } from "@/components/docs/commands";
-import { setTypingStorage } from "@/components/docs/ext/typing";
+import { toast } from "@/components/docs/insert/context";
 import { isMac } from "@/components/docs/keys";
 import { AutocorrectBubble } from "@/components/docs/typing/autocorrect-bubble";
 import { TYPING_EVENT, fireTyping } from "@/components/docs/typing/events";
 import { findState, searchFrom, setFind, stepResult } from "@/components/docs/typing/find";
 import { FindBar, FindReplaceDialog, type FindMode } from "@/components/docs/typing/find-ui";
-import { copyMarkdown, pasteMarkdown, pasteMessages } from "@/components/docs/typing/paste";
+import { copyMarkdown, pasteMarkdown } from "@/components/docs/typing/paste";
 import { typingPrefs } from "@/components/docs/typing/prefs";
 import { PreferencesDialog } from "@/components/docs/typing/preferences-dialog";
 import { ShortcutsDialog } from "@/components/docs/typing/shortcuts-dialog";
@@ -19,9 +19,9 @@ import { VoiceTyping } from "@/components/docs/typing/voice-typing";
 
 // The typing area (SPEC.md §29): find and find and replace, Tools >
 // Preferences, the keyboard shortcuts, voice typing, and the spelling
-// switch. The keys that open them answer when the page editor has the
-// focus, or when nothing else does — never in the notes tray or any other
-// text box. The word count (word-count.tsx) mounts beside this layer.
+// switch. Their keys answer when the page editor has the focus, or when
+// nothing else does — never in the notes tray or any other text box. The
+// word count (word-count.tsx) mounts beside this layer.
 
 registerDocsCommands([
   {
@@ -41,18 +41,10 @@ registerDocsCommands([
     run: () => fireTyping(TYPING_EVENT.wordCount),
   },
   {
-    id: "typing:spelling",
-    label: "docsTyping.spellingCheck",
-    menu: "tools",
-    keywords: ["spelling", "grammar", "spellcheck", "拼写"],
-    shortcut: "Mod+Alt+X",
-    run: () => fireTyping(TYPING_EVENT.spelling),
-  },
-  {
     id: "typing:preferences",
     label: "docsTyping.preferences",
     menu: "tools",
-    keywords: ["autocorrect", "substitutions", "smart quotes", "markdown", "capitalize", "偏好", "自动更正"],
+    keywords: ["autocorrect", "substitutions", "smart quotes", "markdown", "capitalize", "emoji", "偏好", "自动更正"],
     run: () => fireTyping(TYPING_EVENT.preferences),
   },
   {
@@ -106,23 +98,13 @@ function docsActive(editor: Editor): boolean {
   return false;
 }
 
-export function TypingLayer({ editor, pageSetup }: DocsAreaProps) {
+export function TypingLayer({ editor }: DocsAreaProps) {
   const t = useT();
   const [findMode, setFindMode] = useState<FindMode>(null);
   const [focusToken, setFocusToken] = useState(0);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
-
-  useEffect(() => {
-    setTypingStorage(editor, { pageless: pageSetup.pageless });
-  }, [editor, pageSetup.pageless]);
-
-  useEffect(() => {
-    pasteMessages.uploadFailed = t("docsTyping.uploadFailed");
-    pasteMessages.noClipboard = t("docsTyping.pasteNoClipboard");
-    pasteMessages.copied = t("docsTyping.copied");
-  }, [t]);
 
   useEffect(() => {
     const view = editor.view;
@@ -135,14 +117,10 @@ export function TypingLayer({ editor, pageSetup }: DocsAreaProps) {
       setFindMode(mode);
       setFocusToken((n) => n + 1);
     };
+    // Spelling and grammar check: the browser's underlines on or off.
     const toggleSpelling = () => {
-      const on = !editor.storage.docsTyping.spellcheck;
-      setTypingStorage(editor, { spellcheck: on });
-      view.dom.setAttribute("spellcheck", on ? "true" : "false");
-      view.dispatch(view.state.tr.setMeta("docsSpellcheck", on).setMeta("addToHistory", false));
-      window.dispatchEvent(
-        new CustomEvent("dissect:toast", { detail: { text: on ? t("docsTyping.spellingOn") : t("docsTyping.spellingOff") } }),
-      );
+      view.dom.spellcheck = !view.dom.spellcheck;
+      toast(t(view.dom.spellcheck ? "docsTyping.spellingOn" : "docsTyping.spellingOff"));
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing || !docsActive(editor)) return;
@@ -166,13 +144,11 @@ export function TypingLayer({ editor, pageSetup }: DocsAreaProps) {
         e.stopPropagation();
       }
     };
-    const onFind = () => openFind("bar");
     const onFindReplace = () => openFind("dialog");
     const onPrefs = () => setPrefsOpen(true);
     const onShortcuts = () => setShortcutsOpen(true);
     const onVoice = () => setVoiceOpen(true);
     window.addEventListener("keydown", onKey);
-    window.addEventListener(TYPING_EVENT.find, onFind);
     window.addEventListener(TYPING_EVENT.findReplace, onFindReplace);
     window.addEventListener(TYPING_EVENT.preferences, onPrefs);
     window.addEventListener(TYPING_EVENT.shortcuts, onShortcuts);
@@ -180,7 +156,6 @@ export function TypingLayer({ editor, pageSetup }: DocsAreaProps) {
     window.addEventListener(TYPING_EVENT.spelling, toggleSpelling);
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener(TYPING_EVENT.find, onFind);
       window.removeEventListener(TYPING_EVENT.findReplace, onFindReplace);
       window.removeEventListener(TYPING_EVENT.preferences, onPrefs);
       window.removeEventListener(TYPING_EVENT.shortcuts, onShortcuts);

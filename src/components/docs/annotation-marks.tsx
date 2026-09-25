@@ -20,15 +20,11 @@ import { PAGE_FLASH_EVENT } from "@/components/docs/layer/events";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 
-// The Unitos layer over the page editor (SPEC.md §29): the marks the reader
-// paints on an article — notes, annotations, links, extractions, and the
-// selection tint under the open toolbar — painted over the rich text as
-// ProseMirror decorations. They never change the text: the classes are the
-// reader's (block-view.tsx markedText), the chips at a mark's end are
-// data-anchor-skip widgets outside the document, and a press on a mark opens
-// what it opens in the reader, through the same window events. Offsets are
-// the paragraph index's (layer/anchor.ts); the decorations map through each
-// edit until the next repaint.
+// The Unitos layer over the page editor (SPEC.md §29): the reader's marks —
+// notes, annotations, links, extractions, and the selection tint — painted
+// over the rich text as decorations, with the reader's classes
+// (block-view.tsx markedText). The text never changes: a mark's chips are
+// data-anchor-skip widgets, and a press opens what it opens in the reader.
 
 export type MarksMeta = { highlights: Record<string, Highlight[]>; t: TFunc };
 
@@ -36,66 +32,53 @@ export const annotationMarksKey = new PluginKey<DecorationSet>("docsAnnotationMa
 
 type Chip = { kind: "tool" | "comment" | "link-start" | "link-end" | "extract"; highlight: Highlight };
 
-function chipWidget(chip: Chip, t: TFunc) {
+function chipWidget({ kind, highlight: h }: Chip, t: TFunc) {
   return () => {
     const button = document.createElement("button");
     button.type = "button";
     button.contentEditable = "false";
     button.setAttribute("data-anchor-skip", "");
-    const h = chip.highlight;
-    let root: Root | null = null;
-    if (chip.kind === "tool" && h.tool) {
-      const tip = t((h.plus ? TOOL_PLUS_KEY : TOOL_KEY)[h.tool]);
-      button.className = `${MARK_CHIP} mark-chip-${h.tool}${h.plus ? " mark-chip-plus" : ""}`;
+    const look = (className: string, tip: string, open: string, track?: string) => {
+      button.className = className;
       button.setAttribute("aria-label", tip);
       button.setAttribute("data-tip", tip);
-      button.setAttribute("data-track", "tool-chip");
-      button.dataset.docsOpen = "annotation";
-      button.dataset.sourceId = h.sourceId ?? "";
+      button.dataset.docsOpen = open;
+      if (track) button.setAttribute("data-track", track);
+    };
+    let symbol: React.ReactNode = null;
+    if (kind === "tool" && h.tool) {
+      const tip = t((h.plus ? TOOL_PLUS_KEY : TOOL_KEY)[h.tool]);
+      look(`${MARK_CHIP} mark-chip-${h.tool}${h.plus ? " mark-chip-plus" : ""}`, tip, "annotation", "tool-chip");
       // The pointer on the symbol shows the log, as on the words (SPEC.md §21).
       button.dataset.hoverSource = h.sourceId ?? "";
-      root = createRoot(button);
-      root.render(<ToolSymbol tool={h.tool} plus={h.plus} size={10} />);
-    } else if (chip.kind === "comment") {
-      button.className = `comment-dot ${MARK_CHIP} mark-chip-comment`;
-      button.setAttribute("aria-label", t("panes.openComment"));
-      button.setAttribute("data-tip", t("panes.openComment"));
-      button.setAttribute("data-track", "comment-icon");
-      button.dataset.docsOpen = "annotation";
-      button.dataset.sourceId = h.sourceId ?? "";
-      root = createRoot(button);
-      root.render(<CommentIcon size={10} />);
-    } else if (chip.kind === "link-end") {
-      // A completed link's chain: the press goes to the other end, as the
-      // reader's chain does. The linked words themselves stay text to edit.
-      const tip = h.linkTitle ? t("panes.linkedTo", { title: h.linkTitle }) : t("panes.linked");
-      button.className = CHAIN_BUTTON;
-      button.setAttribute("aria-label", tip);
-      button.setAttribute("data-tip", tip);
-      button.dataset.docsOpen = "link";
+      symbol = <ToolSymbol tool={h.tool} plus={h.plus} size={10} />;
+    } else if (kind === "comment") {
+      look(`comment-dot ${MARK_CHIP} mark-chip-comment`, t("panes.openComment"), "annotation", "comment-icon");
+      symbol = <CommentIcon size={10} />;
+    } else if (kind === "link-end") {
+      // A completed link's chain goes to the other end; the linked words stay text to edit.
+      look(CHAIN_BUTTON, h.linkTitle ? t("panes.linkedTo", { title: h.linkTitle }) : t("panes.linked"), "link");
       button.dataset.href = h.href ?? "";
-      root = createRoot(button);
-      root.render(<LinkIcon size={10} />);
-    } else if (chip.kind === "link-start") {
-      button.className = CHAIN_BUTTON;
-      button.setAttribute("aria-label", t("panes.linkToOtherTexts"));
-      button.setAttribute("data-tip", t("panes.linkToOtherTexts"));
-      button.setAttribute("data-track", "link-chip");
-      button.dataset.docsOpen = "start-link";
-      button.dataset.sourceId = h.sourceId ?? "";
-      root = createRoot(button);
-      root.render(<UnlinkIcon size={10} />);
+      symbol = <LinkIcon size={10} />;
+    } else if (kind === "link-start") {
+      look(CHAIN_BUTTON, t("panes.linkToOtherTexts"), "start-link", "link-chip");
+      symbol = <UnlinkIcon size={10} />;
     } else {
-      button.className =
-        "mx-0.5 inline-flex h-4 items-center rounded-full bg-clay-100 px-1.5 align-text-top text-[9.5px] font-bold text-clay-700 hover:bg-clay-200 hover:text-clay-800";
+      look(
+        "mx-0.5 inline-flex h-4 items-center rounded-full bg-clay-100 px-1.5 align-text-top text-[9.5px] font-bold text-clay-700 hover:bg-clay-200 hover:text-clay-800",
+        t("panes.extractOpenCard", { label: h.extractLabel ?? "" }),
+        "extract",
+        "extract-chip",
+      );
       button.textContent = h.extractLabel ?? "";
-      button.setAttribute("aria-label", t("panes.extractOpenCard", { label: h.extractLabel ?? "" }));
-      button.setAttribute("data-tip", t("panes.extractOpenCard", { label: h.extractLabel ?? "" }));
-      button.setAttribute("data-track", "extract-chip");
-      button.dataset.docsOpen = "extract";
       button.dataset.extractId = h.extractId ?? "";
     }
-    if (root) (button as HTMLButtonElement & { __root?: Root }).__root = root;
+    if (kind === "tool" || kind === "comment" || kind === "link-start") button.dataset.sourceId = h.sourceId ?? "";
+    if (symbol) {
+      const root = createRoot(button);
+      root.render(symbol);
+      (button as HTMLButtonElement & { __root?: Root }).__root = root;
+    }
     return button;
   };
 }

@@ -5,11 +5,13 @@ import type { Transaction } from "@tiptap/pm/state";
 import { useEffect, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CloseIcon, ExpandLessIcon, ExpandMoreIcon } from "@/components/docs/icons";
-import { useT } from "@/components/lang-provider";
+import { formatLength, lengthUnitFor, parseLength } from "@/components/docs/page/geometry";
+import { useLang, useT } from "@/components/lang-provider";
 
 // The insert area's shared pieces (SPEC.md §29): a box that floats at a
-// place in the text, and Google Docs' side panel with its folding sections.
-// A press inside either keeps the page's selection, except in a field.
+// place in the text, and Google Docs' side panel with its folding sections
+// and its fields. A press inside either keeps the page's selection, except
+// in a field.
 
 /** Re-render on every change of the editor's state. */
 export function useEditorTick(editor: Editor): number {
@@ -71,6 +73,9 @@ export function keepSelection(e: React.MouseEvent) {
 
 export type Anchor = { left: number; top: number; bottom: number };
 
+/** What a box opens: menus, the insert area's boxes, and dialogs. */
+const OWN = "[data-docs-insert-popover], [data-docs-menu], .docs-tb-backdrop";
+
 /** A box under (or, without room, over) an anchor in the window. */
 export function FloatingBox({
   anchor,
@@ -120,13 +125,13 @@ export function FloatingBox({
     const onDown = (e: MouseEvent) => {
       const target = e.target as Element | null;
       if (ref.current?.contains(target)) return;
-      // Its own menus and windows are not outside.
-      if (target?.closest("[data-docs-insert-popover], [data-docs-menu]")) return;
+      // Its own menus and dialogs are not outside.
+      if (target?.closest(OWN)) return;
       onDismiss();
     };
     const onKey = (e: KeyboardEvent) => {
-      // Escape closes an open menu first.
-      if (e.key !== "Escape" || document.querySelector("[data-docs-menu]")) return;
+      // Escape closes an open menu or dialog first.
+      if (e.key !== "Escape" || document.querySelector("[data-docs-menu], .docs-tb-backdrop")) return;
       e.preventDefault();
       e.stopPropagation();
       onDismiss();
@@ -167,14 +172,22 @@ export function SidePanel({
   children,
 }: {
   title: string;
-  icon?: ReactNode;
+  icon: ReactNode;
   onClose: () => void;
   children: ReactNode;
 }) {
   const t = useT();
+  const ref = useRef<HTMLElement>(null);
+  // A field applies on blur: blur it before the panel goes.
+  const close = () => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && ref.current?.contains(active)) active.blur();
+    onClose();
+  };
   if (typeof document === "undefined") return null;
   return createPortal(
     <aside
+      ref={ref}
       className="docs-side-panel"
       aria-label={title}
       data-docs-insert-popover
@@ -182,17 +195,16 @@ export function SidePanel({
       data-selection-popover
       onMouseDown={keepSelection}
       onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.stopPropagation();
-          onClose();
-        }
+        if (e.key !== "Escape") return;
+        e.stopPropagation();
+        close();
       }}
     >
       <header className="docs-side-head">
-        {icon && <span className="docs-side-icon">{icon}</span>}
+        {icon}
         <h2>{title}</h2>
-        <button type="button" className="docs-icon-btn" aria-label={t("docs.close")} data-tip={t("docs.close")} onClick={onClose}>
-          <CloseIcon size={20} />
+        <button type="button" className="docs-icon-btn" aria-label={t("docs.close")} data-tip={t("docs.close")} onClick={close}>
+          <CloseIcon />
         </button>
       </header>
       <div className="docs-side-body">{children}</div>
@@ -201,25 +213,70 @@ export function SidePanel({
   );
 }
 
-export function PanelSection({
-  title,
-  open,
-  onToggle,
-  children,
-}: {
-  title: string;
-  open: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
+export function PanelSection({ title, open: initial = true, children }: { title: string; open?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(initial);
   return (
     <section className="docs-side-section">
-      <button type="button" className="docs-side-section-head" aria-expanded={open} onClick={onToggle}>
+      <button type="button" className="docs-side-section-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span>{title}</span>
-        {open ? <ExpandLessIcon size={20} /> : <ExpandMoreIcon size={20} />}
+        {open ? <ExpandLessIcon /> : <ExpandMoreIcon />}
       </button>
       {open && <div className="docs-side-section-body">{children}</div>}
     </section>
+  );
+}
+
+/** One of a few choices, as a row of joined buttons. */
+export function Seg<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: [T, string][];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="docs-seg" role="group" aria-label={label}>
+      {options.map(([v, text]) => (
+        <button key={v} type="button" aria-pressed={value === v} onClick={() => onChange(v)}>
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A length in the page's unit (in, or cm in Chinese), applied on Enter or
+    blur; `pt` is its value in points. `bare` leaves the label to a
+    checkbox beside it. */
+export function LengthField({ label, pt, onChange, bare }: { label: string; pt: number; onChange: (pt: number) => void; bare?: boolean }) {
+  const t = useT();
+  const unit = lengthUnitFor(useLang());
+  const shown = formatLength(pt, unit);
+  const apply = (input: HTMLInputElement) => {
+    const next = parseLength(input.value, unit);
+    if (next !== null && input.value !== shown) onChange(next);
+    else input.value = shown;
+  };
+  return (
+    <label className="docs-side-field">
+      {!bare && <span className="docs-side-label">{label}</span>}
+      <span className="docs-side-length">
+        <input
+          key={pt}
+          className="docs-field"
+          inputMode="decimal"
+          aria-label={label}
+          defaultValue={shown}
+          onBlur={(e) => apply(e.currentTarget)}
+          onKeyDown={(e) => e.key === "Enter" && apply(e.currentTarget)}
+        />
+        {t(unit === "in" ? "docsInsert.unitIn" : "docsInsert.unitCm")}
+      </span>
+    </label>
   );
 }
 

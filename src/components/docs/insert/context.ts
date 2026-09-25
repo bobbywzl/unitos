@@ -36,10 +36,13 @@ export function insertT(editor: Editor): TFunc {
   return contexts.get(editor)?.t ?? translatorFor(DEFAULT_LANG);
 }
 
+/** The pickers the "@" menu opens in place of the "@query". */
+export type PickerKind = "date" | "dropdown" | "table" | "emoji" | "image" | "toc" | "code";
+
 /** A window of the insert area, opened from a key, a command, or a menu. */
 type InsertEvent =
-  | { type: "picker"; kind: "date" | "dropdown" | "table" | "emoji" | "image" | "toc" | "code" }
-  | { type: "image-options"; section?: "size" | "wrap" | "recolor" | "adjust" | "alt" }
+  | { type: "picker"; kind: PickerKind }
+  | { type: "image-options"; section?: "alt" }
   | { type: "image-replace" }
   | { type: "table-options" }
   | { type: "split-cell" }

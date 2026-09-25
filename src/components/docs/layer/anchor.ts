@@ -1,6 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
+import type { SourceInput } from "@/lib/anchors/input";
 import { inlineText } from "@/lib/docs/blocks";
 import type { RichNode } from "@/lib/docs/schema";
 
@@ -10,14 +11,7 @@ import type { RichNode } from "@/lib/docs/schema";
 // widgets would shift the offsets. Type imports only: the reader loads this
 // for every document.
 
-type PageSegment = {
-  blockId: string;
-  startOffset: number;
-  endOffset: number;
-  quotedText: string;
-  prefix: string;
-  suffix: string;
-};
+type PageSegment = Omit<SourceInput, "documentId" | "layer">;
 
 const CONTEXT = 32;
 

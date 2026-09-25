@@ -4,6 +4,7 @@ import { Plugin } from "@tiptap/pm/state";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
 import { emitInsert, insertContext, insertT } from "@/components/docs/insert/context";
 import { jumpTo } from "@/components/docs/insert/links";
+import { PX_PER_PT } from "@/components/docs/page/geometry";
 
 // The table of contents (SPEC.md §29) in Google Docs' three styles: plain
 // text with page numbers, dotted leaders to the page numbers, and blue
@@ -12,7 +13,6 @@ import { jumpTo } from "@/components/docs/insert/links";
 export type TocStyle = "plain" | "dotted" | "links";
 export const TOC_STYLES: TocStyle[] = ["plain", "dotted", "links"];
 const DEFAULT_LEVELS = [1, 2, 3];
-const PX_PER_PT = 96 / 72;
 
 type TocEntry = { level: number; text: string; blockId: string | null; pos: number };
 
@@ -131,6 +131,8 @@ class TocView implements NodeView {
       const row = document.createElement("div");
       row.className = "docs-toc-entry";
       row.setAttribute("data-level", String(entry.level));
+      // Google Docs' indents: a quarter inch a level.
+      row.style.paddingLeft = `${(entry.level - 1) * 0.25}in`;
       const link = document.createElement("a");
       link.className = "docs-toc-link";
       link.textContent = entry.text;

@@ -120,7 +120,6 @@ function TitleField({
   const [draft, setDraft] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const shown = saved ?? title;
-  const inputRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef(false);
   const [prevTitle, setPrevTitle] = useState(title);
   if (prevTitle !== title) {
@@ -150,7 +149,6 @@ function TitleField({
   return (
     <span className="docs-title-wrap" data-value={value || " "}>
       <input
-        ref={inputRef}
         value={value}
         readOnly={!canEdit}
         onChange={(e) => setDraft(e.target.value)}
@@ -169,8 +167,7 @@ function TitleField({
         aria-label={t("docs.renameTitle")}
         data-tip={canEdit ? t("docs.renameTitle") : shown}
         className={`docs-title-input${untitled ? " docs-title-untitled" : ""}`}
-        // The field is as wide as its text (the wrap's copy of it sets the
-        // width), so the status sits right after the title.
+        // As wide as its text (the wrap's copy sets the width).
         size={1}
       />
     </span>
@@ -343,7 +340,7 @@ export function DocsEditor({
             onInsertImage={insertImage}
           />
         )}
-        {area && <PageRuler {...area} zoom={zoom} />}
+        {area && <PageRuler {...area} />}
       </div>
       {area ? (
         <PageCanvas {...area} zoom={zoom} onZoom={setZoom} onPageClick={onPageClick}>

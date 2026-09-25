@@ -5,8 +5,6 @@
 :root {
   --docs-find-result: #c4eed0;
   --docs-find-current: #6dd58c;
-  --docs-field-line: #747775;
-  --docs-scrim: rgba(0, 0, 0, 0.32);
   --docs-code: #188038;
   --docs-autocorrect: #9e9e9e;
   --docs-voice-on: #d93025;
@@ -14,8 +12,6 @@
 .dark {
   --docs-find-result: rgba(109, 213, 140, 0.3);
   --docs-find-current: rgba(109, 213, 140, 0.62);
-  --docs-field-line: #8e918f;
-  --docs-scrim: rgba(0, 0, 0, 0.55);
   --docs-code: #81c995;
   --docs-autocorrect: #8a8a8a;
   --docs-voice-on: #f28b82;
@@ -49,7 +45,7 @@
   text-decoration-color: #8ab4f8;
 }
 
-/* A word Docs corrected: a dashed gray underline over a white halo. */
+/* A word Docs corrected: a dashed gray underline. */
 .docs-autocorrected {
   text-decoration: underline dashed var(--docs-autocorrect);
   text-decoration-thickness: 2px;
@@ -67,63 +63,33 @@
   background: var(--docs-menu-bg);
   box-shadow: var(--docs-menu-shadow);
 }
-.docs-ac-menu {
+
+/* "Tab to replace" under a pasted document address (typing/url-chip.ts). */
+.docs-tab-hint {
   position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  min-width: 220px;
-  padding: 6px 0;
+  z-index: 1;
+  margin-top: 1.6em;
+  padding: 4px 8px;
   border-radius: 4px;
   background: var(--docs-menu-bg);
   box-shadow: var(--docs-menu-shadow);
-  font: 400 14px/20px var(--docs-ui-font);
   color: var(--docs-text);
-}
-.docs-ac-menu .docs-wc-item {
-  padding-left: 16px;
-}
-.docs-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
+  font: 400 12px/16px var(--docs-ui-font);
   white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
 }
 
-/* Non-printing characters (Ctrl+Shift+P). */
-.tiptap-invisible-character {
-  height: 0;
-  padding: 0;
-  pointer-events: none;
-  user-select: none;
-  width: 0;
-}
-.tiptap-invisible-character::before {
-  display: inline-block;
-  width: 0;
+/* Non-printing characters (Ctrl+Shift+P) in Tiptap's own style, with Docs'
+   glyphs for a line break and a tab. */
+.docs-prose .tiptap-invisible-character::before {
   color: var(--docs-placeholder);
-  font-style: normal;
-  font-weight: 400;
-  line-height: 1em;
 }
-.tiptap-invisible-character--space::before {
-  content: "·";
-}
-.tiptap-invisible-character--tab::before {
-  content: "→";
-}
-.tiptap-invisible-character--break::before {
+.docs-prose .tiptap-invisible-character--break::before {
   content: "↵";
 }
-.tiptap-invisible-character--paragraph::before {
-  content: "¶";
-}
-.tiptap-invisible-character + img.ProseMirror-separator {
-  height: 0 !important;
-  width: 0 !important;
-  pointer-events: none;
-  user-select: none;
+.docs-prose .tiptap-invisible-character--tab::before {
+  content: "→";
 }
 
 /* Markdown's inline code: Roboto Mono in Docs' code green. */
@@ -131,7 +97,7 @@
   color: var(--docs-code);
 }
 
-/* ── Shared pieces: checkboxes, icon buttons, fields ─────────────────── */
+/* ── Checkboxes, focus ────────────────────────────────────────────────── */
 .docs-ty-check {
   display: flex;
   align-items: flex-start;
@@ -140,43 +106,57 @@
   color: var(--docs-text);
   cursor: pointer;
 }
-.docs-ty-check input {
+.docs-ty-check input,
+.docs-subs-box {
   flex: none;
   width: 18px;
   height: 18px;
-  margin-top: 1px;
   accent-color: var(--docs-blue);
   cursor: pointer;
 }
-.docs-find-btn {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  color: var(--docs-icon);
-  cursor: pointer;
+.docs-ty-check input {
+  margin-top: 1px;
 }
-.docs-find-btn:hover:not(:disabled) {
-  background: var(--docs-hover);
-}
-.docs-find-btn:disabled {
-  opacity: 0.38;
-  cursor: default;
-}
-.docs-find-input:focus-visible,
-.docs-outlined input:focus-visible,
-.docs-subs-input:focus-visible,
-.docs-shortcuts-search input:focus-visible {
-  outline: none;
-}
-.docs-find-btn:focus-visible,
+.docs-icon-btn:focus-visible,
 .docs-wc-widget:focus-visible,
 .docs-voice-mic:focus-visible {
   outline: 2px solid var(--docs-blue);
   outline-offset: 1px;
+}
+
+/* ── The outlined field, the counter inside it (bar and dialog) ────────── */
+.docs-outlined {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.docs-outlined input {
+  width: 100%;
+  height: 40px;
+  padding: 0 76px 0 16px;
+  border: 1px solid var(--docs-tb-outline);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--docs-text);
+  font: 400 16px/24px var(--docs-ui-font);
+  outline: none;
+}
+.docs-outlined input:focus {
+  border: 2px solid var(--docs-blue);
+  padding: 0 75px 0 15px;
+}
+.docs-outlined-label {
+  position: absolute;
+  top: -9px;
+  left: 12px;
+  padding: 0 4px;
+  background: var(--docs-menu-bg);
+  color: var(--docs-muted);
+  font: 400 12px/16px var(--docs-ui-font);
+  pointer-events: none;
+}
+.docs-outlined:focus-within .docs-outlined-label {
+  color: var(--docs-blue);
 }
 
 /* ── The find bar: top right, under the toolbar ───────────────────────── */
@@ -192,34 +172,11 @@
   color: var(--docs-text);
   font-family: var(--docs-ui-font);
 }
-.docs-find-field {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.docs-find-input {
+.docs-findbar input {
   width: 208px;
-  height: 40px;
-  padding: 0 12px 0 16px;
-  border: 1px solid var(--docs-field-line);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--docs-text);
-  font: 400 16px/24px var(--docs-ui-font);
-  outline: none;
 }
-.docs-find-input::placeholder {
+.docs-findbar input::placeholder {
   color: var(--docs-muted);
-}
-.docs-find-input:focus {
-  border: 2px solid var(--docs-blue);
-  padding: 0 11px 0 15px;
-}
-.docs-find-field .docs-find-input {
-  padding-right: 76px;
-}
-.docs-find-field .docs-find-input:focus {
-  padding-right: 75px;
 }
 .docs-find-counter {
   position: absolute;
@@ -270,44 +227,10 @@
   gap: 24px;
   padding: 8px 24px 0;
 }
-.docs-outlined {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.docs-outlined input {
-  width: 100%;
-  height: 40px;
-  padding: 0 76px 0 16px;
-  border: 1px solid var(--docs-field-line);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--docs-text);
-  font: 400 16px/24px var(--docs-ui-font);
-  outline: none;
-}
-.docs-outlined input:focus {
-  border: 2px solid var(--docs-blue);
-  padding: 0 75px 0 15px;
-}
-.docs-outlined-label {
-  position: absolute;
-  top: -9px;
-  left: 12px;
-  padding: 0 4px;
-  background: var(--docs-menu-bg);
-  color: var(--docs-muted);
-  font: 400 12px/16px var(--docs-ui-font);
-  pointer-events: none;
-}
-.docs-outlined:focus-within .docs-outlined-label {
-  color: var(--docs-blue);
-}
 .docs-replace-checks {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-top: 0;
 }
 .docs-replace-message {
   min-height: 20px;
@@ -357,11 +280,6 @@
   min-height: 300px;
   padding-top: 20px;
 }
-.docs-subs {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
 .docs-subs[aria-disabled="true"] {
   opacity: 0.6;
 }
@@ -378,25 +296,8 @@
   padding-bottom: 8px;
   border-bottom: 1px solid var(--docs-sep);
 }
-.docs-subs-box {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--docs-blue);
-}
-.docs-subs-input {
+.docs-subs-entry .docs-tb-field {
   min-width: 0;
-  height: 32px;
-  padding: 0 8px;
-  border: 1px solid var(--docs-field-line);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--docs-text);
-  font: 400 14px/20px var(--docs-ui-font);
-  outline: none;
-}
-.docs-subs-input:focus {
-  border: 2px solid var(--docs-blue);
-  padding: 0 7px;
 }
 .docs-subs-list {
   max-height: 300px;
@@ -420,7 +321,7 @@
   margin-bottom: 8px;
   padding: 0 12px;
   height: 40px;
-  border: 1px solid var(--docs-field-line);
+  border: 1px solid var(--docs-tb-outline);
   border-radius: 20px;
   color: var(--docs-icon);
 }
@@ -524,47 +425,6 @@
   margin-right: 8px;
   text-align: left;
 }
-.docs-wc-caption b,
-.docs-wc-item b {
-  font-weight: 700;
-}
-.docs-wc-menu {
-  position: absolute;
-  left: 0;
-  bottom: 52px;
-  min-width: 240px;
-  padding: 6px 0;
-  border-radius: 4px;
-  background: var(--docs-menu-bg);
-  box-shadow: var(--docs-menu-shadow);
-  font: 400 14px/20px var(--docs-ui-font);
-  color: var(--docs-text);
-}
-.docs-wc-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 32px;
-  padding: 4px 16px 4px 8px;
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.docs-wc-item:hover {
-  background: var(--docs-hover);
-}
-.docs-wc-check {
-  display: inline-flex;
-  justify-content: center;
-  width: 28px;
-  flex: none;
-  color: var(--docs-icon);
-}
-.docs-wc-sep {
-  height: 1px;
-  margin: 6px 0;
-  background: var(--docs-sep);
-}
 
 /* ── Voice typing: the microphone box ─────────────────────────────────── */
 .docs-voice {
@@ -647,11 +507,11 @@
 }
 
 @media (max-width: 560px) {
-  .docs-find-input {
-    width: 150px;
-  }
   .docs-findbar {
     padding: 8px;
+  }
+  .docs-findbar input {
+    width: 150px;
   }
   .docs-replace-actions {
     flex-wrap: wrap;
@@ -664,7 +524,8 @@
   .docs-replace,
   .docs-wc-anchor,
   .docs-voice,
-  .docs-ac-bubble {
+  .docs-ac-bubble,
+  .docs-tab-hint {
     display: none !important;
   }
   .docs-autocorrected {

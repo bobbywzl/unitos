@@ -194,7 +194,7 @@ export function ColorMenu({
   return (
     <div className="docs-palette">
       {onNone && (
-        <MenuItem onSelect={onNone} icon={<ColorResetIcon size={18} />} className="docs-palette-none" track="docs:highlight-none">
+        <MenuItem onSelect={onNone} icon={<ColorResetIcon size={18} />} track="docs:highlight-none">
           {t("docs.noHighlight")}
         </MenuItem>
       )}

@@ -4,6 +4,7 @@ import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useCollab } from "@/components/collab/collab-context";
+import { PersonBadge } from "@/components/collab/person-badge";
 import { useT } from "@/components/lang-provider";
 import {
   BulletListIcon,
@@ -34,12 +35,13 @@ import {
 } from "@/components/docs/insert/actions";
 import { atMenuState, closeAtMenu, setAtKeyHandler, type AtState } from "@/components/docs/insert/at-plugin";
 import { buildingBlock, type BuildingBlock } from "@/components/docs/insert/building-blocks";
-import { emitInsert, onInsert, type InsertContext } from "@/components/docs/insert/context";
+import { emitInsert, onInsert, type InsertContext, type PickerKind } from "@/components/docs/insert/context";
 import { DatePicker } from "@/components/docs/insert/date-picker";
 import { matchDates } from "@/components/docs/insert/dates";
 import { DropdownPicker } from "@/components/docs/insert/dropdown-ui";
 import { EmojiPicker, rememberEmoji, useEmojiData } from "@/components/docs/insert/emoji-picker";
 import { insertFootnote } from "@/components/docs/insert/footnotes";
+import { TocStyles } from "@/components/docs/insert/hosts";
 import {
   AssignmentIcon,
   BookmarkIcon,
@@ -49,7 +51,6 @@ import {
   CodeIcon,
   DropdownChipIcon,
   EmailIcon,
-  EventIcon,
   FootnoteIcon,
   FunctionsIcon,
   MapIcon,
@@ -61,30 +62,14 @@ import {
 import { ImageSourcePicker } from "@/components/docs/insert/image-source";
 import { insertImageFrom } from "@/components/docs/insert/image";
 import { TableGridPicker } from "@/components/docs/insert/table-grid";
-import { TOC_STYLES, type TocStyle } from "@/components/docs/insert/toc";
 import { anchorAt, FloatingBox, useDocPos, useEditorTick, useViewportTick } from "@/components/docs/insert/ui";
-import type { Person } from "@/lib/person";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The "@" menu (SPEC.md §29), Google Docs' insert menu under the typed "@":
 // sections filtered by the words typed after it, the matching letters in
 // bold. An item deletes the "@query" and inserts, or opens its picker there.
 
-type Section =
-  | "people"
-  | "dates"
-  | "chips"
-  | "blocks"
-  | "files"
-  | "emojis"
-  | "lists"
-  | "media"
-  | "headings"
-  | "tables"
-  | "page"
-  | "more";
-
-type PickerKind = "date" | "dropdown" | "table" | "emoji" | "image" | "toc" | "code";
+type Section = "people" | "dates" | "chips" | "blocks" | "files" | "emojis" | "lists" | "media" | "headings" | "tables" | "page" | "more";
 
 type Item = {
   key: string;
@@ -94,9 +79,8 @@ type Item = {
   /** More words that find the item, lowercase, both languages. */
   words?: string;
   icon: ReactNode;
-  /** The item opens a picker instead of inserting at once. */
-  picker?: PickerKind;
-  run?: (range: Range) => void;
+  /** A picker to open, or what the item does in place of the "@query". */
+  action: PickerKind | ((range: Range) => void);
   disabled?: string;
   /** Always shown while its section shows (dates and emoji are matched already). */
   matched?: boolean;
@@ -123,37 +107,43 @@ const SECTION_LIMIT: Partial<Record<Section, number>> = { people: 3, blocks: 4, 
 const ORDER_EMPTY: Section[] = ["people", "chips", "blocks", "files", "lists", "media", "headings", "tables", "page", "more"];
 const ORDER_QUERY: Section[] = ["people", "dates", "chips", "files", "blocks", "emojis", "lists", "media", "headings", "tables", "page", "more"];
 
-const CODE_LANGUAGES: { id: string; name: string }[] = [
-  { id: "bash", name: "Bash" },
-  { id: "c", name: "C" },
-  { id: "cpp", name: "C++" },
-  { id: "csharp", name: "C#" },
-  { id: "css", name: "CSS" },
-  { id: "go", name: "Go" },
-  { id: "html", name: "HTML" },
-  { id: "java", name: "Java" },
-  { id: "javascript", name: "JavaScript" },
-  { id: "json", name: "JSON" },
-  { id: "kotlin", name: "Kotlin" },
-  { id: "php", name: "PHP" },
-  { id: "protobuf", name: "Protobuf" },
-  { id: "python", name: "Python" },
-  { id: "rust", name: "Rust" },
-  { id: "sql", name: "SQL" },
-  { id: "typescript", name: "TypeScript" },
-  { id: "xml", name: "XML" },
+const BLOCKS: [BuildingBlock, TKey, ReactNode, string][] = [
+  ["meetingNotes", "docsInsert.itemMeetingNotes", <MeetingNotesIcon key="i" />, "meeting notes agenda 会议 记录"],
+  ["emailDraft", "docsInsert.itemEmailDraft", <EmailIcon key="i" />, "email mail draft 邮件"],
+  ["productRoadmap", "docsInsert.itemProductRoadmap", <MapIcon key="i" />, "roadmap product table 路线图"],
+  ["reviewTracker", "docsInsert.itemReviewTracker", <AssignmentIcon key="i" />, "review tracker table 审核"],
+  ["taskTracker", "docsInsert.itemTaskTracker", <TaskIcon key="i" />, "task tracker todo table 任务"],
 ];
 
-export function Avatar({ person, size = 24 }: { person: Pick<Person, "name" | "symbol" | "color" | "picture">; size?: number }) {
-  return person.picture ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={person.picture} alt="" className="docs-avatar" style={{ width: size, height: size }} />
-  ) : (
-    <span className="docs-avatar" style={{ width: size, height: size, backgroundColor: person.color, fontSize: size * 0.45 }}>
-      {person.symbol}
-    </span>
-  );
-}
+const HEADINGS: ["title" | "subtitle" | "h1" | "h2" | "h3" | "normal", TKey, string][] = [
+  ["title", "docs.styleTitle", "title heading 标题"],
+  ["subtitle", "docs.styleSubtitle", "subtitle 副标题"],
+  ["h1", "docs.styleHeading1", "heading h1 标题"],
+  ["h2", "docs.styleHeading2", "heading h2 标题"],
+  ["h3", "docs.styleHeading3", "heading h3 标题"],
+  ["normal", "docs.styleNormal", "normal text paragraph 正文"],
+];
+
+const CODE_LANGUAGES: [string, string][] = [
+  ["bash", "Bash"],
+  ["c", "C"],
+  ["cpp", "C++"],
+  ["csharp", "C#"],
+  ["css", "CSS"],
+  ["go", "Go"],
+  ["html", "HTML"],
+  ["java", "Java"],
+  ["javascript", "JavaScript"],
+  ["json", "JSON"],
+  ["kotlin", "Kotlin"],
+  ["php", "PHP"],
+  ["protobuf", "Protobuf"],
+  ["python", "Python"],
+  ["rust", "Rust"],
+  ["sql", "SQL"],
+  ["typescript", "TypeScript"],
+  ["xml", "XML"],
+];
 
 /** The label with the typed letters in bold. */
 function Marked({ label, query }: { label: string; query: string }) {
@@ -176,11 +166,9 @@ function score(item: Item, q: string): number {
   if (label.startsWith(q)) return 4;
   if (label.split(/[\s/&(),.-]+/).some((w) => w.startsWith(q))) return 3;
   if (label.includes(q)) return 2;
-  if ((item.words ?? "").split(" ").some((w) => w && (w.startsWith(q) || q.startsWith(w) && w.length > 2))) return 1;
+  if ((item.words ?? "").split(" ").some((w) => w && (w.startsWith(q) || (q.startsWith(w) && w.length > 2)))) return 1;
   return 0;
 }
-
-type Picker = { kind: PickerKind; at: number };
 
 export function AtMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
   useEditorTick(editor);
@@ -191,25 +179,29 @@ export function AtMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertContext
   useViewportTick(s.active || at !== null);
 
   const openPicker = useCallback(
-    (picker: Picker) => {
-      setKind(picker.kind);
-      setAt(picker.at);
+    (next: PickerKind, pos: number) => {
+      setKind(next);
+      setAt(pos);
     },
     [setAt],
   );
 
   // A command opens a picker at the caret (Insert › Date, Dropdown, …).
   useEffect(
-    () => onInsert(editor, (event) => event.type === "picker" && openPicker({ kind: event.kind, at: editor.state.selection.from })),
+    () => onInsert(editor, (event) => event.type === "picker" && openPicker(event.kind, editor.state.selection.from)),
     [editor, openPicker],
   );
 
-  const closePicker = useCallback(() => {
-    setAt(null);
-    editor.commands.focus();
-  }, [editor, setAt]);
-
-  if (at !== null) return <PickerBox editor={editor} ctx={ctx} picker={{ kind, at }} onClose={closePicker} />;
+  if (at !== null) {
+    const close = (run?: () => void) => {
+      setAt(null);
+      const { state, view } = editor;
+      view.dispatch(state.tr.setSelection(TextSelection.near(state.doc.resolve(Math.min(at, state.doc.content.size)))));
+      view.focus();
+      run?.();
+    };
+    return <PickerBox editor={editor} ctx={ctx} kind={kind} at={at} done={close} />;
+  }
   if (!s.active) return null;
   return <AtMenu editor={editor} ctx={ctx} state={s} onPicker={openPicker} />;
 }
@@ -223,7 +215,7 @@ function AtMenu({
   editor: Editor;
   ctx: InsertContext;
   state: AtState;
-  onPicker: (picker: Picker) => void;
+  onPicker: (kind: PickerKind, pos: number) => void;
 }) {
   const t = useT();
   const collab = useCollab();
@@ -244,199 +236,101 @@ function AtMenu({
 
   const items = useMemo((): Item[] => {
     const lang = ctx.lang;
-    const out: Item[] = [];
-    if (colon) {
-      if (emoji && emoji !== "error" && q) {
-        for (const e of emoji.searchEmojis(q, 40)) {
-          out.push({
+    const emojiItems = (limit: number): Item[] =>
+      emoji && emoji !== "error" && q
+        ? emoji.searchEmojis(q, limit).map((e) => ({
             key: `emoji-${e.code}`,
             section: "emojis",
             label: `:${e.code}:`,
+            words: e.words,
             icon: <span className="docs-at-emoji">{e.char}</span>,
-            matched: true,
-            run: (range) => {
+            matched: colon,
+            action: (range) => {
               rememberEmoji(e.char);
               insertInline(editor, { type: "text", text: e.char }, range);
             },
-          });
-        }
-      }
-      return out;
-    }
-    // People: the project's collaborators; the signed-in person answers "@me".
-    for (const person of Object.values(collab.people)) {
-      const me = person.id === collab.myId;
-      out.push({
-        key: `person-${person.id}`,
-        section: "people",
-        label: person.name,
-        sub: me ? t("docsInsert.me") : undefined,
-        words: me ? "me 我" : "",
-        icon: <Avatar person={person} size={24} />,
-        run: (range) => insertPersonChip(editor, person, range),
-      });
-    }
-    // Smart chips.
-    out.push(
-      { key: "date", section: "chips", label: t("docsInsert.itemDate"), words: "date calendar 日期", icon: <EventIcon />, picker: "date" },
-      {
-        key: "dropdown",
-        section: "chips",
-        label: t("docsInsert.itemDropdown"),
-        words: "dropdown status select 下拉",
-        icon: <DropdownChipIcon />,
-        picker: "dropdown",
-      },
-    );
-    // Dates: the words typed name a day.
-    if (q) {
-      for (const d of matchDates(state.query, lang)) {
-        out.push({
+          }))
+        : [];
+    if (colon) return emojiItems(40);
+    const here = (run: () => void) => (range: Range) => replaceQuery(editor, range, run);
+    const item = (key: string, section: Section, label: TKey, words: string, icon: ReactNode, action: Item["action"]): Item => ({
+      key,
+      section,
+      label: t(label),
+      words,
+      icon,
+      action,
+    });
+    return [
+      // People: the project's collaborators; the signed-in person answers "@me".
+      ...Object.values(collab.people).map(
+        (person): Item => ({
+          key: `person-${person.id}`,
+          section: "people",
+          label: person.name,
+          sub: person.id === collab.myId ? t("docsInsert.me") : undefined,
+          words: person.id === collab.myId ? "me 我" : "",
+          icon: <PersonBadge person={person} size={20} />,
+          action: (range) => insertPersonChip(editor, person, range),
+        }),
+      ),
+      item("date", "chips", "docsInsert.itemDate", "date calendar 日期", <CalendarIcon />, "date"),
+      item("dropdown", "chips", "docsInsert.itemDropdown", "dropdown status select 下拉", <DropdownChipIcon />, "dropdown"),
+      // Dates: the words typed name a day.
+      ...(q ? matchDates(state.query, lang) : []).map(
+        (d): Item => ({
           key: `date-${d.iso}`,
           section: "dates",
-          label: new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : "en-US", { dateStyle: "medium" }).format(
-            new Date(`${d.iso}T12:00:00`),
-          ),
+          label: new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : "en-US", { dateStyle: "medium" }).format(new Date(`${d.iso}T12:00:00`)),
           sub: d.hint,
           icon: <CalendarIcon />,
           matched: true,
-          run: (range) => insertDateChip(editor, d.iso, lang, { range }),
-        });
-      }
-    }
-    // Building blocks.
-    const blocks: [BuildingBlock, TKey, ReactNode, string][] = [
-      ["meetingNotes", "docsInsert.itemMeetingNotes", <MeetingNotesIcon key="i" />, "meeting notes agenda 会议 记录"],
-      ["emailDraft", "docsInsert.itemEmailDraft", <EmailIcon key="i" />, "email mail draft 邮件"],
-      ["productRoadmap", "docsInsert.itemProductRoadmap", <MapIcon key="i" />, "roadmap product table 路线图"],
-      ["reviewTracker", "docsInsert.itemReviewTracker", <AssignmentIcon key="i" />, "review tracker table 审核"],
-      ["taskTracker", "docsInsert.itemTaskTracker", <TaskIcon key="i" />, "task tracker todo table 任务"],
-    ];
-    for (const [kind, key, icon, words] of blocks) {
-      out.push({
-        key: `block-${kind}`,
-        section: "blocks",
-        label: t(key),
-        words,
-        icon,
-        run: (range) => replaceQuery(editor, range, () => editor.chain().focus().insertContent(buildingBlock(kind, t, lang)).run()),
-      });
-    }
-    // Files: the project's other documents.
-    for (const doc of ctx.documents) {
-      if (doc.id === ctx.documentId) continue;
-      out.push({
-        key: `file-${doc.id}`,
-        section: "files",
-        label: doc.title,
-        icon: <DocIcon className="docs-at-doc-icon" />,
-        run: (range) => insertFileChip(editor, doc, ctx.notebookId, range),
-      });
-    }
-    // Emojis while searching.
-    if (q && emoji && emoji !== "error") {
-      for (const e of emoji.searchEmojis(q, 12)) {
-        out.push({
-          key: `emoji-${e.code}`,
-          section: "emojis",
-          label: `:${e.code}:`,
-          words: e.words,
-          icon: <span className="docs-at-emoji">{e.char}</span>,
-          run: (range) => {
-            rememberEmoji(e.char);
-            insertInline(editor, { type: "text", text: e.char }, range);
-          },
-        });
-      }
-    }
-    const list = (kind: "task" | "bullet" | "ordered") => (range: Range) =>
-      replaceQuery(editor, range, () => {
-        const c = editor.chain().focus();
-        if (kind === "task" && !editor.isActive("taskList")) c.toggleTaskList().run();
-        if (kind === "bullet" && !editor.isActive("bulletList")) c.toggleBulletList().run();
-        if (kind === "ordered" && !editor.isActive("orderedList")) c.toggleOrderedList().run();
-      });
-    out.push(
-      { key: "checklist", section: "lists", label: t("docs.checklist"), words: "checklist todo task 清单", icon: <ChecklistIcon />, run: list("task") },
-      { key: "bullets", section: "lists", label: t("docs.bulletedList"), words: "bulleted list bullets 列表", icon: <BulletListIcon />, run: list("bullet") },
-      { key: "numbers", section: "lists", label: t("docs.numberedList"), words: "numbered list ordered 编号", icon: <NumberedListIcon />, run: list("ordered") },
-      { key: "image", section: "media", label: t("docsInsert.itemImage"), words: "image picture photo 图片 照片", icon: <ImageIcon />, picker: "image" },
-      { key: "emoji", section: "media", label: t("docsInsert.itemEmoji"), words: "emoji smiley 表情", icon: <MoodIcon />, picker: "emoji" },
-    );
-    const style = (docStyle: "title" | "subtitle" | "h1" | "h2" | "h3" | "normal") => (range: Range) =>
-      replaceQuery(editor, range, () => editor.chain().focus().setDocStyle(docStyle).run());
-    out.push(
-      { key: "title", section: "headings", label: t("docs.styleTitle"), words: "title heading 标题", icon: <TitleIcon />, run: style("title") },
-      { key: "subtitle", section: "headings", label: t("docs.styleSubtitle"), words: "subtitle 副标题", icon: <TitleIcon />, run: style("subtitle") },
-      { key: "h1", section: "headings", label: t("docs.styleHeading1"), words: "heading h1 标题", icon: <TitleIcon />, run: style("h1") },
-      { key: "h2", section: "headings", label: t("docs.styleHeading2"), words: "heading h2 标题", icon: <TitleIcon />, run: style("h2") },
-      { key: "h3", section: "headings", label: t("docs.styleHeading3"), words: "heading h3 标题", icon: <TitleIcon />, run: style("h3") },
-      { key: "normal", section: "headings", label: t("docs.styleNormal"), words: "normal text paragraph 正文", icon: <TitleIcon />, run: style("normal") },
-      { key: "table", section: "tables", label: t("docsInsert.itemTable"), words: "table grid 表格", icon: <TableIcon />, picker: "table" },
+          action: (range) => insertDateChip(editor, d.iso, lang, { range }),
+        }),
+      ),
+      ...BLOCKS.map(([kind, label, icon, words]) =>
+        item(`block-${kind}`, "blocks", label, words, icon, here(() => editor.chain().focus().insertContent(buildingBlock(kind, t, lang)).run())),
+      ),
+      // Files: the project's other documents.
+      ...ctx.documents
+        .filter((doc) => doc.id !== ctx.documentId)
+        .map(
+          (doc): Item => ({
+            key: `file-${doc.id}`,
+            section: "files",
+            label: doc.title,
+            icon: <DocIcon className="docs-at-doc-icon" />,
+            action: (range) => insertFileChip(editor, doc, ctx.notebookId, range),
+          }),
+        ),
+      ...emojiItems(12),
+      item("checklist", "lists", "docs.checklist", "checklist todo task 清单", <ChecklistIcon />, here(() => editor.isActive("taskList") || editor.chain().focus().toggleTaskList().run())),
+      item("bullets", "lists", "docs.bulletedList", "bulleted list bullets 列表", <BulletListIcon />, here(() => editor.isActive("bulletList") || editor.chain().focus().toggleBulletList().run())),
+      item("numbers", "lists", "docs.numberedList", "numbered list ordered 编号", <NumberedListIcon />, here(() => editor.isActive("orderedList") || editor.chain().focus().toggleOrderedList().run())),
+      item("image", "media", "docsInsert.itemImage", "image picture photo 图片 照片", <ImageIcon />, "image"),
+      item("emoji", "media", "docsInsert.itemEmoji", "emoji smiley 表情", <MoodIcon />, "emoji"),
+      ...HEADINGS.map(([style, label, words]) => item(style, "headings", label, words, <TitleIcon />, here(() => editor.chain().focus().setDocStyle(style).run()))),
+      item("table", "tables", "docsInsert.itemTable", "table grid 表格", <TableIcon />, "table"),
       {
-        key: "pagebreak",
-        section: "page",
-        label: t("docsInsert.itemPageBreak"),
-        words: "page break 分页",
-        icon: <PageBreakIcon />,
+        ...item("pagebreak", "page", "docsInsert.itemPageBreak", "page break 分页", <PageBreakIcon />, here(() => editor.chain().focus().setPageBreak().run())),
         disabled: ctx.pageSetup.pageless ? t("docsInsert.pagesOnly") : undefined,
-        run: (range) => replaceQuery(editor, range, () => editor.chain().focus().setPageBreak().run()),
       },
-      {
-        key: "hr",
-        section: "more",
-        label: t("docsInsert.itemHorizontalLine"),
-        words: "horizontal line rule divider hr 分隔线 横线",
-        icon: <HorizontalRuleIcon />,
-        run: (range) => insertHorizontalLine(editor, range),
-      },
-      { key: "toc", section: "more", label: t("docsInsert.itemTableOfContents"), words: "table of contents toc 目录", icon: <OutlineIcon />, picker: "toc" },
-      {
-        key: "bookmark",
-        section: "more",
-        label: t("docsInsert.itemBookmark"),
-        words: "bookmark anchor 书签 锚点",
-        icon: <BookmarkIcon />,
-        run: (range) => insertBookmark(editor, range),
-      },
-      {
-        key: "footnote",
-        section: "more",
-        label: t("docsInsert.itemFootnote"),
-        words: "footnote note 脚注",
-        icon: <FootnoteIcon />,
-        run: (range) => replaceQuery(editor, range, () => insertFootnote(editor)),
-      },
-      {
-        key: "equation",
-        section: "more",
-        label: t("docsInsert.itemEquation"),
-        words: "equation math formula latex 公式 数学",
-        icon: <FunctionsIcon />,
-        run: (range) => {
-          const pos = insertEquation(editor, range);
-          if (pos !== null) emitInsert(editor, { type: "equation", pos });
-        },
-      },
-      {
-        key: "special",
-        section: "more",
-        label: t("docsInsert.itemSpecialCharacters"),
-        words: "special characters symbols omega 特殊 符号",
-        icon: <span className="docs-at-glyph">Ω</span>,
-        run: (range) => replaceQuery(editor, range, () => emitInsert(editor, { type: "special-characters" })),
-      },
-      {
-        key: "link",
-        section: "more",
-        label: t("docsInsert.itemLink"),
-        words: "link url hyperlink 链接",
-        icon: <LinkIcon />,
-        run: (range) => replaceQuery(editor, range, () => window.dispatchEvent(new CustomEvent(DOCS_EVENT.link))),
-      },
-      { key: "code", section: "more", label: t("docsInsert.itemCodeBlock"), words: "code block snippet 代码", icon: <CodeIcon />, picker: "code" },
-    );
-    return out;
+      item("hr", "more", "docsInsert.itemHorizontalLine", "horizontal line rule divider hr 分隔线 横线", <HorizontalRuleIcon />, (range) =>
+        insertHorizontalLine(editor, range),
+      ),
+      item("toc", "more", "docsInsert.itemTableOfContents", "table of contents toc 目录", <OutlineIcon />, "toc"),
+      item("bookmark", "more", "docsInsert.itemBookmark", "bookmark anchor 书签 锚点", <BookmarkIcon />, (range) => insertBookmark(editor, range)),
+      item("footnote", "more", "docsInsert.itemFootnote", "footnote note 脚注", <FootnoteIcon />, here(() => insertFootnote(editor))),
+      item("equation", "more", "docsInsert.itemEquation", "equation math formula latex 公式 数学", <FunctionsIcon />, (range) => {
+        const pos = insertEquation(editor, range);
+        if (pos !== null) emitInsert(editor, { type: "equation", pos });
+      }),
+      item("special", "more", "docsInsert.itemSpecialCharacters", "special characters symbols omega 特殊 符号", <span className="docs-at-glyph">Ω</span>, here(() =>
+        emitInsert(editor, { type: "special-characters" }),
+      )),
+      item("link", "more", "docsInsert.itemLink", "link url hyperlink 链接", <LinkIcon />, here(() => window.dispatchEvent(new CustomEvent(DOCS_EVENT.link)))),
+      item("code", "more", "docsInsert.itemCodeBlock", "code block snippet 代码", <CodeIcon />, "code"),
+    ];
   }, [colon, emoji, q, state.query, collab.people, collab.myId, ctx, editor, t]);
 
   // The sections to show, each with its rows. While searching, the section
@@ -445,7 +339,6 @@ function AtMenu({
     const order = colon ? (["emojis"] as Section[]) : q ? ORDER_QUERY : ORDER_EMPTY;
     const out: { section: Section; rows: Item[]; more: boolean; best: number }[] = [];
     for (const section of expanded ? [expanded] : order) {
-      if (!q && (section === "dates" || section === "emojis") && !colon) continue;
       const scored = items
         .filter((i) => i.section === section)
         .map((i, index) => ({ i, index, s: score(i, q) }))
@@ -453,7 +346,7 @@ function AtMenu({
         .sort((a, b) => b.s - a.s || a.index - b.index);
       if (scored.length === 0) continue;
       const matched = scored.map((x) => x.i);
-      const limit = colon ? 8 : SECTION_LIMIT[section] ?? 0;
+      const limit = colon ? 8 : (SECTION_LIMIT[section] ?? 0);
       const more = limit > 0 && matched.length > limit;
       out.push({ section, rows: expanded || !more ? matched : matched.slice(0, limit), more: more && !expanded, best: scored[0].s });
     }
@@ -471,15 +364,20 @@ function AtMenu({
       if (!item || item.disabled) return;
       const range = { ...state.range };
       closeAtMenu(editor.view);
-      if (item.picker) {
-        if (range.to > range.from) editor.chain().focus().deleteRange(range).run();
-        onPicker({ kind: item.picker, at: range.from });
+      if (typeof item.action === "function") {
+        item.action(range);
         return;
       }
-      item.run?.(range);
+      if (range.to > range.from) editor.chain().focus().deleteRange(range).run();
+      onPicker(item.action, range.from);
     },
     [editor, onPicker, state.range],
   );
+
+  const expand = (section: Section | null) => {
+    setExpanded(section);
+    setHighlight(0);
+  };
 
   // The keys, while the menu is open.
   const keyState = useRef({ flat, current, sections, choose, expanded });
@@ -502,22 +400,13 @@ function AtMenu({
         return true;
       }
       if (e.key === "ArrowRight" && !k.expanded) {
-        const row = k.flat[k.current];
-        const section = k.sections.find((s) => s.rows.includes(row as Item));
-        if (section?.more) {
-          setExpanded(section.section);
-          setHighlight(0);
-          return true;
-        }
-        return false;
-      }
-      if (e.key === "ArrowLeft" && k.expanded) {
-        setExpanded(null);
-        setHighlight(0);
+        const section = k.sections.find((s) => s.rows.includes(k.flat[k.current]));
+        if (!section?.more) return false;
+        expand(section.section);
         return true;
       }
-      if (e.key === "Escape") {
-        closeAtMenu(view);
+      if (e.key === "ArrowLeft" && k.expanded) {
+        expand(null);
         return true;
       }
       return false;
@@ -530,31 +419,23 @@ function AtMenu({
   }, [current, expanded]);
 
   const anchor = anchorAt(editor, state.range.from);
-  if (!anchor) return null;
   // ":" shows nothing until a letter is typed.
-  if (colon && !q) return null;
+  if (!anchor || (colon && !q)) return null;
   const loading = (colon || (q && flat.length === 0)) && emoji === null;
   const failed = colon && emoji === "error";
   if (colon && !loading && !failed && flat.length === 0) return null;
   let index = -1;
   return (
-    <FloatingBox anchor={anchor} className="docs-at-menu" role="listbox" label={t("docsInsert.insertMenu")} onDismiss={() => closeAtMenu(editor.view)}>
+    <FloatingBox anchor={anchor} className="docs-at-menu" role="listbox" label={t("docs.menuInsert")} onDismiss={() => closeAtMenu(editor.view)}>
       <div ref={listRef} className="docs-at-scroll">
         {expanded && (
-          <button
-            type="button"
-            className="docs-at-back"
-            onClick={() => {
-              setExpanded(null);
-              setHighlight(0);
-            }}
-          >
-            <ChevronLeftIcon size={20} />
+          <button type="button" className="docs-at-back" onClick={() => expand(null)}>
+            <ChevronLeftIcon />
             <span>{t(SECTION_TITLE[expanded])}</span>
           </button>
         )}
         {sections.map((sec) => (
-          <div key={sec.section} className="docs-at-group" role="group" aria-label={t(SECTION_TITLE[sec.section])}>
+          <div key={sec.section} role="group" aria-label={t(SECTION_TITLE[sec.section])}>
             {!expanded && (
               <div className="docs-at-section">
                 <span>{t(SECTION_TITLE[sec.section])}</span>
@@ -564,12 +445,9 @@ function AtMenu({
                     className="docs-at-more"
                     aria-label={t("docsInsert.seeAll")}
                     data-tip={t("docsInsert.seeAll")}
-                    onClick={() => {
-                      setExpanded(sec.section);
-                      setHighlight(0);
-                    }}
+                    onClick={() => expand(sec.section)}
                   >
-                    <ChevronRightIcon size={20} />
+                    <ChevronRightIcon />
                   </button>
                 )}
               </div>
@@ -585,7 +463,7 @@ function AtMenu({
                   aria-selected={mine === current}
                   aria-disabled={Boolean(item.disabled)}
                   data-tip={item.disabled}
-                  className={`docs-at-row${mine === current ? " is-active" : ""}${item.sub ? " is-two-line" : ""}${item.disabled ? " is-disabled" : ""}`}
+                  className={`docs-at-row${mine === current ? " is-active" : ""}${item.sub ? " is-two-line" : ""}`}
                   onMouseMove={() => mine !== current && setHighlight(mine)}
                   onClick={() => choose(item)}
                 >
@@ -601,7 +479,7 @@ function AtMenu({
             })}
           </div>
         ))}
-        {loading && <div className="docs-at-state">{t("docsInsert.loading")}</div>}
+        {loading && <div className="docs-at-state">{t("common.loading")}</div>}
         {failed && <div className="docs-at-state">{t("docsInsert.cantRetrieve")}</div>}
         {!loading && !failed && flat.length === 0 && <div className="docs-at-state">{t("docsInsert.noResults")}</div>}
       </div>
@@ -609,158 +487,54 @@ function AtMenu({
   );
 }
 
-/** The picker an item opened, at the place of its "@query". */
-function PickerBox({ editor, ctx, picker, onClose }: { editor: Editor; ctx: InsertContext; picker: Picker; onClose: () => void }) {
+/** The picker an item opened, at the place of its "@query". `done` puts the
+    caret back there, then runs what was picked. */
+function PickerBox({
+  editor,
+  ctx,
+  kind,
+  at,
+  done,
+}: {
+  editor: Editor;
+  ctx: InsertContext;
+  kind: PickerKind;
+  at: number;
+  done: (run?: () => void) => void;
+}) {
   const t = useT();
-  const anchor = anchorAt(editor, picker.at);
-  const here: Range = { from: picker.at, to: picker.at };
-  const caretHere = () => {
-    const pos = Math.min(picker.at, editor.state.doc.content.size);
-    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(editor.state.doc.resolve(pos))));
-    editor.view.focus();
-  };
+  const anchor = anchorAt(editor, at);
   if (!anchor) return null;
-  let body: ReactNode = null;
-  switch (picker.kind) {
-    case "date":
-      body = (
-        <DatePicker
-          onPick={(iso, time) => {
-            onClose();
-            insertDateChip(editor, iso, ctx.lang, { range: here, time });
-          }}
-        />
-      );
-      break;
-    case "dropdown":
-      body = (
-        <DropdownPicker
-          editor={editor}
-          onPick={(d) => {
-            onClose();
-            insertDropdownChip(editor, d, here);
-          }}
-          onNew={() => {
-            onClose();
-            caretHere();
-            emitInsert(editor, { type: "dropdown-dialog", dropdownId: null });
-          }}
-          onEdit={(id) => {
-            onClose();
-            caretHere();
-            emitInsert(editor, { type: "dropdown-dialog", dropdownId: id });
-          }}
-        />
-      );
-      break;
-    case "table":
-      body = (
-        <TableGridPicker
-          onPick={(rows, cols) => {
-            onClose();
-            caretHere();
-            editor.chain().focus().insertDocsTable(rows, cols).run();
-          }}
-        />
-      );
-      break;
-    case "emoji":
-      body = (
-        <EmojiPicker
-          onPick={(char) => {
-            onClose();
-            insertInline(editor, { type: "text", text: char }, here);
-          }}
-        />
-      );
-      break;
-    case "image":
-      body = (
-        <ImageSourcePicker
-          onFile={(file) => {
-            onClose();
-            caretHere();
-            insertImageFrom(editor, { file });
-          }}
-          onUrl={(url) => {
-            onClose();
-            caretHere();
-            insertImageFrom(editor, { url });
-          }}
-        />
-      );
-      break;
-    case "toc":
-      body = (
-        <div className="docs-toc-styles" role="menu">
-          {TOC_STYLES.map((style: TocStyle) => (
-            <button
-              key={style}
-              type="button"
-              className="docs-toc-style"
-              aria-label={t(TOC_STYLE_LABEL[style])}
-              data-tip={t(TOC_STYLE_LABEL[style])}
-              onClick={() => {
-                onClose();
-                insertTableOfContents(editor, style, here);
-              }}
-            >
-              <TocThumb style={style} />
-            </button>
-          ))}
-        </div>
-      );
-      break;
-    case "code":
-      body = (
-        <div className="docs-code-langs" role="menu" aria-label={t("docsInsert.codeLanguage")}>
-          <div className="docs-at-section">
-            <span>{t("docsInsert.codeLanguage")}</span>
-          </div>
-          {[{ id: "", name: t("docsInsert.plainText") }, ...CODE_LANGUAGES].map((l) => (
-            <button
-              key={l.id || "plain"}
-              type="button"
-              className="docs-at-row"
-              onClick={() => {
-                onClose();
-                insertCodeBlock(editor, l.id || null, here);
-              }}
-            >
-              <span className="docs-at-icon">
-                <CodeIcon />
-              </span>
-              <span className="docs-at-label">{l.name}</span>
-            </button>
-          ))}
-        </div>
-      );
-      break;
-  }
+  const pickers: Record<PickerKind, () => ReactNode> = {
+    date: () => <DatePicker onPick={(iso, time) => done(() => insertDateChip(editor, iso, ctx.lang, { time }))} />,
+    dropdown: () => (
+      <DropdownPicker
+        editor={editor}
+        onPick={(d) => done(() => insertDropdownChip(editor, d))}
+        onEdit={(dropdownId) => done(() => emitInsert(editor, { type: "dropdown-dialog", dropdownId }))}
+      />
+    ),
+    table: () => <TableGridPicker onPick={(rows, cols) => done(() => editor.chain().focus().insertDocsTable(rows, cols).run())} />,
+    emoji: () => <EmojiPicker onPick={(char) => done(() => insertInline(editor, { type: "text", text: char }))} />,
+    image: () => <ImageSourcePicker onPick={(source) => done(() => insertImageFrom(editor, source))} />,
+    toc: () => <TocStyles onPick={(style) => done(() => insertTableOfContents(editor, style, null))} />,
+    code: () => (
+      <div className="docs-code-langs" role="menu" aria-label={t("docsInsert.codeLanguage")}>
+        <div className="docs-at-section">{t("docsInsert.codeLanguage")}</div>
+        {[["", t("docsInsert.plainText")], ...CODE_LANGUAGES].map(([id, name]) => (
+          <button key={id || "plain"} type="button" className="docs-at-row" onClick={() => done(() => insertCodeBlock(editor, id || null, null))}>
+            <span className="docs-at-icon">
+              <CodeIcon />
+            </span>
+            <span className="docs-at-label">{name}</span>
+          </button>
+        ))}
+      </div>
+    ),
+  };
   return (
-    <FloatingBox anchor={anchor} className={`docs-picker docs-picker-${picker.kind}`} onDismiss={onClose}>
-      {body}
+    <FloatingBox anchor={anchor} className={`docs-picker docs-picker-${kind}`} onDismiss={() => done()}>
+      {pickers[kind]()}
     </FloatingBox>
-  );
-}
-
-export const TOC_STYLE_LABEL: Record<TocStyle, TKey> = {
-  plain: "docsInsert.tocPlain",
-  dotted: "docsInsert.tocDotted",
-  links: "docsInsert.tocLinks",
-};
-
-/** A table of contents style, drawn small: lines, dots, or blue links. */
-export function TocThumb({ style }: { style: TocStyle }) {
-  return (
-    <span className={`docs-toc-thumb docs-toc-thumb-${style}`} aria-hidden>
-      {[0, 1, 1, 0, 1].map((level, i) => (
-        <span key={i} className="docs-toc-thumb-line" data-level={level}>
-          <span className="docs-toc-thumb-text" />
-          {style !== "links" && <span className="docs-toc-thumb-leader" />}
-          {style !== "links" && <span className="docs-toc-thumb-num" />}
-        </span>
-      ))}
-    </span>
   );
 }

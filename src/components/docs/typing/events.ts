@@ -1,10 +1,7 @@
-// The window events that open the typing area's windows (SPEC.md §29): the
-// keys, the registered commands, and other areas raise them; the typing
-// area (areas/typing.tsx) listens. Find and Word count keep the names
-// DOCS_EVENT gives them (extensions.ts); this module stays free of that one,
-// which loads the typing extension.
+// The window events that open the typing area's windows (SPEC.md §29),
+// raised by keys, commands, and other areas; areas/typing.tsx and
+// word-count.tsx listen.
 export const TYPING_EVENT = {
-  find: "docs:find",
   findReplace: "docs:find-replace",
   preferences: "docs:preferences",
   shortcuts: "docs:shortcuts",

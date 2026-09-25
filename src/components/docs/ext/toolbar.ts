@@ -2,11 +2,11 @@ import { Extension, type AnyExtension } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { firstFamily, loadFontInUse } from "@/components/docs/fonts";
-import { readChanges, STYLE_ATTR, STYLE_ORDER, styleVariables } from "@/components/docs/toolbar/styles";
+import { namedStyleSheet, readChanges, STYLE_ATTR, STYLE_ORDER } from "@/components/docs/toolbar/styles";
 
 // The toolbar's extensions (SPEC.md §29): the named styles on the doc node,
-// drawn as CSS variables on the editor's root; the paragraph flags of Line
-// & paragraph spacing (null = the named style's); Clear formatting; and the
+// drawn by a style sheet for this editor; the paragraph flags of Line &
+// paragraph spacing (null = the named style's); Clear formatting; and the
 // loading of faces the document uses.
 
 declare module "@tiptap/core" {
@@ -52,9 +52,11 @@ function flagAttr(name: string, data: string) {
 }
 
 const namedStyles = new PluginKey("docsNamedStyles");
+/** Each editor's named styles apply under its own data-docs-styles. */
+let editors = 0;
 
-/** Every face (and weight) the document's runs use. */
-function facesInUse(doc: PMNode): Map<string, Set<number>> {
+/** Every face (and weight) the document's runs and named styles use. */
+export function facesInUse(doc: PMNode): Map<string, Set<number>> {
   const faces = new Map<string, Set<number>>();
   doc.descendants((node) => {
     if (!node.isText) return true;
@@ -151,14 +153,16 @@ const DocsToolbar = Extension.create({
     return [
       new Plugin({
         key: namedStyles,
-        props: {
-          // The named styles' changes as variables on the editor's root.
-          attributes: (state): Record<string, string> => {
-            const { style, flags } = styleVariables(state.doc);
-            return flags ? { style, "data-docs-styles": flags } : {};
-          },
-        },
         view: (view) => {
+          const scope = `s${++editors}`;
+          view.dom.setAttribute("data-docs-styles", scope);
+          const sheet = document.head.appendChild(document.createElement("style"));
+          let attrs: PMNode["attrs"] | null = null;
+          const draw = () => {
+            if (view.state.doc.attrs === attrs) return;
+            attrs = view.state.doc.attrs;
+            sheet.textContent = namedStyleSheet(view.state.doc, `html .docs-prose[data-docs-styles="${scope}"]`);
+          };
           let timer: number | null = null;
           let last: PMNode | null = null;
           const scan = () => {
@@ -174,10 +178,15 @@ const DocsToolbar = Extension.create({
             if (timer !== null) window.clearTimeout(timer);
             timer = window.setTimeout(scan, 400);
           };
+          draw();
           schedule();
           return {
-            update: schedule,
+            update: () => {
+              draw();
+              schedule();
+            },
             destroy: () => {
+              sheet.remove();
               if (timer !== null) window.clearTimeout(timer);
             },
           };

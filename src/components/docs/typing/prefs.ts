@@ -5,25 +5,30 @@ import { z } from "zod";
 // They hold for every blank document in this browser (localStorage); a
 // private window or blocked storage keeps the defaults.
 
-export type Substitution = { from: string; to: string; enabled: boolean };
+const prefsSchema = z.object({
+  autoCapitalize: z.boolean(),
+  smartQuotes: z.boolean(),
+  detectLinks: z.boolean(),
+  detectLists: z.boolean(),
+  markdown: z.boolean(),
+  correctSpelling: z.boolean(),
+  // ":" and letters open the "@" menu with emoji.
+  colonEmoji: z.boolean(),
+  // "Automatic substitution": the master switch of the list below.
+  substitute: z.boolean(),
+  substitutions: z
+    .array(z.object({ from: z.string().min(1).max(100), to: z.string().max(200), enabled: z.boolean() }))
+    .max(500),
+  // Words whose spelling correction was undone: never corrected again.
+  spellingBlocklist: z.array(z.string().max(100)).max(2000),
+  // Substitutions undone right after they fired: skipped from then on.
+  substitutionBlocklist: z.array(z.string().max(100)).max(2000),
+  // The metric the floating word counter shows.
+  counterMetric: z.enum(["pages", "words", "characters", "charactersNoSpaces"]),
+});
 
-export type TypingPrefs = {
-  autoCapitalize: boolean;
-  smartQuotes: boolean;
-  detectLinks: boolean;
-  detectLists: boolean;
-  markdown: boolean;
-  correctSpelling: boolean;
-  /** "Automatic substitution": the master switch of the list below. */
-  substitute: boolean;
-  substitutions: Substitution[];
-  /** Words whose spelling correction was undone: never corrected again. */
-  spellingBlocklist: string[];
-  /** Substitutions undone right after they fired: skipped from then on. */
-  substitutionBlocklist: string[];
-  /** The metric the floating word counter shows. */
-  counterMetric: "pages" | "words" | "characters" | "charactersNoSpaces";
-};
+export type TypingPrefs = z.infer<typeof prefsSchema>;
+export type Substitution = TypingPrefs["substitutions"][number];
 
 /** Google Docs' default substitutions: exactly these 27 pairs, in this order. */
 const DEFAULT_SUBSTITUTIONS: ReadonlyArray<readonly [string, string]> = [
@@ -63,6 +68,7 @@ const DEFAULT_PREFS: TypingPrefs = {
   detectLists: true,
   markdown: false,
   correctSpelling: true,
+  colonEmoji: true,
   substitute: true,
   substitutions: DEFAULT_SUBSTITUTIONS.map(([from, to]) => ({ from, to, enabled: true })),
   spellingBlocklist: [],
@@ -71,22 +77,6 @@ const DEFAULT_PREFS: TypingPrefs = {
 };
 
 const STORAGE_KEY = "unitos-docs-typing";
-
-const prefsSchema = z.object({
-  autoCapitalize: z.boolean(),
-  smartQuotes: z.boolean(),
-  detectLinks: z.boolean(),
-  detectLists: z.boolean(),
-  markdown: z.boolean(),
-  correctSpelling: z.boolean(),
-  substitute: z.boolean(),
-  substitutions: z
-    .array(z.object({ from: z.string().min(1).max(100), to: z.string().max(200), enabled: z.boolean() }))
-    .max(500),
-  spellingBlocklist: z.array(z.string().max(100)).max(2000),
-  substitutionBlocklist: z.array(z.string().max(100)).max(2000),
-  counterMetric: z.enum(["pages", "words", "characters", "charactersNoSpaces"]),
-});
 
 let current: TypingPrefs | null = null;
 const listeners = new Set<() => void>();

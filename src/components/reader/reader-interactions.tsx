@@ -120,12 +120,19 @@ import { blockIdOfKey, coreKey, isCoreKey } from "@/lib/anchors/core-key";
 import { announceCollapseView } from "@/components/panels/layer-switch";
 import { startCardDrag } from "@/lib/card-drag";
 import { pointsAtText, skipsDrag, watchHold } from "@/lib/hold-drag";
-import { ANNOTATION_PARAM, referenceContent, referenceWords, type AnnotationReference } from "@/lib/annotation-reference";
+import {
+  ANNOTATION_PARAM,
+  annotationReferenceHref,
+  referenceContent,
+  referenceWords,
+  type AnnotationReference,
+} from "@/lib/annotation-reference";
 import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { pageEditorIn, pageSelectionOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
-import { flashInPage, PAGE_EDITED_EVENT } from "@/components/docs/layer/events";
+import { CommentCard } from "@/components/docs/layer/comment-card";
+import { COMMENTS_EVENT, flashInPage, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
 import {
   belowSlot,
@@ -1417,6 +1424,8 @@ export function ReaderInteractions({
   const docsShiftRef = useRef(0);
   docsShiftRef.current = docsShift;
   const marginCardOpenRef = useRef(false);
+  // View > Comments in the page editor: Hide comments unpaints them.
+  const [commentsHidden, setCommentsHidden] = useState(false);
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
   // Highlighting an answer in the chat card (SPEC.md §7): Start side chat,
   // Ask about this, Comment.
@@ -1736,6 +1745,7 @@ export function ReaderInteractions({
     setSimplifyCard(null);
     setAssistantChat(null);
     setCommentCard(null);
+    setCommentsHidden(false);
     setLinkCard(null);
     setAnnotationCard(null);
     setEditMode(false);
@@ -2012,15 +2022,6 @@ export function ReaderInteractions({
             return;
           }
         }
-        // A pending link waits on the next highlighted text: the Close link
-        // chip shows at the end of the highlight, and pressing it closes the
-        // link there. No auto-close — an accidental selection creates nothing.
-        if (captured && pendingLinkRef.current) {
-          setPopover(null);
-          setSubmenu(null);
-          setCloseLink({ anchor: captured.anchor, left: captured.endLeft, top: captured.endTop });
-          return;
-        }
         // captureSelection bails on math blocks — the rendered KaTeX text is
         // not the stored TeX — which left equations mute under a selection
         // attempt. Detect that case and open the whole-equation tools instead.
@@ -2041,10 +2042,42 @@ export function ReaderInteractions({
             return;
           }
         }
-        setPopover(captured);
-        setSubmenu(null);
-        setCloseLink(null);
-        setCommentDraft("");
+        showTools(captured);
+      });
+    };
+    // The toolbar on a selection. A pending link waits on the next
+    // highlighted text instead: the Close link chip shows at its end, and
+    // pressing it closes the link there — an accidental selection creates
+    // nothing.
+    const showTools = (captured: Popover | null) => {
+      setSubmenu(null);
+      if (captured && pendingLinkRef.current) {
+        setPopover(null);
+        setCloseLink({ anchor: captured.anchor, left: captured.endLeft, top: captured.endTop });
+        return;
+      }
+      setPopover(captured);
+      setCloseLink(null);
+      setCommentDraft("");
+    };
+    // The page editor (SPEC.md §29): a keyboard selection opens the toolbar
+    // once Shift, Ctrl, or Cmd is let go; a caret moved with the keys closes it.
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!richTextRef.current || !canEditRef.current) return;
+      if (!(e.target instanceof Element) || !e.target.closest("[data-docs-body]")) return;
+      const released = e.key === "Shift" || e.key === "Control" || e.key === "Meta";
+      if (!released && !(CARET_KEYS.has(e.key) && !e.shiftKey)) return;
+      requestAnimationFrame(() => {
+        if (!released) {
+          if (window.getSelection()?.isCollapsed && popoverRef.current) {
+            setPopover(null);
+            setSubmenu(null);
+          }
+          return;
+        }
+        const captured = captureSelection();
+        const open = popoverRef.current ?? closeLinkRef.current;
+        if (captured && JSON.stringify(open?.anchor) !== JSON.stringify(captured.anchor)) showTools(captured);
       });
     };
     // Touch: mouseup is unreliable after long-press selection, and adjusting
@@ -2077,12 +2110,14 @@ export function ReaderInteractions({
     document.addEventListener("mousedown", onDocumentMouseDown);
     document.addEventListener("mouseup", onMouseUp);
     container.addEventListener("pointerup", onPointerUp);
+    container.addEventListener("keyup", onKeyUp);
     document.addEventListener("selectionchange", onSelectionChange);
     return () => {
       container.removeEventListener("mousedown", onContainerMouseDown);
       document.removeEventListener("mousedown", onDocumentMouseDown);
       document.removeEventListener("mouseup", onMouseUp);
       container.removeEventListener("pointerup", onPointerUp);
+      container.removeEventListener("keyup", onKeyUp);
       document.removeEventListener("selectionchange", onSelectionChange);
       if (selectionTimer) clearTimeout(selectionTimer);
     };
@@ -2112,8 +2147,8 @@ export function ReaderInteractions({
         showToast(t("docs.selectToComment"));
         return;
       }
-      // Ctrl+Alt+M's keyup (below) can come before React renders: it reads
-      // the ref and leaves the Comment tool open.
+      // Ctrl+Alt+M's keyup can come before React renders: it reads the ref
+      // and leaves the Comment tool open.
       popoverRef.current = captured;
       // The new comment takes the margin from a saved comment card.
       setCommentCard((c) => (c && !c.busy && c.draft === c.saved ? null : c));
@@ -3080,16 +3115,15 @@ export function ReaderInteractions({
       const page = pageGeometry(container, 0);
       const slot = page ? slotAt(page, 0) : null;
       if (!slot) return;
-      const move = <T extends { left: number; width: number }>(c: T | null): T | null =>
-        c && (c.left !== slot.left || c.width !== slot.width) ? { ...c, ...slot } : c;
+      // An on-mark card without a width sits under its words and stays.
+      const move = <T extends { left: number; width?: number }>(c: T | null): T | null =>
+        c && c.width !== undefined && (c.left !== slot.left || c.width !== slot.width) ? { ...c, ...slot } : c;
       setBubble(move);
       setSimplifyCard(move);
       setAssistantChat(move);
       setCommentCard(move);
       setLinkCard(move);
-      setAnnotationCard((c) =>
-        c && c.width !== undefined && (c.left !== slot.left || c.width !== slot.width) ? { ...c, ...slot } : c,
-      );
+      setAnnotationCard(move);
     };
     const onMoved = (e: TransitionEvent) => {
       if (e.target instanceof Element && e.target.matches("[data-docs-page], .docs-canvas")) redock();
@@ -3161,41 +3195,19 @@ export function ReaderInteractions({
     window.addEventListener(PAGE_EDITED_EVENT, onEdited);
     return () => window.removeEventListener(PAGE_EDITED_EVENT, onEdited);
   }, [blankDocument, documentId]);
-  // A keyboard selection in the page editor opens the toolbar once Shift,
-  // Ctrl, or Cmd is let go; a caret moved with the keys closes it.
+  // View > Comments (SPEC.md §29): Hide comments unpaints the comments and
+  // closes their card; Minimize comments shows them as their icons and closes
+  // the card; Show all comments shows them.
   useEffect(() => {
     const container = containerRef.current;
     if (!blankDocument || !container) return;
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (!canEditRef.current || !(e.target instanceof Element) || !e.target.closest("[data-docs-body]")) return;
-      const released = e.key === "Shift" || e.key === "Control" || e.key === "Meta";
-      if (!released && !(CARET_KEYS.has(e.key) && !e.shiftKey)) return;
-      requestAnimationFrame(() => {
-        if (!released) {
-          if (window.getSelection()?.isCollapsed && popoverRef.current) {
-            setPopover(null);
-            setSubmenu(null);
-          }
-          return;
-        }
-        const captured = captureSelectionRef.current();
-        if (!captured) return;
-        const open = popoverRef.current ?? closeLinkRef.current;
-        if (open && JSON.stringify(open.anchor) === JSON.stringify(captured.anchor)) return;
-        if (pendingLinkRef.current) {
-          setPopover(null);
-          setSubmenu(null);
-          setCloseLink({ anchor: captured.anchor, left: captured.endLeft, top: captured.endTop });
-          return;
-        }
-        setPopover(captured);
-        setSubmenu(null);
-        setCloseLink(null);
-        setCommentDraft("");
-      });
+    const onView = (e: Event) => {
+      const view = (e as CustomEvent<CommentsView>).detail;
+      setCommentsHidden(view === "hidden");
+      if (view !== "all") setCommentCard(null);
     };
-    container.addEventListener("keyup", onKeyUp);
-    return () => container.removeEventListener("keyup", onKeyUp);
+    container.addEventListener(COMMENTS_EVENT, onView);
+    return () => container.removeEventListener(COMMENTS_EVENT, onView);
   }, [blankDocument]);
 
   // The on-mark card closes on a click anywhere else. A click on another mark
@@ -4474,6 +4486,8 @@ export function ReaderInteractions({
     setPopover(null);
     setSubmenu(null);
     setCommentDraft("");
+    // A new comment shows, and every hidden comment with it.
+    if (input.comment) setCommentsHidden(false);
     window.getSelection()?.removeAllRanges();
     setBusy(true);
     const body = {
@@ -5666,7 +5680,7 @@ function blockFormatKind(
   for (const [blockId, list] of Object.entries(anchorHighlights)) {
     // A deleted note's marks fade first, then unpaint (removedNotes).
     highlightsByBlock[blockId] = list
-      .filter((h) => removedNotes[h.noteId] !== "gone")
+      .filter((h) => removedNotes[h.noteId] !== "gone" && !(commentsHidden && h.comment))
       .map((h) => {
         // A stored AI annotation carries the symbol of the tool that made it —
         // Explain's question mark, Simplify's lines, the assistant's sparkle —
@@ -6409,11 +6423,12 @@ function blockFormatKind(
     : null;
   // The stored comment's own card, opened from its mark: its grip and a hold
   // drag the comment like the tool cards' drag theirs.
+  const commentSourceId = commentCard?.noteId ? sourceIdOfNote(commentCard.noteId) : null;
   const commentReference =
     commentCard && !commentCard.busy
       ? annotationReference({
           noteId: commentCard.noteId,
-          sourceId: commentCard.noteId ? sourceIdOfNote(commentCard.noteId) : null,
+          sourceId: commentSourceId,
           kind: "comment",
           quote: commentCard.anchor ? passageText(commentCard.anchor) : null,
           content: commentCard.saved,
@@ -7514,7 +7529,37 @@ function blockFormatKind(
       </Presence>
 
       <Presence show={commentCard !== null} exit="bubble">
-      {commentCard && (
+      {commentCard && richText && commentCard.noteId ? (
+        // The page editor's comment card is Google Docs' (SPEC.md §29).
+        <CommentCard
+          key={commentCard.noteId}
+          noteId={commentCard.noteId}
+          sourceId={commentSourceId}
+          link={annotationReferenceHref(notebookId, {
+            annotationId: commentCard.noteId,
+            documentId,
+            sourceId: commentSourceId,
+            kind: "comment",
+          })}
+          draft={commentCard.draft}
+          saved={commentCard.saved}
+          busy={commentCard.busy}
+          grip={annotationGrip(commentReference)}
+          className={`bubble-in absolute ${TOOL_LAYER}`}
+          style={{
+            left: commentCard.left,
+            top: commentCard.top,
+            width: commentCard.width,
+            maxHeight: cardMaxHeight,
+            borderColor: annotationKindColor("comment", null),
+          }}
+          onPointerDown={holdAnnotation(commentReference)}
+          onDraft={(draft) => setCommentCard((c) => (c ? { ...c, draft } : c))}
+          onSave={() => void saveCommentCard()}
+          onDelete={() => void deleteCommentCard()}
+          onClose={closeCommentCard}
+        />
+      ) : commentCard && (
         <div
           data-selection-popover
           data-side-card="comment"

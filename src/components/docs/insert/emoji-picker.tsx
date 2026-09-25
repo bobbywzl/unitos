@@ -177,7 +177,7 @@ export function EmojiPicker({ onPick }: { onPick: (char: string) => void }) {
           if (current !== group) setGroup(current);
         }}
       >
-        {data === null && <div className="docs-emoji-state">{t("docsInsert.loading")}</div>}
+        {data === null && <div className="docs-emoji-state">{t("common.loading")}</div>}
         {data === "error" && <div className="docs-emoji-state">{t("docsInsert.cantRetrieve")}</div>}
         {results && results.length === 0 && <div className="docs-emoji-state">{t("docsInsert.noResults")}</div>}
         {results && results.length > 0 && <div className="docs-emoji-grid">{results.map(button)}</div>}

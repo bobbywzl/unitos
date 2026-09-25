@@ -3,7 +3,7 @@
 import type { Editor } from "@tiptap/core";
 import { useEffect, useState } from "react";
 import { useT } from "@/components/lang-provider";
-import { scrollParent } from "@/components/docs/page/geometry";
+import { pageAt, scrollParent } from "@/components/docs/page/geometry";
 
 // The page indicator (SPEC.md §29), Google Docs': while the pointer is
 // within 20 px of the pane's right edge, a dark tip beside the scrollbar
@@ -35,10 +35,7 @@ export function PageIndicator({
         return;
       }
       const r = box.getBoundingClientRect();
-      const p = page.getBoundingClientRect();
-      const scale = page.offsetWidth > 0 ? p.width / page.offsetWidth : 1;
-      const middle = r.top + box.clientHeight / 2;
-      const n = Math.max(1, Math.min(pages, Math.floor((middle - p.top) / scale / pitch) + 1));
+      const n = Math.max(1, Math.min(pages, pageAt(page, pitch, r.top + box.clientHeight / 2).page + 1));
       // The thumb's middle: as far down the track as the view's middle is
       // down the document.
       const y = r.top + ((box.scrollTop + box.clientHeight / 2) / Math.max(1, box.scrollHeight)) * box.clientHeight;

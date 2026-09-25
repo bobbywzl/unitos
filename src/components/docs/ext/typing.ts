@@ -1,4 +1,4 @@
-import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
+import { Extension, type AnyExtension } from "@tiptap/core";
 import {
   HardBreakNode,
   InvisibleCharacter,
@@ -6,8 +6,8 @@ import {
   ParagraphNode,
   SpaceCharacter,
 } from "@tiptap/extension-invisible-characters";
-import { Plugin, PluginKey, TextSelection, type Transaction } from "@tiptap/pm/state";
-import { AddMarkStep, ReplaceStep } from "@tiptap/pm/transform";
+import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
+import { insertContext } from "@/components/docs/insert/context";
 import { isMac } from "@/components/docs/keys";
 import { blockText, runAutocorrect } from "@/components/docs/typing/autocorrect";
 import { wordAt } from "@/components/docs/typing/chars";
@@ -30,47 +30,14 @@ import { markStylePlugin, TYPING_RESTORE_META, validMarkStyle } from "@/componen
 import { armPlainPaste, imageFiles, insertImageFiles, notePaste, plainTextSlice } from "@/components/docs/typing/paste";
 import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
 import { tracePlugin } from "@/components/docs/typing/trace";
+import { replaceWithChip, urlChipPlugin } from "@/components/docs/typing/url-chip";
 
 // The page editor's typing (SPEC.md §29): Google Docs' keys, autocorrect,
 // paste, and find. It runs first (priority 1001), so its keys win over
-// Tiptap's and Tiptap's own input rules never run.
-
-declare module "@tiptap/core" {
-  interface Storage {
-    docsTyping: DocsTypingStorage;
-  }
-}
-
-type DocsTypingStorage = {
-  /** The document is pageless: no page breaks, no page count. */
-  pageless: boolean;
-  /** The browser underlines misspelled words (Spelling and grammar check). */
-  spellcheck: boolean;
-};
-
-/** Update the typing storage (the page area's pageless switch, the spelling switch). */
-export function setTypingStorage(editor: Editor, patch: Partial<DocsTypingStorage>): void {
-  Object.assign(editor.storage.docsTyping, patch);
-}
+// Tiptap's. The editor runs no Tiptap input rule and only Link's paste rule
+// (docs-editor.tsx): Docs' own autocorrect formats what is typed.
 
 const typingKey = new PluginKey("docsTyping");
-
-const MARKDOWN_MARKS = new Set(["bold", "italic", "strike", "code"]);
-
-/** A Tiptap paste rule turning **x** into bold: it deletes Markdown markers
-    and adds bold, italic, strike, or code. Docs never autoformats a paste. */
-function isMarkdownPasteRule(tr: Transaction): boolean {
-  let deletes = 0;
-  for (let i = 0; i < tr.steps.length; i++) {
-    const step = tr.steps[i];
-    if (step instanceof AddMarkStep && MARKDOWN_MARKS.has(step.mark.type.name)) continue;
-    if (!(step instanceof ReplaceStep) || step.slice.size !== 0) return false;
-    const removed = tr.docs[i].textBetween(step.from, step.to, "\n", "\n");
-    if (!/^[\s*_~`]+$/.test(removed)) return false;
-    deletes++;
-  }
-  return deletes > 0;
-}
 
 const PT_PER_UNIT: Record<string, number> = { pt: 1, px: 0.75, in: 72, cm: 72 / 2.54, mm: 72 / 25.4 };
 
@@ -99,13 +66,9 @@ function keepParagraphFormat(html: string): string {
   return doc.body.innerHTML;
 }
 
-const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
+const DocsTyping = Extension.create({
   name: "docsTyping",
   priority: 1001,
-
-  addStorage() {
-    return { pageless: false, spellcheck: true };
-  },
 
   addGlobalAttributes() {
     return [
@@ -156,7 +119,7 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
       Backspace: () => backspace(e, "char"),
       "Shift-Backspace": () => backspace(e, "char"),
       Delete: () => deleteForward(e, false, mac),
-      Tab: () => tab(e, false),
+      Tab: () => replaceWithChip(e) || tab(e, false),
       "Shift-Tab": () => tab(e, true),
       // Normal text: Tiptap's paragraph binds the same keys first otherwise.
       "Mod-Alt-0": () => e.commands.setDocStyle("normal"),
@@ -166,7 +129,7 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
       "Ctrl-Shift-ArrowDown": move(1),
       "Mod-Alt-Enter": () => toggleCheckbox(e),
       // Pageless documents have no page breaks.
-      "Mod-Enter": () => e.storage.docsTyping.pageless,
+      "Mod-Enter": () => Boolean(insertContext(e)?.pageSetup.pageless),
       "Mod-Shift-v": () => {
         armPlainPaste(e.view);
         return false;
@@ -231,23 +194,14 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
 
   addProseMirrorPlugins() {
     const editor = this.editor;
-    let pasting = false;
-    const plugin: Plugin = new Plugin({
+    const plugin = new Plugin({
       key: typingKey,
       props: {
         // Typed text goes in as one undo step with the typing around it;
         // then the autocorrect rules for the character run, each its own step.
-        handleTextInput(view, from, to, text, deflt) {
+        handleTextInput(view, _from, _to, text, deflt) {
           if (view.composing) return false;
-          const plugins = view.state.plugins;
-          for (let i = plugins.indexOf(plugin) + 1; i < plugins.length; i++) {
-            const other = plugins[i];
-            if ((other.spec as { isInputRules?: boolean }).isInputRules) continue;
-            const handler = other.props.handleTextInput;
-            if (handler && handler.call(other, view, from, to, text, deflt)) return true;
-          }
-          const tr = deflt();
-          view.dispatch(groupEdit(view, tr, "insert"));
+          view.dispatch(groupEdit(view, deflt(), "insert"));
           if ([...text].length === 1) runAutocorrect(view, text);
           return true;
         },
@@ -317,23 +271,8 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
           .setMeta("addToHistory", false)
           .setMeta(TYPING_RESTORE_META, true);
       },
-      // Tiptap's input rules never run, and a paste keeps its Markdown markers.
-      filterTransaction(tr, state) {
-        for (const p of state.plugins) {
-          if ((p.spec as { isInputRules?: boolean }).isInputRules && tr.getMeta(p)) return false;
-        }
-        const origin = tr.getMeta("uiEvent") as string | undefined;
-        if (origin === "paste" || origin === "drop") {
-          pasting = true;
-          queueMicrotask(() => {
-            pasting = false;
-          });
-          return true;
-        }
-        return !(pasting && isMarkdownPasteRule(tr));
-      },
     });
-    return [plugin, findPlugin(), tracePlugin(), repeatPlugin(), markStylePlugin()];
+    return [plugin, findPlugin(), tracePlugin(), repeatPlugin(), markStylePlugin(), urlChipPlugin(editor)];
   },
 });
 
@@ -341,7 +280,6 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
     line break, → for a tab, · for a space. Hidden until asked for. */
 const NonPrinting = InvisibleCharacters.configure({
   visible: false,
-  injectCSS: false,
   builders: [
     new SpaceCharacter(),
     new InvisibleCharacter({ type: "tab", predicate: (ch) => ch === "\t" }),

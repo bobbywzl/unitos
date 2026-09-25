@@ -35,16 +35,7 @@ const MODES: ModeItem[] = [
   { mode: "viewing", icon: <ViewIcon size={20} />, label: "docs.modeViewing", hint: "docs.modeViewingHint", combo: "Mod+Alt+Shift+C" },
 ];
 
-export function ModeSwitcher({
-  mode,
-  onMode,
-  folded,
-}: {
-  mode: DocsMode;
-  onMode: (mode: DocsMode) => void;
-  /** The bar runs short: only the symbol and the triangle show. */
-  folded: boolean;
-}) {
+export function ModeSwitcher({ mode, onMode }: { mode: DocsMode; onMode: (mode: DocsMode) => void }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [fromKeys, setFromKeys] = useState(false);
@@ -60,7 +51,6 @@ export function ModeSwitcher({
         data-tip={open ? undefined : tip}
         aria-haspopup="menu"
         aria-expanded={open}
-        data-folded={folded ? "" : undefined}
         data-track="docs:mode"
         data-tb-item
         onMouseDown={keepFocus}
@@ -96,7 +86,6 @@ export function ModeSwitcher({
         {MODES.map((m) => (
           <MenuItem
             key={m.mode}
-            role="menuitemradio"
             checked={m.mode === mode}
             disabled={m.mode === "suggesting"}
             label={t(m.label)}

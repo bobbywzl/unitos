@@ -43,9 +43,13 @@ export function paperOf(setup: Pick<PageSetup, "width" | "height">): Paper | nul
   return PAPERS.find((p) => Math.abs(p.width - short) <= 5 && Math.abs(p.height - long) <= 5) ?? null;
 }
 
-/** The ruler's and the dialog's unit: inches, or centimeters. */
+/** The ruler's and the dialogs' unit: inches, or centimeters in Chinese. */
 export type LengthUnit = "in" | "cm";
 export const PT_PER_UNIT: Record<LengthUnit, number> = { in: 72, cm: 72 / 2.54 };
+
+export function lengthUnitFor(lang: string): LengthUnit {
+  return lang === "zh" ? "cm" : "in";
+}
 
 /** Points in a unit, shown with up to 2 decimals ("1", "0.75"). */
 export function formatLength(pt: number, unit: LengthUnit): string {
@@ -96,6 +100,15 @@ export function pageFrame(setup: PageSetup): PageFrame {
     at most the Text width's cap. */
 export function pagelessWidth(available: number, scale: number, width: TextWidth): number {
   return Math.max(600, Math.min(available / scale - 80, TEXT_WIDTHS[width]));
+}
+
+/** The page (0-based, unclamped) at a client y over the page stack `el`,
+    and the y in px at 100% from that page's top. */
+export function pageAt(el: HTMLElement, pitch: number, clientY: number): { page: number; y: number } {
+  const r = el.getBoundingClientRect();
+  const y = (clientY - r.top) / (el.offsetWidth > 0 ? r.width / el.offsetWidth : 1);
+  const page = Math.floor(y / pitch);
+  return { page, y: y - page * pitch };
 }
 
 /** The pane that scrolls the pages: the nearest ancestor that scrolls

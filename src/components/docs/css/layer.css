@@ -69,3 +69,101 @@
 .docs-prose .mark-chip {
   box-shadow: 0 0 0 1.5px var(--docs-page);
 }
+
+/* A comment's card (layer/comment-card.tsx): Google Docs' 32 px badge, the
+   name over the time, Resolve and More options faded in on hover or while
+   in use, then the comment in 14 px text. */
+.docs-comment {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding: 16px 16px 12px;
+  border: 1px solid;
+  color: var(--docs-icon);
+  font: 400 14px/20px var(--docs-ui-font);
+}
+/* The focused card shows as the card in use, white and lifted. */
+.docs-comment:focus-visible {
+  outline: none;
+}
+.docs-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.docs-comment-who {
+  flex: 1;
+  min-width: 0;
+}
+.docs-comment-name {
+  overflow: hidden;
+  color: var(--docs-text);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.docs-comment-time {
+  font-size: 12px;
+  line-height: 16px;
+}
+.docs-comment-buttons {
+  display: flex;
+  align-items: center;
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .docs-comment-buttons {
+    transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+.docs-comment:hover .docs-comment-buttons,
+.docs-comment:focus-within .docs-comment-buttons {
+  opacity: 1;
+}
+.docs-comment-button {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+.docs-comment-button:hover {
+  background: var(--docs-hover);
+}
+.docs-comment-resolve {
+  color: var(--docs-blue);
+}
+.docs-comment-text .prose {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+.docs-comment-text .prose p {
+  margin: 0;
+}
+.docs-comment-text a {
+  color: var(--docs-blue);
+}
+.docs-comment-field {
+  resize: none;
+  field-sizing: content;
+  padding: 8px 7px 8px 16px;
+  border: 1px solid var(--docs-tb-outline);
+  border-radius: 16px;
+  background: var(--docs-page);
+  color: var(--docs-text);
+  font: inherit;
+}
+.docs-comment-field:focus {
+  padding: 7px 6px 7px 15px;
+  border: 2px solid var(--docs-blue);
+  border-radius: 16px;
+  outline: none;
+}
+.docs-comment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

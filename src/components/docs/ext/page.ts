@@ -1,18 +1,25 @@
 import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
-import type { Node as PMNode } from "@tiptap/pm/model";
+import { DOMSerializer, type Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey, TextSelection, type EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
-import { paginate, type PaginationConfig, type SpacerKind, type SpacerPlan } from "@/components/docs/page/paginate";
+import {
+  paginate,
+  type FootnotePlan,
+  type PaginationConfig,
+  type SpacerKind,
+  type SpacerPlan,
+} from "@/components/docs/page/paginate";
 
 // The page editor's page extensions (SPEC.md §29): pagination and Docs'
 // caret.
 //
 // Pagination: a spacer at each page's end — a widget decoration, never
-// content — pushes what follows to the next page's text top (page/paginate.ts
-// works out where). A pass runs one frame after a change, never during a
-// composition or a mouse selection; it moves spacers with a meta-only
-// transaction and resizes them in place (ProseMirror ignores mutations
-// inside a widget), so the document, the selection, and undo never change.
+// content — pushes what follows to the next page's text top, and each
+// footnote stands at its page's foot (page/paginate.ts works out where). A
+// pass runs one frame after a change, never during a composition or a mouse
+// selection; it moves spacers and footnotes with a meta-only transaction and
+// resizes spacers in place (ProseMirror ignores mutations inside a widget),
+// so the document, the selection, and undo never change.
 
 type Host = { config: PaginationConfig; onPages: (pages: number) => void };
 
@@ -43,6 +50,7 @@ const paginationKey = new PluginKey<DecorationSet>("docsPagination");
 
 type Spacer = SpacerPlan & { id: string };
 type SpacerSpec = { key: string; kind: SpacerKind; id: string; side: number; marks: []; ignoreSelection: true };
+type Plan = { spacers: Spacer[]; footnotes: FootnotePlan[] };
 
 let nextId = 0;
 
@@ -66,22 +74,55 @@ function spacerDOM(kind: SpacerKind, id: string, height: number, columns: number
   return el;
 }
 
-function buildDecorations(doc: PMNode, spacers: Spacer[], heights: Map<string, number>): DecorationSet {
-  return DecorationSet.create(
-    doc,
-    spacers.map((s) => {
-      let columns = 0;
-      if (s.kind === "row") {
-        doc.resolve(s.pos).parent.firstChild?.forEach((cell) => {
-          const span: unknown = cell.attrs.colspan;
-          columns += typeof span === "number" && span > 0 ? span : 1;
-        });
-      }
-      const spec: SpacerSpec = { key: `docs-spacer-${s.id}`, kind: s.kind, id: s.id, side: -1, marks: [], ignoreSelection: true };
-      return Decoration.widget(s.pos, () => spacerDOM(s.kind, s.id, heights.get(s.id) ?? 0, columns), spec);
-    }),
-  );
+/** A table's pinned header rows, drawn again at the foot of a row spacer:
+    rows written from the document (no decorations), in a copy of the
+    table's columns. */
+function headerRows(view: EditorView, tablePos: number): HTMLElement | null {
+  const node = view.state.doc.nodeAt(tablePos);
+  const wrapper = view.nodeDOM(tablePos);
+  const table = wrapper instanceof HTMLElement ? wrapper.querySelector("table") : null;
+  if (!node || !table) return null;
+  const copy = document.createElement("table");
+  const columns = table.querySelector(":scope > colgroup");
+  if (columns) copy.append(columns.cloneNode(true));
+  const body = copy.createTBody();
+  const serializer = DOMSerializer.fromSchema(view.state.schema);
+  for (let i = 0; i < node.childCount && node.child(i).attrs.pinned === true; i++) {
+    body.append(serializer.serializeNode(node.child(i)));
+  }
+  copy.querySelectorAll("[data-block-id]").forEach((el) => el.removeAttribute("data-block-id"));
+  const head = document.createElement("div");
+  head.className = "docs-spacer-head";
+  head.append(copy);
+  return head;
 }
+
+function buildDecorations(doc: PMNode, plan: Plan, heights: Map<string, number>): DecorationSet {
+  const spacers = plan.spacers.map((s) => {
+    let columns = 0;
+    if (s.kind === "row") {
+      doc.resolve(s.pos).parent.firstChild?.forEach((cell) => {
+        const span: unknown = cell.attrs.colspan;
+        columns += typeof span === "number" && span > 0 ? span : 1;
+      });
+    }
+    const spec: SpacerSpec = { key: `docs-spacer-${s.id}`, kind: s.kind, id: s.id, side: -1, marks: [], ignoreSelection: true };
+    return Decoration.widget(s.pos, () => spacerDOM(s.kind, s.id, heights.get(s.id) ?? 0, columns), spec);
+  });
+  const footnotes = plan.footnotes.flatMap((f) => {
+    const node = doc.nodeAt(f.pos);
+    if (!node) return [];
+    const attrs = {
+      class: f.first ? "docs-footnote-placed docs-footnote-first" : "docs-footnote-placed",
+      style: `--docs-footnote-top: ${f.top}px; --docs-footnote-page: ${f.page}`,
+    };
+    return [Decoration.node(f.pos, f.pos + node.nodeSize, attrs, { footnote: f })];
+  });
+  return DecorationSet.create(doc, [...spacers, ...footnotes]);
+}
+
+const sameFootnote = (a: FootnotePlan | undefined, b: FootnotePlan | undefined) =>
+  !!a && !!b && a.pos === b.pos && a.page === b.page && a.first === b.first && Math.abs(a.top - b.top) < 0.5;
 
 class Paginator {
   private frame = 0;
@@ -181,9 +222,11 @@ class Paginator {
       return;
     }
     this.touched = null;
-    const current = (paginationKey.getState(this.view.state)?.find() ?? []).map((d) => ({ pos: d.from, ...(d.spec as SpacerSpec) }));
+    const found = paginationKey.getState(this.view.state)?.find() ?? [];
+    const current = found.filter((d) => "kind" in d.spec).map((d) => ({ pos: d.from, ...(d.spec as SpacerSpec) }));
+    const placed = found.flatMap((d) => ("footnote" in d.spec ? [{ ...(d.spec.footnote as FootnotePlan), pos: d.from }] : []));
     if (!config.enabled) {
-      if (current.length > 0) this.dispatch([]);
+      if (found.length > 0) this.dispatch({ spacers: [], footnotes: [] });
       this.lastHeight = this.view.dom.offsetHeight;
       host.onPages(1);
       return;
@@ -202,13 +245,24 @@ class Paginator {
     // Spacers that stay where they are keep their ids, and their DOM.
     const byPlace = new Map(current.map((s) => [`${s.kind}@${s.pos}`, s.id]));
     const next = plan.spacers.map((s) => ({ ...s, id: byPlace.get(`${s.kind}@${s.pos}`) ?? `s${(nextId += 1)}` }));
-    if (next.length !== current.length || next.some((s, i) => s.id !== current[i].id || s.pos !== current[i].pos)) {
-      this.dispatch(next);
-    }
+    const moved =
+      next.length !== current.length ||
+      next.some((s, i) => s.id !== current[i].id || s.pos !== current[i].pos) ||
+      plan.footnotes.length !== placed.length ||
+      plan.footnotes.some((f, i) => !sameFootnote(f, placed[i]));
+    // The caret in a footnote that came to another page (a new footnote
+    // starts at the document's end) follows it into view.
+    const { $head } = this.view.state.selection;
+    let caretFootnote = -1;
+    for (let d = $head.depth; d > 0; d--) if ($head.node(d).type.name === "footnote") caretFootnote = $head.before(d);
+    const page = (list: FootnotePlan[]) => list.find((f) => f.pos === caretFootnote)?.page;
+    const follow = caretFootnote >= 0 && page(plan.footnotes) !== page(placed);
+    if (moved) this.dispatch({ spacers: next, footnotes: plan.footnotes }, follow);
 
     // Each spacer's bottom on its page's text top: read every top once, then
     // set the heights top to bottom (a change moves every spacer below it).
     const targets = new Map(next.map((s) => [s.id, s.target]));
+    const headers = new Map(next.map((s) => [s.id, s.header]));
     const nodes = Array.from(this.view.dom.querySelectorAll<HTMLElement>("[data-docs-spacer]"));
     const origin = this.view.dom.getBoundingClientRect().top;
     const scale = this.scale();
@@ -223,6 +277,9 @@ class Paginator {
       shift += height - old;
       this.heights.set(id, height);
       el.style.setProperty("--docs-spacer-h", `${height}px`);
+      const table = headers.get(id);
+      const cell = el.firstElementChild;
+      if (cell) cell.replaceChildren(...(table === undefined ? [] : [headerRows(this.view, table) ?? ""]));
     });
     for (const id of [...this.heights.keys()]) if (!targets.has(id)) this.heights.delete(id);
     this.heightsAtPass = new WeakMap(plan.heights);
@@ -231,8 +288,9 @@ class Paginator {
     host.onPages(plan.pages);
   }
 
-  private dispatch(spacers: Spacer[]) {
-    this.view.dispatch(this.view.state.tr.setMeta(paginationKey, spacers).setMeta("addToHistory", false));
+  private dispatch(plan: Plan, scroll = false) {
+    const tr = this.view.state.tr.setMeta(paginationKey, plan).setMeta("addToHistory", false);
+    this.view.dispatch(scroll ? tr.scrollIntoView() : tr);
   }
 
   destroy() {
@@ -256,8 +314,8 @@ const Pagination = Extension.create({
         state: {
           init: () => DecorationSet.empty,
           apply: (tr, set) => {
-            const spacers = tr.getMeta(paginationKey) as Spacer[] | undefined;
-            if (spacers) return buildDecorations(tr.doc, spacers, heights);
+            const plan = tr.getMeta(paginationKey) as Plan | undefined;
+            if (plan) return buildDecorations(tr.doc, plan, heights);
             return tr.docChanged ? set.map(tr.mapping, tr.doc) : set;
           },
         },

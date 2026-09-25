@@ -1,55 +1,72 @@
 "use client";
 
 import type { Editor } from "@tiptap/core";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useT } from "@/components/lang-provider";
 import { OutlineIcon } from "@/components/docs/icons";
-import { TOC_STYLE_LABEL, TocThumb } from "@/components/docs/insert/at-menu";
 import { onInsert } from "@/components/docs/insert/context";
 import { goToPlace, placeOf } from "@/components/docs/insert/links";
-import { levelsOf, styleOf, TOC_STYLES } from "@/components/docs/insert/toc";
+import { levelsOf, styleOf, TOC_STYLES, type TocStyle } from "@/components/docs/insert/toc";
 import { PanelSection, SidePanel, useDocPos, useEditorTick } from "@/components/docs/insert/ui";
+import type { TKey } from "@/lib/i18n/dictionaries";
 
-// The table of contents' options panel, and the page's address: a
-// #heading= or #bookmark= in it goes to that place when the document opens.
+// The table of contents' styles and its options panel, and the page's
+// address: a #heading= or #bookmark= in it goes to that place when the
+// document opens.
+
+const TOC_STYLE_LABEL: Record<TocStyle, TKey> = {
+  plain: "docsInsert.tocPlain",
+  dotted: "docsInsert.tocDotted",
+  links: "docsInsert.tocLinks",
+};
+
+/** The three styles, each drawn small: lines, dots, or blue links. */
+export function TocStyles({ current, onPick }: { current?: TocStyle; onPick: (style: TocStyle) => void }) {
+  const t = useT();
+  return (
+    <div className="docs-toc-styles">
+      {TOC_STYLES.map((style) => (
+        <button
+          key={style}
+          type="button"
+          className="docs-toc-style"
+          aria-pressed={current === undefined ? undefined : current === style}
+          aria-label={t(TOC_STYLE_LABEL[style])}
+          data-tip={t(TOC_STYLE_LABEL[style])}
+          onClick={() => onPick(style)}
+        >
+          <span className={`docs-toc-thumb docs-toc-thumb-${style}`} aria-hidden>
+            {[0, 1, 1, 0, 1].map((level, i) => (
+              <span key={i} className="docs-toc-thumb-line" data-level={level}>
+                <span className="docs-toc-thumb-text" />
+                {style !== "links" && <span className="docs-toc-thumb-leader" />}
+                {style !== "links" && <span className="docs-toc-thumb-num" />}
+              </span>
+            ))}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /** Table of contents options: its style, and which heading levels it lists. */
 export function TocOptionsHost({ editor }: { editor: Editor }) {
   const t = useT();
   useEditorTick(editor);
   const [pos, setPos] = useDocPos(editor);
-  const [open, setOpen] = useState({ formatting: true, levels: true });
   useEffect(() => onInsert(editor, (e) => e.type === "toc-options" && setPos(e.pos)), [editor, setPos]);
   if (pos === null) return null;
   const node = editor.state.doc.nodeAt(pos);
   if (!node || node.type.name !== "tableOfContents") return null;
-  const style = styleOf(node);
   const levels = levelsOf(node);
-  const set = (attrs: Record<string, unknown>) => {
-    const current = editor.state.doc.nodeAt(pos);
-    if (!current) return;
-    editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, ...attrs }));
-  };
+  const set = (attrs: Record<string, unknown>) => editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attrs }));
   return (
-    <SidePanel title={t("docsInsert.tocOptions")} icon={<OutlineIcon size={20} />} onClose={() => setPos(null)}>
-      <PanelSection title={t("docsInsert.formatting")} open={open.formatting} onToggle={() => setOpen((o) => ({ ...o, formatting: !o.formatting }))}>
-        <div className="docs-toc-styles">
-          {TOC_STYLES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className="docs-toc-style"
-              aria-pressed={style === s}
-              aria-label={t(TOC_STYLE_LABEL[s])}
-              data-tip={t(TOC_STYLE_LABEL[s])}
-              onClick={() => set({ tocStyle: s })}
-            >
-              <TocThumb style={s} />
-            </button>
-          ))}
-        </div>
+    <SidePanel title={t("docsInsert.tocOptions")} icon={<OutlineIcon />} onClose={() => setPos(null)}>
+      <PanelSection title={t("docsInsert.formatting")}>
+        <TocStyles current={styleOf(node)} onPick={(tocStyle) => set({ tocStyle })} />
       </PanelSection>
-      <PanelSection title={t("docsInsert.headingLevels")} open={open.levels} onToggle={() => setOpen((o) => ({ ...o, levels: !o.levels }))}>
+      <PanelSection title={t("docsInsert.headingLevels")}>
         {[1, 2, 3, 4, 5, 6].map((n) => (
           <label key={n} className="docs-side-check">
             <input

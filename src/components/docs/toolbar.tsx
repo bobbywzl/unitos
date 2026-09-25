@@ -35,6 +35,10 @@ import {
   UnderlineIcon,
   UndoIcon,
 } from "@/components/docs/icons";
+import { BorderButtons, ColorButton } from "@/components/docs/insert/colors";
+import { emitInsert } from "@/components/docs/insert/context";
+import { FillIcon } from "@/components/docs/insert/icons";
+import { cellBorder, selectedCells } from "@/components/docs/insert/table";
 import { isMac, keys, matchesCombo, withKeys } from "@/components/docs/keys";
 import { keepFocus, MenuItem, MenuSeparator } from "@/components/docs/menu";
 import { addCustomColor, ColorMenu } from "@/components/docs/palette";
@@ -58,14 +62,11 @@ import {
   toggleFlag,
   type ParagraphState,
 } from "@/components/docs/toolbar/spacing";
-import { STYLE_KEYS, STYLE_LABEL, StylesSelect, menuStyles } from "@/components/docs/toolbar/styles-menu";
+import { STYLE_KEYS, STYLE_LABEL, StylesSelect, menuStyles, styleOptions } from "@/components/docs/toolbar/styles-menu";
 import {
   blockStyle,
   deepestHeading,
   readStyles,
-  replaceAllChanges,
-  saveDefaultStyles,
-  savedDefaultStyles,
   selectionFont,
   selectionSize,
   selectionStyle,
@@ -112,9 +113,8 @@ const MENUS: [string, TKey, string[]][] = [
   ["numbered-list", "docs.numberedListMenu", ["numbering styles"]],
 ];
 
-function fire(name: string, detail?: unknown) {
-  window.dispatchEvent(new CustomEvent(name, { detail }));
-}
+/** An action a button runs and Search the menus finds; `on: false` is off. */
+type Act = { id: string; key: TKey; combo?: string; Icon?: typeof UndoIcon; where?: DocsMenu; words?: string[]; run: () => void; on?: boolean };
 
 /** What the toolbar shows for the selection, read on every change. */
 function readToolbar(e: Editor) {
@@ -149,6 +149,7 @@ function readToolbar(e: Editor) {
     },
     styleFlags,
   };
+  const cell = selectedCells(state)[0];
   return {
     canUndo: e.can().undo(),
     canRedo: e.can().redo(),
@@ -171,6 +172,8 @@ function readToolbar(e: Editor) {
       orderedList: currentListStyle(state, "orderedList"),
       taskList: currentListStyle(state, "taskList"),
     },
+    // The caret's cell: the table's buttons show while the caret is in a table.
+    table: cell ? { background: (cell.node.attrs.backgroundColor as string | null) ?? null, border: cellBorder(state) } : null,
   };
 }
 
@@ -211,6 +214,7 @@ export function DocsToolbar({
     if (!editor.isDestroyed) editor.view.focus();
   };
   const run = (fn: (c: ReturnType<Editor["chain"]>) => ReturnType<Editor["chain"]>) => fn(editor.chain().focus()).run();
+  const fire = (name: string) => window.dispatchEvent(new CustomEvent(name));
 
   // Search the menus (Alt+/), and the modes' keys: Ctrl+Alt+Shift+Z is
   // Editing, Ctrl+Alt+Shift+C and D are Viewing (Docs' help page and its
@@ -230,7 +234,7 @@ export function DocsToolbar({
       if (search) {
         e.preventDefault();
         e.stopPropagation();
-        fire(SEARCH_MENUS_EVENT);
+        window.dispatchEvent(new CustomEvent(SEARCH_MENUS_EVENT));
         return;
       }
       if (!modeRef.current.canEdit) return;
@@ -252,29 +256,26 @@ export function DocsToolbar({
     else run((c) => (hex ? c.setBackgroundColor(hex) : c.unsetBackgroundColor()));
   };
 
-  // The actions a button runs and Search the menus finds.
-  type Act = { id: string; key: TKey; combo?: string; Icon?: typeof UndoIcon; where?: DocsMenu; words?: string[]; run: () => void; on?: boolean };
-  const act = (a: Act) => a;
   const A = {
-    undo: act({ id: "undo", key: "docs.undo", combo: "Mod+Z", Icon: UndoIcon, where: "edit", run: () => run((c) => c.undo()), on: s.canUndo }),
-    redo: act({ id: "redo", key: "docs.redo", combo: "Mod+Y", Icon: RedoIcon, where: "edit", run: () => run((c) => c.redo()), on: s.canRedo }),
-    print: act({ id: "print", key: "docs.print", combo: "Mod+P", Icon: PrintIcon, where: "file", run: () => window.print() }),
-    spelling: act({ id: "spelling", key: "docs.spellcheck", combo: "Mod+Alt+X", Icon: SpellcheckIcon, where: "tools", run: () => fire(TYPING_EVENT.spelling) }),
-    paint: act({ id: "paint-format", key: "docs.paintFormat", Icon: PaintFormatIcon, words: ["copy formatting"], run: paint.press }),
-    bold: act({ id: "bold", key: "docs.bold", combo: "Mod+B", Icon: BoldIcon, run: () => run((c) => c.toggleBold()) }),
-    italic: act({ id: "italic", key: "docs.italic", combo: "Mod+I", Icon: ItalicIcon, run: () => run((c) => c.toggleItalic()) }),
-    underline: act({ id: "underline", key: "docs.underline", combo: "Mod+U", Icon: UnderlineIcon, run: () => run((c) => c.toggleUnderline()) }),
-    link: act({ id: "link", key: "docs.insertLink", combo: "Mod+K", Icon: LinkIcon, where: "insert", words: ["hyperlink", "url"], run: () => fire(DOCS_EVENT.link) }),
-    comment: act({ id: "comment", key: "docs.addComment", combo: "Mod+Alt+M", Icon: AddCommentIcon, where: "insert", run: () => fire(DOCS_EVENT.comment), on: canEdit }),
-    outdent: act({ id: "indent-decrease", key: "docs.decreaseIndent", combo: "Mod+[", Icon: IndentDecreaseIcon, run: () => run((c) => c.indentStep(-1)) }),
-    indent: act({ id: "indent-increase", key: "docs.increaseIndent", combo: "Mod+]", Icon: IndentIncreaseIcon, run: () => run((c) => c.indentStep(1)) }),
-    clear: act({ id: "clear-formatting", key: "docs.clearFormatting", combo: "Mod+\\", Icon: ClearFormattingIcon, words: ["remove formatting"], run: () => run((c) => c.clearFormatting()) }),
-    sizeDown: act({ id: "font-size-down", key: "docs.decreaseFontSize", combo: "Mod+Shift+,", Icon: RemoveIcon, words: ["smaller"], run: () => stepSelectionFontSize(editor, -1) }),
-    sizeUp: act({ id: "font-size-up", key: "docs.increaseFontSize", combo: "Mod+Shift+.", Icon: AddIcon, words: ["bigger", "make the font bigger", "larger"], run: () => stepSelectionFontSize(editor, 1) }),
-    checklist: act({ id: "checklist", key: "docs.checklist", combo: "Mod+Shift+9", Icon: ChecklistIcon, run: () => run((c) => c.toggleTaskList()) }),
-    bulleted: act({ id: "bulleted-list", key: "docs.bulletedList", combo: "Mod+Shift+8", Icon: BulletListIcon, run: () => run((c) => c.toggleBulletList()) }),
-    numbered: act({ id: "numbered-list", key: "docs.numberedList", combo: "Mod+Shift+7", Icon: NumberedListIcon, run: () => run((c) => c.toggleOrderedList()) }),
-  };
+    undo: { id: "undo", key: "docs.undo", combo: "Mod+Z", Icon: UndoIcon, where: "edit", run: () => run((c) => c.undo()), on: s.canUndo },
+    redo: { id: "redo", key: "docs.redo", combo: "Mod+Y", Icon: RedoIcon, where: "edit", run: () => run((c) => c.redo()), on: s.canRedo },
+    print: { id: "print", key: "docs.print", combo: "Mod+P", Icon: PrintIcon, where: "file", run: () => window.print() },
+    spelling: { id: "spelling", key: "docs.spellcheck", combo: "Mod+Alt+X", Icon: SpellcheckIcon, where: "tools", run: () => fire(TYPING_EVENT.spelling) },
+    paint: { id: "paint-format", key: "docs.paintFormat", Icon: PaintFormatIcon, words: ["copy formatting"], run: paint.press },
+    bold: { id: "bold", key: "docs.bold", combo: "Mod+B", Icon: BoldIcon, run: () => run((c) => c.toggleBold()) },
+    italic: { id: "italic", key: "docs.italic", combo: "Mod+I", Icon: ItalicIcon, run: () => run((c) => c.toggleItalic()) },
+    underline: { id: "underline", key: "docs.underline", combo: "Mod+U", Icon: UnderlineIcon, run: () => run((c) => c.toggleUnderline()) },
+    link: { id: "link", key: "docs.insertLink", combo: "Mod+K", Icon: LinkIcon, where: "insert", words: ["hyperlink", "url"], run: () => fire(DOCS_EVENT.link) },
+    comment: { id: "comment", key: "docs.addComment", combo: "Mod+Alt+M", Icon: AddCommentIcon, where: "insert", run: () => fire(DOCS_EVENT.comment), on: canEdit },
+    outdent: { id: "indent-decrease", key: "docs.decreaseIndent", combo: "Mod+[", Icon: IndentDecreaseIcon, run: () => run((c) => c.indentStep(-1)) },
+    indent: { id: "indent-increase", key: "docs.increaseIndent", combo: "Mod+]", Icon: IndentIncreaseIcon, run: () => run((c) => c.indentStep(1)) },
+    clear: { id: "clear-formatting", key: "docs.clearFormatting", combo: "Mod+\\", Icon: ClearFormattingIcon, words: ["remove formatting"], run: () => run((c) => c.clearFormatting()) },
+    sizeDown: { id: "font-size-down", key: "docs.decreaseFontSize", combo: "Mod+Shift+,", Icon: RemoveIcon, words: ["smaller"], run: () => stepSelectionFontSize(editor, -1) },
+    sizeUp: { id: "font-size-up", key: "docs.increaseFontSize", combo: "Mod+Shift+.", Icon: AddIcon, words: ["bigger", "make the font bigger", "larger"], run: () => stepSelectionFontSize(editor, 1) },
+    checklist: { id: "checklist", key: "docs.checklist", combo: "Mod+Shift+9", Icon: ChecklistIcon, run: () => run((c) => c.toggleTaskList()) },
+    bulleted: { id: "bulleted-list", key: "docs.bulletedList", combo: "Mod+Shift+8", Icon: BulletListIcon, run: () => run((c) => c.toggleBulletList()) },
+    numbered: { id: "numbered-list", key: "docs.numberedList", combo: "Mod+Shift+7", Icon: NumberedListIcon, run: () => run((c) => c.toggleOrderedList()) },
+  } satisfies Record<string, Act>;
   const split = (a: Act, pressed: boolean, menuKey: TKey, menu: (close: () => void) => ReactNode) => (
     <SplitButton
       id={a.id}
@@ -289,16 +290,8 @@ export function DocsToolbar({
       {menu}
     </SplitButton>
   );
-  const button = (a: Act, pressed?: boolean, className?: string) => (
-    <Btn
-      label={t(a.key)}
-      tip={withKeys(t(a.key), a.combo)}
-      track={a.id}
-      pressed={pressed}
-      disabled={a.on === false}
-      onClick={a.run}
-      className={className}
-    >
+  const button = (a: Act, pressed?: boolean) => (
+    <Btn label={t(a.key)} tip={withKeys(t(a.key), a.combo)} track={a.id} pressed={pressed} disabled={a.on === false} onClick={a.run}>
       {a.Icon && <a.Icon />}
     </Btn>
   );
@@ -317,9 +310,9 @@ export function DocsToolbar({
     }));
     const edits = (a: Act) => a.where === "file" || a.where === "tools" || a.id === "comment";
     const own: Act[] = [
-      ...Object.values(A).map((a) => ({ ...a, on: a.on !== false && (edits(a) || !off) })),
-      ...ALIGNS.map((a) => act({ id: `align-${a.align}`, key: a.key, combo: a.combo, Icon: a.Icon, words: ["align"], run: () => run((c) => c.setTextAlign(a.align)), on: !off })),
-      ...MENUS.map(([id, key, words]) => act({ id: `open-${id}`, key, words, run: () => fire(OPEN_MENU_EVENT, { id }), on: !off })),
+      ...Object.values(A).map((a: Act) => ({ ...a, on: a.on !== false && (edits(a) || !off) })),
+      ...ALIGNS.map((a) => ({ id: `align-${a.align}`, key: a.key, combo: a.combo, Icon: a.Icon, words: ["align"], run: () => run((c) => c.setTextAlign(a.align)), on: !off })),
+      ...MENUS.map(([id, key, words]) => ({ id: `open-${id}`, key, words, run: () => window.dispatchEvent(new CustomEvent(OPEN_MENU_EVENT, { detail: { id } })), on: !off })),
     ];
     const list: SearchAction[] = own.map((a) => ({
       id: a.id,
@@ -340,15 +333,7 @@ export function DocsToolbar({
       add(`style-${style}`, name, "format", () => run((c) => c.setDocStyle(style)), !off, STYLE_KEYS[style]);
       add(`update-${style}`, t("docs.updateStyle", { name }), "format", () => updateStyleToMatch(editor, style));
     }
-    add("save-styles", t("docs.saveDefaultStyles"), "format", () => {
-      saveDefaultStyles(editor.state.doc);
-      fire("dissect:toast", { text: t("docs.defaultStylesSaved") });
-    });
-    add("use-styles", t("docs.useDefaultStyles"), "format", () => {
-      replaceAllChanges(editor, savedDefaultStyles());
-      fire("dissect:toast", { text: t("docs.usingDefaultStyles") });
-    });
-    add("reset-styles", t("docs.resetStyles"), "format", () => replaceAllChanges(editor, {}));
+    for (const o of styleOptions(editor, t)) add(o.key, t(o.key), "format", o.run);
     for (const { value, key } of LINE_SPACINGS) add(`spacing-${value}`, `${t("docs.lineSpacing")}: ${t(key)}`, "format", () => setLineSpacing(editor, s.para, value));
     const before = s.para.spaceBefore > 0;
     const after = s.para.spaceAfter > 0;
@@ -406,7 +391,7 @@ export function DocsToolbar({
         label={t(text ? "docs.textColor" : "docs.highlightColor")}
         track={text ? "text-color" : "highlight-color"}
         arrow={false}
-        className="docs-tb-color"
+        className="docs-tb-menu-btn"
         face={
           <>
             {text ? <TextColorGlyph /> : <HighlightGlyph className="docs-highlight-glyph" />}
@@ -476,7 +461,7 @@ export function DocsToolbar({
           key: "styles",
           sep: true,
           menus: ["styles"],
-          content: <StylesSelect editor={editor} style={s.style} styles={s.styles} deepest={s.deepest} toast={(text) => fire("dissect:toast", { text })} />,
+          content: <StylesSelect editor={editor} style={s.style} styles={s.styles} deepest={s.deepest} />,
         },
         { key: "font", sep: true, menus: ["font"], content: <FontSelect editor={editor} font={s.font} /> },
         {
@@ -484,9 +469,9 @@ export function DocsToolbar({
           sep: true,
           content: (
             <div className="docs-size">
-              {button(A.sizeDown, undefined, "docs-size-down")}
+              {button(A.sizeDown)}
               <FontSizeBox editor={editor} size={s.size} />
-              {button(A.sizeUp, undefined, "docs-size-up")}
+              {button(A.sizeUp)}
             </div>
           ),
         },
@@ -573,13 +558,30 @@ export function DocsToolbar({
         },
         {
           key: "indent",
-          // Docs keeps a separator here that it never draws.
+          // Docs keeps a separator here that it never draws; the table's
+          // buttons join this group, as in Docs.
           sep: false,
           content: (
             <>
               {button(A.outdent)}
               {button(A.indent)}
               {button(A.clear)}
+              {s.table && (
+                <>
+                  <ColorButton
+                    label={t("docsInsert.backgroundColor")}
+                    track="table-background"
+                    face={<FillIcon />}
+                    current={s.table.background}
+                    onPick={(hex) => run((c) => c.setCellsAttrs({ backgroundColor: hex }))}
+                    onNone={() => run((c) => c.setCellsAttrs({ backgroundColor: null }))}
+                  />
+                  <BorderButtons track="table" border={s.table.border} onChange={(spec) => run((c) => c.setTableBorders("all", spec))} />
+                  <Btn label={t("docsInsert.tableOptions")} track="table-options" className="docs-tb-text-btn" onClick={() => emitInsert(editor, { type: "table-options" })}>
+                    {t("docsInsert.tableOptions")}
+                  </Btn>
+                </>
+              )}
             </>
           ),
         },
@@ -590,25 +592,24 @@ export function DocsToolbar({
     <>
       <ToolbarRow
         groups={groups}
-        foldable={canEdit}
         label={t("docs.toolbar")}
         moreLabel={t("docs.more")}
         pageless={pageless}
         onEscape={focusPage}
-        right={(folded) => (
+        right={
           <>
-            {aiControls}
+            {aiControls && <div className="docs-tb-unitos">{aiControls}</div>}
             {canEdit && (
               <>
                 <Sep className="docs-tb-mode-sep" />
-                <ModeSwitcher mode={mode} onMode={onMode} folded={folded} />
+                <ModeSwitcher mode={mode} onMode={onMode} />
               </>
             )}
             <Btn label={hideLabel} tip={withKeys(hideLabel, "Ctrl+Shift+F")} track="hide-menus" onClick={onToggleHeader}>
               {headerHidden ? <ExpandMoreIcon /> : <ExpandLessIcon />}
             </Btn>
           </>
-        )}
+        }
       />
       {customFor && (
         <CustomColorDialog

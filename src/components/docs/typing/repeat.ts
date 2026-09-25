@@ -70,10 +70,10 @@ export function repeatPlugin(): Plugin {
   });
 }
 
-/** Apply the last formatting to the selection. False when there is none. */
-export function repeatLastAction(view: EditorView): boolean {
+/** Apply the last formatting, if any, to the selection. */
+export function repeatLastAction(view: EditorView): void {
   const action = last.get(view);
-  if (!action || !view.editable) return false;
+  if (!action) return;
   const { state } = view;
   const { from, to, empty } = state.selection;
   const tr = state.tr.setMeta("docsRepeat", true);
@@ -102,5 +102,4 @@ export function repeatLastAction(view: EditorView): boolean {
     });
   }
   view.dispatch(tr);
-  return true;
 }

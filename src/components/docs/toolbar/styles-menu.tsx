@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { useT } from "@/components/lang-provider";
 import type { DocStyle } from "@/components/docs/extensions";
 import { fontStack } from "@/components/docs/fonts";
+import { toast } from "@/components/docs/insert/context";
 import { keys } from "@/components/docs/keys";
 import { MenuItem, MenuSeparator } from "@/components/docs/menu";
 import { DropBtn } from "@/components/docs/toolbar/controls";
@@ -17,7 +18,7 @@ import {
   updateStyleToMatch,
   type NamedStyle,
 } from "@/components/docs/toolbar/styles";
-import type { TKey } from "@/lib/i18n/dictionaries";
+import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
 // Styles (SPEC.md §29): the named style of the selection, and Google Docs'
 // menu of styles — Normal text, Title, Subtitle, Heading 1–3, and Heading
@@ -57,6 +58,28 @@ export function menuStyles(deepest: number): DocStyle[] {
   return list;
 }
 
+/** Options: Save as my default styles, Use my default styles, Reset styles
+    (the menu and Search the menus). */
+export function styleOptions(editor: Editor, t: TFunc): { key: TKey; run: () => void }[] {
+  return [
+    {
+      key: "docs.saveDefaultStyles",
+      run: () => {
+        saveDefaultStyles(editor.state.doc);
+        toast(t("docs.defaultStylesSaved"));
+      },
+    },
+    {
+      key: "docs.useDefaultStyles",
+      run: () => {
+        replaceAllChanges(editor, savedDefaultStyles());
+        toast(t("docs.usingDefaultStyles"));
+      },
+    },
+    { key: "docs.resetStyles", run: () => replaceAllChanges(editor, {}) },
+  ];
+}
+
 /** A style's item drawn in the style, its size capped at 24 pt. */
 function preview(styles: Record<DocStyle, NamedStyle>, style: DocStyle): { style: CSSProperties; plain: boolean } {
   const s = styles[style];
@@ -79,14 +102,12 @@ export function StylesSelect({
   style,
   styles,
   deepest,
-  toast,
 }: {
   editor: Editor;
   /** The selection's style; null when it spans styles. */
   style: DocStyle | null;
   styles: Record<DocStyle, NamedStyle>;
   deepest: number;
-  toast: (text: string) => void;
 }) {
   const t = useT();
   const apply = (s: DocStyle) => editor.chain().focus().setDocStyle(s).run();
@@ -150,38 +171,18 @@ export function StylesSelect({
           <MenuItem
             className="docs-style-options"
             submenuClassName="docs-menu-plain"
-            submenu={
-              <>
-                <MenuItem
-                  onSelect={() => {
-                    close();
-                    saveDefaultStyles(editor.state.doc);
-                    toast(t("docs.defaultStylesSaved"));
-                  }}
-                >
-                  {t("docs.saveDefaultStyles")}
-                </MenuItem>
-                <MenuItem
-                  onSelect={() => {
-                    close();
-                    replaceAllChanges(editor, savedDefaultStyles());
-                    editor.commands.focus();
-                    toast(t("docs.usingDefaultStyles"));
-                  }}
-                >
-                  {t("docs.useDefaultStyles")}
-                </MenuItem>
-                <MenuItem
-                  onSelect={() => {
-                    close();
-                    replaceAllChanges(editor, {});
-                    editor.commands.focus();
-                  }}
-                >
-                  {t("docs.resetStyles")}
-                </MenuItem>
-              </>
-            }
+            submenu={styleOptions(editor, t).map((o) => (
+              <MenuItem
+                key={o.key}
+                onSelect={() => {
+                  close();
+                  o.run();
+                  editor.commands.focus();
+                }}
+              >
+                {t(o.key)}
+              </MenuItem>
+            ))}
           >
             {t("docs.styleOptions")}
           </MenuItem>

@@ -23,7 +23,6 @@
   --docs-sep: #c7c7c7;
   --docs-menu-bg: #ffffff;
   --docs-menu-shadow: 0 2px 6px 2px rgba(60, 64, 67, 0.15), 0 1px 2px 0 rgba(60, 64, 67, 0.3);
-  --docs-page-shadow: 0 1px 3px 1px rgba(60, 64, 67, 0.15), 0 1px 2px 0 rgba(60, 64, 67, 0.3);
   /* Google Docs' selection: #4e8ff8 at half strength over the white page. */
   --docs-selection: #a7c7fc;
   --docs-link: #1155cc;
@@ -54,7 +53,6 @@
   --docs-blue: #a8c7fa;
   --docs-sep: #5f6368;
   --docs-menu-bg: #2d2f31;
-  --docs-page-shadow: 0 1px 3px 1px rgba(0, 0, 0, 0.5);
   --docs-selection: #3b5a8c;
   --docs-link: #8ab4f8;
   --docs-placeholder: #80868b;
@@ -74,71 +72,9 @@ div:has([data-docs-editor]) > .reader-fade {
   background: var(--docs-canvas);
   padding: 8px 12px 6px;
 }
-.docs-title-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 4px 4px;
-}
-.docs-title-icon {
-  flex: none;
-  color: #4285f4;
-}
-.docs-title-wrap {
-  display: inline-grid;
-  max-width: min(60%, 520px);
-  min-width: 40px;
-}
-.docs-title-wrap::after {
-  content: attr(data-value);
-  visibility: hidden;
-  white-space: pre;
-  grid-area: 1 / 1;
-  font: 400 18px/24px var(--docs-ui-font);
-  padding: 2px 6px;
-}
-.docs-title-input {
-  grid-area: 1 / 1;
-  min-width: 0;
-  font: 400 18px/24px var(--docs-ui-font);
-  color: var(--docs-text);
-  padding: 2px 6px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  outline: none;
-}
-.docs-title-input:hover {
-  border-color: var(--docs-sep);
-}
-.docs-title-input:focus {
-  border-color: var(--docs-blue);
-  box-shadow: inset 0 0 0 1px var(--docs-blue);
-}
-.docs-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--docs-muted);
-  font-size: 12.5px;
-  margin-left: 4px;
-}
-.docs-status-error,
-.docs-status-offline {
-  color: #b3261e;
-}
 
-/* The toolbar, its menus, and its palettes: css/toolbar.css. */
-
-/* ── The canvas and the page (css/page.css draws the canvas and the sheets:
-   white, a 1 px #c4c7c5 border, square corners, no shadow) ─────────────── */
-.docs-page {
-  position: relative;
-  box-sizing: border-box;
-  margin: 0 auto;
-  cursor: text;
-}
+/* The title row, the canvas, and the pages: css/page.css. The toolbar, its
+   menus, and its palettes: css/toolbar.css. */
 
 /* ── The document's text: Google Docs' Normal text and styles ─────────── */
 .docs-prose,
@@ -147,7 +83,6 @@ div:has([data-docs-editor]) > .reader-fade {
   outline: none;
 }
 .docs-title-input:focus-visible,
-.docs-size-input:focus-visible,
 .docs-field:focus-visible {
   outline: none;
 }
@@ -252,18 +187,6 @@ div:has([data-docs-editor]) > .reader-fade {
 .docs-prose li > p {
   margin: 0;
 }
-.docs-prose ul { list-style-type: disc; }
-.docs-prose ul ul { list-style-type: circle; }
-.docs-prose ul ul ul { list-style-type: square; }
-.docs-prose ul ul ul ul { list-style-type: disc; }
-.docs-prose ul ul ul ul ul { list-style-type: circle; }
-.docs-prose ul ul ul ul ul ul { list-style-type: square; }
-.docs-prose ol { list-style-type: decimal; }
-.docs-prose ol ol { list-style-type: lower-alpha; }
-.docs-prose ol ol ol { list-style-type: lower-roman; }
-.docs-prose ol ol ol ol { list-style-type: decimal; }
-.docs-prose ol ol ol ol ol { list-style-type: lower-alpha; }
-.docs-prose ol ol ol ol ol ol { list-style-type: lower-roman; }
 .docs-prose li::marker {
   color: var(--docs-ink);
 }
@@ -356,48 +279,13 @@ div:has([data-docs-editor]) > .reader-fade {
   outline: 2px solid var(--docs-blue);
 }
 
-/* A page break takes no room: the spacer after it starts the next page
-   (ext/page.ts). Selected, it shows as a blue line where its page ends. */
-.docs-page-break {
-  position: relative;
-  height: 0;
-  margin: 0;
-  user-select: none;
-}
-.docs-page-break.ProseMirror-selectednode::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -1px;
-  border-top: 2px solid var(--docs-blue);
-}
-
 /* The Unitos marks keep their colors under the page's own text color. */
 .docs-prose .selection-mark::selection,
 .docs-prose .selection-mark ::selection {
   background: transparent;
 }
 
-/* ── Popups and dialogs ────────────────────────────────────────────────── */
-.docs-popup {
-  position: fixed;
-  z-index: 60;
-  border-radius: 8px;
-  background: var(--docs-menu-bg);
-  box-shadow: var(--docs-menu-shadow);
-  color: var(--docs-text);
-  font: 400 14px/20px var(--docs-ui-font);
-}
-.docs-link-dialog {
-  width: 380px;
-  padding: 12px 36px 12px 12px;
-}
-.docs-link-dialog form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+/* ── Fields and buttons ────────────────────────────────────────────────── */
 .docs-field-row {
   display: flex;
   align-items: center;
@@ -428,10 +316,6 @@ div:has([data-docs-editor]) > .reader-fade {
   border: 2px solid var(--docs-blue);
   padding: 0 7px;
 }
-.docs-field-label {
-  font-size: 12px;
-  color: var(--docs-muted);
-}
 .docs-button-primary {
   height: 32px;
   padding: 0 16px;
@@ -447,93 +331,4 @@ div:has([data-docs-editor]) > .reader-fade {
 .docs-button-primary:disabled {
   opacity: 0.38;
   cursor: default;
-}
-.docs-popup-close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: inline-flex;
-  padding: 2px;
-  border-radius: 50%;
-  color: var(--docs-icon);
-}
-.docs-popup-close:hover {
-  background: var(--docs-hover);
-}
-.docs-link-bubble {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 420px;
-  padding: 6px 8px 6px 14px;
-}
-.docs-link-bubble-href {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--docs-link);
-  text-decoration: underline;
-  margin-right: 6px;
-}
-.docs-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
-}
-.docs-dialog {
-  width: min(420px, calc(100vw - 32px));
-  padding: 20px 24px;
-  border-radius: 8px;
-  background: var(--docs-menu-bg);
-  box-shadow: var(--docs-menu-shadow);
-  color: var(--docs-text);
-  font: 400 14px/20px var(--docs-ui-font);
-}
-.docs-dialog-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.docs-dialog-head h2 {
-  font: 400 22px/28px var(--docs-ui-font);
-}
-.docs-count-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.docs-count-table td {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--docs-sep);
-}
-.docs-count-table td:last-child {
-  text-align: right;
-}
-.docs-check-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
-}
-.docs-check-row input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--docs-blue);
-}
-.docs-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-/* ── Print: the pages alone (css/page.css lays them out) ───────────────── */
-@media print {
-  .docs-header {
-    display: none !important;
-  }
 }
