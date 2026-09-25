@@ -874,11 +874,7 @@ export function ReaderInteractions({
   // answer lands. Null answers: no key, no confident answer, a fixed lead.
   const [leadAnswer, setLeadAnswer] = useState<{ key: string; tool: Tool } | null>(null);
   // The page is only editable in edit mode; reading mode never opens editors.
-  // `edit=1` opens the document in edit mode (SPEC.md §15: a blank document
-  // opens ready to write); viewers and transcripts never enter it.
-  const [editMode, setEditMode] = useState(
-    () => searchParams.get("edit") === "1" && canEdit && transcript === undefined && !embedded && !richText,
-  );
+  const [editMode, setEditMode] = useState(false);
   // A blank document's page editor is always the place to type: the block
   // edit mode, its double-click, and its hint never apply to it.
   const richTextRef = useRef(richText);

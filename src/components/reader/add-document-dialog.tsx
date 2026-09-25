@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
+import { BlankDocumentIcon, DriveLogo, LibraryIcon } from "@/components/icons";
 import { Presence } from "@/components/presence";
 import { parseDriveFileId, type DriveAccess, type DrivePickedFile } from "@/lib/drive/types";
 import { IngestProgress, type IngestStep } from "@/components/reader/ingest-progress";
@@ -61,8 +62,9 @@ function requestFor(items: UploadItem[]): UploadRequest {
 // and Drive picks queue together (SPEC.md §22): Enter after a link queues
 // it, dropping or choosing files queues them, picking in Google Drive queues
 // the picks, and Continue hands the queue to the upload box, which imports
-// it. Google Drive and the library stay one small button each, off to the
-// side. A new project (no document yet) asks for its title at the top.
+// it. Under the queue one row holds Blank document, Add from Google Drive,
+// and Library, each a button with its symbol, and Continue at its end. A new
+// project (no document yet) asks for its title at the top.
 export function AddDocumentDialog({
   open,
   onClose,
@@ -91,7 +93,7 @@ export function AddDocumentDialog({
   onError: (message: string | null) => void;
   // The queue goes to the upload box.
   onSubmit: (request: UploadRequest) => void;
-  // A blank document (SPEC.md §15): created at once, opened in edit mode.
+  // A blank document (SPEC.md §15): created at once, opened in the page editor.
   onCreateBlank: () => void;
   fileAccept: string;
   // A new project's title (SPEC.md §15): the current title and its default.
@@ -230,8 +232,12 @@ export function AddDocumentDialog({
     return e.dataTransfer?.types.includes("Files") ?? false;
   }
 
-  const smallButton =
-    "text-xs font-semibold text-sand-600 hover:text-clay-800 disabled:opacity-40";
+  // Blank document, Add from Google Drive, and Library: one look, a pill with
+  // the symbol and the label, as tall as Continue. The focus ring in
+  // globals.css sets a 2px radius outside Tailwind's layers, which beats
+  // rounded-full; the important radius keeps the pill round under it.
+  const secondaryButton =
+    "flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-sand-100 px-3 text-xs font-semibold text-sand-700 hover:border-clay-300 hover:bg-clay-100 hover:text-clay-800 focus-visible:rounded-full! disabled:opacity-40";
   const submitButton =
     "shrink-0 rounded-full bg-clay px-4 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40";
 
@@ -248,7 +254,7 @@ export function AddDocumentDialog({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[85vh] w-[520px] max-w-full flex-col gap-4 overflow-y-auto rounded-[24px] bg-card p-6 shadow-float"
+        className="flex max-h-[85vh] w-[600px] max-w-full flex-col gap-4 overflow-y-auto rounded-[24px] bg-card p-6 shadow-float"
       >
         <div className="flex items-center">
           <span className="font-display text-[20px]">{t("panes.addDocument")}</span>
@@ -372,14 +378,19 @@ export function AddDocumentDialog({
               </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-3">
+            {/* One row: at the dialog's 600px the three buttons and Continue
+                fit side by side, a count on Continue too. On a narrow
+                screen the row wraps onto more lines and Continue stays at
+                its end. */}
+            <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
               <button
                 onClick={onCreateBlank}
                 data-track="add-blank"
                 data-tip={t("panes.blankDocumentTitle")}
                 disabled={busy}
-                className={smallButton}
+                className={secondaryButton}
               >
+                <BlankDocumentIcon size={14} />
                 {t("panes.blankDocument")}
               </button>
               {onImportDrive && (
@@ -387,8 +398,9 @@ export function AddDocumentDialog({
                   onClick={() => void pickDrive()}
                   data-track="add-drive"
                   disabled={busy}
-                  className={smallButton}
+                  className={secondaryButton}
                 >
+                  <DriveLogo size={14} />
                   {t("panes.addFromDrive")}
                 </button>
               )}
@@ -400,8 +412,9 @@ export function AddDocumentDialog({
                 }}
                 data-track="add-library-toggle"
                 aria-expanded={libraryOpen}
-                className={smallButton}
+                className={secondaryButton}
               >
+                <LibraryIcon size={14} />
                 {t("panes.library")}
               </button>
               <button

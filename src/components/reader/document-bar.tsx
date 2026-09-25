@@ -308,9 +308,8 @@ export function DocumentBar({
   }
 
   // A blank document (SPEC.md §15): created with one empty paragraph and
-  // opened straight into edit mode (`edit=1`, reader-interactions.tsx), so
-  // the reader writes it here with the edit toolbar. No box: there is
-  // nothing to import or finish.
+  // opened in the page editor (§29). No box: there is nothing to import or
+  // finish.
   async function createBlank() {
     if (isOffline()) {
       setError(t("common.offlineReadOnly"));
@@ -325,7 +324,6 @@ export function DocumentBar({
       setDialog(false);
       const params = new URLSearchParams();
       params.set("doc", created.id);
-      params.set("edit", "1");
       startOpening(() => router.push(`/n/${notebookId}?${params.toString()}`));
       router.refresh();
     } catch (err) {
