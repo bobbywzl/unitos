@@ -1,3 +1,4 @@
+import { inlineText } from "@/lib/docs/blocks";
 import { INDEXED_NODE_TYPES, newBlockId, type RichMark, type RichNode } from "@/lib/docs/schema";
 
 // Server-side edits to a blank document's rich text (SPEC.md §29). The block
@@ -242,24 +243,32 @@ export function toggleBlockStyle(
   const pieces: { node: RichNode; from: number; to: number }[] = [];
   let at = 0;
   for (const child of hit.node.content ?? []) {
-    const len = child.type === "text" ? (child.text ?? "").length : child.type === "hardBreak" ? 1 : 0;
+    // Offsets count as the paragraph index counts: a chip as its label, a
+    // suggested break's zero-width spaces not at all.
+    const len = inlineText(child).length;
     if (child.type !== "text") {
       pieces.push({ node: child, from: at, to: at + len });
       at += len;
       continue;
     }
     const text = child.text ?? "";
-    const cuts = [0, text.length, Math.max(0, Math.min(text.length, start - at)), Math.max(0, Math.min(text.length, end - at))];
+    const raw = (k: number) => {
+      if (k >= len) return text.length;
+      let i = 0;
+      for (let left = k; i < text.length && left > 0; i++) if (text[i] !== "\u200B") left--;
+      return i;
+    };
+    const cuts = [0, len, Math.max(0, Math.min(len, start - at)), Math.max(0, Math.min(len, end - at))];
     const points = [...new Set(cuts)].sort((a, b) => a - b);
     for (let i = 0; i < points.length - 1; i++) {
       if (points[i] === points[i + 1]) continue;
       pieces.push({
-        node: { ...child, text: text.slice(points[i], points[i + 1]) },
+        node: { ...child, text: text.slice(raw(points[i]), raw(points[i + 1])) },
         from: at + points[i],
         to: at + points[i + 1],
       });
     }
-    at += text.length;
+    at += len;
   }
   const inside = pieces.filter((p) => p.node.type === "text" && p.from >= start && p.to <= end);
   if (inside.length === 0) return null;

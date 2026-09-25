@@ -5,6 +5,7 @@ import { Selection, TextSelection, type EditorState, type Transaction } from "@t
 import { liftListItem, sinkListItem } from "@tiptap/pm/schema-list";
 import { canSplit, liftTarget } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
+import { isSuggesting } from "@/components/docs/ext/suggest";
 import { atMenuState } from "@/components/docs/insert/at-plugin";
 import { blockText, previousTextblock, runAutocorrect, runCodeFence } from "@/components/docs/typing/autocorrect";
 import { firstGraphemeLength, lastGraphemeLength, wordEndAfter, wordStartBefore } from "@/components/docs/typing/chars";
@@ -225,15 +226,21 @@ function deleteBlock(tr: Transaction, pos: number): boolean {
     (positions before each). The joined paragraph keeps the lower
     paragraph's style — Docs keeps the lower paragraph's end — unless the
     upper one is a list item, whose style and list then win. The caret goes
-    to the join. False when they cannot join; `tr` is then to be dropped. */
-function joinInto(tr: Transaction, upperPos: number, lowerPos: number): boolean {
+    to the join. In Suggesting mode only the break goes, so the join is
+    suggested as a removed break (ext/suggest.ts). False when they cannot
+    join; `tr` is then to be dropped. */
+function joinInto(tr: Transaction, upperPos: number, lowerPos: number, suggesting: boolean): boolean {
   const upper = tr.doc.nodeAt(upperPos);
   const lower = tr.doc.nodeAt(lowerPos);
   if (!upper?.isTextblock || !lower?.isTextblock) return false;
   if (upper.type.spec.code || lower.type.spec.code) return false;
   const $upper = tr.doc.resolve(upperPos + 1);
   const keepUpper = isListItem($upper.node($upper.depth - 1));
-  if (keepUpper) {
+  if (suggesting) {
+    const join = upperPos + upper.nodeSize - 1;
+    tr.delete(join, lowerPos + 1);
+    tr.setSelection(TextSelection.create(tr.doc, join));
+  } else if (keepUpper) {
     const join = upperPos + 1 + upper.content.size;
     const before = tr.steps.length;
     tr.insert(join, lower.content);
@@ -251,9 +258,9 @@ function joinInto(tr: Transaction, upperPos: number, lowerPos: number): boolean 
 }
 
 /** The join as a transaction of its own, or null. */
-function joinBlocks(state: EditorState, upperPos: number, lowerPos: number): Transaction | null {
-  const tr = state.tr;
-  return joinInto(tr, upperPos, lowerPos) ? tr : null;
+function joinBlocks(editor: Editor, upperPos: number, lowerPos: number): Transaction | null {
+  const tr = editor.state.tr;
+  return joinInto(tr, upperPos, lowerPos, isSuggesting(editor)) ? tr : null;
 }
 
 /** The text block that starts after `pos` (a position between blocks), or null. */
@@ -294,7 +301,7 @@ export function backspace(editor: Editor, mode: DeleteMode): boolean {
     dispatch(view, groupEdit(view, state.tr.delete(from, $from.pos), "delete"));
     return true;
   }
-  return backspaceAtStart(view, $from, mode === "word");
+  return backspaceAtStart(editor, $from, mode === "word");
 }
 
 function setBlockAttrs(view: EditorView, pos: number, node: PMNode, attrs: Record<string, unknown>): true {
@@ -304,7 +311,8 @@ function setBlockAttrs(view: EditorView, pos: number, node: PMNode, attrs: Recor
   return true;
 }
 
-function backspaceAtStart(view: EditorView, $from: ResolvedPos, word: boolean): boolean {
+function backspaceAtStart(editor: Editor, $from: ResolvedPos, word: boolean): boolean {
+  const view = editor.view;
   const state = view.state;
   const block = $from.parent;
   const blockPos = $from.before();
@@ -334,7 +342,7 @@ function backspaceAtStart(view: EditorView, $from: ResolvedPos, word: boolean): 
     if (isListItem(container)) {
       const prev = previousTextblock(state.doc, blockPos);
       if (!prev || inTable(state.doc.resolve(prev.start)) !== inTable($from)) return true;
-      tr = joinBlocks(state, prev.start - 1, blockPos);
+      tr = joinBlocks(editor, prev.start - 1, blockPos);
     }
   } else {
     const prev = container.child(index - 1);
@@ -348,14 +356,14 @@ function backspaceAtStart(view: EditorView, $from: ResolvedPos, word: boolean): 
       const above = index >= 2 ? container.child(index - 2) : null;
       if (above?.isTextblock && !above.type.spec.code) {
         const joined = state.tr.delete(prevPos, blockPos);
-        tr = joinInto(joined, prevPos - above.nodeSize, prevPos) ? joined : tr;
+        tr = joinInto(joined, prevPos - above.nodeSize, prevPos, isSuggesting(editor)) ? joined : tr;
       }
     } else if (prev.isTextblock) {
       // 8. Join, the Docs way.
-      tr = joinBlocks(state, prevPos, blockPos);
+      tr = joinBlocks(editor, prevPos, blockPos);
     } else if (isList(prev)) {
       const last = previousTextblock(state.doc, blockPos);
-      if (last) tr = joinBlocks(state, last.start - 1, blockPos);
+      if (last) tr = joinBlocks(editor, last.start - 1, blockPos);
     }
   }
   if (!tr) return false;
@@ -428,7 +436,7 @@ export function deleteForward(editor: Editor, word: boolean, mac: boolean): bool
       // A table right after the list: nothing.
       const $next = state.doc.resolve(next.pos);
       if (inTable($next) && !inTable($from)) return true;
-      tr = joinBlocks(state, blockPos, next.pos);
+      tr = joinBlocks(editor, blockPos, next.pos);
     }
   } else {
     const next = container.child(index + 1);
@@ -436,10 +444,10 @@ export function deleteForward(editor: Editor, word: boolean, mac: boolean): bool
     if (next.type.name === "pageBreak") {
       tr = state.tr.delete(after, after + next.nodeSize);
     } else if (next.isTextblock) {
-      tr = joinBlocks(state, blockPos, after);
+      tr = joinBlocks(editor, blockPos, after);
     } else if (isList(next)) {
       const first = nextTextblock(state.doc, after);
-      if (first) tr = joinBlocks(state, blockPos, first.pos);
+      if (first) tr = joinBlocks(editor, blockPos, first.pos);
     }
   }
   if (!tr) return false;

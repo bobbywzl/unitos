@@ -109,7 +109,8 @@ export const richDocSchema = richNodeSchema.refine((n) => n.type === "doc", { me
 
 const HEX = /^#[0-9a-fA-F]{3,8}$/;
 const RGB = /^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+)\s*)?\)$/;
-const FONT_FAMILY = /^[\w\s,'"\-.]{1,120}$/;
+// A face's name may be in any script (宋体, 맑은 고딕).
+const FONT_FAMILY = /^[\p{L}\p{M}\p{N}_\s,'"\-.]{1,120}$/u;
 const FONT_SIZE = /^\d{1,3}(\.\d{1,2})?(pt|px)$/;
 const BLOCK_ID = /^[\w-]{1,64}$/;
 const ALIGN = new Set(["left", "center", "right", "justify"]);

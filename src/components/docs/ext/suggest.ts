@@ -25,11 +25,12 @@ import {
 const SPECS = { insertion, deletion, modification } as const;
 type Kind = keyof typeof SPECS;
 const TAGS: Record<Kind, string> = { insertion: "ins", deletion: "del", modification: "span" };
-const KINDS = new Set<string>(Object.keys(SPECS));
+/** The suggestion marks' names: formatting tools leave them alone. */
+export const SUGGESTION_MARKS: ReadonlySet<string> = new Set(Object.keys(SPECS));
 /** What the library puts at a paragraph's edge to hold a suggested break. */
 export const ZWSP = "\u200B";
 
-export const isSuggestionMark = (mark: PMMark) => KINDS.has(mark.type.name);
+export const isSuggestionMark = (mark: PMMark) => SUGGESTION_MARKS.has(mark.type.name);
 /** Words added or removed: an insertion or a deletion mark. */
 const isWordMark = (mark: PMMark) => mark.type.name === "insertion" || mark.type.name === "deletion";
 const isModification = (mark: PMMark) => mark.type.name === "modification";
@@ -103,6 +104,8 @@ function suggestionMark(name: Kind) {
 }
 
 const suggesters = new WeakMap<Editor, string>();
+/** Suggesting mode is on in this editor. */
+export const isSuggesting = (editor: Editor) => suggesters.has(editor);
 
 /** Suggesting mode on for an author (their account id), or off (null). */
 export function setSuggesting(editor: Editor, author: string | null): void {
@@ -346,7 +349,7 @@ const Suggesting = Extension.create({
   // table, a removed list item), and a code block on its words.
   onBeforeCreate() {
     const { schema } = this.editor;
-    const marks = [...KINDS].map((name) => schema.marks[name]);
+    const marks = [...SUGGESTION_MARKS].map((name) => schema.marks[name]);
     for (const type of Object.values(schema.nodes)) {
       if (type.markSet) type.markSet = [...type.markSet, ...marks];
     }

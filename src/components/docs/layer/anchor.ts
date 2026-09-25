@@ -21,8 +21,11 @@ export function pageEditorIn(container: Element | null): Editor | null {
   return dom?.editor && !dom.editor.isDestroyed ? dom.editor : null;
 }
 
+// A suggested paragraph break holds zero-width spaces the paragraph index
+// does not count (lib/docs/blocks.ts); offsets here skip them the same way.
+const ZWSP = "\u200B";
+
 function inlineLength(node: PMNode): number {
-  if (node.isText) return node.text?.length ?? 0;
   if (node.type.name === "hardBreak") return 1;
   return inlineText(node.toJSON() as RichNode).length;
 }
@@ -34,7 +37,7 @@ function offsetInBlock(block: PMNode, blockPos: number, pos: number): number {
   let at = blockPos + 1;
   for (let i = 0; i < block.childCount && at < pos; i++) {
     const child = block.child(i);
-    if (child.isText && pos < at + child.nodeSize) return offset + (pos - at);
+    if (child.isText && pos < at + child.nodeSize) return offset + (child.text ?? "").slice(0, pos - at).replaceAll(ZWSP, "").length;
     offset += inlineLength(child);
     at += child.nodeSize;
   }
@@ -49,7 +52,14 @@ export function posInBlock(block: PMNode, blockPos: number, offset: number): num
     const child = block.child(i);
     const length = inlineLength(child);
     if (offset <= text + length) {
-      if (child.isText) return pos + (offset - text);
+      if (child.isText) {
+        const chars = child.text ?? "";
+        let i = 0;
+        for (let left = offset - text; i < chars.length && (left > 0 || chars[i] === ZWSP); i++) {
+          if (chars[i] !== ZWSP) left--;
+        }
+        return pos + i;
+      }
       return offset === text ? pos : pos + child.nodeSize;
     }
     text += length;

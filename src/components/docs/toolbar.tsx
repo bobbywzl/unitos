@@ -216,7 +216,7 @@ export function DocsToolbar({
   const paint = usePaintFormat(editor);
   const [customFor, setCustomFor] = useState<"text" | "highlight" | null>(null);
   const [dialog, setDialog] = useState<"indent" | "numbering" | null>(null);
-  const off = !(mode === "editing" && canEdit);
+  const off = mode === "viewing" || !canEdit;
   // At once, not on the next frame as editor.commands.focus() does, so a key
   // pressed right after (Alt+/ again) keeps its own target.
   const focusPage = () => {

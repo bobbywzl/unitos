@@ -51,13 +51,16 @@ function keepTextFormat(el: HTMLElement, hex: (value: string) => string | null):
   const pt = toPoints(s.fontSize, PT_PER_FONT_UNIT);
   for (const name of ["color", "background", "font-size"]) s.removeProperty(name);
   // Written as text: a color set through el.style would read back as rgb().
-  const kept = [
+  const style = [
     s.cssText,
     color && `color: ${color};`,
     background && `background-color: ${background};`,
     pt !== null && `font-size: ${Math.min(400, Math.max(1, Math.round(pt * 2) / 2))}pt;`,
-  ];
-  el.setAttribute("style", kept.filter(Boolean).join(" "));
+  ]
+    .filter(Boolean)
+    .join(" ");
+  if (style) el.setAttribute("style", style);
+  else el.removeAttribute("style");
 }
 
 /** Pasted HTML as the page editor keeps it: its paragraph and text formats
@@ -100,10 +103,10 @@ function imagesAt(doc: PMNode, src: string): number[] {
   return found;
 }
 
-/** Pictures in pasted HTML are copied into Unitos: a data: picture shows at
-    once from a blob: address; one with an address a save drops goes. Once
+/** Pictures in pasted HTML are copied into Unitos. A data: picture shows at
+    once from a blob: address; one no save keeps (file:, cid:) goes. Once
     the paste has landed, each picture it put in the document is uploaded
-    (the path insertImageFiles takes), and its images take the stored
+    (the path insertImageFiles takes) and its images take the stored
     address. A remote picture the browser may not read keeps its address; a
     data: picture that cannot be stored goes, with the reason. */
 function copyImages(editor: Editor, root: DocumentFragment): void {
@@ -226,8 +229,8 @@ export async function insertImageFiles(editor: Editor, files: File[], pos?: numb
         .chain()
         .focus()
         .command(({ tr, commands }) => {
-          let spot = at ?? tr.selection.from;
-          if (at === undefined) spot = tr.deleteSelection().mapping.map(spot);
+          const { from } = tr.selection;
+          const spot = at ?? tr.deleteSelection().mapping.map(from);
           return commands.insertContentAt(imageSpot(tr.doc, Math.min(spot, tr.doc.content.size)), content);
         })
         .run();

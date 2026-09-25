@@ -9,7 +9,7 @@ export type DocsAreaProps = {
   notebookId: string;
   /** The reader may edit the document (editor or owner). */
   canEdit: boolean;
-  /** The page takes typing now: canEdit and the mode is Editing. */
+  /** The page takes typing now: canEdit and the mode is Editing or Suggesting. */
   editing: boolean;
   pageSetup: PageSetup;
   /** The project's documents, for links and file chips. */

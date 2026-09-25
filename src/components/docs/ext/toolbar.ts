@@ -3,6 +3,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { firstFamily, loadFontInUse } from "@/components/docs/fonts";
 import { namedStyleSheet, readChanges, STYLE_ATTR, STYLE_ORDER } from "@/components/docs/toolbar/styles";
+import { SUGGESTION_MARKS } from "@/components/docs/ext/suggest";
 
 // The toolbar's extensions (SPEC.md §29): the named styles on the doc node,
 // drawn by a style sheet for this editor; the paragraph flags of Line &
@@ -123,7 +124,9 @@ const DocsToolbar = Extension.create({
             for (const range of selection.ranges) {
               const from = range.$from.pos;
               const to = range.$to.pos;
-              for (const type of Object.values(schema.marks)) if (type !== link) tr.removeMark(from, to, type);
+              for (const type of Object.values(schema.marks)) {
+                if (type !== link && !SUGGESTION_MARKS.has(type.name)) tr.removeMark(from, to, type);
+              }
               state.doc.nodesBetween(from, to, (node, pos) => {
                 if (!node.isTextblock) return true;
                 resetBlock(node, pos);
