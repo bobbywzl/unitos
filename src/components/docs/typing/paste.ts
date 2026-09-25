@@ -224,21 +224,26 @@ export async function insertImageFiles(editor: Editor, files: File[], pos?: numb
     try {
       const { url } = await uploadImage(file);
       if (editor.isDestroyed) return;
-      const content = { type: "image", attrs: { src: url, alt: file.name } };
-      editor
-        .chain()
-        .focus()
-        .command(({ tr, commands }) => {
-          const { from } = tr.selection;
-          const spot = at ?? tr.deleteSelection().mapping.map(from);
-          return commands.insertContentAt(imageSpot(tr.doc, Math.min(spot, tr.doc.content.size)), content);
-        })
-        .run();
+      insertImage(editor, { src: url, alt: file.name }, at);
       at = editor.state.selection.to;
     } catch (err) {
       uploadFailed(editor, err);
     }
   }
+}
+
+/** An image on its own line after the paragraph at `pos` (else the
+    selection, which it replaces), or in place of an empty line. */
+export function insertImage(editor: Editor, attrs: { src: string; alt?: string }, pos?: number): void {
+  editor
+    .chain()
+    .focus()
+    .command(({ tr, commands }) => {
+      const { from } = tr.selection;
+      const spot = pos ?? tr.deleteSelection().mapping.map(from);
+      return commands.insertContentAt(imageSpot(tr.doc, Math.min(spot, tr.doc.content.size)), { type: "image", attrs });
+    })
+    .run();
 }
 
 /** Paste from Markdown: the clipboard's Markdown goes in as formatted text. */

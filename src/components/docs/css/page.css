@@ -154,10 +154,25 @@
   padding: 11px calc(var(--docs-pad-r, 24px) + 2 * var(--docs-shift, 0px)) 16px var(--docs-pad-l, 24px);
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: none;
   background: var(--docs-canvas);
   transition:
     padding-right 0.2s ease,
     padding-left 0.2s ease;
+}
+/* The canvas's sideways scrollbar, at the pane's foot (its own would sit
+   under the last page); under the tabs & outlines panel. */
+.docs-hscroll {
+  position: sticky;
+  bottom: 0;
+  z-index: 19;
+  height: 16px;
+  margin-top: -16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.docs-hscroll > div {
+  height: 1px;
 }
 
 /* The page stack: one sheet per page behind one flow of text. */
@@ -560,28 +575,28 @@
 
 /* Google Docs' scrollbars: a 16 px track, an 8 px thumb with round ends,
    darker under the pointer. */
-:is([data-page-editor], .docs-canvas, .docs-outline-scroll)::-webkit-scrollbar {
+:is([data-page-editor], .docs-hscroll, .docs-outline-scroll)::-webkit-scrollbar {
   width: 16px;
   height: 16px;
 }
-:is([data-page-editor], .docs-canvas, .docs-outline-scroll)::-webkit-scrollbar-track {
+:is([data-page-editor], .docs-hscroll, .docs-outline-scroll)::-webkit-scrollbar-track {
   margin: 0 4px;
   background: none;
 }
-:is([data-page-editor], .docs-canvas, .docs-outline-scroll)::-webkit-scrollbar-thumb {
+:is([data-page-editor], .docs-hscroll, .docs-outline-scroll)::-webkit-scrollbar-thumb {
   min-height: 28px;
   border: 4px solid transparent;
   border-radius: 8px;
   background: #e1e3e1 padding-box;
 }
-:is([data-page-editor], .docs-canvas, .docs-outline-scroll)::-webkit-scrollbar-thumb:hover,
-.dark :is([data-page-editor], .docs-canvas, .docs-outline-scroll)::-webkit-scrollbar-thumb {
+:is([data-page-editor], .docs-hscroll, .docs-outline-scroll)::-webkit-scrollbar-thumb:hover,
+.dark :is([data-page-editor], .docs-hscroll, .docs-outline-scroll)::-webkit-scrollbar-thumb {
   background-color: #444746;
 }
-.dark :is([data-page-editor], .docs-canvas, .docs-outline-scroll)::-webkit-scrollbar-thumb:hover {
+.dark :is([data-page-editor], .docs-hscroll, .docs-outline-scroll)::-webkit-scrollbar-thumb:hover {
   background-color: #8e918f;
 }
-:is([data-page-editor], .docs-canvas)::-webkit-scrollbar-corner {
+[data-page-editor]::-webkit-scrollbar-corner {
   background: transparent;
 }
 

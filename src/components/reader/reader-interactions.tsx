@@ -5958,8 +5958,10 @@ function blockFormatKind(
   // assistant runs; the mark stays until the toolbar closes. Every block of
   // the passage keeps it, so the tint is the selection, whole, from the
   // moment the pointer lifts. The Close link chip's highlight keeps it the
-  // same way.
-  const underToolbar = popover?.anchor ?? closeLink?.anchor ?? null;
+  // same way. The page editor keeps its own selection drawn, blue or gray
+  // (SPEC.md §29): no tint, so opening the toolbar never repaints the page,
+  // and a repaint cannot put back a selection the keys have just moved.
+  const underToolbar = richText ? null : (popover?.anchor ?? closeLink?.anchor ?? null);
   if (underToolbar) {
     for (const s of segmentsOf(underToolbar)) {
       const existing = highlightsByBlock[s.blockId] ?? [];

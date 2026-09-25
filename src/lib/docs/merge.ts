@@ -10,12 +10,14 @@ import { INDEXED_NODE_TYPES, type RichNode } from "@/lib/docs/schema";
 
 type Entry = { key: string; node: RichNode; json: string };
 
-/** JSON with sorted keys: a stored copy lists attributes in another order. */
+/** JSON with sorted keys: a stored copy lists attributes in another order.
+    An attribute that is null or "" counts as absent: a pasted style fills an
+    empty "" where the stored copy holds nothing. */
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
   if (value && typeof value === "object") {
     const o = value as Record<string, unknown>;
-    const keys = Object.keys(o).filter((k) => o[k] !== undefined).sort();
+    const keys = Object.keys(o).filter((k) => o[k] !== undefined && o[k] !== null && o[k] !== "").sort();
     return `{${keys.map((k) => `${JSON.stringify(k)}:${stable(o[k])}`).join(",")}}`;
   }
   return JSON.stringify(value ?? null);

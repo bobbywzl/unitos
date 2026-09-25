@@ -448,9 +448,18 @@ export function PageCanvas({
       };
 
   // The page stands centered in the canvas while the room left of it holds
-  // the outline; else it moves right, past the outline.
+  // the outline; else it moves right, past the outline, but never past the
+  // pane's right edge: with no room the outline covers the page's left, as
+  // in Google Docs.
   const pageVisual = columnWidth * scale;
   const centered = (canvasWidth - pageVisual) / 2 >= side;
+  const padLeft = Math.min(side, Math.max(FIT_GUTTER, canvasWidth - FIT_GUTTER - pageVisual));
+  const padRight = centered ? side : FIT_GUTTER;
+  // A page wider than the pane scrolls sideways with the bar at the pane's
+  // foot, where Google Docs keeps its scrollbar: the canvas's own sits under
+  // the last page.
+  const scrollWidth = padLeft + pageVisual + padRight;
+  const barRef = useRef<HTMLDivElement>(null);
 
   // A new, empty document opens the outline, as Google Docs does, when the
   // pane has the room for it beside the page.
@@ -486,7 +495,10 @@ export function PageCanvas({
         ref={canvasRef}
         className="docs-canvas"
         data-pageless={pageless || undefined}
-        style={{ "--docs-pad-l": `${side}px`, "--docs-pad-r": `${centered ? side : FIT_GUTTER}px` } as React.CSSProperties}
+        style={{ "--docs-pad-l": `${padLeft}px`, "--docs-pad-r": `${padRight}px` } as React.CSSProperties}
+        onScroll={(e) => {
+          if (barRef.current) barRef.current.scrollLeft = e.currentTarget.scrollLeft;
+        }}
       >
         <article
           ref={pageRef}
@@ -537,6 +549,17 @@ export function PageCanvas({
           {children}
         </article>
       </div>
+      {scrollWidth > canvasWidth + 0.5 && (
+        <div
+          ref={barRef}
+          className="docs-hscroll"
+          onScroll={(e) => {
+            if (canvasRef.current) canvasRef.current.scrollLeft = e.currentTarget.scrollLeft;
+          }}
+        >
+          <div style={{ width: `calc(${scrollWidth}px + 2 * var(--docs-shift, 0px))` }} />
+        </div>
+      )}
       {!pageless && <PageIndicator editor={editor} pages={pages} pitch={frame.pitch} />}
       {dialog === "setup" && <PageSetupDialog store={store} onClose={closeDialog} />}
       {dialog === "pageNumbers" && <PageNumbersDialog store={store} onClose={closeDialog} />}

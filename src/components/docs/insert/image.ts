@@ -5,7 +5,7 @@ import type { EditorView, NodeView } from "@tiptap/pm/view";
 import { emitInsert, insertContext, toast } from "@/components/docs/insert/context";
 import { PX_PER_PT } from "@/components/docs/page/geometry";
 import type { ImageSource } from "@/components/docs/toolbar/image-menu";
-import { insertImageFiles } from "@/components/docs/typing/paste";
+import { insertImage, insertImageFiles } from "@/components/docs/typing/paste";
 import { uploadImage } from "@/lib/images";
 
 // Images (SPEC.md §29), as Google Docs draws them: the blue frame with eight
@@ -563,7 +563,7 @@ class ImageView implements NodeView {
 /** Insert an image from an address or a file at the selection. */
 export function insertImageFrom(editor: Editor, source: ImageSource): void {
   if ("file" in source) void insertImageFiles(editor, [source.file]);
-  else editor.chain().focus().setImage({ src: source.url }).run();
+  else insertImage(editor, { src: source.url });
 }
 
 /** Set attributes of the image at `pos`; the image stays selected. */

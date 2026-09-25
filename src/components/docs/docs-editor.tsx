@@ -13,7 +13,7 @@ import { CloudDoneIcon, CloudOffIcon, CloudSyncIcon, DocIcon } from "@/component
 import { DocsToolbar, type DocsMode, type Zoom } from "@/components/docs/toolbar";
 import { useDocsSave, type SaveState } from "@/components/docs/use-docs-save";
 import { WordCountDialog } from "@/components/docs/word-count";
-import { insertImageFiles } from "@/components/docs/typing/paste";
+import { insertImageFrom } from "@/components/docs/insert/image";
 import { InsertLayer } from "@/components/docs/areas/insert";
 import { UnitosLayer } from "@/components/docs/areas/layer";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
@@ -292,9 +292,7 @@ export function DocsEditor({
 
   const insertImage = useCallback(
     (source: { file: File } | { url: string }) => {
-      if (!editor) return;
-      if ("url" in source) editor.chain().focus().setImage({ src: source.url }).run();
-      else void insertImageFiles(editor, [source.file]);
+      if (editor) insertImageFrom(editor, source);
     },
     [editor],
   );
