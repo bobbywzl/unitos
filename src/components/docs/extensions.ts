@@ -369,7 +369,7 @@ export function docsExtensions() {
         defaultProtocol: "https",
         HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" },
       },
-      dropcursor: { color: "#0b57d0", width: 2 },
+      dropcursor: { color: "var(--docs-blue)", width: 2 },
       horizontalRule: false,
       undoRedo: { depth: 500, newGroupDelay: 1000 },
       // Docs ends a document on any line, a list's too; only a table or

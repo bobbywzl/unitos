@@ -1,19 +1,13 @@
 /* The page editor: layer (SPEC.md §29). Imported by docs.css.
-   The toolbar and the cards take Google Docs' place and card numbers; the
-   marks keep the Unitos kind colors (SPEC.md §6). */
+   The toolbar and the cards take Google Docs' place and card numbers and
+   Unitos's look; the marks keep the Unitos kind colors (SPEC.md §6). */
 
 :root {
-  /* Google Docs' comment card: at rest, on hover, and active. */
-  --docs-card-rest: #f0f4f9;
-  --docs-card-hover: #e9eef6;
-  --docs-card-active: #ffffff;
-  --docs-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 8px 3px rgba(0, 0, 0, 0.15);
-}
-.dark {
-  --docs-card-rest: #2a2c2e;
-  --docs-card-hover: #323538;
-  --docs-card-active: #37393c;
-  --docs-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 4px 8px 3px rgba(0, 0, 0, 0.35);
+  /* A card at rest (a shade off the paper), under the pointer, and in use. */
+  --docs-card-rest: var(--sand-100);
+  --docs-card-hover: var(--sand-200);
+  --docs-card-active: var(--card);
+  --docs-card-shadow: var(--elev-lg);
 }
 
 /* The header (the title row, the toolbar, the ruler) stays above the card
@@ -38,10 +32,10 @@
   }
 }
 
-/* Cards: 12 px corners, flat at rest, darker on hover, white and lifted while
-   in use. The border keeps the kind color. */
+/* Cards: Unitos's 20 px corners, flat at rest, darker on hover, the card
+   color and the float shadow while in use. The border keeps the kind color. */
 [data-page-editor] :is([data-side-card], [data-log-card], [data-annotation-card], [data-comment-card], [data-suggestion-card]) {
-  border-radius: 12px;
+  border-radius: 20px;
   background: var(--docs-card-rest);
   box-shadow: none;
   backdrop-filter: none;
@@ -152,7 +146,7 @@
   color: var(--docs-icon);
   font: 400 14px/20px var(--docs-ui-font);
 }
-/* The focused card shows as the card in use, white and lifted. */
+/* The focused card shows as the card in use, lifted. */
 .docs-comment:focus-visible {
   outline: none;
 }
@@ -180,7 +174,7 @@
 .docs-comment-name {
   overflow: hidden;
   color: var(--docs-text);
-  font-weight: 500;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -204,7 +198,7 @@
   background: var(--docs-hover);
 }
 .docs-comment-resolve {
-  color: var(--docs-blue);
+  color: var(--docs-accent-text);
 }
 .docs-comment-text .prose {
   color: inherit;
@@ -215,15 +209,15 @@
   margin: 0;
 }
 .docs-comment-text a {
-  color: var(--docs-blue);
+  color: var(--docs-accent-text);
 }
 .docs-comment-field {
   resize: none;
   field-sizing: content;
   padding: 8px 7px 8px 16px;
-  border: 1px solid var(--docs-tb-outline);
+  border: 1px solid transparent;
   border-radius: 16px;
-  background: var(--docs-page);
+  background: var(--docs-field-bg);
   color: var(--docs-text);
   font: inherit;
 }

@@ -1,16 +1,12 @@
 /* The page editor: insert (SPEC.md §29). Imported by docs.css. The "@"
    menu and its pickers, the smart chips and their cards, footnotes,
    bookmarks, equations, the table of contents, tables, images, links, and
-   the side panels, in Google Docs' look, on the tokens of docs.css and
-   css/toolbar.css. */
+   the side panels, in Google Docs' layout and Unitos's look, on the tokens
+   of docs.css and css/toolbar.css. */
 
 :root {
-  --docs-chip-bg: #e8eaed;
-  --docs-chip-hover: #dadce0;
-}
-.dark {
-  --docs-chip-bg: #3c4043;
-  --docs-chip-hover: #4a4e52;
+  --docs-chip-bg: var(--sand-200);
+  --docs-chip-hover: var(--sand-300);
 }
 
 /* ── Boxes and buttons ─────────────────────────────────────────────────── */
@@ -19,7 +15,7 @@
 .docs-insert-pop {
   position: fixed;
   z-index: 57;
-  border-radius: 8px;
+  border-radius: 16px;
   background: var(--docs-menu-bg);
   box-shadow: var(--docs-menu-shadow);
   color: var(--docs-text);
@@ -51,8 +47,8 @@
   height: 32px;
   padding: 0 12px;
   border-radius: 16px;
-  color: var(--docs-blue);
-  font-weight: 500;
+  color: var(--docs-accent-text);
+  font-weight: 600;
   cursor: pointer;
 }
 .docs-icon-btn:hover:not(:disabled, [aria-checked="true"]),
@@ -71,14 +67,20 @@
 .docs-link-row:hover {
   background: var(--docs-hover);
 }
-/* Section names: uppercase, small, gray. */
+/* A row under the pointer or the keys: clay words, as in Unitos's menus. */
+.docs-at-row:hover,
+.docs-at-row.is-active,
+.docs-link-row:hover {
+  color: var(--docs-on-fg);
+}
+/* Section names: Unitos's small capitals, 11 px semibold in sand-500. */
 .docs-at-section,
 .docs-at-back,
 .docs-emoji-title,
 .docs-link-section {
-  color: var(--docs-muted);
-  font: 500 11px/16px var(--docs-ui-font);
-  letter-spacing: 0.8px;
+  color: var(--sand-500);
+  font: 600 11px/16px var(--docs-ui-font);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -134,10 +136,10 @@
   color: var(--docs-muted);
 }
 .docs-at-doc-icon {
-  color: #4285f4;
+  color: var(--docs-blue);
 }
 .docs-at-glyph {
-  font: 500 17px/1 var(--docs-ui-font);
+  font: 600 17px/1 var(--docs-ui-font);
 }
 .docs-at-emoji {
   font-size: 18px;
@@ -165,6 +167,7 @@
   width: 100%;
   height: 40px;
   padding: 0 12px;
+  color: var(--docs-muted);
   cursor: pointer;
 }
 .docs-at-state {
@@ -210,22 +213,22 @@
 .docs-grid-cell {
   width: 18px;
   height: 18px;
-  border: 1px solid #ededed;
+  border: 1px solid var(--sand-300);
   border-radius: 1px;
-  background: #f8f8f8;
+  background: var(--sand-100);
   cursor: pointer;
 }
 .docs-grid-cell.is-on {
-  border-color: #ceddfb;
-  background: #e0eafa;
+  border-color: var(--clay-300);
+  background: var(--clay-100);
 }
 .dark .docs-grid-cell {
-  border-color: #4a4e52;
-  background: #3c4043;
+  border-color: var(--sand-400);
+  background: var(--sand-200);
 }
 .dark .docs-grid-cell.is-on {
-  border-color: #8ab4f8;
-  background: #394457;
+  border-color: var(--clay-500);
+  background: var(--clay-200);
 }
 .docs-grid-label {
   margin-top: 8px;
@@ -243,7 +246,7 @@
 }
 .docs-date-title {
   flex: 1;
-  font-weight: 500;
+  font-weight: 600;
 }
 .docs-date-grid {
   display: grid;
@@ -270,7 +273,7 @@
   color: var(--docs-placeholder);
 }
 .docs-date-day.is-today {
-  color: var(--docs-blue);
+  color: var(--docs-accent-text);
   font-weight: 700;
 }
 .docs-date-day.is-on {
@@ -290,7 +293,10 @@
   color: var(--docs-icon);
 }
 .docs-date-time-field.is-bad {
-  border-color: #b3261e;
+  border-color: #dc2626;
+}
+.dark .docs-date-time-field.is-bad {
+  border-color: #f87171;
 }
 .docs-date-actions {
   display: flex;
@@ -398,7 +404,7 @@
 .docs-toc-style {
   padding: 4px;
   border: 1px solid var(--docs-tb-sep);
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--docs-page);
   cursor: pointer;
 }
@@ -430,7 +436,7 @@
   width: 24px;
   height: 3px;
   border-radius: 1px;
-  background: #5f6368;
+  background: var(--sand-600);
 }
 .docs-toc-thumb-num {
   width: 5px;
@@ -499,11 +505,11 @@
 }
 .docs-chip-icon {
   margin-left: -2px;
-  color: #4285f4;
+  color: var(--docs-blue);
 }
 .docs-prose .docs-chip-dropdown {
   padding-right: 3px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .docs-prose .docs-chip-dropdown:hover {
   filter: brightness(0.96);
@@ -521,7 +527,7 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font-weight: 500;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -537,8 +543,9 @@
   flex: 1;
   height: 36px;
   padding: 0 10px;
-  border: 1px solid var(--docs-sep);
-  border-radius: 4px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: var(--docs-field-bg);
   text-align: left;
   cursor: pointer;
 }
@@ -577,8 +584,8 @@
 .docs-dd-new,
 .docs-dd-addedit,
 .docs-dd-addedit .docs-menu-check {
-  color: var(--docs-blue);
-  font-weight: 500;
+  color: var(--docs-accent-text);
+  font-weight: 600;
 }
 .docs-dd-new .docs-at-icon {
   color: inherit;
@@ -602,7 +609,7 @@
   padding: 2px 10px;
   border-radius: 999px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -633,7 +640,7 @@
   height: 48px;
   padding: 0 14px;
   border: 1px solid var(--docs-tb-outline);
-  border-radius: 4px;
+  border-radius: 12px;
   background: transparent;
   font-size: 15px;
   outline: none;
@@ -696,7 +703,7 @@
   display: flex;
   flex-direction: column;
   width: 300px;
-  border-radius: 12px;
+  border-radius: 20px;
   background: var(--docs-menu-bg);
   box-shadow: var(--docs-menu-shadow);
   color: var(--docs-text);
@@ -712,7 +719,7 @@
 .docs-side-head h2 {
   flex: 1;
   color: var(--docs-text);
-  font: 400 18px/24px var(--docs-ui-font);
+  font: 400 18px/24px var(--docs-title-font);
 }
 .docs-side-body {
   flex: 1;
@@ -728,7 +735,7 @@
   justify-content: space-between;
   width: 100%;
   padding: 12px 16px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
 }
 .docs-side-section-body {
@@ -796,7 +803,7 @@ textarea.docs-field:focus {
   display: inline-flex;
   overflow: hidden;
   border: 1px solid var(--docs-tb-outline);
-  border-radius: 18px;
+  border-radius: 12px;
 }
 .docs-seg button {
   height: 32px;
@@ -823,7 +830,7 @@ textarea.docs-field:focus {
   gap: 4px;
   padding: 8px 4px;
   border: 1px solid var(--docs-tb-sep);
-  border-radius: 8px;
+  border-radius: 12px;
   color: var(--docs-icon);
   font-size: 12px;
   line-height: 16px;
@@ -920,7 +927,7 @@ textarea.docs-field:focus {
   height: 12px;
   margin: 0 1px;
   vertical-align: -1px;
-  background: #4285f4;
+  background: var(--docs-blue);
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%);
   cursor: pointer;
 }
@@ -1159,7 +1166,7 @@ textarea.docs-field:focus {
 .docs-img-handle,
 .docs-img-rotate {
   position: absolute;
-  border: 1px solid #ffffff;
+  border: 1px solid var(--docs-page);
   background: var(--docs-blue);
   pointer-events: auto;
 }
@@ -1199,10 +1206,11 @@ textarea.docs-field:focus {
   top: -52px;
   transform: translateX(-50%);
   padding: 2px 8px;
-  border-radius: 4px;
-  background: #3c4043;
-  color: #ffffff;
-  font: 500 12px/18px var(--docs-ui-font);
+  border-radius: 9999px;
+  background: var(--docs-tip-bg);
+  box-shadow: var(--elev-md);
+  color: var(--docs-tip-fg);
+  font: 600 12px/18px var(--docs-ui-font);
   white-space: nowrap;
 }
 body.docs-img-dragging,
@@ -1262,9 +1270,6 @@ body.docs-img-dragging * {
   height: 32px;
   min-width: 32px;
 }
-.docs-img-toolbar .docs-tb-btn[aria-pressed="true"] {
-  border-radius: 50%;
-}
 /* While the image is dragged, the words under the toolbar take the drop. */
 body.docs-img-moving .docs-img-toolbar {
   visibility: hidden;
@@ -1296,9 +1301,6 @@ body.docs-img-moving .docs-img-toolbar {
   top: var(--docs-sticky-top, 0px);
   z-index: 1;
   background-color: var(--docs-page);
-}
-.docs-shell .docs-prose .selectedCell::after {
-  background: rgba(78, 143, 248, 0.35);
 }
 .docs-prose.docs-row-resize,
 .docs-prose.docs-row-resize * {
@@ -1358,7 +1360,7 @@ body.docs-img-moving .docs-img-toolbar {
   opacity: 1;
   box-shadow: 0 0 0 1px var(--docs-blue);
 }
-/* The chosen borders, blue over the table's lines. */
+/* The chosen borders, clay over the table's lines. */
 .docs-border-mark {
   position: fixed;
   z-index: 29;
@@ -1454,8 +1456,8 @@ body.docs-img-moving .docs-img-toolbar {
   gap: 6px;
   height: 36px;
   padding: 0 8px;
-  border: 1px solid var(--docs-sep);
-  border-radius: 4px;
+  border-radius: 9999px;
+  background: var(--docs-field-bg);
   color: var(--docs-icon);
   font-size: 13px;
 }
@@ -1534,7 +1536,7 @@ body.docs-img-moving .docs-img-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .docs-link-section {
   padding: 12px 8px 4px;

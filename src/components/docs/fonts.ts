@@ -155,15 +155,15 @@ function familyQuery(name: string, weights: number[], text?: string): string {
   return `family=${family}:${axis}${text ? `&text=${encodeURIComponent(text)}` : ""}`;
 }
 
-/** The Google Fonts stylesheet for every web face the menu lists, the
-    metric twins of the computer's faces, and the toolbar's own face. The
-    browser downloads a face only when something on the page uses it. */
+/** The Google Fonts stylesheet for every web face the menu lists and the
+    metric twins of the computer's faces. The browser downloads a face only
+    when something on the page uses it. */
 export function docsFontsUrl(): string {
   const faces = [
     ...DOCS_FONTS.filter((f) => f.web).map((f) => f.name),
     ...["Arimo", "Tinos", "Cousine", "Comic Neue", "Gelasio", "Anton", "Fira Sans"],
   ].map((f) => familyQuery(f, W2));
-  return `https://fonts.googleapis.com/css2?${[...faces, "family=Google+Sans:wght@400;500"].join("&")}&display=swap`;
+  return `https://fonts.googleapis.com/css2?${faces.join("&")}&display=swap`;
 }
 
 const loaded = new Set<string>();

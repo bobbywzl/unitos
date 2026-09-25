@@ -1,14 +1,24 @@
-import { CHIP_NODE_TYPES, INDEXED_NODE_TYPES, newBlockId, ZWSP, type RichMark, type RichNode } from "@/lib/docs/schema";
+import { isAssistantSuggestion } from "@/lib/docs/assistant-suggestions";
+import {
+  CHIP_NODE_TYPES,
+  INDEXED_NODE_TYPES,
+  newBlockId,
+  SUGGESTION_MARK_TYPES,
+  ZWSP,
+  type RichMark,
+  type RichNode,
+} from "@/lib/docs/schema";
 
 // The paragraph index of a blank document (SPEC.md §29). The rich text is the
 // document; its Block rows are derived from it on every save, one per node a
 // reader can select — a paragraph, a heading, a list item's paragraph, a
 // table cell's paragraph, a code block — plus images (FIGURE) and horizontal
 // lines (SEPARATOR). A row's id is the node's blockId and its text is the
-// node's words as if every suggestion were accepted, counted as the editor's
-// anchors count them (layer/anchor.ts), so an anchor captured in the editor
-// (data-block-id + offsets, SPEC.md §5) resolves against the row. The same
-// function runs in the editor and on the server, so both sides agree.
+// node's words as if every person's suggestion were accepted and every one
+// of the assistant's rejected, counted as the editor's anchors count them
+// (layer/anchor.ts), so an anchor captured in the editor (data-block-id +
+// offsets, SPEC.md §5) resolves against the row. The same function runs in
+// the editor and on the server, so both sides agree.
 
 export type DerivedBlockType = "PARAGRAPH" | "HEADING" | "LIST" | "CODE" | "FIGURE" | "SEPARATOR" | "EQUATION";
 
@@ -59,12 +69,17 @@ function runStyles(marks: RichMark[] | undefined): string[] {
   return out;
 }
 
-/** The words of one node as the paragraph index reads them, as if every
-    suggestion were accepted: text as it is, a line break (Shift+Enter) as
-    "\n". Words a suggestion removes, and the zero-width space that holds a
-    suggested paragraph break (components/docs/ext/suggest.ts), are no words. */
+/** A suggestion's mark whose words or block the paragraph index leaves out:
+    a person's deletion, or the assistant's insertion. */
+export const outOfIndex = (type: string, id: unknown): boolean =>
+  type === "deletion" ? !isAssistantSuggestion(id) : type === "insertion" && isAssistantSuggestion(id);
+
+/** The words of one node as the paragraph index reads them: text as it is,
+    a line break (Shift+Enter) as "\n". Words a person's suggestion removes
+    or the assistant's adds, and the zero-width space that holds a suggested
+    paragraph break (components/docs/ext/suggest.ts), are no words. */
 export function inlineText(node: RichNode): string {
-  if (node.marks?.some((m) => m.type === "deletion")) return "";
+  if (node.marks?.some((m) => outOfIndex(m.type, m.attrs?.id))) return "";
   if (node.type === "text") return (node.text ?? "").replaceAll(ZWSP, "");
   if (node.type === "hardBreak") return "\n";
   // A smart chip's words are its label; other atoms add none.
@@ -72,16 +87,19 @@ export function inlineText(node: RichNode): string {
   return (node.content ?? []).map(inlineText).join("");
 }
 
-/** Rich text as if every suggestion were rejected: added words and blocks
-    go, removed ones stay, a format change goes back, and the zero-width
-    spaces of a suggested break go. */
-export function withoutSuggestions(nodes: RichNode[]): RichNode[] {
-  return nodes.flatMap((node) => {
+/** Rich text as if the suggestions `which` picks by id (every one by
+    default) were rejected: their added words and blocks go, the words they
+    remove stay, a format change goes back, and the zero-width spaces of a
+    suggested break go. */
+export function withoutSuggestions(nodes: RichNode[], which: (id: unknown) => boolean = () => true): RichNode[] {
+  const out: RichNode[] = [];
+  for (const node of nodes) {
     const marks = node.marks ?? [];
-    if (marks.some((m) => m.type === "insertion")) return [];
+    const rejected = marks.filter((m) => SUGGESTION_MARK_TYPES.has(m.type) && which(m.attrs?.id));
+    if (rejected.some((m) => m.type === "insertion")) continue;
     let { type, attrs } = node;
-    let kept = marks.filter((m) => m.type !== "deletion" && m.type !== "modification");
-    for (const { type: name, attrs: change } of marks) {
+    let kept = marks.filter((m) => !rejected.includes(m));
+    for (const { type: name, attrs: change } of rejected) {
       if (name !== "modification" || !change) continue;
       if (change.type === "nodeType" && typeof change.previousValue === "string") type = change.previousValue;
       if (change.type === "attr" && typeof change.attrName === "string") attrs = { ...attrs, [change.attrName]: change.previousValue };
@@ -90,11 +108,21 @@ export function withoutSuggestions(nodes: RichNode[]): RichNode[] {
         if (change.previousValue) kept.push(change.previousValue as RichMark);
       }
     }
-    const out: RichNode = { ...node, type, attrs, marks: kept };
-    if (node.type === "text") out.text = (node.text ?? "").replaceAll(ZWSP, "");
-    else if (node.content) out.content = withoutSuggestions(node.content);
-    return out.text === "" ? [] : [out];
-  });
+    const next: RichNode = { ...node, type, attrs, marks: kept };
+    // A suggestion that stays keeps its zero-width spaces.
+    const stays = kept.some((m) => SUGGESTION_MARK_TYPES.has(m.type));
+    if (node.type === "text" && !stays) next.text = (node.text ?? "").replaceAll(ZWSP, "");
+    else if (node.content) next.content = withoutSuggestions(node.content, which);
+    if (next.text === "") continue;
+    // Words beside words with the same marks join, as the editor holds them.
+    const last = out.at(-1);
+    if (next.type === "text" && last?.type === "text" && JSON.stringify(last.marks) === JSON.stringify(next.marks)) {
+      last.text = `${last.text ?? ""}${next.text ?? ""}`;
+    } else {
+      out.push(next);
+    }
+  }
+  return out;
 }
 
 function textblockRuns(node: RichNode): { text: string; styles: StyleSpan[]; links: LinkSpan[] } {
@@ -167,7 +195,7 @@ function tokens(node: RichNode, ctx: Context): string {
 export function deriveBlocks(doc: RichNode): DerivedBlock[] {
   const out: DerivedBlock[] = [];
   const walk = (node: RichNode, ctx: Context) => {
-    // A block a suggestion removes is read as removed.
+    // A block a person's suggestion removes is read as removed.
     if (node.marks?.some((m) => m.type === "deletion")) return;
     if (INDEXED_NODE_TYPES.has(node.type)) {
       const id = node.attrs?.blockId;
@@ -236,7 +264,9 @@ export function deriveBlocks(doc: RichNode): DerivedBlock[] {
                 : ctx;
     for (const child of node.content ?? []) walk(child, next);
   };
-  walk(doc, { list: null, quote: false, cell: false });
+  // The assistant's suggestions read as not made yet: their words, blocks,
+  // and format changes as before them.
+  for (const node of withoutSuggestions([doc], isAssistantSuggestion)) walk(node, { list: null, quote: false, cell: false });
   return out;
 }
 

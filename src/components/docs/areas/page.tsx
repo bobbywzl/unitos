@@ -334,12 +334,13 @@ export function PageCanvas({
     };
   }, [setup, pageless, editor, store]);
 
-  // Pageless: the canvas and the chrome take the page's color.
+  // Pageless: the canvas and the chrome take a page color; a white page
+  // draws on the paper, as the reader draws an article.
   const white = /^#f{3}(f{3})?$/i.test(setup.color);
   useEffect(() => {
     const shell = canvasRef.current?.closest<HTMLElement>(".docs-shell");
     if (!shell) return;
-    if (pageless) shell.style.setProperty("--docs-canvas", white ? "var(--docs-page)" : setup.color);
+    if (pageless && !white) shell.style.setProperty("--docs-canvas", setup.color);
     else shell.style.removeProperty("--docs-canvas");
     return () => {
       shell.style.removeProperty("--docs-canvas");

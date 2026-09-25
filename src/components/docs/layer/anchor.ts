@@ -2,7 +2,7 @@ import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import type { SourceInput } from "@/lib/anchors/input";
-import { inlineText } from "@/lib/docs/blocks";
+import { inlineText, outOfIndex } from "@/lib/docs/blocks";
 import { ZWSP, type RichNode } from "@/lib/docs/schema";
 
 // Anchors in the page editor (SPEC.md §5, §29): one segment per paragraph,
@@ -40,8 +40,9 @@ function offsetInBlock(block: PMNode, blockPos: number, pos: number): number {
 }
 
 /** The position of an offset in a paragraph's words; inside a chip, after
-    it. Where the offset falls on what counts no words (a removed word, a
-    zero-width space), a start goes past it and an end stops before it. */
+    it. Where the offset falls on what counts no words (a word the index
+    leaves out, a zero-width space), a start goes past it and an end stops
+    before it. */
 export function posInBlock(block: PMNode, blockPos: number, offset: number, end = false): number {
   let left = offset;
   let pos = blockPos + 1;
@@ -86,8 +87,8 @@ function segmentsBetween(doc: PMNode, from: number, to: number): { segments: Pag
   const segments: PageSegment[] = [];
   let truncated = false;
   doc.nodesBetween(from, to, (node, pos) => {
-    // A block a suggestion removes has no words to quote.
-    if (node.marks.some((m) => m.type.name === "deletion")) return false;
+    // A block a person's suggestion removes, or the assistant's adds, has no words to quote.
+    if (node.marks.some((m) => outOfIndex(m.type.name, m.attrs.id))) return false;
     if (LEFT_OUT.has(node.type.name)) truncated = true;
     if (!node.isTextblock) return true;
     const blockId = node.attrs.blockId;

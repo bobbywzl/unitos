@@ -14,6 +14,7 @@ import {
   SKELETON_MODEL,
   STITCH_MODEL,
   STITCH_SELECT_MODEL,
+  SUGGEST_MODEL,
   SVG_CHART_MODEL,
   VISION_MODEL,
   VISUALIZE_MODEL,
@@ -46,6 +47,7 @@ export type Feature =
   | "compare"
   | "analyze"
   | "voice"
+  | "suggest"
   | "visualize"
   | "assistant"
   | "act"
@@ -80,6 +82,7 @@ export const FEATURE_DEFAULTS: Record<Feature, string> = {
   compare: DERIVATION_MODEL.COMPARE,
   analyze: DERIVATION_MODEL.ANALYZE,
   voice: VOICE_MODEL,
+  suggest: SUGGEST_MODEL,
   visualize: VISUALIZE_MODEL,
   assistant: DERIVATION_MODEL.SYNTHESIS,
   act: DERIVATION_MODEL.SYNTHESIS,
@@ -114,6 +117,7 @@ export const FEATURE_ORDER: Feature[] = [
   "analyze",
   "visualize",
   "voice",
+  "suggest",
   "find",
   "ask",
   "formalize",

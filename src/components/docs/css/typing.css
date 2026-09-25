@@ -3,21 +3,20 @@
    voice typing, and the marks typing leaves in the text. */
 
 :root {
-  --docs-find-result: #c4eed0;
-  --docs-find-current: #6dd58c;
-  --docs-code: #188038;
-  --docs-autocorrect: #9e9e9e;
-  --docs-voice-on: #d93025;
+  /* Unitos's search gold (globals.css .search-hit) and recording red. */
+  --docs-find-result: color-mix(in srgb, #f2c94c 45%, transparent);
+  --docs-find-current: #f2c94c;
+  --docs-code: var(--sage-700);
+  --docs-autocorrect: var(--sand-500);
+  --docs-voice-on: #ef4444;
 }
 .dark {
-  --docs-find-result: rgba(109, 213, 140, 0.3);
-  --docs-find-current: rgba(109, 213, 140, 0.62);
-  --docs-code: #81c995;
-  --docs-autocorrect: #8a8a8a;
-  --docs-voice-on: #f28b82;
+  --docs-find-result: color-mix(in srgb, #f2c94c 28%, transparent);
+  --docs-find-current: color-mix(in srgb, #f2c94c 60%, transparent);
+  --docs-voice-on: #f87171;
 }
 
-/* ── Find: every result light green, the current one green ─────────────── */
+/* ── Find: every result in light gold, the current one full gold ──────── */
 .docs-find-result {
   background: var(--docs-find-result);
   border-radius: 2px;
@@ -59,7 +58,7 @@
   align-items: center;
   gap: 2px;
   padding: 2px;
-  border-radius: 8px;
+  border-radius: 16px;
   background: var(--docs-menu-bg);
   box-shadow: var(--docs-menu-shadow);
 }
@@ -70,9 +69,9 @@
   z-index: 1;
   margin-top: 1.6em;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 9999px;
   background: var(--docs-menu-bg);
-  box-shadow: var(--docs-menu-shadow);
+  box-shadow: var(--elev-sm);
   color: var(--docs-text);
   font: 400 12px/16px var(--docs-ui-font);
   white-space: nowrap;
@@ -92,7 +91,7 @@
   content: "→";
 }
 
-/* Markdown's inline code: Roboto Mono in Docs' code green. */
+/* Markdown's inline code: Roboto Mono in sage, Unitos's green. */
 .docs-prose code {
   color: var(--docs-code);
 }
@@ -135,7 +134,7 @@
   height: 40px;
   padding: 0 76px 0 16px;
   border: 1px solid var(--docs-tb-outline);
-  border-radius: 4px;
+  border-radius: 12px;
   background: transparent;
   color: var(--docs-text);
   font: 400 16px/24px var(--docs-ui-font);
@@ -156,7 +155,7 @@
   pointer-events: none;
 }
 .docs-outlined:focus-within .docs-outlined-label {
-  color: var(--docs-blue);
+  color: var(--docs-accent-text);
 }
 
 /* ── The find bar: top right, under the toolbar ───────────────────────── */
@@ -166,7 +165,7 @@
   display: flex;
   align-items: center;
   padding: 16px;
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--docs-menu-bg);
   box-shadow: var(--docs-menu-shadow);
   color: var(--docs-text);
@@ -206,7 +205,7 @@
   transform: translate(-50%, -50%);
   width: min(396px, calc(100vw - 32px));
   min-width: 280px;
-  border-radius: 28px;
+  border-radius: 24px;
   background: var(--docs-menu-bg);
   box-shadow: var(--docs-menu-shadow);
   color: var(--docs-text);
@@ -219,7 +218,7 @@
   padding: 24px 16px 16px 24px;
 }
 .docs-replace-head h2 {
-  font: 400 24px/32px var(--docs-ui-font);
+  font: 400 24px/32px var(--docs-title-font);
 }
 .docs-replace-body {
   display: flex;
@@ -266,12 +265,12 @@
   padding: 0 16px;
   border-bottom: 3px solid transparent;
   color: var(--docs-muted);
-  font: 500 14px/20px var(--docs-ui-font);
+  font: 600 14px/20px var(--docs-ui-font);
   cursor: pointer;
 }
 .docs-prefs-tab[aria-selected="true"] {
   border-bottom-color: var(--docs-blue);
-  color: var(--docs-blue);
+  color: var(--docs-accent-text);
 }
 .docs-prefs-body {
   display: flex;
@@ -322,7 +321,7 @@
   padding: 0 12px;
   height: 40px;
   border: 1px solid var(--docs-tb-outline);
-  border-radius: 20px;
+  border-radius: 12px;
   color: var(--docs-icon);
 }
 .docs-shortcuts-search:focus-within {
@@ -348,8 +347,8 @@
 }
 .docs-shortcuts-body h3 {
   margin-bottom: 6px;
-  color: var(--docs-blue);
-  font: 500 14px/20px var(--docs-ui-font);
+  color: var(--docs-accent-text);
+  font: 600 14px/20px var(--docs-ui-font);
 }
 .docs-shortcuts-body table {
   width: 100%;
@@ -367,7 +366,7 @@
   color: var(--docs-muted);
 }
 .docs-shortcuts-body kbd {
-  font: 500 13px/18px var(--docs-ui-font);
+  font: 600 13px/18px var(--docs-ui-font);
 }
 .docs-shortcuts-empty {
   color: var(--docs-muted);
@@ -412,9 +411,9 @@
   align-items: center;
   padding: 12px 10px 12px 14px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 9999px;
   background: var(--docs-menu-bg);
-  box-shadow: 0 2px 6px 2px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--elev-sm);
   color: var(--docs-text);
   font: 400 14px/20px var(--docs-ui-font);
   white-space: nowrap;
@@ -436,7 +435,7 @@
   gap: 8px;
   width: 132px;
   padding: 4px 8px 12px;
-  border-radius: 8px;
+  border-radius: 16px;
   background: var(--docs-menu-bg);
   box-shadow: var(--docs-menu-shadow);
   color: var(--docs-text);
@@ -455,9 +454,8 @@
   max-width: 116px;
   height: 28px;
   padding: 0 4px;
-  border: 1px solid var(--docs-sep);
-  border-radius: 4px;
-  background: transparent;
+  border-radius: 9999px;
+  background: var(--docs-field-bg);
   color: var(--docs-text);
   font: 400 12px/16px var(--docs-ui-font);
 }
@@ -488,10 +486,10 @@
 }
 @keyframes docs-voice-pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(217, 48, 37, 0.45);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--docs-voice-on) 45%, transparent);
   }
   100% {
-    box-shadow: 0 0 0 14px rgba(217, 48, 37, 0);
+    box-shadow: 0 0 0 14px transparent;
   }
 }
 @media (prefers-reduced-motion: reduce) {

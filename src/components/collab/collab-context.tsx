@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext } from "react";
 import { useT } from "@/components/lang-provider";
-import { personOf, type NotebookRole, type Person } from "@/lib/person";
+import { isAssistantAuthor } from "@/lib/docs/assistant-suggestions";
+import { assistantPerson, personOf, type NotebookRole, type Person } from "@/lib/person";
 import type { TierState } from "@/lib/tiers";
 
 // Collaboration state of the open corpus, provided by the workspace and the
@@ -61,14 +62,17 @@ export function useCollab(): CollabState {
   return useContext(CollabContext);
 }
 
-/** The person an account id names. Without sign-in every author is the
-    local reader, named as the history names them. */
+/** The person an author id names: an account, or the assistant (its
+    suggestions' author). Without sign-in every other author is the local
+    reader, named as the history names them. */
 export function useAuthor(): (id: string) => Person | undefined {
   const { authOn, people } = useCollab();
   const t = useT();
   return useCallback(
     (id: string) =>
-      people[id] ?? (authOn ? undefined : personOf({ id, name: t("panes.historyYou"), symbol: "", color: "", picture: "" })),
+      isAssistantAuthor(id)
+        ? assistantPerson(id, t("reader.assistant"))
+        : (people[id] ?? (authOn ? undefined : personOf({ id, name: t("panes.historyYou"), symbol: "", color: "", picture: "" }))),
     [authOn, people, t],
   );
 }

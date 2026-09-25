@@ -51,6 +51,7 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "explain",
     "simplify",
     "assistant-run", // a question or a command about the selection
+    "assistant-command:", // a command chip: assistant-command:shorten, assistant-command:formal
     "read-aloud",
     // the article menu's asks: ask:summarize, ask:key-takeaways, ask:explain-simply
     "ask:",
@@ -68,6 +69,10 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "assistant-task:",
     "assistant-recommended:",
     "assistant-regenerate",
+    // the row under a command's suggestions (SPEC.md §29)
+    "assistant-suggestions:review",
+    "assistant-suggestions:accept-all",
+    "assistant-suggestions:reject-all",
     // the rating of a tool's output: rate:<tool>:up, rate:<tool>:down, rate:<tool>:comment
     "rate:",
     // extract (distill) runs

@@ -122,6 +122,16 @@ const en = {
   // Plan (SPEC.md §7, This page scope)
   proposedActions: "Proposed {n} action{s}",
   reviewPlan: "Review in the plan card",
+  // The assistant's suggestions (SPEC.md §29): the row under a command's turn
+  suggestWriting: "Writing suggestions…",
+  suggestReview: "Review",
+  suggestReviewTitle: "Step through this command's suggestions",
+  suggestAcceptAllTitle: "Accept every suggestion of this command",
+  suggestRejectAllTitle: "Reject every suggestion of this command",
+  suggestSkipped: "{n} skipped",
+  suggestSkippedTitle: "Why these changes did not land",
+  suggestFailedStatus: "The suggestions failed ({status})",
+  suggestNoPage: "The document is not open.",
 
   // Errors
   emptyResponse: "The model returned an empty response. Try again.",
@@ -230,6 +240,15 @@ const zh: Record<keyof typeof en, string> = {
   historyAnchorOrphaned: "高亮文本已不在文档中",
   proposedActions: "已提议 {n} 个操作",
   reviewPlan: "在计划卡片中查看",
+  suggestWriting: "正在写建议…",
+  suggestReview: "审阅",
+  suggestReviewTitle: "逐条查看这条指令的建议",
+  suggestAcceptAllTitle: "接受这条指令的所有建议",
+  suggestRejectAllTitle: "拒绝这条指令的所有建议",
+  suggestSkipped: "跳过 {n} 处",
+  suggestSkippedTitle: "这些修改为什么没有写入",
+  suggestFailedStatus: "建议失败（{status}）",
+  suggestNoPage: "文档没有打开。",
   emptyResponse: "模型返回了空响应。请重试。",
   requestFailedStatus: "请求失败（{status}）",
   assistantFailed: "助手请求失败",

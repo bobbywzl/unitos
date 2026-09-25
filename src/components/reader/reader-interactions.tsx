@@ -1,5 +1,6 @@
 "use client";
 
+import type { Editor } from "@tiptap/core";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
@@ -136,7 +137,15 @@ import { CardColumn, CommentCard } from "@/components/docs/layer/comment-card";
 import { setCommentResolved } from "@/lib/annotations/resolve";
 import { COMMENTS_EVENT, flashInPage, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
-import { DOCS_EVENT } from "@/components/docs/typing/events";
+import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
+import { assistantAuthor, type ResolvedOp, type SuggestEvent, type SuggestResult } from "@/lib/docs/assistant-suggestions";
+import { readNdjson } from "@/lib/ndjson";
+import {
+  publishSuggestRun,
+  SUGGEST_EVENT,
+  SuggestionRow,
+  type SuggestRequest,
+} from "@/components/assistant/suggestion-row";
 import {
   belowSlot,
   marginPlace,
@@ -429,6 +438,19 @@ const ACTION_LABEL_KEY: Record<AssistantAction["type"], TKey> = {
   format_block: "reader.actionFormat",
   style: "reader.actionStyle",
 };
+
+// The assistant's commands on selected words (SPEC.md §29), in the chips'
+// order: the name the act route takes, and the chip's label.
+const SUGGEST_COMMANDS = [
+  { name: "rephrase", key: "reader.commandRephrase" },
+  { name: "shorten", key: "reader.commandShorten" },
+  { name: "elaborate", key: "reader.commandElaborate" },
+  { name: "formal", key: "reader.commandFormal" },
+  { name: "casual", key: "reader.commandCasual" },
+  { name: "bulleted", key: "reader.commandBulleted" },
+  { name: "fix", key: "reader.commandFix" },
+] as const satisfies readonly { name: string; key: TKey }[];
+type SuggestCommand = (typeof SUGGEST_COMMANDS)[number];
 // A tool's output continued into a conversation — Explain+, Simplify+,
 // Analyze+, Visualize+ (SPEC.md §21). Continue opens the box; the turns
 // persist on the tool's annotation (Note.conversation) and reopen with it.
@@ -458,7 +480,9 @@ type ExplainBubble = ToolChat & {
   noteId: string | null; // the persisted annotation; Delete removes it and its mark
 };
 
-type ChatMessage = ChatTurn;
+// suggestKey: an answer that landed suggestions in the text (SPEC.md §29);
+// its row reads the run by this key.
+type ChatMessage = ChatTurn & { suggestKey?: string };
 
 // The log card (SPEC.md §21): hovering a mark whose annotation holds a
 // conversation shows the conversation's condensed log where the card would
@@ -502,6 +526,8 @@ type AssistantChat = {
   messages: ChatMessage[];
   input: string;
   busy: boolean;
+  // A command chip runs (SPEC.md §29): the thinking line says so.
+  writing?: boolean;
   // Side chats off a quote of an answer (SPEC.md §7): each one its own
   // conversation, kept with this one and out of assistant history. openKey =
   // the side chat on screen; quote = the words the next message carries.
@@ -518,6 +544,28 @@ type ReaderSideChat = {
   quote: string;
   messages: ChatMessage[];
 };
+
+// One command's run of the assistant's suggestions (SPEC.md §29), as this
+// reader holds it: the suggestions it landed, the reasons for the changes
+// it skipped, the notes for the run (a failed window, a cap), its stream.
+type SuggestionRun = {
+  ids: string[];
+  count: number;
+  skipped: string[];
+  notes: string[];
+  summary: string;
+  running: boolean;
+  controller: AbortController | null;
+};
+
+// The page editor's suggestion code, loaded with the first command: the
+// reader loads for every document, this code only for a blank document.
+const suggestCode = () =>
+  import("@/components/docs/ext/suggest").then((ext) => ({
+    readSuggestions: ext.readSuggestions,
+    settleSuggestions: (editor: Editor, accept: boolean, ids: string[]) => ids.forEach((id) => ext.settleSuggestions(editor, accept, id)),
+    applyAssistantOps: (editor: Editor, ops: ResolvedOp[], author: string): { ids: string[]; skipped: string[] } => ({ ids: [], skipped: ops.map((op) => `${author}: ${op.op}`) }),
+  }));
 
 // The picture a stored visualization's markdown points at, and its caption
 // (SPEC.md §20): the card's Open button shows them in the viewer.
@@ -2167,13 +2215,30 @@ export function ReaderInteractions({
         setCommentDraft("");
       });
     };
-    // The page editor's right-click menu: Add to notes, Explain, and Ask the
-    // assistant open the same tools on the selection as this toolbar does.
+    // The page editor's right-click menu and Search the menus: Add to notes,
+    // Explain, and Ask the assistant open the same tools on the selection as
+    // this toolbar does, and an assistant's command runs on it (SPEC.md §29).
+    // With no selection, the assistant takes the caret's paragraph.
     const onTool = (e: Event) => {
-      const tool = (e as CustomEvent<{ tool: "add-to-notes" | "explain" | "assistant" }>).detail.tool;
-      const captured = captureSelection();
+      const { tool, command } = (
+        e as CustomEvent<{ tool: "add-to-notes" | "explain" | "assistant"; command?: string }>
+      ).detail;
+      const editor = pageEditorIn(container);
+      // A menu that took the focus gives the page its selection back first.
+      if (editor && !editor.view.hasFocus()) editor.view.focus();
+      let captured = captureSelection();
+      const caret = editor?.state.selection.$from;
+      if (!captured && tool === "assistant" && editor && caret?.parent.isTextblock) {
+        editor.commands.setTextSelection({ from: caret.start(), to: caret.end() });
+        captured = captureSelection();
+      }
       if (!captured) {
         showToast(t("docsLayer.selectWordsFirst"));
+        return;
+      }
+      const chip = SUGGEST_COMMANDS.find((c) => c.name === command);
+      if (chip) {
+        void runSuggestCommandRef.current(chip, captured);
         return;
       }
       popoverRef.current = captured;
@@ -4534,7 +4599,7 @@ export function ReaderInteractions({
     chatAbortRef.current?.abort();
     chatAbortRef.current = null;
     setAiBusy(false);
-    setAssistantChat((c) => (c ? { ...c, busy: false } : c));
+    setAssistantChat((c) => (c ? { ...c, busy: false, writing: false } : c));
   }
 
   // When the comment field closes, the page editor takes the focus back with
@@ -4785,7 +4850,7 @@ export function ReaderInteractions({
         ...slot,
         messages: [
           { role: "user", content: command },
-          { role: "assistant", content: turn.reply },
+          { role: "assistant", content: turn.reply, suggestKey: turn.suggestKey },
         ],
         input: "",
         busy: false,
@@ -4799,6 +4864,57 @@ export function ReaderInteractions({
       setAiBusy(false);
     }
   }
+
+  // A command chip (SPEC.md §29): the chat card opens beside the words at
+  // once, the command as the reader's message, and the suggestions land
+  // when the answer comes. The page keeps its selection.
+  async function runSuggestCommand(command: SuggestCommand, target: Popover | null = popover) {
+    if (!target || aiBusy) return;
+    const { anchor, yTop } = target;
+    const label = t(command.key);
+    setPopover(null);
+    setSubmenu(null);
+    markFreshAnchor(anchor);
+    const slot = claimSideSlot("assistant", yTop);
+    setAssistantChat({
+      anchor,
+      noteId: null,
+      ...slot,
+      messages: [{ role: "user", content: label }],
+      input: "",
+      busy: true,
+      writing: true,
+    });
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
+    try {
+      await flushLiveBlock(anchor.blockId);
+      const turn = await assistantTurn(label, anchor, [], null, controller.signal, undefined, undefined, command.name);
+      if (turn.noteId) addLocalAnchor(anchor);
+      setAssistantChat((c) =>
+        c
+          ? {
+              ...c,
+              busy: false,
+              writing: false,
+              noteId: turn.noteId,
+              messages: [...c.messages, { role: "assistant", content: turn.reply, suggestKey: turn.suggestKey }],
+            }
+          : c,
+      );
+    } catch (err) {
+      // Stopped, not failed: the command stays, no reply lands.
+      if (controller.signal.aborted) return;
+      const message = err instanceof Error ? err.message : t("reader.assistantFailed");
+      setAssistantChat((c) =>
+        c ? { ...c, busy: false, writing: false, messages: [...c.messages, { role: "assistant", content: message }] } : c,
+      );
+    } finally {
+      if (chatAbortRef.current === controller) chatAbortRef.current = null;
+    }
+  }
+  const runSuggestCommandRef = useRef(runSuggestCommand);
+  runSuggestCommandRef.current = runSuggestCommand;
 
   // One assistant turn: command + history → reply text. Plans route through the
   // plan card, and the chat narrates it.
@@ -4814,7 +4930,9 @@ export function ReaderInteractions({
     // A side chat (SPEC.md §7): the conversation it branched from and the
     // quote it started on. Its turns persist on a note of its own.
     sideChat?: { of: string; quote: string },
-  ): Promise<{ reply: string; noteId: string | null }> {
+    // A command chip (SPEC.md §29): the act route runs it with no chat model.
+    suggestCommand?: SuggestCommand["name"],
+  ): Promise<{ reply: string; noteId: string | null; suggestKey?: string }> {
     const res = await fetch("/api/assistant/act", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -4825,17 +4943,18 @@ export function ReaderInteractions({
         command,
         anchor: anchor && !toolNoteId ? anchorBody(anchor) : undefined,
         ...(anchor && !toolNoteId ? segmentsBody(anchor) : {}),
-        history: history.slice(-12),
+        history: history.slice(-12).map(({ role, content }) => ({ role, content })),
         conversationNoteId: conversationNoteId ?? undefined,
         toolNoteId,
         sideChatOf: sideChat?.of,
         sideChatQuote: sideChat?.quote,
+        suggestCommand,
         thinking,
         web,
       }),
     });
     const plan = (await res.json().catch(() => null)) as
-      | (AssistantPlan & { error?: string })
+      | (AssistantPlan & { suggestions?: SuggestResult; error?: string })
       | null;
     if (!res.ok || !plan)
       throw new Error(plan?.error ?? t("reader.assistantFailedStatus", { status: res.status }));
@@ -4848,11 +4967,187 @@ export function ReaderInteractions({
       setPlanChecked(new Set(plan.actions.map((_, i) => i)));
       parts.push(t("reader.proposedActions", { n, s: plural(n) }));
     }
-    if (parts.length === 0) parts.push(plan.warnings[0] ?? t("reader.noActions"));
+    // The assistant's suggestions land in the text: pending by construction
+    // until an editor accepts them.
+    const suggestKey = plan.suggestions ? await landSuggestions(plan.suggestions) : undefined;
+    if (parts.length === 0) parts.push(plan.suggestions?.summary || (plan.warnings[0] ?? t("reader.noActions")));
     // The anchored conversation persisted server-side; refresh paints its mark.
     if (plan.conversationNoteId) router.refresh();
-    return { reply: parts.join("\n\n"), noteId: plan.conversationNoteId ?? null };
+    return { reply: parts.join("\n\n"), noteId: plan.conversationNoteId ?? null, suggestKey };
   }
+
+  // The assistant's suggestions (SPEC.md §29): every command's run, by key.
+  // The rows under its turn (suggestion-row.tsx) read what publishRun gives
+  // them; the count follows the text as anyone accepts or rejects one.
+  const suggestRunsRef = useRef(new Map<string, SuggestionRun>());
+  const suggestWatchRef = useRef<{ editor: Editor; off: () => void } | null>(null);
+  // Once this reader closes, its runs keep their count and lose their buttons.
+  const readerClosedRef = useRef(false);
+
+  function publishRun(key: string) {
+    const run = suggestRunsRef.current.get(key);
+    if (!run) return;
+    publishSuggestRun(key, {
+      running: run.running,
+      count: run.count,
+      skipped: [...run.skipped],
+      notes: [...run.notes],
+      summary: run.summary,
+      act: readerClosedRef.current
+        ? undefined
+        : { stop: () => run.controller?.abort(), review: () => reviewRun(run), settle: (accept) => void settleRun(run, accept) },
+    });
+  }
+
+  function startRun(key: string, controller: AbortController | null): SuggestionRun {
+    const run: SuggestionRun = { ids: [], count: 0, skipped: [], notes: [], summary: "", running: true, controller };
+    suggestRunsRef.current.set(key, run);
+    publishRun(key);
+    return run;
+  }
+
+  // Ops land as the assistant's suggestions, authored for this reader. Viewing
+  // mode hides suggestions: the page switches to Editing first.
+  async function landOps(key: string, ops: ResolvedOp[], warnings: string[]) {
+    const run = suggestRunsRef.current.get(key);
+    const editor = pageEditorIn(containerRef.current);
+    if (!run || !editor) return;
+    run.skipped.push(...warnings);
+    if (ops.length > 0) {
+      const code = await suggestCode();
+      if (editor.isDestroyed) return;
+      if (!editor.isEditable) fireDocs(editor, DOCS_EVENT.mode, "editing");
+      const landed = code.applyAssistantOps(editor, ops, assistantAuthor(myId));
+      run.ids.push(...landed.ids);
+      run.skipped.push(...landed.skipped);
+      watchRuns(editor, code.readSuggestions);
+      run.count = countRun(run, code.readSuggestions(editor.state.doc));
+    }
+    publishRun(key);
+  }
+
+  // One answer's suggestions from the act route (a chip, or a typed command
+  // the assistant turned into suggestions).
+  async function landSuggestions(result: SuggestResult): Promise<string> {
+    const key = queuedKey();
+    const run = startRun(key, null);
+    run.summary = result.summary;
+    await landOps(key, result.ops, result.warnings);
+    run.running = false;
+    publishRun(key);
+    return key;
+  }
+
+  function countRun(run: SuggestionRun, present: readonly { id: string }[]): number {
+    const ids = new Set(present.map((s) => s.id));
+    return run.ids.filter((id) => ids.has(id)).length;
+  }
+
+  // While runs are held, every change of the text recounts them.
+  function watchRuns(editor: Editor, read: (doc: Editor["state"]["doc"]) => readonly { id: string }[]) {
+    if (suggestWatchRef.current?.editor === editor) return;
+    suggestWatchRef.current?.off();
+    const onTransaction = ({ transaction }: { transaction: { docChanged: boolean } }) => {
+      if (!transaction.docChanged) return;
+      const present = read(editor.state.doc);
+      for (const [key, run] of suggestRunsRef.current) {
+        const count = countRun(run, present);
+        if (count === run.count) continue;
+        run.count = count;
+        publishRun(key);
+      }
+    };
+    editor.on("transaction", onTransaction);
+    suggestWatchRef.current = { editor, off: () => editor.off("transaction", onTransaction) };
+  }
+
+  // Review suggested edits over this command's suggestions, the first one selected.
+  function reviewRun(run: SuggestionRun) {
+    pageEditorIn(containerRef.current)?.view.dom.dispatchEvent(
+      new CustomEvent("docs:review-suggestions", { detail: { ids: run.ids } }),
+    );
+  }
+
+  // Accept all or Reject all of this command: one undo step.
+  async function settleRun(run: SuggestionRun, accept: boolean) {
+    const editor = pageEditorIn(containerRef.current);
+    if (!editor) return;
+    const { settleSuggestions } = await suggestCode();
+    settleSuggestions(editor, accept, run.ids);
+  }
+
+  // The panel's command over this document (SPEC.md §29): the suggest route
+  // answers one window at a time, and each window's ops land as it arrives.
+  // Stop keeps what landed; another document opening stops the run.
+  async function suggestDocument(request: SuggestRequest) {
+    const controller = new AbortController();
+    const run = startRun(request.key, controller);
+    try {
+      await flushEditRef.current?.();
+      const caret = pageEditorIn(containerRef.current)?.state.selection.$from.parent.attrs.blockId;
+      const res = await fetch(`/api/documents/${documentId}/suggest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          notebookId,
+          command: request.command,
+          instruction: request.instruction,
+          blockIds: request.blockIds,
+          caretBlockId: typeof caret === "string" && caret ? caret : undefined,
+          material: request.material,
+          history: request.history,
+          thinking,
+        }),
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(json?.error ?? t("assistant.suggestFailedStatus", { status: res.status }));
+      }
+      for await (const event of readNdjson<SuggestEvent>(res)) {
+        if ("ops" in event) await landOps(request.key, event.ops, event.warnings);
+        else if ("done" in event) {
+          run.summary = event.summary;
+          run.notes.push(...event.warnings);
+        } else if ("error" in event) run.notes.push(event.error);
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) run.notes.push(err instanceof Error ? err.message : t("assistant.suggestFailedStatus", { status: 0 }));
+    } finally {
+      run.running = false;
+      run.controller = null;
+      publishRun(request.key);
+    }
+  }
+  const suggestDocumentRef = useRef(suggestDocument);
+  suggestDocumentRef.current = suggestDocument;
+  useEffect(() => {
+    const onSuggest = (e: Event) => {
+      const request = (e as CustomEvent<SuggestRequest>).detail;
+      if (request.documentId !== documentId || !richTextRef.current) return;
+      // One pane takes the command: a split view may show this document twice.
+      e.stopImmediatePropagation();
+      void suggestDocumentRef.current(request);
+    };
+    window.addEventListener(SUGGEST_EVENT, onSuggest);
+    return () => window.removeEventListener(SUGGEST_EVENT, onSuggest);
+  }, [documentId]);
+  // The reader closes: every run stops, and keeps what landed.
+  useEffect(() => {
+    readerClosedRef.current = false;
+    const runs = suggestRunsRef.current;
+    return () => {
+      readerClosedRef.current = true;
+      suggestWatchRef.current?.off();
+      suggestWatchRef.current = null;
+      for (const [key, run] of runs) {
+        run.controller?.abort();
+        run.running = false;
+        publishRun(key);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // The side chat on screen in the card, and the note the open thread saves
   // on: what a comment is written under.
@@ -5094,7 +5389,7 @@ export function ReaderInteractions({
                 ? {
                     ...s,
                     noteId: turn.noteId ?? s.noteId,
-                    messages: [...s.messages, { role: "assistant", content: turn.reply }],
+                    messages: [...s.messages, { role: "assistant", content: turn.reply, suggestKey: turn.suggestKey }],
                   }
                 : s,
             ),
@@ -5104,7 +5399,7 @@ export function ReaderInteractions({
           ...c,
           busy: false,
           noteId: turn.noteId ?? c.noteId,
-          messages: [...c.messages, { role: "assistant", content: turn.reply }],
+          messages: [...c.messages, { role: "assistant", content: turn.reply, suggestKey: turn.suggestKey }],
         };
       });
     } catch (err) {
@@ -6105,6 +6400,9 @@ function blockFormatKind(
   const popoverNearTop = popover ? (popover.nearTop ?? popover.yTop < 54) : false;
   // One row of the toolbox. Coarse pointers get 44px-tall rows.
   const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
+  // The assistant's command chips (SPEC.md §29): on a blank document, for a
+  // reader who can edit it, out of Viewing mode.
+  const commandChips = popover !== null && blankDocument && pageEditorIn(containerRef.current)?.isEditable === true;
   // The open popover's content kind and its toolbar (SPEC.md §6).
   const popoverKind: ContentKind = contentKindOf(
     popover ? blocks.find((b) => b.id === popover.anchor.blockId)?.type : undefined,
@@ -6970,6 +7268,23 @@ function blockFormatKind(
                 rows={2}
                 className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
+              {commandChips && (
+                <div className="flex flex-wrap gap-1">
+                  {SUGGEST_COMMANDS.map((c) => (
+                    <button
+                      key={c.name}
+                      type="button"
+                      disabled={aiBusy}
+                      onClick={() => void runSuggestCommand(c)}
+                      data-track={`assistant-command:${c.name}`}
+                      data-tip={t("reader.commandTitle")}
+                      className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                    >
+                      {t(c.key)}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-1.5">
                 <ThinkingChips small />
                 <WebChip small />
@@ -7929,6 +8244,7 @@ function blockFormatKind(
                   <div {...{ [ANSWER_MARK]: "" }}>
                     <Markdown>{message.content}</Markdown>
                   </div>
+                  {message.suggestKey && <SuggestionRow runKey={message.suggestKey} />}
                   {/* The rating (SPEC.md §25): the question and the selection
                       it ran on, the answer it gave. */}
                   {!assistantChat.busy && (
@@ -7947,7 +8263,12 @@ function blockFormatKind(
                 </div>
               ),
             )}
-            {assistantChat.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
+            {assistantChat.busy && (
+              <ThinkingIndicator
+                label={assistantChat.writing ? t("assistant.suggestWriting") : undefined}
+                className="py-0.5 text-[12px]"
+              />
+            )}
             <QueuedList items={chatQueueShown(assistantChat)} onRemove={removeQueuedChat} />
           </div>
           {assistantChatFoot(assistantChat, "flex items-end gap-1.5 px-3 pb-3", "px-3 pb-1.5")}

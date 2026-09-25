@@ -235,6 +235,24 @@ export const COLLAPSE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 export const COLLAPSE_MAX_OUTPUT_TOKENS = 32768; // a core per block of the window, with the reasoning before them
 export const COLLAPSE_WINDOW_CHARS = 30_000;
 
+// The assistant's suggestions (SPEC.md §29): the assistant edits a rich text
+// as suggestions an editor accepts or rejects. Claude Sonnet 5, as the voice
+// command: it copies `find` exactly (a misquote is a skipped change) and
+// follows many rules at once at a fifth of Opus 5.5's price, and the
+// document prefix is cached, so every window and every command on the same
+// document reads it from the cache. Deep Thinking at "high", Fast Thinking
+// at "low". A whole document runs one call per window of the scope's text,
+// SUGGEST_PARALLEL at once.
+export const SUGGEST_MODEL = CLAUDE_SONNET_5;
+export const SUGGEST_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
+export const SUGGEST_MAX_OUTPUT_TOKENS = 32768; // room for the reasoning and the ops
+export const SUGGEST_MAX_OPS = 80; // per call: a window's worth; more is a model running away
+export const SUGGEST_WINDOW_CHARS = 8_000; // a window's full rewrite is about 2,500 output tokens: under a minute
+export const SUGGEST_MAX_WINDOWS = 12; // per command, about 16,000 words; past it the reader selects words or names a section
+export const SUGGEST_PARALLEL = 4; // windows at once: the gateway's rate limits
+export const SUGGEST_MAX_NEW_CHARS = 100_000; // new text per command, across its windows
+export const SUGGEST_DEADLINE_MS = 270_000; // the route allows 300 s; windows not started by then are reported
+
 // The merge of notes (SPEC.md §6): the reader drops a note on another and
 // picks Merge with AI, and the model writes the one note that replaces both.
 // It rewrites the reader's own words, so it reasons at the reader's effort.

@@ -27,6 +27,7 @@ import {
   transformToSuggestionTransaction,
 } from "@handlewithcare/prosemirror-suggest-changes";
 import { isList, isListItem } from "@/components/docs/typing/lists";
+import { isAssistantAuthor } from "@/lib/docs/assistant-suggestions";
 import { SUGGESTION_MARK_TYPES, suggestionAuthor, ZWSP } from "@/lib/docs/schema";
 
 // Suggesting mode (SPEC.md §29), on @handlewithcare/prosemirror-suggest-changes.
@@ -260,7 +261,7 @@ export function setSuggesting(editor: Editor, author: string | null): void {
 let lastTime = 0;
 /** A new suggestion's id: "<account id>.<ms>", a millisecond past the last
     id this page made. */
-const newId = (author: string) => `${author}.${(lastTime = Math.max(Date.now(), lastTime + 1))}`;
+export const newId = (author: string) => `${author}.${(lastTime = Math.max(Date.now(), lastTime + 1))}`;
 
 const EACH = "docsSuggestEach";
 /** Each step of `tr` becomes a suggestion of its own (Replace all). */
@@ -387,16 +388,24 @@ function touched(tr: Transaction): [number, number][] {
     one person's words to the other. Words that had a suggestion keep its
     id; words new to one take this author's: the one right beside the
     change, as the text stood before it (Backspace pressed again), else a
-    new one. */
+    new one. The assistant's words always take the new one, and the words
+    beside them keep theirs: each op is a suggestion of its own. */
 function keepAuthors(tr: Transaction, before: PMNode, author: string, id: string): void {
+  const apart = isAssistantAuthor(author);
   const back = tr.mapping.invert();
   const fixes: { from: number; to: number; old: PMMark; mark: PMMark; block: boolean }[] = [];
   const check = (from: number, to: number, mark: PMMark, block: boolean, beside: PMMark[] = []) => {
     const origin = back.mapResult(from, 1);
     const was = origin.deletedAfter ? undefined : before.nodeAt(origin.pos)?.marks.find((m) => m.type === mark.type);
     const markAuthor = suggestionAuthor(mark.attrs.id);
-    const own = beside.find((m) => m.type === mark.type && suggestionAuthor(m.attrs.id) === author);
-    const want = was ? (suggestionAuthor(was.attrs.id) === markAuthor ? mark.attrs.id : was.attrs.id) : markAuthor === author ? mark.attrs.id : (own?.attrs.id ?? id);
+    const own = apart ? undefined : beside.find((m) => m.type === mark.type && suggestionAuthor(m.attrs.id) === author);
+    const want = was
+      ? suggestionAuthor(was.attrs.id) === markAuthor && !apart
+        ? mark.attrs.id
+        : was.attrs.id
+      : markAuthor === author && !apart
+        ? mark.attrs.id
+        : (own?.attrs.id ?? id);
     if (want === mark.attrs.id) return;
     const last = fixes.at(-1);
     if (last && !block && last.to === from && last.old.eq(mark) && last.mark.attrs.id === want) last.to = to;
@@ -685,8 +694,10 @@ function replaceListChanges(tr: Transaction, state: EditorState, author: string,
   return { tr: carry(out, tr), seen };
 }
 
-function suggest(edit: Transaction, state: EditorState, author: string): Transaction {
-  const id = newId(author);
+/** `edit` made on `state` as the author's suggestion: the transaction that
+    tracks it in place of it. The assistant's ops come here too
+    (suggest/assistant.ts), each under the id they give. */
+export function suggest(edit: Transaction, state: EditorState, author: string, id = newId(author)): Transaction {
   if (edit.steps.every(isFormatStep)) return dropIdChanges(suggestFormat(edit, state, id));
   const each = edit.getMeta(EACH) === true;
   const tr = edit.steps.length > 1 && !each ? caseChange(edit, state) : edit;
@@ -718,7 +729,7 @@ function suggest(edit: Transaction, state: EditorState, author: string): Transac
 
 /** The zero-width spaces the library puts at a paragraph's edge to hold a
     suggested break, left behind once their suggestion is settled. */
-function dropStrays(tr: Transaction): void {
+function dropStrays(tr: Transform): void {
   const strays: number[] = [];
   const plain = (node: PMNode) => !node.marks.some(isWordMark);
   tr.doc.descendants((node, pos) => {
@@ -733,15 +744,14 @@ function dropStrays(tr: Transaction): void {
   for (const at of strays.reverse()) tr.delete(at, at + 1);
 }
 
-/** Accept or reject one suggestion, or every one (no id), as one undo step.
-    The library applies or reverts the words added and removed; format
-    changes are settled here, since the library takes every modification
-    for a block's and settles all of them whatever their id. The other
+/** Accept or reject these suggestions, or every one (no ids), on `tr`. The
+    library applies or reverts the words added and removed; format changes
+    are settled here, since the library takes every modification for a
+    block's and settles all of them whatever their id. The other
     suggestions' modifications stand aside while it runs. */
-export function settleSuggestions(editor: Editor, accept: boolean, id?: string): void {
-  const { state } = editor;
-  const { schema } = state;
-  const tr = state.tr;
+export function settle(tr: Transform, accept: boolean, ids?: ReadonlySet<string>): void {
+  const { doc } = tr;
+  const { schema } = doc.type;
   const markOf = (json: unknown) => {
     try {
       return json ? schema.markFromJSON(json) : null;
@@ -750,10 +760,10 @@ export function settleSuggestions(editor: Editor, accept: boolean, id?: string):
     }
   };
   const aside: { pos: number; to: number; mark: PMMark; inline: boolean }[] = [];
-  state.doc.descendants((node, pos) => {
+  doc.descendants((node, pos) => {
     const mods = node.marks.filter(isModification);
     if (mods.length === 0) return true;
-    const settled = (mod: PMMark) => id === undefined || String(mod.attrs.id) === id;
+    const settled = (mod: PMMark) => ids === undefined || ids.has(String(mod.attrs.id));
     if (node.isInline) {
       const to = pos + node.nodeSize;
       for (const mod of mods) {
@@ -783,8 +793,8 @@ export function settleSuggestions(editor: Editor, accept: boolean, id?: string):
   const end = tr.doc.content.size;
   tr.insert(end, schema.nodes.paragraph.create());
   const start = tr.steps.length;
-  const run = id === undefined ? (accept ? applySuggestions : revertSuggestions) : accept ? applySuggestion(id) : revertSuggestion(id);
-  run(EditorState.create({ doc: tr.doc }), (library) => library.steps.forEach((step) => tr.step(step)));
+  const runs = ids === undefined ? [accept ? applySuggestions : revertSuggestions] : [...ids].map((id) => (accept ? applySuggestion(id) : revertSuggestion(id)));
+  for (const run of runs) run(EditorState.create({ doc: tr.doc }), (library) => library.steps.forEach((step) => tr.step(step)));
   const map = tr.mapping.slice(start);
   if (tr.doc.childCount > 1) tr.delete(map.map(end), tr.doc.content.size);
   for (const { pos, to, mark, inline } of aside) {
@@ -798,6 +808,13 @@ export function settleSuggestions(editor: Editor, accept: boolean, id?: string):
     }
   }
   dropStrays(tr);
+}
+
+/** Accept or reject a suggestion, some, or every one (no ids), as one undo
+    step. */
+export function settleSuggestions(editor: Editor, accept: boolean, ids?: string | readonly string[]): void {
+  const tr = editor.state.tr;
+  settle(tr, accept, ids === undefined ? undefined : new Set(typeof ids === "string" ? [ids] : ids));
   editor.view.dispatch(tr.setMeta(suggestChangesKey, { skip: true }));
 }
 

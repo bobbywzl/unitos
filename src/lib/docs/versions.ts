@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { db } from "@/lib/db";
 import { deriveBlocks } from "@/lib/docs/blocks";
 import type { RichNode } from "@/lib/docs/schema";
 
@@ -7,9 +8,37 @@ import type { RichNode } from "@/lib/docs/schema";
 const SITTING_MS = 10 * 60 * 1000;
 const STEADY_MS = 30 * 60 * 1000;
 
+export const VERSION_FIELDS = { id: true, rev: true, savedAt: true, userId: true, name: true } as const;
+
 /** No words, no image, no line. */
-export function isEmptyRichText(doc: RichNode): boolean {
+function isEmptyRichText(doc: RichNode): boolean {
   return !deriveBlocks(doc).some((b) => b.text.trim() || b.type === "FIGURE" || b.type === "SEPARATOR");
+}
+
+/** Keep the live text as a version at once (Name current version, Restore
+    this version, a command of the assistant's suggestions over the whole
+    document): the version of its revision, named when a name is given.
+    Null when the document has no rich text; "empty" when it has no words. */
+export async function keepCurrentVersion(documentId: string, name: string | null) {
+  const document = await db.document.findUnique({
+    where: { id: documentId },
+    select: { richText: true, richTextRev: true, richTextSavedAt: true, richTextSavedBy: true },
+  });
+  if (!document?.richText) return null;
+  if (isEmptyRichText(document.richText as unknown as RichNode)) return "empty" as const;
+  return db.documentVersion.upsert({
+    where: { documentId_rev: { documentId, rev: document.richTextRev } },
+    create: {
+      documentId,
+      rev: document.richTextRev,
+      richText: document.richText as Prisma.InputJsonValue,
+      userId: document.richTextSavedBy,
+      name,
+      savedAt: document.richTextSavedAt ?? new Date(),
+    },
+    update: name ? { name } : {},
+    select: VERSION_FIELDS,
+  });
 }
 
 /** In a save's transaction, under the document's lock, before the save: keep

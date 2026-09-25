@@ -3,11 +3,8 @@
    suggestion whose card is open takes a stronger tint (--docs-suggest-tint). */
 
 :root {
-  /* Google Docs' Suggesting pill: on the primary container (--docs-tb-container). */
-  --docs-suggesting-fg: #0842a0;
-}
-.dark {
-  --docs-suggesting-fg: #d3e3fd;
+  /* The Suggesting pill sits on the on color (--docs-tb-container), as in Docs. */
+  --docs-suggesting-fg: var(--clay-800);
 }
 
 .docs-prose [data-suggestion] {
@@ -90,14 +87,11 @@
   background: color-mix(in srgb, var(--docs-suggesting-fg) 10%, var(--docs-tb-container));
 }
 .docs-menu-modes [data-track="docs:mode:suggesting"][aria-checked="true"] .docs-mode-label {
-  color: #146c2e;
-}
-.dark .docs-menu-modes [data-track="docs:mode:suggesting"][aria-checked="true"] .docs-mode-label {
-  color: #6dd58c;
+  color: var(--sage-700);
 }
 
 /* A suggestion's card (suggest/card.tsx): the comment card's look. The
-   active card is white and lifted (css/layer.css, the card in use), with
+   active card is lifted (css/layer.css, the card in use), with
    Accept and Reject in view; the others are one line (.docs-card-line). */
 .docs-suggest-what {
   overflow-wrap: anywhere;
@@ -114,7 +108,7 @@
   gap: 12px;
   min-width: 260px;
   padding: 12px 12px 12px 16px;
-  border-radius: 12px;
+  border-radius: 20px;
   background: var(--docs-menu-bg);
   box-shadow: var(--docs-menu-shadow);
   color: var(--docs-text);
@@ -127,7 +121,7 @@
 }
 .docs-suggest-review-count {
   flex: 1;
-  font-weight: 500;
+  font-weight: 600;
 }
 .docs-suggest-review .docs-comment-button:disabled {
   opacity: 0.38;

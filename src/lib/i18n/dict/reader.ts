@@ -62,6 +62,16 @@ const en = {
   runTitle: "Send the command to the assistant (Enter)",
   sendTitle: "Send the message (Enter)",
   stopRunTitle: "Stop the run. What arrived so far stays.",
+  // The assistant's commands (SPEC.md §29): a chip writes its change into
+  // the text as suggestions
+  commandRephrase: "Rephrase",
+  commandShorten: "Shorten",
+  commandElaborate: "Elaborate",
+  commandFormal: "Make more formal",
+  commandCasual: "Make more casual",
+  commandBulleted: "Turn into a bulleted list",
+  commandFix: "Fix spelling and grammar",
+  commandTitle: "The assistant writes this change into the text as suggestions. Accept or reject each one.",
   // Contents (SPEC.md §26): the article's parts, each a jump to where it
   // starts. Two clicks make them: Contents opens the list, Generate
   // contents runs the model call.
@@ -325,6 +335,14 @@ const zh: Record<keyof typeof en, string> = {
   runTitle: "把指令发给助手（Enter）",
   sendTitle: "发送消息（Enter）",
   stopRunTitle: "停止运行。已到达的内容保留。",
+  commandRephrase: "改写",
+  commandShorten: "缩短",
+  commandElaborate: "扩写",
+  commandFormal: "改得更正式",
+  commandCasual: "改得更随意",
+  commandBulleted: "转为项目符号列表",
+  commandFix: "修正拼写和语法",
+  commandTitle: "助手把这处修改以建议的形式写进文中。逐条接受或拒绝。",
   contents: "目录",
   contentsTitle: "文章的目录：各个部分，每一项跳转到它开始的位置。",
   contentsAsk: "生成目录？AI 阅读文章，写出各个部分，每一项跳转到它开始的位置。",

@@ -6,60 +6,52 @@
 @import "./css/versions.css";
 @import "./css/suggest.css";
 
-/* The page editor (SPEC.md §29): Google Docs' look, loaded with the editor
-   (docs-editor.tsx). Every color the shell uses is a --docs-* token, set for
-   light and dark; the frame's own (the canvas, the page, the text, the
-   icons, the UI font) are in frame.css, which loads with the reader. */
+/* The page editor (SPEC.md §29): Google Docs' layout in Unitos's look,
+   loaded with the editor (docs-editor.tsx). Every color the shell uses is a
+   --docs-* token set from Unitos's variables (globals.css), which flip under
+   .dark by themselves; the .dark block holds only the document's own colors.
+   The frame's tokens (the canvas, the page, the text, the icons, the faces)
+   are in frame.css, which loads with the reader. */
 
 :root {
   --docs-ink: #000000;
-  --docs-toolbar: #edf2fa;
-  --docs-muted: #5e5e5e;
-  --docs-hover: rgba(68, 71, 70, 0.08);
-  --docs-on-bg: #d3e3fd;
-  --docs-on-fg: #0b57d0;
-  --docs-blue: #0b57d0;
-  --docs-sep: #c7c7c7;
-  --docs-menu-bg: #ffffff;
-  --docs-menu-shadow: 0 2px 6px 2px rgba(60, 64, 67, 0.15), 0 1px 2px 0 rgba(60, 64, 67, 0.3);
-  /* Google Docs' selection: #4e8ff8 at half strength over the white page. */
-  --docs-selection: #a7c7fc;
+  --docs-toolbar: var(--docs-field-bg);
+  --docs-muted: var(--sand-600);
+  --docs-hover: var(--clay-100);
+  --docs-on-bg: var(--clay-100);
+  --docs-on-fg: var(--clay-800);
+  /* Clay fills and rings; accent words take --docs-accent-text (clay is too
+     light for 14 px words). */
+  --docs-blue: var(--clay);
+  --docs-accent-text: var(--clay-700);
+  --docs-sep: var(--line);
+  --docs-menu-bg: var(--card);
+  --docs-menu-shadow: var(--elev-lg);
+  --docs-selection: var(--selection-bg);
   --docs-link: #1155cc;
-  --docs-placeholder: #70757a;
+  --docs-placeholder: var(--sand-600);
   /* Docs' dark gray 3 and dark gray 2: Heading 3; Heading 4–6, the Subtitle. */
   --docs-gray-3: #434343;
   --docs-gray-2: #666666;
-  --docs-code-block: #f1f3f4;
+  --docs-code-block: color-mix(in srgb, var(--ink) 6%, transparent);
   --docs-grid: #000000;
+  --docs-field-bg: var(--sand-100);
 }
 /* The "@" menu's "Search menu" is a shade lighter than the empty line's hint. */
 .docs-at-placeholder {
-  --docs-placeholder: #80868b;
+  --docs-placeholder: var(--sand-500);
 }
 
+/* The page is a card in a dark room: the document's black reads as ink, its
+   grays as sand, its grid as a sand line; a field fills with sand-200, since
+   sand-100 is the card's own color there. */
 .dark {
-  --docs-ink: #e8e8e8;
-  --docs-toolbar: #2d2f31;
-  --docs-muted: #a8a8a8;
-  --docs-hover: rgba(227, 227, 227, 0.08);
-  --docs-on-bg: #004a77;
-  --docs-on-fg: #c2e7ff;
-  --docs-blue: #a8c7fa;
-  --docs-sep: #5f6368;
-  --docs-menu-bg: #2d2f31;
-  --docs-selection: #3b5a8c;
-  --docs-link: #8ab4f8;
-  --docs-placeholder: #80868b;
-  --docs-gray-3: #b0b0b0;
-  --docs-gray-2: #b0b0b0;
-  --docs-code-block: #303134;
-  --docs-grid: #8a8a8a;
-}
-
-/* The reader pane's paper fade at its foot belongs to articles: a page on
-   the gray canvas runs to the pane's edge, as in Google Docs. */
-div:has([data-docs-editor]) > .reader-fade {
-  display: none;
+  --docs-ink: var(--ink);
+  --docs-link: var(--weblink);
+  --docs-gray-3: var(--sand-700);
+  --docs-gray-2: var(--sand-600);
+  --docs-grid: var(--sand-500);
+  --docs-field-bg: var(--sand-200);
 }
 
 /* The header, the title row, the toolbar's bar, and the canvas: frame.css.
@@ -137,7 +129,7 @@ div:has([data-docs-editor]) > .reader-fade {
 .docs-prose pre {
   margin: 6pt 0;
   padding: 8pt 10pt;
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--docs-code-block);
   font-family: "Roboto Mono", "Courier New", monospace;
   font-size: 10pt;
@@ -147,7 +139,7 @@ div:has([data-docs-editor]) > .reader-fade {
 .docs-prose blockquote {
   margin: 0 0 0 36pt;
   padding-left: 12pt;
-  border-left: 3px solid #dadce0;
+  border-left: 3px solid var(--sand-300);
 }
 .docs-prose hr {
   margin: 6pt 0;
@@ -218,7 +210,7 @@ div:has([data-docs-editor]) > .reader-fade {
 /* The ticked line only: a line nested under it keeps its own tick. */
 .docs-prose ul[data-type="taskList"] li[data-checked="true"] > div > p {
   text-decoration: line-through;
-  color: #666666;
+  color: var(--docs-gray-2);
 }
 
 /* Tables: a one-point black grid, five points inside each cell. */
@@ -249,7 +241,7 @@ div:has([data-docs-editor]) > .reader-fade {
   content: "";
   position: absolute;
   inset: 0;
-  background: rgba(11, 87, 208, 0.12);
+  background: var(--docs-selection);
   pointer-events: none;
 }
 .docs-prose .column-resize-handle {
@@ -276,7 +268,8 @@ div:has([data-docs-editor]) > .reader-fade {
   outline: 2px solid var(--docs-blue);
 }
 
-/* ── Fields and buttons ────────────────────────────────────────────────── */
+/* ── Fields and buttons: Unitos's filled pill fields (a text area rounds at
+   12 px) and its clay pill button ─────────────────────────────────────── */
 .docs-field-row {
   display: flex;
   align-items: center;
@@ -295,31 +288,34 @@ div:has([data-docs-editor]) > .reader-fade {
   flex: 1;
   min-width: 0;
   height: 32px;
-  padding: 0 8px;
-  border: 1px solid var(--docs-sep);
-  border-radius: 4px;
-  background: transparent;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: var(--docs-field-bg);
   color: var(--docs-text);
   font: 400 14px/20px var(--docs-ui-font);
   outline: none;
 }
+textarea.docs-field {
+  border-radius: 12px;
+}
 .docs-field:focus {
   border: 2px solid var(--docs-blue);
-  padding: 0 7px;
+  padding: 0 11px;
 }
 .docs-button-primary {
   height: 32px;
   padding: 0 16px;
   border-radius: 16px;
   background: var(--docs-blue);
-  color: #ffffff;
-  font: 500 14px/20px var(--docs-ui-font);
+  color: var(--clay-fg);
+  font: 600 14px/20px var(--docs-ui-font);
   cursor: pointer;
 }
-.dark .docs-button-primary {
-  color: #062e6f;
+.docs-button-primary:hover:not(:disabled) {
+  background: var(--clay-600);
 }
 .docs-button-primary:disabled {
-  opacity: 0.38;
+  opacity: 0.4;
   cursor: default;
 }
