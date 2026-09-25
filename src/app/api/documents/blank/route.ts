@@ -1,7 +1,9 @@
+import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { emptyRichText, newBlockId } from "@/lib/docs/schema";
 import { serverT } from "@/lib/i18n/server";
 import { attachDocument } from "@/lib/parse/attach";
 import { PARSER_VERSION } from "@/lib/parse/types";
@@ -12,10 +14,11 @@ const createSchema = z.object({
   title: z.string().trim().min(1).max(200),
 });
 
-// A blank document (SPEC.md §15): one the reader writes here. No file, no
-// source, no parse: the document holds one empty paragraph, user-authored
-// (originalText ""), and opens in edit mode. Nothing to finish, so the
-// response is the plain id and title, not an ingest stream.
+// A blank document (SPEC.md §15, §29): one the reader writes here. No file,
+// no source, no parse: the document is rich text holding one empty
+// paragraph, and its one Block row is that paragraph's index row. It opens in
+// the page editor. Nothing to finish, so the response is the plain id and
+// title, not an ingest stream.
 export async function POST(req: Request) {
   const t = await serverT();
   const { data, error } = await parseBody(req, createSchema);
@@ -25,12 +28,14 @@ export async function POST(req: Request) {
   const access = await notebookAccess(data.notebookId, "editor");
   if (access instanceof NextResponse) return access;
 
+  const blockId = newBlockId();
   const document = await db.document.create({
     data: {
       title: data.title,
       parserVersion: PARSER_VERSION,
+      richText: emptyRichText(blockId) as unknown as Prisma.InputJsonValue,
       blocks: {
-        create: [{ order: 0, type: "PARAGRAPH", text: "", originalText: "" }],
+        create: [{ id: blockId, order: 0, type: "PARAGRAPH", text: "", originalText: "" }],
       },
     },
     select: { id: true, title: true },

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { insertAtOrder, nodeForBlock } from "@/lib/docs/ops";
+import { editRichText, isRichTextDocument } from "@/lib/docs/server";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
@@ -36,6 +38,15 @@ export async function POST(req: Request) {
   const order = typeof meta.order === "number" ? meta.order : 0;
   const type = meta.type === "HEADING" || meta.type === "LIST" ? meta.type : "PARAGRAPH";
   const text = edit.before;
+
+  // A blank document is edited through its rich text (SPEC.md §29): the
+  // paragraph goes back in its place with its own id, so anchors on it heal.
+  if (await isRichTextDocument(edit.documentId)) {
+    const node = nodeForBlock({ id: edit.blockId, type, text, html: meta.html ?? null });
+    const result = await editRichText(edit.documentId, access.user.id, (doc) => insertAtOrder(doc, order, node));
+    if (!result.ok) return NextResponse.json({ error: t("api.editNotRemovedParagraph") }, { status: 400 });
+    return NextResponse.json(await db.block.findUnique({ where: { id: edit.blockId } }), { status: 201 });
+  }
 
   const block = await db.$transaction(async (tx) => {
     await tx.block.updateMany({

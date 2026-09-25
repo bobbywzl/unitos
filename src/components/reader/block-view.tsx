@@ -23,14 +23,14 @@ import { googleFontsUrl, parseFontList, webFontFamilies } from "@/lib/office-fon
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { colorClass, customCss, isColorStyle, isHighlightStyle, type TextStyle } from "@/lib/text-style";
 
-const CHAIN_BUTTON =
+export const CHAIN_BUTTON =
   "link-chain mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800";
 // The symbol at the end of a highlighted text — the tool that made the
 // annotation, or the comment bubble. A small round chip on the highlight's
 // bottom edge, right after its last character (globals.css .mark-chip);
 // clicking it opens the card. SVG only, so the block's DOM text stays exactly
 // the stored text (SPEC.md §5).
-const MARK_CHIP =
+export const MARK_CHIP =
   "mark-chip inline-flex items-center justify-center rounded-full bg-clay-100 text-clay-700 hover:bg-clay-200 hover:text-clay-800";
 
 export type BlockData = {
@@ -99,7 +99,7 @@ export type Highlight = {
   linkReason?: string | null;
 };
 
-function anchorClass(anchor: Highlight): string {
+export function anchorClass(anchor: Highlight): string {
   if (anchor.color === "sage") return "hl-sage";
   if (anchor.color === "gold") return "hl-gold";
   if (anchor.color === "plum") return "hl-plum";
@@ -116,7 +116,7 @@ function anchorClass(anchor: Highlight): string {
 
 // Each AI tool's symbol, at the end of its highlighted text — the glyph on
 // the toolbar button and on the group label in the Annotations tab.
-type ToolKind = "explain" | "simplify" | "analyze" | "visualize" | "assistant";
+export type ToolKind = "explain" | "simplify" | "analyze" | "visualize" | "assistant";
 const TOOL_ICON: Record<ToolKind, (props: { size?: number }) => React.ReactNode> = {
   explain: QuestionIcon,
   simplify: SummaryIcon,
@@ -124,7 +124,7 @@ const TOOL_ICON: Record<ToolKind, (props: { size?: number }) => React.ReactNode>
   visualize: VisualizeIcon,
   assistant: SparkleIcon,
 };
-const TOOL_KEY: Record<ToolKind, TKey> = {
+export const TOOL_KEY: Record<ToolKind, TKey> = {
   explain: "panes.openExplanation",
   simplify: "panes.openSimplified",
   analyze: "panes.openAnalysis",
@@ -132,7 +132,7 @@ const TOOL_KEY: Record<ToolKind, TKey> = {
   assistant: "panes.openConversation",
 };
 // The same symbols with the plus: the output continued into a conversation.
-const TOOL_PLUS_KEY: Record<ToolKind, TKey> = {
+export const TOOL_PLUS_KEY: Record<ToolKind, TKey> = {
   explain: "panes.openExplanationPlus",
   simplify: "panes.openSimplifiedPlus",
   analyze: "panes.openAnalysisPlus",

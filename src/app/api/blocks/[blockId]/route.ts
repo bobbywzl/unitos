@@ -4,6 +4,8 @@ import { blockKind } from "@/lib/block-kind";
 import { diffSegments, remapAnchor, remapRange } from "@/lib/anchors/remap";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { removeBlock, replaceBlockText, setBlockKind } from "@/lib/docs/ops";
+import { editRichText, isRichTextDocument } from "@/lib/docs/server";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -48,6 +50,18 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
 
   if (block.type === "TABLE" || block.type === "FIGURE" || block.type === "SLIDE" || block.type === "SHEET") {
     return NextResponse.json({ error: t("api.onlyTextBlocksEdited") }, { status: 400 });
+  }
+
+  // A blank document is edited through its rich text (SPEC.md §29).
+  if (await isRichTextDocument(block.documentId)) {
+    const result = await editRichText(block.documentId, access.user.id, (doc) => {
+      let next: typeof doc | null = doc;
+      if (data.text !== undefined) next = replaceBlockText(next, blockId, data.text);
+      if (next && data.kind !== undefined) next = setBlockKind(next, blockId, data.kind) ?? next;
+      return next;
+    });
+    if (!result.ok) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
+    return NextResponse.json(await db.block.findUnique({ where: { id: blockId } }));
   }
 
   const target = data.kind !== undefined ? KIND_TO_BLOCK[data.kind] : null;
@@ -226,6 +240,13 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
   if (access instanceof NextResponse) return access;
   if (block.type === "TABLE" || block.type === "FIGURE" || block.type === "SLIDE" || block.type === "SHEET") {
     return NextResponse.json({ error: t("api.onlyTextBlocksRemoved") }, { status: 400 });
+  }
+
+  // A blank document is edited through its rich text (SPEC.md §29).
+  if (await isRichTextDocument(block.documentId)) {
+    const result = await editRichText(block.documentId, access.user.id, (doc) => removeBlock(doc, blockId));
+    if (!result.ok) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
+    return NextResponse.json({ ok: true, editId: result.removedEdits[blockId] ?? null });
   }
 
   const [, , , , removal] = await db.$transaction([

@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BookmarkIcon, PlusIcon, RedoIcon, UndoIcon } from "@/components/icons";
 import { setQuoteDragImage, writeQuoteDrag } from "@/lib/quote-drag";
@@ -40,6 +41,14 @@ import { PageBlock, type PageMark } from "@/components/reader/page-block";
 import type { PageSize } from "@/lib/handwritten/pages";
 import { DocumentTitle } from "@/components/reader/document-title";
 import { formatTime, type Speaker, type TranscriptLine } from "@/lib/video/types";
+import type { PageSetup, RichNode } from "@/lib/docs/schema";
+
+// The page editor (SPEC.md §29) loads with a blank document only: its editor
+// library stays out of every other document's bundle.
+const DocsEditor = dynamic(() => import("@/components/docs/docs-editor").then((m) => m.DocsEditor), {
+  ssr: false,
+  loading: () => <div className="docs-shell" style={{ minHeight: "100%" }} />,
+});
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
 // The article's horizontal padding (px-6 on both sides), added to the
@@ -558,9 +567,20 @@ export function Reader({
   collapse,
   transcript,
   embedded,
+  richText,
 }: {
   title: string;
   blocks: BlockData[];
+  /** A blank document (SPEC.md §29): the page editor takes the article's
+      place. canEdit: the reader may type; aiControls: the Unitos tools at the
+      toolbar's right end. */
+  richText?: {
+    doc: RichNode;
+    rev: number;
+    pageSetup: PageSetup;
+    canEdit: boolean;
+    aiControls?: React.ReactNode;
+  } | null;
   /** The article card in the video pane (SPEC.md §11): no column padding, no block count. */
   embedded?: boolean;
   /** Above the title: the Translate offer (SPEC.md §19). */
@@ -1156,6 +1176,22 @@ export function Reader({
         {gap !== undefined && documentId && <FigurePlace documentId={documentId} label={gap} render={figureRender} />}
         {node}
       </Reveal>
+    );
+  }
+
+  if (richText && documentId) {
+    return (
+      <DocsEditor
+        documentId={documentId}
+        title={title}
+        richText={richText.doc}
+        rev={richText.rev}
+        pageSetup={richText.pageSetup}
+        canEdit={richText.canEdit}
+        highlightsByBlock={highlightsByBlock}
+        flushRef={flushRef}
+        aiControls={richText.aiControls}
+      />
     );
   }
 

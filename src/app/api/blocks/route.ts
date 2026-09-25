@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { imageNode, insertAfterBlock, paragraphNode } from "@/lib/docs/ops";
+import { newBlockId } from "@/lib/docs/schema";
+import { editRichText, isRichTextDocument } from "@/lib/docs/server";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
@@ -29,6 +32,19 @@ export async function POST(req: Request) {
   }
   const access = await documentAccess(data.documentId, "editor");
   if (access instanceof NextResponse) return access;
+
+  // A blank document is edited through its rich text (SPEC.md §29).
+  if (await isRichTextDocument(data.documentId)) {
+    const id = newBlockId();
+    const node =
+      data.type === "FIGURE" ? imageNode(data.html ?? "", data.text ?? "", id) : paragraphNode(data.text ?? "", id);
+    if (!node) return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 400 });
+    const result = await editRichText(data.documentId, access.user.id, (doc) =>
+      insertAfterBlock(doc, data.afterBlockId, node),
+    );
+    if (!result.ok) return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
+    return NextResponse.json(await db.block.findUnique({ where: { id } }), { status: 201 });
+  }
 
   const block = await db.$transaction(async (tx) => {
     await tx.block.updateMany({

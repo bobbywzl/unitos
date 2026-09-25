@@ -123,6 +123,7 @@ import { pointsAtText, skipsDrag, watchHold } from "@/lib/hold-drag";
 import { ANNOTATION_PARAM, referenceContent, referenceWords, type AnnotationReference } from "@/lib/annotation-reference";
 import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
+import type { PageSetup, RichNode } from "@/lib/docs/schema";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -680,6 +681,7 @@ export function ReaderInteractions({
   figureRender,
   translationAvailable,
   transcript,
+  richText = null,
 }: {
   documentId: string;
   notebookId: string;
@@ -784,6 +786,10 @@ export function ReaderInteractions({
   // (figure-capture.tsx): the reader marks each figure's place.
   captionGaps: { id: string; label: string }[];
   figureRender: FigureRenderInfo;
+  /** A blank document (SPEC.md §29): its rich text, revision, and page setup.
+      The page editor takes the article's place; there is no reading mode and
+      no block edit mode, and every tool of this layer works on its text. */
+  richText?: { doc: RichNode; rev: number; pageSetup: PageSetup } | null;
 }) {
   // The whole text's anchors and the collapsed view's, one map: a core's
   // anchors under its core key, so marks, local marks, and cards find them
@@ -834,8 +840,12 @@ export function ReaderInteractions({
   // `edit=1` opens the document in edit mode (SPEC.md §15: a blank document
   // opens ready to write); viewers and transcripts never enter it.
   const [editMode, setEditMode] = useState(
-    () => searchParams.get("edit") === "1" && canEdit && transcript === undefined && !embedded,
+    () => searchParams.get("edit") === "1" && canEdit && transcript === undefined && !embedded && !richText,
   );
+  // A blank document's page editor is always the place to type: the block
+  // edit mode, its double-click, and its hint never apply to it.
+  const richTextRef = useRef(richText);
+  richTextRef.current = richText;
   const [bubble, setBubble] = useState<ExplainBubble | null>(null);
   const [busy, setBusy] = useState(false);
   const [simplifyCard, setSimplifyCard] = useState<SimplifyCard | null>(null);
@@ -1992,6 +2002,37 @@ export function ReaderInteractions({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [captureSelection, documentId]);
 
+  // A blank document's Add comment (the page editor's toolbar button and
+  // Ctrl+Alt+M, SPEC.md §29) opens this layer's Comment tool on the
+  // selection; a message from the page editor shows as this layer's toast.
+  useEffect(() => {
+    if (!richText) return;
+    const onComment = (e: Event) => {
+      const detail = (e as CustomEvent<{ documentId: string }>).detail;
+      if (detail?.documentId !== documentId) return;
+      const captured = captureSelection();
+      if (!captured) {
+        showToast(t("docs.selectToComment"));
+        return;
+      }
+      setPopover(captured);
+      setSubmenu("comment");
+      setCloseLink(null);
+      setCommentDraft("");
+    };
+    const onToast = (e: Event) => {
+      const text = (e as CustomEvent<{ text: string }>).detail?.text;
+      if (text) showToast(text);
+    };
+    window.addEventListener("docs:comment-selection", onComment);
+    window.addEventListener("dissect:toast", onToast);
+    return () => {
+      window.removeEventListener("docs:comment-selection", onComment);
+      window.removeEventListener("dissect:toast", onToast);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captureSelection, documentId, Boolean(richText)]);
+
   // Double-click a text block to edit it in place. The hint card teaches this
   // once; after the first double-click it never shows again.
   useEffect(() => {
@@ -1999,7 +2040,7 @@ export function ReaderInteractions({
     if (!container) return;
     const onDblClick = (e: MouseEvent) => {
       if (!canEditRef.current) return;
-      if (editModeRef.current) return;
+      if (editModeRef.current || richTextRef.current) return;
       // A transcript is not edited in place.
       if (transcriptModeRef.current) return;
       const target = e.target as Element;
@@ -2550,7 +2591,7 @@ export function ReaderInteractions({
     const container = containerRef.current;
     if (!container) return;
     const onDown = (e: PointerEvent) => {
-      if (e.button !== 0 || !canEditRef.current || editModeRef.current) return;
+      if (e.button !== 0 || !canEditRef.current || editModeRef.current || richTextRef.current) return;
       const mark = (e.target as Element | null)?.closest<HTMLElement>("mark[data-source-id]");
       if (!mark || !container.contains(mark)) return;
       const sourceId = mark.dataset.sourceId;
@@ -4791,6 +4832,8 @@ export function ReaderInteractions({
   // them newest first. A block's text and kind come from the article as it
   // is now; the rest from the ids the write routes return.
   async function executePlan(actions: AssistantAction[], warnings: string[] = []) {
+    // The routes edit what is stored: typing on screen is saved first.
+    await flushEditRef.current?.();
     const sectionIdByTitle = new Map(
       sectionChoices.map((c) => [c.label.toLowerCase(), c.id] as const),
     );
@@ -6127,13 +6170,18 @@ function blockFormatKind(
             }`
       }
     >
-      {!split && !transcript && !embedded && articleMenu}
+      {!split && !transcript && !embedded && !richText && articleMenu}
 
       {/* The controls float over the article at the top right of the pane
           and stay there as it scrolls: a sticky block with no height, so the
           text runs under them and never wraps around them. The article's
           errors sit under the controls. */}
-      <div className="pointer-events-none sticky top-4 z-10 h-0 print:hidden">
+      <div
+        className={`pointer-events-none sticky z-10 h-0 print:hidden ${
+          // A blank document's toolbar holds the top; the toasts sit under it.
+          richText ? "top-[112px]" : "top-4"
+        }`}
+      >
       <div className="absolute top-0 right-4 flex flex-col items-end gap-2">
       <div
         className="pointer-events-auto flex items-center gap-2 rounded-full"
@@ -6180,8 +6228,8 @@ function blockFormatKind(
             {t("common.done")}
           </button>
         )}
-        {!split && !transcript && !embedded && collapseButton}
-        {!split && !transcript && !embedded && distillButton}
+        {!split && !transcript && !embedded && !richText && collapseButton}
+        {!split && !transcript && !embedded && !richText && distillButton}
       </div>
       {!split && !transcript && !embedded && <ArticleErrors documentId={documentId} />}
       </div>
@@ -6189,7 +6237,7 @@ function blockFormatKind(
 
       {/* Not in a split pane: the card would sit over the title. Not on a
           transcript: it has no edit mode. */}
-      {editHint && !editMode && !split && !transcript && !embedded && (
+      {editHint && !editMode && !split && !transcript && !embedded && !richText && (
         <div
           onAnimationEnd={() => setEditHint(false)}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-10 rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
@@ -6226,6 +6274,11 @@ function blockFormatKind(
         onUndo={() => void runStep(true)}
         onRedo={() => void runStep(false)}
         flushRef={flushEditRef}
+        richText={
+          richText
+            ? { ...richText, canEdit, aiControls: !split && !embedded ? distillButton : null }
+            : null
+        }
         transcript={transcript}
         embedded={embedded}
         banner={

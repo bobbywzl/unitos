@@ -48,6 +48,9 @@ import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { GlossaryLanguage } from "@/components/reader/glossary-language";
 import type { PageMark } from "@/components/reader/page-block";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
+import { ensureBlockIds, isOlderBlankDocument, richTextFromBlocks } from "@/lib/docs/blocks";
+import { readPageSetup, type RichNode } from "@/lib/docs/schema";
+import { syncRichText } from "@/lib/docs/sync";
 import { PaneDocumentSelect, ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
 import { Workspace } from "@/components/reader/workspace";
 import { VideoPane } from "@/components/video/video-pane";
@@ -190,11 +193,26 @@ export default async function NotebookPage(props: {
 
   // ── One pane's data: everything the reader needs for one document ─────────
   async function paneData(documentId: string) {
-    const document = await db.document.findUnique({
+    let document = await db.document.findUnique({
       where: { id: documentId },
       include: { blocks: { orderBy: { order: "asc" } }, video: true },
     });
     if (!document) return null;
+    // A blank document made before the page editor holds only blocks: it
+    // gets its rich text once, on this open (SPEC.md §29).
+    if (!document.richText && isOlderBlankDocument(document) && myRole !== "viewer") {
+      await syncRichText({
+        documentId,
+        userId: user!.id,
+        baseRev: null,
+        richText: ensureBlockIds(richTextFromBlocks(document.blocks)),
+      });
+      document = await db.document.findUnique({
+        where: { id: documentId },
+        include: { blocks: { orderBy: { order: "asc" } }, video: true },
+      });
+      if (!document) return null;
+    }
     const blockById = new Map(document.blocks.map((b) => [b.id, b]));
     // Video anchors are time ranges, not text spans: they skip the text
     // highlight painting and render on the player overlay (SPEC.md §11).
@@ -1231,6 +1249,15 @@ export default async function NotebookPage(props: {
       ) : (
         <ReaderInteractions
           documentId={pane.document.id}
+          richText={
+            pane.document.richText
+              ? {
+                  doc: pane.document.richText as unknown as RichNode,
+                  rev: pane.document.richTextRev,
+                  pageSetup: readPageSetup(pane.document.pageSetup),
+                }
+              : null
+          }
           notebookId={notebook.id}
           sectionChoices={sectionChoices}
           title={pane.document.title}

@@ -50,6 +50,10 @@ const en = {
 
   // Blocks
   onlyTextBlocksEdited: "Only text blocks can be edited",
+  notBlankDocument: "This is not a blank document",
+  richTextTooLarge: "The document is too large to save",
+  richTextInvalid: "The document could not be read",
+  richTextConflict: "The document changed in another tab or by another person",
   onlyTextBlocksRemoved: "Only text blocks can be removed",
   onlyTextBlocksStyled: "Only text blocks can be styled",
   editNotRemovedParagraph: "Edit is not a removed paragraph",
@@ -336,6 +340,10 @@ const zh: Record<keyof typeof en, string> = {
   sectionsNestOneLevel: "章节只能嵌套一层",
 
   onlyTextBlocksEdited: "只有文本块可以编辑",
+  notBlankDocument: "这不是空白文档",
+  richTextTooLarge: "文档太大，无法保存",
+  richTextInvalid: "无法读取文档",
+  richTextConflict: "文档已在另一个标签页或被另一个人更改",
   onlyTextBlocksRemoved: "只有文本块可以移除",
   onlyTextBlocksStyled: "只有文本块可以设置样式",
   editNotRemovedParagraph: "此编辑不是被移除的段落",

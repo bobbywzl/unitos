@@ -526,6 +526,19 @@ model Document {
   // documents. generatedCommand is the command that made it; a document with
   // one is a generated document of the project it is attached to.
   generatedCommand String?
+  // A blank document (SPEC.md §29): the rich text the reader writes in the
+  // page editor — Tiptap (ProseMirror) JSON, the source of truth for its
+  // words and formatting. The document's Block rows are the paragraph index
+  // derived from it on every save (lib/docs/sync.ts), so anchors, notes, and
+  // every AI tool keep reading blocks. Null for every other document.
+  richText      Json?
+  // Bumped by every save of richText: a save names the revision it started
+  // from, and a save from an older one is refused (a conflict, not a loss).
+  richTextRev   Int                @default(0)
+  // The page setup of a blank document: {pageless, width, height, margins:
+  // {top, right, bottom, left}, color} in points. Null = Letter, 1 in
+  // margins, pages.
+  pageSetup     Json?
   createdAt     DateTime           @default(now())
 }
 
