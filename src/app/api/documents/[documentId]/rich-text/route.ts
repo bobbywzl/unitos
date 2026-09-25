@@ -20,11 +20,10 @@ const saveSchema = z.object({
 const setupSchema = z.object({ pageSetup: pageSetupSchema });
 
 // A document's rich text, a blank document's or an import's (SPEC.md §29).
-// GET reads it with its revision and, for an import, the revision the import
-// or its last re-parse stored (importRev); PUT saves the editor's copy, which
-// must start from the stored revision — an older one answers 409 with the
-// stored copy, never a silent overwrite — and refuses an import shared across
-// accounts (403); PATCH sets the page setup.
+// GET reads it with its revision; PUT saves the editor's copy, which must
+// start from the stored revision — an older one answers 409 with the stored
+// copy, never a silent overwrite; PATCH sets the page setup. PUT and PATCH
+// refuse an import shared across accounts (403).
 export async function GET(_req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
   const { documentId } = await ctx.params;
@@ -32,15 +31,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ documentId: st
   if (access instanceof NextResponse) return access;
   const document = await db.document.findUnique({
     where: { id: documentId },
-    select: { richText: true, richTextRev: true, pageSetup: true, importRev: true },
+    select: { richText: true, richTextRev: true, pageSetup: true },
   });
   if (!document?.richText) return NextResponse.json({ error: t("api.notBlankDocument") }, { status: 404 });
-  return NextResponse.json({
-    richText: document.richText,
-    rev: document.richTextRev,
-    pageSetup: document.pageSetup,
-    importRev: document.importRev,
-  });
+  return NextResponse.json({ richText: document.richText, rev: document.richTextRev, pageSetup: document.pageSetup });
 }
 
 export async function PUT(req: Request, ctx: { params: Promise<{ documentId: string }> }) {

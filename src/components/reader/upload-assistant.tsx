@@ -110,6 +110,28 @@ function statusMessage(t: TFunc, status: number): string {
 const EARLY_OPEN_MS = 20_000;
 const EARLY_OPEN_FIGURE_SHARE = 0.9;
 
+/** The save stage's detail says the size guard kept an import out of the
+    page editor (SPEC.md §29; lib/parse/ingest.ts saveDetail): the done line
+    says so. */
+export function keptBlockDocument(detail: string | null | undefined): boolean {
+  if (!detail?.startsWith("{")) return false;
+  try {
+    return (JSON.parse(detail) as { blockDocument?: unknown }).blockDocument === "size";
+  } catch {
+    return false;
+  }
+}
+
+/** The save stage ran the figure check: a PDF's detail carries at most the
+    size guard's flag. */
+function hasFigureCheck(detail: string): boolean {
+  try {
+    return "figures" in (JSON.parse(detail) as object);
+  } catch {
+    return false;
+  }
+}
+
 // Does the saved document read well enough to open before its finishing
 // step is done? The save stage's figure check says: the figures that loaded
 // against the captions left without one. No check: nothing speaks against it.
@@ -539,10 +561,12 @@ export function UploadAssistant({
     setOpenTarget(target);
     // Clean adds close themselves; failures stay visible until Close, and so
     // does a lost figure: a single add whose figure check found a caption
-    // without a figure. A clean figure check line shows long enough to read.
+    // without a figure, and an import the size guard kept out of the page
+    // editor. A clean figure check line shows long enough to read.
     const lost =
       itemCount === 1 &&
-      (ingestCounts(saveDetailRef.current ?? "")?.captionsWithoutFigure ?? 0) > 0;
+      ((ingestCounts(saveDetailRef.current ?? "")?.captionsWithoutFigure ?? 0) > 0 ||
+        keptBlockDocument(saveDetailRef.current));
     if (failed.length === 0 && !lost) {
       setTimeout(() => onClose(target), collected.length > 1 || saveDetailRef.current ? 900 : 300);
     } else if (hiddenRef.current) {
