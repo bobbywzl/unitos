@@ -38,9 +38,11 @@
 }
 
 /* ── Floating boxes ────────────────────────────────────────────────────── */
+/* The insert area's layers sit under the shared menus (z-index 60), which
+   open from them. */
 .docs-insert-pop {
   position: fixed;
-  z-index: 62;
+  z-index: 57;
   border-radius: 8px;
   background: var(--docs-menu-bg);
   box-shadow: var(--docs-pop-shadow);
@@ -821,7 +823,7 @@
   position: fixed;
   top: 120px;
   right: 24px;
-  z-index: 66;
+  z-index: 59;
 }
 .docs-insert-dialog {
   display: flex;
@@ -849,7 +851,7 @@
   top: 112px;
   right: 16px;
   bottom: 16px;
-  z-index: 64;
+  z-index: 59;
   display: flex;
   flex-direction: column;
   width: 300px;

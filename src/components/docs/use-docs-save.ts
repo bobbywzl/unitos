@@ -62,10 +62,9 @@ export function useDocsSave({
 
   const save = useCallback(async (): Promise<void> => {
     if (!editor || !enabled) return;
-    if (inFlightRef.current) {
-      await inFlightRef.current;
-      if (!dirtyRef.current) return;
-    }
+    // One save at a time: every caller waits out the save that runs, and
+    // the first to wake starts the next before any other can.
+    while (inFlightRef.current) await inFlightRef.current;
     clearTimer();
     if (!dirtyRef.current) return;
     const version = versionRef.current;

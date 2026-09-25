@@ -176,7 +176,7 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
               />
             )}
           </DropBtn>
-          <DropBtn label={t("docsInsert.borderWidth")} track="image-border-width" face={<BorderWeightIcon size={20} />}>
+          <DropBtn label={t("docsInsert.borderWeight")} track="image-border-width" face={<BorderWeightIcon size={20} />}>
             {() =>
               BORDER_WEIGHTS.map((w) => (
                 <MenuItem

@@ -478,7 +478,7 @@ function BorderSelector({ editor }: { editor: Editor }) {
                 />
               )}
             </DropBtn>
-            <DropBtn label={t("docsInsert.borderWidth")} track="table-border-width" face={<BorderWeightIcon size={20} />}>
+            <DropBtn label={t("docsInsert.borderWeight")} track="table-border-width" face={<BorderWeightIcon size={20} />}>
               {() =>
                 BORDER_WEIGHTS.map((w) => (
                   <MenuItem key={w} checked={border.width === w} onSelect={() => apply({ width: w })}>
@@ -765,7 +765,7 @@ function TableOptionsPanel({ editor, onClose }: { editor: Editor; onClose: () =>
           <select
             className="docs-select"
             value={String(border.width)}
-            aria-label={t("docsInsert.borderWidth")}
+            aria-label={t("docsInsert.borderWeight")}
             onChange={(e) => editor.chain().focus().setTableBorders("all", { width: Number(e.target.value) }).run()}
           >
             {BORDER_WEIGHTS.map((w) => (

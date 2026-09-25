@@ -9,6 +9,7 @@ import { useOpenDocument } from "@/components/reader/open-document-context";
 import { readThinking } from "@/lib/assistant/thinking";
 import { readNdjson } from "@/lib/ndjson";
 import type { VoiceEvent, VoiceStage } from "@/app/api/notes/voice/route";
+import { flushDocument } from "@/components/docs/layer/flush";
 
 // The voice command (SPEC.md §6): press to record, press again to stop. The
 // recording goes to /api/notes/voice with the section and the open document;
@@ -131,7 +132,11 @@ export function VoiceNoteButton({
     try {
       if (blob.size === 0) throw new Error(t("outline.voiceNoteEmpty"));
       const params = new URLSearchParams({ sectionId, thinking: readThinking() });
-      if (documentId) params.set("documentId", documentId);
+      if (documentId) {
+        params.set("documentId", documentId);
+        // A blank document's typing is saved before the command reads it.
+        await flushDocument(documentId);
+      }
       const res = await fetch(`/api/notes/voice?${params}`, {
         method: "POST",
         headers: { "Content-Type": blob.type || "audio/webm" },
