@@ -9,12 +9,13 @@ import { isEmptyChart } from "@/lib/parse/figures";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
 
 // A page whose figures are drawn by its scripts (a chart svg empty in the
-// server's HTML, a canvas) has no figure to parse in the static page. Where a
-// browser is configured (BROWSER_WS_ENDPOINT or CHROMIUM_PATH, the same
-// browser SPEC.md §11 uses for transcripts; lib/browser.ts), the page renders
-// in it at 1280×900, scrolls through so scroll-revealed charts draw, and the
-// rendered DOM parses in the static page's place. Without a browser the
-// static page stands.
+// server's HTML, a canvas, a figure whose image a lazy loader puts in) has
+// no figure to parse in the static page. Where a browser is configured
+// (BROWSER_WS_ENDPOINT or CHROMIUM_PATH, the same browser SPEC.md §11 uses
+// for transcripts; lib/browser.ts), the page renders in it at 1280×900,
+// scrolls through so scroll-revealed figures draw, and the rendered DOM
+// parses in the static page's place. Without a browser the static page
+// stands.
 //
 // A chart the page's scripts animate settles first (lib/parse/capture-animation.ts):
 // the page's clock is paused and stepped, a one-shot animation is drawn to
@@ -59,15 +60,26 @@ export type RenderOptions = {
   store?: { userId: string | null };
 };
 
+/** A figure its scripts fill later: something inside, but no media and no
+    words outside its caption — a lazy-loading image's placeholder. */
+function isEmptyFigure(figure: Element): boolean {
+  if (figure.children.length === 0) return false;
+  if (figure.querySelector("img, picture, video, audio, iframe, svg, canvas, object, embed")) return false;
+  const words = figure.cloneNode(true) as Element;
+  for (const caption of words.querySelectorAll("figcaption")) caption.remove();
+  return !words.textContent?.trim();
+}
+
 /** Does the static HTML show figures its scripts draw later? An empty chart
-    svg or a canvas outside the page's chrome. */
+    svg, a canvas, or an empty figure outside the page's chrome. */
 export function needsBrowserRender(html: string): boolean {
-  if (!/<(?:svg|canvas)\b/i.test(html)) return false;
+  if (!/<(?:svg|canvas|figure)\b/i.test(html)) return false;
   try {
     const dom = new JSDOM(html, { virtualConsole: new VirtualConsole() });
     const { document } = dom.window;
     const inContent = (el: Element) => el.closest("nav, header, footer") === null;
     if ([...document.querySelectorAll("canvas")].some(inContent)) return true;
+    if ([...document.querySelectorAll("figure")].some((figure) => isEmptyFigure(figure) && inContent(figure))) return true;
     return [...document.querySelectorAll("svg[viewBox]")].some(
       (svg) => isEmptyChart(svg) && inContent(svg) && svg.parentElement?.closest("svg") === null,
     );
