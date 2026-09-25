@@ -11,6 +11,7 @@ import { ThumbsDownIcon, ThumbsUpIcon } from "@/components/icons";
 // quality loop (scripts/eval) can read the poor answers back as eval cases.
 // Fire-and-forget: a failed post changes nothing on screen.
 export type RatingTool =
+  | "define"
   | "simplify"
   | "analyze"
   | "visualize"

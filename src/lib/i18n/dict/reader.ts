@@ -14,6 +14,7 @@ const en = {
   // Selection popover
   copied: "Copied",
   copyFailed: "Could not copy. Your browser blocked it.",
+  define: "Define",
   assistant: "Assistant",
   explain: "Explain",
   simplify: "Simplify",
@@ -50,6 +51,8 @@ const en = {
   highlightInWithNote: "Highlight in {color} with your note",
   readAloud: "Read the selection aloud",
   stopReading: "Stop reading",
+  defineTitle:
+    "The AI defines the selected word or phrase as this sentence uses it, tuned to your background. Nothing is saved.",
   assistantTitle:
     "Tell the assistant what to do with the selection. It proposes a plan or replies beside the article.",
   explainTitle:
@@ -127,6 +130,7 @@ const en = {
   renameDocumentTitle: "Click to edit the title",
 
   // Side cards
+  defining: "Defining…",
   explaining: "Explaining…",
   explanation: "Explanation",
   analyzing: "Analyzing…",
@@ -282,6 +286,7 @@ const zh: Record<keyof typeof en, string> = {
   // Selection popover
   copied: "已复制",
   copyFailed: "无法复制。浏览器阻止了此操作。",
+  define: "定义",
   assistant: "助手",
   explain: "解释",
   simplify: "简化",
@@ -316,6 +321,7 @@ const zh: Record<keyof typeof en, string> = {
   highlightInWithNote: "以{color}高亮并附上评论",
   readAloud: "朗读选中内容",
   stopReading: "停止朗读",
+  defineTitle: "AI 结合你的背景，给出选中的词或短语在这句话里的定义。不保存。",
   assistantTitle: "告诉助手要对选中内容做什么。它会提出计划，或在文章旁回复。",
   explainTitle: "AI 结合你的背景，用通俗的语言解释选中内容。保存在批注下。",
   explainFigureTitle: "AI 解读这幅图展示的内容",
@@ -384,6 +390,7 @@ const zh: Record<keyof typeof en, string> = {
   renameDocumentTitle: "点击编辑标题",
 
   // Side cards
+  defining: "定义中…",
   explaining: "解释中…",
   explanation: "解释",
   analyzing: "分析中…",

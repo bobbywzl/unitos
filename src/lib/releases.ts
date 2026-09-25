@@ -27,6 +27,13 @@ export const RELEASES: Release[] = [
     bodyKey: "works.release20260924Body",
     features: ["collapse", "annotationsFullPage", "byDocument", "conversations"],
   },
+  {
+    id: "2026-09-25",
+    date: "2026-09-25",
+    titleKey: "works.release20260925Title",
+    bodyKey: "works.release20260925Body",
+    features: ["define"],
+  },
 ];
 
 /** How long a release's controls glow after it shipped. */

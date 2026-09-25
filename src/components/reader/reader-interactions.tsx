@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { blockKind } from "@/lib/block-kind";
+import { definable, defineKey } from "@/lib/define";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
   applyReadingPosition,
@@ -74,6 +75,7 @@ import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
   CollapseIcon,
   CommentIcon,
+  DefineIcon,
   ExpandIcon,
   MaximizeIcon,
   TrashIcon,
@@ -184,9 +186,12 @@ const TOOL_LAYER = "z-40";
 // One toolbar per content kind (SPEC.md §6). The popover shows the tools of
 // the kind under the selection and nothing else: a tool missing from a
 // kind's list is not offered there. The first tool of a kind after the
-// assistant is its lead tool and reads as recommended.
+// assistant is its lead tool and reads as recommended. Define comes before
+// the assistant, and only on a selection of one word or one phrase
+// (offersDefine): the first row, right under the highlight colors.
 type ContentKind = "text" | "figure" | "equation";
 type Tool =
+  | "define"
   | "assistant"
   | "analyze"
   | "explain"
@@ -199,8 +204,8 @@ type Tool =
   | "readAloud";
 
 const TOOLBARS: Record<ContentKind, readonly Tool[]> = {
-  text: ["assistant", "explain", "simplify", "visualize", "comment", "link", "highlight", "addToNotes", "readAloud"],
-  figure: ["assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
+  text: ["define", "assistant", "explain", "simplify", "visualize", "comment", "link", "highlight", "addToNotes", "readAloud"],
+  figure: ["define", "assistant", "analyze", "explain", "comment", "link", "highlight", "addToNotes"],
   equation: ["assistant", "explain", "visualize", "comment", "link", "highlight", "addToNotes"],
 };
 
@@ -213,6 +218,24 @@ function contentKindOf(type: string | undefined): ContentKind {
   if (type === "EQUATION") return "equation";
   return "text";
 }
+
+/** Whether the popover offers Define: text selected in one block, one word
+    or one phrase long (lib/define.ts). Never on the hold-and-circle
+    gesture, whose anchor is the whole block. */
+function offersDefine(popover: Popover): boolean {
+  return !popover.figure && segmentsOf(popover.anchor).length === 1 && definable(popover.anchor.quotedText);
+}
+
+// Define's output for one popover (SPEC.md §6): the meaning of the selected
+// word or phrase, shown under the Define row. glossary: the glossary's
+// definition of a key term, read with no model call.
+type Definition = {
+  key: string;
+  text: string;
+  streaming: boolean;
+  error: string | null;
+  glossary: boolean;
+};
 
 const KIND_LABEL: Record<Exclude<ContentKind, "text">, TKey> = {
   figure: "reader.figureTools",
@@ -824,12 +847,31 @@ export function ReaderInteractions({
   // The popover's submenus (section list, link targets) are custom lists, not
   // native selects: the popover preventDefaults mousedown to keep the text
   // selection alive, which also keeps a native select from ever opening.
-  const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment">(null);
+  const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment" | "define">(null);
   const [commentDraft, setCommentDraft] = useState("");
   // The lead tool Jev predicts for a popover (SPEC.md §6), keyed by the
   // popover it answers: another popover reads it as null until its own
   // answer lands. Null answers: no key, no confident answer, a fixed lead.
   const [leadAnswer, setLeadAnswer] = useState<{ key: string; tool: Tool } | null>(null);
+  // Define (SPEC.md §6): the open popover's definition, the call on its way,
+  // and every definition read this session by block and word, so pressing
+  // Define on the same word again costs no call.
+  const [definition, setDefinition] = useState<Definition | null>(null);
+  const defineAbortRef = useRef<AbortController | null>(null);
+  const definitionCacheRef = useRef(new Map<string, string>());
+  // The New glow (SPEC.md §18) on the Define row until it is pressed.
+  const defineNew = useNewFeature("define");
+  // The glossary's definitions by term (lib/glossary.ts): Define on a key
+  // term shows the glossary's definition at once, with no model call.
+  const glossaryDefinitions = useMemo(() => {
+    const byTerm = new Map<string, string>();
+    for (const block of blocks) {
+      for (const term of termsByBlock[block.id] ?? []) {
+        if (term.definition) byTerm.set(defineKey(block.text.slice(term.start, term.end)), term.definition);
+      }
+    }
+    return byTerm;
+  }, [blocks, termsByBlock]);
   // The page is only editable in edit mode; reading mode never opens editors.
   // `edit=1` opens the document in edit mode (SPEC.md §15: a blank document
   // opens ready to write); viewers and transcripts never enter it.
@@ -3028,8 +3070,13 @@ export function ReaderInteractions({
     const kind = contentKindOf(blockType);
     if (kind === "figure") return;
     const key = popoverAnchorKey;
-    // A core selection has no Link (SPEC.md §28), so Link never leads there.
-    const tools = isCoreKey(popover.anchor.blockId) ? TOOLBARS[kind].filter((tool) => tool !== "link") : TOOLBARS[kind];
+    // Only the tools the popover shows: a core selection has no Link (SPEC.md
+    // §28), and Define shows on one word or one phrase alone.
+    const core = isCoreKey(popover.anchor.blockId);
+    const define = offersDefine(popover);
+    const tools = TOOLBARS[kind].filter(
+      (tool) => !(core && tool === "link") && (tool !== "define" || define),
+    );
     const controller = new AbortController();
     fetch("/api/jev/lead-tool", {
       method: "POST",
@@ -3046,6 +3093,16 @@ export function ReaderInteractions({
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [popoverAnchorKey, notebookId]);
+
+  // A definition on its way stops when its popover closes or moves to
+  // another selection: nobody is left to read it.
+  useEffect(
+    () => () => {
+      defineAbortRef.current?.abort();
+      defineAbortRef.current = null;
+    },
+    [popoverAnchorKey],
+  );
 
   // Pressing a dotted key term opens the selection toolbar on it, with Extract
   // recommended on top. Fires on mousedown, so the toolbar survives the
@@ -3374,6 +3431,85 @@ export function ReaderInteractions({
 
   function deriveBody(type: string, anchor: Anchor) {
     return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor), ...segmentsBody(anchor) });
+  }
+
+  // DEFINE (SPEC.md §4, §6): the meaning of the selected word or phrase in
+  // its sentence, streamed into the toolbar under the Define row. Nothing
+  // persists. A key term's definition is the glossary's, shown at once with
+  // no call; a definition read once stays for the session. Pressing Define
+  // again folds the definition away.
+  async function define() {
+    if (!popover || !popoverAnchorKey) return;
+    if (submenu === "define") {
+      setSubmenu(null);
+      return;
+    }
+    setSubmenu("define");
+    const key = popoverAnchorKey;
+    const anchor = popover.anchor;
+    // Shown already, or on its way.
+    if (definition?.key === key && !definition.error) return;
+    const word = defineKey(anchor.quotedText);
+    const fromGlossary = glossaryDefinitions.get(word);
+    if (fromGlossary) {
+      setDefinition({ key, text: fromGlossary, streaming: false, error: null, glossary: true });
+      return;
+    }
+    const cacheKey = `${anchor.blockId}:${word}`;
+    const known = definitionCacheRef.current.get(cacheKey);
+    if (known) {
+      setDefinition({ key, text: known, streaming: false, error: null, glossary: false });
+      return;
+    }
+    defineAbortRef.current?.abort();
+    const controller = new AbortController();
+    defineAbortRef.current = controller;
+    const settle = (patch: Partial<Definition>) =>
+      setDefinition((d) => (d && d.key === key ? { ...d, ...patch } : d));
+    setDefinition({ key, text: "", streaming: true, error: null, glossary: false });
+    try {
+      await flushLiveBlock(anchor.blockId);
+      const res = await fetch("/api/derive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: deriveBody("DEFINE", anchor),
+      });
+      if (!res.ok || !res.body) {
+        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let raw = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        raw += decoder.decode(value, { stream: true });
+        settle({ text: splitStreamError(raw).text });
+      }
+      // A failure mid-stream arrives in-band; an empty stream is a failure too.
+      const { text, error } = splitStreamError(raw);
+      const meaning = text.trim();
+      if (meaning && !error) definitionCacheRef.current.set(cacheKey, meaning);
+      settle({ text: meaning, streaming: false, error: error ?? (meaning ? null : t("reader.emptyResponse")) });
+    } catch (err) {
+      // Stopped, not failed: what arrived stays; nothing at all clears it.
+      if (controller.signal.aborted) {
+        setDefinition((d) => (d && d.key === key ? (d.text.trim() ? { ...d, streaming: false } : null) : d));
+        return;
+      }
+      settle({ streaming: false, error: err instanceof Error ? err.message : t("reader.deriveFailed") });
+    } finally {
+      if (defineAbortRef.current === controller) defineAbortRef.current = null;
+    }
+  }
+  // Stop under the Define row: the call ends, and a panel with nothing in
+  // it folds away.
+  function stopDefine() {
+    defineAbortRef.current?.abort();
+    defineAbortRef.current = null;
+    if (!definition?.text.trim()) setSubmenu((m) => (m === "define" ? null : m));
   }
 
   // EXPLAIN and ANALYZE stream into the same card beside the article (SPEC.md
@@ -5643,11 +5779,18 @@ function blockFormatKind(
   // The toolbox's own box (top/left/width), in pane coordinates. The bubbles
   // anchored to it (highlight colors, Add to notes) are w-full, so the stack
   // shares one left edge and one width. Coarse pointers get wider boxes to
-  // fit the tap-sized rows.
+  // fit the tap-sized rows; an open command box, comment box, or definition
+  // widens the box to read and type in.
   const popoverBox = popover
     ? (() => {
         const w =
-          submenu === "ai" || submenu === "comment" ? (coarse ? 300 : 248) : coarse ? 220 : 176;
+          submenu === "ai" || submenu === "comment" || submenu === "define"
+            ? coarse
+              ? 300
+              : 248
+            : coarse
+              ? 220
+              : 176;
         if (popover.side === "right") {
           return { top: popover.yTop, left: Math.min(popover.rightBase, popover.cw - w - 6), width: w };
         }
@@ -5670,7 +5813,13 @@ function blockFormatKind(
   // A selection in a core (SPEC.md §28) takes every tool but Link: a link
   // joins the texts themselves.
   const inCore = popover ? isCoreKey(popover.anchor.blockId) : false;
-  const has = (tool: Tool) => TOOLBARS[popoverKind].includes(tool) && !(inCore && tool === "link");
+  // Define shows on one word or one phrase alone (offersDefine).
+  const has = (tool: Tool) =>
+    TOOLBARS[popoverKind].includes(tool) &&
+    !(inCore && tool === "link") &&
+    (tool !== "define" || (popover !== null && offersDefine(popover)));
+  // The definition under the Define row: the open popover's own.
+  const shownDefinition = definition && definition.key === popoverAnchorKey ? definition : null;
   // A row's look: the predicted lead tool reads as recommended, like the
   // figure toolbar's Analyze; every other row is plain.
   const leads = (tool: Tool) => leadTool === tool;
@@ -6460,6 +6609,71 @@ function blockFormatKind(
               <LinkIcon size={11} />
               {t("reader.closeLink")}
             </button>
+          )}
+
+          {/* Define (SPEC.md §6): the first row when the selection is one
+              word or one phrase, right under the highlight colors — on a
+              coarse pointer, where the colors are the toolbox's first row,
+              the row after them. The definition opens under the row. */}
+          {has("define") && (
+            <div className={`flex flex-col gap-0.5${coarse ? " -order-2" : ""}`}>
+              <button
+                onClick={() => {
+                  defineNew.seen();
+                  void define();
+                }}
+                data-track="define"
+                aria-expanded={submenu === "define"}
+                data-tip={t("reader.defineTitle")}
+                className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${
+                  submenu === "define" ? "bg-clay-100 text-clay-800" : rowLook("define")
+                }${defineNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <DefineIcon size={coarse ? 14 : 12} />
+                  {t("reader.define")}
+                  {defineNew.isNew && <NewPill />}
+                </span>
+                {leadBadge("define")}
+              </button>
+              <Collapse open={submenu === "define" && shownDefinition !== null}>
+                {shownDefinition && (
+                  <div data-definition className="flex flex-col gap-1 px-2.5 pt-0.5 pb-1.5">
+                    <span className="text-[12px] font-semibold break-words text-sand-900">
+                      {popover.anchor.quotedText.trim()}
+                    </span>
+                    {shownDefinition.text && (
+                      <p className="text-[12.5px] leading-snug break-words whitespace-pre-line text-sand-800">
+                        {shownDefinition.text}
+                      </p>
+                    )}
+                    {shownDefinition.streaming && !shownDefinition.text && (
+                      <ThinkingIndicator
+                        label={t("reader.defining")}
+                        className="py-0.5 text-[11.5px]"
+                        onStop={stopDefine}
+                      />
+                    )}
+                    {shownDefinition.error && (
+                      <p className="text-[11.5px] leading-snug text-red-600">{shownDefinition.error}</p>
+                    )}
+                    {!shownDefinition.streaming &&
+                      !shownDefinition.error &&
+                      !shownDefinition.glossary &&
+                      shownDefinition.text && (
+                        <RatingButtons
+                          tool="define"
+                          input={popover.anchor.quotedText}
+                          output={shownDefinition.text}
+                          notebookId={notebookId}
+                          documentId={documentId}
+                          className="self-end"
+                        />
+                      )}
+                  </div>
+                )}
+              </Collapse>
+            </div>
           )}
 
           <button

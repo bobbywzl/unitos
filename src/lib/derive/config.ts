@@ -73,7 +73,9 @@ export const SVG_CHART_EFFORT: ClaudeEffort = "high";
 // the tools that reason over a passage or answer the reader; GLM 5.3 Flash
 // for the readings, which find and copy passages into structure. Extract
 // (DISTILL) runs on Kimi K3: a question against the whole document, and
-// the quotes have to be copied exactly.
+// the quotes have to be copied exactly. Define runs on GLM 5.3 Flash: a
+// definition is one sentence, two at most, like the glossary's, and the
+// reader waits for it with the toolbar open.
 export const DERIVATION_MODEL: Record<DerivationType, string> = {
   EXPLAIN: GLM_5_3,
   SIMPLIFY: GLM_5_3,
@@ -89,6 +91,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   ANALYZE: GLM_5_3, // an image attached goes to VISION_MODEL, an SVG chart to SVG_CHART_MODEL (api/derive)
   VOICE: CLAUDE_SONNET_5, // the voice command (SPEC.md §6): VOICE_MODEL below, not a chat call
   VISUALIZE: CLAUDE_OPUS_5_5, // the strongest model at drawing: the picture has to be faithful or refused (SPEC.md §20)
+  DEFINE: GLM_5_3_FLASH, // one word or one phrase in its sentence (SPEC.md §6)
 };
 
 export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
@@ -106,6 +109,7 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
   ANALYZE: "max",
   VOICE: DEFAULT_EFFORT,
   VISUALIZE: "max", // not a Kimi call: VISUALIZE_EFFORT below is the effort used
+  DEFINE: "low", // a word in its sentence needs little reasoning, and the reader is waiting
 };
 
 // The voice command (SPEC.md §6): a spoken command over the open document and
@@ -159,6 +163,7 @@ export const MAX_OUTPUT_TOKENS: Record<DerivationType, number> = {
   ANALYZE: 32768, // three short sections, read at "max" effort: room for the reasoning
   VOICE: 16384, // a few notes with their quotes, and the short reasoning before them
   VISUALIZE: 32768, // the judgment, then a diagram spec or an SVG; an animation's SVG is long
+  DEFINE: 16384, // two sentences at most; the floor Moonshot asks for
 };
 
 // The ingest-time corpus scan for recommended links (SPEC.md §13). Not a

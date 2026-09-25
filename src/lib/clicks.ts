@@ -10,7 +10,7 @@
 export const CLICK_SURFACES = [
   "topbar", // the workspace header: documents, share, history, context, guide
   "sidebar", // the rail: assistant, notes, distill, graph, annotations, edits, more
-  "ai-toolbar", // the selection popover: assistant, explain, simplify, visualize, comment, link, highlight, add to notes, read aloud
+  "ai-toolbar", // the selection popover: define, assistant, explain, simplify, visualize, comment, link, highlight, add to notes, read aloud
   "article-menu", // the floating menu at the top left: the contents
   "reader", // the article itself: distill button, edit toolbar, tool cards, distilled page, pages, video pane
   "tray", // the notes tray: notes, assistant, distill, annotations, and edits tabs
@@ -48,6 +48,7 @@ export type ClickGroup = (typeof CLICK_GROUPS)[number];
 const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
   ai: [
     // the AI toolbar
+    "define",
     "explain",
     "simplify",
     "assistant-run", // a question or a command about the selection
