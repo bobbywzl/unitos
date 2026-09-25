@@ -3,7 +3,7 @@
 import { Extension } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { createRoot, type Root } from "react-dom/client";
 import { CommentIcon, LinkIcon, UnlinkIcon } from "@/components/icons";
 import {
@@ -15,7 +15,10 @@ import {
   anchorClass,
   type Highlight,
 } from "@/components/reader/block-view";
+import { findBlock, posInBlock } from "@/components/docs/layer/anchor";
+import { PAGE_FLASH_EVENT } from "@/components/docs/layer/flash";
 import type { TFunc } from "@/lib/i18n/dictionaries";
+import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 
 // The Unitos layer over the page editor (SPEC.md §29): the marks the reader
 // paints on an article — notes, annotations, links, extractions, and the
@@ -23,34 +26,14 @@ import type { TFunc } from "@/lib/i18n/dictionaries";
 // ProseMirror decorations. They never change the text: the classes are the
 // reader's (block-view.tsx markedText), the chips at a mark's end are
 // data-anchor-skip widgets outside the document, and a press on a mark opens
-// what it opens in the reader, through the same window events.
+// what it opens in the reader, through the same window events. Offsets are
+// the paragraph index's (layer/anchor.ts), so a mark sits on the words its
+// anchor names. Every decoration maps through each edit until the next
+// repaint, so a mark follows the words while they are typed.
 
 export type MarksMeta = { highlights: Record<string, Highlight[]>; t: TFunc };
 
 export const annotationMarksKey = new PluginKey<DecorationSet>("docsAnnotationMarks");
-
-/** The document position of each character offset of a textblock's words
-    (lib/docs/blocks.ts inlineText): text maps one to one, a line break is one
-    character at its own position. */
-function offsetToPos(node: PMNode, nodePos: number, offset: number): number {
-  let text = 0;
-  let pos = nodePos + 1;
-  let result = pos;
-  let done = false;
-  node.forEach((child) => {
-    if (done) return;
-    const len = child.isText ? (child.text ?? "").length : child.type.name === "hardBreak" ? 1 : 0;
-    if (offset <= text + len) {
-      result = child.isText || child.type.name === "hardBreak" ? pos + (offset - text) : pos;
-      done = true;
-      return;
-    }
-    text += len;
-    pos += child.nodeSize;
-    result = pos;
-  });
-  return result;
-}
 
 type Chip = { kind: "tool" | "comment" | "link-start" | "link-end" | "extract"; highlight: Highlight };
 
@@ -70,6 +53,9 @@ function chipWidget(chip: Chip, t: TFunc) {
       button.setAttribute("data-track", "tool-chip");
       button.dataset.docsOpen = "annotation";
       button.dataset.sourceId = h.sourceId ?? "";
+      // The pointer resting on the symbol shows the conversation's log, as
+      // on its words (SPEC.md §21).
+      button.dataset.hoverSource = h.sourceId ?? "";
       root = createRoot(button);
       root.render(<ToolSymbol tool={h.tool} plus={h.plus} size={10} />);
     } else if (chip.kind === "comment") {
@@ -105,6 +91,8 @@ function chipWidget(chip: Chip, t: TFunc) {
       button.className =
         "mx-0.5 inline-flex h-4 items-center rounded-full bg-clay-100 px-1.5 align-text-top text-[9.5px] font-bold text-clay-700 hover:bg-clay-200 hover:text-clay-800";
       button.textContent = h.extractLabel ?? "";
+      button.setAttribute("aria-label", t("panes.extractOpenCard", { label: h.extractLabel ?? "" }));
+      button.setAttribute("data-tip", t("panes.extractOpenCard", { label: h.extractLabel ?? "" }));
       button.setAttribute("data-track", "extract-chip");
       button.dataset.docsOpen = "extract";
       button.dataset.extractId = h.extractId ?? "";
@@ -120,12 +108,11 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
     if (!node.isTextblock) return true;
     const id = node.attrs.blockId as string | null;
     const list = id ? highlights[id] : undefined;
-    if (!list || list.length === 0) return false;
-    const at = (offset: number) => offsetToPos(node, pos, offset);
+    if (!id || !list || list.length === 0) return false;
     for (const h of list) {
       if (h.end <= h.start) continue;
-      const from = at(h.start);
-      const to = at(h.end);
+      const from = posInBlock(node, pos, h.start);
+      const to = posInBlock(node, pos, h.end);
       if (to <= from) continue;
       let cls = "";
       const attrs: Record<string, string> = {};
@@ -150,6 +137,7 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
         cls = `${h.extractOrigin ? "extract-origin-mark" : "extract-mark"} annotation-mark`;
         attrs["data-docs-open"] = "extract";
         if (h.extractId) attrs["data-extract-id"] = h.extractId;
+        attrs["data-tip"] = t("panes.extractOpenCard", { label: h.extractLabel ?? "" });
       } else if (h.kind === "link") {
         cls = "link-mark rounded-[4px]";
         if (h.linkId) attrs["data-link-id"] = h.linkId;
@@ -161,6 +149,13 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
         // The document's own formatting, terms, and web links are the
         // editor's to draw.
         continue;
+      }
+      // A mark made in this session sweeps in once (globals.css mark-sweep);
+      // the plugin's view reports the end, and the next repaint drops it.
+      if (h.fresh && !h.leaving && (h.kind === "anchor" || h.kind === "simplify" || h.kind === "link")) {
+        cls += " mark-sweep";
+        attrs["data-sweep"] = `${id}:${h.start}:${h.end}`;
+        if (h.freshDelay) attrs.style = `animation-delay: ${h.freshDelay}ms`;
       }
       decorations.push(Decoration.inline(from, to, { class: cls, ...attrs }, { inclusiveStart: false, inclusiveEnd: false }));
       // The chips at the mark's end.
@@ -176,7 +171,7 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
             side: 1 + i,
             ignoreSelection: true,
             stopEvent: () => true,
-            key: `${chip.kind}:${h.sourceId ?? h.extractId ?? ""}:${h.start}:${h.end}`,
+            key: `${chip.kind}:${h.sourceId ?? h.extractId ?? h.linkId ?? ""}:${h.start}:${h.end}:${h.plus ? 1 : 0}`,
             destroy: (dom) => {
               const root = (dom as HTMLElement & { __root?: Root }).__root;
               if (root) queueMicrotask(() => root.unmount());
@@ -190,7 +185,104 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
   return DecorationSet.create(doc, decorations);
 }
 
-/** The marks layer: set its highlights with setMarks(view, meta). */
+// ── The flash ────────────────────────────────────────────────────────────
+// A jump to a mark or a paragraph flashes it (SPEC.md §6): the reader
+// raises PAGE_FLASH_EVENT on the element, and the flash is a decoration over
+// the same words, gone after FLASH_MS.
+
+const FLASH_MS = 2000;
+const flashKey = new PluginKey<DecorationSet>("docsFlash");
+type FlashMeta = { add: Decoration[] } | { remove: string };
+let flashCount = 0;
+
+function flashDecorations(view: EditorView, target: HTMLElement, id: string): Decoration[] {
+  const spec = { flash: id };
+  // A paragraph: the whole node flashes.
+  const blockId = target.dataset.blockId;
+  if (blockId && !target.dataset.sourceId && !target.dataset.linkId) {
+    const block = findBlock(view.state.doc, blockId);
+    if (!block) return [];
+    return [Decoration.node(block.pos, block.pos + block.node.nodeSize, { class: "anchor-flash" }, spec)];
+  }
+  // A mark: every piece of it — a mark over two runs of text draws as two
+  // spans.
+  const sourceId = target.dataset.sourceId;
+  const linkId = target.dataset.linkId;
+  const pieces = sourceId
+    ? [...view.dom.querySelectorAll<HTMLElement>(`[data-source-id="${CSS.escape(sourceId)}"]`)]
+    : linkId
+      ? [...view.dom.querySelectorAll<HTMLElement>(`[data-link-id="${CSS.escape(linkId)}"]`)]
+      : [target];
+  let from = Infinity;
+  let to = -Infinity;
+  for (const piece of pieces) {
+    try {
+      from = Math.min(from, view.posAtDOM(piece, 0));
+      to = Math.max(to, view.posAtDOM(piece, piece.childNodes.length));
+    } catch {
+      // Not in the text (a widget): nothing to flash there.
+    }
+  }
+  return to > from ? [Decoration.inline(from, to, { class: "anchor-flash" }, spec)] : [];
+}
+
+function flashPlugin() {
+  return new Plugin<DecorationSet>({
+    key: flashKey,
+    state: {
+      init: () => DecorationSet.empty,
+      apply(tr, set) {
+        let next = tr.docChanged ? set.map(tr.mapping, tr.doc) : set;
+        const meta = tr.getMeta(flashKey) as FlashMeta | undefined;
+        if (meta && "add" in meta) next = next.add(tr.doc, meta.add);
+        if (meta && "remove" in meta) {
+          next = next.remove(next.find(undefined, undefined, (spec) => spec.flash === meta.remove));
+        }
+        return next;
+      },
+    },
+    props: {
+      decorations(state) {
+        return flashKey.getState(state);
+      },
+    },
+    view(view) {
+      const onFlash = (e: Event) => {
+        if (!(e.target instanceof HTMLElement)) return;
+        const id = `flash-${++flashCount}`;
+        const add = flashDecorations(view, e.target, id);
+        if (add.length === 0) return;
+        view.dispatch(view.state.tr.setMeta(flashKey, { add }).setMeta("addToHistory", false));
+        window.setTimeout(() => {
+          if (view.isDestroyed) return;
+          view.dispatch(view.state.tr.setMeta(flashKey, { remove: id }).setMeta("addToHistory", false));
+        }, FLASH_MS);
+      };
+      // A fresh mark's sweep ended: the reader forgets it is fresh
+      // (lib/mark-sweep.ts), and the next repaint paints it at rest.
+      const onAnimationEnd = (e: AnimationEvent) => {
+        if (e.animationName !== "mark-sweep" || !(e.target instanceof HTMLElement)) return;
+        const [blockId, start, end] = (e.target.dataset.sweep ?? "").split(":");
+        if (!blockId) return;
+        window.dispatchEvent(
+          new CustomEvent<MarkSweptDetail>(MARK_SWEPT_EVENT, {
+            detail: { blockId, start: Number(start), end: Number(end) },
+          }),
+        );
+      };
+      view.dom.addEventListener(PAGE_FLASH_EVENT, onFlash);
+      view.dom.addEventListener("animationend", onAnimationEnd);
+      return {
+        destroy() {
+          view.dom.removeEventListener(PAGE_FLASH_EVENT, onFlash);
+          view.dom.removeEventListener("animationend", onAnimationEnd);
+        },
+      };
+    },
+  });
+}
+
+/** The marks layer: set its highlights with a MarksMeta on annotationMarksKey. */
 export const AnnotationMarks = Extension.create({
   name: "docsAnnotationMarks",
   addProseMirrorPlugins() {
@@ -211,6 +303,7 @@ export const AnnotationMarks = Extension.create({
           },
         },
       }),
+      flashPlugin(),
     ];
   },
 });

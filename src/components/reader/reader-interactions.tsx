@@ -124,6 +124,9 @@ import { ANNOTATION_PARAM, referenceContent, referenceWords, type AnnotationRefe
 import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
+import { pageEditorIn, pageSegmentsOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
+import { flashInPage } from "@/components/docs/layer/flash";
+import { marginPlace, marginSlot, pageGeometry, toolbarLeft, type PageGeometry } from "@/components/docs/layer/margin";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -158,6 +161,12 @@ type Popover = {
   truncated: boolean; // the selection crossed an equation or a page, which the passage leaves out
   figure?: boolean; // opened by the hold-and-circle gesture on a figure, equation, or table: the anchor is the whole block
   term?: boolean; // opened by clicking a key term; Extract leads, recommended
+  // Too close to the top of the pane for the bubbles above the toolbox:
+  // they drop below it. Unset: the top of the article decides.
+  nearTop?: boolean;
+  // The page editor's page as the toolbar opened, and its shift (SPEC.md
+  // §29): the toolbox sits beside the page's right edge, never over the text.
+  page?: { geo: PageGeometry; shift: number };
   // Placement, by proximity to open tool blocks: right of the text first, then
   // left, then directly below the highlighted text. Bases are container coords.
   side: "right" | "left" | "below";
@@ -173,6 +182,15 @@ function isTextEntry(el: HTMLElement): boolean {
   return (
     el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el.isContentEditable
   );
+}
+
+// A jump flashes the mark or the block it lands on. In the page editor the
+// flash is the editor's own decoration (SPEC.md §29): a class written on its
+// text's DOM would be redrawn away.
+function flashElement(el: HTMLElement) {
+  if (flashInPage(el)) return;
+  el.classList.add("anchor-flash");
+  setTimeout(() => el.classList.remove("anchor-flash"), 2000);
 }
 
 // The layer the reader's tools sit on, over the article: the toolbar a
@@ -1385,6 +1403,12 @@ export function ReaderInteractions({
   const narrowRef = useRef(false);
   const splitRef = useRef(split);
   splitRef.current = split;
+  // The page editor (SPEC.md §29): how far its page moves left while cards
+  // sit in its margin, as Google Docs moves the page for its comments. The
+  // pane carries it as --docs-shift; 0 with no card open.
+  const [docsShift, setDocsShift] = useState(0);
+  const docsShiftRef = useRef(0);
+  docsShiftRef.current = docsShift;
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
   // Highlighting an answer in the chat card (SPEC.md §7): Start side chat,
   // Ask about this, Comment.
@@ -1720,6 +1744,11 @@ export function ReaderInteractions({
     if (!container || !selection || selection.isCollapsed || selection.rangeCount === 0) return null;
     const range = selection.getRangeAt(0);
     if (!container.contains(range.commonAncestorContainer)) return null;
+    // A blank document (SPEC.md §29): the passage is read from the page
+    // editor's own document, so its offsets are the paragraph index's — a
+    // line break or a chip counted from the DOM would shift them.
+    const pageEditor = richTextRef.current ? pageEditorIn(container) : null;
+    const pageSegments = pageEditor ? pageSegmentsOfRange(pageEditor, range) : null;
 
     const blockOf = (node: Node): HTMLElement | null => {
       const el = node instanceof HTMLElement ? node : node.parentElement;
@@ -1727,12 +1756,12 @@ export function ReaderInteractions({
     };
     const startBlock = blockOf(range.startContainer);
     const endBlock = blockOf(range.endContainer);
-    if (!startBlock) return null;
+    if (!startBlock && !pageSegments) return null;
     // A layer inside this one (the article card in the video pane, SPEC.md
     // §11) takes its own selections: a block whose nearest reader root is
     // not this container belongs to that layer.
     const own = (el: Element) => el.closest("[data-reader-root]") === container;
-    if (!own(startBlock)) return null;
+    if (startBlock && !own(startBlock)) return null;
 
     // The passage: every block the selection touches, in reading order, one
     // segment per block (lib/anchors/passage.ts). A rendered equation's DOM
@@ -1742,13 +1771,13 @@ export function ReaderInteractions({
     const blockEls = Array.from(
       container.querySelectorAll<HTMLElement>("[data-block-id], [data-edit-block]"),
     ).filter((el) => own(el) && (el === startBlock || el === endBlock || range.intersectsNode(el)));
-    const segments: Segment[] = [];
+    const segments: Segment[] = pageSegments ?? [];
     let truncated = false;
     // A core's words (SPEC.md §28) take the core key: their anchor is in the
     // collapsed view's layer. A passage stays in one layer — the first
     // block's — and a block of the other layer is left out.
-    const firstCore = startBlock.hasAttribute("data-collapsed");
-    for (const el of blockEls) {
+    const firstCore = startBlock?.hasAttribute("data-collapsed") ?? false;
+    for (const el of pageSegments ? [] : blockEls) {
       const blockId = el.dataset.blockId ?? el.dataset.editBlock;
       if (!blockId) continue;
       const core = el.hasAttribute("data-collapsed");
@@ -1807,13 +1836,35 @@ export function ReaderInteractions({
     const { rects, articleLeft, articleRight, cw } = measureSideCards(container);
     const articleMid = (articleLeft + articleRight) / 2;
     const POPOVER_ESTIMATE = 280;
+    // The page editor (SPEC.md §29): the toolbox sits beside the page's right
+    // edge at the selection's height, where Google Docs shows its floating
+    // buttons — over the page's margin when the pane is tight, never over the
+    // text; with room for neither it goes under the words.
+    const shift = docsShiftRef.current;
+    const pageGeo = pageEditor ? pageGeometry(container, shift) : null;
     const side = window.matchMedia("(pointer: coarse)").matches
       ? ("below" as const)
-      : blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
-        ? ("right" as const)
-        : blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
-          ? ("left" as const)
-          : ("below" as const);
+      : pageGeo
+        ? toolbarLeft(pageGeo, shift, 176) === null
+          ? ("below" as const)
+          : ("right" as const)
+        : blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
+          ? ("right" as const)
+          : blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
+            ? ("left" as const)
+            : ("below" as const);
+    // Google Docs centers its buttons on the selection's first line: the
+    // toolbox's first row sits there. The page editor's title row and
+    // toolbar stay at the top of the pane, so near them the bubbles above
+    // the toolbox drop below it.
+    const firstLine = lineRects[0] ?? rect;
+    const lineTop = firstLine.top + firstLine.height / 2 - 20;
+    const headerBottom = pageGeo
+      ? container.querySelector(".docs-header")?.getBoundingClientRect().bottom
+      : undefined;
+    // Right under that toolbar the toolbox steps down: Add to notes keeps
+    // its room above it.
+    const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
     return {
       anchor: {
         blockId,
@@ -1826,7 +1877,10 @@ export function ReaderInteractions({
       },
       x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
       y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6),
-      yTop,
+      yTop:
+        pageGeo && side === "right"
+          ? Math.max(8, pageTop - containerRect.top + container.scrollTop)
+          : yTop,
       textLeft,
       endLeft,
       endTop,
@@ -1834,6 +1888,8 @@ export function ReaderInteractions({
       side,
       rightBase: articleRight + 10,
       cw,
+      ...(headerBottom !== undefined ? { nearTop: lineTop - headerBottom < 96 } : {}),
+      ...(pageGeo ? { page: { geo: pageGeo, shift } } : {}),
     };
   }, []);
   // Read by the drag-start handler below, a mount-time effect with no deps.
@@ -2461,8 +2517,7 @@ export function ReaderInteractions({
       const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("anchor-flash");
-        setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+        flashElement(el);
       } else if (attempts++ < 30) {
         setTimeout(tryScroll, 200);
       }
@@ -2507,8 +2562,7 @@ export function ReaderInteractions({
       const el = container.querySelector<HTMLElement>(`[data-link-id="${linkParam}"]`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("anchor-flash");
-        setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+        flashElement(el);
       } else if (attempts++ < 10) {
         setTimeout(tryScroll, 200);
       }
@@ -2529,8 +2583,7 @@ export function ReaderInteractions({
       );
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("anchor-flash");
-        setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+        flashElement(el);
       } else if (attempts++ < 10) {
         setTimeout(tryScroll, 200);
       }
@@ -3237,8 +3290,7 @@ export function ReaderInteractions({
         return;
       }
       el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("anchor-flash");
-      setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+      flashElement(el);
     };
     window.addEventListener("dissect:flash-block", onFlashBlock);
     return () => window.removeEventListener("dissect:flash-block", onFlashBlock);
@@ -4009,8 +4061,7 @@ export function ReaderInteractions({
       );
       if (!el) return;
       el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("anchor-flash");
-      setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+      flashElement(el);
     });
   }
 
@@ -5691,6 +5742,12 @@ function blockFormatKind(
     ? (() => {
         const w =
           submenu === "ai" || submenu === "comment" ? (coarse ? 300 : 248) : coarse ? 220 : 176;
+        // The page editor: beside the page's right edge, or over its margin;
+        // a box widened by a submenu keeps to the pane's right edge.
+        if (popover.side === "right" && popover.page) {
+          const left = toolbarLeft(popover.page.geo, popover.page.shift, w) ?? Math.max(6, popover.cw - w - 6);
+          return { top: popover.yTop, left, width: w };
+        }
         if (popover.side === "right") {
           return { top: popover.yTop, left: Math.min(popover.rightBase, popover.cw - w - 6), width: w };
         }
@@ -5704,6 +5761,9 @@ function blockFormatKind(
         return { top: popover.yTop, left: Math.max(6, popover.textLeft - w - 10), width: w };
       })()
     : { top: 0, left: 0, width: 0 };
+  // Near the top of the article, or of the page editor's pane under its
+  // toolbar, the bubbles above the toolbox drop below it.
+  const popoverNearTop = popover ? (popover.nearTop ?? popover.yTop < 54) : false;
   // One row of the toolbox. Coarse pointers get 44px-tall rows.
   const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
   // The open popover's content kind and its toolbar (SPEC.md §6).
@@ -6749,7 +6809,7 @@ function blockFormatKind(
               coarse
                 ? `order-first flex items-center justify-around rounded-full px-2 py-2${leadRing("highlight")}`
                 : `absolute left-0 flex w-full items-center justify-around rounded-full bg-card px-3 py-2 shadow-float ${
-                    popover.yTop < 54 ? "top-full mt-[50px]" : "bottom-full mb-2"
+                    popoverNearTop ? "top-full mt-[50px]" : "bottom-full mb-2"
                   }${leadRing("highlight")}`
             }
           >
@@ -6783,7 +6843,7 @@ function blockFormatKind(
                 coarse
                   ? `-order-1 flex flex-col gap-0.5 rounded-2xl${leadRing("addToNotes")}`
                   : `absolute bottom-full left-0 flex w-full flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float ${
-                      popover.yTop < 54 ? "mb-2" : "mb-[52px]"
+                      popoverNearTop ? "mb-2" : "mb-[52px]"
                     }${leadRing("addToNotes")}`
               }
             >
