@@ -30,18 +30,19 @@ export type ParagraphState = {
   styleFlags: Record<ParagraphFlag, boolean>;
 };
 
-export const LINE_SPACINGS = [
-  { value: 1, key: "docs.spacingSingle" },
+/** Each with the words Search the menus also finds it by, as Docs has them. */
+export const LINE_SPACINGS: { value: number; key: TKey; words?: string[] }[] = [
+  { value: 1, key: "docs.spacingSingle", words: ["single spacing", "single space"] },
   { value: 1.15, key: "docs.spacing115" },
   { value: 1.5, key: "docs.spacing15" },
-  { value: 2, key: "docs.spacingDouble" },
-] as const;
+  { value: 2, key: "docs.spacingDouble", words: ["double spacing", "double space"] },
+];
 
-export const PARAGRAPH_FLAGS: { flag: ParagraphFlag; key: TKey }[] = [
-  { flag: "keepWithNext", key: "docs.keepWithNext" },
-  { flag: "keepLinesTogether", key: "docs.keepLinesTogether" },
-  { flag: "preventSingleLines", key: "docs.preventSingleLines" },
-  { flag: "pageBreakBefore", key: "docs.pageBreakBefore" },
+export const PARAGRAPH_FLAGS: { flag: ParagraphFlag; key: TKey; words: string[] }[] = [
+  { flag: "keepWithNext", key: "docs.keepWithNext", words: ["keep with next paragraph"] },
+  { flag: "keepLinesTogether", key: "docs.keepLinesTogether", words: ["keep paragraph together"] },
+  { flag: "preventSingleLines", key: "docs.preventSingleLines", words: ["widow", "orphan"] },
+  { flag: "pageBreakBefore", key: "docs.pageBreakBefore", words: ["page break before paragraph"] },
 ];
 
 const same = (a: number, b: number) => Math.abs(a - b) < 0.001;

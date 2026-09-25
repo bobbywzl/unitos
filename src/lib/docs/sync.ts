@@ -64,7 +64,8 @@ type Placed = {
 };
 
 // Where the anchors go (SPEC.md §5). The paragraphs that changed or left
-// between two unchanged ones form a run; its words before and after the save
+// between two unchanged ones form a run (each paragraph its own run when none
+// split, joined, came, or went); its words before and after the save
 // (paragraphs joined by SEP) differ in one stretch. A mark outside the
 // stretch moves with its words, into the new paragraph after an Enter or the
 // joined one after a Backspace; typing right before or after a mark stays
@@ -124,11 +125,18 @@ function runAround(m: Moves, blockId: string): Run | null {
   while (a > 0 && !m.stable.has(m.old[a - 1].id)) a--;
   let b = i;
   while (b + 1 < m.old.length && !m.stable.has(m.old[b + 1].id)) b++;
+  let from = a > 0 ? (m.newIndex.get(m.old[a - 1].id) ?? -2) + 1 : 0;
+  let to = b + 1 < m.old.length ? (m.newIndex.get(m.old[b + 1].id) ?? -1) : m.derived.length;
+  // No paragraph split, joined, added, or removed: each paragraph is its own
+  // run, so an edit in the next paragraph never reaches a mark in this one.
+  if (from >= 0 && to - from === b - a + 1 && m.old.slice(a, b + 1).every((block, k) => m.derived[from + k].id === block.id)) {
+    from += i - a;
+    to = from + 1;
+    a = b = i;
+  }
   const key = m.old[a].id;
   const cached = m.runs.get(key);
   if (cached !== undefined) return cached;
-  const from = a > 0 ? (m.newIndex.get(m.old[a - 1].id) ?? -2) + 1 : 0;
-  const to = b + 1 < m.old.length ? (m.newIndex.get(m.old[b + 1].id) ?? -1) : m.derived.length;
   let run: Run | null = null;
   if (from >= 0 && to >= from) {
     const oldStart = new Map<string, number>();

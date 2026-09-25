@@ -361,7 +361,6 @@ const Suggesting = Extension.create({
       !tr.docChanged ||
       tr.getMeta("addToHistory") === false ||
       tr.getMeta("history$") !== undefined ||
-      tr.getMeta("preventUpdate") === true ||
       tr.getMeta(suggestChangesKey) !== undefined;
     next(passes ? tr : suggest(tr, this.editor.state, author));
   },

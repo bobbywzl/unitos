@@ -60,10 +60,11 @@ export function menuStyles(deepest: number): DocStyle[] {
 
 /** Options: Save as my default styles, Use my default styles, Reset styles
     (the menu and Search the menus). */
-export function styleOptions(editor: Editor, t: TFunc): { key: TKey; run: () => void }[] {
+export function styleOptions(editor: Editor, t: TFunc): { key: TKey; words: string[]; run: () => void }[] {
   return [
     {
       key: "docs.saveDefaultStyles",
+      words: ["save styles", "save all styles"],
       run: () => {
         saveDefaultStyles(editor.state.doc);
         toast(t("docs.defaultStylesSaved"));
@@ -71,12 +72,13 @@ export function styleOptions(editor: Editor, t: TFunc): { key: TKey; run: () => 
     },
     {
       key: "docs.useDefaultStyles",
+      words: ["load default styles"],
       run: () => {
         replaceAllChanges(editor, savedDefaultStyles());
         toast(t("docs.usingDefaultStyles"));
       },
     },
-    { key: "docs.resetStyles", run: () => replaceAllChanges(editor, {}) },
+    { key: "docs.resetStyles", words: ["clear styles"], run: () => replaceAllChanges(editor, {}) },
   ];
 }
 

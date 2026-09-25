@@ -99,24 +99,26 @@ const MENU_NAMES: Record<DocsMenu, TKey> = {
 /** Google Docs' Format submenu of the lists: the list menus and List options. */
 const BULLETS = "bullets & numbering";
 
-const ALIGNS: { align: Align; key: TKey; combo: string; Icon: typeof AlignLeftIcon }[] = [
-  { align: "left", key: "docs.alignLeft", combo: "Mod+Shift+L", Icon: AlignLeftIcon },
-  { align: "center", key: "docs.alignCenter", combo: "Mod+Shift+E", Icon: AlignCenterIcon },
-  { align: "right", key: "docs.alignRight", combo: "Mod+Shift+R", Icon: AlignRightIcon },
-  { align: "justify", key: "docs.alignJustify", combo: "Mod+Shift+J", Icon: AlignJustifyIcon },
+const ALIGNS: { align: Align; key: TKey; combo: string; Icon: typeof AlignLeftIcon; words: string[] }[] = [
+  { align: "left", key: "docs.alignLeft", combo: "Mod+Shift+L", Icon: AlignLeftIcon, words: ["align left", "left alignment"] },
+  { align: "center", key: "docs.alignCenter", combo: "Mod+Shift+E", Icon: AlignCenterIcon, words: ["align center", "center alignment"] },
+  { align: "right", key: "docs.alignRight", combo: "Mod+Shift+R", Icon: AlignRightIcon, words: ["align right", "right alignment"] },
+  { align: "justify", key: "docs.alignJustify", combo: "Mod+Shift+J", Icon: AlignJustifyIcon, words: ["justified", "align justified", "justified alignment"] },
 ];
 
 /** The toolbar menus Search the menus opens, by their DropBtn id, and the
     Google Docs menu each lives in when not Format. */
 const MENUS: [string, TKey, string[], DocsMenu?][] = [
-  ["font", "docs.font", ["typeface", "more fonts"]],
+  ["styles", "docs.styles", ["paragraph styles"]],
+  ["font", "docs.font", ["typeface", "more fonts", "get fonts"]],
   ["text-color", "docs.textColor", ["font color", "colour"]],
   ["highlight-color", "docs.highlightColor", ["background color", "marker"]],
-  ["image", "docs.insertImage", ["picture", "photo", "upload", "url"], "insert"],
-  ["line-spacing", "docs.customSpacing", ["line spacing", "paragraph spacing"]],
-  ["checklist", "docs.checklistMenu", ["checklist styles", BULLETS]],
-  ["bulleted-list", "docs.bulletedListMenu", ["bullet styles", BULLETS]],
-  ["numbered-list", "docs.numberedListMenu", ["numbering styles", BULLETS]],
+  ["image", "docs.insertImage", ["picture", "photo", "add a photo", "add a picture", "add an image", "upload from computer", "by url"], "insert"],
+  ["align", "docs.align", ["align & indent", "alignment"]],
+  ["line-spacing", "docs.customSpacing", ["line spacing", "paragraph spacing", "set line spacing", "change line spacing", "custom space"]],
+  ["checklist", "docs.checklistMenu", ["checklist styles", BULLETS, "create checklist", "insert checklist", "todo", "task", "action item", "strikethrough when checked", "don't strikethrough when checked"]],
+  ["bulleted-list", "docs.bulletedListMenu", ["bullet styles", BULLETS, "apply bulleted list", "toggle bulleted list", "start bulleted list"]],
+  ["numbered-list", "docs.numberedListMenu", ["numbering styles", BULLETS, "apply numbered list", "toggle numbered list", "start numbered list"]],
 ];
 
 /** An action a button runs and Search the menus finds; `on: false` is off. */
@@ -275,22 +277,57 @@ export function DocsToolbar({
   const A = {
     undo: { id: "undo", key: "docs.undo", combo: "Mod+Z", Icon: UndoIcon, where: "edit", run: () => run((c) => c.undo()), on: s.canUndo },
     redo: { id: "redo", key: "docs.redo", combo: "Mod+Y", Icon: RedoIcon, where: "edit", run: () => run((c) => c.redo()), on: s.canRedo },
-    print: { id: "print", key: "docs.print", combo: "Mod+P", Icon: PrintIcon, where: "file", run: () => window.print() },
+    print: { id: "print", key: "docs.print", combo: "Mod+P", Icon: PrintIcon, where: "file", words: ["printer", "print preview"], run: () => window.print() },
     spelling: { id: "spelling", key: "docs.spellcheck", combo: "Mod+Alt+X", Icon: SpellcheckIcon, where: "tools", run: () => fire(TYPING_EVENT.spelling) },
     paint: { id: "paint-format", key: "docs.paintFormat", Icon: PaintFormatIcon, words: ["copy formatting"], run: paint.press },
-    bold: { id: "bold", key: "docs.bold", combo: "Mod+B", Icon: BoldIcon, run: () => run((c) => c.toggleBold()) },
-    italic: { id: "italic", key: "docs.italic", combo: "Mod+I", Icon: ItalicIcon, run: () => run((c) => c.toggleItalic()) },
+    bold: { id: "bold", key: "docs.bold", combo: "Mod+B", Icon: BoldIcon, words: ["strong", "dark"], run: () => run((c) => c.toggleBold()) },
+    italic: { id: "italic", key: "docs.italic", combo: "Mod+I", Icon: ItalicIcon, words: ["emphasis", "emphasized", "italicize"], run: () => run((c) => c.toggleItalic()) },
     underline: { id: "underline", key: "docs.underline", combo: "Mod+U", Icon: UnderlineIcon, run: () => run((c) => c.toggleUnderline()) },
     link: { id: "link", key: "docs.insertLink", combo: "Mod+K", Icon: LinkIcon, where: "insert", words: ["hyperlink", "url"], run: () => fire(DOCS_EVENT.link) },
     comment: { id: "comment", key: "docs.addComment", combo: "Mod+Alt+M", Icon: AddCommentIcon, where: "insert", run: () => fire(DOCS_EVENT.comment), on: canEdit },
-    outdent: { id: "indent-decrease", key: "docs.decreaseIndent", combo: "Mod+[", Icon: IndentDecreaseIcon, run: () => run((c) => c.indentStep(-1)) },
-    indent: { id: "indent-increase", key: "docs.increaseIndent", combo: "Mod+]", Icon: IndentIncreaseIcon, run: () => run((c) => c.indentStep(1)) },
+    outdent: {
+      id: "indent-decrease",
+      key: "docs.decreaseIndent",
+      combo: "Mod+[",
+      Icon: IndentDecreaseIcon,
+      words: ["decrease paragraph indent", "unindent", "outdent", "dedent"],
+      run: () => run((c) => c.indentStep(-1)),
+    },
+    indent: { id: "indent-increase", key: "docs.increaseIndent", combo: "Mod+]", Icon: IndentIncreaseIcon, words: ["tab", "increase paragraph indent"], run: () => run((c) => c.indentStep(1)) },
     clear: { id: "clear-formatting", key: "docs.clearFormatting", combo: "Mod+\\", Icon: ClearFormattingIcon, words: ["remove formatting"], run: () => run((c) => c.clearFormatting()) },
-    sizeDown: { id: "font-size-down", key: "docs.decreaseFontSize", combo: "Mod+Shift+,", Icon: RemoveIcon, words: ["smaller"], run: () => stepSelectionFontSize(editor, -1) },
-    sizeUp: { id: "font-size-up", key: "docs.increaseFontSize", combo: "Mod+Shift+.", Icon: AddIcon, words: ["bigger", "make the font bigger", "larger"], run: () => stepSelectionFontSize(editor, 1) },
+    sizeDown: {
+      id: "font-size-down",
+      key: "docs.decreaseFontSize",
+      combo: "Mod+Shift+,",
+      Icon: RemoveIcon,
+      words: ["smaller", "make the font smaller", "make it smaller"],
+      run: () => stepSelectionFontSize(editor, -1),
+    },
+    sizeUp: {
+      id: "font-size-up",
+      key: "docs.increaseFontSize",
+      combo: "Mod+Shift+.",
+      Icon: AddIcon,
+      words: ["bigger", "make the font bigger", "make it bigger", "larger"],
+      run: () => stepSelectionFontSize(editor, 1),
+    },
     checklist: { id: "checklist", key: "docs.checklist", combo: "Mod+Shift+9", Icon: ChecklistIcon, run: () => run((c) => c.toggleTaskList()) },
-    bulleted: { id: "bulleted-list", key: "docs.bulletedList", combo: "Mod+Shift+8", Icon: BulletListIcon, run: () => run((c) => c.toggleBulletList()) },
-    numbered: { id: "numbered-list", key: "docs.numberedList", combo: "Mod+Shift+7", Icon: NumberedListIcon, run: () => run((c) => c.toggleOrderedList()) },
+    bulleted: {
+      id: "bulleted-list",
+      key: "docs.bulletedList",
+      combo: "Mod+Shift+8",
+      Icon: BulletListIcon,
+      words: ["circles", "create bulleted list", "insert bulleted list"],
+      run: () => run((c) => c.toggleBulletList()),
+    },
+    numbered: {
+      id: "numbered-list",
+      key: "docs.numberedList",
+      combo: "Mod+Shift+7",
+      Icon: NumberedListIcon,
+      words: ["numbers", "123", "create numbered list", "insert numbered list"],
+      run: () => run((c) => c.toggleOrderedList()),
+    },
   } satisfies Record<string, Act>;
   const split = (a: Act, pressed: boolean, menuKey: TKey, menu: (close: () => void) => ReactNode) => (
     <SplitButton
@@ -327,7 +364,7 @@ export function DocsToolbar({
     const edits = (a: Act) => a.where === "file" || a.where === "tools" || a.id === "comment";
     const own: Act[] = [
       ...Object.values(A).map((a: Act) => ({ ...a, on: a.on !== false && (edits(a) || !off) })),
-      ...ALIGNS.map((a) => ({ id: `align-${a.align}`, key: a.key, combo: a.combo, Icon: a.Icon, words: ["align"], run: () => run((c) => c.setTextAlign(a.align)), on: !off })),
+      ...ALIGNS.map((a) => ({ id: `align-${a.align}`, key: a.key, combo: a.combo, Icon: a.Icon, words: a.words, run: () => run((c) => c.setTextAlign(a.align)), on: !off })),
       ...MENUS.map(([id, key, words, where]) => ({ id: `open-${id}`, key, words, where, run: () => window.dispatchEvent(new CustomEvent(OPEN_MENU_EVENT, { detail: { id } })), on: !off })),
     ];
     const list: SearchAction[] = own.map((a) => ({
@@ -346,16 +383,20 @@ export function DocsToolbar({
     for (const z of ZOOMS) add(`zoom-${z}`, t("docs.zoomValue", { n: z }), "view", () => onZoom(z), { enabled: true });
     for (const style of menuStyles(6)) {
       const name = t(STYLE_LABEL[style]);
-      add(`style-${style}`, name, "format", () => run((c) => c.setDocStyle(style)), { shortcut: STYLE_KEYS[style] });
+      // Docs' own words: Apply 'Heading 1', apply h1, apply header 1.
+      const words = [t("docs.applyStyle", { name })];
+      if (style[0] === "h") words.push(`apply ${style}`, `apply header ${style[1]}`);
+      else if (style !== "normal") words.push(`apply ${style} style`);
+      add(`style-${style}`, name, "format", () => run((c) => c.setDocStyle(style)), { shortcut: STYLE_KEYS[style], words });
       add(`update-${style}`, t("docs.updateStyle", { name }), "format", () => updateStyleToMatch(editor, style));
     }
-    for (const o of styleOptions(editor, t)) add(o.key, t(o.key), "format", o.run);
-    for (const { value, key } of LINE_SPACINGS) add(`spacing-${value}`, `${t("docs.lineSpacing")}: ${t(key)}`, "format", () => setLineSpacing(editor, s.para, value));
+    for (const o of styleOptions(editor, t)) add(o.key, t(o.key), "format", o.run, { words: o.words });
+    for (const { value, key, words } of LINE_SPACINGS) add(`spacing-${value}`, `${t("docs.lineSpacing")}: ${t(key)}`, "format", () => setLineSpacing(editor, s.para, value), { words });
     const before = s.para.spaceBefore > 0;
     const after = s.para.spaceAfter > 0;
     add("space-before", t(before ? "docs.removeSpaceBefore" : "docs.addSpaceBefore"), "format", () => setSpace(editor, s.para, "before", before ? 0 : 10));
     add("space-after", t(after ? "docs.removeSpaceAfter" : "docs.addSpaceAfter"), "format", () => setSpace(editor, s.para, "after", after ? 0 : 10));
-    if (!pageless) for (const { flag, key } of PARAGRAPH_FLAGS) add(flag, t(key), "format", () => toggleFlag(editor, s.para, flag));
+    if (!pageless) for (const { flag, key, words } of PARAGRAPH_FLAGS) add(flag, t(key), "format", () => toggleFlag(editor, s.para, flag), { words });
     add("indentation-options", t("docs.indentationOptions"), "format", () => setDialog("indent"), { words: ["hanging indent", "first line indent"] });
     // List options: Restart numbering asks for the number; the right-click
     // menu's restarts at 1.
@@ -370,10 +411,14 @@ export function DocsToolbar({
     });
     add("rename", t("docs.renameTitle"), "file", rename, { enabled: canEdit, words: ["title", "save as"] });
     if (canEdit) {
-      add("mode-editing", t("docs.editingMode"), "view", () => onMode("editing"), { enabled: true, shortcut: "Mod+Alt+Shift+Z" });
-      add("mode-viewing", t("docs.viewingMode"), "view", () => onMode("viewing"), { enabled: true, shortcut: "Mod+Alt+Shift+C" });
+      add("mode-editing", t("docs.editingMode"), "view", () => onMode("editing"), {
+        enabled: true,
+        shortcut: "Mod+Alt+Shift+Z",
+        words: ["switch to editing", "return to editing"],
+      });
+      add("mode-viewing", t("docs.viewingMode"), "view", () => onMode("viewing"), { enabled: true, shortcut: "Mod+Alt+Shift+C", words: ["switch to viewing"] });
     }
-    add("menus", t(headerHidden ? "docs.showMenus" : "docs.hideMenus"), "view", onToggleHeader, { enabled: true, shortcut: "Ctrl+Shift+F", words: ["compact mode"] });
+    add("menus", t(headerHidden ? "docs.showMenus" : "docs.hideMenus"), "view", onToggleHeader, { enabled: true, shortcut: "Ctrl+Shift+F", words: ["compact mode", "compact controls"] });
     const taken = new Set(registered.map((c) => c.label.toLowerCase()));
     return [...list.filter((a) => !taken.has(a.label.toLowerCase())), ...registered];
   };

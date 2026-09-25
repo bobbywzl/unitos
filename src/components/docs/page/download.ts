@@ -190,8 +190,8 @@ export async function downloadDocument(editor: Editor, format: DownloadFormat): 
       // The server reads the stored copy: the typing waiting to save goes first.
       await flushDocument(ctx.documentId);
       const res = await fetch(`/api/documents/${ctx.documentId}/export?format=docx`);
-      if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error);
-      save(await res.blob(), `${title}.docx`);
+      if (res.ok) save(await res.blob(), `${title}.docx`);
+      else toast(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? ctx.t("common.requestFailed"));
     } else if (format === "txt") {
       save(new Blob([plainText(editor)], { type: "text/plain;charset=utf-8" }), `${title}.txt`);
     } else {
@@ -199,7 +199,7 @@ export async function downloadDocument(editor: Editor, format: DownloadFormat): 
       if (format === "md") save(new Blob([markdown(editor, images)], { type: "text/markdown;charset=utf-8" }), `${title}.md`);
       else save(new Blob([webPage(editor, title, images)], { type: "text/html;charset=utf-8" }), `${title}.html`);
     }
-  } catch (err) {
-    toast(err instanceof Error && err.message ? err.message : ctx.t("common.requestFailed"));
+  } catch {
+    toast(ctx.t("common.requestFailed"));
   }
 }

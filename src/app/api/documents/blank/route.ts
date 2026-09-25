@@ -25,8 +25,9 @@ function copyRichText(doc: RichNode): RichNode | null {
   const fresh = (node: RichNode): RichNode => {
     const out = { ...node, content: node.content?.map(fresh) };
     if (INDEXED_NODE_TYPES.has(node.type)) {
-      out.attrs = { ...node.attrs, blockId: newBlockId() };
-      if (typeof node.attrs?.blockId === "string") ids.set(node.attrs.blockId, out.attrs.blockId as string);
+      const id = newBlockId();
+      if (typeof node.attrs?.blockId === "string") ids.set(node.attrs.blockId, id);
+      out.attrs = { ...node.attrs, blockId: id };
     }
     return out;
   };
@@ -59,18 +60,21 @@ export async function POST(req: Request) {
 
   let richText = emptyRichText(newBlockId());
   let pageSetup: Prisma.InputJsonValue | undefined;
+  let folderId: string | null = null;
   if (data.copyOf) {
     const source = await documentAccess(data.copyOf, "viewer");
     if (source instanceof NextResponse) return source;
     const original = await db.document.findUnique({
       where: { id: data.copyOf },
-      select: { richText: true, pageSetup: true },
+      select: { richText: true, pageSetup: true, notebooks: { where: { notebookId: data.notebookId }, select: { folderId: true } } },
     });
     if (!original) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
     const copied = original.richText ? copyRichText(original.richText as unknown as RichNode) : null;
     if (!copied) return NextResponse.json({ error: t("api.notBlankDocument") }, { status: 400 });
     richText = copied;
     pageSetup = (original.pageSetup ?? undefined) as Prisma.InputJsonValue | undefined;
+    // The copy sits beside the original, as in Google Docs.
+    folderId = original.notebooks[0]?.folderId ?? null;
   }
 
   const document = await db.document.create({
@@ -96,6 +100,12 @@ export async function POST(req: Request) {
     select: { id: true, title: true },
   });
   await attachDocument(data.notebookId, document.id);
+  if (folderId) {
+    await db.notebookDocument.update({
+      where: { notebookId_documentId: { notebookId: data.notebookId, documentId: document.id } },
+      data: { folderId },
+    });
+  }
   await bumpNotebook(data.notebookId);
   return NextResponse.json({ id: document.id, title: document.title });
 }

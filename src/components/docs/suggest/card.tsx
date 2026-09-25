@@ -82,6 +82,17 @@ function blockName(node: PMNode, attrName: unknown, newValue: unknown, t: TFunc)
   return t(BLOCK_ATTRS[String(attrName)] ?? "docsSuggest.otherFormat");
 }
 
+/** A block's words, ¶ between its paragraphs. */
+function blockWords(node: PMNode): string {
+  if (node.isTextblock) return node.textContent;
+  const lines: string[] = [];
+  node.descendants((n) => {
+    if (n.isTextblock) lines.push(n.textContent);
+    return !n.isTextblock;
+  });
+  return lines.join("¶");
+}
+
 type Change = { from: number; added: string; removed: string; formats: string[] };
 
 /** What a suggestion adds and removes — its words, ¶ where it breaks a
@@ -112,7 +123,7 @@ function readChange(doc: PMNode, id: string, t: TFunc): Change | null {
     if (last[side] >= 0 && last[side] !== at) change[side] += "¶";
     last[side] = at;
     const object = OBJECTS[node.type.name];
-    change[side] += object ? t(object) : node.textContent.replaceAll(ZWSP, "");
+    change[side] += object ? t(object) : (node.isInline ? node.textContent : blockWords(node)).replaceAll(ZWSP, "");
     return false;
   });
   return change.from < 0 ? null : change;
