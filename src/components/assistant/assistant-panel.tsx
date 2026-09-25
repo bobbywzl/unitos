@@ -65,6 +65,8 @@ import { RatingButtons } from "@/components/rating-buttons";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 
 type Scope = "document" | "notebook";
+type Task = "contradictions" | "gaps" | "unsourced";
+type Issue = { noteIds: string[]; issue: string; explanation: string };
 type SuggestAction = Extract<AssistantAction, { type: "suggest" }>;
 
 /** The paragraph the caret stands in on a document's open page. */
@@ -73,8 +75,6 @@ function caretBlockIn(documentId: string): string | undefined {
   const id: unknown = editor?.state.selection.$from.parent.attrs.blockId;
   return typeof id === "string" && id ? id : undefined;
 }
-type Task = "contradictions" | "gaps" | "unsourced";
-type Issue = { noteIds: string[]; issue: string; explanation: string };
 
 // One attachment of a message (SPEC.md §7): an image stored through
 // POST /api/images, or a file read to text. `pending` while it is still

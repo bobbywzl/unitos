@@ -46,6 +46,13 @@
   outline: 2px solid var(--docs-suggest-ink);
   outline-offset: 2px;
 }
+/* A list line added or removed whole keeps its bullet or number. */
+.docs-prose ul:not([data-type="taskList"]) > [data-suggestion-block] > li {
+  list-style-type: var(--docs-level-bullet);
+}
+.docs-prose ol > [data-suggestion-block] > li {
+  list-style-type: var(--docs-level-number);
+}
 
 /* Blocks a suggestion puts back with the same words (a list toggled, a
    paragraph moved) draw once: the removed copy hides, and a list changed in

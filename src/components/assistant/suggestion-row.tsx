@@ -82,7 +82,7 @@ export function SuggestionRow({
       : count === 1
         ? t("docsSuggest.oneSuggestion")
         : t("docsSuggest.suggestionCount", { n: count });
-  const button = "rounded-full bg-sand-100 px-2.5 py-0.5 font-semibold text-sand-700 hover:bg-sand-200";
+  const button = "rounded-full bg-card px-2.5 py-0.5 font-semibold text-sand-700 shadow-soft hover:text-clay-800";
   const settle = (accept: boolean) => {
     act?.settle(accept);
     bar?.onSettled();
@@ -126,9 +126,11 @@ export function SuggestionRow({
         {run.running ? (
           <ThinkingIndicator label={t("assistant.suggestWriting")} onStop={act?.stop} className="mr-1" />
         ) : (
-          <span style={{ color: annotationKindColor("assistant", null) }}>
-            <SparkleIcon size={12} />
-          </span>
+          !bar && (
+            <span style={{ color: annotationKindColor("assistant", null) }}>
+              <SparkleIcon size={12} />
+            </span>
+          )
         )}
         {bar && !run.running && run.summary && (
           <span className="min-w-0 flex-1 truncate text-sand-800" data-tip={run.summary}>

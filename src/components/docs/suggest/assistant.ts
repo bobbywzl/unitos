@@ -67,20 +67,26 @@ function land(editor: Editor, tr: Transaction, op: ResolvedOp, author: string, m
     made.push(id);
     return null;
   };
-  // The asker's earlier suggestions on these words, or on the blocks around
-  // them, give way: a new op on them takes their place. Another person's
-  // stack, as the assistant's for someone else do. A style change on the
-  // blocks around gives way only to a new style.
-  const giveWay = (from: number, to: number, style = false) => {
-    const ids = new Set<string>();
+  // An op that meets what an op before it in this landing changed is skipped
+  // (a list toggled joins the list beside it). The asker's earlier
+  // suggestions on these words, or on the blocks around them, give way: a
+  // new op on them takes their place. Another person's stack, as the
+  // assistant's for someone else do. A style change on the blocks around
+  // gives way only to a new style.
+  const clear = (from: number, to: number, style = false): SkipReason | null => {
+    const earlier = new Set<string>();
+    let meets = false;
     tr.doc.nodesBetween(from, to, (node) => {
       for (const mark of node.marks) {
         const id = String(mark.attrs.id);
-        if (!isSuggestionMark(mark) || suggestionAuthor(id) !== author || made.includes(id)) continue;
-        if (node.isInline || style || mark.type.name !== "modification") ids.add(id);
+        if (!isSuggestionMark(mark) || suggestionAuthor(id) !== author) continue;
+        if (made.includes(id)) meets = true;
+        else if (node.isInline || style || mark.type.name !== "modification") earlier.add(id);
       }
     });
-    if (ids.size) settle(tr, false, ids);
+    if (meets) return "overlap";
+    if (earlier.size) settle(tr, false, earlier);
+    return null;
   };
 
   switch (op.op) {
@@ -92,8 +98,8 @@ function land(editor: Editor, tr: Transaction, op: ResolvedOp, author: string, m
       const at = text === null ? null : op.op === "rewrite_block" ? (text === op.base ? 0 : null) : wordsAt(text, op);
       const place = at === null ? null : range(tr.doc, op.blockId, at, at + base.length);
       if (at === null || !place) return "changed";
-      giveWay(place.from, place.to);
-      let reason: SkipReason | null = null;
+      let reason = clear(place.from, place.to);
+      if (reason) return reason;
       for (const s of stretches(base, op.text)) {
         reason =
           commit((state) => {
@@ -109,44 +115,54 @@ function land(editor: Editor, tr: Transaction, op: ResolvedOp, author: string, m
       const at = block ? wordsAt(indexText(block.node), op) : null;
       const place = at === null ? null : range(tr.doc, op.blockId, at, at + op.find.length);
       if (at === null || !place) return "changed";
-      giveWay(place.from, place.to);
-      return commit((state) => {
-        const r = range(state.doc, op.blockId, at, at + op.find.length);
-        return r ? state.tr.addMark(r.from, r.to, state.schema.marks[MARKS[op.format]].create()) : "changed";
-      });
+      return (
+        clear(place.from, place.to) ??
+        commit((state) => {
+          const r = range(state.doc, op.blockId, at, at + op.find.length);
+          return r ? state.tr.addMark(r.from, r.to, state.schema.marks[MARKS[op.format]].create()) : "changed";
+        })
+      );
     }
     case "replace_blocks":
     case "remove_blocks": {
       const place = blocksRange(tr.doc, op.blockIds, op.base);
       if (!place) return "changed";
       if (holdsObject(tr.doc, place.from, place.to)) return "object";
-      giveWay(place.from, place.to);
-      return commit((state) => {
-        const r = blocksRange(state.doc, op.blockIds, op.base);
-        if (!r) return "changed";
-        if (op.op === "remove_blocks") return state.tr.delete(r.from, r.to);
-        return state.tr.replaceWith(r.from, r.to, fit(state.doc.resolve(r.from).parent, blocksOf(state, op.markdown)));
-      });
+      return (
+        clear(place.from, place.to) ??
+        commit((state) => {
+          const r = blocksRange(state.doc, op.blockIds, op.base);
+          if (!r) return "changed";
+          if (op.op === "remove_blocks") return state.tr.delete(r.from, r.to);
+          return state.tr.replaceWith(r.from, r.to, fit(state.doc.resolve(r.from).parent, blocksOf(state, op.markdown)));
+        })
+      );
     }
     case "insert_blocks": {
-      if (op.afterBlockId !== null && !findBlock(tr.doc, op.afterBlockId)) return "changed";
-      return commit((state) => {
-        const at = insertion(state.doc, op.afterBlockId, blocksOf(state, op.markdown));
-        return at ? state.tr.insert(at.pos, at.content) : "changed";
-      });
+      const block = op.afterBlockId === null ? null : findBlock(tr.doc, op.afterBlockId);
+      if (op.afterBlockId !== null && !block) return "changed";
+      return (
+        (block && clear(block.pos, block.pos + 1)) ??
+        commit((state) => {
+          const at = insertion(state.doc, op.afterBlockId, blocksOf(state, op.markdown));
+          return at ? state.tr.insert(at.pos, at.content) : "changed";
+        })
+      );
     }
     case "set_style": {
       const block = findBlock(tr.doc, op.blockId);
       if (!block || styleOf(tr.doc, block) !== op.baseStyle) return "changed";
-      giveWay(block.pos, block.pos + 1, true);
-      return commit((state) => {
-        const found = findBlock(state.doc, op.blockId);
-        if (!found) return "changed";
-        // The Styles menu's and the list buttons' own commands, on this block.
-        const edit = state.tr.setSelection(TextSelection.create(state.doc, found.pos + 1));
-        restyle(new CommandManager({ editor, state }).createChain(edit), op.baseStyle, op.style).run();
-        return edit;
-      });
+      return (
+        clear(block.pos, block.pos + 1, true) ??
+        commit((state) => {
+          const found = findBlock(state.doc, op.blockId);
+          if (!found) return "changed";
+          // The Styles menu's and the list buttons' own commands, on this block.
+          const edit = state.tr.setSelection(TextSelection.create(state.doc, found.pos + 1));
+          restyle(new CommandManager({ editor, state }).createChain(edit), op.baseStyle, op.style).run();
+          return edit;
+        })
+      );
     }
   }
 }

@@ -76,7 +76,8 @@ export function ReviewPanel({
         ))}
       </div>
       {canSettle && !none && (
-        <div className="docs-suggest-review-actions">
+        // The page keeps the focus: Ctrl+Z then takes the settling back.
+        <div className="docs-suggest-review-actions" onMouseDown={(e) => e.preventDefault()}>
           <DialogButton onClick={() => settleSuggestions(editor, true, scoped ? ids : undefined)}>{t("docsSuggest.acceptAll")}</DialogButton>
           <DialogButton onClick={() => settleSuggestions(editor, false, scoped ? ids : undefined)}>{t("docsSuggest.rejectAll")}</DialogButton>
         </div>

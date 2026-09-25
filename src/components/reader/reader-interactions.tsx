@@ -142,7 +142,6 @@ import { matchesCombo } from "@/components/docs/keys";
 import {
   assistantAuthor,
   type ResolvedOp,
-  type SkipReason,
   type SuggestEvent,
   type SuggestResult,
 } from "@/lib/docs/assistant-suggestions";
@@ -461,17 +460,6 @@ const SUGGEST_CHIPS: Chip[] = [
   { name: "fix", key: "reader.commandFix" },
 ];
 
-// Why a change did not land, as the page tells the reader (SPEC.md §29).
-const SKIP_REASON_KEY: Record<SkipReason, TKey> = {
-  outside: "api.suggestSkipOutside",
-  notFound: "api.suggestSkipNotFound",
-  ambiguous: "api.suggestSkipAmbiguous",
-  overlap: "api.suggestSkipOverlap",
-  notText: "api.suggestSkipNotText",
-  limit: "api.suggestSkipLimit",
-  changed: "reader.suggestSkipChanged",
-  object: "reader.suggestSkipObject",
-};
 // A tool's output continued into a conversation — Explain+, Simplify+,
 // Analyze+, Visualize+ (SPEC.md §21). Continue opens the box; the turns
 // persist on the tool's annotation (Note.conversation) and reopen with it.
@@ -5119,8 +5107,10 @@ export function ReaderInteractions({
       const landed = code.applyAssistantOps(editor, ops, assistantAuthor(myId), replacing);
       run.ops.push(...ops);
       run.ids.push(...landed.ids);
+      // The page's own skips read as the server's: the words changed, or hold an object.
       for (const { i, reason } of landed.skipped) {
-        run.skipped.push(t(SKIP_REASON_KEY[reason], { why: ops.find((op) => op.i === i)?.why ?? "" }));
+        const why = ops.find((op) => op.i === i)?.why ?? "";
+        run.skipped.push(t(reason === "object" ? "docsSuggest.skipObject" : "docsSuggest.skipChanged", { why }));
       }
       watchRuns(editor, code.readSuggestions);
       run.count = countRun(run, code.readSuggestions(editor.state.doc));
@@ -5217,7 +5207,7 @@ export function ReaderInteractions({
         } else if ("error" in event) run.notes.push(event.error);
       }
     } catch (err) {
-      if (!controller.signal.aborted) run.notes.push(err instanceof Error ? err.message : t("assistant.suggestFailedStatus", { status: 0 }));
+      if (!controller.signal.aborted) run.notes.push(err instanceof Error ? err.message : t("reader.assistantFailed"));
     } finally {
       run.running = false;
       run.controller = null;
@@ -8633,7 +8623,7 @@ function blockFormatKind(
               type="button"
               disabled={bar.busy || !bar.input.trim()}
               onClick={() => void runBar(bar)}
-              data-track="assistant-bar-send"
+              data-track="assistant-run"
               data-tip={t("reader.sendTitle")}
               className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >

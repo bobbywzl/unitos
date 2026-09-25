@@ -143,6 +143,14 @@
   --docs-gray-2: #666666;
   --docs-code-block: color-mix(in srgb, #201e1d 6%, transparent);
   --docs-grid: #000000;
+  /* The kind colors of the marks and suggestions on the page: globals.css's light values. */
+  --kind-comment: #3f6fbf;
+  --kind-explain: #c8433b;
+  --kind-simplify: #2f8f5b;
+  --kind-analyze: #1f8a8a;
+  --kind-visualize: #c2408f;
+  --kind-assistant: #7a4fc9;
+  --kind-link: #5b6b7a;
 }
 /* Show print layout off: the pages' text areas edge to edge, a dotted line
    where each page after the first starts. */
