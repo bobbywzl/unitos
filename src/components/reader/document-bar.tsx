@@ -46,7 +46,12 @@ import {
   useFigureCapture,
 } from "@/components/reader/figure-capture";
 import { setRevealFlag } from "@/components/reader/reveal";
-import { UploadAssistant, uploadItemTitle, type UploadRequest } from "@/components/reader/upload-assistant";
+import {
+  keptBlockDocument,
+  UploadAssistant,
+  uploadItemTitle,
+  type UploadRequest,
+} from "@/components/reader/upload-assistant";
 import { isMarkdownFile, MARKDOWN_ACCEPT } from "@/lib/markdown-file";
 import { isSheetsFile, isSlidesFile, SHEETS_ACCEPT, SLIDES_ACCEPT } from "@/lib/office-file";
 
@@ -82,17 +87,6 @@ type IngestEvent =
 // The re-parse route's answer when a re-parse would replace an import's
 // edits: the document menu shows it as its question, never as an error.
 class EditedImportAnswer extends Error {}
-
-// The save stage's detail says the size guard kept a block document
-// (lib/parse/ingest.ts saveDetail): too long for the page editor.
-function keptBlockDocument(detail: string): boolean {
-  if (!detail.startsWith("{")) return false;
-  try {
-    return (JSON.parse(detail) as { blockDocument?: unknown }).blockDocument === "size";
-  } catch {
-    return false;
-  }
-}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
