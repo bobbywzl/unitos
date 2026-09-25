@@ -213,7 +213,7 @@ export function DocsToolbar({
   headerHidden: boolean;
   onToggleHeader: () => void;
   onInsertImage: (source: ImageSource) => void;
-  /** The page is pageless: the bar is lighter and the page flags go. */
+  /** The page is pageless: the page flags go. */
   pageless?: boolean;
 }) {
   const t = useT();
@@ -716,7 +716,6 @@ export function DocsToolbar({
         groups={groups}
         label={t("docs.toolbar")}
         moreLabel={t("docs.more")}
-        pageless={pageless}
         onEscape={focusPage}
         right={
           <>

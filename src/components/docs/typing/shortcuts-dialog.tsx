@@ -99,6 +99,7 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
       { label: "docsTyping.scVoice", pc: ["Mod+Shift+S"] },
       { label: "docsTyping.scToggleCheckbox", pc: ["Mod+Alt+Enter"] },
       { label: "docsTyping.scNonPrinting", pc: ["Mod+Shift+P"] },
+      { label: "docsInsert.askAssistant", pc: ["Mod+Alt+G"] },
     ],
   },
   {

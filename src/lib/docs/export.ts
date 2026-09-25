@@ -48,8 +48,10 @@ import { listPreset } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, styleFont, type NamedStyle } from "@/components/docs/toolbar/styles";
 import { authEnabled } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { isAssistantAuthor } from "@/lib/docs/assistant-suggestions";
 import { hex6, inlineText } from "@/lib/docs/blocks";
 import { suggestionAuthor, suggestionTime, ZWSP, type PageSetup, type RichMark, type RichNode } from "@/lib/docs/schema";
+import { serverT } from "@/lib/i18n/server";
 import { MAX_IMAGE_BYTES, sniffImage } from "@/lib/images";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
@@ -607,8 +609,8 @@ function styleParagraph(styles: Record<DocStyle, NamedStyle>, style: DocStyle, o
   };
 }
 
-/** The names of the accounts whose suggestions the text holds, and of
-    `more`, by account id. */
+/** The names of the authors whose suggestions the text holds, and of the
+    accounts in `more`, by author id: an account's name, or Assistant. */
 async function authorNames(doc: RichNode, more: (string | null)[]): Promise<Map<string, string>> {
   const ids = new Set(more.filter((id) => id !== null));
   const walk = (node: RichNode) => {
@@ -618,7 +620,10 @@ async function authorNames(doc: RichNode, more: (string | null)[]): Promise<Map<
   };
   walk(doc);
   const users = await db.user.findMany({ where: { id: { in: [...ids] } }, select: { id: true, name: true } });
-  return new Map(users.map((u) => [u.id, u.name]));
+  const names = new Map(users.map((u) => [u.id, u.name]));
+  const assistant = (await serverT())("reader.assistant");
+  for (const id of ids) if (isAssistantAuthor(id)) names.set(id, assistant);
+  return names;
 }
 
 /** A document's open comments in the projects `user` can open (every one

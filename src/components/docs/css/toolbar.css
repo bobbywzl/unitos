@@ -1,52 +1,30 @@
 /* The page editor: toolbar (SPEC.md §29). Imported by docs.css.
-   Google Docs' toolbar in its Material 3 look: one rounded bar, 30 px
-   controls with 4 px corners, 20 px outlined symbols, six separators, the
-   menus, palettes, and dialogs its controls open, the tooltip, and the list
-   presets' glyphs. The bar itself and its color (--docs-tb-bg) are in
-   frame.css; the shared tokens (--docs-icon, --docs-text, --docs-blue) are
-   in frame.css and docs.css. */
+   Google Docs' toolbar in Unitos's look: one card pill, 30 px round
+   controls, 20 px outlined symbols, six separators, the menus, palettes, and
+   dialogs its controls open, the tooltip, and the list presets' glyphs. The
+   bar itself and its color (--docs-tb-bg) are in frame.css; the shared
+   tokens (--docs-icon, --docs-text, --docs-blue) are in frame.css and
+   docs.css. Every token is a Unitos variable, so it flips under .dark. */
 
 :root {
-  --docs-tb-bg-pageless: #f8fafd;
-  --docs-tb-caption: rgba(31, 31, 31, 0.7);
-  --docs-tb-on: #d3e3fd;
-  --docs-tb-on-icon: #041e49;
-  --docs-tb-sep: #c4c7c5;
-  --docs-tb-outline: #747775;
-  --docs-tb-container: #d3e3fd;
-  --docs-tb-high: #e9eef6;
-  --docs-tb-surface: #ffffff;
-  --docs-tb-dialog: #ffffff;
-  --docs-tb-menu-hover: rgba(31, 31, 31, 0.1);
-  --docs-tb-muted: rgba(31, 31, 31, 0.38);
-  --docs-tb-tip-bg: #1f1f1f;
-  --docs-tb-tip-fg: #f2f2f2;
-  --docs-tb-menu-shadow: 0 2px 6px 2px rgba(0, 0, 0, 0.15);
-  --docs-tb-font: "Google Sans", Roboto, sans-serif;
-  --docs-tb-menu-font: Roboto, RobotoDraft, Helvetica, Arial, sans-serif;
-  --docs-tb-swatch-ring: rgba(0, 0, 0, 0.35);
-}
-.dark {
-  --docs-tb-bg-pageless: #1b1b1b;
-  --docs-tb-caption: rgba(227, 227, 227, 0.7);
-  --docs-tb-sep: #444746;
-  --docs-tb-outline: #8e918f;
-  --docs-tb-container: #0842a0;
-  --docs-tb-high: #282a2c;
-  --docs-tb-surface: #131314;
-  --docs-tb-dialog: #282a2c;
-  --docs-tb-menu-hover: rgba(227, 227, 227, 0.1);
-  --docs-tb-muted: rgba(227, 227, 227, 0.38);
-  --docs-tb-tip-bg: #e3e3e3;
-  --docs-tb-tip-fg: #303030;
-  --docs-tb-menu-shadow: 0 2px 6px 2px rgba(0, 0, 0, 0.5);
-  --docs-tb-swatch-ring: rgba(255, 255, 255, 0.55);
+  --docs-tb-caption: var(--sand-700);
+  --docs-tb-on: var(--clay-200);
+  --docs-tb-on-icon: var(--clay-800);
+  --docs-tb-sep: var(--line);
+  --docs-tb-outline: var(--sand-500);
+  --docs-tb-container: var(--clay-200);
+  --docs-tb-high: var(--sand-100);
+  --docs-tb-surface: var(--card);
+  --docs-tb-dialog: var(--card);
+  --docs-tb-menu-hover: var(--clay-100);
+  --docs-tb-muted: var(--sand-500);
+  --docs-tb-tip-bg: var(--ink);
+  --docs-tb-tip-fg: var(--paper);
+  --docs-tb-menu-shadow: var(--elev-lg);
+  --docs-tb-swatch-ring: color-mix(in srgb, var(--ink) 35%, transparent);
 }
 
 /* ── The bar (its box: frame.css) ─────────────────────────────────────── */
-.docs-tb-pageless {
-  --docs-tb-bg: var(--docs-tb-bg-pageless);
-}
 .docs-tb-left {
   display: flex;
   align-items: center;
@@ -98,10 +76,10 @@
 
 /* ── Controls ─────────────────────────────────────────────────────────────
    A button is 28 px of content inside a 1 px transparent border, 5 px above
-   and below, 1 px beside. Hover lays an 8% state layer over it; press,
-   keyboard focus, and an open menu 12%; an on toggle is light blue. The
-   global focus ring and color fades stay out: Docs shows the state layer
-   and changes color at once. */
+   and below, 1 px beside, round. Hover is Unitos's clay-100; press, keyboard
+   focus, an open menu, and an on toggle a step stronger, clay-200, which an
+   on toggle keeps under the pointer; the symbol turns clay-800. The global
+   focus ring and color fades stay out: Docs shows the state at once. */
 .docs-tb-btn {
   position: relative;
   flex: none;
@@ -112,11 +90,11 @@
   min-width: 30px;
   border: 1px solid transparent;
   color: var(--docs-icon);
-  font: 500 14px/20px var(--docs-tb-font);
+  font: 600 14px/20px var(--docs-ui-font);
 }
 .docs-tb-btn,
 .docs-tb-btn:focus-visible {
-  border-radius: 4px;
+  border-radius: 9999px;
 }
 .docs-toolbar .docs-tb-btn,
 .docs-tb-bubble .docs-tb-btn,
@@ -124,12 +102,14 @@
   margin: 5px 1px;
 }
 .docs-tb-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--docs-icon) 8%, transparent);
+  background: var(--docs-hover);
+  color: var(--docs-tb-on-icon);
 }
 .docs-tb-btn:active:not(:disabled),
 .docs-tb-btn:focus-visible,
 .docs-tb-btn[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--docs-icon) 12%, transparent);
+  background: var(--docs-tb-on);
+  color: var(--docs-tb-on-icon);
 }
 .docs-tb-btn[aria-pressed="true"],
 .docs-tb-btn[aria-pressed="true"]:hover,
@@ -176,6 +156,7 @@
   text-overflow: ellipsis;
   text-align: left;
   color: var(--docs-tb-caption);
+  font-weight: 400;
 }
 .docs-tb-select .docs-tb-arrow {
   margin: 0 4px 2px 5px;
@@ -202,11 +183,12 @@
   height: 28px;
   margin: 6px 1px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 9999px;
   cursor: pointer;
 }
 .docs-tb-combo:hover:not([data-open]) {
-  background: color-mix(in srgb, var(--docs-icon) 8%, transparent);
+  background: var(--docs-hover);
+  color: var(--docs-tb-on-icon);
 }
 .docs-tb-combo[data-open] {
   border: 2px solid var(--docs-blue);
@@ -214,7 +196,7 @@
 .docs-tb-combo input,
 .docs-size-box input {
   color: var(--docs-icon);
-  font: 400 14px/20px var(--docs-tb-font);
+  font: 400 14px/20px var(--docs-ui-font);
 }
 .docs-tb-combo input {
   width: 48px;
@@ -230,11 +212,6 @@
 .docs-tb-combo[data-open] input,
 .docs-size-box:focus-within input {
   color: var(--docs-text);
-}
-.docs-tb-combo input::selection,
-.docs-size-box input::selection {
-  background: #d3e3fd;
-  color: #1f1f1f;
 }
 .docs-tb-combo .docs-tb-arrow {
   margin: 0 4px 2px auto;
@@ -263,7 +240,7 @@
   height: 24px;
   margin: 0 3px;
   border: 1px solid var(--docs-tb-outline);
-  border-radius: 4px;
+  border-radius: 9999px;
 }
 .docs-size-box:hover:not([data-open], :focus-within) {
   border-color: var(--docs-text);
@@ -307,14 +284,14 @@
 .docs-tb-split .docs-tb-split-left,
 .docs-tb-split-left:focus-visible {
   margin: 5px 0 5px 1px;
-  border-radius: 4px 0 0 4px;
+  border-radius: 9999px 0 0 9999px;
 }
 .docs-tb-split .docs-tb-split-right,
 .docs-tb-split-right:focus-visible {
   width: 12px;
   min-width: 12px;
   margin: 5px 1px 5px 0;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 9999px 9999px 0;
   overflow: visible;
 }
 .docs-tb-split-right[aria-expanded="true"] {
@@ -333,19 +310,21 @@
   height: 30px;
   margin: 5px 0 5px 1px;
   padding-left: 8px;
-  font: 500 14px/28px var(--docs-tb-font);
+  font: 600 14px/28px var(--docs-ui-font);
 }
 .docs-mode-pill,
 .docs-mode-pill:focus-visible {
   border-radius: 9999px;
 }
 .docs-mode-pill:hover {
-  background: color-mix(in srgb, var(--docs-icon) 8%, transparent);
+  background: var(--docs-hover);
+  color: var(--docs-tb-on-icon);
 }
 .docs-mode-pill:active,
 .docs-mode-pill:focus-visible,
 .docs-mode-pill[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--docs-icon) 10%, transparent);
+  background: var(--docs-tb-on);
+  color: var(--docs-tb-on-icon);
 }
 .docs-mode-pill > svg {
   flex: none;
@@ -393,9 +372,9 @@
 }
 
 /* ── Search the menus ─────────────────────────────────────────────────────
-   A white 100 px pill on a wide bar, a 35 px symbol button otherwise; while
-   it has the focus the field grows to 350 px over the bar, and its results
-   hang under it. */
+   A filled 100 px pill on a wide bar, a 35 px symbol button otherwise;
+   while it has the focus the field grows to 350 px over the bar, and its
+   results hang under it. */
 .docs-search {
   position: relative;
   flex: none;
@@ -405,7 +384,7 @@
   height: 28px;
   margin: 6px 1px;
   border-radius: 28px;
-  background: var(--docs-tb-surface);
+  background: var(--docs-field-bg);
   cursor: text;
 }
 .docs-search > svg,
@@ -421,7 +400,7 @@
   padding: 0 12px 0 35px;
   border-radius: inherit;
   color: var(--docs-text);
-  font: 400 14px/20px var(--docs-tb-font);
+  font: 400 14px/20px var(--docs-ui-font);
 }
 .docs-search-input::placeholder {
   color: var(--docs-icon);
@@ -439,10 +418,10 @@
   border-radius: 28px;
   background: var(--docs-tb-surface);
   color: var(--docs-icon);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--elev-sm);
 }
 .docs-search-open[data-results] {
-  border-radius: 8px 8px 0 0;
+  border-radius: 16px 16px 0 0;
 }
 .docs-search-results {
   position: fixed;
@@ -451,11 +430,11 @@
   max-height: min(420px, calc(100vh - 120px));
   overflow-y: auto;
   padding: 4px 0 8px;
-  border-radius: 0 0 8px 8px;
+  border-radius: 0 0 16px 16px;
   background: var(--docs-tb-surface);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--docs-tb-menu-shadow);
   color: var(--docs-text);
-  font: 400 14px/20px var(--docs-tb-menu-font);
+  font: 400 14px/20px var(--docs-ui-font);
 }
 .docs-search-row {
   position: relative;
@@ -468,6 +447,7 @@
 }
 .docs-search-row[data-active] {
   background: var(--docs-tb-menu-hover);
+  color: var(--docs-on-fg);
 }
 .docs-search-row[aria-disabled="true"] {
   color: var(--docs-tb-muted);
@@ -494,7 +474,7 @@
   font-size: 12px;
 }
 .docs-search-keys {
-  font-weight: 500;
+  font-weight: 600;
 }
 .docs-search-empty {
   padding: 10px 15px 10px 35px;
@@ -519,19 +499,21 @@
 }
 
 /* ── Menus ────────────────────────────────────────────────────────────────
-   White, 4 px corners, a soft shadow, 6 px above and below; items 32 px
-   tall with a column for a check or a symbol; shortcuts at the right. */
+   Unitos's menu: the card color, 16 px corners, the float shadow, 6 px
+   above and below; items 32 px tall with a column for a check or a symbol,
+   clay-100 with clay-800 words under the pointer or the keys; shortcuts at
+   the right; section names in small capitals. */
 .docs-menu {
   position: fixed;
   z-index: 60;
   overflow-y: auto;
   padding: 6px 0;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 16px;
   background: var(--docs-tb-surface);
   box-shadow: var(--docs-tb-menu-shadow);
   color: var(--docs-text);
-  font: 400 14px/20px var(--docs-tb-menu-font);
+  font: 400 14px/20px var(--docs-ui-font);
   letter-spacing: 0.2px;
 }
 .docs-menu-item {
@@ -547,6 +529,7 @@
 .docs-menu-item[data-active],
 .docs-menu-item[data-sub-open] {
   background: var(--docs-tb-menu-hover);
+  color: var(--docs-on-fg);
 }
 .docs-menu-item[aria-disabled="true"] {
   color: var(--docs-tb-muted);
@@ -570,7 +553,7 @@
   flex: none;
   padding-left: 24px;
   color: var(--docs-tb-muted);
-  font-weight: 500;
+  font-weight: 600;
 }
 .docs-menu-item[data-has-submenu] {
   padding-right: 32px;
@@ -592,8 +575,9 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font: 500 11px/16px var(--docs-tb-menu-font);
-  letter-spacing: 0.8px;
+  color: var(--docs-tb-muted);
+  font: 600 11px/16px var(--docs-ui-font);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 /* Menus without a symbol column: Zoom, the size list. */
@@ -671,7 +655,8 @@
   background: var(--docs-tb-bg);
 }
 .docs-menu-align .docs-tb-btn[data-active] {
-  background: color-mix(in srgb, var(--docs-icon) 12%, var(--docs-tb-bg));
+  background: var(--docs-hover);
+  color: var(--docs-tb-on-icon);
 }
 .docs-menu-align .docs-tb-btn[aria-checked="true"] {
   background: var(--docs-tb-on);
@@ -699,7 +684,7 @@
 .docs-mode-label {
   display: block;
   padding-bottom: 4px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--docs-text);
 }
 .docs-mode-hint {
@@ -787,7 +772,8 @@
 }
 .docs-palette-tool:hover,
 .docs-palette-tool[data-active] {
-  background: var(--docs-tb-high);
+  background: var(--docs-hover);
+  color: var(--docs-tb-on-icon);
 }
 .docs-swatch-custom {
   width: 16px;
@@ -824,14 +810,14 @@
   height: 82px;
   padding: 6px 6px 6px 8px;
   border: 1px solid var(--docs-tb-sep);
-  border-radius: 2px;
-  background: #ffffff;
-  color: #1f1f1f;
+  border-radius: 8px;
+  background: var(--docs-page);
+  color: var(--docs-ink);
 }
 .docs-list-tile:hover .docs-list-tile-face,
 .docs-list-tile[data-active] .docs-list-tile-face {
   border-color: var(--docs-tb-outline);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--elev-sm);
 }
 .docs-list-tile[aria-checked="true"] .docs-list-tile-face {
   border: 2px solid var(--docs-tb-outline);
@@ -848,7 +834,7 @@
   flex: 1;
   height: 3px;
   border-radius: 1px;
-  background: #d9d9d9;
+  background: var(--sand-300);
 }
 .docs-list-tile-check .docs-list-tile-face {
   width: 81px;
@@ -864,22 +850,24 @@
   flex: none;
   width: 7px;
   height: 7px;
-  border: 1px solid #5f6368;
+  border: 1px solid var(--sand-600);
   border-radius: 1px;
 }
 .docs-list-tile-box[data-checked] {
-  background: #5f6368;
+  background: var(--sand-600);
 }
 .docs-list-tile-row[data-strike] .docs-list-tile-bar {
   height: 5px;
-  border-block: 1px solid #d9d9d9;
-  background: linear-gradient(#d9d9d9, #d9d9d9) center / 100% 1px no-repeat;
+  border-block: 1px solid var(--sand-300);
+  background: linear-gradient(var(--sand-300), var(--sand-300)) center / 100% 1px no-repeat;
 }
 .docs-menu-lists .docs-menu-sep {
   margin: 6px 4px;
 }
 
-/* ── Dialogs ──────────────────────────────────────────────────────────── */
+/* ── Dialogs: Unitos's dialog, a 24 px card with the float shadow over an
+   ink scrim at 30%, the title in Caprasimo, pill buttons (clay for the
+   primary, sand for the rest), and filled pill fields ─────────────────── */
 .docs-tb-backdrop {
   position: fixed;
   inset: 0;
@@ -887,7 +875,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
+  background: color-mix(in srgb, var(--ink) 30%, transparent);
 }
 .docs-tb-backdrop-clear {
   background: transparent;
@@ -897,13 +885,11 @@
   max-height: calc(100vh - 32px);
   overflow: auto;
   padding: 24px;
-  border-radius: 8px;
+  border-radius: 24px;
   background: var(--docs-tb-dialog);
-  box-shadow:
-    0 4px 8px 3px rgba(0, 0, 0, 0.15),
-    0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--elev-lg);
   color: var(--docs-text);
-  font: 400 14px/20px var(--docs-tb-font);
+  font: 400 14px/20px var(--docs-ui-font);
 }
 .docs-tb-dialog-head {
   display: flex;
@@ -913,7 +899,7 @@
   margin-bottom: 16px;
 }
 .docs-tb-dialog-head h2 {
-  font: 400 22px/28px var(--docs-tb-font);
+  font: 400 22px/28px var(--docs-title-font);
 }
 .docs-tb-dialog-close,
 .docs-fonts-clear,
@@ -928,7 +914,8 @@
   padding: 8px;
 }
 .docs-tb-dialog-close:hover {
-  background: color-mix(in srgb, var(--docs-icon) 8%, transparent);
+  background: var(--docs-hover);
+  color: var(--docs-accent-text);
 }
 .docs-tb-dialog-actions {
   display: flex;
@@ -939,27 +926,29 @@
 .docs-tb-button {
   height: 36px;
   padding: 0 24px;
-  border: 1px solid var(--docs-tb-outline);
+  border: 1px solid var(--docs-sep);
   border-radius: 9999px;
-  color: var(--docs-blue);
-  font: 500 14px/20px var(--docs-tb-font);
+  background: var(--sand-100);
+  color: var(--docs-icon);
+  font: 600 14px/20px var(--docs-ui-font);
 }
 .docs-tb-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--docs-blue) 8%, transparent);
+  border-color: var(--clay-300);
+  background: var(--docs-hover);
+  color: var(--docs-on-fg);
 }
 .docs-tb-button-primary {
   border-color: var(--docs-blue);
   background: var(--docs-blue);
-  color: #ffffff;
-}
-.dark .docs-tb-button-primary {
-  color: #062e6f;
+  color: var(--clay-fg);
 }
 .docs-tb-button-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, #ffffff 8%, var(--docs-blue));
+  border-color: var(--clay-600);
+  background: var(--clay-600);
+  color: var(--clay-fg);
 }
 .docs-tb-button:disabled {
-  opacity: 0.38;
+  opacity: 0.4;
 }
 .docs-tb-dialog :is(input, select):focus-visible {
   outline: none;
@@ -969,19 +958,15 @@
   outline-offset: 2px;
   border-radius: 9999px;
 }
-/* A dialog's buttons are Docs' dialog buttons: 4 px corners. */
-.docs-tb-dialog .docs-tb-button,
-.docs-tb-dialog .docs-tb-button:focus-visible {
-  border-radius: 4px;
-}
 .docs-tb-field {
   height: 36px;
-  padding: 1px 8px;
-  border: 1px solid var(--docs-tb-sep);
-  border-radius: 4px;
+  padding: 1px 12px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: var(--docs-field-bg);
 }
 .docs-tb-field:focus {
-  padding: 0 7px;
+  padding: 0 11px;
   border: 2px solid var(--docs-blue);
 }
 .docs-tb-field:disabled {
@@ -991,7 +976,7 @@
   display: block;
   padding-bottom: 6px;
   color: var(--docs-icon);
-  font: 500 12px/16px var(--docs-tb-font);
+  font: 600 12px/16px var(--docs-ui-font);
 }
 
 /* The custom color picker. */
@@ -1072,7 +1057,7 @@
 .docs-color-field > span {
   padding-bottom: 4px;
   color: var(--docs-icon);
-  font: 500 11px/16px var(--docs-tb-font);
+  font: 600 11px/16px var(--docs-ui-font);
 }
 .docs-color-hex input {
   width: 75px;
@@ -1092,7 +1077,7 @@
 }
 .docs-fields-dialog h3 {
   margin: 20px 0 8px;
-  font: 500 14px/20px var(--docs-tb-font);
+  font: 600 14px/20px var(--docs-ui-font);
 }
 .docs-fields-dialog form > h3:first-child {
   margin-top: 0;
@@ -1122,8 +1107,8 @@
   margin-top: 16px;
   padding: 16px;
   overflow: hidden;
-  border-radius: 4px;
-  background: var(--docs-tb-bg);
+  border-radius: 12px;
+  background: var(--docs-field-bg);
   color: var(--docs-icon);
   text-align: center;
 }
@@ -1181,10 +1166,9 @@
 }
 .docs-fonts-select {
   height: 36px;
-  padding: 0 8px;
-  border: 1px solid var(--docs-tb-sep);
-  border-radius: 4px;
-  background: var(--docs-tb-dialog);
+  padding: 0 12px;
+  border-radius: 9999px;
+  background: var(--docs-field-bg);
 }
 .docs-fonts-lists {
   display: flex;
@@ -1198,7 +1182,7 @@
   min-width: 0;
   overflow-y: auto;
   border: 1px solid var(--docs-tb-sep);
-  border-radius: 4px;
+  border-radius: 12px;
 }
 .docs-fonts-mine {
   display: flex;
@@ -1210,7 +1194,7 @@
 }
 .docs-fonts-mine h3 {
   margin-bottom: 8px;
-  font: 500 14px/20px var(--docs-tb-font);
+  font: 600 14px/20px var(--docs-ui-font);
 }
 .docs-fonts-mine ul {
   flex: 1;
@@ -1231,12 +1215,13 @@
 .docs-fonts-row:focus-visible,
 .docs-fonts-remove:hover {
   background: var(--docs-tb-menu-hover);
+  color: var(--docs-on-fg);
   outline: none;
 }
 .docs-fonts-row > svg {
   position: absolute;
   left: 12px;
-  color: var(--docs-blue);
+  color: var(--docs-accent-text);
 }
 .docs-fonts-mine li {
   display: flex;
@@ -1252,17 +1237,19 @@
 }
 
 /* ── The tooltip over the page editor ─────────────────────────────────────
-   12 px on near-black, 4 px under its control (above it near the window's
+   Unitos's bubble (ink, paper words, semibold, the float shadow) in Docs'
+   place: 12 px words, 4 px under its control (above it near the window's
    foot), after the pointer rests 300 ms. */
 .docs-tip {
   min-height: 24px;
   max-width: min(300px, calc(100vw - 16px));
   padding: 3px 8px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 12px;
   background: var(--docs-tb-tip-bg);
   color: var(--docs-tb-tip-fg);
-  font: 400 12px/16px var(--docs-tb-font);
+  box-shadow: var(--elev-lg);
+  font: 600 12px/16px var(--docs-ui-font);
   letter-spacing: 0.00625rem;
   white-space: pre-wrap;
   word-break: break-word;

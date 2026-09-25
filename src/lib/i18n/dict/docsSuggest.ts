@@ -18,6 +18,11 @@ const en = {
   checked: "Checked",
   unchecked: "Unchecked",
   otherFormat: "other formatting",
+  // The assistant's suggestions: the card, in a shared project, and an op
+  // the page skipped (suggest/assistant.ts)
+  askedBy: "Asked by {name}",
+  skipChanged: "Skipped: the words changed while the assistant worked. ({why})",
+  skipObject: "Skipped: the words hold an object the assistant cannot change. ({why})",
   // Review suggested edits
   reviewSuggestedEdits: "Review suggested edits",
   oneSuggestion: "1 suggestion",
@@ -47,6 +52,9 @@ const zh: Record<keyof typeof en, string> = {
   checked: "已勾选",
   unchecked: "未勾选",
   otherFormat: "其他格式",
+  askedBy: "请求人：{name}",
+  skipChanged: "已跳过：助手处理期间这些文字已改动。（{why}）",
+  skipObject: "已跳过：这些文字中有助手不能改动的对象。（{why}）",
   reviewSuggestedEdits: "审阅建议",
   oneSuggestion: "1 条建议",
   suggestionCount: "{n} 条建议",

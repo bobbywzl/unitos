@@ -1,4 +1,6 @@
-import { INDEXED_NODE_TYPES, type RichNode } from "@/lib/docs/schema";
+import { isAssistantSuggestion } from "@/lib/docs/assistant-suggestions";
+import { withoutSuggestions } from "@/lib/docs/blocks";
+import { INDEXED_NODE_TYPES, SUGGESTION_MARK_TYPES, type RichNode } from "@/lib/docs/schema";
 
 // Two copies of one blank document met (SPEC.md §29): the editor's save
 // started from a revision someone else already moved past. The editor's own
@@ -6,7 +8,9 @@ import { INDEXED_NODE_TYPES, type RichNode } from "@/lib/docs/schema";
 // people's work stands. Nodes pair by the first blockId inside them, at every
 // level: two list items or two table cells are two changes. Two changes to
 // one paragraph both stand when they touch different words; else the editor's
-// copy, the one on screen, wins that paragraph.
+// copy, the one on screen, wins that paragraph — unless its only change is
+// the assistant's suggestions: a person's words win over those, and each of
+// them goes whole.
 
 type Entry = { key: string; node: RichNode; json: string };
 
@@ -55,7 +59,7 @@ function withContent(node: RichNode, attrs: RichNode["attrs"], content: RichNode
 }
 
 /** The remote list with the editor's changes since `base` laid over it. */
-function mergeList(base: RichNode[], local: RichNode[], remote: RichNode[]): RichNode[] {
+function mergeList(base: RichNode[], local: RichNode[], remote: RichNode[], dropped: Set<string>): RichNode[] {
   const baseBy = new Map(keyed(base).map((e) => [e.key, e]));
   const localList = keyed(local);
   const localBy = new Map(localList.map((e) => [e.key, e]));
@@ -69,7 +73,7 @@ function mergeList(base: RichNode[], local: RichNode[], remote: RichNode[]): Ric
       if (!b) result.push(r);
       continue;
     }
-    result.push({ key: r.key, node: b ? mergeNode(b, l, r) : l.node });
+    result.push({ key: r.key, node: b ? mergeNode(b, l, r, dropped) : l.node });
   }
   // The editor's new nodes go after the nearest node before them that the
   // result holds. A node the stored copy already holds (a save whose answer
@@ -90,18 +94,36 @@ function mergeList(base: RichNode[], local: RichNode[], remote: RichNode[]): Ric
   return result.map((r) => r.node);
 }
 
-/** One node both copies hold, merged against its base. */
-function mergeNode(base: Entry, local: Entry, remote: Entry): RichNode {
+/** A node as people wrote and accepted it: the assistant's suggestions taken back. */
+const approved = (node: RichNode) => stable(withoutSuggestions([node], isAssistantSuggestion));
+
+/** The ids of the assistant's suggestions in a node. */
+function assistantIds(node: RichNode, ids = new Set<string>()): Set<string> {
+  for (const mark of node.marks ?? []) {
+    if (SUGGESTION_MARK_TYPES.has(mark.type) && isAssistantSuggestion(mark.attrs?.id)) ids.add(String(mark.attrs?.id));
+  }
+  for (const child of node.content ?? []) assistantIds(child, ids);
+  return ids;
+}
+
+/** One node both copies hold, merged against its base. The assistant's
+    suggestions a paragraph gives up to the stored copy go in `dropped`. */
+function mergeNode(base: Entry, local: Entry, remote: Entry, dropped: Set<string>): RichNode {
   if (local.json === base.json || local.json === remote.json) return remote.node;
   if (remote.json === base.json) return local.node;
   const [b, l, r] = [base.node, local.node, remote.node];
+  if (INDEXED_NODE_TYPES.has(b.type) && approved(l) === approved(b)) {
+    const kept = assistantIds(b, assistantIds(r));
+    for (const id of assistantIds(l)) if (!kept.has(id)) dropped.add(id);
+    return r;
+  }
   if (l.type !== r.type || l.type !== b.type) return l;
   const attrs = stable(l.attrs ?? null) !== stable(b.attrs ?? null) ? l.attrs : r.attrs;
   if (INDEXED_NODE_TYPES.has(l.type)) {
     const content = mergeWords(b.content ?? [], l.content ?? [], r.content ?? []);
     return content ? withContent(l, attrs, content) : l;
   }
-  return withContent(l, attrs, mergeList(b.content ?? [], l.content ?? [], r.content ?? []));
+  return withContent(l, attrs, mergeList(b.content ?? [], l.content ?? [], r.content ?? [], dropped));
 }
 
 // One character with its marks, or one inline node (a chip, a line break).
@@ -175,7 +197,10 @@ function mergeWords(base: RichNode[], local: RichNode[], remote: RichNode[]): Ri
 
 /** The stored copy with the editor's changes since `base` laid over it. */
 export function mergeRichText(base: RichNode, local: RichNode, remote: RichNode): RichNode {
-  const content = mergeList(base.content ?? [], local.content ?? [], remote.content ?? []);
+  const dropped = new Set<string>();
+  const merged = mergeList(base.content ?? [], local.content ?? [], remote.content ?? [], dropped);
+  // A suggestion that gave up one paragraph leaves the others too: none stays half made.
+  const content = dropped.size > 0 ? withoutSuggestions(merged, (id) => dropped.has(String(id))) : merged;
   // The doc node's attributes (the named styles): the editor's when it changed them.
   const attrs = stable(local.attrs ?? null) !== stable(base.attrs ?? null) ? local.attrs : remote.attrs;
   return { ...remote, attrs, content: content.length > 0 ? content : [{ type: "paragraph" }] };

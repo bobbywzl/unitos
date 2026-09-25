@@ -90,6 +90,7 @@ export default async function AdminGatewayPage() {
     analyze: t("admin.featAnalyze"),
     visualize: t("admin.featVisualize"),
     voice: t("admin.featVoice"),
+    suggest: t("admin.featSuggest"),
     find: t("admin.featFind"),
     ask: t("admin.featAsk"),
     formalize: t("admin.featFormalize"),

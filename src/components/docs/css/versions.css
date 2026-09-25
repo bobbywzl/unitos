@@ -46,7 +46,7 @@
   text-overflow: ellipsis;
 }
 .docs-versions-heading-title {
-  font: 500 16px/24px var(--docs-ui-font);
+  font: 600 16px/24px var(--docs-ui-font);
 }
 .docs-versions-heading-time {
   color: var(--docs-muted);
@@ -76,11 +76,13 @@
   margin: 0 auto;
   background: var(--docs-page);
   outline: 1px solid var(--docs-page-border);
+  box-shadow: var(--elev-sm);
 }
 .docs-versions-page[data-pageless] {
   padding-top: 59px;
   background: none;
   outline: none;
+  box-shadow: none;
 }
 .docs-versions-status {
   padding: 24px;
@@ -89,17 +91,19 @@
   text-align: center;
 }
 
-/* The panel: 320 px, the title, the filter, the list by day, Show changes. */
+/* The panel: 320 px on the notes tray's sand, the title, the filter, the
+   list by day, Show changes. */
 .docs-versions-panel {
   display: flex;
   flex: none;
   flex-direction: column;
-  background: var(--docs-tb-bg);
+  border-left: 1px solid var(--docs-sep);
+  background: var(--sand-100);
 }
 .docs-versions-panel-title {
   flex: none;
   padding: 18px 24px;
-  font: 400 22px/28px var(--docs-ui-font);
+  font: 400 22px/28px var(--docs-title-font);
 }
 .docs-versions-check {
   display: flex;
@@ -131,8 +135,10 @@
   align-items: center;
   height: 35px;
   padding-left: 24px;
-  color: var(--docs-icon);
-  font: 500 11px/16px var(--docs-ui-font);
+  color: var(--sand-500);
+  font: 600 11px/16px var(--docs-ui-font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .docs-versions-tile {
   position: relative;
@@ -143,7 +149,7 @@
 }
 .docs-versions-tile-selected,
 .docs-versions-tile-selected:hover {
-  background: var(--docs-pill);
+  background: var(--docs-on-bg);
 }
 /* The whole tile picks the version; ⋮ sits over it. */
 .docs-versions-pick {
@@ -159,7 +165,7 @@
   inset: 0;
 }
 .docs-versions-tile-selected .docs-versions-pick {
-  font-weight: 500;
+  font-weight: 600;
 }
 .docs-versions-note,
 .docs-versions-author {

@@ -3,20 +3,25 @@
 import { useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useCollab } from "@/components/collab/collab-context";
+import { useAuthor, useCollab } from "@/components/collab/collab-context";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands } from "@/components/docs/commands";
-import { readSuggestions, setSuggesting, settleSuggestions, suggestionAt } from "@/components/docs/ext/suggest";
+import { focusSuggestion, readSuggestions, setSuggesting, settleSuggestions, suggestionAt } from "@/components/docs/ext/suggest";
 import { belowSlot, pageGeometry, paneReach, slotAt } from "@/components/docs/layer/margin";
+import { applyAssistantOps, type Landing } from "@/components/docs/suggest/assistant";
 import { SuggestionCard } from "@/components/docs/suggest/card";
 import { ReviewPanel } from "@/components/docs/suggest/review";
+import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
+import type { TKey } from "@/lib/i18n/dictionaries";
+import { assistantAuthor, type ResolvedOp } from "@/lib/docs/assistant-suggestions";
 import { suggestionAuthor } from "@/lib/docs/schema";
 import { personColor } from "@/lib/person";
+import type { SuggestCommand } from "@/lib/prompts/suggest";
 
 // Suggesting mode in the page editor (SPEC.md §29): the authors' colors,
-// every suggestion's card, and Review suggested edits. The layer also places
-// the card column's comment and suggestion cards (layer/comment-card.tsx
-// CardColumn).
+// every suggestion's card, and Review suggested edits, of a person's
+// suggestions and the assistant's. The layer also places the card column's
+// comment and suggestion cards (layer/comment-card.tsx CardColumn).
 
 /** Raised on the page's text by Review suggested edits. */
 const REVIEW_EVENT = "docs:review-suggestions";
@@ -55,6 +60,35 @@ registerDocsCommands([
     run: (editor) => settleSuggestions(editor, false),
     enabled: settleable,
   },
+]);
+
+// The assistant on the selection, or on the paragraph the caret stands in:
+// the reader layer opens its box, or runs one of its commands there.
+const COMMANDS: [SuggestCommand, TKey][] = [
+  ["rephrase", "reader.commandRephrase"],
+  ["shorten", "reader.commandShorten"],
+  ["elaborate", "reader.commandElaborate"],
+  ["formal", "reader.commandFormal"],
+  ["casual", "reader.commandCasual"],
+  ["bulleted", "reader.commandBulleted"],
+  ["fix", "reader.commandFix"],
+];
+registerDocsCommands([
+  {
+    id: "assistant:ask",
+    label: "docsInsert.askAssistant",
+    menu: "tools",
+    keywords: ["ai", "助手"],
+    run: (editor) => fireDocs(editor, DOCS_EVENT.tool, { tool: "assistant" }),
+  },
+  ...COMMANDS.map(([command, label]) => ({
+    id: `assistant:${command}`,
+    label,
+    menu: "tools" as const,
+    keywords: ["ai", "assistant", "助手"],
+    run: (editor: Editor) => fireDocs(editor, DOCS_EVENT.tool, { tool: "assistant", command }),
+    enabled: (editor: Editor) => editor.isEditable,
+  })),
 ]);
 
 /** The column's box over the pane and the notes tray beside it (in a split
@@ -172,8 +206,10 @@ function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boo
 }
 
 export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaProps & { suggesting: boolean }) {
-  const { myId, people } = useCollab();
-  const [reviewing, setReviewing] = useState(false);
+  const { myId } = useCollab();
+  const authorOf = useAuthor();
+  // Review suggested edits, open on every suggestion (null) or on some.
+  const [review, setReview] = useState<{ scope: readonly string[] | null } | null>(null);
   const { active, ids } = useEditorState({
     editor,
     selector: ({ editor: e }) => ({ active: suggestionAt(e.state), ids: readSuggestions(e.state.doc).map((s) => s.id) }),
@@ -192,13 +228,28 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
   }, [editor, suggesting, myId]);
 
   // Review suggested edits: its command, and Google's chord (hold Ctrl+Alt,
-  // press O then U), which the chord reader runs (typing/navigate.ts).
+  // press O then U), which the chord reader runs (typing/navigate.ts); on
+  // one command's suggestions ({ids}), the first of them selected.
   useEffect(() => {
     const dom = editor.view.dom;
-    const open = () => setReviewing(true);
+    const open = (e: Event) => {
+      const scope = (e as CustomEvent<{ ids?: string[] } | null>).detail?.ids ?? null;
+      setReview({ scope });
+      const first = scope && readSuggestions(editor.state.doc).find((s) => scope.includes(s.id));
+      if (first) focusSuggestion(editor, first.id);
+    };
     dom.addEventListener(REVIEW_EVENT, open);
     return () => dom.removeEventListener(REVIEW_EVENT, open);
   }, [editor]);
+
+  // The QA scripts land fixed ops with no model in development.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    (window as unknown as { __applyAssistantOps?: (ops: ResolvedOp[], replacing?: string[]) => Landing }).__applyAssistantOps = (
+      ops,
+      replacing,
+    ) => applyAssistantOps(editor, ops, assistantAuthor(myId), replacing);
+  }, [editor, myId]);
 
   // The cards move with their words once the pages are laid out (a frame
   // after a change), when the pane or the page moves, and when a card or
@@ -268,9 +319,9 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
   const colors = useMemo(
     () =>
       [...new Set(ids.map(suggestionAuthor))].map(
-        (author) => `.docs-prose [data-author="${CSS.escape(author)}"]{--docs-suggest:${people[author]?.color ?? personColor(author)}}`,
+        (author) => `.docs-prose [data-author="${CSS.escape(author)}"]{--docs-suggest:${authorOf(author)?.color ?? personColor(author)}}`,
       ),
-    [ids, people],
+    [ids, authorOf],
   );
   const canSettle = canEdit && editing;
   // The cards, made once per list: typing re-renders the page, not them.
@@ -282,14 +333,15 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
         {[...colors, active && !viewing ? `.docs-prose [data-suggestion="${CSS.escape(active)}"]{--docs-suggest-tint:24%}` : ""].join("\n")}
       </style>
       {column && !viewing && createPortal(cards, column)}
-      {reviewing && header && !viewing && (
+      {review && header && !viewing && (
         <ReviewPanel
           editor={editor}
           header={header}
-          ids={ids}
+          ids={review.scope ? ids.filter((id) => review.scope?.includes(id)) : ids}
+          scoped={review.scope !== null}
           at={active}
           canSettle={canSettle}
-          onClose={() => setReviewing(false)}
+          onClose={() => setReview(null)}
         />
       )}
     </>

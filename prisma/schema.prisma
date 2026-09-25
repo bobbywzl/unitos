@@ -1007,7 +1007,7 @@ model ToolRating {
   notebookId String?
   documentId String?
   noteId     String? // the annotation or conversation note the output lives on, when it has one
-  tool       String // define | simplify | analyze | visualize | assistant | act | distill | summarize | ask | find | formalize | stitch
+  tool       String // define | simplify | analyze | visualize | assistant | act | distill | summarize | ask | find | formalize | stitch | suggest
   rating     String // "up" | "down"
   lang       String // the reader's UI language at the time
   input      String // what the tool ran on: the selection, the question, the command (cut at 4000)

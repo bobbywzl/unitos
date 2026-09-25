@@ -1,4 +1,4 @@
-import { ACTION_TYPE_LINES } from "@/lib/assistant/plan";
+import { actionLines } from "@/lib/assistant/plan";
 import type { Lang } from "@/lib/i18n/config";
 import {
   answerLanguage,
@@ -41,10 +41,9 @@ export function synthesisAskPrompt(params: {
   imageCount?: number;
   // This page scope (SPEC.md §7): the assistant may propose actions on the
   // open document and the notes, which the reader approves in the plan card.
-  act?: {
-    sections: { id: string; title: string; parentTitle: string | null }[];
-    otherDocuments: { id: string; title: string }[];
-  };
+  // richText: a change to the document is one suggest action (SPEC.md §29);
+  // caretBlockId: the block the caret stands in.
+  act?: PageActions;
 }): string {
   const files = params.files ?? [];
   const imageCount = params.imageCount ?? 0;
@@ -105,22 +104,28 @@ export function synthesisAskPrompt(params: {
 const ACT_ELSEWHERE_LINE =
   "You cannot change a document or the notes from this scope. When the message asks for a change, answer it, then say in one sentence that changes run from the This page scope with the document open.";
 
+type PageActions = {
+  sections: { id: string; title: string; parentTitle: string | null }[];
+  otherDocuments: { id: string; title: string }[];
+  richText?: boolean;
+  caretBlockId?: string | null;
+};
+
 // This page scope: the actions the assistant may propose, and the fence the
 // answer ends with when the message asks for a change. The server holds the
 // fence back from the stream, validates every action against the real
 // document (lib/assistant/plan.ts), and sends the plan after the answer; the
-// reader approves it in the plan card before anything runs.
-function actLines(act: {
-  sections: { id: string; title: string; parentTitle: string | null }[];
-  otherDocuments: { id: string; title: string }[];
-}): string[] {
+// reader approves it in the plan card before anything runs. A suggest action
+// goes to the page instead: its changes land as the assistant's suggestions.
+function actLines(act: PageActions): string[] {
   return [
     "",
     "You can propose changes to the open document and the notes. The reader approves every action before it runs.",
     `Sections in the project (id — title):\n${act.sections.length > 0 ? act.sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
     `Other attached documents (id — title):\n${act.otherDocuments.length > 0 ? act.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
+    ...(act.caretBlockId ? [`The caret stands in [block ${act.caretBlockId}]. "Here" means right after it.`] : []),
     "Action types:",
-    ...ACTION_TYPE_LINES,
+    ...actionLines(act.richText ?? false),
     "Rules for actions:",
     "1. A message that asks for a change to the document or the notes: write the answer, then end with a fenced block whose info string is actions, holding a JSON array of the actions. Nothing after the block.",
     "2. A message that asks for analysis, an answer, or a summary, and no change: no block.",
@@ -128,7 +133,9 @@ function actLines(act: {
     "4. Use the smallest set of actions that fulfils the message. Never change text the message did not ask to change.",
     "5. description: one plain sentence of what the action does, for the reader's approval list.",
     "6. TABLE and FIGURE blocks cannot be edited or removed.",
-    "7. In the answer, say what each action changes and why. The answer stands on its own; the reader reads the actions in the plan card.",
+    act.richText
+      ? "7. A change to the document's words or styles is one suggest action, whatever its size: the whole document, a section, or a paragraph. The answer is one sentence on what will change; never write the changed text in the answer: the suggestions carry it."
+      : "7. In the answer, say what each action changes and why. The answer stands on its own; the reader reads the actions in the plan card.",
   ];
 }
 

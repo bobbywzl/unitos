@@ -7,12 +7,14 @@ import { CloseIcon, ExpandLessIcon, ExpandMoreIcon } from "@/components/docs/ico
 import { DialogButton } from "@/components/docs/toolbar/dialog";
 import { useT } from "@/components/lang-provider";
 
-// Review suggested edits (SPEC.md §29): Google Docs' box under the toolbar.
+// Review suggested edits (SPEC.md §29): Google Docs' box under the toolbar,
+// on every suggestion or on one command's of the assistant.
 
 export function ReviewPanel({
   editor,
   header,
   ids,
+  scoped,
   at,
   canSettle,
   onClose,
@@ -20,8 +22,11 @@ export function ReviewPanel({
   editor: Editor;
   /** The page editor's header: the box hangs from its bottom edge. */
   header: HTMLElement;
-  /** Every suggestion, in the order of the text, and the one the caret is in. */
+  /** The suggestions it reviews, in the order of the text, and the one the
+      caret is in. */
   ids: string[];
+  /** Some suggestions, not every one: Accept all and Reject all settle them alone. */
+  scoped: boolean;
   at: string | null;
   canSettle: boolean;
   onClose: () => void;
@@ -71,9 +76,10 @@ export function ReviewPanel({
         ))}
       </div>
       {canSettle && !none && (
-        <div className="docs-suggest-review-actions">
-          <DialogButton onClick={() => settleSuggestions(editor, true)}>{t("docsSuggest.acceptAll")}</DialogButton>
-          <DialogButton onClick={() => settleSuggestions(editor, false)}>{t("docsSuggest.rejectAll")}</DialogButton>
+        // The page keeps the focus: Ctrl+Z then takes the settling back.
+        <div className="docs-suggest-review-actions" onMouseDown={(e) => e.preventDefault()}>
+          <DialogButton onClick={() => settleSuggestions(editor, true, scoped ? ids : undefined)}>{t("docsSuggest.acceptAll")}</DialogButton>
+          <DialogButton onClick={() => settleSuggestions(editor, false, scoped ? ids : undefined)}>{t("docsSuggest.rejectAll")}</DialogButton>
         </div>
       )}
     </div>,

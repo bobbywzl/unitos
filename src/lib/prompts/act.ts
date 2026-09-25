@@ -1,4 +1,4 @@
-import { ACTION_TYPE_LINES } from "@/lib/assistant/plan";
+import { actionLines } from "@/lib/assistant/plan";
 import type { ChatTurn } from "@/lib/conversation";
 import type { Lang } from "@/lib/i18n/config";
 import { languageName, profileLines, STYLE_RULE, WEB_LINES, type ReaderProfileCtx } from "@/lib/prompts/types";
@@ -34,6 +34,9 @@ export type ActCtx = {
   command: string;
   // The reader's Web toggle is on: the model can search (SPEC.md §7).
   web?: boolean;
+  // The document has rich text: a change to it is one suggest action
+  // (SPEC.md §29), in place of the block actions.
+  richText?: boolean;
 };
 
 /** The selection block for a text selection: what the route puts in the
@@ -66,7 +69,7 @@ export function actPrompt(ctx: ActCtx): string {
     }`,
     "",
     "Action types:",
-    ...ACTION_TYPE_LINES,
+    ...actionLines(ctx.richText ?? false),
     "",
     "Rules:",
     "1. Use block ids exactly as given. Every quote must be an exact substring of the named block's text.",
@@ -89,6 +92,11 @@ export function actPrompt(ctx: ActCtx): string {
             : "   e. This is the first message of the conversation: always return matches.",
         ]
       : ["9. matches: return an empty list. The reader has no selection."]),
+    ...(ctx.richText
+      ? [
+          "10. A command that asks to change the document's words or styles: one suggest action, reply null, and matches an empty list. The suggestions carry the change: never write the changed text in reply.",
+        ]
+      : []),
     "",
     ...(ctx.history.length > 0
       ? [

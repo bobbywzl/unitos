@@ -3,22 +3,19 @@
    imports this file, so it loads with the reader; docs.css, the rest of the
    editor's look, loads with the editor (docs-editor.tsx). */
 
+/* Unitos's variables (globals.css), which flip under .dark by themselves:
+   the paper ground, a card page, the chrome's words and symbols, the page's
+   hairline, the toolbar's card pill, Figtree for the chrome, and Caprasimo
+   for titles. */
 :root {
-  --docs-canvas: #f8fafd;
-  --docs-page: #ffffff;
-  --docs-icon: #444746;
-  --docs-text: #1f1f1f;
-  --docs-page-border: #c4c7c5;
-  --docs-tb-bg: #f0f4f9;
-  --docs-ui-font: "Google Sans", Roboto, "Segoe UI", Arial, sans-serif;
-}
-.dark {
-  --docs-canvas: #1b1b1b;
-  --docs-page: #262626;
-  --docs-icon: #c4c7c5;
-  --docs-text: #e3e3e3;
-  --docs-page-border: #444746;
-  --docs-tb-bg: #1e1f20;
+  --docs-canvas: var(--paper);
+  --docs-page: var(--card);
+  --docs-icon: var(--sand-700);
+  --docs-text: var(--ink);
+  --docs-page-border: var(--line);
+  --docs-tb-bg: var(--card);
+  --docs-ui-font: var(--font-figtree), system-ui, sans-serif;
+  --docs-title-font: var(--font-caprasimo), var(--font-figtree), system-ui, sans-serif;
 }
 
 .docs-shell {
@@ -38,8 +35,8 @@
   padding: 8px 12px 6px;
 }
 
-/* The title row: the title in Google Sans 18/22 (css/page.css has the
-   field's states and the status beside it). */
+/* The title row: the title in Caprasimo 18/22, as every title in Unitos
+   (css/page.css has the field's states and the status beside it). */
 .docs-title-row {
   display: flex;
   align-items: center;
@@ -49,14 +46,15 @@
 }
 .docs-title-icon {
   flex: none;
-  color: #4285f4;
+  color: var(--clay);
 }
 .docs-title-input,
 .docs-title-wrap::after {
   grid-area: 1 / 1;
   padding: 1px 6px;
   border: 1px solid transparent;
-  font: 400 18px/22px var(--docs-ui-font);
+  font: 400 18px/22px var(--docs-title-font);
+  letter-spacing: -0.01em;
 }
 .docs-title-input {
   min-width: 0;
@@ -67,12 +65,12 @@
   outline: none;
 }
 .docs-title-untitled {
-  color: var(--docs-icon);
+  color: var(--sand-500);
 }
 
-/* The toolbar's bar: 40 px tall, 28 px corners, 16 px from the pane's sides
-   and 8 px above the ruler (the header adds 12 px at the sides and 6 px
-   below). Its controls: css/toolbar.css. */
+/* The toolbar's bar: a card pill with Unitos's soft shadow, 40 px tall, 16 px
+   from the pane's sides and 8 px above the ruler (the header adds 12 px at
+   the sides and 6 px below). Its controls: css/toolbar.css. */
 .docs-toolbar {
   display: flex;
   align-items: center;
@@ -82,8 +80,9 @@
   padding: 0 8px;
   border-radius: 28px;
   background: var(--docs-tb-bg);
+  box-shadow: var(--elev-sm);
   color: var(--docs-icon);
-  font-family: var(--docs-tb-font);
+  font-family: var(--docs-ui-font);
 }
 
 /* The ruler's row sits 8 px under the toolbar (the rulers: css/page.css). */
@@ -94,7 +93,13 @@
   background: var(--docs-canvas);
 }
 
-/* ── The canvas: one flat color under the chrome; the first page's border
+/* A pageless page's color fills the canvas and, in the light theme, the
+   chrome (areas/page.tsx); in dark mode the chrome keeps the dark paper. */
+.dark :is(.docs-header, .docs-side) {
+  --docs-canvas: var(--paper);
+}
+
+/* ── The canvas: the paper under the chrome; the first page's border
    sits 10 px under the ruler, and the canvas scrolls sideways when the page
    is wider than the pane. The page stands between the side paddings (the
    left one clears the outline); while Unitos cards sit in the page's right
@@ -117,24 +122,36 @@
   }
 }
 
-/* The page stack: one sheet per page behind one flow of text. */
+/* The page stack: one sheet per page behind one flow of text. A sheet is
+   paper: square corners, a hairline, and Unitos's soft shadow. The ground
+   under the text (--docs-ground, which a pinned table row paints too) is
+   the page's color, the card color for a white page in dark mode, and the
+   canvas when pageless. */
 .docs-page {
+  --docs-ground: var(--docs-sheet-color, var(--docs-page));
   position: relative;
   box-sizing: border-box;
   margin: 0 auto;
   isolation: isolate;
   cursor: text;
 }
+.dark .docs-page[data-white]:not([data-pageless]) {
+  --docs-ground: var(--docs-page);
+}
+.docs-page[data-pageless] {
+  --docs-ground: var(--docs-canvas);
+}
 .docs-sheet {
   position: absolute;
   left: 0;
   width: 100%;
   overflow: hidden;
-  background: var(--docs-sheet-color, var(--docs-page));
+  background: var(--docs-ground);
   outline: 1px solid var(--docs-page-border);
+  box-shadow: var(--elev-sm);
 }
-.dark .docs-sheet[data-white] {
-  background: var(--docs-page);
+.docs-page-compact .docs-sheet {
+  box-shadow: none;
 }
 
 /* The card column (layer/comment-card.tsx CardColumn; css/layer.css): the
@@ -161,9 +178,15 @@
   visibility: hidden;
 }
 
+/* The reader pane's paper fade at its foot belongs to articles: a page runs
+   to the pane's edge. */
+div:has(.docs-shell) > .reader-fade {
+  display: none;
+}
+
 /* The pane around the page takes the canvas's color, down to the card
-   column's end, and Google Docs' scrollbars: a 16 px track, an 8 px thumb
-   with round ends, darker under the pointer. */
+   column's end, and Google Docs' scrollbars in sand: a 16 px track, an 8 px
+   thumb with round ends, darker under the pointer. */
 [data-page-editor] {
   background: var(--docs-canvas);
 }
@@ -179,14 +202,14 @@
   min-height: 28px;
   border: 4px solid transparent;
   border-radius: 8px;
-  background: #e1e3e1 padding-box;
+  background: var(--sand-300) padding-box;
 }
 :is([data-page-editor], .docs-hscroll, .docs-outline-scroll)::-webkit-scrollbar-thumb:hover,
 .dark :is([data-page-editor], .docs-hscroll, .docs-outline-scroll)::-webkit-scrollbar-thumb {
-  background-color: #444746;
+  background-color: var(--sand-400);
 }
 .dark :is([data-page-editor], .docs-hscroll, .docs-outline-scroll)::-webkit-scrollbar-thumb:hover {
-  background-color: #8e918f;
+  background-color: var(--sand-500);
 }
 [data-page-editor]::-webkit-scrollbar-corner {
   background: transparent;
@@ -194,5 +217,8 @@
 @media print {
   [data-page-editor] {
     background: transparent;
+  }
+  .docs-sheet {
+    box-shadow: none;
   }
 }

@@ -10,7 +10,7 @@ export type Person = {
   id: string;
   name: string;
   symbol: string; // 1–2 characters shown on the badge
-  color: string; // badge background, hex
+  color: string; // badge background, hex (the assistant's: a CSS variable)
   picture: string; // "" = no picture; the badge shows the symbol
   // The account's tier state (TIERS.md), for the tier mark beside the badge:
   // the white crystal for Unitos Premium, the black diamond for Unitos
@@ -42,6 +42,12 @@ export function personColor(userId: string): string {
 // pair (emoji, CJK beyond the BMP) whole.
 export function personSymbol(name: string): string {
   return [...name.trim()][0]?.toUpperCase() ?? "?";
+}
+
+// The assistant as the author of its suggestions (lib/docs/assistant-suggestions.ts):
+// ✦ on the assistant's kind color, which follows the theme.
+export function assistantPerson(author: string, name: string): Person {
+  return { id: author, name, symbol: "✦", color: "var(--kind-assistant)", picture: "" };
 }
 
 // The stored account with defaults applied. With the tier fields on the

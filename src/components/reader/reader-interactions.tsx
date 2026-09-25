@@ -1,5 +1,6 @@
 "use client";
 
+import type { Editor } from "@tiptap/core";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
@@ -147,6 +148,21 @@ import { setCommentResolved } from "@/lib/annotations/resolve";
 import { COMMENTS_EVENT, flashInPage, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
 import { DOCS_EVENT } from "@/components/docs/typing/events";
+import { matchesCombo } from "@/components/docs/keys";
+import {
+  assistantAuthor,
+  type ResolvedOp,
+  type SuggestEvent,
+  type SuggestResult,
+} from "@/lib/docs/assistant-suggestions";
+import type { SuggestCommand } from "@/lib/prompts/suggest";
+import { readNdjson } from "@/lib/ndjson";
+import {
+  publishSuggestRun,
+  SUGGEST_EVENT,
+  SuggestionRow,
+  type SuggestRequest,
+} from "@/components/assistant/suggestion-row";
 import {
   belowSlot,
   marginPlace,
@@ -459,7 +475,22 @@ const ACTION_LABEL_KEY: Record<AssistantAction["type"], TKey> = {
   link: "reader.actionLink",
   format_block: "reader.actionFormat",
   style: "reader.actionStyle",
+  suggest: "reader.actionSuggest",
 };
+
+// The assistant's commands on selected words (SPEC.md §29), in the chips'
+// order: the name the act route takes, and the chip's label.
+type Chip = { name: SuggestCommand; key: TKey };
+const SUGGEST_CHIPS: Chip[] = [
+  { name: "rephrase", key: "reader.commandRephrase" },
+  { name: "shorten", key: "reader.commandShorten" },
+  { name: "elaborate", key: "reader.commandElaborate" },
+  { name: "formal", key: "reader.commandFormal" },
+  { name: "casual", key: "reader.commandCasual" },
+  { name: "bulleted", key: "reader.commandBulleted" },
+  { name: "fix", key: "reader.commandFix" },
+];
+
 // A tool's output continued into a conversation — Explain+, Simplify+,
 // Analyze+, Visualize+ (SPEC.md §21). Continue opens the box; the turns
 // persist on the tool's annotation (Note.conversation) and reopen with it.
@@ -489,7 +520,9 @@ type ExplainBubble = ToolChat & {
   noteId: string | null; // the persisted annotation; Delete removes it and its mark
 };
 
-type ChatMessage = ChatTurn;
+// suggestKey: an answer that landed suggestions in the text (SPEC.md §29);
+// its row reads the run by this key.
+type ChatMessage = ChatTurn & { suggestKey?: string };
 
 // The log card (SPEC.md §21): hovering a mark whose annotation holds a
 // conversation shows the conversation's condensed log where the card would
@@ -549,6 +582,48 @@ type ReaderSideChat = {
   quote: string;
   messages: ChatMessage[];
 };
+
+// One command's run of the assistant's suggestions (SPEC.md §29), as this
+// reader holds it: what it was asked and answered, the suggestions it
+// landed, the reasons for the changes it skipped, the notes for the run (a
+// failed window, a cap), its stream.
+type SuggestionRun = {
+  input: string;
+  ops: ResolvedOp[];
+  ids: string[];
+  count: number;
+  skipped: string[];
+  notes: string[];
+  summary: string;
+  running: boolean;
+  controller: AbortController | null;
+};
+
+// The assistant's bar (SPEC.md §29): on a blank document, the commands on
+// the selected words run from a bar at the bottom of the pane. Its
+// conversation is the selection chat's, anchored to the words; yTop places
+// the chat card it can go on in.
+type AssistantBar = {
+  key: string;
+  anchor: Anchor;
+  yTop: number;
+  noteId: string | null;
+  messages: ChatMessage[];
+  input: string;
+  busy: boolean;
+  error: string | null;
+};
+
+// The page editor's suggestion code, loaded with the first command: the
+// reader loads for every document, this code only for a blank document.
+const suggestCode = () =>
+  Promise.all([import("@/components/docs/ext/suggest"), import("@/components/docs/suggest/assistant")]).then(
+    ([ext, assistant]) => ({
+      readSuggestions: ext.readSuggestions,
+      settleSuggestions: ext.settleSuggestions,
+      applyAssistantOps: assistant.applyAssistantOps,
+    }),
+  );
 
 // The picture a stored visualization's markdown points at, and its caption
 // (SPEC.md §20): the card's Open button shows them in the viewer.
@@ -1593,6 +1668,8 @@ export function ReaderInteractions({
   const [columnHost, setColumnHost] = useState<HTMLDivElement | null>(null);
   const inColumn = (cards: React.ReactNode) => (columnHost ? createPortal(cards, columnHost) : cards);
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
+  // The assistant's bar at the bottom of the pane (SPEC.md §29).
+  const [bar, setBar] = useState<AssistantBar | null>(null);
   // Highlighting an answer in the chat card (SPEC.md §7): Start side chat,
   // Ask about this, Comment.
   const {
@@ -1630,6 +1707,7 @@ export function ReaderInteractions({
     bubble !== null ||
     simplifyCard !== null ||
     assistantChat !== null ||
+    bar !== null ||
     annotationCard !== null ||
     commentCard !== null ||
     linkCard !== null ||
@@ -2111,6 +2189,7 @@ export function ReaderInteractions({
         chatAbortRef.current?.abort();
         chatAbortRef.current = null;
         setAssistantChat(null);
+        setBar(null);
         setCommentCard(null);
         setLinkCard(null);
         setAnnotationCard(null);
@@ -2326,13 +2405,34 @@ export function ReaderInteractions({
         setCommentDraft("");
       });
     };
-    // The page editor's right-click menu: Add to notes, Explain, and Ask the
-    // assistant open the same tools on the selection as this toolbar does.
-    const onTool = (e: Event) => {
-      const tool = (e as CustomEvent<{ tool: "add-to-notes" | "explain" | "assistant" }>).detail.tool;
+    // The selection; for the assistant with none, the caret's paragraph. A
+    // menu that took the focus gives the page its selection back first.
+    const passage = (editor: Editor | null, orParagraph: boolean) => {
+      if (editor && !editor.view.hasFocus()) editor.view.focus();
       const captured = captureSelection();
+      const caret = editor?.state.selection.$from;
+      if (captured || !orParagraph || !editor || !caret?.parent.isTextblock) return captured;
+      editor.commands.setTextSelection({ from: caret.start(), to: caret.end() });
+      return captureSelection();
+    };
+    // The page editor's right-click menu and Search the menus: Add to notes,
+    // Explain, and Ask the assistant open the same tools on the selection as
+    // this toolbar does. Where the page takes suggestions, the assistant is
+    // its bar, and a command runs in it at once (SPEC.md §29).
+    const onTool = (e: Event) => {
+      const { tool, command } = (
+        e as CustomEvent<{ tool: "add-to-notes" | "explain" | "assistant"; command?: string }>
+      ).detail;
+      const editor = pageEditorIn(container);
+      const captured = passage(editor, tool === "assistant");
       if (!captured) {
         showToast(t("docsLayer.selectWordsFirst"));
+        return;
+      }
+      if (tool === "assistant" && editor?.isEditable) {
+        const opened = openBarRef.current(captured);
+        const chip = SUGGEST_CHIPS.find((c) => c.name === command);
+        if (chip) void runBarRef.current(opened, chip);
         return;
       }
       popoverRef.current = captured;
@@ -2341,6 +2441,15 @@ export function ReaderInteractions({
       setSubmenu(tool === "add-to-notes" ? "add" : tool === "assistant" ? "ai" : null);
       if (tool === "explain") setPendingExplain(true);
     };
+    // Ctrl+Alt+G (⌘+Option+G) opens the assistant's bar on the selection.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !matchesCombo(e, "Mod+Alt+G") || e.getModifierState("AltGraph")) return;
+      const editor = pageEditorIn(container);
+      if (!editor?.isEditable || !(e.target instanceof Node) || !editor.view.dom.contains(e.target)) return;
+      e.preventDefault();
+      const captured = passage(editor, true);
+      if (captured) openBarRef.current(captured);
+    };
     // A toast raised on no page editor shows in every pane.
     const onToast = (e: Event) => {
       const text = (e as CustomEvent<{ text: string }>).detail?.text;
@@ -2348,10 +2457,12 @@ export function ReaderInteractions({
     };
     container.addEventListener(DOCS_EVENT.comment, onComment);
     container.addEventListener(DOCS_EVENT.tool, onTool);
+    container.addEventListener("keydown", onKey);
     container.addEventListener("dissect:toast", onToast);
     return () => {
       container.removeEventListener(DOCS_EVENT.comment, onComment);
       container.removeEventListener(DOCS_EVENT.tool, onTool);
+      container.removeEventListener("keydown", onKey);
       container.removeEventListener("dissect:toast", onToast);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5063,7 +5174,7 @@ export function ReaderInteractions({
         ...slot,
         messages: [
           { role: "user", content: command },
-          { role: "assistant", content: turn.reply },
+          { role: "assistant", content: turn.reply, suggestKey: turn.suggestKey },
         ],
         input: "",
         busy: false,
@@ -5077,6 +5188,89 @@ export function ReaderInteractions({
       setAiBusy(false);
     }
   }
+
+  // The assistant's bar (SPEC.md §29): a chip or the typed instruction runs
+  // through the selection chat's request, and the answer's suggestions land
+  // in the text. A follow-up takes the place of the edit still pending; a
+  // turn with no suggestions (an answer, a plan) goes on in the chat card.
+  // Closing the bar stops nothing: what lands stays pending, with its cards.
+  const barRef = useRef(bar);
+  barRef.current = bar;
+  const barAbortRef = useRef<AbortController | null>(null);
+
+  function openBar(target: Popover): AssistantBar {
+    const opened: AssistantBar = {
+      key: queuedKey(),
+      anchor: target.anchor,
+      yTop: target.yTop,
+      noteId: null,
+      messages: [],
+      input: "",
+      busy: false,
+      error: null,
+    };
+    setPopover(null);
+    setSubmenu(null);
+    setBar(opened);
+    return opened;
+  }
+  const openBarRef = useRef(openBar);
+  openBarRef.current = openBar;
+
+  // The bar's edit: its last command's suggestions.
+  const barRunKey = (b: AssistantBar) => b.messages.findLast((m) => m.suggestKey)?.suggestKey ?? null;
+
+  async function runBar(current: AssistantBar, chip?: Chip) {
+    const text = chip ? t(chip.key) : current.input.trim();
+    if (current.busy || !text) return;
+    const { key, anchor, messages, noteId } = current;
+    const pending = barRunKey(current);
+    const replacing = pending ? suggestRunsRef.current.get(pending)?.ids : undefined;
+    const same = (b: AssistantBar | null): b is AssistantBar => b?.key === key;
+    setBar({ ...current, busy: true, error: null, input: chip ? current.input : "" });
+    const controller = new AbortController();
+    barAbortRef.current = controller;
+    try {
+      await flushLiveBlock(anchor.blockId);
+      const turn = await assistantTurn(text, anchor, messages, noteId, controller.signal, undefined, undefined, chip?.name, replacing);
+      if (turn.noteId) addLocalAnchor(anchor);
+      const done: AssistantBar = {
+        ...current,
+        noteId: turn.noteId ?? noteId,
+        busy: false,
+        messages: [...messages, { role: "user", content: text }, { role: "assistant", content: turn.reply, suggestKey: turn.suggestKey }],
+      };
+      if (turn.suggestKey) setBar((b) => (same(b) ? { ...done, input: b.input } : b));
+      else if (same(barRef.current)) barToCard(done);
+    } catch (err) {
+      // Stopped: a typed instruction comes back to the field.
+      const error = controller.signal.aborted ? null : err instanceof Error ? err.message : t("reader.assistantFailed");
+      setBar((b) => (same(b) ? { ...b, busy: false, error, input: b.input || (chip ? "" : text) } : b));
+    } finally {
+      if (barAbortRef.current === controller) barAbortRef.current = null;
+    }
+  }
+  const runBarRef = useRef(runBar);
+  runBarRef.current = runBar;
+
+  // The bar's conversation goes on in the chat card beside the words.
+  function barToCard(b: AssistantBar) {
+    setBar(null);
+    const slot = claimSideSlot("assistant", b.yTop);
+    setAssistantChat({ anchor: b.anchor, noteId: b.noteId, ...slot, messages: b.messages, input: "", busy: false });
+  }
+
+  // A press anywhere but the bar closes it.
+  const barOpen = bar !== null;
+  useEffect(() => {
+    if (!barOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (e.target instanceof Element && e.target.closest("[data-assistant-bar]")) return;
+      setBar(null);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [barOpen]);
 
   // One assistant turn: command + history → reply text. Plans route through the
   // plan card, and the chat narrates it.
@@ -5092,7 +5286,11 @@ export function ReaderInteractions({
     // A side chat (SPEC.md §7): the conversation it branched from and the
     // quote it started on. Its turns persist on a note of its own.
     sideChat?: { of: string; quote: string },
-  ): Promise<{ reply: string; noteId: string | null }> {
+    // A command chip (SPEC.md §29): the act route runs it with no chat model.
+    suggestCommand?: SuggestCommand,
+    // A follow-up's suggestions take the place of these, still pending.
+    replacing?: readonly string[],
+  ): Promise<{ reply: string; noteId: string | null; suggestKey?: string }> {
     const res = await fetch("/api/assistant/act", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -5103,17 +5301,18 @@ export function ReaderInteractions({
         command,
         anchor: anchor && !toolNoteId ? anchorBody(anchor) : undefined,
         ...(anchor && !toolNoteId ? segmentsBody(anchor) : {}),
-        history: history.slice(-12),
+        history: history.slice(-12).map(({ role, content }) => ({ role, content })),
         conversationNoteId: conversationNoteId ?? undefined,
         toolNoteId,
         sideChatOf: sideChat?.of,
         sideChatQuote: sideChat?.quote,
+        suggestCommand,
         thinking,
         web,
       }),
     });
     const plan = (await res.json().catch(() => null)) as
-      | (AssistantPlan & { error?: string })
+      | (AssistantPlan & { suggestions?: SuggestResult; error?: string })
       | null;
     if (!res.ok || !plan)
       throw new Error(plan?.error ?? t("reader.assistantFailedStatus", { status: res.status }));
@@ -5126,11 +5325,204 @@ export function ReaderInteractions({
       setPlanChecked(new Set(plan.actions.map((_, i) => i)));
       parts.push(t("reader.proposedActions", { n, s: plural(n) }));
     }
-    if (parts.length === 0) parts.push(plan.warnings[0] ?? t("reader.noActions"));
+    // The assistant's suggestions land in the text: pending by construction
+    // until an editor accepts them.
+    const suggestKey = plan.suggestions
+      ? await landSuggestions(plan.suggestions, anchor ? `${command}\n\n${passageText(anchor)}` : command, replacing)
+      : undefined;
+    if (parts.length === 0) parts.push(plan.suggestions?.summary || (plan.warnings[0] ?? t("reader.noActions")));
     // The anchored conversation persisted server-side; refresh paints its mark.
     if (plan.conversationNoteId) router.refresh();
-    return { reply: parts.join("\n\n"), noteId: plan.conversationNoteId ?? null };
+    return { reply: parts.join("\n\n"), noteId: plan.conversationNoteId ?? null, suggestKey };
   }
+
+  // The assistant's suggestions (SPEC.md §29): every command's run, by key.
+  // The rows under its turn (suggestion-row.tsx) read what publishRun gives
+  // them; the count follows the text as anyone accepts or rejects one.
+  const suggestRunsRef = useRef(new Map<string, SuggestionRun>());
+  const suggestWatchRef = useRef<{ editor: Editor; off: () => void } | null>(null);
+  // Once this reader closes, its runs keep their count and lose their buttons.
+  const readerClosedRef = useRef(false);
+
+  function publishRun(key: string) {
+    const run = suggestRunsRef.current.get(key);
+    if (!run) return;
+    publishSuggestRun(key, {
+      running: run.running,
+      count: run.count,
+      skipped: [...run.skipped],
+      notes: [...run.notes],
+      summary: run.summary,
+      rating: {
+        input: run.input,
+        output: `${run.summary}\n\n${JSON.stringify(run.ops)}`.slice(0, 12_000),
+        notebookId,
+        documentId,
+      },
+      act: readerClosedRef.current
+        ? undefined
+        : { stop: () => run.controller?.abort(), review: () => reviewRun(run), settle: (accept) => void settleRun(run, accept) },
+    });
+  }
+
+  function startRun(key: string, input: string, controller: AbortController | null): SuggestionRun {
+    const run: SuggestionRun = { input, ops: [], ids: [], count: 0, skipped: [], notes: [], summary: "", running: true, controller };
+    suggestRunsRef.current.set(key, run);
+    publishRun(key);
+    return run;
+  }
+
+  // Ops land as the assistant's suggestions, authored for this reader (the
+  // page switches Viewing mode to Editing to show them).
+  async function landOps(key: string, ops: ResolvedOp[], warnings: string[], replacing: readonly string[] = []) {
+    const run = suggestRunsRef.current.get(key);
+    const editor = pageEditorIn(containerRef.current);
+    if (!run || !editor) return;
+    run.skipped.push(...warnings);
+    if (ops.length > 0) {
+      const code = await suggestCode();
+      if (editor.isDestroyed) return;
+      const landed = code.applyAssistantOps(editor, ops, assistantAuthor(myId), replacing);
+      run.ops.push(...ops);
+      run.ids.push(...landed.ids);
+      // The page's own skips read as the server's: the words changed, or hold an object.
+      for (const { i, reason } of landed.skipped) {
+        const why = ops.find((op) => op.i === i)?.why ?? "";
+        run.skipped.push(
+          t(reason === "object" ? "docsSuggest.skipObject" : reason === "overlap" ? "api.suggestSkipOverlap" : "docsSuggest.skipChanged", { why }),
+        );
+      }
+      watchRuns(editor, code.readSuggestions);
+      run.count = countRun(run, code.readSuggestions(editor.state.doc));
+    }
+    publishRun(key);
+  }
+
+  // One answer's suggestions from the act route: a chip, or a typed command
+  // the assistant turned into suggestions.
+  async function landSuggestions(result: SuggestResult, input: string, replacing?: readonly string[]): Promise<string> {
+    const key = queuedKey();
+    const run = startRun(key, input, null);
+    run.summary = result.summary;
+    await landOps(key, result.ops, result.warnings, replacing);
+    run.running = false;
+    publishRun(key);
+    return key;
+  }
+
+  function countRun(run: SuggestionRun, present: readonly { id: string }[]): number {
+    const ids = new Set(present.map((s) => s.id));
+    return run.ids.filter((id) => ids.has(id)).length;
+  }
+
+  // While runs are held, every change of the text recounts them.
+  function watchRuns(editor: Editor, read: (doc: Editor["state"]["doc"]) => readonly { id: string }[]) {
+    if (suggestWatchRef.current?.editor === editor) return;
+    suggestWatchRef.current?.off();
+    const onTransaction = ({ transaction }: { transaction: { docChanged: boolean } }) => {
+      if (!transaction.docChanged) return;
+      const present = read(editor.state.doc);
+      for (const [key, run] of suggestRunsRef.current) {
+        const count = countRun(run, present);
+        if (count === run.count) continue;
+        run.count = count;
+        publishRun(key);
+      }
+    };
+    editor.on("transaction", onTransaction);
+    suggestWatchRef.current = { editor, off: () => editor.off("transaction", onTransaction) };
+  }
+
+  // Review suggested edits over this command's suggestions, the first one selected.
+  function reviewRun(run: SuggestionRun) {
+    pageEditorIn(containerRef.current)?.view.dom.dispatchEvent(
+      new CustomEvent("docs:review-suggestions", { detail: { ids: run.ids } }),
+    );
+  }
+
+  // Accept all or Reject all of this command: one undo step.
+  async function settleRun(run: SuggestionRun, accept: boolean) {
+    const editor = pageEditorIn(containerRef.current);
+    if (!editor) return;
+    const { settleSuggestions } = await suggestCode();
+    settleSuggestions(editor, accept, run.ids);
+  }
+
+  // The panel's command over this document (SPEC.md §29): the suggest route
+  // answers one window at a time, and each window's ops land as it arrives.
+  // Stop keeps what landed; another document opening stops the run.
+  async function suggestDocument(request: SuggestRequest) {
+    const controller = new AbortController();
+    const run = startRun(request.key, `${request.command}\n\n${request.instruction}`, controller);
+    try {
+      await flushEditRef.current?.();
+      const caret = pageEditorIn(containerRef.current)?.state.selection.$from.parent.attrs.blockId;
+      const res = await fetch(`/api/documents/${documentId}/suggest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          notebookId,
+          command: request.command,
+          instruction: request.instruction,
+          blockIds: request.blockIds,
+          caretBlockId: typeof caret === "string" && caret ? caret : undefined,
+          material: request.material,
+          history: request.history,
+          thinking,
+        }),
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(json?.error ?? t("assistant.suggestFailedStatus", { status: res.status }));
+      }
+      for await (const event of readNdjson<SuggestEvent>(res)) {
+        if ("ops" in event) {
+          // The windows' summaries until the run's own: a stopped run keeps them.
+          if (event.ops.length > 0) run.summary = [run.summary, event.summary].filter(Boolean).join(" ");
+          await landOps(request.key, event.ops, event.warnings);
+        } else if ("done" in event) {
+          run.summary = event.summary;
+          run.notes.push(...event.warnings);
+        } else if ("error" in event) run.notes.push(event.error);
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) run.notes.push(err instanceof Error ? err.message : t("reader.assistantFailed"));
+    } finally {
+      run.running = false;
+      run.controller = null;
+      publishRun(request.key);
+    }
+  }
+  const suggestDocumentRef = useRef(suggestDocument);
+  suggestDocumentRef.current = suggestDocument;
+  useEffect(() => {
+    const onSuggest = (e: Event) => {
+      const request = (e as CustomEvent<SuggestRequest>).detail;
+      if (request.documentId !== documentId || !richTextRef.current) return;
+      // One pane takes the command: a split view may show this document twice.
+      e.stopImmediatePropagation();
+      void suggestDocumentRef.current(request);
+    };
+    window.addEventListener(SUGGEST_EVENT, onSuggest);
+    return () => window.removeEventListener(SUGGEST_EVENT, onSuggest);
+  }, [documentId]);
+  // The reader closes: every run stops, and keeps what landed.
+  useEffect(() => {
+    readerClosedRef.current = false;
+    const runs = suggestRunsRef.current;
+    return () => {
+      readerClosedRef.current = true;
+      suggestWatchRef.current?.off();
+      suggestWatchRef.current = null;
+      for (const [key, run] of runs) {
+        run.controller?.abort();
+        run.running = false;
+        publishRun(key);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // The side chat on screen in the card, and the note the open thread saves
   // on: what a comment is written under.
@@ -5350,6 +5742,8 @@ export function ReaderInteractions({
     setAssistantChat((c) => (c ? pushUser(c) : c));
     const controller = new AbortController();
     chatAbortRef.current = controller;
+    // A follow-up's suggestions take the place of the thread's pending ones.
+    const pending = history.findLast((m) => m.suggestKey)?.suggestKey;
     try {
       const turn = await assistantTurn(
         text,
@@ -5359,6 +5753,8 @@ export function ReaderInteractions({
         controller.signal,
         undefined,
         open && chat.noteId ? { of: chat.noteId, quote: open.quote } : undefined,
+        undefined,
+        pending ? suggestRunsRef.current.get(pending)?.ids : undefined,
       );
       if (turn.noteId && chat.anchor && !open) addLocalAnchor(chat.anchor);
       setAssistantChat((c) => {
@@ -5372,7 +5768,7 @@ export function ReaderInteractions({
                 ? {
                     ...s,
                     noteId: turn.noteId ?? s.noteId,
-                    messages: [...s.messages, { role: "assistant", content: turn.reply }],
+                    messages: [...s.messages, { role: "assistant", content: turn.reply, suggestKey: turn.suggestKey }],
                   }
                 : s,
             ),
@@ -5382,7 +5778,7 @@ export function ReaderInteractions({
           ...c,
           busy: false,
           noteId: turn.noteId ?? c.noteId,
-          messages: [...c.messages, { role: "assistant", content: turn.reply }],
+          messages: [...c.messages, { role: "assistant", content: turn.reply, suggestKey: turn.suggestKey }],
         };
       });
     } catch (err) {
@@ -5676,7 +6072,13 @@ export function ReaderInteractions({
   }
 
   // Voice command: browser speech recognition fills the box.
-  function toggleVoice() {
+  // The spoken command goes to the selection box's field, or to the bar's.
+  function toggleVoice(
+    write = (text: string) => {
+      aiCommandRef.current = text;
+      setAiCommand(text);
+    },
+  ) {
     if (aiListening) {
       recognitionRef.current?.stop();
       return;
@@ -5701,8 +6103,7 @@ export function ReaderInteractions({
         e.results as ArrayLike<ArrayLike<{ transcript: string }>>,
         (r) => r[0].transcript,
       ).join(" ");
-      setAiCommand(transcript);
-      aiCommandRef.current = transcript;
+      write(transcript);
     };
     rec.onend = () => {
       setAiListening(false);
@@ -6383,6 +6784,9 @@ function blockFormatKind(
   const popoverNearTop = popover ? (popover.nearTop ?? popover.yTop < 54) : false;
   // One row of the toolbox. Coarse pointers get 44px-tall rows.
   const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
+  // The assistant's bar (SPEC.md §29) takes the selection box's Assistant on
+  // a blank document, for a reader who can edit it, out of Viewing mode.
+  const barOffered = popover !== null && blankDocument && pageEditorIn(containerRef.current)?.isEditable === true;
   // The open popover's content kind and its toolbar (SPEC.md §6).
   const popoverKind: ContentKind = contentKindOf(
     popover ? blocks.find((b) => b.id === popover.anchor.blockId)?.type : undefined,
@@ -6807,8 +7211,9 @@ function blockFormatKind(
           content: commentCard.saved,
         })
       : null;
+  const barKey = bar ? barRunKey(bar) : null;
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* A split view: the pane header — the pane's document, the article
           menu, Extract — one row above the scroller, never over the text
           (SPEC.md §6). On a transcript the header carries the document only. */}
@@ -7291,7 +7696,7 @@ function blockFormatKind(
           )}
 
           <button
-            onClick={() => setSubmenu(submenu === "ai" ? null : "ai")}
+            onClick={() => (barOffered ? openBar(popover) : setSubmenu(submenu === "ai" ? null : "ai"))}
             data-track="assistant"
             aria-expanded={submenu === "ai"}
             data-tip={t("reader.assistantTitle")}
@@ -7333,7 +7738,7 @@ function blockFormatKind(
               </div>
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={toggleVoice}
+                  onClick={() => toggleVoice()}
                   data-track="assistant-voice"
                   aria-label={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
                   data-tip={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
@@ -8287,8 +8692,11 @@ function blockFormatKind(
                     <Markdown>{message.content}</Markdown>
                   </div>
                   {/* The rating (SPEC.md §25): the question and the selection
-                      it ran on, the answer it gave. */}
-                  {!assistantChat.busy && (
+                      it ran on, the answer it gave; the suggestions' row
+                      rates the suggestions. */}
+                  {message.suggestKey ? (
+                    <SuggestionRow runKey={message.suggestKey} />
+                  ) : !assistantChat.busy && (
                     <RatingButtons
                       tool="act"
                       input={[assistantChat.anchor?.quotedText ?? "", list[i - 1]?.content ?? ""]
@@ -8527,6 +8935,97 @@ function blockFormatKind(
       </Presence>
 
     </div>
+      {/* The assistant's bar (SPEC.md §29), over the page at the bottom of
+          the pane: the status of its edit, the field, and the commands. */}
+      <Presence show={bar !== null} exit="fade">
+      {bar && (
+        <div
+          data-assistant-bar
+          // The page editor's own control: its header stays while the bar has the focus.
+          data-edit-control
+          data-track-surface="ai-toolbar"
+          role="dialog"
+          aria-label={t("docsInsert.askAssistant")}
+          className={`pop-in absolute bottom-5 left-1/2 ${TOOL_LAYER} flex w-[min(640px,calc(100%-32px))] -translate-x-1/2 flex-col gap-2 rounded-[24px] border bg-card px-4 py-2.5 shadow-float`}
+          style={{ borderColor: annotationKindColor("assistant", null) }}
+        >
+          {bar.busy ? (
+            <ThinkingIndicator
+              label={t("assistant.suggestWriting")}
+              onStop={() => barAbortRef.current?.abort()}
+              className="text-[12px]"
+            />
+          ) : bar.error ? (
+            <p className="text-[12px] font-medium text-amber-700 dark:text-amber-400">⚠ {bar.error}</p>
+          ) : (
+            barKey && (
+              <SuggestionRow runKey={barKey} bar={{ onChat: () => barToCard(bar), onSettled: () => setBar(null) }} />
+            )
+          )}
+          <div className="flex items-center gap-2">
+            <span style={{ color: annotationKindColor("assistant", null) }}>
+              <SparkleIcon size={14} />
+            </span>
+            <input
+              autoFocus
+              value={bar.input}
+              onChange={(e) => {
+                const input = e.target.value;
+                setBar((b) => (b ? { ...b, input } : b));
+              }}
+              {...ime.props}
+              onKeyDown={(e) => {
+                if (ime.isImeEnter(e) || isImeKey(e) || e.key !== "Enter") return;
+                e.preventDefault();
+                void runBar(bar);
+              }}
+              placeholder={t("reader.barPlaceholder")}
+              aria-label={t("reader.barPlaceholder")}
+              className="min-w-0 flex-1 rounded-xl bg-sand-100 px-3 py-1.5 text-[13px] outline-none placeholder:text-sand-500"
+            />
+            <button
+              type="button"
+              onClick={() => toggleVoice((input) => setBar((b) => (b ? { ...b, input } : b)))}
+              data-track="assistant-voice"
+              aria-label={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
+              data-tip={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
+              className={`flex size-7 shrink-0 items-center justify-center rounded-full ${
+                aiListening ? "animate-pulse bg-red-500 text-white" : "text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+              }`}
+            >
+              <MicIcon size={13} />
+            </button>
+            <button
+              type="button"
+              disabled={bar.busy || !bar.input.trim()}
+              onClick={() => void runBar(bar)}
+              data-track="assistant-run"
+              data-tip={t("reader.sendTitle")}
+              className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+            >
+              {t("reader.send")}
+            </button>
+          </div>
+          {!barKey && !bar.busy && (
+            <div className="flex flex-wrap items-center gap-1">
+              {SUGGEST_CHIPS.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => void runBar(bar, c)}
+                  data-track={`assistant-command:${c.name}`}
+                  data-tip={t("reader.commandTitle")}
+                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  {t(c.key)}
+                </button>
+              ))}
+              <ThinkingChips small className="ml-auto" />
+            </div>
+          )}
+        </div>
+      )}
+      </Presence>
     </div>
   );
 }
