@@ -76,7 +76,8 @@ export function ZoomBox({
         value={shown}
         aria-label={t("docs.zoom")}
         aria-expanded={open}
-        aria-haspopup="listbox"
+        aria-controls="docs-zoom-list"
+        aria-haspopup="menu"
         role="combobox"
         tabIndex={-1}
         data-track="docs:zoom"
@@ -118,6 +119,7 @@ export function ZoomBox({
         anchorRef={boxRef}
         onClose={() => setOpen(false)}
         className="docs-menu-plain docs-menu-zoom"
+        id="docs-zoom-list"
         label={t("docs.zoom")}
         keys={false}
       >

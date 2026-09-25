@@ -30,6 +30,25 @@
   background: var(--docs-find-current);
 }
 
+/* The browser's spelling and grammar marks (Spelling and grammar check) in
+   Docs' colors: a red wave under a misspelled word, a blue one under grammar. */
+.docs-prose ::spelling-error {
+  text-decoration: underline wavy #dd0000;
+  text-decoration-thickness: 1px;
+}
+.docs-prose ::grammar-error {
+  text-decoration: underline wavy #4285f4;
+  text-decoration-thickness: 1px;
+}
+/* A highlight pseudo-element does not read custom properties everywhere:
+   the dark colors are written out. */
+.dark .docs-prose ::spelling-error {
+  text-decoration-color: #f28b82;
+}
+.dark .docs-prose ::grammar-error {
+  text-decoration-color: #8ab4f8;
+}
+
 /* A word Docs corrected: a dashed gray underline over a white halo. */
 .docs-autocorrected {
   text-decoration: underline dashed var(--docs-autocorrect);
@@ -726,4 +745,22 @@
   .docs-find-result.docs-find-current {
     background: none;
   }
+}
+
+/* A list item's bullet or number is drawn in its paragraph mark's style
+   (typing/mark-style.ts sets these on the item). */
+.docs-prose li[data-mark-bold]::marker {
+  font-weight: 700;
+}
+.docs-prose li[data-mark-italic]::marker {
+  font-style: italic;
+}
+.docs-prose li[data-mark-color]::marker {
+  color: var(--docs-mark-color);
+}
+.docs-prose li[data-mark-size]::marker {
+  font-size: var(--docs-mark-size);
+}
+.docs-prose li[data-mark-font]::marker {
+  font-family: var(--docs-mark-font);
 }

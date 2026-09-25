@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { SearchIcon } from "@/components/docs/icons";
 import { keys } from "@/components/docs/keys";
@@ -94,27 +94,38 @@ export function SearchMenus({
     actionsRef.current = actions;
   });
 
+  // The field takes the focus in the same task as the key that opened it,
+  // so nothing typed right after Alt+/ reaches the page.
   const show = () => {
     const r = anchorRef.current?.getBoundingClientRect();
     if (!r) return;
-    setAll(actionsRef.current());
-    setRect({ left: Math.max(8, Math.min(r.left, window.innerWidth - 358)), top: r.top + (r.height - 28) / 2 });
-    setQuery("");
-    setActive(0);
-    setOpen(true);
+    flushSync(() => {
+      setAll(actionsRef.current());
+      setRect({ left: Math.max(8, Math.min(r.left, window.innerWidth - 358)), top: r.top + (r.height - 28) / 2 });
+      setQuery("");
+      setActive(0);
+      setOpen(true);
+    });
+    inputRef.current?.focus();
   };
   const hide = (backToPage: boolean) => {
-    setOpen(false);
-    setQuery("");
-    if (backToPage) onDone();
+    if (!backToPage) {
+      setOpen(false);
+      setQuery("");
+      return;
+    }
+    // The field leaves the page first; then the page takes the focus.
+    flushSync(() => {
+      setOpen(false);
+      setQuery("");
+    });
+    onDone();
   };
 
   useEffect(() => {
     const onOpen = () => show();
     window.addEventListener(SEARCH_MENUS_EVENT, onOpen);
     return () => window.removeEventListener(SEARCH_MENUS_EVENT, onOpen);
-    // show reads refs only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useLayoutEffect(() => {

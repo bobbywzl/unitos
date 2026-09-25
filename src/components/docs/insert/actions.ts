@@ -143,6 +143,25 @@ export function insertEquation(editor: Editor, range: Range | null): number | nu
   return at;
 }
 
+/** A horizontal line; on an empty line it takes the line's place and the
+    caret goes to a new empty line under it. */
+export function insertHorizontalLine(editor: Editor, range: Range | null): void {
+  replaceQuery(editor, range, () => {
+    const { state } = editor;
+    const $from = state.selection.$from;
+    const para = $from.parent;
+    const hr = state.schema.nodes.horizontalRule;
+    if (hr && para.type.name === "paragraph" && para.content.size === 0 && $from.depth >= 1) {
+      const pos = $from.before();
+      const tr = state.tr.replaceWith(pos, pos + para.nodeSize, [hr.create(), state.schema.nodes.paragraph.create()]);
+      tr.setSelection(TextSelection.create(tr.doc, pos + 2));
+      editor.view.dispatch(tr.scrollIntoView());
+      return;
+    }
+    editor.chain().focus().setHorizontalRule().run();
+  });
+}
+
 export function insertTableOfContents(editor: Editor, style: "plain" | "dotted" | "links", range: Range | null): void {
   replaceQuery(editor, range, () => {
     editor

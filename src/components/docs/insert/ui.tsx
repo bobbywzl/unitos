@@ -278,6 +278,12 @@ export function Dialog({
   );
 }
 
+/** Focus a field after the editor's own focus, which Tiptap applies a
+    frame later, has landed. */
+export function focusSoon(el: HTMLElement | null | undefined) {
+  requestAnimationFrame(() => requestAnimationFrame(() => el?.focus()));
+}
+
 /** Show a short message the way the app shows its toasts. */
 export function toast(text: string) {
   if (text) window.dispatchEvent(new CustomEvent("dissect:toast", { detail: { text } }));

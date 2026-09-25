@@ -76,9 +76,9 @@ export function CustomColorDialog({
     setRgb(next);
   };
 
-  const drag = (ref: React.RefObject<HTMLDivElement | null>, onMove: (x: number, y: number) => void) => (e: React.PointerEvent) => {
-    const el = ref.current;
-    if (!el) return;
+  // A press and drag on the area or the hue track.
+  const drag = (e: React.PointerEvent<HTMLDivElement>, onMove: (x: number, y: number) => void) => {
+    const el = e.currentTarget;
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
     const move = (ev: PointerEvent | React.PointerEvent) => {
@@ -139,7 +139,7 @@ export function CustomColorDialog({
         ref={areaRef}
         className="docs-color-area"
         style={{ background: `hsl(${hsv.h} 100% 50%)` }}
-        onPointerDown={drag(areaRef, (x, y) => setColor({ ...hsv, s: x, v: 1 - y }))}
+        onPointerDown={(e) => drag(e, (x, y) => setColor({ ...hsv, s: x, v: 1 - y }))}
         role="slider"
         aria-label={t("docs.customColorPicker")}
         aria-valuetext={hex}
@@ -183,7 +183,7 @@ export function CustomColorDialog({
         <div
           ref={hueRef}
           className="docs-color-hue"
-          onPointerDown={drag(hueRef, (x) => setColor({ ...hsv, h: Math.min(359.9, x * 360) }))}
+          onPointerDown={(e) => drag(e, (x) => setColor({ ...hsv, h: Math.min(359.9, x * 360) }))}
           role="slider"
           aria-label="Hue"
           aria-valuemin={0}

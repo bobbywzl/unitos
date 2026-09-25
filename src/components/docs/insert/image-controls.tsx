@@ -95,8 +95,9 @@ export function DropButton({
   disabled?: boolean;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
-  const anchor = open ? rectOf(ref.current) : null;
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
+  const open = anchor !== null;
+  const close = () => setAnchor(null);
   return (
     <>
       <button
@@ -108,14 +109,14 @@ export function DropButton({
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setAnchor(anchor ? null : rectOf(ref.current))}
       >
         {face}
         <DropDownIcon size={18} className="docs-tb-caret" />
       </button>
-      {open && anchor && (
-        <FloatingBox anchor={anchor} className="docs-img-menu" role="menu" onDismiss={() => setOpen(false)}>
-          {children(() => setOpen(false))}
+      {anchor && (
+        <FloatingBox anchor={anchor} className="docs-img-menu" role="menu" onDismiss={close}>
+          {children(close)}
         </FloatingBox>
       )}
     </>

@@ -244,17 +244,3 @@ export function ColorMenu({
     </div>
   );
 }
-
-/** The color menu under its old name, while the toolbar moves to ColorMenu. */
-export function ColorPalette({
-  current,
-  onPick,
-  onReset,
-}: {
-  current: string | null;
-  onPick: (hex: string) => void;
-  onReset: () => void;
-  resetLabel: string;
-}) {
-  return <ColorMenu kind="highlight" current={current} onPick={onPick} onNone={onReset} onCustom={() => undefined} />;
-}

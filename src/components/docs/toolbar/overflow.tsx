@@ -61,8 +61,14 @@ export function ToolbarRow({
   const [shown, setShown] = useState(groups.length);
   const [folded, setFolded] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  const entered = useRef(groups.length);
   const count = groups.length;
+  // The groups that just came back from the bubble fade in.
+  const [lastShown, setLastShown] = useState(shown);
+  const [enteredFrom, setEnteredFrom] = useState(shown);
+  if (lastShown !== shown) {
+    setLastShown(shown);
+    setEnteredFrom(lastShown);
+  }
 
   const fit = useCallback(() => {
     const bar = barRef.current;
@@ -111,13 +117,6 @@ export function ToolbarRow({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    entered.current = shown;
-  }, [shown]);
-
-  useEffect(() => {
-    if (shown >= count) setMoreOpen(false);
-  }, [shown, count]);
 
   // Search the menus opens a menu that sits in the bubble: the bubble
   // opens first, then the menu.
@@ -156,8 +155,14 @@ export function ToolbarRow({
       return;
     }
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    // A field keeps its arrows for its own caret.
-    if (target.matches("input") && !target.hasAttribute("readonly")) return;
+    // A field keeps its arrows for its own caret, until the caret is at the
+    // end it moves toward.
+    if (target instanceof HTMLInputElement && !target.readOnly) {
+      const { selectionStart: start, selectionEnd: end, value } = target;
+      const atEdge = e.key === "ArrowLeft" ? start === 0 && end === 0 : start === value.length && end === value.length;
+      const all = start === 0 && end === value.length;
+      if (!atEdge && !all) return;
+    }
     const items = [...bar.querySelectorAll<HTMLElement>("[data-tb-item]")]
       .map(focusTarget)
       .filter((el): el is HTMLElement => el !== null && !(el as HTMLButtonElement).disabled && el.offsetParent !== null);
@@ -171,6 +176,7 @@ export function ToolbarRow({
   };
 
   const hidden = groups.slice(shown);
+  const bubbleOpen = moreOpen && hidden.length > 0;
   return (
     <div
       ref={barRef}
@@ -189,7 +195,7 @@ export function ToolbarRow({
               if (el) groupRefs.current.set(g.key, el);
               else groupRefs.current.delete(g.key);
             }}
-            className={`docs-tb-group${i >= entered.current ? " docs-tb-group-in" : ""}`}
+            className={`docs-tb-group${i >= enteredFrom ? " docs-tb-group-in" : ""}`}
           >
             {i > 0 && g.sep && <Sep />}
             {g.content}
@@ -201,9 +207,9 @@ export function ToolbarRow({
               ref={moreRef}
               type="button"
               aria-label={moreLabel}
-              data-tip={moreOpen ? undefined : moreLabel}
+              data-tip={bubbleOpen ? undefined : moreLabel}
               aria-haspopup="true"
-              aria-expanded={moreOpen}
+              aria-expanded={bubbleOpen}
               data-track="docs:more"
               data-tb-item
               onMouseDown={keepFocus}
@@ -213,7 +219,7 @@ export function ToolbarRow({
               <MoreVertIcon />
             </button>
             <DropdownPanel
-              open={moreOpen}
+              open={bubbleOpen}
               anchorRef={moreRef}
               onClose={() => setMoreOpen(false)}
               placement="below-right"

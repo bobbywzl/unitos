@@ -99,6 +99,7 @@ export function DropdownPanel({
   className = "",
   style,
   label,
+  id,
   highlightFirst = false,
   keys: readKeys = true,
 }: {
@@ -111,6 +112,8 @@ export function DropdownPanel({
   style?: CSSProperties;
   /** The menu's accessible name. */
   label?: string;
+  /** The element id (a combobox's aria-controls). */
+  id?: string;
   /** Highlight the checked item, else the first, when the panel opens (a
       menu opened from the keyboard). */
   highlightFirst?: boolean;
@@ -120,6 +123,15 @@ export function DropdownPanel({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
   const [openSub, setOpenSub] = useState<string | null>(null);
+  // A closed panel forgets where it was and which submenu it had open.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (!open) {
+      setPos(null);
+      setOpenSub(null);
+    }
+  }
   const closeRef = useRef(onClose);
   useEffect(() => {
     closeRef.current = onClose;
@@ -160,11 +172,7 @@ export function DropdownPanel({
   }, [anchorRef, placement]);
 
   useLayoutEffect(() => {
-    if (!open) {
-      setPos(null);
-      setOpenSub(null);
-      return;
-    }
+    if (!open) return;
     place();
     const panel = panelRef.current;
     // A panel whose content changes size (a filtered list) is placed again.
@@ -290,6 +298,7 @@ export function DropdownPanel({
     <MenuContext.Provider value={{ openSub, setOpenSub }}>
       <div
         ref={panelRef}
+        id={id}
         role="menu"
         aria-label={label}
         data-docs-menu

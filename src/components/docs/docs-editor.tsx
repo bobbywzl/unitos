@@ -16,6 +16,7 @@ import { WordCountDialog } from "@/components/docs/word-count";
 import { InsertLayer } from "@/components/docs/areas/insert";
 import { UnitosLayer } from "@/components/docs/areas/layer";
 import { PageCanvas, PageRuler } from "@/components/docs/areas/page";
+import { StatusPopup } from "@/components/docs/page/status-popup";
 import { TypingLayer } from "@/components/docs/areas/typing";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import type { Highlight } from "@/components/reader/block-view";
@@ -72,13 +73,30 @@ function SaveStatus({ state }: { state: SaveState }) {
           : finished > faded
             ? t("docsPage.savedCaption")
             : "";
-  const tip = state === "saved" ? t("docs.saved") : caption;
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const Icon = state === "saved" ? CloudDoneIcon : state === "offline" || state === "error" ? CloudOffIcon : CloudSyncIcon;
   return (
-    <span className={`docs-status docs-status-${state}`} data-tip={tip} aria-label={tip} role="status">
-      <Icon size={20} />
-      {caption && <span className="docs-status-text">{caption}</span>}
-    </span>
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={`docs-status docs-status-${state}`}
+        data-tip={open ? undefined : t("docsPage.documentStatus")}
+        aria-label={`${t("docsPage.documentStatus")}: ${state === "saved" ? t("docs.saved") : caption}`}
+        aria-expanded={open}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Icon size={20} />
+        {caption && (
+          <span className="docs-status-text" aria-live="polite">
+            {caption}
+          </span>
+        )}
+      </button>
+      {open && <StatusPopup state={state} anchorRef={buttonRef} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
@@ -151,6 +169,9 @@ function TitleField({
         aria-label={t("docs.renameTitle")}
         data-tip={canEdit ? t("docs.renameTitle") : shown}
         className={`docs-title-input${untitled ? " docs-title-untitled" : ""}`}
+        // The field is as wide as its text (the wrap's copy of it sets the
+        // width), so the status sits right after the title.
+        size={1}
       />
     </span>
   );
@@ -188,7 +209,6 @@ export function DocsEditor({
   useDocsFonts();
   const [mode, setMode] = useState<DocsMode>("editing");
   const [zoom, setZoom] = useState<Zoom>(100);
-  const [spellcheck, setSpellcheck] = useState(true);
   const [headerHidden, setHeaderHidden] = useState(false);
 
   const extensions = useMemo(
@@ -257,11 +277,6 @@ export function DocsEditor({
     if (!editor || editor.isDestroyed) return;
     editor.setEditable(canEdit && mode === "editing");
   }, [editor, canEdit, mode]);
-
-  useEffect(() => {
-    if (!editor || editor.isDestroyed) return;
-    editor.view.dom.setAttribute("spellcheck", spellcheck ? "true" : "false");
-  }, [editor, spellcheck]);
 
   // Ctrl+Shift+F hides the title row, as Google Docs' compact mode does.
   useEffect(() => {
@@ -337,8 +352,7 @@ export function DocsEditor({
             canEdit={canEdit}
             zoom={zoom}
             onZoom={setZoom}
-            spellcheck={spellcheck}
-            onSpellcheck={setSpellcheck}
+            pageless={pageSetup.pageless}
             aiControls={aiControls}
             headerHidden={headerHidden}
             onToggleHeader={() => setHeaderHidden((h) => !h)}

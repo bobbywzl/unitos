@@ -66,11 +66,15 @@ export function usePageRect(editor: Editor, deps: unknown[]): PageRect | null {
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(measure);
     };
-    const start = () => {
+    // The page moves with the canvas's own padding transitions (the layer's
+    // shift, the outline's push); follow them frame by frame.
+    const start = (e: Event) => {
+      if (e.target !== canvas) return;
       moving += 1;
       schedule();
     };
-    const stop = () => {
+    const stop = (e: Event) => {
+      if (e.target !== canvas) return;
       moving = Math.max(0, moving - 1);
       schedule();
     };
@@ -341,13 +345,16 @@ export function HorizontalRuler({
     if (!editing || !page || !strip || pageless) return;
     const other = side === "left" ? frame.right : frame.left;
     const limit = frame.width - other - MIN_TEXT_PT * PX_PER_PT; // px at 100%
-    let value = side === "left" ? setup.margins.left : setup.margins.right;
+    const initial = side === "left" ? setup.margins.left : setup.margins.right;
+    let value = initial;
+    // The margin moves with the pointer from where the drag started.
+    const startX = e.clientX;
     startDrag(
       e,
       false,
       (clientX) => {
-        const fromEdge = side === "left" ? clientX - page.left : page.left + page.width - clientX;
-        const pt = Math.max(0, Math.min(limit / PX_PER_PT, snapPt(toPt(fromEdge), unit)));
+        const moved = toPt(side === "left" ? clientX - startX : startX - clientX);
+        const pt = Math.max(0, Math.min(limit / PX_PER_PT, snapPt(initial + moved, unit)));
         value = pt;
         const at = side === "left" ? pt * PX_PER_PT * s : pageWidth - pt * PX_PER_PT * s;
         setDraft({ key: `margin-${side}`, at });
@@ -593,14 +600,16 @@ export function VerticalRuler({
     if (!editing) return;
     const other = side === "top" ? frame.bottom : frame.top;
     const limit = (frame.height - other) / PX_PER_PT - MIN_TEXT_PT;
-    let value = side === "top" ? setup.margins.top : setup.margins.bottom;
+    const initial = side === "top" ? setup.margins.top : setup.margins.bottom;
+    let value = initial;
     const edge = top + pageTop;
+    const startY = e.clientY;
     startDrag(
       e,
       true,
       (clientY) => {
-        const fromEdge = side === "top" ? clientY - edge : edge + pageHeight - clientY;
-        const pt = Math.max(0, Math.min(limit, snapPt(toPt(fromEdge), unit)));
+        const moved = toPt(side === "top" ? clientY - startY : startY - clientY);
+        const pt = Math.max(0, Math.min(limit, snapPt(initial + moved, unit)));
         value = pt;
         const at = side === "top" ? pt * PX_PER_PT * s : pageHeight - pt * PX_PER_PT * s;
         setDraft({ key: side, at });

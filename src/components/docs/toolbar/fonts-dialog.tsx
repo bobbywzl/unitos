@@ -133,10 +133,11 @@ export function FontsDialog({ onClose }: { onClose: () => void }) {
   }, [all, query, script, show, sort]);
 
   // A new search starts at the top of the list.
-  useEffect(() => {
+  const refilter = <T,>(set: (value: T) => void) => (value: T) => {
+    set(value);
     setLimit(PAGE);
     listRef.current?.scrollTo({ top: 0 });
-  }, [query, script, show, sort]);
+  };
 
   const toggle = (font: GoogleFont) => {
     const key = font.name.toLowerCase();
@@ -182,10 +183,10 @@ export function FontsDialog({ onClose }: { onClose: () => void }) {
             value={query}
             placeholder={t("docs.fontsSearch")}
             aria-label={t("docs.fontsSearch")}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => refilter(setQuery)(e.target.value)}
           />
           {query && (
-            <button type="button" className="docs-fonts-clear" aria-label={t("docs.clearSearch")} onClick={() => setQuery("")}>
+            <button type="button" className="docs-fonts-clear" aria-label={t("docs.clearSearch")} onClick={() => refilter(setQuery)("")}>
               <CloseIcon size={18} />
             </button>
           )}
@@ -194,7 +195,7 @@ export function FontsDialog({ onClose }: { onClose: () => void }) {
           className="docs-fonts-select"
           aria-label={t("docs.scripts")}
           value={script}
-          onChange={(e) => setScript(e.target.value as Script | "all")}
+          onChange={(e) => refilter(setScript)(e.target.value as Script | "all")}
         >
           <option value="all">{t("docs.allScripts")}</option>
           {[...SCRIPTS]
@@ -210,7 +211,7 @@ export function FontsDialog({ onClose }: { onClose: () => void }) {
           className="docs-fonts-select"
           aria-label={t("docs.show")}
           value={show}
-          onChange={(e) => setShow(e.target.value as FontCategory | "all")}
+          onChange={(e) => refilter(setShow)(e.target.value as FontCategory | "all")}
         >
           {SHOWS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -222,7 +223,7 @@ export function FontsDialog({ onClose }: { onClose: () => void }) {
           className="docs-fonts-select"
           aria-label={t("docs.sort")}
           value={sort}
-          onChange={(e) => setSort(e.target.value as Sort)}
+          onChange={(e) => refilter(setSort)(e.target.value as Sort)}
         >
           {SORTS.map((o) => (
             <option key={o.value} value={o.value}>

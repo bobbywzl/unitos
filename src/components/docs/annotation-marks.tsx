@@ -134,21 +134,11 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<
     return " mark-sweep";
   };
   if (anchor?.sourceId) attrs["data-source-id"] = anchor.sourceId;
-  if (link) {
-    // The linked words stay text to edit; the chain at their end goes to the
-    // other end.
-    if (link.linkId) attrs["data-link-id"] = link.linkId;
-    const tip = [link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : null, link.linkReason]
-      .filter((s): s is string => Boolean(s))
-      .join("\n");
-    if (tip) attrs["data-tip"] = tip;
-    attrs.class = `link-mark rounded-[4px]${sweep(link)}${selectionClass}`;
-    return attrs;
-  }
   const leaving = Boolean(anchor?.leaving);
   const focusable = Boolean(anchor?.annotation && anchor.sourceId && !leaving);
   const noteMark = !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
   const extractMark = extract && !focusable && !noteMark ? extract : null;
+  // A click on the words opens what the mark names.
   if (focusable) {
     attrs["data-docs-open"] = "annotation";
     attrs["data-tip"] = t("panes.viewAnnotation");
@@ -160,6 +150,18 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<
     attrs["data-docs-open"] = "extract";
     attrs["data-extract-id"] = extractMark.extractId ?? "";
     attrs["data-tip"] = t("panes.extractOpenCard", { label: extractMark.extractLabel ?? "" });
+  }
+  if (link) {
+    // The linked words stay text to edit, and a click on them still opens the
+    // annotation or note under the link; the chain at their end goes to the
+    // other end.
+    if (link.linkId) attrs["data-link-id"] = link.linkId;
+    const tip = [link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : null, link.linkReason]
+      .filter((s): s is string => Boolean(s))
+      .join("\n");
+    if (tip) attrs["data-tip"] = tip;
+    attrs.class = `link-mark rounded-[4px]${sweep(link)}${selectionClass}`;
+    return attrs;
   }
   const markClass = simplify
     ? "simplify-mark"

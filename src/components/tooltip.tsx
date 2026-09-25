@@ -24,6 +24,13 @@ const WARM_MS = 500;
 const GAP = 8;
 const MARGIN = 8;
 const TIP_ID = "app-tip";
+// The page editor (a blank document) and its menus draw Google Docs'
+// tooltip instead: 12 px on near-black, 4 px under the control, after 300 ms
+// (css/toolbar.css .docs-tip).
+const DOCS_DELAY_MS = 300;
+const DOCS_SWAP_MS = 50;
+const DOCS_GAP = 4;
+const isDocsTarget = (el: Element) => el.closest("[data-docs-editor], [data-docs-menu]") !== null;
 
 type Tip = { target: Element; text: string };
 type Box = { left: number; top: number };
@@ -66,9 +73,17 @@ export function TooltipLayer() {
       const current = tipRef.current?.target ?? null;
       if (!target) return hide();
       if (target === current) return;
-      if (current || performance.now() - hiddenAtRef.current < WARM_MS) return show(target);
+      // The page editor's controls follow Google Docs: 300 ms before the
+      // first tooltip, 50 ms to move it to the next control.
+      const docs = isDocsTarget(target);
+      if (current || performance.now() - hiddenAtRef.current < WARM_MS) {
+        if (!docs) return show(target);
+        clearTimer();
+        timerRef.current = window.setTimeout(() => show(target), DOCS_SWAP_MS);
+        return;
+      }
       clearTimer();
-      timerRef.current = window.setTimeout(() => show(target), SHOW_DELAY_MS);
+      timerRef.current = window.setTimeout(() => show(target), docs ? DOCS_DELAY_MS : SHOW_DELAY_MS);
     };
     // relatedTarget null: the pointer left the window.
     const onPointerOut = (e: PointerEvent) => {
@@ -125,8 +140,15 @@ export function TooltipLayer() {
     }
     const r = tip.target.getBoundingClientRect();
     const b = bubble.getBoundingClientRect();
-    const below = r.top - GAP - b.height < MARGIN;
-    const top = below ? r.bottom + GAP : r.top - GAP - b.height;
+    let top: number;
+    if (isDocsTarget(tip.target)) {
+      // Under the control; above it when the window's foot is too close.
+      const above = r.bottom + DOCS_GAP + b.height > window.innerHeight - MARGIN;
+      top = above ? r.top - DOCS_GAP - b.height : r.bottom + DOCS_GAP;
+    } else {
+      const below = r.top - GAP - b.height < MARGIN;
+      top = below ? r.bottom + GAP : r.top - GAP - b.height;
+    }
     const left = Math.max(
       MARGIN,
       Math.min(r.left + r.width / 2 - b.width / 2, window.innerWidth - MARGIN - b.width),
@@ -145,7 +167,11 @@ export function TooltipLayer() {
       ref={bubbleRef}
       id={TIP_ID}
       role="tooltip"
-      className="tip-in pointer-events-none fixed z-[100] max-w-[min(300px,calc(100vw-16px))] rounded-xl bg-ink px-2.5 py-1.5 text-[11.5px] leading-snug font-semibold whitespace-pre-line text-paper shadow-float"
+      className={
+        isDocsTarget(tip.target)
+          ? "docs-tip pointer-events-none fixed z-[100]"
+          : "tip-in pointer-events-none fixed z-[100] max-w-[min(300px,calc(100vw-16px))] rounded-xl bg-ink px-2.5 py-1.5 text-[11.5px] leading-snug font-semibold whitespace-pre-line text-paper shadow-float"
+      }
       style={box ? { left: box.left, top: box.top } : { left: 0, top: 0, visibility: "hidden" }}
     >
       {tip.text}

@@ -1,5 +1,6 @@
 import { Extension, type Editor } from "@tiptap/core";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { ReplaceStep } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { insertContext, insertLayerOn } from "@/components/docs/insert/context";
 
@@ -88,6 +89,33 @@ export function atMenuState(state: EditorState): AtState {
   return atMenuKey.getState(state) ?? INACTIVE;
 }
 
+/** The "@" or ":" a transaction typed where the menu opens: a small text
+    insertion (typing, one key or a burst of keys) with the caret right after
+    it, the character at a line start or after a space, a tab, "(" or "[".
+    Paste, drop, undo, and redo never open the menu. */
+function typedTrigger(tr: Transaction, next: EditorState): { from: number; char: AtTrigger } | null {
+  if (!tr.docChanged || tr.getMeta("paste") || tr.getMeta("uiEvent") || tr.getMeta("history$")) return null;
+  const step = tr.steps[tr.steps.length - 1];
+  if (!(step instanceof ReplaceStep) || step.from !== step.to) return null;
+  const content = step.slice.content;
+  if (step.slice.openStart !== 0 || content.childCount !== 1 || !content.firstChild?.isText) return null;
+  const text = content.firstChild.text ?? "";
+  if (text.length === 0 || text.length > 12) return null;
+  // The step's position in the document the transaction ends with.
+  const later = tr.mapping.slice(tr.steps.length).map(step.from);
+  if (next.selection.head !== later + text.length || !next.selection.empty) return null;
+  const $at = next.doc.resolve(later);
+  if (!$at.parent.isTextblock || $at.parent.type.spec.code) return null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch !== "@" && ch !== ":") continue;
+    if (ch === ":" && !colonOn()) continue;
+    const ok = i === 0 ? prefixOk(next, later) : PREFIXES.has(text[i - 1]);
+    if (ok) return { from: later + i, char: ch };
+  }
+  return null;
+}
+
 function hintWidget(editor: Editor, label: string) {
   return () => {
     const span = document.createElement("span");
@@ -137,7 +165,6 @@ export const AtMenu = Extension.create({
   priority: 1000,
   addProseMirrorPlugins() {
     const editor = this.editor;
-    let pending: { from: number; char: AtTrigger } | null = null;
     return [
       new Plugin<AtState>({
         key: atMenuKey,
@@ -149,29 +176,16 @@ export const AtMenu = Extension.create({
             let s = prev;
             if (meta && "open" in meta) {
               s = { active: true, char: meta.open.char, range: { from: meta.open.from, to: meta.open.from }, query: "" };
-            } else if (pending && tr.docChanged) {
-              // The "@" or ":" just typed: open when it landed where it was typed.
-              const { from, char } = pending;
-              pending = null;
-              if (next.doc.content.size > from && next.doc.textBetween(from, from + 1, "\n", "￼") === char) {
-                s = { active: true, char, range: { from, to: from + 1 }, query: "" };
-              }
-            } else if (prev.active && tr.docChanged) {
+            } else if (!prev.active) {
+              const typed = editor.isEditable && insertLayerOn(editor) ? typedTrigger(tr, next) : null;
+              if (typed) s = { active: true, char: typed.char, range: { from: typed.from, to: typed.from + 1 }, query: "" };
+            } else if (tr.docChanged) {
               s = { ...prev, range: { from: tr.mapping.map(prev.range.from, -1), to: tr.mapping.map(prev.range.to) } };
             }
             return s.active ? validate(s, next) : s;
           },
         },
         props: {
-          handleTextInput(view, from, _to, text) {
-            if (text !== "@" && text !== ":") return false;
-            if (!insertLayerOn(editor) || !editor.isEditable) return false;
-            if (atMenuKey.getState(view.state)?.active) return false;
-            if (text === ":" && !colonOn()) return false;
-            if (!prefixOk(view.state, from)) return false;
-            pending = { from, char: text };
-            return false;
-          },
           handleKeyDown(view, event) {
             const s = atMenuKey.getState(view.state);
             if (!s?.active) return false;

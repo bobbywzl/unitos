@@ -105,7 +105,7 @@ export function DropBtn({
   const set = (next: boolean, byKeys = false) => {
     setFromKeys(byKeys);
     setOpen(next);
-    changeRef.current?.(next);
+    onOpenChange?.(next);
   };
   useEffect(() => {
     if (!id) return;

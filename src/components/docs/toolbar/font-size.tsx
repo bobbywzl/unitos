@@ -90,6 +90,8 @@ export function FontSizeControl({ editor, size, disabled }: { editor: Editor; si
           aria-label={t("docs.fontSizeValue", { n: formatSize(size) })}
           role="combobox"
           aria-expanded={open}
+          aria-controls="docs-size-list"
+          aria-haspopup="menu"
           inputMode="decimal"
           data-track="docs:font-size"
           onFocus={(e) => {
@@ -139,6 +141,7 @@ export function FontSizeControl({ editor, size, disabled }: { editor: Editor; si
         anchorRef={boxRef}
         onClose={() => setOpen(false)}
         className="docs-menu-plain docs-menu-sizes"
+        id="docs-size-list"
         label={t("docs.fontSize")}
         keys={false}
       >

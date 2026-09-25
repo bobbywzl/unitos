@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useLang } from "@/components/lang-provider";
@@ -131,13 +132,16 @@ export function PageCanvas({
   const view = useView(canvasRef);
   const [canvasWidth, setCanvasWidth] = useState(0);
 
-  // A newer stored setup that arrives with the page replaces the one on
-  // screen.
+  // A newer stored setup that arrives with the page (another person's
+  // change) replaces the one on screen — unless a change made here waits to
+  // be saved, or a header is being edited.
   const propRef = useRef(pageSetup);
   useEffect(() => {
     if (propRef.current === pageSetup) return;
-    if (JSON.stringify(propRef.current) !== JSON.stringify(pageSetup)) store.set({ setup: pageSetup });
     propRef.current = pageSetup;
+    const now = store.get();
+    if (now.editing || store.pendingSaves() > 0) return;
+    if (JSON.stringify(now.setup) !== JSON.stringify(pageSetup)) store.set({ setup: pageSetup });
   }, [pageSetup, store]);
 
   // A new document takes this browser's default page (Set as default), and
@@ -158,6 +162,13 @@ export function PageCanvas({
   useEffect(() => {
     store.bindZoom((next) => onZoom?.(next));
   }, [store, onZoom]);
+
+  // A saved setup refreshes the page's props, so the other areas (the
+  // toolbar, typing) read it too.
+  const router = useRouter();
+  useEffect(() => {
+    store.bindSaved(() => router.refresh());
+  }, [store, router]);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -190,6 +201,15 @@ export function PageCanvas({
   useEffect(() => {
     if (store.get().scale !== scale) store.set({ scale });
   }, [store, scale]);
+
+  // A pane narrower than the page (the notes tray open, a phone) opens the
+  // page at Fit, so no line runs past the pane's edge.
+  const fittedRef = useRef(false);
+  useEffect(() => {
+    if (fittedRef.current || canvasWidth === 0) return;
+    fittedRef.current = true;
+    if (zoom === 100 && !pageless && frame.width + 2 * FIT_GUTTER > canvasWidth) store.zoomTo("fit");
+  }, [canvasWidth, zoom, pageless, frame.width, store]);
 
   // Zooming keeps the caret's line where it was on screen, or else the same
   // part of the document at the top of the view.

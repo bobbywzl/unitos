@@ -2133,6 +2133,14 @@ export function ReaderInteractions({
         showToast(t("docs.selectToComment"));
         return;
       }
+      // Ctrl+Alt+M's keys come up before React renders: the keyup below reads
+      // the ref, finds this selection open, and leaves the Comment tool.
+      popoverRef.current = captured;
+      // The new comment takes the margin: the comment card a click on a mark
+      // opened closes, unless it holds unsaved words, and so does the on-mark
+      // card.
+      setCommentCard((c) => (c && !c.busy && c.draft === c.saved ? null : c));
+      setAnnotationCard(null);
       setPopover(captured);
       setSubmenu("comment");
       setCloseLink(null);
@@ -3105,6 +3113,55 @@ export function ReaderInteractions({
       container.removeEventListener("transitionend", onMoved);
     };
   }, [docsShift, blankDocument]);
+  // The page moves back once no card sits in the margin and the toolbar is
+  // closed, and never under a held press: a press on the page closes the
+  // card, and the words would slide under the drag it starts. A press that
+  // makes a selection opens the toolbar (a frame after the mouseup), and the
+  // page stays where the toolbar measured it.
+  const pageHeld =
+    popover !== null ||
+    bubble !== null ||
+    simplifyCard !== null ||
+    assistantChat !== null ||
+    commentCard !== null ||
+    linkCard !== null ||
+    annotationCard !== null;
+  const pressedRef = useRef(false);
+  useEffect(() => {
+    if (!blankDocument) return;
+    const down = (e: PointerEvent) => {
+      if (e.button === 0) pressedRef.current = true;
+    };
+    const up = () => {
+      pressedRef.current = false;
+    };
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    return () => {
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true);
+    };
+  }, [blankDocument]);
+  useEffect(() => {
+    if (pageHeld || docsShift === 0) return;
+    let timer = 0;
+    const back = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setDocsShift(0), 120);
+    };
+    if (!pressedRef.current) back();
+    else {
+      window.addEventListener("pointerup", back, { once: true });
+      window.addEventListener("pointercancel", back, { once: true });
+    }
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("pointerup", back);
+      window.removeEventListener("pointercancel", back);
+    };
+  }, [pageHeld, docsShift]);
   // The page editor's words changed under the toolbar — typing, a paste, an
   // undo: its anchor no longer names them, so the toolbar and the Close link
   // chip close (components/docs/areas/layer.tsx raises the event).
@@ -5958,7 +6015,7 @@ function blockFormatKind(
   // Near the top of the article, or of the page editor's pane under its
   // toolbar, the bubbles above the toolbox drop below it.
   const popoverNearTop = popover ? (popover.nearTop ?? popover.yTop < 54) : false;
-  // The page editor's page moves back once no card sits in its margin.
+  // A card in the page editor's margin (the page moves back without one).
   const marginCardOpen =
     bubble !== null ||
     simplifyCard !== null ||
@@ -5967,7 +6024,6 @@ function blockFormatKind(
     linkCard !== null ||
     annotationCard !== null;
   marginCardOpenRef.current = marginCardOpen;
-  if (!marginCardOpen && docsShift !== 0) setDocsShift(0);
   // One row of the toolbox. Coarse pointers get 44px-tall rows.
   const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
   // The open popover's content kind and its toolbar (SPEC.md §6).

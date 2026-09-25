@@ -1,6 +1,6 @@
 import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey, type EditorState } from "@tiptap/pm/state";
+import { Plugin, PluginKey, TextSelection, type EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { paginate, type PageArea, type SpacerKind, type SpacerPlan } from "@/components/docs/page/paginate";
 
@@ -69,7 +69,10 @@ let nextId = 0;
 /** The events that end a press: a drag and drop never sends pointerup. */
 const RELEASE = ["pointerup", "pointercancel", "dragend", "drop"] as const;
 
-function spacerDOM(kind: SpacerKind, id: string, heights: Map<string, number>): HTMLElement {
+/** A row spacer is a table row of one cell across the table: exactly as
+    many columns as the table has, or a fixed-layout table would share its
+    width among more columns than it has. */
+function spacerDOM(kind: SpacerKind, id: string, heights: Map<string, number>, columns = 1): HTMLElement {
   const height = `${heights.get(id) ?? 0}px`;
   if (kind === "row") {
     const tr = document.createElement("tr");
@@ -79,7 +82,7 @@ function spacerDOM(kind: SpacerKind, id: string, heights: Map<string, number>): 
     tr.contentEditable = "false";
     tr.style.setProperty("--docs-spacer-h", height);
     const td = document.createElement("td");
-    td.colSpan = 100;
+    td.colSpan = Math.max(1, columns);
     tr.appendChild(td);
     return tr;
   }
@@ -96,7 +99,16 @@ function buildDecorations(doc: PMNode, spacers: Meta["spacers"], heights: Map<st
   if (spacers.length === 0) return DecorationSet.empty;
   const decos = spacers.map((s) => {
     const spec: SpacerSpec = { key: `docs-spacer-${s.id}`, kind: s.kind, id: s.id, side: -1, marks: [], ignoreSelection: true };
-    return Decoration.widget(s.pos, () => spacerDOM(s.kind, s.id, heights), spec);
+    let columns = 1;
+    if (s.kind === "row") {
+      const firstRow = doc.resolve(s.pos).parent.firstChild;
+      columns = 0;
+      firstRow?.forEach((cell) => {
+        const span: unknown = cell.attrs.colspan;
+        columns += typeof span === "number" && span > 0 ? span : 1;
+      });
+    }
+    return Decoration.widget(s.pos, () => spacerDOM(s.kind, s.id, heights, columns), spec);
   });
   return DecorationSet.create(doc, decos);
 }
@@ -281,6 +293,7 @@ class Paginator {
     this.heightsAtPass = new WeakMap(plan.heights);
 
     this.lastHeight = this.view.dom.offsetHeight;
+    caretViews.get(this.view)?.place();
     const pageTops = [0];
     for (const s of plan.spacers) pageTops[s.page] = s.target;
     for (let i = 1; i < plan.pages; i++) {
@@ -370,6 +383,125 @@ export function togglePageFlag(editor: Editor, flag: PageFlag): void {
   editor.commands.focus();
 }
 
+/** Google Docs' caret: a 2 px bar in the text's color, as tall as the
+    line's text, blinking 500 ms on and 500 ms off and solid again after
+    every move or keystroke. The browser's caret cannot be made wider, so the
+    page's own is drawn over the text and the browser's is hidden (the page's
+    text only: headers, fields, and dialogs keep theirs). It shows only for an
+    empty text selection while the page has the focus. */
+class DocsCaretView {
+  private el: HTMLDivElement | null = null;
+  private phase = false;
+  private frame = 0;
+  constructor(private view: EditorView) {
+    view.dom.addEventListener("focus", this.onFocus);
+    view.dom.addEventListener("blur", this.onFocus);
+    window.addEventListener("resize", this.onFocus);
+    this.place();
+  }
+  private onFocus = () => this.schedule();
+  schedule() {
+    if (this.frame) return;
+    this.frame = requestAnimationFrame(() => {
+      this.frame = 0;
+      this.place();
+    });
+  }
+  update(view: EditorView) {
+    this.view = view;
+    this.place();
+  }
+  /** Show the browser's caret instead of the page's. */
+  private native(on: boolean) {
+    if (on) this.view.dom.style.setProperty("--docs-native-caret", "var(--docs-ink)");
+    else this.view.dom.style.removeProperty("--docs-native-caret");
+  }
+  private host(): HTMLElement | null {
+    return this.view.dom.closest<HTMLElement>("[data-docs-page]");
+  }
+  place() {
+    const view = this.view;
+    const host = this.host();
+    const sel = view.state.selection;
+    const show = !!host && view.editable && view.hasFocus() && sel.empty && sel instanceof TextSelection && !view.composing;
+    if (!show || !host) {
+      this.native(true);
+      if (this.el) this.el.style.display = "none";
+      return;
+    }
+    if (!this.el || this.el.parentElement !== host) {
+      this.el?.remove();
+      this.el = document.createElement("div");
+      this.el.className = "docs-caret";
+      this.el.setAttribute("aria-hidden", "true");
+      host.appendChild(this.el);
+    }
+    let coords: { left: number; top: number; bottom: number };
+    try {
+      // Where a line wraps, one position ends a line and starts the next,
+      // and only the browser knows which it drew: there the browser's own
+      // caret shows. After a line break the caret starts the next line.
+      const afterBreak = sel.$head.nodeBefore?.type.name === "hardBreak";
+      const before = view.coordsAtPos(sel.head, -1);
+      const after = view.coordsAtPos(sel.head, 1);
+      if (!afterBreak && Math.abs(before.top - after.top) > 1) {
+        this.native(true);
+        this.el.style.display = "none";
+        return;
+      }
+      coords = afterBreak ? after : sel.$head.parentOffset === 0 ? after : before;
+    } catch {
+      this.native(true);
+      this.el.style.display = "none";
+      return;
+    }
+    this.native(false);
+    const r = host.getBoundingClientRect();
+    const scale = host.offsetWidth > 0 ? r.width / host.offsetWidth : 1;
+    const el = this.el;
+    el.style.display = "";
+    el.style.left = `${(coords.left - r.left) / scale - 1}px`;
+    el.style.top = `${(coords.top - r.top) / scale}px`;
+    el.style.height = `${Math.max(1, (coords.bottom - coords.top) / scale)}px`;
+    // Solid again for 500 ms after every move: restart the blink.
+    this.phase = !this.phase;
+    el.classList.toggle("docs-caret-a", this.phase);
+    el.classList.toggle("docs-caret-b", !this.phase);
+  }
+  destroy() {
+    if (this.frame) cancelAnimationFrame(this.frame);
+    this.view.dom.removeEventListener("focus", this.onFocus);
+    this.view.dom.removeEventListener("blur", this.onFocus);
+    window.removeEventListener("resize", this.onFocus);
+    this.el?.remove();
+  }
+}
+
+const caretViews = new WeakMap<EditorView, DocsCaretView>();
+
+const DocsCaret = Extension.create({
+  name: "docsCaret",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("docsCaret"),
+        props: { attributes: { class: "docs-own-caret" } },
+        view: (view) => {
+          const caret = new DocsCaretView(view);
+          caretViews.set(view, caret);
+          return {
+            update: (v) => caret.update(v),
+            destroy: () => {
+              caret.destroy();
+              caretViews.delete(view);
+            },
+          };
+        },
+      }),
+    ];
+  },
+});
+
 /** Google Docs' pages: the spacers, and the controller that places them. */
 const Pagination = Extension.create({
   name: "docsPagination",
@@ -406,4 +538,4 @@ const Pagination = Extension.create({
   },
 });
 
-export const pageExtensions: AnyExtension[] = [Pagination, PageFlags];
+export const pageExtensions: AnyExtension[] = [Pagination, PageFlags, DocsCaret];

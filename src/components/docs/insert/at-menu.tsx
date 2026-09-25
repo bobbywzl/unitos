@@ -26,6 +26,7 @@ import {
   insertEquation,
   insertFileChip,
   insertFootnoteAt,
+  insertHorizontalLine,
   insertInline,
   insertPersonChip,
   insertTableOfContents,
@@ -34,7 +35,7 @@ import {
 } from "@/components/docs/insert/actions";
 import { atMenuState, closeAtMenu, setAtKeyHandler, type AtState } from "@/components/docs/insert/at-plugin";
 import { buildingBlock, type BuildingBlock } from "@/components/docs/insert/building-blocks";
-import { emitInsert, type InsertContext } from "@/components/docs/insert/context";
+import { emitInsert, onInsert, type InsertContext } from "@/components/docs/insert/context";
 import { DatePicker } from "@/components/docs/insert/date-picker";
 import { matchDates } from "@/components/docs/insert/dates";
 import { DropdownPicker } from "@/components/docs/insert/dropdown-ui";
@@ -177,7 +178,7 @@ function Marked({ label, query }: { label: string; query: string }) {
 function score(item: Item, q: string): number {
   if (item.matched) return 5;
   if (!q) return 1;
-  const label = item.label.toLowerCase();
+  const label = item.label.toLowerCase().replace(/^:/, "");
   if (label.startsWith(q)) return 4;
   if (label.split(/[\s/&(),.-]+/).some((w) => w.startsWith(q))) return 3;
   if (label.includes(q)) return 2;
@@ -194,20 +195,24 @@ export function AtMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertContext
   useViewportTick(s.active || picker !== null);
 
   // A picker's place follows the edits made while it is open.
-  const pickerRef = useRef<Picker | null>(null);
-  useLayoutEffect(() => {
-    pickerRef.current = picker;
-  });
   useEffect(() => {
     const onTr = ({ transaction }: { transaction: { docChanged: boolean; mapping: { map: (p: number) => number } } }) => {
-      const p = pickerRef.current;
-      if (p && transaction.docChanged) setPicker({ ...p, at: transaction.mapping.map(p.at) });
+      if (transaction.docChanged) setPicker((p) => (p ? { ...p, at: transaction.mapping.map(p.at) } : p));
     };
     editor.on("transaction", onTr);
     return () => {
       editor.off("transaction", onTr);
     };
   }, [editor]);
+
+  // A command opens a picker at the caret (Insert › Date, Dropdown, …).
+  useEffect(
+    () =>
+      onInsert(editor, (event) => {
+        if (event.type === "picker") setPicker({ kind: event.kind, at: editor.state.selection.from });
+      }),
+    [editor],
+  );
 
   const closePicker = useCallback(() => {
     setPicker(null);
@@ -345,8 +350,8 @@ function AtMenu({
           key: `emoji-${e.code}`,
           section: "emojis",
           label: `:${e.code}:`,
+          words: e.words,
           icon: <span className="docs-at-emoji">{e.char}</span>,
-          matched: true,
           run: (range) => {
             rememberEmoji(e.char);
             insertInline(editor, { type: "text", text: e.char }, range);
@@ -393,7 +398,7 @@ function AtMenu({
         label: t("docsInsert.itemHorizontalLine"),
         words: "horizontal line rule divider hr 分隔线 横线",
         icon: <HorizontalRuleIcon />,
-        run: (range) => replaceQuery(editor, range, () => editor.chain().focus().setHorizontalRule().run()),
+        run: (range) => insertHorizontalLine(editor, range),
       },
       { key: "toc", section: "more", label: t("docsInsert.itemTableOfContents"), words: "table of contents toc 目录", icon: <OutlineIcon />, picker: "toc" },
       {
@@ -437,23 +442,27 @@ function AtMenu({
     return out;
   }, [colon, emoji, q, state.query, collab.people, collab.myId, ctx, editor, t]);
 
-  // The sections to show, each with its rows.
+  // The sections to show, each with its rows. While searching, the section
+  // with the best match comes first.
   const sections = useMemo(() => {
     const order = colon ? (["emojis"] as Section[]) : q ? ORDER_QUERY : ORDER_EMPTY;
-    const out: { section: Section; rows: Item[]; more: boolean }[] = [];
+    const out: { section: Section; rows: Item[]; more: boolean; best: number }[] = [];
     for (const section of expanded ? [expanded] : order) {
       if (!q && (section === "dates" || section === "emojis") && !colon) continue;
-      const matched = items
+      const scored = items
         .filter((i) => i.section === section)
         .map((i, index) => ({ i, index, s: score(i, q) }))
         .filter((x) => x.s > 0)
-        .sort((a, b) => b.s - a.s || a.index - b.index)
-        .map((x) => x.i);
-      if (matched.length === 0) continue;
+        .sort((a, b) => b.s - a.s || a.index - b.index);
+      if (scored.length === 0) continue;
+      const matched = scored.map((x) => x.i);
       const limit = colon ? 8 : SECTION_LIMIT[section] ?? 0;
       const more = limit > 0 && matched.length > limit;
-      out.push({ section, rows: expanded || !more ? matched : matched.slice(0, limit), more: more && !expanded });
+      out.push({ section, rows: expanded || !more ? matched : matched.slice(0, limit), more: more && !expanded, best: scored[0].s });
     }
+    // Emoji give way to the menu's own items on a tie.
+    const rank = (x: { section: Section; best: number }) => x.best - (x.section === "emojis" ? 0.5 : 0);
+    if (q && !colon) out.sort((a, b) => rank(b) - rank(a));
     return out;
   }, [items, q, expanded, colon]);
 
@@ -580,7 +589,7 @@ function AtMenu({
                   aria-disabled={Boolean(item.disabled)}
                   data-tip={item.disabled}
                   className={`docs-at-row${mine === current ? " is-active" : ""}${item.sub ? " is-two-line" : ""}${item.disabled ? " is-disabled" : ""}`}
-                  onMouseEnter={() => setHighlight(mine)}
+                  onMouseMove={() => mine !== current && setHighlight(mine)}
                   onClick={() => choose(item)}
                 >
                   <span className="docs-at-icon">{item.icon}</span>

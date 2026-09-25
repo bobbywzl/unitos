@@ -20,7 +20,19 @@ import {
   toggleCheckbox,
   toggleSmallCaps,
 } from "@/components/docs/typing/format";
-import { backspace, closeEdit, deleteForward, enter, groupEdit, lineBreak, moveParagraphs, tab } from "@/components/docs/typing/keys";
+import {
+  backspace,
+  closeEdit,
+  deleteForward,
+  enter,
+  groupEdit,
+  lineBreak,
+  moveParagraphs,
+  moveToParagraph,
+  moveWord,
+  tab,
+} from "@/components/docs/typing/keys";
+import { markStylePlugin, TYPING_RESTORE_META, validMarkStyle } from "@/components/docs/typing/mark-style";
 import { armPlainPaste, imageFiles, insertImageFiles, notePaste, plainTextSlice } from "@/components/docs/typing/paste";
 import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
 import { tracePlugin } from "@/components/docs/typing/trace";
@@ -110,14 +122,25 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
   addGlobalAttributes() {
     return [
       {
-        // A list's preset, as the Google Docs API names it (typing/lists.ts).
-        // The toolbar area defines the same attribute; either one serves.
+        // A list's preset, as the Google Docs API names it (typing/lists.ts),
+        // on the outermost list. The toolbar area draws each preset's glyphs.
         types: ["bulletList", "orderedList", "taskList"],
         attributes: {
           listStyle: {
             default: null,
             parseHTML: (el) => el.getAttribute("data-list-style"),
             renderHTML: (attrs) => (attrs.listStyle ? { "data-list-style": attrs.listStyle } : {}),
+          },
+        },
+      },
+      {
+        // The paragraph mark's style (typing/mark-style.ts), as JSON.
+        types: ["paragraph", "heading"],
+        attributes: {
+          markStyle: {
+            default: null,
+            parseHTML: (el) => validMarkStyle(el.getAttribute("data-mark-style")),
+            renderHTML: (attrs) => (attrs.markStyle ? { "data-mark-style": attrs.markStyle } : {}),
           },
         },
       },
@@ -179,6 +202,9 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
       // Keys Tiptap binds and Docs does not: inline code, a quote.
       "Mod-e": () => true,
       "Mod-Shift-b": () => true,
+      // Center, bound again here: with Caps Lock on, Ctrl+Shift+E reads as
+      // Ctrl+E, which the line above would take.
+      "Mod-Shift-e": () => e.commands.setTextAlign("center"),
     };
     if (mac) {
       Object.assign(shortcuts, {
@@ -187,6 +213,15 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
         "Alt-Delete": () => deleteForward(e, true, mac),
         "Mod-Shift-x": () => e.chain().toggleStrike().run(),
         "Alt-Shift-k": () => toggleSmallCaps(e),
+        // Word and paragraph moves by Docs' classes; Shift extends.
+        "Alt-ArrowLeft": () => moveWord(e, -1, false, mac),
+        "Alt-ArrowRight": () => moveWord(e, 1, false, mac),
+        "Alt-Shift-ArrowLeft": () => moveWord(e, -1, true, mac),
+        "Alt-Shift-ArrowRight": () => moveWord(e, 1, true, mac),
+        "Alt-ArrowUp": () => moveToParagraph(e, -1, false),
+        "Alt-ArrowDown": () => moveToParagraph(e, 1, false),
+        "Alt-Shift-ArrowUp": () => moveToParagraph(e, -1, true),
+        "Alt-Shift-ArrowDown": () => moveToParagraph(e, 1, true),
       });
     } else {
       Object.assign(shortcuts, {
@@ -198,6 +233,13 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
         "Ctrl-Space": () => e.commands.clearFormatting(),
         "Alt-Shift-ArrowUp": move(-1),
         "Alt-Shift-ArrowDown": move(1),
+        // Word and paragraph moves by Docs' classes; Shift extends a word move.
+        "Ctrl-ArrowLeft": () => moveWord(e, -1, false, mac),
+        "Ctrl-ArrowRight": () => moveWord(e, 1, false, mac),
+        "Ctrl-Shift-ArrowLeft": () => moveWord(e, -1, true, mac),
+        "Ctrl-Shift-ArrowRight": () => moveWord(e, 1, true, mac),
+        "Ctrl-ArrowUp": () => moveToParagraph(e, -1, false),
+        "Ctrl-ArrowDown": () => moveToParagraph(e, 1, false),
       });
     }
     return shortcuts;
@@ -288,7 +330,10 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
           (tr) => (!tr.docChanged || tr.getMeta("addToHistory") === false) && !tr.selectionSet && !tr.storedMarksSet,
         );
         if (!bookkeeping || !oldState.selection.eq(newState.selection)) return null;
-        return newState.tr.setStoredMarks(oldState.storedMarks).setMeta("addToHistory", false);
+        return newState.tr
+          .setStoredMarks(oldState.storedMarks)
+          .setMeta("addToHistory", false)
+          .setMeta(TYPING_RESTORE_META, true);
       },
       // Tiptap's own input rules never change the text (the typing area's
       // rules are Docs' rules), and a paste keeps its Markdown markers.
@@ -309,7 +354,7 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
         return !(pasting && isMarkdownPasteRule(tr));
       },
     });
-    return [plugin, findPlugin(), tracePlugin(), repeatPlugin()];
+    return [plugin, findPlugin(), tracePlugin(), repeatPlugin(), markStylePlugin()];
   },
 });
 

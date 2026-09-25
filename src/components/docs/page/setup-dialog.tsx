@@ -79,8 +79,10 @@ export function PageSetupDialog({ store, onClose }: { store: PageStore; onClose:
   const colorRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
+  // The dialog takes the focus, so Escape and Enter reach it; a tab key
+  // then moves through its controls.
   useEffect(() => {
-    dialogRef.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+    dialogRef.current?.focus();
   }, []);
 
   /** The dialog's Pages settings, or null when a margin is not a number or
@@ -150,7 +152,14 @@ export function PageSetupDialog({ store, onClose }: { store: PageStore; onClose:
         }
       }}
     >
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={t("docsPage.pageSetup")} className="docs-setup-dialog">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("docsPage.pageSetup")}
+        className="docs-setup-dialog"
+        tabIndex={-1}
+      >
         <h2 className="docs-setup-title">{t("docsPage.pageSetup")}</h2>
         <div role="tablist" className="docs-setup-tabs">
           {(["pages", "pageless"] as const).map((id) => (
@@ -159,7 +168,6 @@ export function PageSetupDialog({ store, onClose }: { store: PageStore; onClose:
               type="button"
               role="tab"
               aria-selected={tab === id}
-              data-autofocus={tab === id ? "" : undefined}
               className="docs-setup-tab"
               onClick={() => setTab(id)}
             >

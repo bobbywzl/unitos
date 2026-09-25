@@ -1,4 +1,5 @@
-// UI strings of the page editor's page area: the canvas, the page, the ruler, the outline, page setup
+// UI strings of the page editor's page area: the canvas, the pages, the rulers, the tabs & outlines panel,
+// page setup, headers and footers
 // (SPEC.md §29). The English follows Google Docs' own labels. zh glossary: dict/common.ts — page 页面 ·
 // document 文档 · pages(分页格式) 分页 · pageless 无分页.
 
@@ -7,6 +8,10 @@ const en = {
   untitled: "Untitled document",
   savedCaption: "Saved to Unitos",
   documentStatus: "See document status",
+  statusSaved: "Every change you make is saved in Unitos as you type.",
+  statusSaving: "Your latest changes are being saved.",
+  statusOffline: "Your changes stay here and save once the connection is back.",
+  statusFailed: "Your latest changes are not saved yet. Unitos tries again with your next change.",
   // Commands (Search the menus)
   pageSetup: "Page setup",
   showRuler: "Show ruler",
@@ -72,7 +77,7 @@ const en = {
   documentTabs: "Document tabs",
   firstTab: "Tab 1",
   outlineEmpty: "Headings you add to the document will appear here.",
-  outline: "Outline",
+  tabsOutlines: "Tabs & outlines",
   resizePanel: "Drag to resize",
   // Headers, footers, page numbers
   firstPageHeader: "First page header",
@@ -98,6 +103,10 @@ const zh: Record<keyof typeof en, string> = {
   untitled: "无标题文档",
   savedCaption: "已保存到 Unitos",
   documentStatus: "查看文档状态",
+  statusSaved: "你所做的每项更改都会在输入时保存到 Unitos。",
+  statusSaving: "正在保存你最新的更改。",
+  statusOffline: "你的更改会先留在这里，连接恢复后再保存。",
+  statusFailed: "你最新的更改尚未保存。Unitos 会在你下次更改时再次尝试。",
   pageSetup: "页面设置",
   showRuler: "显示标尺",
   showOutline: "显示标签页和大纲",
@@ -158,7 +167,7 @@ const zh: Record<keyof typeof en, string> = {
   documentTabs: "文档标签页",
   firstTab: "标签页 1",
   outlineEmpty: "你添加到文档中的标题会显示在这里。",
-  outline: "大纲",
+  tabsOutlines: "标签页和大纲",
   resizePanel: "拖动以调整大小",
   firstPageHeader: "首页页眉",
   firstPageFooter: "首页页脚",

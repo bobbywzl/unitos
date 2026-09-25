@@ -356,6 +356,9 @@
   color: var(--docs-text);
   font: 400 14px/20px var(--docs-ui-font);
 }
+.docs-setup-dialog:focus {
+  outline: none;
+}
 .docs-setup-title {
   margin: 0 0 12px;
   font: 400 24px/32px var(--docs-ui-font);
@@ -796,6 +799,9 @@
   outline: none;
   caret-color: var(--docs-ink);
 }
+.docs-hf-prose:focus-visible {
+  outline: none;
+}
 .docs-hf-prose ::selection {
   background: var(--docs-selection);
 }
@@ -841,7 +847,7 @@
 .docs-hf-options {
   display: inline-flex;
   align-items: center;
-  height: 28px;
+  height: 24px;
   margin-right: 10px;
   margin-left: auto;
   padding: 0 4px 0 8px;
@@ -856,6 +862,13 @@
 }
 .docs-small-dialog {
   width: min(380px, calc(100vw - 32px));
+}
+/* The page area's windows take Google Docs' blue focus ring. */
+.docs-setup-dialog :focus-visible,
+.docs-hf-bar :focus-visible,
+.docs-status-popup :focus-visible {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: 2px;
 }
 .docs-setup-two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -919,6 +932,7 @@
 .docs-title-row .docs-title-input,
 .docs-title-row .docs-title-wrap::after {
   padding: 1px 6px;
+  border: 1px solid transparent;
   font: 400 18px/22px var(--docs-ui-font);
 }
 .docs-title-row .docs-title-input {
@@ -1054,4 +1068,90 @@
 }
 .docs-page-compact .docs-sheets {
   outline: 1px solid var(--docs-page-border);
+}
+
+/* The document status popup under the status: a blue header (red when a
+   save failed) and one line. */
+.docs-status-popup {
+  position: fixed;
+  z-index: 80;
+  min-width: 320px;
+  max-width: 420px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--docs-menu-bg);
+  box-shadow: var(--docs-menu-shadow);
+}
+.docs-status-popup-head {
+  min-height: 40px;
+  padding: 10px 16px;
+  background: #d3e3fd;
+  color: #0b57d0;
+  font: 500 14px/20px var(--docs-ui-font);
+}
+.docs-status-popup-failed .docs-status-popup-head {
+  background: #f9dedc;
+  color: #8c1d18;
+}
+.dark .docs-status-popup-head {
+  background: #004a77;
+  color: #c2e7ff;
+}
+.dark .docs-status-popup-failed .docs-status-popup-head {
+  background: #601410;
+  color: #f9dedc;
+}
+.docs-status-popup-body {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--docs-text);
+  font: 400 12px/16px Roboto, var(--docs-ui-font);
+}
+.docs-title-row button.docs-status {
+  cursor: pointer;
+}
+.docs-title-row button.docs-status:focus-visible {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: 2px;
+  border-radius: 14px;
+}
+
+/* ── The caret: Google Docs' 2 px bar, 500 ms on and 500 ms off, solid
+   after every move (ext/page.ts DocsCaret draws it). ────────────────────── */
+.docs-prose.docs-own-caret {
+  caret-color: var(--docs-native-caret, transparent);
+}
+.docs-caret {
+  position: absolute;
+  z-index: 2;
+  width: 2px;
+  background: var(--docs-ink);
+  pointer-events: none;
+}
+.docs-caret-a {
+  animation: docs-caret-a 1s step-end infinite;
+}
+.docs-caret-b {
+  animation: docs-caret-b 1s step-end infinite;
+}
+@keyframes docs-caret-a {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes docs-caret-b {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+@media print {
+  .docs-caret {
+    display: none !important;
+  }
 }

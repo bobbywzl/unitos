@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { SearchIcon } from "@/components/docs/insert/icons";
 import type { EmojiEntry, EmojiGroup } from "@/components/docs/insert/emoji-data";
+import { focusSoon } from "@/components/docs/insert/ui";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Google Docs' emoji picker (SPEC.md §29): a search field, a row of nine
@@ -96,7 +97,7 @@ export function EmojiPicker({ onPick }: { onPick: (char: string) => void }) {
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    searchRef.current?.focus();
+    focusSoon(searchRef.current);
   }, []);
 
   const byGroup = useMemo(() => {

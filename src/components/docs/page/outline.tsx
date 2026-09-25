@@ -7,9 +7,10 @@ import { useT } from "@/components/lang-provider";
 import { ArrowBackIcon, ListIcon, TabDocIcon } from "@/components/docs/page/icons";
 import { OUTLINE_MAX, OUTLINE_MIN, usePageState, type PageStore } from "@/components/docs/page/store";
 
-// Tabs & outlines (SPEC.md §29), Google Docs' left panel: the document's one
-// tab ("Tab 1") and under it the outline — the Title and Heading 1–6, never
-// the Subtitle — each nested under the heading above it. The heading that
+// The tabs & outlines panel (SPEC.md §29), Google Docs' left panel: the
+// document's one tab ("Tab 1") and under it the document's headings — the
+// Title and Heading 1–6, never the Subtitle — each nested under the heading
+// above it. The heading that
 // owns the top of the view is marked blue as the page scrolls; a press on an
 // item scrolls to its heading and puts the caret there. While the panel is
 // closed, a small button at the canvas's top left opens it.
@@ -180,7 +181,7 @@ export function OutlinePanel({
       ref={panelRef}
       className="docs-outline"
       style={{ left, width: shown, height }}
-      aria-label={t("docsPage.outline")}
+      aria-label={t("docsPage.tabsOutlines")}
       data-edit-control
     >
       <div className="docs-outline-hat">

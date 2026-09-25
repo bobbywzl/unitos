@@ -271,7 +271,7 @@ export function HeaderFooterLayer({
 
   const exit = () => store.set({ editing: null });
   const change = (next: RichNode) => store.set({ setup: { ...store.get().setup, [slot]: next } });
-  const barHeight = 34;
+  const barHeight = 30;
   const textStyle: CSSProperties =
     area === "header"
       ? { top: top + frame.headerMargin, left: frame.left, right: frame.right }
@@ -459,6 +459,10 @@ function SmallDialog({
   children: ReactNode;
 }) {
   const t = useT();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
   if (typeof document === "undefined") return null;
   return createPortal(
     <div
@@ -471,10 +475,13 @@ function SmallDialog({
         if (e.key === "Escape") {
           e.stopPropagation();
           onClose();
+        } else if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") {
+          e.preventDefault();
+          onApply();
         }
       }}
     >
-      <div role="dialog" aria-modal="true" aria-label={title} className="docs-setup-dialog docs-small-dialog">
+      <div ref={ref} role="dialog" aria-modal="true" aria-label={title} className="docs-setup-dialog docs-small-dialog" tabIndex={-1}>
         <h2 className="docs-setup-title">{title}</h2>
         <div className="docs-setup-body">{children}</div>
         <div className="docs-setup-actions">
@@ -482,7 +489,7 @@ function SmallDialog({
           <button type="button" className="docs-setup-text-btn" onClick={onClose}>
             {t("docsPage.cancel")}
           </button>
-          <button type="button" className="docs-button-primary" onClick={onApply} autoFocus>
+          <button type="button" className="docs-button-primary" onClick={onApply}>
             {t("docsPage.apply")}
           </button>
         </div>

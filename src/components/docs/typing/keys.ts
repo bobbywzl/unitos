@@ -93,6 +93,13 @@ function inTable($pos: ResolvedPos): boolean {
   return false;
 }
 
+/** The caret is at the start of the first cell of a table that starts the document. */
+function atFirstCellStart($pos: ResolvedPos): boolean {
+  if ($pos.depth < 1 || $pos.node(1).type.name !== "table" || $pos.before(1) !== 0) return false;
+  // The table, its first row, its first cell, and the cell's first paragraph open.
+  return $pos.pos === 4;
+}
+
 function num(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
@@ -118,6 +125,9 @@ export function enter(editor: Editor): boolean {
   const sel = state.selection;
   if (!(sel instanceof TextSelection)) return false;
   if (sel.$from.parent.type.spec.code || sel.$to.parent.type.spec.code) return false;
+  // At the very start of a table that starts the document, the table area
+  // (insert/table.ts) makes a paragraph above it.
+  if (sel.empty && atFirstCellStart(sel.$from)) return false;
   const item = listItemAt(sel.$from);
   if (item && sel.empty && sel.$from.parent.content.size === 0 && item.node.childCount === 1) {
     liftListItem(item.node.type)(state, (tr) => dispatch(view, groupEdit(view, tr, "structure")));
@@ -157,7 +167,8 @@ export function enter(editor: Editor): boolean {
   if (heading && atEnd && paragraph) {
     const attrs: Record<string, unknown> = {};
     for (const name of Object.keys(paragraph.spec.attrs ?? {})) {
-      if (name in node.attrs && name !== "blockId" && name !== "docStyle") attrs[name] = node.attrs[name];
+      // Normal text, with no pending style and a plain paragraph mark.
+      if (name in node.attrs && !["blockId", "docStyle", "markStyle"].includes(name)) attrs[name] = node.attrs[name];
     }
     after = { type: paragraph, attrs };
   } else {
@@ -352,8 +363,9 @@ function backspaceAtStart(view: EditorView, $from: ResolvedPos, word: boolean): 
   } else {
     const prev = container.child(index - 1);
     const prevPos = blockPos - prev.nodeSize;
-    // 6. Never into a table.
-    if (prev.type.name === "table") return true;
+    // 6. Never into a table. An empty line after one is the table area's
+    // (insert/table.ts): the caret goes into the last cell.
+    if (prev.type.name === "table") return block.content.size > 0;
     // 7. A page break goes with its paragraph break.
     if (prev.type.name === "pageBreak") {
       tr = state.tr.delete(prevPos, blockPos);
@@ -622,27 +634,36 @@ export function moveParagraphs(editor: Editor, dir: -1 | 1): boolean {
   const endPos = $a.posAtIndex(endIndex, depth);
   const tr = state.tr;
   let shift = 0;
+  // The part of the document the move rewrites, before the move.
+  let region: [number, number];
   if (dir === -1 && startIndex > 0) {
     const prev = parent.child(startIndex - 1);
     const moved = state.doc.slice(startPos, endPos).content;
     tr.delete(startPos - prev.nodeSize, endPos);
     tr.insert(startPos - prev.nodeSize, moved.append(Fragment.from(prev)));
     shift = -prev.nodeSize;
+    region = [startPos - prev.nodeSize, endPos];
   } else if (dir === 1 && endIndex < parent.childCount) {
     const next = parent.child(endIndex);
     const moved = state.doc.slice(startPos, endPos).content;
     tr.delete(startPos, endPos + next.nodeSize);
     tr.insert(startPos, Fragment.from(next).append(moved));
     shift = next.nodeSize;
+    region = [startPos, endPos + next.nodeSize];
   } else if (isListNode(parent) && depth > 0 && !isListItemNode($a.node(depth - 1))) {
     const moved = leaveList(tr, state, $a, depth, startIndex, endIndex, dir);
     if (moved === null) return true;
-    shift = moved;
+    shift = moved.shift;
+    region = moved.region;
   } else {
     return true;
   }
-  const anchor = sel.anchor + shift;
-  const head = sel.head + shift;
+  // Lists the move put side by side, the numbering running on, are one list.
+  const joinFrom = tr.steps.length;
+  joinLists(tr, tr.mapping.map(region[0], -1), tr.mapping.map(region[1], 1));
+  const joins = tr.mapping.slice(joinFrom);
+  const anchor = joins.map(sel.anchor + shift);
+  const head = joins.map(sel.head + shift);
   try {
     tr.setSelection(TextSelection.create(tr.doc, anchor, head));
   } catch {
@@ -653,9 +674,33 @@ export function moveParagraphs(editor: Editor, dir: -1 | 1): boolean {
   return true;
 }
 
+/** Two lists that read as one: the same kind and style, and a numbered
+    list's second part numbered on from the first. */
+function listsJoin(a: PMNode, b: PMNode): boolean {
+  if (!isListNode(a) || a.type !== b.type || (a.attrs.listStyle ?? null) !== (b.attrs.listStyle ?? null)) return false;
+  if (a.type.name !== "orderedList") return true;
+  return (Number(b.attrs.start) || 1) === (Number(a.attrs.start) || 1) + a.childCount;
+}
+
+/** Join the lists that meet between `from` and `to`, two positions between
+    the blocks of one container. */
+function joinLists(tr: Transaction, from: number, to: number): void {
+  const $from = tr.doc.resolve(from);
+  const container = $from.parent;
+  const joints: number[] = [];
+  let pos = $from.start();
+  for (let i = 0; i + 1 < container.childCount; i++) {
+    const a = container.child(i);
+    pos += a.nodeSize;
+    if (pos >= from && pos <= to && listsJoin(a, container.child(i + 1))) joints.push(pos);
+  }
+  for (const at of joints.reverse()) tr.join(at);
+}
+
 /** A list's first items moving up (or last items moving down) leave the
     list past the block beyond it, as a list of their own with the same
-    style; numbering goes on. Returns how far the items moved, or null. */
+    style; numbering goes on. Returns how far the items moved and the part
+    of the document rewritten, or null. */
 function leaveList(
   tr: Transaction,
   state: EditorState,
@@ -664,7 +709,7 @@ function leaveList(
   startIndex: number,
   endIndex: number,
   dir: -1 | 1,
-): number | null {
+): { shift: number; region: [number, number] } | null {
   const list = $a.node(depth);
   const listPos = $a.before(depth);
   const container = $a.node(depth - 1);
@@ -687,12 +732,81 @@ function leaveList(
     // The items moved from inside the list to the front of `from`.
     const oldItemsStart = $a.posAtIndex(startIndex, depth);
     const newItemsStart = from + 1;
-    return newItemsStart - oldItemsStart;
+    return { shift: newItemsStart - oldItemsStart, region: [from, listPos + list.nodeSize] };
   }
   const to = listPos + list.nodeSize + neighbor.nodeSize;
   const nodes = [...(restList ? [restList] : []), neighbor, movedList];
   tr.replaceWith(listPos, to, nodes);
   const oldItemsStart = $a.posAtIndex(startIndex, depth);
   const newItemsStart = listPos + (restList ? restList.nodeSize : 0) + neighbor.nodeSize + 1;
-  return newItemsStart - oldItemsStart;
+  return { shift: newItemsStart - oldItemsStart, region: [listPos, to] };
+}
+
+// ── Caret: words and paragraphs ─────────────────────────────────────────
+
+/** Right-to-left script: the browser moves the caret there, visually. */
+const RTL = /[֐-ࣿיִ-﷿ﹰ-ﻼ]/;
+
+function moveHead(view: EditorView, sel: TextSelection, target: number, extend: boolean): true {
+  const doc = view.state.doc;
+  const next = extend ? TextSelection.create(doc, sel.anchor, target) : TextSelection.create(doc, target);
+  view.dispatch(view.state.tr.setSelection(next).scrollIntoView());
+  return true;
+}
+
+/** Ctrl+← and → (Option on a Mac), a word at a time by Docs' character
+    classes, so don't and well-known are one word: ← stops at a word's
+    start; → at the next word's start (a Mac: at the word's end). At a
+    paragraph's edge the caret goes on to the next paragraph. Shift extends
+    the selection. A selected object and right-to-left text are the
+    browser's. */
+export function moveWord(editor: Editor, dir: -1 | 1, extend: boolean, mac: boolean): boolean {
+  const view = editor.view;
+  const state = view.state;
+  const sel = state.selection;
+  if (!(sel instanceof TextSelection)) return false;
+  const $head = sel.$head;
+  const block = $head.parent;
+  if (!block.isTextblock) return false;
+  const text = blockText(block);
+  if (RTL.test(text)) return false;
+  const offset = $head.parentOffset;
+  let target: number;
+  if (dir === -1 && offset === 0) {
+    const found = Selection.findFrom(state.doc.resolve($head.before()), -1, true);
+    if (!found) return true;
+    target = found.from;
+  } else if (dir === 1 && offset === block.content.size) {
+    const found = Selection.findFrom(state.doc.resolve($head.after()), 1, true);
+    if (!found) return true;
+    target = found.from;
+  } else {
+    target = $head.start() + (dir === -1 ? wordStartBefore(text, offset) : wordEndAfter(text, offset, mac));
+  }
+  return moveHead(view, sel, target, extend);
+}
+
+/** Ctrl+↑ and ↓ (Option on a Mac): ↑ to the start of this paragraph, or of
+    the one before when the caret is already there; ↓ to the start of the
+    next paragraph (the last one: its end). Shift (a Mac) extends. */
+export function moveToParagraph(editor: Editor, dir: -1 | 1, extend: boolean): boolean {
+  const view = editor.view;
+  const state = view.state;
+  const sel = state.selection;
+  if (!(sel instanceof TextSelection)) return false;
+  const $head = sel.$head;
+  if (!$head.parent.isTextblock) return false;
+  let target: number;
+  if (dir === -1) {
+    if ($head.parentOffset > 0) target = $head.start();
+    else {
+      const found = Selection.findFrom(state.doc.resolve($head.before()), -1, true);
+      if (!found) return true;
+      target = found.$from.start();
+    }
+  } else {
+    const found = Selection.findFrom(state.doc.resolve($head.after()), 1, true);
+    target = found ? found.from : $head.end();
+  }
+  return moveHead(view, sel, target, extend);
 }

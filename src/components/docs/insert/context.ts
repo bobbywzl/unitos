@@ -61,6 +61,7 @@ export function useInsertContext(editor: Editor): InsertContext | null {
 /** A window of the insert area, opened from a key, a command, or a menu. */
 export type InsertEvent =
   | { type: "at-menu" }
+  | { type: "picker"; kind: "date" | "dropdown" | "table" | "emoji" | "image" | "toc" | "code" }
   | { type: "context-menu"; x?: number; y?: number }
   | { type: "image-options"; section?: "size" | "wrap" | "recolor" | "adjust" | "alt" }
   | { type: "image-replace"; source: "upload" | "url" }

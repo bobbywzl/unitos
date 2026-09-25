@@ -1,7 +1,6 @@
 import type { Mark, MarkType, Node as PMNode, NodeType } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
 import { Selection, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
-import { findWrapping } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
 import {
   isLetterOrDigit,
@@ -462,24 +461,24 @@ const detectList: Rule = ({ state, prefs, block, start, text, trigger, at, virtu
     attrs = found.style ? { listStyle: found.style } : {};
     earlier = null;
   }
-  if (!listType) return null;
-  const tr = state.tr.delete(start, start + at + 1);
-  const $from = tr.doc.resolve(start);
-  const range = $from.blockRange($from);
-  if (!range) return null;
+  const itemType = listType?.name === "taskList" ? schema.nodes.taskItem : schema.nodes.listItem;
+  if (!listType || !itemType) return null;
+  // One replace step: the paragraph, less its prefix, as the list's item. A
+  // delete and then a wrap undoes into a state the placeholder's decorations
+  // cannot map through; one step undoes cleanly.
+  const item = itemType.createAndFill(null, block.type.create(block.attrs, block.content.cut(at + 1), block.marks));
+  if (!item) return null;
   const known = listType.spec.attrs ?? {};
   const listAttrs = Object.fromEntries(Object.entries(attrs).filter(([k]) => k in known && k !== "blockId"));
-  const wrapping = findWrapping(range, listType, listAttrs);
-  if (!wrapping) return null;
-  tr.wrap(range, wrapping);
   // A continued list right after its earlier part becomes one list again.
-  if (earlier?.adjacent) {
-    const joinAt = tr.mapping.map(blockPos, -1);
-    if (tr.doc.resolve(joinAt).nodeBefore?.type === listType) {
-      tr.join(joinAt);
-    }
-  }
-  tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map(start))));
+  const from = earlier?.adjacent ? earlier.pos : blockPos;
+  const list = earlier?.adjacent
+    ? earlier.node.copy(earlier.node.content.addToEnd(item))
+    : listType.createAndFill(listAttrs, item);
+  if (!list) return null;
+  const tr = state.tr.replaceWith(from, blockPos + block.nodeSize, list);
+  // The caret at the start of the item's text.
+  tr.setSelection(TextSelection.create(tr.doc, from + list.nodeSize - 1 - item.nodeSize + 2));
   return tr;
 };
 

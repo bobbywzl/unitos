@@ -216,7 +216,7 @@
   border-radius: 4px;
   cursor: pointer;
 }
-.docs-tb-combo:hover:not([data-disabled]) {
+.docs-tb-combo:hover:not([data-disabled], [data-open]) {
   background: color-mix(in srgb, var(--docs-tb-icon) 8%, var(--docs-tb-bg));
 }
 .docs-tb-combo[data-open] {
@@ -288,7 +288,7 @@
   border: 1px solid var(--docs-tb-outline);
   border-radius: 4px;
 }
-.docs-size-box:hover:not([data-disabled]) {
+.docs-size-box:hover:not([data-disabled], [data-open], :focus-within) {
   border-color: var(--docs-tb-text);
 }
 .docs-size-box[data-open],
@@ -315,17 +315,18 @@
   opacity: 0.3;
 }
 
-/* Text color and Highlight color: the symbol 3 px up, the color bar under it. */
+/* Text color and Highlight color: the symbol, and a 22 × 4 bar of the
+   selection's color under it (the marker moves up 3 px to make room). */
 .docs-tb-color {
   width: 32px;
 }
-.docs-tb-color svg {
+.docs-tb-color .docs-highlight-glyph {
   margin-top: -3px;
 }
 .docs-tb-colorbar {
   position: absolute;
   left: 50%;
-  bottom: 3px;
+  bottom: 4px;
   width: 22px;
   height: 4px;
   transform: translateX(-50%);
@@ -342,6 +343,11 @@
 }
 
 /* Checklist, Bulleted list, Numbered list: a toggle and its menu, split. */
+.docs-tb-split {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
 .docs-toolbar .docs-tb-split-left,
 .docs-tb-bubble .docs-tb-split-left {
   margin: 5px 0 5px 1px;
@@ -436,6 +442,33 @@
   }
 }
 
+/* Keyboard focus shows the 12% state layer, as in Docs, not the app's ring;
+   and the controls change color at once, with no fade. */
+.docs-toolbar :focus-visible,
+.docs-menu :focus-visible,
+.docs-search-open :focus-visible {
+  outline: none;
+}
+.docs-toolbar .docs-tb-btn:focus-visible,
+.docs-menu .docs-tb-btn:focus-visible {
+  border-radius: 4px;
+}
+.docs-toolbar .docs-tb-split-left:focus-visible {
+  border-radius: 4px 0 0 4px;
+}
+.docs-toolbar .docs-tb-split-right:focus-visible {
+  border-radius: 0 4px 4px 0;
+}
+.docs-toolbar .docs-mode-pill:focus-visible {
+  border-radius: 9999px;
+}
+.docs-toolbar button,
+.docs-toolbar input,
+.docs-menu button,
+.docs-menu input {
+  transition: none;
+}
+
 /* ── Search the menus ─────────────────────────────────────────────────────
    A white 100 px pill on a wide bar, a 35 px symbol button otherwise; while
    it has the focus the field grows to 350 px over the bar, and its results
@@ -473,6 +506,10 @@
 }
 .docs-search-input::placeholder {
   color: var(--docs-tb-icon);
+}
+.docs-search-anchor {
+  display: inline-flex;
+  flex: none;
 }
 .docs-toolbar .docs-search-btn {
   width: 35px;
@@ -558,7 +595,7 @@
 }
 
 /* ── The More bubble: the groups that did not fit, in one row under ⋮ ──── */
-.docs-tb-bubble {
+.docs-menu.docs-tb-bubble {
   --docs-tb-btn-bg: var(--docs-tb-bg);
   z-index: 58;
   padding: 0 4px;
@@ -566,15 +603,16 @@
   background: var(--docs-tb-bg);
   overflow: visible;
 }
-.docs-toolbar[data-pageless] ~ * .docs-tb-bubble,
-.docs-tb-bubble[data-pageless] {
-  --docs-tb-bg: var(--docs-tb-bg-pageless);
-}
+/* One row; a window narrower than the row wraps it rather than hide its end. */
 .docs-tb-bubble-row {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  max-width: calc(100vw - 24px);
   font-family: var(--docs-tb-font);
+}
+.docs-tb-bubble-row[data-pageless] {
+  --docs-tb-bg: var(--docs-tb-bg-pageless);
 }
 
 /* ── Menus ────────────────────────────────────────────────────────────────
@@ -695,6 +733,12 @@
 .docs-menu-styles {
   padding-top: 0;
 }
+.docs-style-preview {
+  color: var(--docs-preview-color, inherit);
+}
+.dark .docs-style-preview[data-plain] {
+  color: inherit;
+}
 .docs-menu-styles .docs-menu-item {
   min-height: 32px;
   line-height: 1.2;
@@ -731,9 +775,18 @@
 /* Align: one row of four buttons on the menu's lighter ground. */
 .docs-menu-align {
   --docs-tb-btn-bg: var(--docs-tb-bg);
-  display: flex;
   padding: 0 4px;
   background: var(--docs-tb-high);
+}
+.docs-align-row {
+  display: flex;
+}
+.docs-menu-align .docs-tb-btn[data-active] {
+  background: color-mix(in srgb, var(--docs-tb-icon) 12%, var(--docs-tb-btn-bg));
+}
+.docs-menu-align .docs-tb-btn[aria-checked="true"] {
+  background: var(--docs-tb-on);
+  color: var(--docs-tb-on-icon);
 }
 
 /* The mode switcher's menu: each mode's symbol, name, and one line. */
@@ -1053,6 +1106,15 @@
 .docs-tb-button:disabled {
   opacity: 0.38;
   cursor: default;
+}
+.docs-tb-dialog input:focus-visible,
+.docs-tb-dialog select:focus-visible {
+  outline: none;
+}
+.docs-tb-button:focus-visible {
+  outline: 2px solid var(--docs-tb-primary);
+  outline-offset: 2px;
+  border-radius: 9999px;
 }
 .docs-tb-field {
   box-sizing: border-box;
@@ -1442,6 +1504,16 @@
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='22' viewBox='0 0 32 22'%3E%3Cpath d='M3 1.5h4M5 1.5v18M3 19.5h4' fill='none' stroke='%23fff' stroke-width='3'/%3E%3Cpath d='M3 1.5h4M5 1.5v18M3 19.5h4' fill='none' stroke='%23000' stroke-width='1'/%3E%3Cg transform='translate(11 1) scale(0.02) translate(0 960)'%3E%3Cpath d='M456-96q-29.7 0-50.85-21.15Q384-138.3 384-168v-167H264q-29.7 0-50.85-21.15Q192-377.3 192-407v-265q0-61 42-102.5T336-816h432v409q0 29.7-21.5 50.85Q725-335 696-335H576v167q0 29.7-21.5 50.85Q533-96 504-96h-48ZM264-552h432v-192h-48v144h-72v-144h-48v73h-72v-73H336q-29.7 0-50.85 20.5Q264-703 264-672v120Zm0 145h432v-73H264v73Zm0 0v-73 73Z' fill='%23000' stroke='%23fff' stroke-width='80' paint-order='stroke'/%3E%3C/g%3E%3C/svg%3E")
       5 10,
     text;
+}
+
+/* ── A face's weight (the font menu's weights) ─────────────────────────────
+   Drawn through a variable, so Bold around or inside the run still wins. */
+.docs-prose [data-font-weight] {
+  font-weight: var(--docs-weight);
+}
+.docs-prose strong [data-font-weight],
+.docs-prose [data-font-weight] strong {
+  font-weight: 700;
 }
 
 /* ── Checklist: Do not strikethrough text when checked ────────────────── */

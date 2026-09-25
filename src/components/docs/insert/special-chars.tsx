@@ -3,7 +3,8 @@
 import type { Editor } from "@tiptap/core";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useT } from "@/components/lang-provider";
+import { useLang, useT } from "@/components/lang-provider";
+import { translatorFor } from "@/lib/i18n/dictionaries";
 import { CloseIcon } from "@/components/docs/icons";
 import { onInsert } from "@/components/docs/insert/context";
 import { SearchIcon } from "@/components/docs/insert/icons";
@@ -33,16 +34,19 @@ export function SpecialCharsHost({ editor }: { editor: Editor }) {
 
 function SpecialCharsDialog({ editor, onClose }: { editor: Editor; onClose: () => void }) {
   const t = useT();
+  const lang = useLang();
   const [category, setCategory] = useState(CHAR_CATEGORIES[0].id);
   const [group, setGroup] = useState(CHAR_CATEGORIES[0].groups[0].id);
   const [query, setQuery] = useState("");
   const [hover, setHover] = useState<string | null>(null);
   const cat = CHAR_CATEGORIES.find((c) => c.id === category) ?? CHAR_CATEGORIES[0];
   const grp = cat.groups.find((g) => g.id === group) ?? cat.groups[0];
-  const chars = useMemo(
-    () => (query.trim() ? searchChars(query, (g) => t(g.name)) : groupChars(grp)),
-    [query, grp, t],
-  );
+  const chars = useMemo(() => {
+    const tr = translatorFor(lang);
+    const inCat = CHAR_CATEGORIES.find((c) => c.id === category) ?? CHAR_CATEGORIES[0];
+    const inGroup = inCat.groups.find((g) => g.id === group) ?? inCat.groups[0];
+    return query.trim() ? searchChars(query, (g) => tr(g.name)) : groupChars(inGroup);
+  }, [query, category, group, lang]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

@@ -30,7 +30,6 @@ const b = (chars: string): Glyph[] => [...chars].map((bullet) => ({ bullet }));
 const P = (counter: Counter): Glyph => ({ counter, before: "", after: "." });
 const R = (counter: Counter): Glyph => ({ counter, before: "", after: ")" });
 const RR = (counter: Counter): Glyph => ({ counter, before: "(", after: ")" });
-const PR = (counter: Counter): Glyph => ({ counter, before: "", after: ".)" });
 const DEC = "decimal";
 const LA = "lower-alpha";
 const UA = "upper-alpha";

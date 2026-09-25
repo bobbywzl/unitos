@@ -52,6 +52,11 @@ export type PageStore = {
   bindZoom: (zoomTo: (zoom: number | "fit") => void) => void;
   /** While printing, layout changes are not the reader's choice. */
   setPrinting: (on: boolean) => void;
+  /** The canvas hands in what runs after a setup is saved: the page's
+      props refresh, so every area reads the new setup. */
+  bindSaved: (fn: () => void) => void;
+  /** Saves not answered yet. */
+  pendingSaves: () => number;
 };
 
 const RULER_KEY = "unitos-docs-ruler";
@@ -105,6 +110,8 @@ function createStore(editor: Editor, documentId: string, setup: PageSetup): Page
   const listeners = new Set<Listener>();
   let saving: Promise<void> = Promise.resolve();
   let zoomSetter: (zoom: number | "fit") => void = () => {};
+  let savedHook: () => void = () => {};
+  let pending = 0;
   // Printing turns the print layout on for the length of the print.
   let printing = false;
   const store: PageStore = {
@@ -130,6 +137,7 @@ function createStore(editor: Editor, documentId: string, setup: PageSetup): Page
     },
     saveSetup: async (next) => {
       store.set({ setup: next });
+      pending += 1;
       // Saves run one after another, so the last change is the one stored.
       saving = saving.then(async () => {
         try {
@@ -139,18 +147,25 @@ function createStore(editor: Editor, documentId: string, setup: PageSetup): Page
             body: JSON.stringify({ pageSetup: next }),
           });
           store.set({ saveError: !res.ok });
+          if (res.ok) savedHook();
         } catch {
           store.set({ saveError: true });
+        } finally {
+          pending -= 1;
         }
       });
       await saving;
     },
+    pendingSaves: () => pending,
     zoomTo: (zoom) => zoomSetter(zoom),
     bindZoom: (fn) => {
       zoomSetter = fn;
     },
     setPrinting: (on) => {
       printing = on;
+    },
+    bindSaved: (fn) => {
+      savedHook = fn;
     },
   };
   void editor;

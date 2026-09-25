@@ -9,7 +9,7 @@ import { onInsert } from "@/components/docs/insert/context";
 import { caretAfter } from "@/components/docs/insert/actions";
 import { DeleteIcon } from "@/components/docs/insert/icons";
 import { DropButton } from "@/components/docs/insert/image-controls";
-import { FloatingBox, useEditorTick, useViewportTick, type Anchor } from "@/components/docs/insert/ui";
+import { FloatingBox, focusSoon, useEditorTick, useViewportTick, type Anchor } from "@/components/docs/insert/ui";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The equation box (SPEC.md §29): Google Docs' equation toolbar — New
@@ -144,7 +144,7 @@ function EquationBox({
   const [value, setValue] = useState(latex);
 
   useEffect(() => {
-    fieldRef.current?.focus();
+    focusSoon(fieldRef.current);
   }, []);
 
   const write = (next: string) => {
