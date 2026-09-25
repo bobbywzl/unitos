@@ -27,6 +27,14 @@ export const RELEASES: Release[] = [
     bodyKey: "works.release20260924Body",
     features: ["collapse", "annotationsFullPage", "byDocument", "conversations"],
   },
+  {
+    // The reading position and the left-off mark (SPEC.md §6): no control to press, so nothing glows.
+    id: "2026-09-25",
+    date: "2026-09-25",
+    titleKey: "works.release20260925Title",
+    bodyKey: "works.release20260925Body",
+    features: [],
+  },
 ];
 
 /** How long a release's controls glow after it shipped. */

@@ -14,6 +14,7 @@ export type AccountData = {
   documents: number; // distinct documents attached to the account's projects
   notes: number;
   digests: number; // the stored project context the assistant reads
+  positions: number; // documents with a reading position (SPEC.md §6)
   clicks: number; // click telemetry rows (SPEC.md §7)
   usage: number; // AI calls metered on the account
   feedback: number;
@@ -22,13 +23,15 @@ export type AccountData = {
 
 export async function accountData(user: User, signedIn: boolean): Promise<AccountData> {
   const userId = user.id;
-  const [sessions, projects, documents, notes, digests, clicks, usage, feedback, notifications] =
+  const [sessions, projects, documents, notes, digests, positions, clicks, usage, feedback, notifications] =
     await Promise.all([
       signedIn ? db.session.count({ where: { userId, expiresAt: { gt: new Date() } } }) : 0,
       db.notebook.count({ where: { userId } }),
       db.document.count({ where: { notebooks: { some: { notebook: { userId } } } } }),
       db.note.count({ where: { section: { notebook: { userId } } } }),
       db.notebookDigest.count({ where: { userId } }),
+      // A preview build reads the production database before its migration runs.
+      db.readingPosition.count({ where: { userId } }).catch(() => 0),
       db.clickEvent.count({ where: { userId } }),
       db.usageEvent.count({ where: { userId } }),
       db.feedback.count({ where: { userId } }),
@@ -43,6 +46,7 @@ export async function accountData(user: User, signedIn: boolean): Promise<Accoun
     documents,
     notes,
     digests,
+    positions,
     clicks,
     usage,
     feedback,
