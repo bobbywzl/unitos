@@ -79,6 +79,15 @@ export function translate(lang: Lang, key: TKey, params?: TParams): string {
   return interpolate(s, params);
 }
 
+// One translator per language: the same function on every render, so an
+// effect or a callback that uses t does not run again for nothing.
+const translators = new Map<Lang, TFunc>();
+
 export function translatorFor(lang: Lang): TFunc {
-  return (key, params) => translate(lang, key, params);
+  let t = translators.get(lang);
+  if (!t) {
+    t = (key, params) => translate(lang, key, params);
+    translators.set(lang, t);
+  }
+  return t;
 }
