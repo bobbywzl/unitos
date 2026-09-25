@@ -2,6 +2,7 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { importShared } from "@/lib/docs/server";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { runConversion } from "@/lib/handwritten/convert";
 import { renderPageImages } from "@/lib/handwritten/page-images";
@@ -19,12 +20,20 @@ const REPARSE_STALE_MS = (maxDuration + 60) * 1000;
 
 // The body is optional: no body re-parses in the document's shape; `as` flips
 // a PDF between article and handwritten (SPEC.md §16) — the escape hatch when
-// Import PDF judged it wrong.
-const bodySchema = z.object({ as: z.enum(["article", "handwritten"]).optional() });
+// Import PDF judged it wrong. replaceEdits: the reader said yes to replacing
+// an import's edits since it was imported (SPEC.md §29; the document menu
+// asks first).
+const bodySchema = z.object({
+  as: z.enum(["article", "handwritten"]).optional(),
+  replaceEdits: z.boolean().optional(),
+});
 
 // Forced re-parse with the current parser. Block ids change; anchors must
-// survive via quote fallback (SPEC.md §5). Streams the same stage events as
-// /api/documents so the client shows the same progress card.
+// survive via quote fallback (SPEC.md §5); an import's rows keep their ids
+// where the words match (SPEC.md §29). Streams the same stage events as
+// /api/documents so the client shows the same progress card. An import
+// edited since it was imported answers 409 "edited" unless the body carries
+// replaceEdits: the silent runs (the figure run on open) stop there.
 export async function POST(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
   const { documentId } = await ctx.params;
@@ -35,7 +44,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   if (!body.success) {
     return NextResponse.json({ error: t("api.validationFailed") }, { status: 400 });
   }
-  const as = body.data.as;
+  const { as, replaceEdits = false } = body.data;
 
   // Parse chain (jsdom, unpdf) loads per request; see /api/documents.
   let parse: typeof import("@/lib/parse/ingest");
@@ -52,7 +61,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
 
   const document = await db.document.findUnique({
     where: { id: documentId },
-    select: { id: true, fileHash: true, handwritten: true, video: { select: { id: true } } },
+    select: {
+      id: true,
+      fileHash: true,
+      handwritten: true,
+      richTextRev: true,
+      importRev: true,
+      video: { select: { id: true } },
+    },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   // A video document's blocks are its player and transcript — re-parsing its
@@ -63,6 +79,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   // A shape switch needs the PDF bytes.
   if (as && document.fileHash === null) {
     return NextResponse.json({ error: t("api.shapeSwitchNeedsPdf") }, { status: 400 });
+  }
+  // An import edited since it was imported (SPEC.md §29): the re-parse would
+  // replace the edits, so it waits for the reader's yes. The document menu
+  // shows this answer as its question, never as an error.
+  const edited = document.importRev !== null && document.richTextRev > document.importRev;
+  if (edited && !replaceEdits) {
+    return NextResponse.json({ error: t("api.importEdited"), reason: "edited" }, { status: 409 });
+  }
+  // Another account's project holds the import too: its edits are not this
+  // reader's to replace, as its words are not theirs to edit.
+  if (edited && (await importShared(documentId))) {
+    return NextResponse.json({ error: t("api.importShared"), reason: "shared" }, { status: 403 });
   }
 
   // One re-parse per document at a time. Every open of a stale document
@@ -96,13 +124,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
       const send = ndjsonWriter(controller);
       const stopHeartbeat = ndjsonHeartbeat(controller);
       try {
-        const updated = await parse.reparseDocument(
-          documentId,
-          (stage, detail) => send({ stage, detail }),
+        const updated = await parse.reparseDocument(documentId, (stage, detail) => send({ stage, detail }), {
           as,
           deadline,
           userId,
-        );
+          replaceEdits,
+        });
         if (!updated) send({ error: t("api.documentNotFound") });
         else {
           await bumpDocument(documentId);
@@ -120,8 +147,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
           send({ id: updated.id, title: updated.title, deduped: false });
         }
       } catch (err) {
-        console.error("Re-parse failed:", err);
-        send({ error: describeIngestError(err, t, "reparse") });
+        // Edited while the parse ran: nothing was written, and the menu asks.
+        if (err instanceof parse.ImportEditedError) send({ error: t("api.importEdited"), reason: "edited" });
+        else {
+          console.error("Re-parse failed:", err);
+          send({ error: describeIngestError(err, t, "reparse") });
+        }
       } finally {
         await releaseClaim();
         stopHeartbeat();

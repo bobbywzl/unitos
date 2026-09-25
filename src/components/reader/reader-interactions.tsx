@@ -2255,6 +2255,13 @@ export function ReaderInteractions({
       // that is text editing, not a new selection.
       if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
+        // A click on a figure object in the page editor comes after this
+        // mouseup and opens the figure's tools (docs:figure-tools): the
+        // press was the figure's.
+        if (suppressNextMouseUp.current) {
+          suppressNextMouseUp.current = false;
+          return;
+        }
         const captured = captureSelection();
         // The VIDEO block (the player's own block) refuses annotation: a
         // selection over it shows the refusal instead of tools. Transcript
@@ -2457,15 +2464,30 @@ export function ReaderInteractions({
       const text = (e as CustomEvent<{ text: string }>).detail?.text;
       if (text) showToast(text);
     };
+    // A click on a figure object opens the figure's tools, as the circle
+    // does. The click comes after its mouseup, whose selection check stands
+    // down (above); a click with no mouseup before it leaves nothing armed.
+    let disarm = 0;
+    const onFigureTools = (e: Event) => {
+      const { blockId, x, y } = (e as CustomEvent<{ blockId: string; x: number; y: number }>).detail;
+      openFigureToolsRef.current(blockId, x, y);
+      cancelAnimationFrame(disarm);
+      disarm = requestAnimationFrame(() => {
+        suppressNextMouseUp.current = false;
+      });
+    };
     container.addEventListener(DOCS_EVENT.comment, onComment);
     container.addEventListener(DOCS_EVENT.tool, onTool);
+    container.addEventListener(DOCS_EVENT.figureTools, onFigureTools);
     container.addEventListener("keydown", onKey);
     container.addEventListener("dissect:toast", onToast);
     return () => {
       container.removeEventListener(DOCS_EVENT.comment, onComment);
       container.removeEventListener(DOCS_EVENT.tool, onTool);
+      container.removeEventListener(DOCS_EVENT.figureTools, onFigureTools);
       container.removeEventListener("keydown", onKey);
       container.removeEventListener("dissect:toast", onToast);
+      cancelAnimationFrame(disarm);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [captureSelection, Boolean(richText)]);
@@ -3954,6 +3976,16 @@ export function ReaderInteractions({
     if (!canEditRef.current) return;
     const containerRect = container.getBoundingClientRect();
     const y = clientY - containerRect.top + container.scrollTop;
+    // The page editor (SPEC.md §29): beside the page's right edge, level
+    // with the press and under the header, as a selection's toolbar stands;
+    // with no room there, at the press.
+    const shift = docsShiftRef.current;
+    const page = richTextRef.current ? pageGeometry(container, shift) : null;
+    const beside =
+      page !== null && !window.matchMedia("(pointer: coarse)").matches && toolbarLeft(page, shift, 176) !== null;
+    const headerBottom = page ? container.querySelector(".docs-header")?.getBoundingClientRect().bottom : undefined;
+    const lineTop = clientY - 20;
+    const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
     suppressNextMouseUp.current = true;
     window.getSelection()?.removeAllRanges();
     setSubmenu(null);
@@ -3963,16 +3995,20 @@ export function ReaderInteractions({
       figure: true,
       x: Math.max(120, clientX - containerRect.left),
       y: y + 8,
-      yTop: Math.max(8, y - 8),
+      yTop: beside ? Math.max(8, pageTop - containerRect.top + container.scrollTop) : Math.max(8, y - 8),
       textLeft: Math.min(clientX - containerRect.left + 130, containerRect.width - 20),
       endLeft: Math.max(8, Math.min(clientX - containerRect.left + 6, containerRect.width - 110)),
       endTop: y,
       truncated: false,
-      side: "left",
+      side: beside ? "right" : "left",
       rightBase: containerRect.width - 130,
       cw: containerRect.width,
+      ...(page ? { page: { geo: page } } : {}),
+      ...(beside && headerBottom !== undefined ? { nearTop: lineTop - headerBottom < 96 } : {}),
     });
   }
+  const openFigureToolsRef = useRef(openFigureTools);
+  openFigureToolsRef.current = openFigureTools;
 
   // Edit mode: unsaved typing must reach the server before an anchor referencing
   // the live text is stored — the anchor's offsets describe what is on screen.
@@ -5358,7 +5394,12 @@ export function ReaderInteractions({
     const editor = pageEditorIn(containerRef.current);
     if (!run || !editor) return;
     run.skipped.push(...warnings);
-    if (ops.length > 0) {
+    // An import another account's project holds too takes no edits: nothing
+    // lands, and the row says why.
+    const locked = t("docs.importShared");
+    if (richTextRef.current?.imported?.shared) {
+      if (ops.length > 0 && !run.notes.includes(locked)) run.notes.push(locked);
+    } else if (ops.length > 0) {
       const code = await suggestCode();
       if (editor.isDestroyed) return;
       const landed = code.applyAssistantOps(editor, ops, assistantAuthor(myId), replacing);
@@ -5433,6 +5474,14 @@ export function ReaderInteractions({
   async function suggestDocument(request: SuggestRequest) {
     const controller = new AbortController();
     const run = startRun(request.key, `${request.command}\n\n${request.instruction}`, controller);
+    // An import another account's project holds too takes no edits.
+    if (richTextRef.current?.imported?.shared) {
+      run.notes.push(t("docs.importShared"));
+      run.running = false;
+      run.controller = null;
+      publishRun(request.key);
+      return;
+    }
     try {
       await flushEditRef.current?.();
       const caret = pageEditorIn(containerRef.current)?.state.selection.$from.parent.attrs.blockId;

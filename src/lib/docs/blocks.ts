@@ -148,17 +148,46 @@ export function withoutSuggestions(nodes: RichNode[], which: (id: unknown) => bo
   return out;
 }
 
-function textblockRuns(node: RichNode): { text: string; styles: StyleSpan[]; links: LinkSpan[] } {
+/** The page a page start names, or null. */
+function pageOf(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
+}
+
+type Runs = {
+  text: string;
+  styles: StyleSpan[];
+  links: LinkSpan[];
+  citations: CitationSpan[];
+  /** The page starts inside the node: the words before each, and its page. */
+  starts: { at: number; page: number }[];
+};
+
+function textblockRuns(node: RichNode): Runs {
   let text = "";
   const open = new Map<string, number>();
   const styles: StyleSpan[] = [];
   const links: LinkSpan[] = [];
+  const citations: CitationSpan[] = [];
+  const starts: Runs["starts"] = [];
   let link: { href: string; start: number } | null = null;
+  let citation: { refId: string; start: number } | null = null;
   const closeLink = (at: number) => {
     if (link && at > link.start) links.push({ start: link.start, end: at, quotedText: text.slice(link.start, at), href: link.href });
     link = null;
   };
+  const closeCitation = (at: number) => {
+    if (citation && at > citation.start) {
+      citations.push({ start: citation.start, end: at, refId: citation.refId, quotedText: text.slice(citation.start, at) });
+    }
+    citation = null;
+  };
   const visit = (child: RichNode) => {
+    // A page start adds no words; it says where a page of the PDF begins.
+    if (child.type === "pageStart") {
+      const page = pageOf(child.attrs?.page);
+      if (page) starts.push({ at: text.length, page });
+      return;
+    }
     const piece = inlineText(child);
     // What adds no words (a removed word, a footnote's number) leaves the runs open.
     if (!piece) return;
@@ -169,6 +198,7 @@ function textblockRuns(node: RichNode): { text: string; styles: StyleSpan[]; lin
       }
       open.clear();
       closeLink(text.length);
+      closeCitation(text.length);
       text += piece;
       return;
     }
@@ -189,6 +219,15 @@ function textblockRuns(node: RichNode): { text: string; styles: StyleSpan[]; lin
     } else {
       closeLink(text.length);
     }
+    const refId = child.marks?.find((m) => m.type === "citation")?.attrs?.refId;
+    if (typeof refId === "string") {
+      if (!citation || citation.refId !== refId) {
+        closeCitation(text.length);
+        citation = { refId, start: text.length };
+      }
+    } else {
+      closeCitation(text.length);
+    }
     text += piece;
   };
   for (const child of node.content ?? []) visit(child);
@@ -196,7 +235,40 @@ function textblockRuns(node: RichNode): { text: string; styles: StyleSpan[]; lin
     if (text.length > start) styles.push({ start, end: text.length, style, quotedText: text.slice(start, text.length) });
   }
   closeLink(text.length);
-  return { text, styles, links };
+  closeCitation(text.length);
+  return { text, styles, links, citations, starts };
+}
+
+/** The last page that begins inside a node: its page starts, and the pages
+    that begin at a code block, an equation, or a figure. */
+function lastPageIn(node: RichNode): number | null {
+  let last: number | null = pageOf(node.attrs?.pageStart);
+  if (node.type === "pageStart") last = pageOf(node.attrs?.page) ?? last;
+  for (const child of node.content ?? []) last = lastPageIn(child) ?? last;
+  return last;
+}
+
+/** Each cell of a table and its place in the table's grid: the row, and
+    the column of its first slot, past the slots a cell above holds with
+    its rowspan. */
+function cellPlaces(table: RichNode): Map<RichNode, { row: number; column: number }> {
+  const places = new Map<RichNode, { row: number; column: number }>();
+  const span = (value: unknown) => Math.min(1000, Math.max(1, Math.floor(Number(value)) || 1));
+  // A column, and the last row a cell above holds it to.
+  const heldTo = new Map<number, number>();
+  (table.content ?? []).forEach((tableRow, i) => {
+    const row = i + 1;
+    let column = 1;
+    for (const cell of tableRow.content ?? []) {
+      while ((heldTo.get(column) ?? 0) >= row) column++;
+      places.set(cell, { row, column });
+      const colspan = span(cell.attrs?.colspan);
+      const rowspan = span(cell.attrs?.rowspan);
+      if (rowspan > 1) for (let c = column; c < column + colspan; c++) heldTo.set(c, row + rowspan - 1);
+      column += colspan;
+    }
+  });
+  return places;
 }
 
 function escapeAttr(s: string): string {

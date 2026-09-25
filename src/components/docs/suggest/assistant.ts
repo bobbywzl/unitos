@@ -163,7 +163,8 @@ function land(
       );
     }
     case "insert_blocks": {
-      const block = op.afterBlockId === null ? null : findBlock(tr.doc, op.afterBlockId);
+      // New blocks may follow a paragraph, or an object on its own line.
+      const block = op.afterBlockId === null ? null : findIndexed(tr.doc, op.afterBlockId);
       if (op.afterBlockId !== null && !block) return "changed";
       return (
         (block && clear(block.pos, block.pos + 1)) ??
@@ -319,7 +320,7 @@ function fit(parent: PMNode, content: Fragment): Fragment {
     right after it; with no block, at the document's start. */
 function insertion(doc: PMNode, afterBlockId: string | null, content: Fragment): { pos: number; content: Fragment } | null {
   if (afterBlockId === null) return { pos: 0, content };
-  const block = findBlock(doc, afterBlockId);
+  const block = findIndexed(doc, afterBlockId);
   if (!block) return null;
   const $pos = doc.resolve(block.pos);
   let inner = 0;
