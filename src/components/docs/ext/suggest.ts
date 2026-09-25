@@ -333,10 +333,13 @@ function suggestMark(tr: Transaction, step: AddMarkStep | RemoveMarkStep, id: st
 /** A block changed again keeps the value from before its first change, and
     a change back to it is no suggestion at all. A block a suggestion adds,
     or one inside it, takes the change as it is and stays added (the library
-    would drop its insertion mark for the modification). A block keeps the
-    attributes the edit gave it (`after`), its id and alignment among them:
-    for a change of type the library sets the new type's defaults and only
-    the attributes that differ. */
+    would drop its insertion mark for the modification). For a change of
+    type the library gives the block the new type's defaults, sets only the
+    attributes that differ, and records a default as the value before: the
+    block keeps the attributes the edit gave it (`after`) and its own id, an
+    attribute's change records the block's value before it, and the
+    attributes the new type lacks (a heading's level) are recorded too, so
+    Reject puts them back. */
 function chainBlockChanges(tr: Transaction, before: PMNode, after: PMNode, id: string): void {
   tr.doc.descendants((node, pos) => {
     const fresh = node.marks.filter((m) => isModification(m) && m.attrs.id === id);
@@ -346,17 +349,22 @@ function chainBlockChanges(tr: Transaction, before: PMNode, after: PMNode, id: s
     const $pos = before.resolve(pos);
     let asIs = Boolean(added);
     for (let depth = $pos.depth; depth > 0; depth--) asIs ||= $pos.node(depth).marks.some(isInsertion);
+    const lost = was && was.type !== node.type ? Object.keys(was.attrs).filter((name) => !(name in node.attrs) && was.attrs[name] !== null) : [];
+    const { modification } = node.type.schema.marks;
+    const changes = [...fresh, ...lost.map((attrName) => modification.create({ id, type: "attr", attrName, previousValue: null, newValue: null }))];
     let marks = node.marks;
-    for (const mod of fresh) {
-      const earlier = was?.marks.find((m) => isModification(m) && m.attrs.type === mod.attrs.type && m.attrs.attrName === mod.attrs.attrName);
-      const previousValue: unknown = earlier ? earlier.attrs.previousValue : mod.attrs.previousValue;
-      marks = mod.removeFromSet(marks);
+    for (const mod of changes) {
+      const { type, attrName } = mod.attrs;
+      const earlier = was?.marks.find((m) => isModification(m) && m.attrs.type === type && m.attrs.attrName === attrName);
+      const previousValue: unknown = earlier ? earlier.attrs.previousValue : type === "attr" ? (was?.attrs[String(attrName)] ?? null) : mod.attrs.previousValue;
+      marks = mod.removeFromSet(earlier ? earlier.removeFromSet(marks) : marks);
       if (!asIs && !same(previousValue, mod.attrs.newValue)) {
         marks = mod.type.create({ ...mod.attrs, id: keptId(earlier, id), previousValue }).addToSet(marks);
       }
     }
     const edited = after.nodeAt(pos);
-    tr.setNodeMarkup(pos, undefined, edited?.type === node.type ? edited.attrs : node.attrs, added ? added.addToSet(marks) : marks);
+    const attrs = edited?.type === node.type ? edited.attrs : node.attrs;
+    tr.setNodeMarkup(pos, undefined, was && "blockId" in attrs ? { ...attrs, blockId: was.attrs.blockId } : attrs, added ? added.addToSet(marks) : marks);
     return true;
   });
 }
