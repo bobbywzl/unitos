@@ -289,80 +289,141 @@ function tokens(node: RichNode, ctx: Context): string {
     saves, and the server refuses a save that lacks them. */
 export function deriveBlocks(doc: RichNode): DerivedBlock[] {
   const out: DerivedBlock[] = [];
+  // The PDF page the walk is on: the page of the last page start before it.
+  let page: number | null = null;
+  let tables = 0;
+  const push = (ctx: Context, row: Pick<DerivedBlock, "id" | "type" | "text"> & Partial<DerivedBlock>) => {
+    out.push({
+      id: row.id,
+      type: row.type,
+      text: row.text,
+      html: row.html ?? null,
+      styles: row.styles ?? [],
+      links: row.links ?? [],
+      page: row.page !== undefined ? row.page : page,
+      region: row.region ?? null,
+      mediaId: row.mediaId ?? null,
+      citations: row.citations ?? [],
+      cell: ctx.cell,
+    });
+  };
   const walk = (node: RichNode, ctx: Context) => {
-    // A block a person's suggestion removes is read as removed.
-    if (node.marks?.some((m) => m.type === "deletion")) return;
+    // A block a person's suggestion removes is read as removed; a page that
+    // begins in it still begins.
+    if (node.marks?.some((m) => m.type === "deletion")) {
+      page = lastPageIn(node) ?? page;
+      return;
+    }
     if (INDEXED_NODE_TYPES.has(node.type)) {
       const id = node.attrs?.blockId;
-      if (typeof id !== "string" || !id) return;
+      if (typeof id !== "string" || !id) {
+        page = lastPageIn(node) ?? page;
+        return;
+      }
+      // A page that begins at a code block, an equation, or a figure.
+      const begins = pageOf(node.attrs?.pageStart);
       if (node.type === "image") {
+        page = begins ?? page;
         const src = typeof node.attrs?.src === "string" ? node.attrs.src : "";
         const alt = typeof node.attrs?.alt === "string" ? node.attrs.alt : "";
-        out.push({
+        push(ctx, {
           id,
           type: "FIGURE",
           text: "",
           html: `<figure><img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}"></figure>`,
-          styles: [],
-          links: [],
+        });
+        return;
+      }
+      if (node.type === "figure") {
+        // A figure object: its words are its caption; its media stays in
+        // FigureMedia, and the save copies the html onto the row.
+        page = begins ?? page;
+        const mediaId = typeof node.attrs?.mediaId === "string" ? node.attrs.mediaId : null;
+        push(ctx, {
+          id,
+          type: "FIGURE",
+          text: typeof node.attrs?.caption === "string" ? node.attrs.caption : "",
+          page: pageOf(node.attrs?.page) ?? page,
+          region: parseRegionAttr(node.attrs?.region),
+          mediaId,
         });
         return;
       }
       if (node.type === "horizontalRule") {
-        out.push({ id, type: "SEPARATOR", text: "", html: null, styles: [], links: [] });
+        page = begins ?? page;
+        push(ctx, { id, type: "SEPARATOR", text: "" });
         return;
       }
       if (node.type === "blockMath") {
         // An equation on its own line keeps its TeX.
+        page = begins ?? page;
         const latex = typeof node.attrs?.latex === "string" ? node.attrs.latex : "";
-        out.push({ id, type: "EQUATION", text: latex, html: null, styles: [], links: [] });
+        push(ctx, { id, type: "EQUATION", text: latex });
         return;
       }
-      const { text, styles, links } = textblockRuns(node);
+      const { text, styles, links, citations, starts } = textblockRuns(node);
+      // The row starts on the page of a page start before its first word.
+      const first = starts[0];
+      const startsOn = begins ?? (first && !text.slice(0, first.at).trim() ? first.page : null);
+      const rowPage = startsOn ?? page;
+      page = starts.at(-1)?.page ?? begins ?? page;
       if (node.type === "codeBlock") {
-        out.push({ id, type: "CODE", text, html: null, styles: [], links: [] });
+        push(ctx, { id, type: "CODE", text, page: rowPage });
         return;
       }
       if (node.type === "heading") {
         const level = Math.min(6, Math.max(1, Number(node.attrs?.level) || 1));
-        out.push({ id, type: "HEADING", text, html: `<h${level}${tokens(node, ctx)}>`, styles, links });
+        push(ctx, { id, type: "HEADING", text, html: `<h${level}${tokens(node, ctx)}>`, styles, links, citations, page: rowPage });
         return;
       }
       // A paragraph: the Title style reads as the document's first heading,
       // a list item's paragraph as a list line.
       if (node.attrs?.docStyle === "title") {
-        out.push({ id, type: "HEADING", text, html: `<h1${tokens(node, ctx)}>`, styles, links });
+        push(ctx, { id, type: "HEADING", text, html: `<h1${tokens(node, ctx)}>`, styles, links, citations, page: rowPage });
         return;
       }
       const html = tokens(node, ctx);
-      out.push({
+      push(ctx, {
         id,
         type: ctx.list ? "LIST" : "PARAGRAPH",
         text,
         html: html ? `<p${html}>` : null,
         styles,
         links,
+        citations,
+        page: rowPage,
       });
       return;
     }
-    const next: Context =
-      node.type === "bulletList"
-        ? { ...ctx, list: "bullet" }
-        : node.type === "orderedList"
-          ? { ...ctx, list: "ordered" }
-          : node.type === "taskList"
-            ? { ...ctx, list: "task" }
-            : node.type === "blockquote"
-              ? { ...ctx, quote: true }
-              : node.type === "tableCell" || node.type === "tableHeader"
-                ? { ...ctx, cell: true, list: null }
-                : ctx;
+    let next = ctx;
+    if (node.type === "bulletList") next = { ...ctx, list: "bullet" };
+    else if (node.type === "orderedList") next = { ...ctx, list: "ordered" };
+    else if (node.type === "taskList") next = { ...ctx, list: "task" };
+    else if (node.type === "blockquote") next = { ...ctx, quote: true };
+    else if (node.type === "table") next = { ...ctx, places: cellPlaces(node), table: ++tables };
+    else if (node.type === "tableCell" || node.type === "tableHeader") {
+      const place = ctx.places?.get(node);
+      next = { ...ctx, list: null, cell: place ? { table: ctx.table, row: place.row, column: place.column } : null };
+    }
     for (const child of node.content ?? []) walk(child, next);
   };
   // The assistant's suggestions read as not made yet: their words, blocks,
   // and format changes as before them.
-  for (const node of withoutSuggestions([doc], isAssistantSuggestion)) walk(node, { list: null, quote: false, cell: false });
+  for (const node of withoutSuggestions([doc], isAssistantSuggestion)) {
+    walk(node, { list: null, quote: false, cell: null, places: null, table: 0 });
+  }
   return out;
+}
+
+/** A figure object's region attribute (a JSON string) as the row stores
+    it; null when it is not JSON. */
+function parseRegionAttr(value: unknown): unknown | null {
+  if (typeof value !== "string") return null;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 /** Every indexed node of the rich text holds a blockId, and no two share one. */

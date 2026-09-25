@@ -50,7 +50,9 @@ import type { PageMark } from "@/components/reader/page-block";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { ensureBlockIds, isOlderBlankDocument, richTextFromBlocks } from "@/lib/docs/blocks";
 import { readPageSetup, type RichNode } from "@/lib/docs/schema";
+import { importShared } from "@/lib/docs/server";
 import { syncRichText } from "@/lib/docs/sync";
+import type { Imported } from "@/components/docs/docs-editor";
 import { PaneDocumentSelect, ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
 import { Workspace } from "@/components/reader/workspace";
 import { VideoPane } from "@/components/video/video-pane";
@@ -72,6 +74,15 @@ import { coreBlocks } from "@/lib/anchors/layer";
 import { READING_LINE_PX, type BlockPosition } from "@/lib/reading-position";
 
 export const dynamic = "force-dynamic";
+
+/** An import changed since it was imported or last re-parsed; suggestions
+    count as changes. */
+const editedSinceImport = (d: { importRev: number | null; richTextRev: number }): boolean =>
+  d.importRev !== null && d.richTextRev > d.importRev;
+
+// A split part of a long web page carries its part in its address's hash
+// (lib/parse/ingest.ts SPLIT_URL_MARKER); its import line links the page.
+const SPLIT_PART = /#unitos-part-\d+$/;
 
 // Split view: reader left, notes drawer right (SPEC.md §6). The reader itself
 // shows one document (Normal) or two panes (Side by Side, Top and Bottom);
@@ -107,6 +118,8 @@ export default async function NotebookPage(props: {
               handwritten: true,
               figureRenderAt: true,
               figureRenderError: true,
+              richTextRev: true,
+              importRev: true,
               video: { select: { id: true } },
             },
           },
@@ -162,6 +175,8 @@ export default async function NotebookPage(props: {
     figureRenderAt: nd.document.figureRenderAt?.toISOString() ?? null,
     figureRenderError: nd.document.figureRenderError,
     folderId: nd.folderId,
+    // Re-parse of an edited import asks first (document-bar.tsx).
+    importEdited: editedSinceImport(nd.document),
   }));
   const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
   // The reader view is a per-visit choice carried in the URL; a fresh open is Normal.
@@ -220,6 +235,37 @@ export default async function NotebookPage(props: {
         include: { blocks: { orderBy: { order: "asc" } }, video: true },
       });
       if (!document) return null;
+    }
+    // An import (SPEC.md §29): rich text made from a PDF, a web page, or a
+    // Markdown or text file. The page editor draws its import line, its
+    // figure objects from their media, and its page starts by the PDF's own
+    // page labels; Editing is off while a project another account owns
+    // holds it too.
+    let imported: Imported | null = null;
+    if (document.richText !== null && document.importRev !== null) {
+      const [media, shared] = await Promise.all([
+        db.figureMedia.findMany({
+          where: { documentId },
+          select: { id: true, html: true, caption: true, page: true, region: true },
+        }),
+        importShared(documentId),
+      ]);
+      const pdf = pdfIds.has(documentId);
+      const labels = document.pageLabels;
+      const pageLabels =
+        Array.isArray(labels) && labels.every((label) => typeof label === "string") ? (labels as string[]) : null;
+      const lastPage = document.blocks.reduce((n, b) => Math.max(n, b.page ?? 0), 0);
+      imported = {
+        kind: pdf ? "pdf" : document.fileHash !== null ? "markdown" : "url",
+        origin: document.sourceUrl?.replace(SPLIT_PART, "") ?? "",
+        pages: pdf ? (pageLabels?.length ?? (lastPage || null)) : null,
+        edited: editedSinceImport(document),
+        shared,
+        figures: Object.fromEntries(
+          media.map((m) => [m.id, { html: m.html, caption: m.caption, page: m.page, region: m.region }]),
+        ),
+        pageLabels,
+      };
     }
     const blockById = new Map(document.blocks.map((b) => [b.id, b]));
     // Video anchors are time ranges, not text spans: they skip the text
@@ -893,6 +939,7 @@ export default async function NotebookPage(props: {
 
     return {
       document,
+      imported,
       summaries,
       distillations,
       extractions,
@@ -1285,6 +1332,7 @@ export default async function NotebookPage(props: {
                   doc: pane.document.richText as unknown as RichNode,
                   rev: pane.document.richTextRev,
                   pageSetup: readPageSetup(pane.document.pageSetup),
+                  imported: pane.imported,
                 }
               : null
           }

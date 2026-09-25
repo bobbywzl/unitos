@@ -41,6 +41,40 @@ export async function keepCurrentVersion(documentId: string, name: string | null
   });
 }
 
+/** In a transaction: keep the stored rich text as a version named `name`
+    (an import's "Imported", a re-parse's "Before re-parse"). It locks the
+    document's row first, so no save slips in before the text is kept. A
+    version already kept at the stored revision takes the name only when it
+    has none: a version the reader named keeps its name. Nothing is kept
+    from a document with no rich text or no words. */
+export async function keepNamedVersion(tx: Prisma.TransactionClient, documentId: string, name: string): Promise<void> {
+  const [stored] = await tx.$queryRaw<
+    { richText: unknown; richTextRev: number; richTextSavedAt: Date | null; richTextSavedBy: string | null; createdAt: Date }[]
+  >`
+    SELECT "richText", "richTextRev", "richTextSavedAt", "richTextSavedBy", "createdAt"
+    FROM "Document" WHERE "id" = ${documentId} FOR UPDATE`;
+  const text = (stored?.richText ?? null) as RichNode | null;
+  if (!stored || !text || isEmptyRichText(text)) return;
+  const kept = await tx.documentVersion.findUnique({
+    where: { documentId_rev: { documentId, rev: stored.richTextRev } },
+    select: { id: true, name: true },
+  });
+  if (kept) {
+    if (!kept.name) await tx.documentVersion.update({ where: { id: kept.id }, data: { name } });
+    return;
+  }
+  await tx.documentVersion.create({
+    data: {
+      documentId,
+      rev: stored.richTextRev,
+      richText: text as Prisma.InputJsonValue,
+      userId: stored.richTextSavedBy,
+      name,
+      savedAt: stored.richTextSavedAt ?? stored.createdAt,
+    },
+  });
+}
+
 /** Before the assistant's suggestions over the whole document or more than
     one window: the live text as a version named "Before the assistant's
     suggestions"; a version the reader named keeps its name. */

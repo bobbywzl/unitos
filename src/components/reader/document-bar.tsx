@@ -67,13 +67,32 @@ export type AttachedDocument = {
   // The folder the document sits in within this project (SPEC.md §6); null
   // = the project itself.
   folderId: string | null;
+  // An import edited since it was imported (SPEC.md §29): Re-parse asks
+  // before it replaces the edits. Absent: the server's 409 "edited" asks.
+  importEdited?: boolean;
 };
 type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 // Wire format from /api/documents: a stage event per line, then one terminal line.
+// reason "edited": a re-parse would replace an import's edits (SPEC.md §29).
 type IngestEvent =
   | { stage: string; detail?: string }
   | { id: string; title: string; deduped: boolean }
-  | { error: string };
+  | { error: string; reason?: string };
+
+// The re-parse route's answer when a re-parse would replace an import's
+// edits: the document menu shows it as its question, never as an error.
+class EditedImportAnswer extends Error {}
+
+// The save stage's detail says the size guard kept a block document
+// (lib/parse/ingest.ts saveDetail): too long for the page editor.
+function keptBlockDocument(detail: string): boolean {
+  if (!detail.startsWith("{")) return false;
+  try {
+    return (JSON.parse(detail) as { blockDocument?: unknown }).blockDocument === "size";
+  } catch {
+    return false;
+  }
+}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -260,6 +279,7 @@ export function DocumentBar({
     setListOpen(false);
     setPillMenu(null);
     setMoveChoice(null);
+    setEditedAsk(null);
   }
   function scheduleCloseList() {
     if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
@@ -399,27 +419,60 @@ export function DocumentBar({
   // Re-parse on a PDF asks which shape first (SPEC.md §16): the row folds
   // open to the two choices for this document.
   const [reparseChoice, setReparseChoice] = useState<string | null>(null);
+  // Re-parse on an import edited since it was imported asks first (SPEC.md
+  // §29): the row folds open to the question, with the shape a PDF's choice
+  // picked.
+  const [editedAsk, setEditedAsk] = useState<{ id: string; as?: "article" | "handwritten" } | null>(null);
+
+  // The bar's passing notice, for `ms`.
+  function showNotice(text: string, ms = 4000) {
+    setNotice(text);
+    setTimeout(() => setNotice(null), ms);
+  }
+
+  // The question comes back where Re-parse is: the document's actions open
+  // with it, when the server answers that the import was edited.
+  function askEdited(doc: AttachedDocument, as?: "article" | "handwritten") {
+    setReparseChoice(null);
+    setMoveChoice(null);
+    setEditedAsk({ id: doc.id, as });
+    setPillMenu(doc.id);
+    setListOpen(true);
+  }
 
   // Manual re-parse: in the document's own shape, or as the shape the reader
-  // chose for a PDF (`as`). The progress card shows, errors show.
-  async function reparse(doc: AttachedDocument, as?: "article" | "handwritten") {
+  // chose for a PDF (`as`). The progress card shows, errors show; an import
+  // edited since it was imported asks first, and replaceEdits is the
+  // reader's yes.
+  async function reparse(doc: AttachedDocument, as?: "article" | "handwritten", replaceEdits = false) {
     setError(null);
     // The figure's place in the reader moves while the re-parse runs; the
     // refresh brings the outcome the document stores.
     const figures = activeGap && doc.id === active?.id;
     if (figures) setFigureCapture({ documentId: doc.id, status: "running", error: null });
     try {
-      await runIngest(doc.title, doc.sourceUrl ? "url" : "pdf", () =>
-        fetch(`/api/documents/${doc.id}/reparse`, {
-          method: "POST",
-          ...(as
-            ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ as }) }
-            : {}),
-        }),
-      );
+      const body = { ...(as ? { as } : {}), ...(replaceEdits ? { replaceEdits } : {}) };
+      const res = await fetch(`/api/documents/${doc.id}/reparse`, {
+        method: "POST",
+        ...(as || replaceEdits
+          ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+          : {}),
+      });
+      if (!res.ok) {
+        const detail = await readJson<{ error?: string; reason?: string }>(res);
+        if (detail?.reason === "edited") throw new EditedImportAnswer(detail.error);
+        throw new Error(detail?.error ?? statusMessage(t, res.status));
+      }
+      const result = await runIngest(doc.title, doc.sourceUrl ? "url" : "pdf", async () => res);
       router.refresh();
+      if (result.blockDocument) showNotice(t("panes.uploadBlockDocument"), 8000);
       if (figures) setFigureCapture(null);
     } catch (err) {
+      if (err instanceof EditedImportAnswer) {
+        if (figures) setFigureCapture(null);
+        askEdited(doc, as);
+        return;
+      }
       const message = err instanceof Error ? err.message : t("panes.reparseFailed");
       setError(message);
       if (figures) setFigureCapture({ documentId: doc.id, status: "failed", error: message });
@@ -451,8 +504,10 @@ export function DocumentBar({
     };
     try {
       const res = await fetch(`/api/documents/${doc.id}/reparse`, { method: "POST" });
-      // 409: another tab or a reload is already running this re-parse; its
-      // outcome reaches this tab with the refresh.
+      // 409: another tab or a reload is already running this re-parse, and
+      // its outcome reaches this tab with the refresh; or the document is an
+      // import edited since it was imported, whose edits a silent run never
+      // replaces (SPEC.md §29).
       if (res.status === 409) {
         if (figures) setFigureCapture(null);
         return;
@@ -468,6 +523,11 @@ export function DocumentBar({
         if ("stage" in event) {
           if (event.stage === "save" && event.detail) saveDetail = event.detail;
         } else result = event;
+      }
+      // Edited while the parse ran: nothing was written.
+      if (result && "error" in result && result.reason === "edited") {
+        if (figures) setFigureCapture(null);
+        return;
       }
       if (result && "id" in result) {
         router.refresh();
@@ -494,6 +554,8 @@ export function DocumentBar({
   useEffect(() => {
     if (active === null || phase !== null) return;
     if (!activeNeedsCapture) return;
+    // An edited import: the run would stop at the server's 409 (SPEC.md §29).
+    if (active.importEdited) return;
     if (reparseAttempted.current.has(active.id)) return;
     if (isOffline() || !reparseDue(active.id)) {
       // A figure run held back: the figure's place says so, with Try again.
@@ -520,11 +582,13 @@ export function DocumentBar({
   // and resolves with the terminal result. Shared by PDF upload and URL ingestion below.
   // send gets an emit callback so a chunked upload can report progress before the
   // server response starts streaming.
+  // blockDocument: the size guard kept the document out of the page editor
+  // (SPEC.md §29); the bar says so once the document opens.
   async function runIngest(
     fileLabel: string,
     kind: "pdf" | "url" | "video" | "youtube" | "media" | "drive",
     send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
-  ): Promise<{ id: string; title: string; deduped: boolean }> {
+  ): Promise<{ id: string; title: string; deduped: boolean; blockDocument: boolean }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });
     const emit = (stage: string, detail?: string) =>
       setPhase((p) => (p ? { ...p, steps: advanceIngestSteps(p.steps, stage, detail) } : p));
@@ -534,19 +598,22 @@ export function DocumentBar({
       throw new Error(detail?.error ?? statusMessage(t, res.status));
     }
     let result: IngestEvent | null = null;
+    let blockDocument = false;
     for await (const event of readNdjson<IngestEvent>(res)) {
       if ("stage" in event) {
         emit(event.stage, event.detail);
+        if (event.stage === "save" && event.detail) blockDocument = keptBlockDocument(event.detail);
       } else {
         result = event;
       }
     }
+    if (result && "error" in result && result.reason === "edited") throw new EditedImportAnswer(result.error);
     if (!result || "error" in result) {
       throw new Error(result && "error" in result ? result.error : t("panes.uploadCutOff"));
     }
     setPhase((p) => (p ? { ...p, steps: completeIngestSteps(p.steps) } : p));
     await sleep(250); // let the last checkmark register before the pill clears
-    return result;
+    return { ...result, blockDocument };
   }
 
   // Every add opens the upload assistant (SPEC.md §15): the box reviews a URL
@@ -662,6 +729,7 @@ export function DocumentBar({
       );
       setDialog(false);
       openAdded(result.id);
+      if (result.blockDocument) showNotice(t("panes.uploadBlockDocument"), 8000);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
@@ -805,6 +873,7 @@ export function DocumentBar({
       );
       setDialog(false);
       openAdded(result.id);
+      if (result.blockDocument) showNotice(t("panes.uploadBlockDocument"), 8000);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
@@ -950,7 +1019,13 @@ export function DocumentBar({
                 // A PDF asks which shape first: the row opens
                 // the two choices instead of running.
                 if (d.pdf && !d.hasVideo) {
+                  setEditedAsk(null);
                   setReparseChoice(reparseChoice === d.id ? null : d.id);
+                  return;
+                }
+                // An edited import asks before its edits go.
+                if (d.importEdited) {
+                  setEditedAsk(editedAsk?.id === d.id ? null : { id: d.id });
                   return;
                 }
                 closeList();
@@ -958,7 +1033,9 @@ export function DocumentBar({
               }}
               data-track="document-reparse"
               disabled={phase !== null || transcribing !== null || !canReparse(d)}
-              aria-expanded={d.pdf && !d.hasVideo ? reparseChoice === d.id : undefined}
+              aria-expanded={
+                d.pdf && !d.hasVideo ? reparseChoice === d.id : d.importEdited ? editedAsk?.id === d.id : undefined
+              }
               className={`${rowAction} disabled:opacity-40`}
               data-tip={
                 d.hasVideo
@@ -981,6 +1058,10 @@ export function DocumentBar({
                     key={as}
                     onClick={() => {
                       setReparseChoice(null);
+                      if (d.importEdited) {
+                        setEditedAsk({ id: d.id, as });
+                        return;
+                      }
                       closeList();
                       void reparse(d, as);
                     }}
@@ -1000,6 +1081,36 @@ export function DocumentBar({
                   </button>
                 );
               })}
+            </div>
+          )}
+          {/* An import edited since it was imported (SPEC.md §29): the
+              re-parse replaces the edits only on the reader's yes, and
+              Version history keeps them either way. */}
+          {canEdit && editedAsk?.id === d.id && (
+            <div role="group" className="flex flex-col gap-1.5 border-y border-line bg-sand-50/60 px-4 py-2">
+              <p className="text-[11.5px] leading-snug text-sand-600">{t("panes.reparseEditedAsk")}</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => {
+                    const shape = editedAsk.as;
+                    setEditedAsk(null);
+                    closeList();
+                    void reparse(d, shape, true);
+                  }}
+                  data-track="document-reparse-replace"
+                  disabled={phase !== null || transcribing !== null}
+                  className="rounded-full bg-clay px-3 py-1 text-[12px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                >
+                  {t("panes.reparseReplaceEdits")}
+                </button>
+                <button
+                  onClick={() => setEditedAsk(null)}
+                  data-track="document-reparse-keep"
+                  className="rounded-full px-3 py-1 text-[12px] text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  {t("panes.reparseKeepEdits")}
+                </button>
+              </div>
             </div>
           )}
           {canEdit && folders.length > 0 && (
