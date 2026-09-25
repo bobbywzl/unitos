@@ -259,6 +259,7 @@ export default async function NotebookPage(props: {
         kind: pdf ? "pdf" : document.fileHash !== null ? "markdown" : "url",
         origin: document.sourceUrl?.replace(SPLIT_PART, "") ?? "",
         pages: pdf ? (pageLabels?.length ?? (lastPage || null)) : null,
+        importRev: document.importRev,
         edited: editedSinceImport(document),
         shared,
         figures: Object.fromEntries(

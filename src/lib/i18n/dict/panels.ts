@@ -54,6 +54,9 @@ const en = {
   kindBlockRemove: "Paragraph removed",
   kindFormat: "Format",
   kindStyle: "Style",
+  // A re-parse of an import (SPEC.md §29): one row for the whole document.
+  kindReparse: "Re-parse",
+  reparseKeptText: "Version history keeps the text from before the re-parse.",
   wasLabel: "was",
   nowLabel: "now",
   revert: "Revert",
@@ -160,6 +163,8 @@ const zh: Record<keyof typeof en, string> = {
   kindBlockRemove: "已移除段落",
   kindFormat: "格式",
   kindStyle: "样式",
+  kindReparse: "重新解析",
+  reparseKeptText: "版本历史记录保留了重新解析之前的文本。",
   wasLabel: "改前",
   nowLabel: "改后",
   revert: "还原",

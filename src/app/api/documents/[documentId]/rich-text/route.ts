@@ -5,6 +5,7 @@ import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { hasBlockIds } from "@/lib/docs/blocks";
 import { MAX_RICH_TEXT_CHARS, pageSetupSchema, richDocSchema, sanitizeRichText } from "@/lib/docs/schema";
+import { importShared } from "@/lib/docs/server";
 import { syncRichText } from "@/lib/docs/sync";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { serverT } from "@/lib/i18n/server";
@@ -18,10 +19,12 @@ const saveSchema = z.object({
 
 const setupSchema = z.object({ pageSetup: pageSetupSchema });
 
-// A blank document's rich text (SPEC.md §29). GET reads it with its revision;
-// PUT saves the editor's copy, which must start from the stored revision —
-// an older one answers 409 with the stored copy, never a silent overwrite;
-// PATCH sets the page setup.
+// A document's rich text, a blank document's or an import's (SPEC.md §29).
+// GET reads it with its revision and, for an import, the revision the import
+// or its last re-parse stored (importRev); PUT saves the editor's copy, which
+// must start from the stored revision — an older one answers 409 with the
+// stored copy, never a silent overwrite — and refuses an import shared across
+// accounts (403); PATCH sets the page setup.
 export async function GET(_req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
   const { documentId } = await ctx.params;
@@ -29,10 +32,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ documentId: st
   if (access instanceof NextResponse) return access;
   const document = await db.document.findUnique({
     where: { id: documentId },
-    select: { richText: true, richTextRev: true, pageSetup: true },
+    select: { richText: true, richTextRev: true, pageSetup: true, importRev: true },
   });
   if (!document?.richText) return NextResponse.json({ error: t("api.notBlankDocument") }, { status: 404 });
-  return NextResponse.json({ richText: document.richText, rev: document.richTextRev, pageSetup: document.pageSetup });
+  return NextResponse.json({
+    richText: document.richText,
+    rev: document.richTextRev,
+    pageSetup: document.pageSetup,
+    importRev: document.importRev,
+  });
 }
 
 export async function PUT(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
@@ -40,6 +48,9 @@ export async function PUT(req: Request, ctx: { params: Promise<{ documentId: str
   const { documentId } = await ctx.params;
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
+  if (await importShared(documentId)) {
+    return NextResponse.json({ error: t("api.importShared"), reason: "shared" }, { status: 403 });
+  }
   const length = Number(req.headers.get("content-length") ?? 0);
   if (length > MAX_RICH_TEXT_CHARS) {
     return NextResponse.json({ error: t("api.richTextTooLarge") }, { status: 413 });
@@ -79,6 +90,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: s
   const { documentId } = await ctx.params;
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
+  if (await importShared(documentId)) {
+    return NextResponse.json({ error: t("api.importShared"), reason: "shared" }, { status: 403 });
+  }
   const { data, error } = await parseBody(req, setupSchema);
   if (error) return error;
   const document = await db.document.findUnique({ where: { id: documentId }, select: { richText: true } });

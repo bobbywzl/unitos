@@ -170,6 +170,10 @@ const en = {
   reparseAsArticle: "Computer text",
   reparseAsArticleTitle: "Read the PDF's text into blocks with the current parser",
   reparseCurrentShape: "current",
+  // Re-parse on an import edited since it was imported (SPEC.md §29).
+  reparseEditedAsk: "Re-parse replaces the edits since the import. Version history keeps them.",
+  reparseReplaceEdits: "Replace the edits",
+  reparseKeepEdits: "Keep the edits",
 
   // Handwritten documents (SPEC.md §16): pages, conversion, Circle & ask.
   circleAsk: "Circle & ask",
@@ -340,6 +344,7 @@ const en = {
   historySectionRemove: "removed a section",
   historyDocumentDetach: "detached a document",
   historyNoteMerge: "merged notes into one",
+  historyReparse: "re-parsed a document",
 
   // Graph (graph-overlay.tsx, graph-view.tsx)
   graph: "Graph",
@@ -419,6 +424,8 @@ const en = {
   detailMediaLost: "{n} of {total} images and videos on the page not loaded: {names}",
   uploadMediaOk: "Every image and video on the page loaded ({n}).",
   uploadEveryMediaLoaded: "every image and video on the page loaded ({n})",
+  // The size guard kept an import out of the page editor (SPEC.md §29).
+  uploadBlockDocument: "Too long for the page editor, so it opens in the reader instead.",
   // The document bar, after the automatic re-parse (document-bar.tsx)
   reparseCaptionsWithoutFigure: "No figure loaded for {labels} after the re-parse.",
   reparseMediaLost: "Not loaded from the page after the re-parse: {names}.",
@@ -589,6 +596,9 @@ const zh: Record<keyof typeof en, string> = {
   reparseAsArticle: "电脑文本",
   reparseAsArticleTitle: "用当前解析器把 PDF 的文本读成块",
   reparseCurrentShape: "当前",
+  reparseEditedAsk: "重新解析会替换导入后的编辑。版本历史记录会保留它们。",
+  reparseReplaceEdits: "替换这些编辑",
+  reparseKeepEdits: "保留这些编辑",
 
   circleAsk: "圈选并提问",
   pageDrawHint: "按住鼠标在页面上圈选一处——即可提问、解释、评论，或选颜色圈选高亮",
@@ -741,6 +751,7 @@ const zh: Record<keyof typeof en, string> = {
   historySectionRemove: "删除了一个章节",
   historyDocumentDetach: "移出了一个文档",
   historyNoteMerge: "把几条笔记合并为一条",
+  historyReparse: "重新解析了一个文档",
 
   graph: "图谱",
   graphTitle: "项目图谱：文档与它们之间的链接",
@@ -804,6 +815,7 @@ const zh: Record<keyof typeof en, string> = {
   detailMediaLost: "页面上 {total} 个图片和视频中有 {n} 个没有加载：{names}",
   uploadMediaOk: "页面上的每个图片和视频都已加载（{n} 个）。",
   uploadEveryMediaLoaded: "页面上的每个图片和视频都已加载（{n} 个）",
+  uploadBlockDocument: "内容太长，无法在页面编辑器中打开，改为在阅读器中打开。",
   reparseCaptionsWithoutFigure: "重新解析后，{labels} 没有加载插图。",
   reparseMediaLost: "重新解析后，页面上没有加载：{names}。",
   reparseRenderFailed: "浏览器渲染失败：{reason}",

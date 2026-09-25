@@ -47,15 +47,17 @@ const FONTS_LINK_ID = "unitos-docs-fonts";
 
 /** An import (SPEC.md §29): a document made from a PDF, a web page, or a
     Markdown or text file, as the page sends it. origin: the address, or ""
-    for an uploaded file; pages: a PDF's page count; edited: changed since
-    the import (richTextRev > importRev); shared: attached to a project
-    another account owns, so Editing and Suggesting are off; figures: the
-    media of its figure objects, by id; pageLabels: the PDF's own names for
-    its pages. */
+    for an uploaded file; pages: a PDF's page count; importRev: the revision
+    the import or its last re-parse stored (a re-parse builds the page
+    editor anew); edited: changed since then (richTextRev > importRev);
+    shared: attached to a project another account owns, so Editing and
+    Suggesting are off; figures: the media of its figure objects, by id;
+    pageLabels: the PDF's own names for its pages. */
 export type Imported = {
   kind: "pdf" | "url" | "markdown";
   origin: string;
   pages: number | null;
+  importRev: number;
   edited: boolean;
   shared: boolean;
   figures: Record<string, FigureMediaView>;

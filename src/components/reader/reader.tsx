@@ -1244,6 +1244,9 @@ export function Reader({
     return (
       <DocsFrameContext.Provider value={{ title, pageSetup: richText.pageSetup }}>
         <DocsEditor
+          // A re-parse of an import stores new text, figures, and page
+          // labels: the page editor is built anew on them, never patched.
+          key={richText.imported ? `import:${richText.imported.importRev}` : "blank"}
           documentId={documentId}
           notebookId={richText.notebookId}
           documents={richText.documents}

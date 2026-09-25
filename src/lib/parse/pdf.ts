@@ -2920,7 +2920,6 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   }
 
   segments = mergeAcrossPages(fused);
-  resolveContentsLinks(segments);
 
   // A long title wraps across layout lines: consecutive equal-size HEADING
   // segments at the top of page 0 are one title, not several headings.
@@ -2959,6 +2958,12 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   // would show it twice.
   if (title && segments[0]?.type === "HEADING" && segments[0].text === title) segments = segments.slice(1);
 
+  // The segments are the blocks now, in their order: a contents entry links
+  // to its heading by that order. Resolved before the title merge and the
+  // title's removal, every link pointed past its heading.
+  segments = segments.filter((s) => s.text.trim().length > 0 || (s.type === "FIGURE" && s.region));
+  resolveContentsLinks(segments);
+
   const blocks: ParsedBlock[] = segments.map((s) => {
     const { styles, links } = spansFromRuns(s.text, s.runs, {
       skipBold: s.type === "HEADING",
@@ -2979,10 +2984,7 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     return block;
   });
 
-  const parsed: PdfParse = {
-    title,
-    blocks: blocks.filter((b) => b.text.trim().length > 0 || (b.type === "FIGURE" && b.region)),
-  };
+  const parsed: PdfParse = { title, blocks };
   if (pageWidths.length > 0) parsed.pageSize = { width: points(pageWidths[0]), height: points(pageHeights[0]) };
   const labels = pageLabelsOf(await pdf.getPageLabels().catch(() => null), pdf.numPages);
   if (labels) parsed.pageLabels = labels;

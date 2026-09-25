@@ -275,7 +275,9 @@ export type HistoryEntry = {
     | "NOTE_REMOVE"
     | "SECTION_REMOVE"
     | "DOCUMENT_DETACH"
-    | "NOTE_MERGE";
+    | "NOTE_MERGE"
+    // A re-parse of an import (SPEC.md §29): one entry, never one per paragraph.
+    | "REPARSE";
   // A small edit (lib/history/trivial.ts): a typo fixed, a style toggled.
   // The panel folds a run of them into one row.
   trivial?: boolean;
@@ -451,10 +453,11 @@ export type AssistantPlan = {
 };
 
 /** One row of the Edits tab. TEXT_EDIT rows can revert (PATCH the block back
-    to `before`); link rows describe the link via meta. */
+    to `before`); link rows describe the link via meta; a REPARSE row is a
+    re-parse of an import, one row for the whole document (SPEC.md §29). */
 export type EditItem = {
   id: string;
-  kind: "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE" | "BLOCK_ADD" | "BLOCK_REMOVE" | "FORMAT" | "STYLE";
+  kind: "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE" | "BLOCK_ADD" | "BLOCK_REMOVE" | "FORMAT" | "STYLE" | "REPARSE";
   blockId: string | null;
   before: string | null;
   after: string | null;

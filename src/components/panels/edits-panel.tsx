@@ -19,6 +19,7 @@ const KIND_KEY: Record<EditItem["kind"], TKey> = {
   BLOCK_REMOVE: "panels.kindBlockRemove",
   FORMAT: "panels.kindFormat",
   STYLE: "panels.kindStyle",
+  REPARSE: "panels.kindReparse",
 };
 
 // FORMAT and STYLE meta values are wire data; these map them to display labels.
@@ -204,6 +205,8 @@ function EditCard({
         <p className="mt-2 text-[13px] text-sand-600">
           {formatLabel(t, edit.meta?.from)} → {formatLabel(t, edit.meta?.to)}
         </p>
+      ) : edit.kind === "REPARSE" ? (
+        <p className="mt-2 text-[13px] text-sand-600">{t("panels.reparseKeptText")}</p>
       ) : edit.kind === "STYLE" ? (
         <p className="mt-2 line-clamp-2 text-[13px] text-sand-600">
           {t(edit.meta?.on === false ? "panels.styleRemoved" : "panels.styleApplied", {
