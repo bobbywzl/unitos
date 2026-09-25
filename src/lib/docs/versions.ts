@@ -41,6 +41,16 @@ export async function keepCurrentVersion(documentId: string, name: string | null
   });
 }
 
+/** Before the assistant's suggestions over the whole document or more than
+    one window: the live text as a version named "Before the assistant's
+    suggestions"; a version the reader named keeps its name. */
+export async function keepVersionBeforeSuggestions(documentId: string, name: string): Promise<void> {
+  const version = await keepCurrentVersion(documentId, null);
+  if (version && version !== "empty" && !version.name) {
+    await db.documentVersion.update({ where: { id: version.id }, data: { name } });
+  }
+}
+
 /** In a save's transaction, under the document's lock, before the save: keep
     the stored text as a version when a new sitting starts (the last save is
     10 minutes old or more), or when the newest version, else the first edit,

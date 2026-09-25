@@ -16,8 +16,12 @@ import {
 } from "@/lib/conversation";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { db } from "@/lib/db";
-import { MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { MAX_OUTPUT_TOKENS, SUGGEST_MAX_NEW_CHARS } from "@/lib/derive/config";
+import { runSuggest, suggestDocument } from "@/lib/derive/suggest";
 import { svgChartCall } from "@/lib/derive/svg-chart";
+import type { SuggestResult } from "@/lib/docs/assistant-suggestions";
+import { scopeOf, takesSuggestions, windowsOf, wordsScope, type SuggestScope } from "@/lib/docs/suggest-ops";
+import { keepVersionBeforeSuggestions } from "@/lib/docs/versions";
 import {
   annotationsSection,
   documentPrefix,
@@ -30,15 +34,16 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { actionsSchema, enrichActions } from "@/lib/assistant/plan";
+import { actionsSchema, enrichActions, type RawAction } from "@/lib/assistant/plan";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
+import { SUGGEST_COMMANDS, type SuggestCommand } from "@/lib/prompts/suggest";
 import { parseBody } from "@/lib/validate";
 import { ultraActive } from "@/lib/tiers";
 import { formatTimeRange, regionSchema } from "@/lib/video/types";
-import type { AssistantPlan } from "@/lib/types";
+import type { AssistantAction, AssistantPlan } from "@/lib/types";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
 
-export const maxDuration = 120;
+export const maxDuration = 180;
 
 // The assistant as an actor: a command (typed or spoken) becomes a plan of
 // actions over the app's own tools. The plan is returned, never executed here —
@@ -111,6 +116,10 @@ const requestSchema = z.object({
   // tool's annotation; the selection is its sources; the turns persist on
   // Note.conversation, never as a conversation note of their own.
   toolNoteId: z.string().optional(),
+  // A command chip on selected words (SPEC.md §29): the assistant's
+  // suggestions run with the chip's command and no chat model; `command` is
+  // the chip's label, stored as the reader's message.
+  suggestCommand: z.enum(Object.keys(SUGGEST_COMMANDS) as [SuggestCommand, ...SuggestCommand[]]).optional(),
 });
 
 // The matches (SPEC.md §7): the passages across the document that deal
@@ -145,11 +154,12 @@ export async function POST(req: Request) {
 }
 
 async function handle(req: Request, t: TFunc) {
-  if (!(await featureConfigured("act"))) {
-    return NextResponse.json({ error: t("api.assistantNeedsKey") }, { status: 503 });
-  }
   const { data, error } = await parseBody(req, requestSchema);
   if (error) return error;
+  const chip = data.suggestCommand;
+  if (!(await featureConfigured(chip ? "suggest" : "act"))) {
+    return NextResponse.json({ error: t(chip ? "api.suggestNeedsKey" : "api.assistantNeedsKey") }, { status: 503 });
+  }
   const access = await notebookAccess(data.notebookId, "editor");
   if (access instanceof NextResponse) return access;
   const user = access.user;
@@ -254,6 +264,11 @@ async function handle(req: Request, t: TFunc) {
   if (anchorInput && (!anchor || !anchored)) {
     return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
   }
+  // The assistant's suggestions (SPEC.md §29) change a document with rich
+  // text; a chip changes the selected words.
+  const richText = takesSuggestions(document);
+  if (chip && !richText) return NextResponse.json({ error: t("api.suggestNeedsRichText") }, { status: 400 });
+  if (chip && passage.length === 0) return NextResponse.json({ error: t("api.anchorMissing") }, { status: 400 });
   if (anchor && anchored && layer === "core") {
     selectionBlock = textSelectionBlock(anchor.blockId, anchored.anchoredText, true);
   } else if (anchor && anchored) {
@@ -342,9 +357,10 @@ async function handle(req: Request, t: TFunc) {
   // frame or an SVG chart goes to the model that reads it, without the web.
   const svgChart = svgSource ? await svgChartCall() : null;
   const web = data.web === true && !attachedImage && !svgChart;
+  const lang = await currentLang();
   const userPrompt = actPrompt({
     profile,
-    lang: await currentLang(),
+    lang,
     selectionBlock,
     toolBlock,
     web,
@@ -356,6 +372,7 @@ async function handle(req: Request, t: TFunc) {
       .map((n) => ({ sectionTitle: n.section.title, content: n.content })),
     history,
     command: data.command,
+    richText,
   });
 
   const messages: ModelMessage[] = [
@@ -379,25 +396,28 @@ async function handle(req: Request, t: TFunc) {
   // a turn with the web on to WEB_SEARCH_MODEL, with its provider's search.
   const chatCall = await featureCall(web ? "web" : attachedImage ? "vision" : "act", thinkingEffort(data.thinking));
   const chat = svgChart ?? chatCall;
-  const result = await callForJson({
-    model: chat.model,
-    messages,
-    maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
-    providerOptions: chat.providerOptions,
-    schema: planSchema,
-    label: "assistant:act",
-    usage: { userId: user.id, feature: "act", model: chat.modelId },
-    // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
-    // model call, not just the response the client would have read.
-    abortSignal: req.signal,
-    ...(web
-      ? {
-          tools: { [WEB_SEARCH_TOOL]: webSearchTool(chatCall.modelId) },
-          stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
-          toolCallUsd: webSearchUsd(chatCall.modelId),
-        }
-      : {}),
-  });
+  // A chip asks the chat model nothing: its command is fixed.
+  const result = chip
+    ? { ok: true as const, data: { reply: null, actions: [] as RawAction[] } }
+    : await callForJson({
+        model: chat.model,
+        messages,
+        maxOutputTokens: MAX_OUTPUT_TOKENS.SYNTHESIS,
+        providerOptions: chat.providerOptions,
+        schema: planSchema,
+        label: "assistant:act",
+        usage: { userId: user.id, feature: "act", model: chat.modelId },
+        // Stop aborts here too (SPEC.md §6): the client disconnecting stops the
+        // model call, not just the response the client would have read.
+        abortSignal: req.signal,
+        ...(web
+          ? {
+              tools: { [WEB_SEARCH_TOOL]: webSearchTool(chatCall.modelId) },
+              stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
+              toolCallUsd: webSearchUsd(chatCall.modelId),
+            }
+          : {}),
+      });
   if (!result.ok) {
     return NextResponse.json({ error: t("api.planFailed", { reason: result.error }) }, { status: 422 });
   }
@@ -406,22 +426,70 @@ async function handle(req: Request, t: TFunc) {
   // (lib/assistant/plan.ts): the sidebar assistant's plan takes the same path.
   const { actions, warnings } = enrichActions(result.data.actions, {
     documentId: data.documentId,
+    richText,
     blocks: document.blocks,
     attachedIds: new Set(attachedDocs.map((nd) => nd.documentId)),
     sectionIds: new Set(sections.map((s) => s.id)),
     t,
   });
 
+  // The assistant's suggestions (SPEC.md §29): a chip, or the plan's suggest
+  // action, runs here once and the page lands its ops; the other actions
+  // wait for the plan card. The scope is the selected words; named blocks,
+  // or the whole document with no selection, take their first window here.
+  const suggest = actions.find((a): a is Extract<AssistantAction, { type: "suggest" }> => a.type === "suggest");
+  let suggestions: SuggestResult | undefined;
+  if (suggest && !(await featureConfigured("suggest"))) warnings.push(t("api.suggestNeedsKey"));
+  else if (chip || suggest) {
+    const doc = suggestDocument(document);
+    let scope: SuggestScope;
+    let window: { n: number; of: number; whole: boolean } | null = null;
+    const cut: string[] = [];
+    if (!suggest?.blockIds && passage.length > 0) scope = wordsScope(document.blocks, passage);
+    else {
+      const whole = !suggest?.blockIds;
+      const windows = windowsOf(doc.rows, doc.places, whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, suggest!.blockIds!));
+      if (whole || windows.length > 1) await keepVersionBeforeSuggestions(document.id, t("api.suggestVersionName"));
+      if (windows.length > 1) cut.push(t("api.suggestTooLong"));
+      scope = { kind: "blocks", blockIds: windows[0] ?? [] };
+      window = { n: 1, of: windows.length, whole };
+    }
+    try {
+      const run = await runSuggest({
+        userId: user.id,
+        document: doc,
+        profile,
+        lang,
+        t,
+        command: chip ? SUGGEST_COMMANDS[chip] : data.command,
+        instruction: suggest?.instruction ?? null,
+        material: null,
+        history,
+        scope,
+        window,
+        caretBlockId: null,
+        thinking: data.thinking ?? "deep",
+        budget: { chars: SUGGEST_MAX_NEW_CHARS },
+        signal: req.signal,
+      });
+      suggestions = { ...run, warnings: [...run.warnings, ...cut] };
+    } catch (err) {
+      return NextResponse.json({ error: modelErrorMessage(err) }, { status: 422 });
+    }
+  }
 
   // An anchored conversation persists like the tools' output: one note in the
   // hidden Annotations section, anchored to the selection, updated per turn.
   // Clicking the mark reopens the conversation; the Annotations tab deletes it.
   let conversationNoteId: string | null = data.conversationNoteId ?? null;
+  // With suggestions, the reply shown and stored is their summary.
   const answer =
     result.data.reply ??
-    (actions.length > 0
-      ? `Applied ${actions.length} action${actions.length === 1 ? "" : "s"}.`
-      : "No actions proposed.");
+    (suggestions
+      ? suggestions.summary || t(suggestions.ops.length > 0 ? "api.suggestMade" : "api.suggestNoChange")
+      : actions.length > 0
+        ? `Applied ${actions.length} action${actions.length === 1 ? "" : "s"}.`
+        : "No actions proposed.");
   const replyText = answer;
   const turns: ChatTurn[] = [
     ...priorTurns,
@@ -502,10 +570,11 @@ async function handle(req: Request, t: TFunc) {
   }
 
   const plan: AssistantPlan = {
-    reply: result.data.reply === null ? null : replyText,
-    actions,
+    reply: result.data.reply === null && !suggestions ? null : replyText,
+    actions: actions.filter((a) => a.type !== "suggest"),
     warnings,
     conversationNoteId,
+    suggestions,
   };
   return NextResponse.json(plan);
 }

@@ -29,6 +29,15 @@
   text-decoration-style: dotted;
   background: color-mix(in srgb, var(--docs-suggest-ink) var(--docs-suggest-tint, 0%), transparent);
 }
+/* The assistant's added words, as Gemini's read in Google Docs: the text's
+   own color on a tint of the assistant's (its removed words are struck in
+   it, as a person's are in theirs). */
+.docs-prose ins[data-author^="assistant-"],
+.docs-prose [data-suggestion-block="insertion"][data-author^="assistant-"] > * {
+  color: inherit;
+  text-decoration-line: none;
+  background: color-mix(in srgb, var(--docs-suggest-ink) var(--docs-suggest-tint, 16%), transparent);
+}
 /* A suggestion on a whole block wraps it; the layout skips the wrapper. */
 .docs-prose [data-suggestion-block] {
   display: contents;

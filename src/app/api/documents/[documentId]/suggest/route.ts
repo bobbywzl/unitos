@@ -10,7 +10,7 @@ import { modelErrorMessage } from "@/lib/derive/json-call";
 import { runSuggest, suggestDocument } from "@/lib/derive/suggest";
 import type { SuggestEvent } from "@/lib/docs/assistant-suggestions";
 import { scopeOf, takesSuggestions, windowsOf } from "@/lib/docs/suggest-ops";
-import { keepCurrentVersion } from "@/lib/docs/versions";
+import { keepVersionBeforeSuggestions } from "@/lib/docs/versions";
 import { featureConfigured } from "@/lib/feature-models";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { mapLimit } from "@/lib/jev";
@@ -92,13 +92,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         const all = windowsOf(doc.rows, doc.places, scope);
         const windows = all.slice(0, SUGGEST_MAX_WINDOWS);
         const warnings = all.length > windows.length ? [t("api.suggestTooLong")] : [];
-        if (whole || windows.length > 1) {
-          // A version the reader named keeps its name.
-          const version = await keepCurrentVersion(documentId, null);
-          if (version && version !== "empty" && !version.name) {
-            await db.documentVersion.update({ where: { id: version.id }, data: { name: t("api.suggestVersionName") } });
-          }
-        }
+        if (whole || windows.length > 1) await keepVersionBeforeSuggestions(documentId, t("api.suggestVersionName"));
         send({ windows: windows.length });
 
         const budget = { chars: SUGGEST_MAX_NEW_CHARS };

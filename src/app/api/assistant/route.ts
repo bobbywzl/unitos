@@ -26,6 +26,7 @@ import {
   splitActionsFence,
 } from "@/lib/assistant/plan";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { takesSuggestions } from "@/lib/docs/suggest-ops";
 import { streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
 import { rankDocumentsForQuestion } from "@/lib/digest/rank";
@@ -68,6 +69,9 @@ const assistantSchema = z.object({
   // (lib/assistant/attachments.ts).
   images: z.array(attachedImageSchema).max(MAX_IMAGES_PER_MESSAGE).optional(),
   files: z.array(attachedFileSchema).max(MAX_FILES_PER_MESSAGE).optional(),
+  // document scope: the block the caret stands in, the "here" of a change
+  // to a document with rich text (SPEC.md §29).
+  caretBlockId: z.string().min(1).max(64).optional(),
 });
 
 
@@ -156,18 +160,21 @@ async function handle(req: Request, t: TFunc) {
   const lang = await currentLang();
   // This page scope (SPEC.md §7): the assistant may propose actions on the
   // open document and the notes. The sections and the attached documents
-  // go in the prompt; the plan validates against them after the answer.
+  // go in the prompt; the plan validates against them after the answer. A
+  // document with rich text changes through the assistant's suggestions
+  // (SPEC.md §29).
   const act =
     data.task === "ask" && data.scope === "document"
       ? await (async () => {
-          const [sections, attached] = await Promise.all([
+          const [sections, attached, open] = await Promise.all([
             sectionSkeleton(data.notebookId),
             db.notebookDocument.findMany({
               where: { notebookId: data.notebookId },
               include: { document: { select: { id: true, title: true } } },
             }),
+            db.document.findUnique({ where: { id: data.documentId! }, select: { richText: true, format: true } }),
           ]);
-          return { sections, attachedDocs: attached.map((nd) => nd.document) };
+          return { sections, attachedDocs: attached.map((nd) => nd.document), richText: open ? takesSuggestions(open) : false };
         })()
       : null;
   const messages: ModelMessage[] = [{ role: "system", content: system }];
@@ -230,6 +237,8 @@ async function handle(req: Request, t: TFunc) {
         ? {
             sections: act.sections,
             otherDocuments: act.attachedDocs.filter((d) => d.id !== data.documentId),
+            richText: act.richText,
+            caretBlockId: data.caretBlockId,
           }
         : undefined,
     });
@@ -322,6 +331,7 @@ async function handle(req: Request, t: TFunc) {
       });
       return enrichActions(raw, {
         documentId: data.documentId!,
+        richText: act!.richText,
         blocks,
         attachedIds: new Set(act!.attachedDocs.map((d) => d.id)),
         sectionIds: new Set(act!.sections.map((s) => s.id)),
