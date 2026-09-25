@@ -1,6 +1,6 @@
 # busy-einstein-9uyeil
 
-**Intent:** Add Define: the first row of the AI toolbar, right under the highlight colors, shown only when the selection is one word and never on Chinese text, on every document the reader draws (articles, PDFs, transcripts, formalized articles, slides, sheets, converted handwritten pages, blank documents in the page editor, cores in the collapsed view); it shows what the word means in its sentence.
+**Intent:** Add Define: the first row of the AI toolbar, right under the highlight colors, shown only when the selection is one word and never on Chinese text, on every document the reader draws (articles, PDFs, transcripts, formalized articles, slides, sheets, converted handwritten pages, blank documents in the page editor, cores in the collapsed view); it shows what the word means in its sentence. Then let the reader stop Collapse and the other long runs the same way.
 
 **Files:**
 - `prisma/schema.prisma`, `prisma/migrations/20260928100000_define_derivation/migration.sql` — `DEFINE` in `DerivationType`. The pipeline's per-type config is keyed on the enum, and the ToolRating comment names the new tool.
@@ -17,7 +17,18 @@
 - `src/lib/i18n/dict/reader.ts`, `src/lib/i18n/dict/api.ts`, `src/lib/i18n/dict/common.ts` — the strings in English and Chinese; 定义 in the zh glossary.
 - `scripts/eval/cases.ts`, `scripts/eval/rubrics.ts`, `scripts/eval/run.ts`, `scripts/eval/import-ratings.ts` — the Define rubric, seven one-word cases (two with the Chinese interface on English text), the adapter with its mechanical checks, and ratings imported as cases.
 - `scripts/qa/mock-kimi.mjs`, `scripts/qa/ui-define.mjs` — the mock's Define answer, and the browser check (37 checks: the route, an article, a phrase, a sentence, a sentence end, a key term, a core, a transcript, slides, a sheet, a blank document in the page editor, Chinese, a touch screen).
-- `SPEC.md` (§2, §4, §6, Phase 7, §18, §25), `README.md`, `CLAUDE.md` (definition in the vocabulary) — the docs.
+- `SPEC.md` (§2, §4, §6, Phase 7, §18, §25, §28), `README.md`, `CLAUDE.md` (definition in the vocabulary) — the docs, and the rule "Stop on every long run" in §6.
+- `src/components/thinking.tsx` — `StopPill`: the Stop pill inside a button whose run is on its way; a press on the button stops the run.
+- `src/components/reader/reader-interactions.tsx`, `src/lib/i18n/dict/reader.ts` — Collapse: the button reads Collapsing… with Stop while the cores are written; a press aborts the request (the route already passed `req.signal` to the model calls), and leaving the document does too.
+- `src/components/reader/contents-menu.tsx`, `src/lib/contents.ts`, `src/components/video/chapters-menu.tsx`, `src/lib/video/chapters.ts`, `src/app/api/documents/[documentId]/contents/route.ts`, `src/lib/i18n/dict/video.ts` — Generate contents and Generate chapters: Stop, and the route passes the abort to the model call and the Jev pass; nothing is stored.
+- `src/components/reader/translation-bar.tsx`, `src/app/api/documents/[documentId]/translate/route.ts`, `src/lib/i18n/dict/panes.ts` — Translate: Stop; the route stores nothing once stopped.
+- `src/components/video/video-pane.tsx`, `src/components/video/transcript.tsx`, `src/app/api/documents/[documentId]/speakers/route.ts`, `src/lib/video/transcription-job.ts` — Detect speakers: Stop; a stopped run saves nothing.
+- `src/components/video/assistant-card.tsx` — Regenerate article: Stop (the route already passed the abort on).
+- `src/components/graph/graph-overlay.tsx` — Recommend links: Stop on the abort that was wired and never pressed.
+- `src/components/outline/use-outline.ts`, `src/components/outline/note-card.tsx`, `src/lib/notes/merge.ts`, `src/app/api/notes/merge/route.ts`, `src/lib/i18n/dict/outline.ts` — Merge with AI: Stop on the card's Merging line; the notes come back, and the route merges nothing once stopped.
+- `src/components/assistant/assistant-panel.tsx`, `src/lib/i18n/dict/assistant.ts` — the Summary card keeps Stop in its header for the whole stream.
+- `src/lib/clicks.ts` — the Stop controls in the admin clicks page's AI group.
+- `scripts/qa/mock-hang.mjs`, `scripts/qa/ui-stop.mjs` — a model that never answers, and the browser check that presses each Stop and reads that the call was closed and nothing stored.
 
 **Decisions:**
 - Define persists nothing: a word lookup is not an annotation, so it adds no mark, no Annotations entry, and no kind color. Viewers may call it.
@@ -28,3 +39,7 @@
 - Define is on the figure toolbar too, for a word selected in a caption; never on the hold-and-circle gesture, and never on equations.
 - The template carries the glossary's "one sentence, two at most" rule in place of `STYLE_RULE`.
 - The assistant's answers and the extract pages keep their own selection controls; Define is not added there.
+- A long run's Stop is the button that started it (it reads what runs, with a Stop pill), not a new control beside it: the reader's eye is already there.
+- Stopped runs store nothing, with two exceptions that follow the existing rules: Recommend links keeps the links it proposed before the stop and still counts the run (recorded before the scan starts), and Detect speakers lets its Gemini call finish on the server (the Gemini client takes no abort) while dropping the answer.
+- Merge with AI must check the stop before the route's fallback to Join text, or a stopped AI merge would merge anyway.
+- Imports (adding a document, Re-parse, Transcribe again, the handwritten conversion) keep no Stop: they save progress on the server as they go, and stopping one needs its own design.

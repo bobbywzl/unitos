@@ -9,12 +9,13 @@ export const maxDuration = 300;
 
 // Speakers on a transcript that already exists (SPEC.md §11): Detect speakers
 // on the media pane. A new transcription finds them on its own; this is for a
-// transcript that landed before, or one that was pasted.
-export async function POST(_req: Request, ctx: { params: Promise<{ documentId: string }> }) {
+// transcript that landed before, or one that was pasted. The reader's Stop
+// aborts the request, and a stopped run saves nothing.
+export async function POST(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const { documentId } = await ctx.params;
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
-  const result = await runSpeakers(documentId, access.user.id);
+  const result = await runSpeakers(documentId, access.user.id, req.signal);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   await bumpDocument(documentId);
   return NextResponse.json({ ok: true, speakers: result.speakers });

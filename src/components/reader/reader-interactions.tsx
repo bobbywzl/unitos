@@ -107,7 +107,7 @@ import {
 import { Markdown } from "@/components/markdown";
 import { RatingButtons } from "@/components/rating-buttons";
 import { Collapse, Presence } from "@/components/presence";
-import { ThinkingIndicator } from "@/components/thinking";
+import { StopPill, ThinkingIndicator } from "@/components/thinking";
 import { type BlockData, type Highlight, ToolSymbol } from "@/components/reader/block-view";
 import { ArticleErrors } from "@/components/reader/article-errors";
 import { Bibliography } from "@/components/reader/bibliography";
@@ -6747,14 +6747,7 @@ function blockFormatKind(
     >
       {collapseBusy ? <SpinnerIcon size={13} className="motion-safe:animate-spin" /> : <CollapseIcon size={13} />}
       {t(collapseBusy ? "reader.collapsing" : collapseOn ? "reader.collapsed" : "reader.collapse")}
-      {/* The Stop pill, as the thinking line draws it: a press on the
-          button stops the run. */}
-      {collapseBusy && (
-        <span className="ml-0.5 inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] text-sand-700">
-          <StopIcon size={9} />
-          {t("common.stop")}
-        </span>
-      )}
+      {collapseBusy && <StopPill />}
       {collapseNew.isNew && <NewPill />}
     </button>
   );

@@ -1635,15 +1635,30 @@ export function AssistantPanel({
                 <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
                   {recommendedLabel}
                 </span>
-                <button
-                  onClick={() => void generateRecommended(recDepth)}
-                  data-track="assistant-regenerate"
-                  data-tip={t("assistant.regenerateTitle")}
-                  disabled={recBusy !== null}
-                  className="text-xs text-sand-500 hover:text-clay-700 disabled:opacity-40"
-                >
-                  {t("common.regenerate")}
-                </button>
+                {/* While the summary streams, Stop stands where Regenerate
+                    does, for the whole run: a stopped run leaves the stored
+                    summary, if any. */}
+                {recBusy === recDepth ? (
+                  <button
+                    onClick={stopRecommended}
+                    data-track="assistant-recommended-stop"
+                    data-tip={t("assistant.summaryStopTitle")}
+                    className="flex items-center gap-1 text-xs text-sand-500 hover:text-clay-700"
+                  >
+                    <StopIcon size={10} />
+                    {t("common.stop")}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => void generateRecommended(recDepth)}
+                    data-track="assistant-regenerate"
+                    data-tip={t("assistant.regenerateTitle")}
+                    disabled={recBusy !== null}
+                    className="text-xs text-sand-500 hover:text-clay-700 disabled:opacity-40"
+                  >
+                    {t("common.regenerate")}
+                  </button>
+                )}
               </div>
               {recError ? (
                 <p className="text-sm text-red-600">{recError}</p>
@@ -1652,7 +1667,11 @@ export function AssistantPanel({
                   <Markdown>{recommendedShown}</Markdown>
                 </div>
               ) : (
-                <ThinkingIndicator className="text-xs" onStop={stopRecommended} />
+                <ThinkingIndicator
+                  className="text-xs"
+                  onStop={stopRecommended}
+                  stopTitle={t("assistant.summaryStopTitle")}
+                />
               )}
             </div>
           )}

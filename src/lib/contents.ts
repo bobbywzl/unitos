@@ -110,8 +110,13 @@ export function headingContents(
 
 /** Build the contents: one model call over the whole document, stored on
     the document. Returns the entries; [] when the document is too short to
-    have parts. Throws with the reason on a failed model call. */
-export async function buildContents(documentId: string, userId: string | null): Promise<ContentsEntry[]> {
+    have parts. Throws with the reason on a failed model call. signal: the
+    reader's Stop (SPEC.md §26) ends the model call, and nothing is stored. */
+export async function buildContents(
+  documentId: string,
+  userId: string | null,
+  signal?: AbortSignal,
+): Promise<ContentsEntry[]> {
   if (!(await featureConfigured("contents"))) return [];
   const document = await db.document.findUnique({
     where: { id: documentId },
@@ -139,8 +144,10 @@ export async function buildContents(documentId: string, userId: string | null): 
     schema: contentsSchema,
     label: "CONTENTS",
     usage: { userId, feature: "contents", model: contentsCall.modelId } satisfies UsageMeta,
+    abortSignal: signal,
   });
   if (!result.ok) throw new Error(result.error);
+  if (signal?.aborted) throw new Error("The reader stopped the contents.");
 
   const entries = resolveParts(result.data.parts, document.blocks);
   await db.document.update({ where: { id: documentId }, data: { contents: entries } });

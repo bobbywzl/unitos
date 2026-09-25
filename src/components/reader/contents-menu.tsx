@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { ContentsEntry } from "@/lib/contents";
 import { useCollab } from "@/components/collab/collab-context";
 import { ContentsIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
+import { StopPill } from "@/components/thinking";
 
 // Contents (SPEC.md §26): the button at the top left of the article, in the
 // article menu's place, and the list it opens — the article's parts, each a
@@ -15,7 +16,8 @@ import { Presence } from "@/components/presence";
 // them — one line on what AI writes, the Generate contents button, and the
 // disclaimer that AI-written parts may be off — and Generate contents runs
 // the one model call (POST /api/documents/[documentId]/contents
-// {generate: true}) and stores the parts. Until then the list shows the
+// {generate: true}) and stores the parts. While it runs the button reads
+// Stop: a press ends the request and the model call, and nothing is stored. Until then the list shows the
 // article's own headings, when it has any. Stored parts show at once, under
 // the disclaimer. A click on a part scrolls the reader to its block and
 // flashes it (dissect:flash-block). The button stays at the top left of the
@@ -97,19 +99,44 @@ export function ContentsMenu({
     };
   }, [open, onOpenChange]);
 
+  // The generation on its way: the button's Stop ends it, and so does
+  // leaving the document.
+  const generateAbort = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      generateAbort.current?.abort();
+      generateAbort.current = null;
+    },
+    [documentId],
+  );
+
   // The second click: the one model call that writes and stores the parts.
+  // While it runs, a press is Stop.
   async function generate() {
-    if (generating) return;
+    if (generating) {
+      generateAbort.current?.abort();
+      return;
+    }
     setGenerating(true);
     setGenerateError(null);
+    const controller = new AbortController();
+    generateAbort.current = controller;
     try {
-      const answer = await api<Answer>(`/api/documents/${documentId}/contents`, "POST", { generate: true });
+      const answer = await api<Answer>(
+        `/api/documents/${documentId}/contents`,
+        "POST",
+        { generate: true },
+        { signal: controller.signal },
+      );
       const next = toLoaded(answer);
       loaded.set(documentId, next);
       setFetched({ id: documentId, data: next });
     } catch (err) {
+      // Stopped, not failed: no message.
+      if (controller.signal.aborted) return;
       setGenerateError(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
+      if (generateAbort.current === controller) generateAbort.current = null;
       setGenerating(false);
     }
   }
@@ -193,13 +220,13 @@ export function ContentsMenu({
                     <div className="px-4">
                       <button
                         onClick={() => void generate()}
-                        data-track="contents-generate"
-                        disabled={generating}
-                        data-tip={t("reader.contentsGenerateTitle")}
-                        className="flex items-center gap-1.5 rounded-full bg-clay px-3.5 py-1.5 text-[12px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-60"
+                        data-track={generating ? "contents-stop" : "contents-generate"}
+                        data-tip={t(generating ? "reader.contentsStopTitle" : "reader.contentsGenerateTitle")}
+                        className="flex items-center gap-1.5 rounded-full bg-clay px-3.5 py-1.5 text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
                       >
                         {generating ? <SpinnerIcon size={13} className="animate-spin" /> : <SparkleIcon size={13} />}
                         {t(generating ? "reader.contentsBuilding" : "reader.contentsGenerate")}
+                        {generating && <StopPill />}
                       </button>
                     </div>
                     {generateError && (

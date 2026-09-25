@@ -95,6 +95,7 @@ const en = {
   chaptersTitle: "The chapters of the recording: a jump to where each topic starts",
   chaptersAsk: "AI reads the transcript and marks where each topic starts. A chapter's title is its first words.",
   chaptersGenerate: "Generate chapters",
+  chaptersStopTitle: "Stop making the chapters. Nothing is stored.",
   chaptersGenerating: "Reading the transcript…",
   chaptersViewer: "An editor can generate the chapters.",
   chaptersNone: "This recording is too short to have chapters.",
@@ -171,6 +172,7 @@ const en = {
   detectSpeakersTitle:
     "Read the recording again and say who speaks each line; names come from the introductions",
   detectingSpeakers: "Listening for speakers…",
+  speakersStopTitle: "Stop detecting speakers. Nothing is saved.",
   speakersFound: "{n} speakers",
   oneSpeaker: "One voice — nothing to name",
   speakersFailed: "Detecting speakers failed",
@@ -187,6 +189,7 @@ const en = {
   copied: "Copied",
   copyFailed: "Copy failed",
   regenerateArticleTitle: "Formalize the transcription into an article again; this one is replaced",
+  regenerateArticleStopTitle: "Stop the rewrite. The article stays as it was.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -275,6 +278,7 @@ const zh: Record<keyof typeof en, string> = {
   chaptersTitle: "录音的章节：点击跳到每个话题开始处",
   chaptersAsk: "AI 阅读逐字稿，标出每个话题的开始。章节标题是它的开头几个词。",
   chaptersGenerate: "生成章节",
+  chaptersStopTitle: "停止生成章节。不保存任何内容。",
   chaptersGenerating: "正在阅读逐字稿…",
   chaptersViewer: "编辑者可以生成章节。",
   chaptersNone: "这段录音太短，没有章节。",
@@ -344,6 +348,7 @@ const zh: Record<keyof typeof en, string> = {
   detectSpeakers: "识别说话人",
   detectSpeakersTitle: "重新听一遍录音，标出每行由谁所说；名字取自录音中的自我介绍",
   detectingSpeakers: "正在识别说话人……",
+  speakersStopTitle: "停止识别说话人。不保存任何内容。",
   speakersFound: "{n} 位说话人",
   oneSpeaker: "只有一个声音——无需命名",
   speakersFailed: "识别说话人失败",
@@ -359,6 +364,7 @@ const zh: Record<keyof typeof en, string> = {
   copied: "已复制",
   copyFailed: "复制失败",
   regenerateArticleTitle: "重新把逐字稿整理成文章；当前这篇会被替换",
+  regenerateArticleStopTitle: "停止重写。文章保持原样。",
 };
 
 export const video = { en, zh } as const;

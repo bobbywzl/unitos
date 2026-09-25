@@ -70,6 +70,9 @@ export type OutlineActions = {
   mergeNotes: (targetId: string, sourceIds: string[], mode?: MergeMode) => Promise<MergeResult | null>;
   /** Notes the AI is merging right now: their cards say so while it runs. */
   merging: ReadonlySet<string>;
+  /** Stop the AI merge into the target: nothing merges, and the notes come
+      back as they were. */
+  stopMerge: (targetId: string) => void;
   /** The last merge, while Undo is offered. */
   lastMerge: LastMerge | null;
   /** Undo the last merge. Resolves to the reason when it could not run. */
@@ -245,6 +248,8 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
 
   // The notes the AI is merging right now: their cards say so while it runs.
   const [merging, setMergingIds] = useState<ReadonlySet<string>>(new Set());
+  // Each AI merge on its way, by target: the card's Stop ends it.
+  const mergeAborts = useRef(new Map<string, AbortController>());
 
   // The last merge, while it can be undone: one pill offers Undo for a while
   // after each merge, and the next merge takes the pill.
@@ -542,12 +547,15 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       setSelectedIds(new Set());
       window.dispatchEvent(new CustomEvent(NOTE_ABSORBED_EVENT, { detail: { noteId: targetId } }));
       if (mode === "ai") setMergingIds((prev) => new Set(prev).add(targetId));
+      const controller = mode === "ai" ? new AbortController() : null;
+      if (controller) mergeAborts.current.set(targetId, controller);
       try {
-        const merged = await api<{ content?: string; undoId?: string }>("/api/notes/merge", "POST", {
-          targetId,
-          sourceIds: ids,
-          mode,
-        });
+        const merged = await api<{ content?: string; undoId?: string }>(
+          "/api/notes/merge",
+          "POST",
+          { targetId, sourceIds: ids, mode },
+          controller ? { signal: controller.signal } : undefined,
+        );
         refresh();
         const undoId = typeof merged?.undoId === "string" ? merged.undoId : null;
         if (undoId) setLastMerge({ undoId, targetId, count: ids.length + 1 });
@@ -556,7 +564,16 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
         // place, saved and ready to keep editing.
         if (mode === "join") replaceNoteDraft(targetId, content);
         return { content, undoId };
+      } catch (err) {
+        // Stopped (SPEC.md §6): the route merges nothing, and the refresh
+        // brings back the notes the optimistic fold took away.
+        if (controller?.signal.aborted) {
+          refresh();
+          return null;
+        }
+        throw err;
       } finally {
+        if (controller && mergeAborts.current.get(targetId) === controller) mergeAborts.current.delete(targetId);
         if (mode === "ai") {
           setMergingIds((prev) => {
             const next = new Set(prev);
@@ -567,6 +584,9 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       }
     },
     merging,
+    stopMerge(targetId) {
+      mergeAborts.current.get(targetId)?.abort();
+    },
     lastMerge,
     undoMerge,
     dismissMerge() {

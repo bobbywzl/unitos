@@ -359,6 +359,7 @@ const en = {
   // so it runs a few times a month and never on its own.
   recommendScan: "Recommend links",
   recommendScanRunning: "Reading the project…",
+  recommendScanStopTitle: "Stop the scan. The links it already proposed stay, and the run still counts this month.",
   recommendScanTitle:
     "Read this project's documents against each other and propose links. {left} left this month.",
   recommendScanSpentTitle: "This month's runs are used. It comes back at the start of next month.",
@@ -387,6 +388,7 @@ const en = {
   translateTo: "Translate to {language}",
   translateTitle: "DeepL translates every paragraph and transcription line into {language}; each translation reads under its original",
   translating: "Translating…",
+  translateStopTitle: "Stop translating. Nothing is stored.",
   translatedBy: "Translated by DeepL",
   hideTranslation: "Hide translation",
   showTranslation: "Show translation",
@@ -755,6 +757,7 @@ const zh: Record<keyof typeof en, string> = {
 
   recommendScan: "推荐链接",
   recommendScanRunning: "正在阅读项目…",
+  recommendScanStopTitle: "停止扫描。已提出的推荐链接保留，本次仍计入本月次数。",
   recommendScanTitle: "让项目中的文档互相对照并提出链接。本月还剩 {left} 次。",
   recommendScanSpentTitle: "本月的次数已用完。下月初恢复。",
   recommendScanDone: "已提出 {n} 条链接。打开推荐链接以接受。",
@@ -779,6 +782,7 @@ const zh: Record<keyof typeof en, string> = {
   translateTo: "翻译成{language}",
   translateTitle: "DeepL 把每个段落和逐字稿的每一行翻译成{language}；译文显示在原文之下",
   translating: "正在翻译……",
+  translateStopTitle: "停止翻译。不保存任何内容。",
   translatedBy: "由 DeepL 翻译",
   hideTranslation: "隐藏译文",
   showTranslation: "显示译文",

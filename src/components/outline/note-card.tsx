@@ -425,7 +425,12 @@ export function NoteCard({
           rewritten, and every control here acts on a note still being
           written. */}
       {merging && (
-        <ThinkingIndicator label={t("outline.merging")} className="min-w-0 flex-1 text-[11px]" />
+        <ThinkingIndicator
+          label={t("outline.merging")}
+          className="min-w-0 flex-1 text-[11px]"
+          onStop={() => actions.stopMerge(note.id)}
+          stopTitle={t("outline.mergeStopTitle")}
+        />
       )}
       {collapsed && !merging && (
         <button

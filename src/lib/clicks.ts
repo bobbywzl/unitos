@@ -80,6 +80,14 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     "collapse-stop",
     "collapse-expand",
     "collapse-fold",
+    // Stop on the other long runs: a stopped run is a reader who gave up on it
+    "contents-stop",
+    "chapters-stop",
+    "translate-stop",
+    "video-detect-speakers-stop",
+    "video-article-regenerate-stop",
+    "graph-recommend-links-stop",
+    "assistant-recommended-stop",
     // handwritten pages
     "page-ask",
     "page-explain",

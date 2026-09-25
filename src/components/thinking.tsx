@@ -65,6 +65,21 @@ export function ThinkingIndicator({
   );
 }
 
+/** The Stop pill inside a button whose run is on its way (Collapse,
+    Generate contents, Translate, …): the button reads what runs, the pill
+    reads Stop, and a press on the button ends the run (SPEC.md §6). It
+    takes the button's own color, so it reads on a light button and a
+    filled one alike. */
+export function StopPill() {
+  const t = useT();
+  return (
+    <span className="ml-0.5 inline-flex items-center gap-1 rounded-full border border-current px-2 py-0.5 text-[11px] font-semibold opacity-80">
+      <StopIcon size={9} />
+      {t("common.stop")}
+    </span>
+  );
+}
+
 export function LoadingDots({ label }: { label?: string }) {
   const t = useT();
   return (
