@@ -132,7 +132,7 @@
 }
 /* Dark mode draws a white page dark and its words light. A page with a color
    stays in its color, so its words keep the light theme's colors. */
-.dark .docs-page:has(> .docs-sheets > :not([data-white])),
+.dark .docs-page:not([data-white]),
 .dark .docs-versions-page:not([data-white]) {
   --docs-ink: #000000;
   --docs-link: #1155cc;

@@ -34,7 +34,7 @@ export const suggestAnswerSchema = z.object({
   summary: z.string().max(400),
   ops: z.array(suggestOpSchema).max(SUGGEST_MAX_OPS),
 });
-export type SuggestOp = z.infer<typeof suggestOpSchema>;
+type SuggestOp = z.infer<typeof suggestOpSchema>;
 
 /** A row of the paragraph index. */
 export type IndexRow = { id: string; type: string; text: string };
@@ -56,7 +56,7 @@ export type SuggestScope =
 
 /** Where an indexed block stands in the rich text. */
 export type BlockPlace = {
-  /** Its paragraph style; null for code, which has none. */
+  /** Its paragraph style; null for code, a figure, a line, or an equation. */
   style: SuggestStyle | null;
   /** A table cell or a footnote takes changes to its words only. */
   where: "body" | "cell" | "footnote";

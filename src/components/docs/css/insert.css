@@ -317,7 +317,7 @@
   margin: 12px 12px 4px;
   padding: 0 14px;
   border-radius: 20px;
-  background: var(--docs-toolbar);
+  background: var(--docs-field-bg);
   color: var(--docs-icon);
 }
 .docs-emoji-search input,
@@ -1300,7 +1300,7 @@ body.docs-img-moving .docs-img-toolbar {
   position: sticky;
   top: var(--docs-sticky-top, 0px);
   z-index: 1;
-  background-color: var(--docs-page);
+  background-color: var(--docs-ground);
 }
 .docs-prose.docs-row-resize,
 .docs-prose.docs-row-resize * {

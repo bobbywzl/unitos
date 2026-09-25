@@ -135,7 +135,7 @@
   isolation: isolate;
   cursor: text;
 }
-.dark .docs-page[data-white] {
+.dark .docs-page[data-white]:not([data-pageless]) {
   --docs-ground: var(--docs-page);
 }
 .docs-page[data-pageless] {

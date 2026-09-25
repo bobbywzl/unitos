@@ -37,6 +37,14 @@ import {
   type AnswerComment,
 } from "@/components/assistant/answer-tools";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
+import { queuedKey } from "@/components/assistant/queued-list";
+import {
+  hasSuggestRun,
+  SUGGEST_EVENT,
+  SuggestionRow,
+  type SuggestRequest,
+} from "@/components/assistant/suggestion-row";
+import { pageEditorIn } from "@/components/docs/layer/anchor";
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { useCollab } from "@/components/collab/collab-context";
@@ -57,6 +65,14 @@ import { RatingButtons } from "@/components/rating-buttons";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 
 type Scope = "document" | "notebook";
+type SuggestAction = Extract<AssistantAction, { type: "suggest" }>;
+
+/** The paragraph the caret stands in on a document's open page. */
+function caretBlockIn(documentId: string): string | undefined {
+  const editor = pageEditorIn(document.querySelector(`[data-reader-root][data-document-id="${documentId}"]`));
+  const id: unknown = editor?.state.selection.$from.parent.attrs.blockId;
+  return typeof id === "string" && id ? id : undefined;
+}
 type Task = "contradictions" | "gaps" | "unsourced";
 type Issue = { noteIds: string[]; issue: string; explanation: string };
 
@@ -81,6 +97,9 @@ type Turn = {
   // the reader approves in the plan card, and the warnings for the ones the
   // server dropped. Not saved: the conversation keeps the answer alone.
   plan?: { actions: AssistantAction[]; warnings: string[] };
+  // The run of the assistant's suggestions the answer asked for (SPEC.md
+  // §29), by its key: the row under the answer follows it. Not saved.
+  suggest?: string;
 };
 const plural = (n: number) => (n === 1 ? "" : "s");
 // One side chat of this conversation (SPEC.md §7): the quote it was started
@@ -928,11 +947,11 @@ export function AssistantPanel({
     );
     const userTurn: Turn = { role: "user", content: q, images, files };
     setTurns((prev) => [...prev, userTurn, { role: "assistant", content: "" }]);
-    const setAnswer = (content: string, plan?: Turn["plan"]) =>
+    const setAnswer = (content: string, plan?: Turn["plan"], suggest?: string) =>
       setTurns((prev) => {
         const last = prev[prev.length - 1];
         if (!last || last.role !== "assistant") return prev;
-        return [...prev.slice(0, -1), { ...last, content, plan }];
+        return [...prev.slice(0, -1), { ...last, content, plan, suggest }];
       });
     const controller = new AbortController();
     runAbortRef.current = controller;
@@ -948,6 +967,8 @@ export function AssistantPanel({
         history,
         images: images.map((img) => ({ id: img.id, name: img.name })),
         files,
+        // Where "here" is on the open page (SPEC.md §29).
+        caretBlockId: scope === "document" && documentId ? caretBlockIn(documentId) : undefined,
       };
       const res = await fetch("/api/assistant", {
         method: "POST",
@@ -977,10 +998,14 @@ export function AssistantPanel({
         setAnswer("");
         throw new Error(streamError ?? t("assistant.emptyResponse"));
       }
-      setAnswer(text, plan ?? undefined);
-      // The plan goes to the reader's plan card (SPEC.md §7): the actions
-      // wait for approval there, and Undo follows them.
-      if (plan && plan.actions.length > 0) proposePlan(plan);
+      // The assistant's suggestions go to the open page (SPEC.md §29); the
+      // other actions go to the reader's plan card (SPEC.md §7), where they
+      // wait for approval, and Undo follows them.
+      const suggest = plan?.actions.find((a): a is SuggestAction => a.type === "suggest");
+      const actions = plan?.actions.filter((a) => a.type !== "suggest") ?? [];
+      const shown = plan ? { actions, warnings: plan.warnings } : undefined;
+      setAnswer(text, shown, suggest && requestSuggestions(suggest, q, text, history));
+      if (shown && actions.length > 0) proposePlan(shown);
       void saveConversation([...threadTurns, userTurn, { role: "assistant", content: text }], sideChatKey);
     } catch (err) {
       // Stopped, not failed: whatever streamed in already stays on screen.
@@ -1039,6 +1064,33 @@ export function AssistantPanel({
 
   function showNote(noteId: string) {
     window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } }));
+  }
+
+  // The open document's reader runs the command over the page and lands the
+  // suggestions (SPEC.md §29); the row under the answer follows the run.
+  function requestSuggestions(
+    action: SuggestAction,
+    command: string,
+    material: string,
+    history: ConversationTurn[],
+  ): string | undefined {
+    if (!documentId) return undefined;
+    const request: SuggestRequest = {
+      documentId,
+      key: queuedKey(),
+      command: command.slice(0, 4000),
+      instruction: action.instruction,
+      blockIds: action.blockIds,
+      material: material.slice(0, 20_000),
+      history: history
+        .filter((turn) => turn.content.trim())
+        .slice(-20)
+        .map((turn) => ({ role: turn.role, content: turn.content.slice(0, 8000) })),
+    };
+    window.dispatchEvent(new CustomEvent(SUGGEST_EVENT, { detail: request }));
+    if (hasSuggestRun(request.key)) return request.key;
+    setError(t("assistant.suggestNoPage"));
+    return undefined;
   }
 
   // The plan card lives in the reader (reader-interactions.tsx); the open
@@ -1484,6 +1536,7 @@ export function AssistantPanel({
                         </button>
                       </div>
                     )}
+                    {turn.suggest && <SuggestionRow runKey={turn.suggest} withSummary />}
                     {turn.plan && turn.plan.warnings.length > 0 && (
                       <ul className="mt-2 flex flex-col gap-1 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
                         {turn.plan.warnings.map((w, j) => (

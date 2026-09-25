@@ -6925,8 +6925,9 @@ function blockFormatKind(
           content: commentCard.saved,
         })
       : null;
+  const barKey = bar ? barRunKey(bar) : null;
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* A split view: the pane header — the pane's document, the article
           menu, Extract — one row above the scroller, never over the text
           (SPEC.md §6). On a transcript the header carries the document only. */}
@@ -8333,10 +8334,12 @@ function blockFormatKind(
                   <div {...{ [ANSWER_MARK]: "" }}>
                     <Markdown>{message.content}</Markdown>
                   </div>
-                  {message.suggestKey && <SuggestionRow runKey={message.suggestKey} />}
                   {/* The rating (SPEC.md §25): the question and the selection
-                      it ran on, the answer it gave. */}
-                  {!assistantChat.busy && (
+                      it ran on, the answer it gave; the suggestions' row
+                      rates the suggestions. */}
+                  {message.suggestKey ? (
+                    <SuggestionRow runKey={message.suggestKey} />
+                  ) : !assistantChat.busy && (
                     <RatingButtons
                       tool="act"
                       input={[assistantChat.anchor?.quotedText ?? "", list[i - 1]?.content ?? ""]
@@ -8575,6 +8578,85 @@ function blockFormatKind(
       </Presence>
 
     </div>
+      {/* The assistant's bar (SPEC.md §29), over the page at the bottom of
+          the pane: the status of its edit, the field, and the commands. */}
+      <Presence show={bar !== null} exit="fade">
+      {bar && (
+        <div
+          data-assistant-bar
+          // The page editor's own control: its header stays while the bar has the focus.
+          data-edit-control
+          data-track-surface="ai-toolbar"
+          role="dialog"
+          aria-label={t("docsInsert.askAssistant")}
+          className={`pop-in absolute bottom-5 left-1/2 ${TOOL_LAYER} flex w-[min(640px,calc(100%-32px))] -translate-x-1/2 flex-col gap-2 rounded-[24px] border bg-card px-4 py-2.5 shadow-float`}
+          style={{ borderColor: annotationKindColor("assistant", null) }}
+        >
+          {bar.busy ? (
+            <ThinkingIndicator
+              label={t("assistant.suggestWriting")}
+              onStop={() => barAbortRef.current?.abort()}
+              className="text-[12px]"
+            />
+          ) : bar.error ? (
+            <p className="text-[12px] font-medium text-amber-700 dark:text-amber-400">⚠ {bar.error}</p>
+          ) : (
+            barKey && (
+              <SuggestionRow runKey={barKey} bar={{ onChat: () => barToCard(bar), onSettled: () => setBar(null) }} />
+            )
+          )}
+          <div className="flex items-center gap-2">
+            <span style={{ color: annotationKindColor("assistant", null) }}>
+              <SparkleIcon size={14} />
+            </span>
+            <input
+              autoFocus
+              value={bar.input}
+              onChange={(e) => {
+                const input = e.target.value;
+                setBar((b) => (b ? { ...b, input } : b));
+              }}
+              {...ime.props}
+              onKeyDown={(e) => {
+                if (ime.isImeEnter(e) || isImeKey(e) || e.key !== "Enter") return;
+                e.preventDefault();
+                void runBar(bar);
+              }}
+              placeholder={t("reader.barPlaceholder")}
+              aria-label={t("reader.barPlaceholder")}
+              className="min-w-0 flex-1 rounded-xl bg-sand-100 px-3 py-1.5 text-[13px] outline-none placeholder:text-sand-500"
+            />
+            <button
+              type="button"
+              disabled={bar.busy || !bar.input.trim()}
+              onClick={() => void runBar(bar)}
+              data-track="assistant-bar-send"
+              data-tip={t("reader.sendTitle")}
+              className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+            >
+              {t("reader.send")}
+            </button>
+          </div>
+          {!barKey && !bar.busy && (
+            <div className="flex flex-wrap items-center gap-1">
+              {SUGGEST_CHIPS.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => void runBar(bar, c)}
+                  data-track={`assistant-command:${c.name}`}
+                  data-tip={t("reader.commandTitle")}
+                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  {t(c.key)}
+                </button>
+              ))}
+              <ThinkingChips small className="ml-auto" />
+            </div>
+          )}
+        </div>
+      )}
+      </Presence>
     </div>
   );
 }

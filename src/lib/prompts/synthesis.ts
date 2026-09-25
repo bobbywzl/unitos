@@ -43,7 +43,7 @@ export function synthesisAskPrompt(params: {
   // open document and the notes, which the reader approves in the plan card.
   // richText: a change to the document is one suggest action (SPEC.md §29);
   // caretBlockId: the block the caret stands in.
-  act?: ActCtx;
+  act?: PageActions;
 }): string {
   const files = params.files ?? [];
   const imageCount = params.imageCount ?? 0;
@@ -104,7 +104,7 @@ export function synthesisAskPrompt(params: {
 const ACT_ELSEWHERE_LINE =
   "You cannot change a document or the notes from this scope. When the message asks for a change, answer it, then say in one sentence that changes run from the This page scope with the document open.";
 
-type ActCtx = {
+type PageActions = {
   sections: { id: string; title: string; parentTitle: string | null }[];
   otherDocuments: { id: string; title: string }[];
   richText?: boolean;
@@ -117,7 +117,7 @@ type ActCtx = {
 // document (lib/assistant/plan.ts), and sends the plan after the answer; the
 // reader approves it in the plan card before anything runs. A suggest action
 // goes to the page instead: its changes land as the assistant's suggestions.
-function actLines(act: ActCtx): string[] {
+function actLines(act: PageActions): string[] {
   return [
     "",
     "You can propose changes to the open document and the notes. The reader approves every action before it runs.",

@@ -16,9 +16,9 @@ function isEmptyRichText(doc: RichNode): boolean {
 }
 
 /** Keep the live text as a version at once (Name current version, Restore
-    this version, a command of the assistant's suggestions over the whole
-    document): the version of its revision, named when a name is given.
-    Null when the document has no rich text; "empty" when it has no words. */
+    this version, before the assistant's suggestions): the version of its
+    revision, named when a name is given. Null when the document has no rich
+    text; "empty" when it has no words. */
 export async function keepCurrentVersion(documentId: string, name: string | null) {
   const document = await db.document.findUnique({
     where: { id: documentId },

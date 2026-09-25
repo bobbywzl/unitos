@@ -104,7 +104,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
           // first wave start a second later and read it.
           if (i > 0 && i < SUGGEST_PARALLEL) await new Promise((resolve) => setTimeout(resolve, 1000));
           if (signal.aborted) {
-            late = true;
+            late ||= deadline.aborted;
             return;
           }
           try {
@@ -134,9 +134,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
           }
         });
         if (late) warnings.push(t("api.suggestOutOfTime"));
-        // The summaries of the windows that changed something, in order; with
-        // none, the first window's word on why.
-        const said = summaries.filter((s, i) => s && changed.has(i));
+        // The distinct summaries of the windows that changed something, in
+        // order; with none, the first window's word on why.
+        const said = [...new Set(summaries.filter((s, i) => s && changed.has(i)))];
         const summary = said.length > 0 ? said.join(" ") : (summaries.find(Boolean) ?? "");
         console.log(`[suggest] ${documentId}: ${windows.length} windows, ${changed.size} with changes${late ? ", out of time" : ""}`);
         send({ done: true, summary, warnings });

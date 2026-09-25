@@ -36,7 +36,6 @@ export function ToolbarRow({
   right,
   label,
   moreLabel,
-  pageless,
   onEscape,
 }: {
   groups: ToolbarGroup[];
@@ -44,7 +43,6 @@ export function ToolbarRow({
   right: ReactNode;
   label: string;
   moreLabel: string;
-  pageless: boolean;
   /** Escape on a control: the page takes the focus back. */
   onEscape: () => void;
 }) {
@@ -179,7 +177,7 @@ export function ToolbarRow({
   return (
     <div
       ref={barRef}
-      className={`docs-toolbar${pageless ? " docs-tb-pageless" : ""}`}
+      className="docs-toolbar"
       role="toolbar"
       aria-label={label}
       data-edit-control
@@ -221,7 +219,7 @@ export function ToolbarRow({
               anchorRef={moreRef}
               onClose={() => setMoreOpen(false)}
               placement="below-right"
-              className={`docs-tb-bubble${pageless ? " docs-tb-pageless" : ""}`}
+              className="docs-tb-bubble"
               label={moreLabel}
               keys={false}
             >
