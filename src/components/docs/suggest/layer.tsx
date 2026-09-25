@@ -3,20 +3,25 @@
 import { useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useCollab } from "@/components/collab/collab-context";
+import { useAuthor, useCollab } from "@/components/collab/collab-context";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands } from "@/components/docs/commands";
-import { readSuggestions, setSuggesting, settleSuggestions, suggestionAt } from "@/components/docs/ext/suggest";
+import { focusSuggestion, readSuggestions, setSuggesting, settleSuggestions, suggestionAt } from "@/components/docs/ext/suggest";
 import { belowSlot, pageGeometry, paneReach, slotAt } from "@/components/docs/layer/margin";
+import { applyAssistantOps, type Landing } from "@/components/docs/suggest/assistant";
 import { SuggestionCard } from "@/components/docs/suggest/card";
 import { ReviewPanel } from "@/components/docs/suggest/review";
+import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
+import type { TKey } from "@/lib/i18n/dictionaries";
+import { assistantAuthor, type ResolvedOp } from "@/lib/docs/assistant-suggestions";
 import { suggestionAuthor } from "@/lib/docs/schema";
 import { personColor } from "@/lib/person";
+import type { SuggestCommand } from "@/lib/prompts/suggest";
 
 // Suggesting mode in the page editor (SPEC.md §29): the authors' colors,
-// every suggestion's card, and Review suggested edits. The layer also places
-// the card column's comment and suggestion cards (layer/comment-card.tsx
-// CardColumn).
+// every suggestion's card, and Review suggested edits, of a person's
+// suggestions and the assistant's. The layer also places the card column's
+// comment and suggestion cards (layer/comment-card.tsx CardColumn).
 
 /** Raised on the page's text by Review suggested edits. */
 const REVIEW_EVENT = "docs:review-suggestions";
@@ -55,6 +60,35 @@ registerDocsCommands([
     run: (editor) => settleSuggestions(editor, false),
     enabled: settleable,
   },
+]);
+
+// The assistant on the selection, or on the paragraph the caret stands in:
+// the reader layer opens its box, or runs one of its commands there.
+const COMMANDS: [SuggestCommand, TKey][] = [
+  ["rephrase", "reader.commandRephrase"],
+  ["shorten", "reader.commandShorten"],
+  ["elaborate", "reader.commandElaborate"],
+  ["formal", "reader.commandFormal"],
+  ["casual", "reader.commandCasual"],
+  ["bulleted", "reader.commandBulleted"],
+  ["grammar", "reader.commandFix"],
+];
+registerDocsCommands([
+  {
+    id: "assistant:ask",
+    label: "docsInsert.askAssistant",
+    menu: "tools",
+    keywords: ["ai", "助手"],
+    run: (editor) => fireDocs(editor, DOCS_EVENT.tool, { tool: "assistant" }),
+  },
+  ...COMMANDS.map(([command, label]) => ({
+    id: `assistant:${command}`,
+    label,
+    menu: "tools" as const,
+    keywords: ["ai", "assistant", "助手"],
+    run: (editor: Editor) => fireDocs(editor, DOCS_EVENT.tool, { tool: "assistant", command }),
+    enabled: (editor: Editor) => editor.isEditable,
+  })),
 ]);
 
 /** The column's box over the pane and the notes tray beside it (in a split

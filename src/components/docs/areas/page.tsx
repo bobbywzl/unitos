@@ -500,6 +500,7 @@ export function PageCanvas({
           onDoubleClick={onPageDoubleClick}
           data-docs-page
           data-pageless={pageless || undefined}
+          data-white={white || undefined}
         >
           {!pageless && (
             <div className="docs-sheets" aria-hidden>
