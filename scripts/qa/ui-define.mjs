@@ -1,9 +1,10 @@
 // UI verification for Define (SPEC.md §6): the first row of the AI toolbar
 // on a selection of one word or one phrase, right under the highlight
 // colors, on every surface the reader draws — an article, a transcript,
-// slides, a sheet, a core in the collapsed view, a key term — and never on a
-// longer selection. The definition streams under the row; a key term's is
-// the glossary's, with no call. The route refuses a longer selection.
+// slides, a sheet, a blank document in the page editor, a core in the
+// collapsed view, a key term — and never on a longer selection. The
+// definition streams under the row; a key term's is the glossary's, with
+// no call. The route refuses a longer selection.
 //
 // Usage: DATABASE_URL=... NB=<notebook> DOC=<article> AUDIO=<audio document>
 //   ZH=<Chinese document> CHROME=<chromium> node scripts/qa/ui-define.mjs
@@ -293,6 +294,30 @@ async function run() {
     await page.screenshot({ path: `${SHOT}/define-${label}.png` });
     await page.keyboard.press("Escape");
   }
+
+  // ── A blank document in the page editor (SPEC.md §29) ──
+  const blankRes = await fetch(`${base}/api/documents/blank`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ notebookId: NB, title: "Define in the page editor (QA)" }),
+  });
+  const blank = await blankRes.json();
+  await page.goto(`${base}/n/${NB}?doc=${blank.id}`, { waitUntil: "networkidle" });
+  const editor = "[data-docs-editor] .ProseMirror";
+  await page.waitForSelector(editor, { timeout: 30000 });
+  await page.locator(editor).click();
+  await page.keyboard.type("The ledger reconciles accruals every quarter.");
+  // The typing saves after a pause (700 ms); Define saves what waits first.
+  await page.waitForTimeout(1500);
+  await select(page, editor, "accruals");
+  check("page editor: Define shows on a word", (await defineRow(page).count()) === 1);
+  const pageLayout = await layout(page);
+  check("page editor: Define is the first tool", pageLayout?.first === "define", pageLayout?.first ?? "none");
+  await defineRow(page).click();
+  const pageMeaning = await definitionText(page);
+  check("page editor: the definition lands", pageMeaning.includes("Mock definition of accruals"), pageMeaning.replace(/\s+/g, " ").slice(0, 90));
+  await page.screenshot({ path: `${SHOT}/define-page-editor.png` });
+  await page.keyboard.press("Escape");
 
   // ── Chinese ──
   await context.addCookies([{ name: "dissect-lang", value: "zh", url: base }]);
