@@ -5365,7 +5365,9 @@ export function ReaderInteractions({
       // The page's own skips read as the server's: the words changed, or hold an object.
       for (const { i, reason } of landed.skipped) {
         const why = ops.find((op) => op.i === i)?.why ?? "";
-        run.skipped.push(t(reason === "object" ? "docsSuggest.skipObject" : "docsSuggest.skipChanged", { why }));
+        run.skipped.push(
+          t(reason === "object" ? "docsSuggest.skipObject" : reason === "overlap" ? "api.suggestSkipOverlap" : "docsSuggest.skipChanged", { why }),
+        );
       }
       watchRuns(editor, code.readSuggestions);
       run.count = countRun(run, code.readSuggestions(editor.state.doc));
