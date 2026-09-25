@@ -182,6 +182,7 @@ until the owner makes one.
 - Voice command (SPEC.md §6): transcription minutes, like video, plus one Claude Sonnet 5 call per command over the open document
 - Collapse (SPEC.md §28): one Claude Opus 5.5 call per window of 30,000 characters of the article, the whole document as the cached prefix; a document collapses once, its cores stored for every reader
 - Compare two documents and Ask about a range: tokens like every derivation
+- The assistant's suggestions (SPEC.md §29): one Claude Sonnet 5 call per command on selected words; up to twelve, one per window, for a whole document
 - What an expired account keeps: today only offline work and large images close. Whether AI, documents, or sharing close too when the trial ends is undecided
 
 ## Open questions
