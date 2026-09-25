@@ -99,6 +99,10 @@ const en = {
   scVoice: "Start voice typing",
   scToggleCheckbox: "Toggle a checkbox",
   scNonPrinting: "Show non-printing characters",
+  // Format > Text > Capitalization
+  caseLower: "Capitalization: lowercase",
+  caseUpper: "Capitalization: UPPERCASE",
+  caseTitle: "Capitalization: Title Case",
   // Voice typing
   voiceTyping: "Voice typing",
   clickToSpeak: "Click to speak",
@@ -215,6 +219,9 @@ const zh: Record<keyof typeof en, string> = {
   scVoice: "开始语音输入",
   scToggleCheckbox: "勾选或取消勾选",
   scNonPrinting: "显示非打印字符",
+  caseLower: "大小写：小写",
+  caseUpper: "大小写：大写",
+  caseTitle: "大小写：首字母大写",
   voiceTyping: "语音输入",
   clickToSpeak: "点击开始说话",
   clickToStop: "点击停止",

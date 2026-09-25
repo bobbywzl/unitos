@@ -4,24 +4,57 @@ import type { Editor } from "@tiptap/react";
 import { useEffect, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
-import { registerDocsCommands } from "@/components/docs/commands";
+import { registerDocsCommands, type DocsCommand } from "@/components/docs/commands";
 import { toast } from "@/components/docs/insert/context";
+import { execClipboard, pasteFromClipboard } from "@/components/docs/insert/context-menu";
 import { isMac } from "@/components/docs/keys";
 import { AutocorrectBubble } from "@/components/docs/typing/autocorrect-bubble";
 import { TYPING_EVENT, fireTyping } from "@/components/docs/typing/events";
 import { findState, searchFrom, setFind, stepResult } from "@/components/docs/typing/find";
 import { FindBar, FindReplaceDialog, type FindMode } from "@/components/docs/typing/find-ui";
+import { setCase, toggleSmallCaps, type TextCase } from "@/components/docs/typing/format";
 import { copyMarkdown, pasteMarkdown } from "@/components/docs/typing/paste";
 import { typingPrefs } from "@/components/docs/typing/prefs";
 import { PreferencesDialog } from "@/components/docs/typing/preferences-dialog";
 import { ShortcutsDialog } from "@/components/docs/typing/shortcuts-dialog";
 import { VoiceTyping } from "@/components/docs/typing/voice-typing";
+import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The typing area (SPEC.md §29): find and find and replace, Tools >
 // Preferences, the keyboard shortcuts, voice typing, and the spelling
 // switch. Their keys answer when the page editor has the focus, or when
 // nothing else does — never in the notes tray or any other text box. The
 // word count (word-count.tsx) mounts beside this layer.
+
+type Run = (editor: Editor) => void;
+const editable = (editor: Editor) => editor.isEditable;
+const selected = (editor: Editor) => !editor.state.selection.empty;
+
+/** Format > Text: the selection's text formatting. */
+const text = (id: string, label: TKey, keywords: string[], run: Run, shortcut?: string): DocsCommand => ({
+  id: `typing:${id}`,
+  label,
+  menu: "format",
+  keywords,
+  shortcut,
+  run,
+  enabled: editable,
+});
+
+const capitalization = (mode: TextCase, label: TKey, keywords: string[]): DocsCommand => ({
+  ...text(`case-${mode}`, label, keywords, (editor) => setCase(editor, mode)),
+  enabled: (editor) => editable(editor) && selected(editor),
+});
+
+/** Edit: the right-click menu's clipboard items. */
+const edit = (id: string, label: TKey, shortcut: string | undefined, run: Run, enabled?: (editor: Editor) => boolean): DocsCommand => ({
+  id: `typing:${id}`,
+  label,
+  menu: "edit",
+  shortcut,
+  run,
+  enabled,
+});
 
 registerDocsCommands([
   {
@@ -51,7 +84,7 @@ registerDocsCommands([
     id: "typing:voice",
     label: "docsTyping.voiceTyping",
     menu: "tools",
-    keywords: ["voice", "dictation", "microphone", "语音"],
+    keywords: ["voice", "dictation", "语音"],
     shortcut: "Mod+Shift+S",
     run: () => fireTyping(TYPING_EVENT.voice),
   },
@@ -79,6 +112,27 @@ registerDocsCommands([
     shortcut: "Mod+/",
     run: () => fireTyping(TYPING_EVENT.shortcuts),
   },
+  text("strikethrough", "docsTyping.scStrike", ["strike-through"], (editor) => editor.chain().focus().toggleStrike().run(), isMac() ? "Mod+Shift+X" : "Alt+Shift+5"),
+  text("superscript", "docsTyping.scSuperscript", ["super script", "super-script", "exponent", "apply superscript"], (editor) => editor.chain().focus().toggleSuperscript().run(), "Mod+."),
+  text("subscript", "docsTyping.scSubscript", ["sub script", "sub-script", "apply subscript"], (editor) => editor.chain().focus().toggleSubscript().run(), "Mod+,"),
+  text("small-caps", "docsTyping.scSmallCaps", [], toggleSmallCaps, isMac() ? "Alt+Shift+K" : "Ctrl+Shift+K"),
+  capitalization("lower", "docsTyping.caseLower", []),
+  capitalization("upper", "docsTyping.caseUpper", ["all caps"]),
+  capitalization("title", "docsTyping.caseTitle", ["capitalize"]),
+  {
+    id: "typing:non-printing",
+    label: "docsTyping.scNonPrinting",
+    menu: "view",
+    keywords: ["show formatting marks", "display hidden characters", "toggle formatting markup", "hide invisible characters"],
+    shortcut: "Mod+Shift+P",
+    run: (editor) => editor.commands.toggleInvisibleCharacters(),
+  },
+  edit("cut", "docsInsert.cut", "Mod+X", (editor) => execClipboard(editor, "cut"), (editor) => editable(editor) && selected(editor)),
+  edit("copy", "docsInsert.copy", "Mod+C", (editor) => execClipboard(editor, "copy"), selected),
+  edit("paste", "docsInsert.paste", "Mod+V", (editor) => void pasteFromClipboard(editor, false), editable),
+  edit("paste-plain", "docsInsert.pastePlain", "Mod+Shift+V", (editor) => void pasteFromClipboard(editor, true), editable),
+  edit("select-all", "docsTyping.scSelectAll", "Mod+A", (editor) => editor.chain().focus().selectAll().run()),
+  edit("delete", "common.delete", undefined, (editor) => editor.chain().focus().deleteSelection().run(), (editor) => editable(editor) && selected(editor)),
 ]);
 
 function isTextEntry(el: HTMLElement): boolean {

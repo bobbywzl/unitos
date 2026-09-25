@@ -14,9 +14,11 @@ export type SyncPresence = Person & { documentId: string | null };
 const POLL_MS = 8_000;
 
 // Typing must never be clobbered: a refresh waits while an input, textarea, or
-// editable block has focus, or a text selection is open.
+// editable block has focus, or a text selection is open. The page editor
+// takes a refresh while typing: its save merges (components/docs/use-docs-save.ts).
 function refreshSafe(): boolean {
   const el = document.activeElement as HTMLElement | null;
+  if (el?.closest("[data-docs-body]")) return true;
   if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
     return false;
   }

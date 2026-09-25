@@ -2,6 +2,7 @@
 
 import { useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { docsCommands, type DocsMenu } from "@/components/docs/commands";
 import type { ParagraphFlag } from "@/components/docs/ext/toolbar";
@@ -47,8 +48,9 @@ import { CustomColorDialog } from "@/components/docs/toolbar/custom-color";
 import { FontSelect } from "@/components/docs/toolbar/font-menu";
 import { FontSizeBox, formatSize, parseSize } from "@/components/docs/toolbar/font-size";
 import { ImageMenu, type ImageSource } from "@/components/docs/toolbar/image-menu";
-import { ChecklistPalette, PresetGrid } from "@/components/docs/toolbar/list-menus";
-import { BULLET_PRESETS, currentListStyle, NUMBER_PRESETS } from "@/components/docs/toolbar/lists";
+import { IndentDialog } from "@/components/docs/toolbar/indent-dialog";
+import { ChecklistPalette, PresetGrid, RestartNumberingDialog } from "@/components/docs/toolbar/list-menus";
+import { BULLET_PRESETS, continueNumbering, currentListStyle, NUMBER_PRESETS, numberedLine } from "@/components/docs/toolbar/lists";
 import { ModeSwitcher, type DocsMode } from "@/components/docs/toolbar/mode";
 import { ToolbarRow, type ToolbarGroup } from "@/components/docs/toolbar/overflow";
 import { usePaintFormat } from "@/components/docs/toolbar/paint-format";
@@ -94,6 +96,9 @@ const MENU_NAMES: Record<DocsMenu, TKey> = {
   tools: "docs.menuTools",
 };
 
+/** Google Docs' Format submenu of the lists: the list menus and List options. */
+const BULLETS = "bullets & numbering";
+
 const ALIGNS: { align: Align; key: TKey; combo: string; Icon: typeof AlignLeftIcon }[] = [
   { align: "left", key: "docs.alignLeft", combo: "Mod+Shift+L", Icon: AlignLeftIcon },
   { align: "center", key: "docs.alignCenter", combo: "Mod+Shift+E", Icon: AlignCenterIcon },
@@ -101,16 +106,17 @@ const ALIGNS: { align: Align; key: TKey; combo: string; Icon: typeof AlignLeftIc
   { align: "justify", key: "docs.alignJustify", combo: "Mod+Shift+J", Icon: AlignJustifyIcon },
 ];
 
-/** The toolbar menus Search the menus opens, by their DropBtn id. */
-const MENUS: [string, TKey, string[]][] = [
+/** The toolbar menus Search the menus opens, by their DropBtn id, and the
+    Google Docs menu each lives in when not Format. */
+const MENUS: [string, TKey, string[], DocsMenu?][] = [
   ["font", "docs.font", ["typeface", "more fonts"]],
   ["text-color", "docs.textColor", ["font color", "colour"]],
   ["highlight-color", "docs.highlightColor", ["background color", "marker"]],
-  ["image", "docs.insertImage", ["picture", "photo", "upload", "url"]],
+  ["image", "docs.insertImage", ["picture", "photo", "upload", "url"], "insert"],
   ["line-spacing", "docs.customSpacing", ["line spacing", "paragraph spacing"]],
-  ["checklist", "docs.checklistMenu", ["checklist styles"]],
-  ["bulleted-list", "docs.bulletedListMenu", ["bullet styles"]],
-  ["numbered-list", "docs.numberedListMenu", ["numbering styles"]],
+  ["checklist", "docs.checklistMenu", ["checklist styles", BULLETS]],
+  ["bulleted-list", "docs.bulletedListMenu", ["bullet styles", BULLETS]],
+  ["numbered-list", "docs.numberedListMenu", ["numbering styles", BULLETS]],
 ];
 
 /** An action a button runs and Search the menus finds; `on: false` is off. */
@@ -207,6 +213,7 @@ export function DocsToolbar({
   const s = useEditorState({ editor, selector: ({ editor: e }) => readToolbar(e) });
   const paint = usePaintFormat(editor);
   const [customFor, setCustomFor] = useState<"text" | "highlight" | null>(null);
+  const [dialog, setDialog] = useState<"indent" | "numbering" | null>(null);
   const off = !(mode === "editing" && canEdit);
   // At once, not on the next frame as editor.commands.focus() does, so a key
   // pressed right after (Alt+/ again) keeps its own target.
@@ -215,6 +222,15 @@ export function DocsToolbar({
   };
   const run = (fn: (c: ReturnType<Editor["chain"]>) => ReturnType<Editor["chain"]>) => fn(editor.chain().focus()).run();
   const fire = (name: string) => window.dispatchEvent(new CustomEvent(name));
+  // File > Rename: the title row shows, and its field takes the focus.
+  const rename = () => {
+    if (headerHidden) flushSync(onToggleHeader);
+    editor.view.dom.closest("[data-docs-editor]")?.querySelector<HTMLInputElement>(".docs-title-input")?.focus();
+  };
+  const closeDialog = () => {
+    setDialog(null);
+    focusPage();
+  };
 
   // Search the menus (Alt+/), and the modes' keys: Ctrl+Alt+Shift+Z is
   // Editing, Ctrl+Alt+Shift+C and D are Viewing (Docs' help page and its
@@ -312,7 +328,7 @@ export function DocsToolbar({
     const own: Act[] = [
       ...Object.values(A).map((a: Act) => ({ ...a, on: a.on !== false && (edits(a) || !off) })),
       ...ALIGNS.map((a) => ({ id: `align-${a.align}`, key: a.key, combo: a.combo, Icon: a.Icon, words: ["align"], run: () => run((c) => c.setTextAlign(a.align)), on: !off })),
-      ...MENUS.map(([id, key, words]) => ({ id: `open-${id}`, key, words, run: () => window.dispatchEvent(new CustomEvent(OPEN_MENU_EVENT, { detail: { id } })), on: !off })),
+      ...MENUS.map(([id, key, words, where]) => ({ id: `open-${id}`, key, words, where, run: () => window.dispatchEvent(new CustomEvent(OPEN_MENU_EVENT, { detail: { id } })), on: !off })),
     ];
     const list: SearchAction[] = own.map((a) => ({
       id: a.id,
@@ -324,13 +340,13 @@ export function DocsToolbar({
       enabled: a.on !== false,
       run: a.run,
     }));
-    const add = (id: string, label: string, where: DocsMenu, runIt: () => void, enabled = !off, shortcut?: string) =>
-      list.push({ id, label, where: t(MENU_NAMES[where]), run: runIt, enabled, shortcut: shortcut && keys(shortcut) });
-    add("zoom-fit", `${t("docs.zoom")}: ${t("docs.zoomFit")}`, "view", () => onZoom("fit"), true);
-    for (const z of ZOOMS) add(`zoom-${z}`, t("docs.zoomValue", { n: z }), "view", () => onZoom(z), true);
+    const add = (id: string, label: string, where: DocsMenu, runIt: () => void, o: { enabled?: boolean; shortcut?: string; words?: string[] } = {}) =>
+      list.push({ id, label, where: t(MENU_NAMES[where]), run: runIt, enabled: o.enabled ?? !off, shortcut: o.shortcut && keys(o.shortcut), keywords: o.words });
+    add("zoom-fit", `${t("docs.zoom")}: ${t("docs.zoomFit")}`, "view", () => onZoom("fit"), { enabled: true });
+    for (const z of ZOOMS) add(`zoom-${z}`, t("docs.zoomValue", { n: z }), "view", () => onZoom(z), { enabled: true });
     for (const style of menuStyles(6)) {
       const name = t(STYLE_LABEL[style]);
-      add(`style-${style}`, name, "format", () => run((c) => c.setDocStyle(style)), !off, STYLE_KEYS[style]);
+      add(`style-${style}`, name, "format", () => run((c) => c.setDocStyle(style)), { shortcut: STYLE_KEYS[style] });
       add(`update-${style}`, t("docs.updateStyle", { name }), "format", () => updateStyleToMatch(editor, style));
     }
     for (const o of styleOptions(editor, t)) add(o.key, t(o.key), "format", o.run);
@@ -340,11 +356,24 @@ export function DocsToolbar({
     add("space-before", t(before ? "docs.removeSpaceBefore" : "docs.addSpaceBefore"), "format", () => setSpace(editor, s.para, "before", before ? 0 : 10));
     add("space-after", t(after ? "docs.removeSpaceAfter" : "docs.addSpaceAfter"), "format", () => setSpace(editor, s.para, "after", after ? 0 : 10));
     if (!pageless) for (const { flag, key } of PARAGRAPH_FLAGS) add(flag, t(key), "format", () => toggleFlag(editor, s.para, flag));
+    add("indentation-options", t("docs.indentationOptions"), "format", () => setDialog("indent"), { words: ["hanging indent", "first line indent"] });
+    // List options: Restart numbering asks for the number; the right-click
+    // menu's restarts at 1.
+    const listWords = ["list options", BULLETS];
+    add("restart-numbering", t("docs.restartNumbering"), "format", () => setDialog("numbering"), {
+      enabled: !off && numberedLine(editor.state) !== null,
+      words: ["start over", "renumber", ...listWords],
+    });
+    add("continue-numbering", t("docs.continueNumbering"), "format", () => continueNumbering(editor.state, editor.view.dispatch), {
+      enabled: !off && continueNumbering(editor.state),
+      words: ["maintain numbering", "join list", "continue preceding list", "continue previous list", "combine list", ...listWords],
+    });
+    add("rename", t("docs.renameTitle"), "file", rename, { enabled: canEdit, words: ["title", "save as"] });
     if (canEdit) {
-      add("mode-editing", t("docs.editingMode"), "view", () => onMode("editing"), true, "Mod+Alt+Shift+Z");
-      add("mode-viewing", t("docs.viewingMode"), "view", () => onMode("viewing"), true, "Mod+Alt+Shift+C");
+      add("mode-editing", t("docs.editingMode"), "view", () => onMode("editing"), { enabled: true, shortcut: "Mod+Alt+Shift+Z" });
+      add("mode-viewing", t("docs.viewingMode"), "view", () => onMode("viewing"), { enabled: true, shortcut: "Mod+Alt+Shift+C" });
     }
-    add("menus", t(headerHidden ? "docs.showMenus" : "docs.hideMenus"), "view", onToggleHeader, true, "Ctrl+Shift+F");
+    add("menus", t(headerHidden ? "docs.showMenus" : "docs.hideMenus"), "view", onToggleHeader, { enabled: true, shortcut: "Ctrl+Shift+F", words: ["compact mode"] });
     const taken = new Set(registered.map((c) => c.label.toLowerCase()));
     return [...list.filter((a) => !taken.has(a.label.toLowerCase())), ...registered];
   };
@@ -611,6 +640,8 @@ export function DocsToolbar({
           </>
         }
       />
+      {dialog === "indent" && <IndentDialog editor={editor} onClose={closeDialog} />}
+      {dialog === "numbering" && <RestartNumberingDialog editor={editor} onClose={closeDialog} />}
       {customFor && (
         <CustomColorDialog
           initial={(customFor === "text" ? s.color : s.highlight) ?? "#000000"}

@@ -1,13 +1,16 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
+import { useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { keepFocus } from "@/components/docs/menu";
-import { applyListPreset, CHECKLIST_PRESETS, tileRows, type ListPreset } from "@/components/docs/toolbar/lists";
+import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { applyListPreset, CHECKLIST_PRESETS, restartNumbering, tileRows, type ListPreset } from "@/components/docs/toolbar/lists";
 
 // The list buttons' palettes (SPEC.md §29): Google Docs' presets — a 3 × 2
 // grid for bullets and for numbers, 2 × 1 for checklists — each tile
-// drawing its glyphs level by level.
+// drawing its glyphs level by level. And List options > Restart numbering,
+// which asks for the number.
 
 function Tile({ preset, on, onPick }: { preset: ListPreset; on: boolean; onPick: () => void }) {
   const rows = tileRows(preset);
@@ -100,5 +103,52 @@ export function PresetGrid({
         />
       ))}
     </div>
+  );
+}
+
+/** List options > Restart numbering: the caret's line starts the list again
+    at the typed number. */
+export function RestartNumberingDialog({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+  const t = useT();
+  const [value, setValue] = useState("1");
+  const n = /^\d{1,4}$/.test(value.trim()) ? Number(value) : 0;
+  const apply = () => {
+    if (n < 1) return;
+    restartNumbering(n)(editor.state, editor.view.dispatch);
+    onClose();
+  };
+  return (
+    <ToolbarDialog
+      title={t("docs.numbering")}
+      onClose={onClose}
+      className="docs-fields-dialog"
+      actions={
+        <>
+          <DialogButton onClick={onClose}>{t("docs.cancel")}</DialogButton>
+          <DialogButton primary disabled={n < 1} onClick={apply}>
+            {t("docs.ok")}
+          </DialogButton>
+        </>
+      }
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          apply();
+        }}
+      >
+        <label>
+          <span className="docs-tb-label">{t("docs.restartNumberingAt")}</span>
+          <input
+            className="docs-tb-field"
+            inputMode="numeric"
+            maxLength={4}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onFocus={(e) => e.currentTarget.select()}
+          />
+        </label>
+      </form>
+    </ToolbarDialog>
   );
 }

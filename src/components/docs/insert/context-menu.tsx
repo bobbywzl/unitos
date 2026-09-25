@@ -12,6 +12,7 @@ import { DOCS_EVENT } from "@/components/docs/extensions";
 import { keys, matchesCombo, isMac } from "@/components/docs/keys";
 import { DropdownPanel, MenuItem, MenuSeparator } from "@/components/docs/menu";
 import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { continueNumbering, restartNumbering } from "@/components/docs/toolbar/lists";
 import { STYLE_LABEL } from "@/components/docs/toolbar/styles-menu";
 import { blockStyle, updateStyleToMatch } from "@/components/docs/toolbar/styles";
 import { copyMarkdown, insertImageFiles, pasteMarkdown } from "@/components/docs/typing/paste";
@@ -57,13 +58,15 @@ type Entry = { label: string; icon?: ReactNode; shortcut?: string; disabled?: bo
 
 type Place = { x: number; y: number; byKeys: boolean };
 
-async function pasteFromClipboard(editor: Editor, plain: boolean): Promise<boolean> {
+/** Paste, or paste without formatting, from the clipboard (Edit > Paste
+    too). When the browser keeps the clipboard, a dialog names the keys. */
+export async function pasteFromClipboard(editor: Editor, plain: boolean): Promise<void> {
   try {
     if (plain) {
       const text = await navigator.clipboard.readText();
       editor.view.focus();
       editor.view.pasteText(text);
-      return true;
+      return;
     }
     for (const item of await navigator.clipboard.read()) {
       const image = item.types.find((type) => type.startsWith("image/"));
@@ -79,15 +82,15 @@ async function pasteFromClipboard(editor: Editor, plain: boolean): Promise<boole
         editor.view.focus();
         editor.view.pasteText(text);
       } else continue;
-      return true;
+      return;
     }
-    return true;
   } catch {
-    return false;
+    emitInsert(editor, { type: "clipboard-blocked" });
   }
 }
 
-function execClipboard(editor: Editor, command: "copy" | "cut"): void {
+/** Cut or copy the selection (Edit > Cut and Copy too). */
+export function execClipboard(editor: Editor, command: "copy" | "cut"): void {
   editor.view.focus();
   let done = false;
   try {
@@ -228,8 +231,7 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
   const textSelected = hasSelection && !image && !toc && state.doc.textBetween(sel.from, sel.to, " ", " ").trim().length > 0;
   const item = (label: TKey, icon: ReactNode, run: () => void, extra?: Omit<Exclude<Entry, "sep">, "label">): Entry => ({ label: t(label), icon, run, ...extra });
   const chain = () => editor.chain().focus();
-  const paste = (plain: boolean) => () =>
-    void pasteFromClipboard(editor, plain).then((ok) => ok || emitInsert(editor, { type: "clipboard-blocked" }));
+  const paste = (plain: boolean) => () => void pasteFromClipboard(editor, plain);
   const copyLink = (url: string) => () =>
     void navigator.clipboard.writeText(url).then(
       () => toast(t("docs.linkCopied")),
@@ -339,6 +341,10 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
     ...(parent.type.name === "heading" && typeof parent.attrs.blockId === "string"
       ? [item("docsInsert.copyHeadingLink", <LinkIcon />, copyLink(`${window.location.origin}${window.location.pathname}${window.location.search}#heading=${parent.attrs.blockId}`))]
       : []),
+    "sep",
+    // On a numbered line; Restart numbering starts the list again at 1.
+    ...(editing && restartNumbering(1)(state) ? [item("docs.restartNumbering", null, () => restartNumbering(1)(editor.state, editor.view.dispatch))] : []),
+    ...(editing && continueNumbering(state) ? [item("docs.continueNumbering", null, () => continueNumbering(editor.state, editor.view.dispatch))] : []),
     "sep",
     {
       label: t("docsInsert.formatOptions"),

@@ -31,6 +31,7 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
       { label: "docsTyping.scFindPrevious", pc: ["Mod+Shift+G", "Shift+F3"] },
       { label: "docsTyping.scPageBreak", pc: ["Mod+Enter"] },
       { label: "docsTyping.scHideTitle", pc: ["Mod+Shift+F"] },
+      { label: "docsVersions.seeHistory", pc: ["Mod+Alt+Shift+H"] },
     ],
   },
   {

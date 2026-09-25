@@ -1,9 +1,52 @@
 import type { Editor } from "@tiptap/core";
+import { closeHistory } from "@tiptap/pm/history";
 import { applyFormatting, captureFormatting, type Formatting } from "@/components/docs/toolbar/paint-format";
+import { charClass } from "@/components/docs/typing/chars";
 
 // The text shortcuts Google Docs binds beyond Bold, Italic, and Underline
-// (SPEC.md §29, typing): small caps, copy and paste formatting (the
-// toolbar's Paint format code), tick a checklist line.
+// (SPEC.md §29, typing): small caps, capitalization, copy and paste
+// formatting (the toolbar's Paint format code), tick a checklist line.
+
+export type TextCase = "lower" | "upper" | "title";
+
+/** Format > Text > Capitalization: the selected letters in lowercase,
+    UPPERCASE, or Title Case (each word's first letter, by Docs' words:
+    don't, well-known). Every text node keeps its marks; one undo step. */
+export function setCase(editor: Editor, mode: TextCase): boolean {
+  const { state } = editor;
+  const tr = state.tr;
+  for (const { $from, $to } of state.selection.ranges) {
+    let blockStart = -1;
+    let inWord = false;
+    state.doc.nodesBetween($from.pos, $to.pos, (node, pos) => {
+      if (!node.isInline) return true;
+      const start = Math.max(pos, $from.pos);
+      const $start = state.doc.resolve(start);
+      if ($start.start() !== blockStart) {
+        // A word the selection starts inside goes on.
+        blockStart = $start.start();
+        const before = [...$start.parent.textBetween(0, $start.parentOffset, undefined, " ")].reverse().find((ch) => charClass(ch) !== "t");
+        inWord = before !== undefined && charClass(before) === "w";
+      }
+      if (!node.isText || !node.text) {
+        inWord = false;
+        return false;
+      }
+      const end = Math.min(pos + node.nodeSize, $to.pos);
+      const text = node.text.slice(start - pos, end - pos);
+      let next = "";
+      for (const ch of text) {
+        const cls = charClass(ch);
+        next += mode === "upper" || (mode === "title" && cls === "w" && !inWord) ? ch.toUpperCase() : ch.toLowerCase();
+        if (cls !== "t") inWord = cls === "w";
+      }
+      if (next !== text) tr.replaceWith(tr.mapping.map(start), tr.mapping.map(end), state.schema.text(next, node.marks));
+      return false;
+    });
+  }
+  if (tr.docChanged) editor.view.dispatch(closeHistory(tr));
+  return true;
+}
 
 /** Small caps on or off (a textStyle attribute). */
 export function toggleSmallCaps(editor: Editor): boolean {

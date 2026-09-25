@@ -54,6 +54,8 @@ const en = {
   richTextTooLarge: "The document is too large to save",
   richTextInvalid: "The document could not be read",
   richTextConflict: "The document changed in another tab or by another person",
+  versionNotFound: "Version not found",
+  versionEmpty: "An empty document is not kept as a version",
   onlyTextBlocksRemoved: "Only text blocks can be removed",
   onlyTextBlocksStyled: "Only text blocks can be styled",
   editNotRemovedParagraph: "Edit is not a removed paragraph",
@@ -246,6 +248,7 @@ const en = {
 
   // Export
   exportFormatInvalid: "format must be md or docx",
+  documentExportFormatInvalid: "format must be docx",
 
   // Admin
   adminNotConfigured: "Admin login is not configured (ADMIN_PASSWORD unset).",
@@ -344,6 +347,8 @@ const zh: Record<keyof typeof en, string> = {
   richTextTooLarge: "文档太大，无法保存",
   richTextInvalid: "无法读取文档",
   richTextConflict: "文档已在另一个标签页或被另一个人更改",
+  versionNotFound: "未找到版本",
+  versionEmpty: "空文档不会保存为版本",
   onlyTextBlocksRemoved: "只有文本块可以移除",
   onlyTextBlocksStyled: "只有文本块可以设置样式",
   editNotRemovedParagraph: "此编辑不是被移除的段落",
@@ -511,6 +516,7 @@ const zh: Record<keyof typeof en, string> = {
   feedbackNoAccount: "这条反馈没有可通知的账户。",
 
   exportFormatInvalid: "format 必须是 md 或 docx",
+  documentExportFormatInvalid: "format 必须是 docx",
 
   adminNotConfigured: "管理登录未配置（未设置 ADMIN_PASSWORD）。",
   invalidPassword: "密码错误",

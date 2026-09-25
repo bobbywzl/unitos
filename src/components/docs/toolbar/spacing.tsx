@@ -208,7 +208,7 @@ function CustomSpacingDialog({ editor, para, onClose }: { editor: Editor; para: 
     <ToolbarDialog
       title={t("docs.customSpacing")}
       onClose={close}
-      className="docs-spacing-dialog"
+      className="docs-fields-dialog"
       actions={
         <>
           <DialogButton onClick={close}>{t("docs.cancel")}</DialogButton>
@@ -229,7 +229,7 @@ function CustomSpacingDialog({ editor, para, onClose }: { editor: Editor; para: 
           <input className="docs-tb-field" inputMode="decimal" value={line} onChange={(e) => setLine(e.target.value)} />
         </label>
         <h3>{t("docs.paragraphSpacingPts")}</h3>
-        <div className="docs-spacing-row">
+        <div className="docs-fields-row">
           <label>
             <span className="docs-tb-label">{t("docs.spaceBefore")}</span>
             <input className="docs-tb-field" inputMode="decimal" value={before} onChange={(e) => setBefore(e.target.value)} />

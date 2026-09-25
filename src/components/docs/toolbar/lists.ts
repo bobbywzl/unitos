@@ -1,10 +1,13 @@
 import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import type { EditorState } from "@tiptap/pm/state";
+import type { Command, EditorState } from "@tiptap/pm/state";
+import { isList } from "@/components/docs/typing/lists";
 
 // Google Docs' list presets (SPEC.md §29). The outermost list keeps its
 // preset in `listStyle`, named as the Google Docs API names it (null is the
 // type's default); a nested list draws its level of it (css/toolbar.css).
+// Restart numbering and Continue previous numbering set a numbered list's
+// `start`.
 
 type ListKind = "bulletList" | "orderedList" | "taskList";
 
@@ -166,3 +169,56 @@ export function applyListPreset(editor: Editor, kind: ListKind, style: string | 
   editor.view.dispatch(tr);
   editor.commands.focus();
 }
+
+/** The caret's line when the innermost list around it is numbered: the
+    list, the line's index in it, and the place before the line. */
+export function numberedLine(state: EditorState): { list: PMNode; pos: number; index: number; at: number } | null {
+  const { $from } = state.selection;
+  for (let d = $from.depth; d > 0; d--) {
+    const node = $from.node(d);
+    if (isList(node)) return node.type.name === "orderedList" ? { list: node, pos: $from.before(d), index: $from.index(d), at: $from.before(d + 1) } : null;
+  }
+  return null;
+}
+
+const startOf = (list: PMNode) => Number(list.attrs.start) || 1;
+
+/** Restart numbering: the list splits before the caret's line, and the line
+    starts a list numbered from `n`. */
+export const restartNumbering =
+  (n: number): Command =>
+  (state, dispatch) => {
+    const line = numberedLine(state);
+    if (!line || (line.index === 0 && startOf(line.list) === n)) return false;
+    if (dispatch) {
+      const attrs = { ...line.list.attrs, start: n };
+      const tr = state.tr;
+      if (line.index === 0) tr.setNodeMarkup(line.pos, undefined, attrs);
+      else tr.split(line.at, 1, [{ type: line.list.type, attrs }]);
+      dispatch(tr.scrollIntoView());
+    }
+    return true;
+  };
+
+/** Continue previous numbering: the caret's numbered list numbers on from
+    the list before it of the same kind and preset, and joins it when the
+    two touch. False when there is none, or the numbering already goes on. */
+export const continueNumbering: Command = (state, dispatch) => {
+  const line = numberedLine(state);
+  if (!line) return false;
+  const $list = state.doc.resolve(line.pos);
+  for (let i = $list.index() - 1; i >= 0; i--) {
+    const prev = $list.parent.child(i);
+    if (prev.type !== line.list.type || (prev.attrs.listStyle ?? null) !== (line.list.attrs.listStyle ?? null)) continue;
+    const next = startOf(prev) + prev.childCount;
+    if (startOf(line.list) === next) return false;
+    if (dispatch) {
+      const tr = state.tr;
+      if (i === $list.index() - 1) tr.join(line.pos);
+      else tr.setNodeMarkup(line.pos, undefined, { ...line.list.attrs, start: next });
+      dispatch(tr.scrollIntoView());
+    }
+    return true;
+  }
+  return false;
+};

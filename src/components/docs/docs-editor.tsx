@@ -16,9 +16,11 @@ import { WordCountDialog } from "@/components/docs/word-count";
 import { insertImageFiles } from "@/components/docs/typing/paste";
 import { InsertLayer } from "@/components/docs/areas/insert";
 import { UnitosLayer } from "@/components/docs/areas/layer";
+import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageCanvas, PageRuler } from "@/components/docs/areas/page";
 import { StatusPopup } from "@/components/docs/page/status-popup";
 import { TypingLayer } from "@/components/docs/areas/typing";
+import { VersionHistory, VersionHistoryButton } from "@/components/docs/versions/version-history";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import type { Highlight } from "@/components/reader/block-view";
 import { api } from "@/lib/api";
@@ -269,7 +271,7 @@ export function DocsEditor({
 
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    editor.setEditable(canEdit && mode === "editing");
+    editor.setEditable(canEdit && mode !== "viewing");
   }, [editor, canEdit, mode]);
 
   // Ctrl+Shift+F hides the title row, as Google Docs' compact mode does.
@@ -307,7 +309,7 @@ export function DocsEditor({
   };
 
   const area: DocsAreaProps | null = editor
-    ? { editor, documentId, notebookId, canEdit, editing: canEdit && mode === "editing", pageSetup, documents }
+    ? { editor, documentId, notebookId, canEdit, editing: canEdit && mode !== "viewing", pageSetup, documents }
     : null;
 
   return (
@@ -326,6 +328,7 @@ export function DocsEditor({
               }}
             />
             {canEdit && <SaveStatus state={saveState} />}
+            {editor && <VersionHistoryButton editor={editor} />}
           </div>
         )}
         {editor && (
@@ -355,8 +358,10 @@ export function DocsEditor({
       {area && <InsertLayer {...area} />}
       {area && <TypingLayer {...area} />}
       {area && <UnitosLayer {...area} />}
+      {area && <SuggestLayer {...area} suggesting={mode === "suggesting"} />}
+      {area && <VersionHistory key={documentId} {...area} />}
       {editor && <LinkDialog editor={editor} />}
-      {editor && <LinkBubble editor={editor} canEdit={canEdit && mode === "editing"} />}
+      {editor && <LinkBubble editor={editor} canEdit={canEdit && mode !== "viewing"} />}
       {editor && <WordCountDialog editor={editor} />}
       <CommentRelay documentId={documentId} editor={editor} />
     </div>

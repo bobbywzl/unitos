@@ -3135,9 +3135,26 @@ export function ReaderInteractions({
       container.removeEventListener("transitionend", onMoved);
     };
   }, [docsShift, blankDocument]);
+  // The page editor's own cards (a suggestion's, docs/suggest) keep the
+  // margin too: their layer says on the pane when it wants it.
+  const [pageMargin, setPageMargin] = useState(false);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!blankDocument || !container) return;
+    const onMargin = (e: Event) => setPageMargin((e as CustomEvent<boolean>).detail);
+    container.addEventListener("docs:margin", onMargin);
+    return () => container.removeEventListener("docs:margin", onMargin);
+  }, [blankDocument]);
+  useEffect(() => {
+    const container = containerRef.current;
+    const page = pageMargin && container && !splitRef.current ? pageGeometry(container, docsShiftRef.current) : null;
+    const place = page && marginPlace(page);
+    if (place && place.shift > docsShiftRef.current) setDocsShift(place.shift);
+  }, [pageMargin]);
   // The page moves back once no card and no toolbar is open, and not under a
   // held press: the words would slide under the drag it starts.
   const marginCardOpen =
+    pageMargin ||
     bubble !== null ||
     simplifyCard !== null ||
     assistantChat !== null ||

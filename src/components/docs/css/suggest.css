@@ -1,0 +1,123 @@
+/* The page editor: Suggesting mode (SPEC.md §29). Imported by docs.css.
+   A suggestion draws in its author's person color (--docs-suggest, one rule
+   per author from suggest/layer.tsx): added words underlined on a light
+   tint, removed words struck through, a format change dotted. The one whose
+   card is open takes a stronger tint (--docs-suggest-tint). */
+
+:root {
+  /* Google Docs' Suggesting pill: primary container. */
+  --docs-suggesting-bg: #d3e3fd;
+  --docs-suggesting-fg: #0842a0;
+}
+.dark {
+  --docs-suggesting-bg: #0842a0;
+  --docs-suggesting-fg: #d3e3fd;
+}
+
+.docs-prose [data-suggestion] {
+  --docs-suggest-ink: var(--docs-suggest, #188038);
+  text-decoration-color: var(--docs-suggest-ink);
+}
+.docs-prose ins[data-suggestion],
+.docs-prose [data-suggestion-block="insertion"] > * {
+  color: var(--docs-suggest-ink);
+  text-decoration-line: underline;
+  background: color-mix(in srgb, var(--docs-suggest-ink) var(--docs-suggest-tint, 10%), transparent);
+}
+.docs-prose del[data-suggestion],
+.docs-prose [data-suggestion-block="deletion"] > * {
+  color: var(--docs-suggest-ink);
+  text-decoration-line: line-through;
+  background: color-mix(in srgb, var(--docs-suggest-ink) var(--docs-suggest-tint, 0%), transparent);
+}
+.docs-prose span[data-suggestion],
+.docs-prose [data-suggestion-block="modification"] > * {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  background: color-mix(in srgb, var(--docs-suggest-ink) var(--docs-suggest-tint, 0%), transparent);
+}
+/* A suggestion on a whole block wraps it; the layout skips the wrapper. */
+.docs-prose [data-suggestion-block] {
+  display: contents;
+}
+.docs-prose [data-suggestion-block] > :is(img, hr, table, [data-page-break]) {
+  outline: 2px solid var(--docs-suggest-ink);
+  outline-offset: 2px;
+}
+
+/* Viewing mode reads the document without its suggestions. */
+[data-docs-mode="viewing"] .docs-prose :is(ins[data-suggestion], [data-suggestion-block="insertion"]),
+[data-docs-mode="viewing"] .docs-prose del[data-suggestion] [contenteditable="false"] {
+  display: none;
+}
+[data-docs-mode="viewing"] .docs-prose :is(del, span)[data-suggestion],
+[data-docs-mode="viewing"] .docs-prose [data-suggestion-block] > * {
+  color: inherit;
+  text-decoration-line: none;
+  background: none;
+  outline: none;
+}
+
+/* The mode switcher in Suggesting mode. */
+.docs-mode-pill[data-mode="suggesting"] {
+  background: var(--docs-suggesting-bg);
+  color: var(--docs-suggesting-fg);
+}
+.docs-mode-pill[data-mode="suggesting"]:hover {
+  background: color-mix(in srgb, var(--docs-suggesting-fg) 8%, var(--docs-suggesting-bg));
+}
+.docs-mode-pill[data-mode="suggesting"]:active,
+.docs-mode-pill[data-mode="suggesting"]:focus-visible,
+.docs-mode-pill[data-mode="suggesting"][aria-expanded="true"] {
+  background: color-mix(in srgb, var(--docs-suggesting-fg) 10%, var(--docs-suggesting-bg));
+}
+.docs-menu-modes [data-track="docs:mode:suggesting"][aria-checked="true"] .docs-mode-label {
+  color: #146c2e;
+}
+.dark .docs-menu-modes [data-track="docs:mode:suggesting"][aria-checked="true"] .docs-mode-label {
+  color: #6dd58c;
+}
+
+/* A suggestion's card (suggest/card.tsx): the comment card's look, with
+   Accept and Reject in view. */
+.docs-suggest-card .docs-comment-buttons {
+  opacity: 1;
+}
+.docs-suggest-what {
+  overflow-wrap: anywhere;
+}
+
+/* Review suggested edits (suggest/review.tsx): a box at the top right,
+   under the toolbar. */
+.docs-suggest-review {
+  position: absolute;
+  top: 100%;
+  right: 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 260px;
+  padding: 12px 12px 12px 16px;
+  border-radius: 12px;
+  background: var(--docs-menu-bg);
+  box-shadow: var(--docs-menu-shadow);
+  color: var(--docs-text);
+  font: 400 14px/20px var(--docs-ui-font);
+}
+.docs-suggest-review-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.docs-suggest-review-count {
+  flex: 1;
+  font-weight: 500;
+}
+.docs-suggest-review .docs-comment-button:disabled {
+  opacity: 0.38;
+}
+.docs-suggest-review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

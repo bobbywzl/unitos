@@ -2,6 +2,8 @@ import type { Editor } from "@tiptap/core";
 import { registerDocsCommands } from "@/components/docs/commands";
 import { ZOOMS } from "@/components/docs/toolbar";
 import { addPageNumbers } from "@/components/docs/page/header-footer";
+import { downloadDocument, type DownloadFormat } from "@/components/docs/page/download";
+import { openMakeCopy } from "@/components/docs/page/make-copy";
 import { PAGE_EVENT, findPageStore as store, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -37,6 +39,15 @@ const NUMBER_PRESETS: [HeaderArea, boolean, TKey][] = [
   ["header", false, "docsPage.numbersHeaderNotFirst"],
   ["footer", true, "docsPage.numbersFooter"],
   ["footer", false, "docsPage.numbersFooterNotFirst"],
+];
+
+// File > Download: each format with the words Google Docs finds it by.
+const DOWNLOADS: [DownloadFormat, TKey, string[]][] = [
+  ["docx", "docsPage.downloadDocx", ["docx", "word", "microsoft word"]],
+  ["pdf", "docsPage.downloadPdf", ["pdf", "adobe"]],
+  ["txt", "docsPage.downloadTxt", ["txt", "plain text"]],
+  ["html", "docsPage.downloadHtml", ["html", "web page", "website"]],
+  ["md", "docsPage.downloadMarkdown", ["md", "markdown", "markup"]],
 ];
 
 registerDocsCommands([
@@ -173,5 +184,20 @@ registerDocsCommands([
       const s = store(editor);
       if (s) s.zoomTo(stepZoom(s.get().scale, -1));
     },
+  },
+  ...DOWNLOADS.map(([format, label, words]) => ({
+    id: `page:download-${format}`,
+    label,
+    menu: "file" as const,
+    keywords: ["download", "export", ...words],
+    run: (editor: Editor) => void downloadDocument(editor, format),
+  })),
+  {
+    id: "page:make-copy",
+    label: "docsPage.makeCopy",
+    menu: "file",
+    keywords: ["copy", "duplicate"],
+    run: openMakeCopy,
+    enabled: (editor) => editor.isEditable,
   },
 ]);

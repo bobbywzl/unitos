@@ -1,6 +1,6 @@
 "use client";
 
-import type { Editor, JSONContent } from "@tiptap/core";
+import type { Editor } from "@tiptap/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mergeRichText } from "@/lib/docs/merge";
 import { newBlockId, type RichNode } from "@/lib/docs/schema";
@@ -11,8 +11,10 @@ import { newBlockId, type RichNode } from "@/lib/docs/schema";
 // it started from. One save runs at a time. A save that meets a newer
 // revision merges the editor's changes over the stored copy
 // (lib/docs/merge.ts) and saves again; a lost connection retries with a
-// growing wait. Leaving the page with unsaved changes tries one last save
-// and asks the browser to warn.
+// growing wait, and at once when the browser is back online. A stored copy
+// goes on screen as one change outside the undo history, so Ctrl+Z takes
+// back only this person's own steps. Leaving the page with unsaved changes
+// tries one last save and asks the browser to warn.
 
 export type SaveState = "saved" | "saving" | "unsaved" | "offline" | "error";
 
@@ -22,6 +24,30 @@ const MAX_WAIT_MS = 3_000;
 const KEEPALIVE_LIMIT = 60_000;
 
 type Response409 = { reason?: string; rev?: number; richText?: RichNode | null; ids?: string[] };
+
+/** Put a stored copy on screen: one step over the stretch that differs, kept
+    out of the undo history; the caret maps through it. */
+function applyStored(editor: Editor, json: RichNode): void {
+  const next = editor.schema.nodeFromJSON(json);
+  const { doc, tr } = editor.state;
+  for (const [key, value] of Object.entries(next.attrs)) {
+    if (JSON.stringify(doc.attrs[key]) !== JSON.stringify(value)) tr.setDocAttribute(key, value);
+  }
+  const start = doc.content.findDiffStart(next.content);
+  if (start !== null) {
+    let { a: endA, b: endB } = doc.content.findDiffEnd(next.content) ?? { a: doc.content.size, b: next.content.size };
+    // Repeated nodes can put the end before the start.
+    const overlap = start - Math.min(endA, endB);
+    if (overlap > 0) {
+      endA += overlap;
+      endB += overlap;
+    }
+    tr.replace(start, endA, next.slice(start, endB));
+  }
+  if (!tr.docChanged) return;
+  tr.setMeta("addToHistory", false);
+  editor.view.dispatch(tr);
+}
 
 export function useDocsSave({
   documentId,
@@ -91,11 +117,11 @@ export function useDocsSave({
             tr.setMeta("addToHistory", false);
             editor.view.dispatch(tr);
           } else if (body.reason === "rev" && body.richText && typeof body.rev === "number" && !editor.isDestroyed) {
-            const merged = mergeRichText(baseRef.current, editor.getJSON() as RichNode, body.richText);
-            const { from, to } = editor.state.selection;
-            editor.commands.setContent(merged as JSONContent, { emitUpdate: false });
-            const max = editor.state.doc.content.size;
-            editor.commands.setTextSelection({ from: Math.min(from, max), to: Math.min(to, max) });
+            // The stored copies come back with their keys reordered and their
+            // default attributes left out: compare them in the editor's form.
+            const normal = (json: RichNode) => editor.schema.nodeFromJSON(json).toJSON() as RichNode;
+            const merged = mergeRichText(normal(baseRef.current), editor.getJSON() as RichNode, normal(body.richText));
+            applyStored(editor, merged);
             baseRef.current = body.richText;
             revRef.current = body.rev;
           }
@@ -128,7 +154,7 @@ export function useDocsSave({
     if (dirtyRef.current) {
       // Typing went on, a merge needs saving, or the save failed: go again,
       // waiting longer after each failure.
-      const wait = retryRef.current > 0 ? Math.min(30_000, 1000 * 2 ** retryRef.current) : SAVE_DELAY_MS;
+      const wait = retryRef.current > 0 ? Math.min(10_000, 1000 * 2 ** retryRef.current) : SAVE_DELAY_MS;
       clearTimer();
       timerRef.current = setTimeout(() => void saveRef.current(), wait);
     }
@@ -145,14 +171,22 @@ export function useDocsSave({
       dirtyRef.current = true;
       versionRef.current += 1;
       firstDirtyAtRef.current ??= Date.now();
-      setState((s) => (s === "saving" ? s : "unsaved"));
+      setState((s) => (s === "saving" || s === "offline" ? s : "unsaved"));
+      // After a failure the retry's wait stands: typing does not fire more saves.
+      if (retryRef.current > 0 && timerRef.current) return;
       clearTimer();
       const waited = Date.now() - (firstDirtyAtRef.current ?? Date.now());
       timerRef.current = setTimeout(() => void save(), waited >= MAX_WAIT_MS ? 0 : SAVE_DELAY_MS);
     };
     editor.on("transaction", onUpdate);
+    // Back online: save now rather than at the end of the retry's wait.
+    const onOnline = () => {
+      if (dirtyRef.current) void save();
+    };
+    window.addEventListener("online", onOnline);
     return () => {
       editor.off("transaction", onUpdate);
+      window.removeEventListener("online", onOnline);
     };
   }, [editor, enabled, save]);
 
@@ -161,13 +195,10 @@ export function useDocsSave({
   // waiting to be saved here; otherwise the next save merges.
   useEffect(() => {
     if (!editor || editor.isDestroyed || rev <= revRef.current) return;
-    if (dirtyRef.current || inFlightRef.current) return;
-    const { from, to } = editor.state.selection;
+    if (dirtyRef.current || inFlightRef.current || editor.view.composing) return;
     loadingRef.current = true;
     try {
-      editor.commands.setContent(richText as JSONContent, { emitUpdate: false });
-      const max = editor.state.doc.content.size;
-      editor.commands.setTextSelection({ from: Math.min(from, max), to: Math.min(to, max) });
+      applyStored(editor, richText);
     } finally {
       loadingRef.current = false;
     }

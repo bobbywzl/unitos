@@ -15,6 +15,7 @@ import { layerExtensions } from "@/components/docs/ext/layer";
 import { pageExtensions } from "@/components/docs/ext/page";
 import { toolbarExtensions } from "@/components/docs/ext/toolbar";
 import { blockStyle, readStyles, selectionSize, sizeInPt } from "@/components/docs/toolbar/styles";
+import { suggestExtensions } from "@/components/docs/ext/suggest";
 import { typingExtensions } from "@/components/docs/ext/typing";
 import { INDEXED_NODE_TYPES, newBlockId } from "@/lib/docs/schema";
 
@@ -404,5 +405,6 @@ export function docsExtensions() {
     ...insertExtensions,
     ...typingExtensions,
     ...layerExtensions,
+    ...suggestExtensions,
   ];
 }

@@ -994,6 +994,9 @@
   padding: 0 7px;
   border: 2px solid var(--docs-blue);
 }
+.docs-tb-field:disabled {
+  opacity: 0.38;
+}
 .docs-tb-label {
   display: block;
   padding-bottom: 6px;
@@ -1093,27 +1096,31 @@
   padding: 0 3px;
 }
 
-/* Custom spacing. */
-.docs-spacing-dialog {
+/* Dialogs of fields: Custom spacing, Indentation options, Numbering. */
+.docs-fields-dialog {
   width: 360px;
 }
-.docs-spacing-dialog h3 {
+.docs-fields-dialog h3 {
   margin: 20px 0 8px;
   font: 500 14px/20px var(--docs-tb-font);
 }
-.docs-spacing-row {
+.docs-fields-dialog form > h3:first-child {
+  margin-top: 0;
+}
+.docs-fields-row {
   display: flex;
   gap: 16px;
 }
-.docs-spacing-row label {
+.docs-fields-row > * {
   flex: 1;
+  min-width: 0;
 }
 
 /* Insert image by URL. */
 .docs-image-dialog {
   width: min(560px, calc(100vw - 32px));
 }
-.docs-spacing-dialog .docs-tb-field,
+.docs-fields-dialog .docs-tb-field,
 .docs-image-dialog .docs-tb-field {
   width: 100%;
 }

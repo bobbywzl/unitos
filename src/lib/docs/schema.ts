@@ -69,7 +69,14 @@ export const RICH_MARK_TYPES = [
   "textStyle",
   "subscript",
   "superscript",
+  // A suggestion's (components/docs/ext/suggest.ts): on words, and on a
+  // whole block.
+  "insertion",
+  "deletion",
+  "modification",
 ] as const;
+
+const SUGGESTION_MARK_TYPES = new Set(["insertion", "deletion", "modification"]);
 
 /** The nodes that hold a paragraph index row each (a Block): every node
     whose words a reader can select, plus the figure and the separator. */
@@ -203,14 +210,48 @@ function cleanAttr(name: string, value: unknown): unknown {
   return null;
 }
 
+const ATTR_NAME = /^[A-Za-z][\w-]{0,40}$/;
+
 function cleanAttrs(attrs: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
   if (!attrs) return undefined;
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(attrs)) {
-    if (!/^[A-Za-z][\w-]{0,40}$/.test(key)) continue;
+    if (!ATTR_NAME.test(key)) continue;
     out[key] = cleanAttr(key, value);
   }
   return out;
+}
+
+/** A suggestion's id: its author's account id and its time, "<id>.<ms>". */
+const SUGGESTION_ID = /^[\w-]{1,64}\.\d{1,15}$/;
+
+const isMarkJson = (value: unknown): value is RichMark =>
+  typeof value === "object" && value !== null && typeof (value as { type?: unknown }).type === "string";
+
+/** A mark as it may be stored, or null. */
+function cleanMark(mark: RichMark): RichMark | null {
+  if (!MARK_TYPES.has(mark.type)) return null;
+  if (SUGGESTION_MARK_TYPES.has(mark.type)) return cleanSuggestion(mark);
+  const attrs = cleanAttrs(mark.attrs);
+  if (mark.type === "link" && !attrs?.href) return null;
+  return attrs && Object.keys(attrs).length > 0 ? { type: mark.type, attrs } : { type: mark.type };
+}
+
+/** A suggestion keeps its id. A format change also keeps what it changed
+    and its values before and after, each checked as the mark, the
+    attribute, or the node type that rejecting it puts back. */
+function cleanSuggestion({ type, attrs = {} }: RichMark): RichMark | null {
+  const { id, type: kind, attrName, previousValue, newValue } = attrs;
+  if (typeof id !== "string" || !SUGGESTION_ID.test(id)) return null;
+  if (type !== "modification") return { type, attrs: { id } };
+  const name = typeof attrName === "string" && ATTR_NAME.test(attrName) ? attrName : null;
+  const value = (v: unknown): unknown => {
+    if (kind === "mark") return isMarkJson(v) && !SUGGESTION_MARK_TYPES.has(v.type) ? cleanMark(v) : null;
+    if (kind === "attr") return name ? cleanAttr(name, v) : null;
+    return typeof v === "string" && NODE_TYPES.has(v) ? v : null;
+  };
+  if (kind !== "mark" && kind !== "attr" && kind !== "nodeType") return null;
+  return { type, attrs: { id, type: kind, attrName: name, previousValue: value(previousValue), newValue: value(newValue) } };
 }
 
 /** The rich text as it may be stored: unknown node and mark types dropped,
@@ -228,15 +269,14 @@ export function sanitizeRichText(input: RichNode): RichNode | null {
     if (node.type === "image" && !attrs?.src) return null;
     const out: RichNode = { type: node.type };
     if (attrs && Object.keys(attrs).length > 0) out.attrs = attrs;
+    // A block carries only a suggestion's marks.
+    const marks = (node.marks ?? []).flatMap((m) => {
+      const mark = node.type === "text" || SUGGESTION_MARK_TYPES.has(m.type) ? cleanMark(m) : null;
+      return mark ? [mark] : [];
+    });
     if (node.type === "text") {
       if (!node.text) return null;
       out.text = node.text;
-      const marks = (node.marks ?? []).flatMap((m) => {
-        if (!MARK_TYPES.has(m.type)) return [];
-        const markAttrs = cleanAttrs(m.attrs);
-        if (m.type === "link" && !markAttrs?.href) return [];
-        return [markAttrs && Object.keys(markAttrs).length > 0 ? { type: m.type, attrs: markAttrs } : { type: m.type }];
-      });
       if (marks.length > 0) out.marks = marks;
       return out;
     }
@@ -245,6 +285,7 @@ export function sanitizeRichText(input: RichNode): RichNode | null {
       if (count > MAX_NODES) return null;
       if (content.length > 0) out.content = content;
     }
+    if (marks.length > 0) out.marks = marks;
     return out;
   };
   const doc = walk(input);

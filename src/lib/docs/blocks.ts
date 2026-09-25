@@ -59,9 +59,10 @@ function runStyles(marks: RichMark[] | undefined): string[] {
 }
 
 /** The words of one node as the editor draws them: text as it is, a line
-    break (Shift+Enter) as "\n". */
+    break (Shift+Enter) as "\n". The zero-width space a suggestion keeps at a
+    suggested paragraph break (components/docs/ext/suggest.ts) is no word. */
 export function inlineText(node: RichNode): string {
-  if (node.type === "text") return node.text ?? "";
+  if (node.type === "text") return (node.text ?? "").replaceAll("​", "");
   if (node.type === "hardBreak") return "\n";
   // A smart chip's words are its label; other atoms add none.
   if (CHIP_NODE_TYPES.has(node.type)) return typeof node.attrs?.label === "string" ? node.attrs.label : "";
@@ -90,7 +91,7 @@ function textblockRuns(node: RichNode): { text: string; styles: StyleSpan[]; lin
       text += piece;
       return;
     }
-    const piece = child.text ?? "";
+    const piece = inlineText(child);
     const here = new Set(runStyles(child.marks));
     for (const [style, start] of [...open]) {
       if (!here.has(style)) {

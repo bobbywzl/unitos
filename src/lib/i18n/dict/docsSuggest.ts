@@ -1,0 +1,65 @@
+// UI strings of Suggesting mode in the page editor (SPEC.md §29): the
+// suggestion's card, Review suggested edits, and their commands. The English
+// follows Google Docs' own labels. zh glossary: dict/common.ts — suggestion
+// 建议 · Suggesting 建议模式.
+
+const en = {
+  suggestingMode: "Suggesting mode",
+  // A suggestion's card
+  suggestion: "Suggestion",
+  add: "Add:",
+  delete: "Delete:",
+  replace: "Replace:",
+  replaceWith: "with",
+  format: "Format:",
+  formatOff: "remove {name}",
+  acceptSuggestion: "Accept suggestion",
+  rejectSuggestion: "Reject suggestion",
+  // Format names the toolbar's own labels do not cover
+  strikethrough: "Strikethrough",
+  subscript: "Subscript",
+  superscript: "Superscript",
+  indent: "Indent",
+  otherFormat: "other formatting",
+  // Review suggested edits
+  reviewSuggestedEdits: "Review suggested edits",
+  oneSuggestion: "1 suggestion",
+  suggestionCount: "{n} suggestions",
+  noSuggestions: "No suggestions",
+  previousSuggestion: "Previous suggestion",
+  nextSuggestion: "Next suggestion",
+  acceptAll: "Accept all",
+  rejectAll: "Reject all",
+  acceptAllSuggestions: "Accept all suggestions",
+  rejectAllSuggestions: "Reject all suggestions",
+};
+
+const zh: Record<keyof typeof en, string> = {
+  suggestingMode: "建议模式",
+  suggestion: "建议",
+  add: "添加：",
+  delete: "删除：",
+  replace: "替换：",
+  replaceWith: "为",
+  format: "格式：",
+  formatOff: "去除{name}",
+  acceptSuggestion: "接受建议",
+  rejectSuggestion: "拒绝建议",
+  strikethrough: "删除线",
+  subscript: "下标",
+  superscript: "上标",
+  indent: "缩进",
+  otherFormat: "其他格式",
+  reviewSuggestedEdits: "审阅建议",
+  oneSuggestion: "1 条建议",
+  suggestionCount: "{n} 条建议",
+  noSuggestions: "没有建议",
+  previousSuggestion: "上一条建议",
+  nextSuggestion: "下一条建议",
+  acceptAll: "全部接受",
+  rejectAll: "全部拒绝",
+  acceptAllSuggestions: "接受所有建议",
+  rejectAllSuggestions: "拒绝所有建议",
+};
+
+export const docsSuggest = { en, zh } as const;

@@ -1,0 +1,229 @@
+/* The page editor: version history (SPEC.md §29). Imported by docs.css.
+   Google Docs' version view over the page editor's pane: the top bar, the
+   version on its page, and the panel of versions at the right. */
+
+:root {
+  --docs-versions-panel: #f0f4f9;
+}
+.dark {
+  --docs-versions-panel: #1f2021;
+}
+
+/* The round icon buttons: the clock in the title row, the back arrow, ⋮. */
+.docs-versions-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  color: var(--docs-icon);
+  cursor: pointer;
+}
+.docs-versions-icon:hover,
+.docs-versions-icon[aria-expanded="true"] {
+  background: var(--docs-hover);
+}
+.docs-versions-icon:focus-visible {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: -2px;
+}
+.docs-versions-open {
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+}
+
+.docs-versions {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  background: var(--docs-canvas);
+  color: var(--docs-text);
+  font-family: var(--docs-ui-font);
+  outline: none;
+}
+.docs-versions-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The top bar: 64 px, the back arrow, the version's time, Restore. */
+.docs-versions-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 64px;
+  padding: 0 24px 0 9px;
+}
+.docs-versions-heading {
+  flex: 1;
+  min-width: 0;
+  margin-left: 9px;
+}
+.docs-versions-heading-title,
+.docs-versions-heading-time {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.docs-versions-heading-title {
+  font: 500 16px/24px var(--docs-ui-font);
+}
+.docs-versions-heading-time {
+  color: var(--docs-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+.docs-versions-bar .docs-tb-button {
+  flex: none;
+  height: 40px;
+  white-space: nowrap;
+}
+
+/* The version on its page: one sheet as wide as the document's page. */
+.docs-versions-canvas {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 11px 24px 16px;
+}
+.docs-versions-page {
+  box-sizing: border-box;
+  margin: 0 auto;
+  background: var(--docs-page);
+  outline: 1px solid var(--docs-page-border);
+}
+.docs-versions-page[data-pageless] {
+  padding-top: 59px;
+  background: none;
+  outline: none;
+}
+.docs-versions-status {
+  padding: 24px;
+  color: var(--docs-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* The panel: 320 px, the title, the filter, the list by day, Show changes. */
+.docs-versions-panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  background: var(--docs-versions-panel);
+}
+.docs-versions-panel-title {
+  flex: none;
+  padding: 18px 24px;
+  font: 400 22px/28px var(--docs-ui-font);
+}
+.docs-versions-check {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 0 24px 12px;
+  font: 400 12px/16px var(--docs-ui-font);
+  cursor: pointer;
+}
+.docs-versions-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--docs-blue);
+  cursor: pointer;
+}
+.docs-versions-foot {
+  padding: 12px 24px;
+  border-top: 1px solid var(--docs-page-border);
+}
+.docs-versions-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.docs-versions-day {
+  display: flex;
+  align-items: center;
+  height: 35px;
+  padding-left: 24px;
+  color: var(--docs-icon);
+  font: 500 11px/16px var(--docs-ui-font);
+}
+.docs-versions-tile {
+  position: relative;
+  padding: 12px 48px 12px 36px;
+}
+.docs-versions-tile:hover {
+  background: var(--docs-hover);
+}
+.docs-versions-tile-selected,
+.docs-versions-tile-selected:hover {
+  background: var(--docs-pill);
+}
+/* The whole tile picks the version; ⋮ sits over it. */
+.docs-versions-pick {
+  display: block;
+  width: 100%;
+  font: 400 16px/24px var(--docs-ui-font);
+  text-align: left;
+  cursor: pointer;
+}
+.docs-versions-pick::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.docs-versions-tile-selected .docs-versions-pick {
+  font-weight: 500;
+}
+.docs-versions-note,
+.docs-versions-author {
+  color: var(--docs-icon);
+  font: 400 12px/16px var(--docs-ui-font);
+}
+.docs-versions-current {
+  font-style: italic;
+}
+.docs-versions-author {
+  display: flex;
+  align-items: center;
+  margin-top: 3px;
+}
+.docs-versions-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 10px;
+  border-radius: 9999px;
+}
+.docs-versions-more {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+}
+.docs-versions-name {
+  width: 100%;
+  box-sizing: border-box;
+  font: 400 16px/24px var(--docs-ui-font);
+}
+.docs-versions-name:focus-visible {
+  outline: none;
+}
+.docs-versions-error {
+  margin: 0 24px 8px;
+  color: #b3261e;
+  font-size: 12px;
+}
+.dark .docs-versions-error {
+  color: #f2b8b5;
+}

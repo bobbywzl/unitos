@@ -6,7 +6,9 @@ import { common } from "@/lib/i18n/dict/common";
 import { docs } from "@/lib/i18n/dict/docs";
 import { docsInsert } from "@/lib/i18n/dict/docsInsert";
 import { docsLayer } from "@/lib/i18n/dict/docsLayer";
+import { docsVersions } from "@/lib/i18n/dict/docsVersions";
 import { docsPage } from "@/lib/i18n/dict/docsPage";
+import { docsSuggest } from "@/lib/i18n/dict/docsSuggest";
 import { docsTyping } from "@/lib/i18n/dict/docsTyping";
 import { legal } from "@/lib/i18n/dict/legal";
 import { outline } from "@/lib/i18n/dict/outline";
@@ -38,6 +40,8 @@ const NAMESPACES = {
   docsInsert,
   docsTyping,
   docsLayer,
+  docsSuggest,
+  docsVersions,
   assistant,
   billing,
   panels,

@@ -1,38 +1,69 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
+import { registerDocsCommands } from "@/components/docs/commands";
 import { CheckIcon, EditIcon, SuggestIcon, ViewIcon } from "@/components/docs/icons";
-import { keys } from "@/components/docs/keys";
+import { keys, matchesCombo } from "@/components/docs/keys";
 import { DropdownPanel, keepFocus, MenuItem } from "@/components/docs/menu";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The mode switcher (SPEC.md §29): a pill with the mode's symbol and name
 // at the toolbar's right end, and Google Docs' menu of modes — Editing,
-// Suggesting, Viewing — each with its line. Suggesting is not built yet: it
-// shows, greyed, as coming later. Ctrl+Alt+Shift+Z switches to Editing,
-// Ctrl+Alt+Shift+C and D to Viewing (toolbar.tsx binds them).
+// Suggesting, Viewing — each with its line. Ctrl+Alt+Shift+Z switches to
+// Editing, Ctrl+Alt+Shift+C and D to Viewing (toolbar.tsx binds them), and
+// Ctrl+Alt+Shift+X to Suggesting (bound here, with its command).
 
-export type DocsMode = "editing" | "viewing";
+export type DocsMode = "editing" | "suggesting" | "viewing";
+
+/** Raised on the page's text with a mode: the mode switcher switches to it. */
+const MODE_EVENT = "docs:mode";
+
+registerDocsCommands([
+  {
+    id: "mode:suggesting",
+    label: "docsSuggest.suggestingMode",
+    menu: "view",
+    keywords: ["suggest", "track changes", "建议"],
+    shortcut: "Mod+Alt+Shift+X",
+    run: (editor) => editor.view.dom.dispatchEvent(new CustomEvent<DocsMode>(MODE_EVENT, { bubbles: true, detail: "suggesting" })),
+  },
+]);
 
 type ModeItem = {
-  mode: DocsMode | "suggesting";
+  mode: DocsMode;
   icon: ReactNode;
   label: TKey;
   hint: TKey;
+  tip: TKey;
   combo: string;
 };
 
 const MODES: ModeItem[] = [
-  { mode: "editing", icon: <EditIcon size={20} />, label: "docs.modeEditing", hint: "docs.modeEditingHint", combo: "Mod+Alt+Shift+Z" },
+  {
+    mode: "editing",
+    icon: <EditIcon size={20} />,
+    label: "docs.modeEditing",
+    hint: "docs.modeEditingHint",
+    tip: "docs.editingMode",
+    combo: "Mod+Alt+Shift+Z",
+  },
   {
     mode: "suggesting",
     icon: <SuggestIcon size={20} />,
     label: "docs.modeSuggesting",
     hint: "docs.modeSuggestingHint",
+    tip: "docsSuggest.suggestingMode",
     combo: "Mod+Alt+Shift+X",
   },
-  { mode: "viewing", icon: <ViewIcon size={20} />, label: "docs.modeViewing", hint: "docs.modeViewingHint", combo: "Mod+Alt+Shift+C" },
+  {
+    mode: "viewing",
+    icon: <ViewIcon size={20} />,
+    label: "docs.modeViewing",
+    hint: "docs.modeViewingHint",
+    tip: "docs.viewingMode",
+    combo: "Mod+Alt+Shift+C",
+  },
 ];
 
 export function ModeSwitcher({ mode, onMode }: { mode: DocsMode; onMode: (mode: DocsMode) => void }) {
@@ -41,7 +72,27 @@ export function ModeSwitcher({ mode, onMode }: { mode: DocsMode; onMode: (mode: 
   const [fromKeys, setFromKeys] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   const current = MODES.find((m) => m.mode === mode) ?? MODES[0];
-  const tip = t(mode === "editing" ? "docs.editingMode" : "docs.viewingMode");
+  const tip = t(current.tip);
+
+  useEffect(() => {
+    const shell = ref.current?.closest("[data-docs-editor]");
+    if (!shell) return;
+    const onKey = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      if (active && active !== document.body && !shell.contains(active)) return;
+      if (!matchesCombo(e, "Mod+Alt+Shift+X")) return;
+      e.preventDefault();
+      onMode("suggesting");
+    };
+    const onModeEvent = (e: Event) => onMode((e as CustomEvent<DocsMode>).detail);
+    window.addEventListener("keydown", onKey, true);
+    shell.addEventListener(MODE_EVENT, onModeEvent);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      shell.removeEventListener(MODE_EVENT, onModeEvent);
+    };
+  }, [onMode]);
+
   return (
     <>
       <button
@@ -52,6 +103,7 @@ export function ModeSwitcher({ mode, onMode }: { mode: DocsMode; onMode: (mode: 
         aria-haspopup="menu"
         aria-expanded={open}
         data-track="docs:mode"
+        data-mode={mode}
         data-tb-item
         onMouseDown={keepFocus}
         onClick={() => {
@@ -87,11 +139,9 @@ export function ModeSwitcher({ mode, onMode }: { mode: DocsMode; onMode: (mode: 
           <MenuItem
             key={m.mode}
             checked={m.mode === mode}
-            disabled={m.mode === "suggesting"}
             label={t(m.label)}
             tip={keys(m.combo)}
             onSelect={() => {
-              if (m.mode === "suggesting") return;
               setOpen(false);
               onMode(m.mode);
             }}
