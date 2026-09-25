@@ -5,15 +5,15 @@ import { useEffect, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands } from "@/components/docs/commands";
-import { keys, matchesCombo } from "@/components/docs/keys";
+import { toast } from "@/components/docs/insert/context";
+import { keys } from "@/components/docs/keys";
 import { flushDocument } from "@/components/docs/layer/flush";
-import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { VersionView } from "@/components/docs/versions/version-view";
 import { api } from "@/lib/api";
 
 // Version history of a blank document (SPEC.md §29): See version history
-// (Ctrl+Alt+Shift+H, the clock at the title row's right end) opens the
-// version view; Name current version names the text as it stands.
+// opens the version view; Name current version names the text as it stands.
 
 const VERSIONS_EVENT = "docs:versions";
 const OPEN_KEYS = "Mod+Alt+Shift+H";
@@ -48,7 +48,7 @@ export function VersionHistoryButton({ editor }: { editor: Editor }) {
   return (
     <button
       type="button"
-      className="docs-versions-icon docs-versions-open"
+      className="docs-icon-btn docs-versions-open"
       aria-label={label}
       data-tip={`${label} (${keys(OPEN_KEYS)})`}
       data-track="docs:version-history"
@@ -68,20 +68,8 @@ export function VersionHistory({ editor, documentId, pageSetup, canEdit }: DocsA
   useEffect(() => {
     const dom = editor.view.dom;
     const onRequest = (e: Event) => ((e as CustomEvent<Action>).detail === "name" ? setNaming(true) : setOpen(true));
-    // The shortcut, while the focus is in this page editor.
-    const onKey = (e: KeyboardEvent) => {
-      const shell = dom.closest(".docs-shell");
-      const active = document.activeElement;
-      if (!matchesCombo(e, OPEN_KEYS) || !shell || !(active === document.body || shell.contains(active))) return;
-      e.preventDefault();
-      setOpen(true);
-    };
     dom.addEventListener(VERSIONS_EVENT, onRequest);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      dom.removeEventListener(VERSIONS_EVENT, onRequest);
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => dom.removeEventListener(VERSIONS_EVENT, onRequest);
   }, [editor]);
 
   return (
@@ -104,7 +92,6 @@ export function VersionHistory({ editor, documentId, pageSetup, canEdit }: DocsA
 function NameDialog({ documentId, onClose }: { documentId: string; onClose: () => void }) {
   const t = useT();
   const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const save = async () => {
     if (!name.trim()) return;
     try {
@@ -112,7 +99,7 @@ function NameDialog({ documentId, onClose }: { documentId: string; onClose: () =
       await api(`/api/documents/${documentId}/versions`, "POST", { name });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+      toast(err instanceof Error && err.message ? err.message : t("common.requestFailed"));
     }
   };
   return (
@@ -120,14 +107,7 @@ function NameDialog({ documentId, onClose }: { documentId: string; onClose: () =
       title={t("docsVersions.nameCurrent")}
       onClose={onClose}
       closeButton={false}
-      actions={
-        <>
-          <DialogButton onClick={onClose}>{t("common.cancel")}</DialogButton>
-          <DialogButton primary disabled={!name.trim()} onClick={() => void save()}>
-            {t("common.save")}
-          </DialogButton>
-        </>
-      }
+      submit={{ label: t("common.save"), disabled: !name.trim(), run: () => void save() }}
     >
       <input
         className="docs-tb-field docs-versions-name"
@@ -135,11 +115,7 @@ function NameDialog({ documentId, onClose }: { documentId: string; onClose: () =
         maxLength={100}
         aria-label={t("docsVersions.nameCurrent")}
         onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") void save();
-        }}
       />
-      {error && <p className="docs-versions-error">{error}</p>}
     </ToolbarDialog>
   );
 }

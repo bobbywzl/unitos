@@ -2,25 +2,28 @@
 
 import { useEditorState, type Editor } from "@tiptap/react";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { useLayoutEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import { memo, type ReactNode } from "react";
 import { useAuthor } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { replyTime } from "@/components/collab/reply-thread";
-import { isSuggestionMark, settleSuggestions, suggestionAuthor, suggestionTime, ZWSP } from "@/components/docs/ext/suggest";
+import {
+  focusSuggestion,
+  readSuggestions,
+  settleSuggestions,
+  suggestionAt,
+  suggestionAuthor,
+  suggestionTime,
+  type Suggestion,
+} from "@/components/docs/ext/suggest";
 import { CheckIcon, CloseIcon } from "@/components/docs/icons";
-import { belowSlot, pageGeometry, slotAt } from "@/components/docs/layer/margin";
 import { blockStyle } from "@/components/docs/toolbar/styles";
 import { STYLE_LABEL } from "@/components/docs/toolbar/styles-menu";
 import { useLang, useT } from "@/components/lang-provider";
+import type { RichMark } from "@/lib/docs/schema";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { personColor } from "@/lib/person";
 
-// A suggestion's card (SPEC.md §29), Google Docs' own: the author's badge,
-// name, and time; what the suggestion adds, deletes, replaces, or
-// reformats; and, for an editor, Accept suggestion and Reject suggestion.
-// It shows while the caret stands in the suggestion, with the comment
-// card's look (css/layer.css) and place in the margin (layer/margin.ts).
+// A suggestion's card (SPEC.md §29): the comment card's look.
 
 const OBJECTS: Record<string, TKey> = {
   image: "docsInsert.itemImage",
@@ -34,9 +37,9 @@ const MARKS: Record<string, TKey> = {
   bold: "docs.bold",
   italic: "docs.italic",
   underline: "docs.underline",
-  strike: "docsSuggest.strikethrough",
-  subscript: "docsSuggest.subscript",
-  superscript: "docsSuggest.superscript",
+  strike: "docsTyping.scStrike",
+  subscript: "docsTyping.scSubscript",
+  superscript: "docsTyping.scSuperscript",
   link: "docsInsert.link",
 };
 const TEXT_STYLES: Record<string, TKey> = {
@@ -59,8 +62,15 @@ const BLOCK_ATTRS: Record<string, TKey> = {
   indentRight: "docsSuggest.indent",
   indentFirstLine: "docsSuggest.indent",
 };
+const LISTS: Record<string, TKey> = {
+  bulletList: "docs.bulletedList",
+  orderedList: "docs.numberedList",
+  taskList: "docs.checklist",
+};
 
-type MarkJson = { type?: string; attrs?: Record<string, unknown> } | null;
+type MarkJson = RichMark | null;
+
+const off = (name: string, t: TFunc) => t("docsSuggest.formatOff", { name: name.toLocaleLowerCase() });
 
 /** A mark put on or taken off words, by name; for text style, the
     attribute that changed. */
@@ -70,136 +80,144 @@ function markName(previous: MarkJson, next: MarkJson, t: TFunc): string {
     type === "textStyle"
       ? Object.keys(TEXT_STYLES).find((a) => (next?.attrs?.[a] ?? null) !== (previous?.attrs?.[a] ?? null))
       : undefined;
-  const key = style ? TEXT_STYLES[style] : MARKS[type];
-  const name = t(key ?? "docsSuggest.otherFormat");
-  return next ? name : t("docsSuggest.formatOff", { name: name.toLocaleLowerCase() });
+  const name = t((style ? TEXT_STYLES[style] : MARKS[type]) ?? "docsSuggest.otherFormat");
+  return next ? name : off(name, t);
 }
 
-/** A block's change, by name: its paragraph style, alignment, spacing, or indent. */
+/** A block's change, by name: its list, paragraph style, alignment,
+    spacing, indent, or tick. */
 function blockName(node: PMNode, attrName: unknown, newValue: unknown, t: TFunc): string {
+  if (attrName === null && LISTS[String(newValue)]) return t(LISTS[String(newValue)]);
   if (attrName === null || attrName === "level" || attrName === "docStyle") return t(STYLE_LABEL[blockStyle(node)]);
   if (attrName === "textAlign") return t(ALIGNS[String(newValue)] ?? "docs.alignLeft");
+  if (attrName === "checked") return t(newValue ? "docsSuggest.checked" : "docsSuggest.unchecked");
   return t(BLOCK_ATTRS[String(attrName)] ?? "docsSuggest.otherFormat");
 }
 
-/** A block's words, ¶ between its paragraphs. */
-function blockWords(node: PMNode): string {
-  if (node.isTextblock) return node.textContent;
-  const lines: string[] = [];
-  node.descendants((n) => {
-    if (n.isTextblock) lines.push(n.textContent);
-    return !n.isTextblock;
+/** A list changed where its words stand: [the list before, the list after]. */
+function listName([before, after]: [string, string], t: TFunc): string {
+  if (after && after !== before) return t(LISTS[after]);
+  return before && !after ? off(t(LISTS[before]), t) : t("docsSuggest.indent");
+}
+
+function words(pieces: (string | PMNode)[], t: TFunc): string {
+  const text = pieces
+    .map((p) => (typeof p === "string" ? p : OBJECTS[p.type.name] ? t(OBJECTS[p.type.name]) : p.type.name === "hardBreak" ? "↵" : p.textContent))
+    .join("");
+  return `“${text.length > 120 ? `${text.slice(0, 120)}…` : text}”`;
+}
+
+/** What a suggestion does, a line each: Add, Delete, Replace, or Move with
+    its words; Format with the names of its format changes. */
+function describe(s: Suggestion, t: TFunc): ReactNode[] {
+  const lines: ReactNode[] = [];
+  const formats = s.formats.map(({ mark, node }) => {
+    const { type, attrName, previousValue, newValue } = mark.attrs;
+    return type === "mark" ? markName(previousValue as MarkJson, newValue as MarkJson, t) : blockName(node, attrName, newValue, t);
   });
-  return lines.join("¶");
+  if (s.same === "move") {
+    lines.push(<><b>{t("docsSuggest.move")}</b> <i>{words(s.added, t)}</i></>);
+  } else if (s.same) {
+    formats.unshift(listName(s.same, t));
+  } else if (s.added.length || s.removed.length) {
+    const [added, removed] = [s.added.length > 0, s.removed.length > 0];
+    lines.push(
+      <>
+        <b>{t(added && removed ? "docsSuggest.replace" : added ? "docsSuggest.add" : "docsSuggest.delete")}</b>{" "}
+        <i>{words(removed ? s.removed : s.added, t)}</i>
+        {added && removed && <> {t("docsSuggest.replaceWith")} <i>{words(s.added, t)}</i></>}
+      </>,
+    );
+  }
+  if (formats.length) lines.push(<><b>{t("docsSuggest.format")}</b> {[...new Set(formats)].join(", ")}</>);
+  return lines;
 }
 
-type Change = { from: number; added: string; removed: string; formats: string[] };
+const samePiece = (a: string | PMNode, b: string | PMNode) => a === b || (typeof a !== "string" && typeof b !== "string" && a.eq(b));
+const samePieces = (a: (string | PMNode)[], b: (string | PMNode)[]) => a.length === b.length && a.every((p, i) => samePiece(p, b[i]));
 
-/** What a suggestion adds and removes — its words, ¶ where it breaks a
-    paragraph, an object by name — and the format changes it makes. */
-function readChange(doc: PMNode, id: string, t: TFunc): Change | null {
-  const change: Change = { from: -1, added: "", removed: "", formats: [] };
-  const last = { added: -1, removed: -1 };
-  let block = -1;
-  doc.descendants((node, pos) => {
-    if (node.isTextblock) block = pos;
-    const mark = node.marks.find((m) => isSuggestionMark(m) && String(m.attrs.id) === id);
-    if (!mark) return true;
-    if (change.from < 0) change.from = pos;
-    if (mark.type.name === "modification") {
-      for (const mod of node.marks) {
-        if (mod.type !== mark.type || String(mod.attrs.id) !== id) continue;
-        const { type, attrName, previousValue, newValue } = mod.attrs;
-        const name =
-          type === "mark"
-            ? markName(previousValue as MarkJson, newValue as MarkJson, t)
-            : blockName(node, attrName, newValue, t);
-        if (!change.formats.includes(name)) change.formats.push(name);
-      }
-      return true;
-    }
-    const side = mark.type.name === "insertion" ? "added" : "removed";
-    const at = node.isText ? block : pos;
-    if (last[side] >= 0 && last[side] !== at) change[side] += "¶";
-    last[side] = at;
-    const object = OBJECTS[node.type.name];
-    change[side] += object ? t(object) : (node.isInline ? node.textContent : blockWords(node)).replaceAll(ZWSP, "");
-    return false;
-  });
-  return change.from < 0 ? null : change;
+/** Two readings of a suggestion draw the same card. */
+function sameCard(a: Suggestion | null, b: Suggestion | null): boolean {
+  if (!a || !b) return a === b;
+  return (
+    String(a.same) === String(b.same) &&
+    samePieces(a.added, b.added) &&
+    samePieces(a.removed, b.removed) &&
+    a.formats.length === b.formats.length &&
+    a.formats.every((f, i) => f.mark.eq(b.formats[i].mark) && f.node.sameMarkup(b.formats[i].node))
+  );
 }
 
-const quote = (words: string) => `“${words.length > 120 ? `${words.slice(0, 120)}…` : words}”`;
-
-/** Put the card beside the page where it stands, level with the
-    suggestion's first line; with no room there, under its words. */
-function place(card: HTMLElement, editor: Editor, pane: HTMLElement, from: number): void {
-  const geo = pageGeometry(pane, 0);
-  card.style.visibility = geo ? "" : "hidden";
-  if (!geo) return;
-  const top = editor.view.coordsAtPos(from).top - pane.getBoundingClientRect().top + pane.scrollTop;
-  const slot = slotAt(geo, 0);
-  const at = slot ? { ...slot, top } : { ...belowSlot(geo, 0), top: top + 34 };
-  card.style.left = `${at.left}px`;
-  card.style.top = `${at.top}px`;
-  card.style.width = `${at.width}px`;
-}
-
-export function SuggestionCard({
+/** One suggestion's card in the margin: the one the caret stands in shows
+    whole, with Accept and Reject for an editor; the others show one line,
+    and a press opens them. The layer places it. A card reads its own
+    suggestion, and draws again only when what it shows changed. */
+export const SuggestionCard = memo(function SuggestionCard({
   editor,
-  pane,
   id,
   canSettle,
 }: {
   editor: Editor;
-  pane: HTMLElement;
   id: string;
   /** Accept and Reject show: an editor, out of Viewing mode. */
   canSettle: boolean;
 }) {
+  const { suggestion, active } = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      suggestion: readSuggestions(e.state.doc).find((s) => s.id === id) ?? null,
+      active: suggestionAt(e.state) === id,
+    }),
+    equalityFn: (a, b) => a.active === b?.active && sameCard(a.suggestion, b.suggestion),
+  });
   const t = useT();
   const lang = useLang();
   const authorOf = useAuthor();
-  const change = useEditorState({ editor, selector: ({ editor: e }) => readChange(e.state.doc, id, t) });
-  const cardRef = useRef<HTMLDivElement>(null);
-  const from = change?.from ?? -1;
-  // The pane resizing and the page moving (--docs-shift) move the card.
-  useLayoutEffect(() => {
-    const card = cardRef.current;
-    if (!card || from < 0) return;
-    const move = () => place(card, editor, pane, from);
-    move();
-    const observer = new ResizeObserver(move);
-    observer.observe(pane);
-    pane.addEventListener("transitionend", move);
-    return () => {
-      observer.disconnect();
-      pane.removeEventListener("transitionend", move);
-    };
-  }, [editor, pane, from]);
-  if (!change) return null;
+  if (!suggestion) return null;
   const author = suggestionAuthor(id);
   const person = authorOf(author);
-  const at = suggestionTime(id);
+  const lines = describe(suggestion, t);
   const settle = (accept: boolean) => settleSuggestions(editor, accept, id);
-  const { added, removed, formats } = change;
-  return createPortal(
+  const style = { borderColor: person?.color ?? personColor(author) };
+  if (!active) {
+    return (
+      <div
+        data-selection-popover
+        data-side-card="suggestion"
+        data-suggestion-card={id}
+        role="button"
+        tabIndex={-1}
+        aria-label={t("docsSuggest.suggestion")}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => focusSuggestion(editor, id)}
+        className="docs-comment docs-suggest-card docs-suggest-line absolute z-30"
+        style={style}
+      >
+        {person && <PersonBadge person={person} size={20} />}
+        <span className="docs-suggest-line-text">
+          {person && <b className="docs-comment-name">{person.name}</b>} {lines.map((line, i) => <span key={i}>{line} </span>)}
+        </span>
+      </div>
+    );
+  }
+  return (
     <div
-      ref={cardRef}
       data-selection-popover
       data-side-card="suggestion"
+      data-suggestion-card={id}
+      data-active
       role="group"
       aria-label={t("docsSuggest.suggestion")}
       // The caret stays in the suggestion, so the card stays.
       onMouseDown={(e) => e.preventDefault()}
       className="docs-comment docs-suggest-card bubble-in absolute z-40"
-      style={{ borderColor: person?.color ?? personColor(author) }}
+      style={style}
     >
       <div className="docs-comment-head">
         {person && <PersonBadge person={person} size={32} />}
         <div className="docs-comment-who">
           {person && <div className="docs-comment-name">{person.name}</div>}
-          {at > 0 && <div className="docs-comment-time">{replyTime(new Date(at).toISOString(), lang)}</div>}
+          <div className="docs-comment-time">{replyTime(new Date(suggestionTime(id)).toISOString(), lang)}</div>
         </div>
         {canSettle && (
           <div className="docs-comment-buttons">
@@ -226,24 +244,11 @@ export function SuggestionCard({
           </div>
         )}
       </div>
-      {(added || removed) && (
-        <p className="docs-suggest-what">
-          <b>{t(added && removed ? "docsSuggest.replace" : added ? "docsSuggest.add" : "docsSuggest.delete")}</b>{" "}
-          <i>{quote(removed || added)}</i>
-          {added && removed && (
-            <>
-              {" "}
-              {t("docsSuggest.replaceWith")} <i>{quote(added)}</i>
-            </>
-          )}
+      {lines.map((line, i) => (
+        <p key={i} className="docs-suggest-what">
+          {line}
         </p>
-      )}
-      {formats.length > 0 && (
-        <p className="docs-suggest-what">
-          <b>{t("docsSuggest.format")}</b> {formats.join(", ")}
-        </p>
-      )}
-    </div>,
-    pane,
+      ))}
+    </div>
   );
-}
+});

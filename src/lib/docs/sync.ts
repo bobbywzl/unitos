@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { matchInText } from "@/lib/anchors/match";
+import { findQuoteLoose, matchInText } from "@/lib/anchors/match";
 import { diffSegments, remapAnchor } from "@/lib/anchors/remap";
 import { resolveAnchor } from "@/lib/anchors/resolve";
 import { db } from "@/lib/db";
@@ -13,7 +13,8 @@ import { keepVersion } from "@/lib/docs/versions";
 // remapped the way the block edit route remaps it; an anchor whose words left
 // their paragraph (Enter split it, Backspace joined it, the paragraph was
 // removed) is found again by its quote across the document, and orphans
-// visibly only when its words are gone (SPEC.md §5).
+// visibly only when its words are gone (SPEC.md §5). An orphan on a paragraph
+// whose words changed or came back (Ctrl+Z) tries its quote again.
 
 /** Edits by one account to one paragraph within this long merge into one
     history row, so typing reads as one change, not one per save. */
@@ -155,7 +156,10 @@ function runAround(m: Moves, blockId: string): Run | null {
       newText += block.text;
     });
     const most = Math.min(oldText.length, newText.length);
-    let head = 0;
+    // A change of letter case alone (Capitalization) moves no word: every
+    // anchor keeps its offsets.
+    const recased = oldText.length === newText.length && oldText.toLowerCase() === newText.toLowerCase();
+    let head = recased ? most : 0;
     while (head < most && oldText[head] === newText[head]) head++;
     let tail = 0;
     while (tail < most - head && oldText[oldText.length - 1 - tail] === newText[newText.length - 1 - tail]) tail++;
@@ -218,11 +222,15 @@ type Anchor = {
   suffix: string;
 };
 
-/** The words inside the changed stretch, found again in the run's paragraphs. */
+/** The words inside the changed stretch, found again in the run's paragraphs:
+    as quoted, else in another case (findQuoteLoose). */
 function findInRun(run: Run, anchor: Anchor): Span | null {
-  for (const block of run.newBlocks) {
-    const hit = matchInText(block.text, { quotedText: anchor.quote, prefix: anchor.prefix, suffix: anchor.suffix });
-    if (hit) return { blockId: block.id, start: hit.start, end: hit.end };
+  const quote = { quotedText: anchor.quote, prefix: anchor.prefix, suffix: anchor.suffix };
+  for (const find of [matchInText, findQuoteLoose]) {
+    for (const block of run.newBlocks) {
+      const hit = find(block.text, quote);
+      if (hit) return { blockId: block.id, start: hit.start, end: hit.end };
+    }
   }
   return null;
 }
@@ -273,7 +281,12 @@ function relocate(anchor: Anchor, m: Moves): Placed {
       orphaned: false,
     };
   }
-  const found = resolveAnchor(m.derived, {
+  return refind(anchor, m.derived);
+}
+
+/** An anchor's words found by its quote across the document, else orphaned. */
+function refind(anchor: Anchor, blocks: DerivedBlock[]): Placed {
+  const found = resolveAnchor(blocks, {
     blockId: anchor.blockId,
     startOffset: anchor.startOffset,
     endOffset: anchor.endOffset,
@@ -313,12 +326,17 @@ export async function syncRichText({
 }): Promise<SyncResult> {
   return db.$transaction(
     async (tx) => {
-      // One save at a time per document: the row lock orders them.
+      // One save at a time per document: the row lock orders them. keptAt is
+      // the newest version's time, else the first edit's (lib/docs/versions.ts).
       const [locked] = await tx.$queryRaw<
-        { richTextRev: number; richTextSavedAt: Date | null; richTextSavedBy: string | null; createdAt: Date }[]
+        { richTextRev: number; richTextSavedAt: Date | null; richTextSavedBy: string | null; createdAt: Date; keptAt: Date | null }[]
       >`
-        SELECT "richTextRev", "richTextSavedAt", "richTextSavedBy", "createdAt" FROM "Document"
-        WHERE "id" = ${documentId} FOR UPDATE`;
+        SELECT "richTextRev", "richTextSavedAt", "richTextSavedBy", "createdAt",
+          COALESCE(
+            (SELECT "savedAt" FROM "DocumentVersion" WHERE "documentId" = ${documentId} ORDER BY "rev" DESC LIMIT 1),
+            (SELECT min("createdAt") FROM "BlockEdit" WHERE "documentId" = ${documentId})
+          ) AS "keptAt"
+        FROM "Document" WHERE "id" = ${documentId} FOR UPDATE`;
       if (!locked) throw new Error("document not found");
       let richText = given ?? null;
       if (edit) {
@@ -380,31 +398,40 @@ export async function syncRichText({
       );
       const moved = kept.filter((k) => k.before.order !== k.order);
 
-      // Anchors on paragraphs whose words changed or left.
+      // Anchors on paragraphs whose words changed or left, and the orphans on
+      // paragraphs whose words changed or came back.
       const affected = [...textChanged.map((k) => k.d.id), ...removed.map((b) => b.id)];
+      const returned = [...textChanged.map((k) => k.d.id), ...created.map(({ d }) => d.id)];
       const moves = movesOf(old, derived, newById);
-      if (affected.length > 0) {
+      if (affected.length > 0 || returned.length > 0) {
         const [sources, links] = await Promise.all([
           tx.source.findMany({
-            where: { blockId: { in: affected }, orphaned: false, layer: null, startTime: null },
+            where: {
+              documentId,
+              layer: null,
+              startTime: null,
+              OR: [
+                { blockId: { in: affected }, orphaned: false },
+                { blockId: { in: returned }, orphaned: true },
+              ],
+            },
           }),
-          tx.docLink.findMany({
-            where: { OR: [{ fromBlockId: { in: affected } }, { toBlockId: { in: affected } }] },
-          }),
+          affected.length > 0
+            ? tx.docLink.findMany({ where: { OR: [{ fromBlockId: { in: affected } }, { toBlockId: { in: affected } }] } })
+            : [],
         ]);
         for (const src of sources) {
-          const placed = relocate(
-            {
-              blockId: src.blockId,
-              startOffset: src.startOffset,
-              endOffset: src.endOffset,
-              quote: src.anchoredText ?? src.quotedText,
-              original: src.quotedText,
-              prefix: src.prefix,
-              suffix: src.suffix,
-            },
-            moves,
-          );
+          const anchor = {
+            blockId: src.blockId,
+            startOffset: src.startOffset,
+            endOffset: src.endOffset,
+            quote: src.anchoredText ?? src.quotedText,
+            original: src.quotedText,
+            prefix: src.prefix,
+            suffix: src.suffix,
+          };
+          const placed = src.orphaned ? refind(anchor, derived) : relocate(anchor, moves);
+          if (placed.orphaned && src.orphaned) continue;
           await tx.source.update({
             where: { id: src.id },
             data: placed.orphaned
@@ -418,6 +445,7 @@ export async function syncRichText({
                   anchoredText: placed.quotedText === src.quotedText ? null : placed.quotedText,
                   prefix: placed.prefix,
                   suffix: placed.suffix,
+                  orphaned: false,
                 },
           });
         }
@@ -595,12 +623,11 @@ export async function syncRichText({
         }
       }
 
-      // A save 10 minutes after the last one starts a sitting: the stored
-      // text is kept as a version first (SPEC.md §29, version history).
       await keepVersion(tx, documentId, {
         rev: locked.richTextRev,
         savedAt: locked.richTextSavedAt ?? locked.createdAt,
         savedBy: locked.richTextSavedBy,
+        keptAt: locked.keptAt,
       });
       const saved = await tx.document.update({
         where: { id: documentId },

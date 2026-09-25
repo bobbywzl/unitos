@@ -1,7 +1,18 @@
 import { Extension, Mark, type AnyExtension, type Editor } from "@tiptap/core";
 import type { Mark as PMMark, MarkSpec, Node as PMNode } from "@tiptap/pm/model";
-import { EditorState, Selection, type Transaction } from "@tiptap/pm/state";
-import { AddMarkStep, AddNodeMarkStep, AttrStep, Mapping, RemoveMarkStep, ReplaceAroundStep, ReplaceStep, type Step } from "@tiptap/pm/transform";
+import { EditorState, Plugin, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
+import {
+  AddMarkStep,
+  AddNodeMarkStep,
+  AttrStep,
+  Mapping,
+  RemoveMarkStep,
+  ReplaceAroundStep,
+  ReplaceStep,
+  Transform,
+  type Step,
+} from "@tiptap/pm/transform";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import {
   applySuggestion,
   applySuggestions,
@@ -10,27 +21,21 @@ import {
   modification,
   revertSuggestion,
   revertSuggestions,
+  selectSuggestion,
   suggestChanges,
   suggestChangesKey,
   transformToSuggestionTransaction,
 } from "@handlewithcare/prosemirror-suggest-changes";
+import { isList, isListItem } from "@/components/docs/typing/lists";
+import { SUGGESTION_MARK_TYPES, ZWSP } from "@/lib/docs/schema";
 
 // Suggesting mode (SPEC.md §29), on @handlewithcare/prosemirror-suggest-changes.
-// A suggestion is one id on insertion, deletion, and modification marks,
-// "<author's account id>.<ms since epoch>", so its card names who made it and
-// when. While Suggesting is on, every edit becomes suggestions before it
-// lands (dispatchTransaction); undo, a stored copy loading, and the layer's
-// own bookkeeping pass as they are.
 
 const SPECS = { insertion, deletion, modification } as const;
 type Kind = keyof typeof SPECS;
 const TAGS: Record<Kind, string> = { insertion: "ins", deletion: "del", modification: "span" };
-/** The suggestion marks' names: formatting tools leave them alone. */
-export const SUGGESTION_MARKS: ReadonlySet<string> = new Set(Object.keys(SPECS));
-/** What the library puts at a paragraph's edge to hold a suggested break. */
-export const ZWSP = "\u200B";
 
-export const isSuggestionMark = (mark: PMMark) => SUGGESTION_MARKS.has(mark.type.name);
+export const isSuggestionMark = (mark: PMMark) => SUGGESTION_MARK_TYPES.has(mark.type.name);
 /** Words added or removed: an insertion or a deletion mark. */
 const isWordMark = (mark: PMMark) => mark.type.name === "insertion" || mark.type.name === "deletion";
 const isModification = (mark: PMMark) => mark.type.name === "modification";
@@ -48,25 +53,156 @@ export function suggestionAt(state: EditorState): string | null {
   return id;
 }
 
-/** Every suggestion's id, in the order of the text. */
-export function suggestionIds(doc: PMNode): string[] {
-  const ids = new Set<string>();
-  doc.descendants((node) => {
-    for (const mark of node.marks) if (isSuggestionMark(mark)) ids.add(String(mark.attrs.id));
-  });
-  return [...ids];
-}
-
 /** The account id a suggestion's id names. */
 export function suggestionAuthor(id: unknown): string {
   const s = String(id);
   return s.slice(0, Math.max(0, s.lastIndexOf(".")));
 }
 
-/** When a suggestion was made (ms since epoch); 0 when its id has no time. */
+/** When a suggestion was made (ms since epoch). */
 export function suggestionTime(id: unknown): number {
   const s = String(id);
-  return Number(s.slice(s.lastIndexOf(".") + 1)) || 0;
+  return Number(s.slice(s.lastIndexOf(".") + 1));
+}
+
+type Side = "added" | "removed";
+
+/** One suggestion, as its card reads it. */
+export type Suggestion = {
+  id: string;
+  /** Where its words start on the page. */
+  from: number;
+  /** What it adds and what it removes, in the order of the text: words,
+      "¶" where a paragraph breaks, and objects (an image, a line break). */
+  added: (string | PMNode)[];
+  removed: (string | PMNode)[];
+  /** Its format changes: each modification mark, with the node it is on. */
+  formats: { mark: PMMark; node: PMNode }[];
+  /** The whole blocks it adds and removes: [from, to] each. */
+  blocks: Record<Side, [number, number][]>;
+  /** It takes whole blocks out and puts their words back as whole blocks:
+      "move" when they come back elsewhere or in another order; else a list
+      changed where they stand, [the list before, the list after] ("" for
+      none) at the first line that changed. */
+  same: "move" | [string, string] | null;
+};
+
+type Draft = Suggestion & {
+  last: Record<Side, number>;
+  inline: boolean;
+  texts: Record<Side, string[]>;
+  lists: Record<Side, string[]>;
+};
+
+/** The list a text block stands in: its type's name, or "". */
+function listOf(doc: PMNode, pos: number): string {
+  const $pos = doc.resolve(pos);
+  for (let depth = $pos.depth; depth > 0; depth--) if (isList($pos.node(depth))) return $pos.node(depth).type.name;
+  return "";
+}
+
+/** The block a paragraph stands for: with the list item and the list
+    around it while they hold nothing else. */
+function outerBlock(doc: PMNode, pos: number): [number, number] {
+  const $pos = doc.resolve(pos);
+  let depth = $pos.depth;
+  while (depth > 0 && $pos.node(depth).childCount === 1 && (isList($pos.node(depth)) || isListItem($pos.node(depth)))) depth--;
+  const from = depth === $pos.depth ? pos : $pos.before(depth + 1);
+  return [from, from + (doc.nodeAt(from)?.nodeSize ?? 0)];
+}
+
+/** Both sides are whole blocks with the same words: see `Suggestion.same`. */
+function sameWords(d: Draft): Suggestion["same"] {
+  const { added, removed } = d.texts;
+  if (d.inline || !added.length || !removed.length) return null;
+  const inOrder = added.join("") === removed.join("");
+  if (!inOrder && [...added].sort().join("\n") !== [...removed].sort().join("\n")) return null;
+  const [a, r] = [d.blocks.added, d.blocks.removed];
+  const touching = a[0][0] === r[r.length - 1][1] || r[0][0] === a[a.length - 1][1];
+  if (!inOrder || !touching) return "move";
+  const at = Math.max(0, d.lists.removed.findIndex((list, i) => list !== d.lists.added[i]));
+  return [d.lists.removed[at] ?? "", d.lists.added[at] ?? ""];
+}
+
+const read = new WeakMap<PMNode, Suggestion[]>();
+
+/** Every suggestion in `doc`, in the order of the text. */
+export function readSuggestions(doc: PMNode): Suggestion[] {
+  const cached = read.get(doc);
+  if (cached) return cached;
+  const drafts = new Map<string, Draft>();
+  const draft = (id: string, pos: number): Draft => {
+    let d = drafts.get(id);
+    if (!d) {
+      const two = <T>(make: () => T): Record<Side, T> => ({ added: make(), removed: make() });
+      d = { id, from: pos, added: [], removed: [], formats: [], blocks: two(() => []), same: null, last: two(() => -1), inline: false, texts: two(() => []), lists: two(() => []) };
+      drafts.set(id, d);
+    }
+    return d;
+  };
+  // A piece of what a side holds; `key` is its paragraph, and "¶" goes
+  // between two paragraphs.
+  const add = (d: Draft, side: Side, key: number, piece: string | PMNode) => {
+    if (d.last[side] >= 0 && d.last[side] !== key) d[side].push("¶");
+    d.last[side] = key;
+    if (piece !== "") d[side].push(piece);
+  };
+  // The blocks a suggestion marks whole, open around the node being read.
+  const open: { d: Draft; side: Side; end: number; words: boolean }[] = [];
+  let block = -1;
+  // The paragraph being read when one suggestion strikes all its words.
+  let struck: Draft | null = null;
+  doc.descendants((node, pos) => {
+    while (open.length && open[open.length - 1].end <= pos) open.pop();
+    for (const mark of node.marks) {
+      if (!isSuggestionMark(mark)) continue;
+      const d = draft(String(mark.attrs.id), pos);
+      if (isModification(mark)) {
+        d.formats.push({ mark, node });
+        continue;
+      }
+      const side: Side = mark.type.name === "insertion" ? "added" : "removed";
+      if (open.some((o) => o.d === d && o.side === side)) continue;
+      if (node.isInline) {
+        if (d !== struck || side === "added") d.inline = true;
+        add(d, side, block, node.isText ? (node.text ?? "").replaceAll(ZWSP, "") : node);
+        continue;
+      }
+      // An object is named; a block of words reads as its words.
+      const words = node.isTextblock || (!node.isAtom && node.type.name !== "table");
+      if (!words) add(d, side, pos, node);
+      d.blocks[side].push([pos, pos + node.nodeSize]);
+      d.texts[side].push(node.textContent);
+      open.push({ d, side, end: pos + node.nodeSize, words });
+    }
+    const reading = open.filter((o) => o.words);
+    if (node.isTextblock) {
+      block = pos;
+      for (const o of reading) {
+        add(o.d, o.side, pos, "");
+        o.d.lists[o.side].push(listOf(doc, pos));
+      }
+      // A paragraph whose words one suggestion strikes whole is a block it
+      // removes (a bullet taken off a one-line list).
+      const mark = node.firstChild?.marks.find((m) => m.type.name === "deletion");
+      struck = mark && node.content.content.every((child) => mark.isInSet(child.marks)) ? draft(String(mark.attrs.id), pos) : null;
+      if (struck && !open.some((o) => o.d === struck)) {
+        struck.blocks.removed.push(outerBlock(doc, pos));
+        struck.texts.removed.push(node.textContent);
+        struck.lists.removed.push(listOf(doc, pos));
+      }
+    } else if (node.isInline) {
+      for (const o of reading) add(o.d, o.side, block, node.isText ? (node.text ?? "").replaceAll(ZWSP, "") : node);
+    }
+    return true;
+  });
+  const out = [...drafts.values()].map((d): Suggestion => {
+    const same = sameWords(d);
+    const { id, added, removed, formats, blocks } = d;
+    return { id, from: same ? blocks.added[0][0] : d.from, added, removed, formats, blocks, same };
+  });
+  read.set(doc, out);
+  return out;
 }
 
 function suggestionMark(name: Kind) {
@@ -113,6 +249,15 @@ export function setSuggesting(editor: Editor, author: string | null): void {
   else suggesters.set(editor, author);
 }
 
+let lastTime = 0;
+/** A new suggestion's id: "<account id>.<ms>", a millisecond past the last
+    id this page made. */
+const newId = (author: string) => `${author}.${(lastTime = Math.max(Date.now(), lastTime + 1))}`;
+
+const EACH = "docsSuggestEach";
+/** Each step of `tr` becomes a suggestion of its own (Replace all). */
+export const suggestEach = (tr: Transaction) => tr.setMeta(EACH, true);
+
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /** The id an edit to an earlier suggestion keeps: the earlier one's, when
@@ -133,6 +278,14 @@ const isFormatStep = (step: Step) =>
     step.slice.size === 2 &&
     step.gapFrom === step.from + 1 &&
     step.gapTo === step.to - 1);
+
+/** `out` in place of `tr`: it keeps `tr`'s metas (undo grouping, focus) and
+    its scroll, as the library's tracked transactions do. */
+function carry(out: Transaction, tr: Transaction): Transaction {
+  (out as unknown as { meta: unknown }).meta = (tr as unknown as { meta: unknown }).meta;
+  if (tr.scrolledIntoView) out.scrollIntoView();
+  return out;
+}
 
 /** The name of the mark a word modification changes. */
 function changedMark(mod: PMMark): string | null {
@@ -200,10 +353,7 @@ function suggestFormat(tr: Transaction, state: EditorState, id: string): Transac
   for (const step of tr.steps) if (isMarkStep(step)) suggestMark(out, step, id);
   if (tr.selectionSet) out.setSelection(tr.selection.map(out.doc, new Mapping()));
   if (tr.storedMarksSet) out.setStoredMarks(tr.storedMarks);
-  if (tr.scrolledIntoView) out.scrollIntoView();
-  // The edit's metas (undo grouping, focus) ride along, as the library keeps them.
-  (out as unknown as { meta: unknown }).meta = (tr as unknown as { meta: unknown }).meta;
-  return out;
+  return carry(out, tr);
 }
 
 /** Where a transaction's steps landed in its final document. */
@@ -255,16 +405,86 @@ function keepAuthors(tr: Transaction, before: PMNode, author: string, id: string
   }
 }
 
-function suggest(tr: Transaction, state: EditorState, author: string): Transaction {
-  const id = `${author}.${Date.now()}`;
-  if (tr.steps.every(isFormatStep)) return suggestFormat(tr, state, id);
-  const tracked = transformToSuggestionTransaction(tr, state, () => id);
-  keepAuthors(tracked, state.doc, author, id);
-  // The library puts the caret after what an edit adds, as typing does. An
-  // edit away from the caret (autocorrect's capital) leaves the caret where it was.
+/** A block's id is no formatting: its change is no suggestion (Enter at a
+    paragraph's start gives the new paragraph above a fresh one). */
+function dropIdChanges(tr: Transaction): Transaction {
+  for (const [from, to] of touched(tr)) {
+    tr.doc.nodesBetween(from, to, (node, pos) => {
+      const mark = node.marks.find((m) => isModification(m) && m.attrs.attrName === "blockId");
+      if (mark) tr.removeNodeMark(pos, mark);
+    });
+  }
+  return tr;
+}
+
+/** Backspace or Delete on a suggested paragraph break — one of the
+    zero-width spaces that hold it, or the break between them — takes the
+    break back: the two paragraphs join and both zero-width spaces go. */
+function takeBackBreak(tr: Transaction, state: EditorState): Transaction | null {
   const step = tr.steps[0];
+  if (tr.steps.length !== 1 || !(step instanceof ReplaceStep) || step.slice.size) return null;
+  const { doc } = state;
+  const addedSpace = (pos: number) => {
+    const node = pos >= 0 ? doc.resolve(pos).nodeAfter : null;
+    return Boolean(node?.text?.startsWith(ZWSP) && node.marks.some((m) => m.type.name === "insertion"));
+  };
+  const near = (pos: number, dir: 1 | -1) => Selection.findFrom(doc.resolve(pos), dir, true)?.from ?? -1;
+  // Where the break may stand: [the upper paragraph's end, the lower one's start].
+  const $from = doc.resolve(step.from);
+  const breaks: [number, number][] = [[step.from, step.to]];
+  if (step.to === step.from + 1 && addedSpace(step.from)) {
+    if (step.from === $from.start()) breaks.push([near($from.before(), -1), step.from]);
+    if (step.to === $from.end()) breaks.push([step.to, near($from.after(), 1)]);
+  }
+  const found = breaks.find(([end, start]) => {
+    if (end < 0 || start <= end || !addedSpace(end - 1) || !addedSpace(start)) return false;
+    const $end = doc.resolve(end);
+    const $start = doc.resolve(start);
+    // Nothing but the two paragraphs' edges lies between them.
+    return end === $end.end() && start === $start.start() && start - end === $end.depth + $start.depth - 2 * $end.sharedDepth(start);
+  });
+  if (!found) return null;
+  const out = state.tr.delete(found[0] - 1, found[1] + 1);
+  return carry(out.setSelection(TextSelection.create(out.doc, found[0] - 1)), tr);
+}
+
+/** A mapping from `doc` to `doc` with every suggestion accepted. */
+function acceptMapping(doc: PMNode): Mapping {
+  // The library settles no format change on words, and those move no text.
+  const plain = new Transform(doc).removeMark(0, doc.content.size, doc.type.schema.marks.modification);
+  let mapping = new Mapping();
+  applySuggestions(EditorState.create({ doc: plain.doc }), (settled) => (mapping = settled.mapping));
+  return mapping;
+}
+
+/** The selection stands in what the transaction adds: a command put it
+    there (a table's first cell, a footnote, a new row, a list line). */
+const inAdded = (tr: Transaction) =>
+  tr.mapping.invert().mapResult(tr.selection.head).deletedAcross ||
+  tr.steps.some((step) => step instanceof ReplaceAroundStep && !isFormatStep(step));
+
+function suggest(tr: Transaction, state: EditorState, author: string): Transaction {
+  const id = newId(author);
+  if (tr.steps.every(isFormatStep)) return dropIdChanges(suggestFormat(tr, state, id));
+  const back = takeBackBreak(tr, state);
+  if (back) return back;
+  const each = tr.getMeta(EACH) === true;
+  const tracked = transformToSuggestionTransaction(tr, state, () => (each ? newId(author) : id));
+  keepAuthors(tracked, state.doc, author, id);
+  dropIdChanges(tracked);
+  const step = tr.steps[0];
+  const one = tr.steps.length === 1 && step instanceof ReplaceStep;
   const caret = state.selection.empty ? state.selection.from : -1;
-  if (!tr.selectionSet && tr.steps.length === 1 && step instanceof ReplaceStep && caret >= 0 && (step.to < caret || step.from > caret)) {
+  if (inAdded(tr)) {
+    // The same place in the tracked copy: both read alike once accepted.
+    const mapping = acceptMapping(tr.doc);
+    mapping.appendMapping(acceptMapping(tracked.doc).invert());
+    tracked.setSelection(tr.selection.map(tracked.doc, mapping));
+  } else if (one && !step.slice.size && step.from === caret) {
+    // Delete strikes what follows the caret, and the caret goes past it.
+    tracked.setSelection(Selection.near(tracked.doc.resolve(tracked.mapping.map(step.to))));
+  } else if (one && !tr.selectionSet && caret >= 0 && (step.to < caret || step.from > caret)) {
+    // An edit away from the caret (autocorrect's capital) leaves it where it was.
     tracked.setSelection(Selection.near(tracked.doc.resolve(tracked.mapping.map(caret))));
   }
   return tracked;
@@ -350,13 +570,30 @@ export function settleSuggestions(editor: Editor, accept: boolean, id?: string):
   editor.view.dispatch(tr.setMeta(suggestChangesKey, { skip: true }));
 }
 
+/** Select a suggestion's words and give the page the focus: its card opens. */
+export function focusSuggestion(editor: Editor, id: string): void {
+  if (selectSuggestion(id)(editor.state, (tr) => editor.view.dispatch(tr))) editor.view.focus();
+}
+
+/** Blocks a suggestion puts back with the same words draw once: the removed
+    copy hides, and a list changed in place draws as a format change. */
+function sameWordsDecorations(doc: PMNode): DecorationSet {
+  const node = (cls: string) => ([from, to]: [number, number]) => Decoration.node(from, to, { class: cls });
+  const decorations = readSuggestions(doc).flatMap((s) =>
+    s.same
+      ? [...s.blocks.removed.map(node("docs-suggest-hidden")), ...(s.same === "move" ? [] : s.blocks.added.map(node("docs-suggest-restyled")))]
+      : [],
+  );
+  return DecorationSet.create(doc, decorations);
+}
+
 const Suggesting = Extension.create({
   name: "docsSuggesting",
   // Every node that holds blocks takes the suggestion marks on them (a new
   // table, a removed list item), and a code block on its words.
   onBeforeCreate() {
     const { schema } = this.editor;
-    const marks = [...SUGGESTION_MARKS].map((name) => schema.marks[name]);
+    const marks = [...SUGGESTION_MARK_TYPES].map((name) => schema.marks[name]);
     for (const type of Object.values(schema.nodes)) {
       if (type.markSet) type.markSet = [...type.markSet, ...marks];
     }
@@ -364,7 +601,20 @@ const Suggesting = Extension.create({
   // The library's plugin: a pilcrow where a paragraph break is suggested,
   // and arrow keys that step over its zero-width spaces.
   addProseMirrorPlugins() {
-    return [suggestChanges()];
+    return [
+      suggestChanges(),
+      new Plugin<DecorationSet>({
+        state: {
+          init: (_, { doc }) => sameWordsDecorations(doc),
+          apply: (tr, set, _, { doc }) => (tr.docChanged ? sameWordsDecorations(doc) : set),
+        },
+        props: {
+          decorations(state) {
+            return this.getState(state);
+          },
+        },
+      }),
+    ];
   },
   dispatchTransaction({ transaction: tr, next }) {
     const author = suggesters.get(this.editor);

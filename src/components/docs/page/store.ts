@@ -4,18 +4,14 @@ import type { Editor } from "@tiptap/core";
 import { useSyncExternalStore } from "react";
 import type { PageSetup } from "@/lib/docs/schema";
 import type { TextWidth } from "@/components/docs/page/geometry";
-import type { SaveState } from "@/components/docs/use-docs-save";
+import { MAX_WAIT_MS, SAVE_DELAY_MS, type SaveState } from "@/components/docs/use-docs-save";
 
 // The page area's state (SPEC.md §29), one store per editor: the ruler
 // under the toolbar, the canvas, the dialogs, and the commands Search the
 // menus runs all read and change it. The page setup is the document's (saved
 // with PATCH /api/documents/[documentId]/rich-text); the ruler, the outline,
-// and the text width are the reader's own, kept per browser.
-
-/** A header or footer saves as the text does (use-docs-save.ts): after a
-    pause of SAVE_DELAY_MS, or MAX_WAIT_MS of steady typing. */
-const SAVE_DELAY_MS = 700;
-const MAX_WAIT_MS = 3_000;
+// and the text width are the reader's own, kept per browser. A header or
+// footer saves as the text does (use-docs-save.ts).
 
 export type HeaderArea = "header" | "footer";
 
@@ -44,7 +40,7 @@ type PageState = {
   outlineOpen: boolean;
   outlineWidth: number;
   textWidth: TextWidth;
-  dialog: "setup" | "pageNumbers" | "headerFormat" | null;
+  dialog: "setup" | "pageNumbers" | "headerFormat" | "copy" | null;
   /** The header or footer being edited, and on which page. */
   editing: { area: HeaderArea; page: number } | null;
   /** The page setup's save, for the title row's status. */
@@ -196,9 +192,9 @@ function createStore(documentId: string, setup: PageSetup): PageStore {
           retries = 0;
           window.removeEventListener("beforeunload", onLeave);
         } else {
-          // A failed save tries again, waiting longer each time.
+          // A failed save tries again, waiting longer each time, up to 10 s.
           retries = Math.min(retries + 1, 5);
-          saveLater(1000 * 2 ** retries);
+          saveLater(Math.min(10_000, 1000 * 2 ** retries));
         }
         store.set({ setupSave: result });
       });

@@ -239,7 +239,8 @@ div:has([data-docs-editor]) > .reader-fade {
   flex: 1;
   min-width: 0;
 }
-.docs-prose ul[data-type="taskList"] li[data-checked="true"] > div {
+/* The ticked line only: a line nested under it keeps its own tick. */
+.docs-prose ul[data-type="taskList"] li[data-checked="true"] > div > p {
   text-decoration: line-through;
   color: #666666;
 }

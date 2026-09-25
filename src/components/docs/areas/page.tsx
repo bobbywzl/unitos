@@ -21,6 +21,7 @@ import { PageIndicator } from "@/components/docs/page/indicator";
 import { OutlineButton, OutlinePanel } from "@/components/docs/page/outline";
 import type { PaginationConfig } from "@/components/docs/page/paginate";
 import { HorizontalRuler, VerticalRuler } from "@/components/docs/page/ruler";
+import { CopyDialog } from "@/components/docs/page/make-copy";
 import { PageSetupDialog, readPageDefault } from "@/components/docs/page/setup-dialog";
 import { PAGE_EVENT, pageStore, usePageState, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
 import { DEFAULT_PAGE_SETUP } from "@/lib/docs/schema";
@@ -551,6 +552,7 @@ export function PageCanvas({
       {dialog === "setup" && <PageSetupDialog store={store} onClose={closeDialog} />}
       {dialog === "pageNumbers" && <PageNumbersDialog store={store} onClose={closeDialog} />}
       {dialog === "headerFormat" && <HeaderFormatDialog store={store} onClose={closeDialog} />}
+      {dialog === "copy" && <CopyDialog editor={editor} onClose={closeDialog} />}
     </>
   );
 }

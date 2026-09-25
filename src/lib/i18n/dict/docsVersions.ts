@@ -20,6 +20,8 @@ const en = {
   yesterday: "Yesterday",
   // A version's time: "September 25, 2:07 PM".
   dateTime: "{date}, {time}",
+  // The navigation keys' N or P, then U (typing/navigate.ts): "No next suggestion".
+  navSuggestion: "suggestion",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -39,6 +41,7 @@ const zh: Record<keyof typeof en, string> = {
   today: "今天",
   yesterday: "昨天",
   dateTime: "{date} {time}",
+  navSuggestion: "建议",
 };
 
 export const docsVersions = { en, zh } as const;

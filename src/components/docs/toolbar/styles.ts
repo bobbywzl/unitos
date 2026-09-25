@@ -358,13 +358,14 @@ const STYLE_SELECTOR: Record<DocStyle, string> = {
 
 /** The CSS that draws the document's changes to its named styles in the
     editor `root` (a selector); an unchanged style leaves the page's own
-    rules. Normal text's face, size, and color go on the root, so lists,
-    tables, and headings without a face of their own take them. A
-    paragraph's own spacing and alignment still win: they are inline. */
-export function namedStyleSheet(doc: PMNode, root: string): string {
-  const changes = readChanges(doc);
+    rules. `full` draws every style whole (a downloaded web page). Normal
+    text's face, size, and color go on the root, so lists, tables, and
+    headings without a face of their own take them. A paragraph's own
+    spacing and alignment still win: they are inline. */
+export function namedStyleSheet(doc: PMNode, root: string, full = false): string {
+  const changes = full ? readStyles(doc) : readChanges(doc);
   const rules: string[] = [];
-  const rule = (selector: string, decls: (string | false | undefined)[]) => {
+  const rule = (selector: string, decls: (string | false | null | undefined)[]) => {
     const list = decls.filter(Boolean);
     if (list.length > 0) rules.push(`${root} ${selector} { ${list.join("; ")} }`);
   };

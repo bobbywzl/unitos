@@ -7,7 +7,7 @@ import type { ParagraphFlag } from "@/components/docs/ext/toolbar";
 import { LineSpacingIcon } from "@/components/docs/icons";
 import { MenuItem, MenuSeparator } from "@/components/docs/menu";
 import { DropBtn } from "@/components/docs/toolbar/controls";
-import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Line & paragraph spacing (SPEC.md §29): Single, 1.15, 1.5, Double, and
@@ -193,7 +193,6 @@ function CustomSpacingDialog({ editor, para, onClose }: { editor: Editor; para: 
   const afterValue = parseFloat(after);
   const valid = lineValue > 0 && lineValue <= 100 && beforeValue >= 0 && beforeValue <= 1584 && afterValue >= 0 && afterValue <= 1584;
   const apply = () => {
-    if (!valid) return;
     const chain = editor.chain().focus();
     chain.setLineSpacing(same(lineValue, para.styleLineSpacing) ? null : lineValue);
     chain.setParagraphSpace("before", same(beforeValue, para.styleSpaceBefore) ? null : beforeValue);
@@ -210,38 +209,23 @@ function CustomSpacingDialog({ editor, para, onClose }: { editor: Editor; para: 
       title={t("docs.customSpacing")}
       onClose={close}
       className="docs-fields-dialog"
-      actions={
-        <>
-          <DialogButton onClick={close}>{t("docs.cancel")}</DialogButton>
-          <DialogButton primary disabled={!valid} onClick={apply}>
-            {t("docs.apply")}
-          </DialogButton>
-        </>
-      }
+      submit={{ label: t("docs.apply"), disabled: !valid, run: apply }}
     >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          apply();
-        }}
-      >
+      <label>
+        <span className="docs-tb-label">{t("docs.lineSpacingField")}</span>
+        <input className="docs-tb-field" inputMode="decimal" value={line} onChange={(e) => setLine(e.target.value)} />
+      </label>
+      <h3>{t("docs.paragraphSpacingPts")}</h3>
+      <div className="docs-fields-row">
         <label>
-          <span className="docs-tb-label">{t("docs.lineSpacingField")}</span>
-          <input className="docs-tb-field" inputMode="decimal" value={line} onChange={(e) => setLine(e.target.value)} />
+          <span className="docs-tb-label">{t("docs.spaceBefore")}</span>
+          <input className="docs-tb-field" inputMode="decimal" value={before} onChange={(e) => setBefore(e.target.value)} />
         </label>
-        <h3>{t("docs.paragraphSpacingPts")}</h3>
-        <div className="docs-fields-row">
-          <label>
-            <span className="docs-tb-label">{t("docs.spaceBefore")}</span>
-            <input className="docs-tb-field" inputMode="decimal" value={before} onChange={(e) => setBefore(e.target.value)} />
-          </label>
-          <label>
-            <span className="docs-tb-label">{t("docs.spaceAfter")}</span>
-            <input className="docs-tb-field" inputMode="decimal" value={after} onChange={(e) => setAfter(e.target.value)} />
-          </label>
-        </div>
-        <button type="submit" hidden />
-      </form>
+        <label>
+          <span className="docs-tb-label">{t("docs.spaceAfter")}</span>
+          <input className="docs-tb-field" inputMode="decimal" value={after} onChange={(e) => setAfter(e.target.value)} />
+        </label>
+      </div>
     </ToolbarDialog>
   );
 }

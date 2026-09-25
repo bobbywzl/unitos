@@ -6,7 +6,7 @@ import { useLang, useT } from "@/components/lang-provider";
 import { DropDownIcon } from "@/components/docs/icons";
 import { insertContext } from "@/components/docs/insert/context";
 import { DropdownPanel, keepFocus, MenuItem, MenuSeparator } from "@/components/docs/menu";
-import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { countRange, type Counts } from "@/components/docs/typing/count";
 import { TYPING_EVENT } from "@/components/docs/typing/events";
 import { serverTypingPrefs, setTypingPrefs, subscribeTypingPrefs, typingPrefs, type TypingPrefs } from "@/components/docs/typing/prefs";
@@ -219,21 +219,13 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
           title={t("docsTyping.wordCount")}
           onClose={closeDialog}
           className="docs-wc-dialog"
-          actions={
-            <>
-              <DialogButton onClick={closeDialog}>{t("docs.cancel")}</DialogButton>
-              <DialogButton
-                primary
-                onClick={() => {
-                  setShow(draftShow);
-                  writeShow(draftShow);
-                  closeDialog();
-                }}
-              >
-                {t("docs.ok")}
-              </DialogButton>
-            </>
-          }
+          submit={{
+            run: () => {
+              setShow(draftShow);
+              writeShow(draftShow);
+              closeDialog();
+            },
+          }}
         >
           <table className="docs-wc-table">
             <tbody>

@@ -1,7 +1,5 @@
-// UI strings of Suggesting mode in the page editor (SPEC.md §29): the
-// suggestion's card, Review suggested edits, and their commands. The English
-// follows Google Docs' own labels. zh glossary: dict/common.ts — suggestion
-// 建议 · Suggesting 建议模式.
+// UI strings of Suggesting mode in the page editor (SPEC.md §29), in Google
+// Docs' words. zh glossary: dict/common.ts — suggestion 建议 · Suggesting 建议模式.
 
 const en = {
   suggestingMode: "Suggesting mode",
@@ -11,15 +9,14 @@ const en = {
   delete: "Delete:",
   replace: "Replace:",
   replaceWith: "with",
+  move: "Move:",
   format: "Format:",
   formatOff: "remove {name}",
   acceptSuggestion: "Accept suggestion",
   rejectSuggestion: "Reject suggestion",
-  // Format names the toolbar's own labels do not cover
-  strikethrough: "Strikethrough",
-  subscript: "Subscript",
-  superscript: "Superscript",
   indent: "Indent",
+  checked: "Checked",
+  unchecked: "Unchecked",
   otherFormat: "other formatting",
   // Review suggested edits
   reviewSuggestedEdits: "Review suggested edits",
@@ -41,14 +38,14 @@ const zh: Record<keyof typeof en, string> = {
   delete: "删除：",
   replace: "替换：",
   replaceWith: "为",
+  move: "移动：",
   format: "格式：",
   formatOff: "去除{name}",
   acceptSuggestion: "接受建议",
   rejectSuggestion: "拒绝建议",
-  strikethrough: "删除线",
-  subscript: "下标",
-  superscript: "上标",
   indent: "缩进",
+  checked: "已勾选",
+  unchecked: "未勾选",
   otherFormat: "其他格式",
   reviewSuggestedEdits: "审阅建议",
   oneSuggestion: "1 条建议",

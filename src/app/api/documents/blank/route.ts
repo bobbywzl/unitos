@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpNotebook, documentAccess, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { deriveBlocks } from "@/lib/docs/blocks";
+import { deriveBlocks, withoutSuggestions } from "@/lib/docs/blocks";
 import { emptyRichText, INDEXED_NODE_TYPES, newBlockId, sanitizeRichText, type RichNode } from "@/lib/docs/schema";
 import { serverT } from "@/lib/i18n/server";
 import { attachDocument } from "@/lib/parse/attach";
@@ -13,14 +13,16 @@ import { parseBody } from "@/lib/validate";
 const createSchema = z.object({
   notebookId: z.string().min(1),
   title: z.string().trim().min(1).max(200),
-  // File > Make a copy: the blank document to copy.
+  // File > Make a copy: the blank document to copy, and whether its
+  // suggestions come with it.
   copyOf: z.string().min(1).optional(),
+  suggestions: z.boolean().optional(),
 });
 
 /** A copy's rich text: every paragraph gets a fresh id (a block id is
-    unique across documents), and a link to one of its headings follows the
-    heading. */
-function copyRichText(doc: RichNode): RichNode | null {
+    unique across documents), a link to one of its headings follows the
+    heading, and without its suggestions it reads as if each were rejected. */
+function copyRichText(doc: RichNode, suggestions: boolean): RichNode | null {
   const ids = new Map<string, string>();
   const fresh = (node: RichNode): RichNode => {
     const out = { ...node, content: node.content?.map(fresh) };
@@ -40,7 +42,8 @@ function copyRichText(doc: RichNode): RichNode | null {
       return to ? { ...mark, attrs: { ...mark.attrs, href: `#heading=${to}` } } : mark;
     }),
   });
-  return sanitizeRichText(relink(fresh(doc)));
+  const text = suggestions ? doc : { ...doc, content: withoutSuggestions(doc.content ?? []) };
+  return sanitizeRichText(relink(fresh(text)));
 }
 
 // A blank document (SPEC.md §15, §29): one the reader writes here. No file,
@@ -69,7 +72,7 @@ export async function POST(req: Request) {
       select: { richText: true, pageSetup: true, notebooks: { where: { notebookId: data.notebookId }, select: { folderId: true } } },
     });
     if (!original) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
-    const copied = original.richText ? copyRichText(original.richText as unknown as RichNode) : null;
+    const copied = original.richText ? copyRichText(original.richText as unknown as RichNode, data.suggestions === true) : null;
     if (!copied) return NextResponse.json({ error: t("api.notBlankDocument") }, { status: 400 });
     richText = copied;
     pageSetup = (original.pageSetup ?? undefined) as Prisma.InputJsonValue | undefined;

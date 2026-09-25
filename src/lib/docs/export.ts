@@ -4,6 +4,7 @@ import {
   BookmarkEnd,
   BookmarkStart,
   BorderStyle,
+  DeletedTextRun,
   Document as DocxDocument,
   ExternalHyperlink,
   Footer,
@@ -12,6 +13,7 @@ import {
   HeadingLevel,
   HeightRule,
   ImageRun,
+  InsertedTextRun,
   InternalHyperlink,
   LevelFormat,
   LineRuleType,
@@ -42,15 +44,15 @@ import { listPreset } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, styleFont, type NamedStyle } from "@/components/docs/toolbar/styles";
 import { db } from "@/lib/db";
 import { hex6, inlineText } from "@/lib/docs/blocks";
-import type { PageSetup, RichMark, RichNode } from "@/lib/docs/schema";
+import { ZWSP, type PageSetup, type RichMark, type RichNode } from "@/lib/docs/schema";
 import { MAX_IMAGE_BYTES, sniffImage } from "@/lib/images";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
 // File > Download > Microsoft Word (.docx) (SPEC.md §29): one walk of the
 // stored rich text. The named styles become Word's styles, marks become run
-// properties, lists become Word numbering, and the page setup becomes the
-// section. What Word has no place for (a chip, an equation) goes in as its
-// words.
+// properties, lists become Word numbering, a suggestion becomes a tracked
+// change, and the page setup becomes the section. What Word has no place for
+// (a chip, an equation) goes in as its words.
 
 type Block = Paragraph | Table;
 type Picture = { data: Uint8Array; type: "png" | "jpg" | "gif" | "bmp"; width: number; height: number };
@@ -66,7 +68,10 @@ type Ctx = {
   numbering: { reference: string; levels: ILevelsOptions[] }[];
   /** A page break came last: the next paragraph starts a page. */
   breakBefore: boolean;
-  bookmarks: number;
+  /** The last id Word's bookmarks and tracked changes took: each takes its own. */
+  ids: number;
+  /** The names of the accounts that made suggestions, by account id. */
+  authors: Map<string, string>;
 };
 
 const tw = (pt: number) => Math.round(pt * 20);
@@ -115,15 +120,35 @@ function wordColor(value: unknown): string | undefined {
 }
 
 /** A Word bookmark name: a letter first, word characters, at most 40. */
-function anchor(kind: "h" | "b", id: string): string {
+function bookmarkName(kind: "h" | "b", id: string): string {
   return `${kind}_${id.replace(/\W/g, "_")}`.slice(0, 40);
 }
 
 /** A bookmark around `children`. docx numbers every bookmark 1, and Word
     pairs a bookmark's start and end by number, so each gets its own. */
 function bookmark(ctx: Ctx, name: string, children: ParagraphChild[]): Bookmark {
-  const id = ++ctx.bookmarks;
+  const id = ++ctx.ids;
   return Object.assign(new Bookmark({ id: name, children }), { start: new BookmarkStart(name, id), end: new BookmarkEnd(id) });
+}
+
+/** The words a suggestion adds or removes: its insertion or deletion mark. */
+const changeOf = (node: RichNode) => node.marks?.find((m) => m.type === "insertion" || m.type === "deletion");
+
+/** The account a suggestion's id ("<account id>.<ms>") names. */
+const authorOf = (mark: RichMark) => String(mark.attrs?.id).replace(/\.\d+$/, "");
+
+/** A suggestion as Word's revision: its author's name (else Unitos) and the
+    time its id holds, to the second. */
+function revision(ctx: Ctx, mark: RichMark) {
+  const ms = Number(/\.(\d+)$/.exec(String(mark.attrs?.id))?.[1]);
+  return { id: ++ctx.ids, author: ctx.authors.get(authorOf(mark)) ?? "Unitos", date: new Date(ms).toISOString().replace(/\.\d+Z$/, "Z") };
+}
+
+/** Inside a block a suggestion adds or removes as a whole, every run is added or removed. */
+function tracked(node: RichNode, block?: RichMark): RichNode {
+  const change = changeOf(node) ?? block;
+  if (node.content) return { ...node, content: node.content.map((child) => tracked(child, change)) };
+  return change && !changeOf(node) ? { ...node, marks: [...(node.marks ?? []), change] } : node;
 }
 
 function num(value: unknown): number | undefined {
@@ -154,33 +179,44 @@ function runStyle(marks: RichMark[] = []): IRunOptions {
 
 function runOf(node: RichNode, ctx: Ctx, extra: IRunOptions): ParagraphChild | null {
   const props = { ...runStyle(node.marks), ...extra };
+  const change = changeOf(node);
+  const run = (options: IRunOptions) =>
+    !change
+      ? new TextRun(options)
+      : change.type === "insertion"
+        ? new InsertedTextRun({ ...options, ...revision(ctx, change) })
+        : new DeletedTextRun({ ...options, ...revision(ctx, change) });
   switch (node.type) {
-    case "text":
-      return new TextRun({ ...props, children: (node.text ?? "").split("\t").flatMap((part, i) => (i > 0 ? [new Tab(), part] : [part])) });
+    case "text": {
+      // The zero-width spaces of a suggested paragraph break are no words.
+      const text = (node.text ?? "").replaceAll(ZWSP, "");
+      return text ? run({ ...props, children: text.split("\t").flatMap((part, i) => (i > 0 ? [new Tab(), part] : [part])) }) : null;
+    }
     case "hardBreak":
-      return new TextRun({ ...props, break: 1 });
+      return run({ ...props, break: 1 });
     case "footnoteReference": {
       const n = ctx.footnotes.get(String(node.attrs?.footnoteId));
       return n ? new FootnoteReferenceRun(n) : null;
     }
     case "bookmark":
-      return bookmark(ctx, anchor("b", String(node.attrs?.bookmarkId ?? "")), []);
+      return bookmark(ctx, bookmarkName("b", String(node.attrs?.bookmarkId ?? "")), []);
     case "pageNumber":
-      return new TextRun({ ...props, children: [PageNumber.CURRENT] });
+      return run({ ...props, children: [PageNumber.CURRENT] });
     case "pageCount":
-      return new TextRun({ ...props, children: [PageNumber.TOTAL_PAGES] });
+      return run({ ...props, children: [PageNumber.TOTAL_PAGES] });
     case "inlineMath":
-      return new TextRun({ ...props, text: String(node.attrs?.latex ?? "") });
+      return run({ ...props, text: String(node.attrs?.latex ?? "") });
     default: {
-      const text = inlineText(node);
-      return text ? new TextRun({ ...props, text }) : null;
+      // A chip's label, also when a suggestion removes it.
+      const text = inlineText({ ...node, marks: undefined });
+      return text ? run({ ...props, text }) : null;
     }
   }
 }
 
 function hyperlink(href: string, children: ParagraphChild[], origin: string): ParagraphChild {
   const place = /^#(heading|bookmark)=([\w.-]+)$/.exec(href);
-  if (place) return new InternalHyperlink({ anchor: anchor(place[1] === "heading" ? "h" : "b", place[2]), children });
+  if (place) return new InternalHyperlink({ anchor: bookmarkName(place[1] === "heading" ? "h" : "b", place[2]), children });
   return new ExternalHyperlink({ link: href.startsWith("/") ? `${origin}${href}` : href, children });
 }
 
@@ -214,7 +250,7 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
   const lineSpacing = num(a.lineSpacing);
   const firstLine = num(a.indentFirstLine) ?? 0;
   let children = inline(node.content, ctx, run);
-  if (node.type === "heading" && typeof a.blockId === "string") children = [bookmark(ctx, anchor("h", a.blockId), children)];
+  if (node.type === "heading" && typeof a.blockId === "string") children = [bookmark(ctx, bookmarkName("h", a.blockId), children)];
   const stops = typeof a.tabStops === "string" ? a.tabStops.split(" ").map((stop) => stop.split(":")) : [];
   return para(ctx, {
     heading: node.type === "heading" ? HEADINGS[level - 1] : a.docStyle === "title" ? HeadingLevel.TITLE : undefined,
@@ -368,11 +404,14 @@ function imageRun(node: RichNode, ctx: Ctx): ImageRun | null {
   const width = num(a.width) ?? Math.min(picture.width, ctx.textWidth);
   const height = num(a.height) ?? (width * picture.height) / picture.width;
   const alt = typeof a.alt === "string" && a.alt ? a.alt : undefined;
+  const change = changeOf(node);
   return new ImageRun({
     type: picture.type,
     data: picture.data,
     transformation: { width, height, rotation: num(a.rotation) },
     altText: alt ? { name: alt, description: alt, title: alt } : undefined,
+    insertion: change?.type === "insertion" ? revision(ctx, change) : undefined,
+    deletion: change?.type === "deletion" ? revision(ctx, change) : undefined,
   });
 }
 
@@ -437,7 +476,7 @@ function blocks(nodes: RichNode[] = [], ctx: Ctx): Block[] {
           out.push(
             para(ctx, {
               indent: { left: (heading.level - 1) * 360 },
-              children: [links ? new InternalHyperlink({ anchor: anchor("h", heading.id), children: [run] }) : run],
+              children: [links ? new InternalHyperlink({ anchor: bookmarkName("h", heading.id), children: [run] }) : run],
             }),
           );
         }
@@ -530,8 +569,22 @@ function styleParagraph(styles: Record<DocStyle, NamedStyle>, style: DocStyle, o
   };
 }
 
+/** The names of the accounts whose suggestions the text holds, by account id. */
+async function authorNames(doc: RichNode): Promise<Map<string, string>> {
+  const ids = new Set<string>();
+  const walk = (node: RichNode) => {
+    const change = changeOf(node);
+    if (change) ids.add(authorOf(change));
+    node.content?.forEach(walk);
+  };
+  walk(doc);
+  const users = await db.user.findMany({ where: { id: { in: [...ids] } }, select: { id: true, name: true } });
+  return new Map(users.map((u) => [u.id, u.name]));
+}
+
 /** The .docx of a blank document. `origin` makes the app's own links whole. */
-export async function richTextDocx(title: string, doc: RichNode, setup: PageSetup, origin: string): Promise<Buffer> {
+export async function richTextDocx(title: string, stored: RichNode, setup: PageSetup, origin: string): Promise<Buffer> {
+  const doc = tracked(stored);
   const styles = readStyles({ attrs: doc.attrs ?? {} });
   const shown = (hf: RichNode | null | undefined) => (setup.pageless ? null : hf);
   const parts = [doc, shown(setup.header), shown(setup.footer), shown(setup.firstHeader), shown(setup.firstFooter)];
@@ -547,7 +600,8 @@ export async function richTextDocx(title: string, doc: RichNode, setup: PageSetu
       { reference: "ticked", levels: bulletLevels("☑") },
     ],
     breakBefore: false,
-    bookmarks: 0,
+    ids: 0,
+    authors: await authorNames(doc),
   };
   const cite = (node: RichNode) => {
     if (node.type === "footnotes") return;

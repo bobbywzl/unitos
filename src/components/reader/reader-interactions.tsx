@@ -4492,6 +4492,13 @@ export function ReaderInteractions({
     setAssistantChat((c) => (c ? { ...c, busy: false } : c));
   }
 
+  // When the comment field closes, the page editor takes the focus back with
+  // the caret after the commented words, as its link box does (SPEC.md §29).
+  function focusPageAfterComment() {
+    const editor = pageEditorIn(containerRef.current);
+    editor?.commands.focus(editor.state.selection.to);
+  }
+
   // Manual annotation: highlight (color, content = quote) or comment (user text).
   // Lands ACCEPTED in the hidden Annotations section. The mark paints instantly
   // from the captured anchor; the server's copy replaces it on refresh.
@@ -4514,9 +4521,12 @@ export function ReaderInteractions({
     setPopover(null);
     setSubmenu(null);
     setCommentDraft("");
-    // A new comment shows, and every hidden comment with it.
-    if (input.comment) setCommentsHidden(false);
     window.getSelection()?.removeAllRanges();
+    // A new comment shows, and every hidden comment with it.
+    if (input.comment) {
+      setCommentsHidden(false);
+      focusPageAfterComment();
+    }
     setBusy(true);
     const body = {
       notebookId,
@@ -7015,7 +7025,10 @@ function blockFormatKind(
           {has("comment") && (
           <>
           <button
-            onClick={() => setSubmenu(submenu === "comment" ? null : "comment")}
+            onClick={() => {
+              if (submenu === "comment") focusPageAfterComment();
+              setSubmenu(submenu === "comment" ? null : "comment");
+            }}
             data-track="comment"
             aria-expanded={submenu === "comment"}
             data-tip={t("reader.commentTitle")}
@@ -7057,6 +7070,7 @@ function blockFormatKind(
                   if (e.key === "Escape") {
                     e.stopPropagation();
                     setSubmenu(null);
+                    focusPageAfterComment();
                   }
                 }}
                 placeholder={t("reader.commentPlaceholder")}

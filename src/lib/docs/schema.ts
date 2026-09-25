@@ -76,7 +76,10 @@ export const RICH_MARK_TYPES = [
   "modification",
 ] as const;
 
-const SUGGESTION_MARK_TYPES = new Set(["insertion", "deletion", "modification"]);
+/** A suggestion's marks: formatting tools leave them alone. */
+export const SUGGESTION_MARK_TYPES: ReadonlySet<string> = new Set(["insertion", "deletion", "modification"]);
+/** What a suggestion puts at a paragraph's edge to hold a suggested break. */
+export const ZWSP = "\u200B";
 
 /** The nodes that hold a paragraph index row each (a Block): every node
     whose words a reader can select, plus the figure and the separator. */

@@ -3,20 +3,15 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { NodeSelection, Selection, TextSelection, type EditorState } from "@tiptap/pm/state";
 import { annotationMarksKey } from "@/components/docs/annotation-marks";
 import { docsCommands, type DocsCommand } from "@/components/docs/commands";
+import { readSuggestions } from "@/components/docs/ext/suggest";
 import { insertContext, insertT, toast } from "@/components/docs/insert/context";
-import { matchesCombo } from "@/components/docs/keys";
+import { isMac, matchesCombo } from "@/components/docs/keys";
 import { posInBlock, wordAtCaret } from "@/components/docs/layer/anchor";
 import { loadChecker, misspelledWords } from "@/components/docs/typing/spelling";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// Google Docs' navigation keys (SPEC.md §29, typing). The chords: hold
-// Ctrl+Alt (Ctrl+Alt+Shift for the comments' view), press a key, then a
-// second one within a second; any other key, or letting go of Ctrl or Alt,
-// cancels. N or P then a letter puts the caret at the start of the next or
-// previous heading, image, list, link, and so on. Every command whose
-// shortcut is a chord ("Mod+Alt+O H", the header) runs from here too. Also
-// Ctrl+' and Ctrl+; (the next and previous misspelling) and Ctrl+Shift+Y
-// (Dictionary).
+// Google Docs' navigation keys (SPEC.md §29, typing): the chords, which also
+// run every command whose shortcut is a chord ("Mod+Alt+O H"), and KEYS.
 
 type Run = (editor: Editor) => void;
 /** A chord: its first combo, a space, its second key. */
@@ -91,6 +86,7 @@ const TARGETS: Record<string, Target> = {
   F: { what: "docsTyping.navFootnote", find: (s) => starts(s, named("footnoteReference")) },
   T: { what: "docsTyping.navTable", find: (s) => starts(s, named("table")) },
   C: { what: "docsTyping.navComment", find: comments },
+  U: { what: "docsVersions.navSuggestion", find: (s) => readSuggestions(s.doc).map((x) => Selection.near(s.doc.resolve(x.from))) },
 };
 
 /** The first of `found` after the selection's start, or the last before it,
@@ -160,7 +156,11 @@ const KEYS: Chord[] = [
   ["Mod+'", (editor) => void misspelling(editor, 1)],
   ["Mod+;", (editor) => void misspelling(editor, -1)],
   ["Mod+Shift+Y", lookUpWord],
+  ["Mod+Alt+Shift+H", runId("versions:see")],
 ];
+
+/** A chord holds Ctrl+Alt, or Ctrl+⌘ on a Mac, as in Google Docs. */
+const held = (combo: string) => (isMac() ? combo.replace("Alt", "Ctrl") : combo);
 
 /** The navigation keys, while `active` says a key is the page editor's.
     Returns the cleanup. */
@@ -181,11 +181,11 @@ export function listenNavigation(editor: Editor, active: () => boolean): () => v
     if (was && Date.now() - was.at < HOLD_MS) {
       const chord = list.find(([keys]) => {
         const [first, second] = keys.split(" ");
-        return first === was.first && matchesCombo(e, first.replace(/[^+]+$/, second));
+        return first === was.first && matchesCombo(e, held(first).replace(/[^+]+$/, second));
       });
       if (chord) return take(e, chord[1]);
     }
-    const first = list.map(([keys]) => keys.split(" ")[0]).find((combo) => matchesCombo(e, combo));
+    const first = list.map(([keys]) => keys.split(" ")[0]).find((combo) => matchesCombo(e, held(combo)));
     if (first) {
       armed = { first, at: Date.now() };
       return take(e);

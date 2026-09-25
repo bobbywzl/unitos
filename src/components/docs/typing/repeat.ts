@@ -3,7 +3,7 @@ import { isHistoryTransaction } from "@tiptap/pm/history";
 import { Plugin, type Transaction } from "@tiptap/pm/state";
 import { AddMarkStep, RemoveMarkStep, ReplaceAroundStep } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
-import { SUGGESTION_MARKS } from "@/components/docs/ext/suggest";
+import { SUGGESTION_MARK_TYPES } from "@/lib/docs/schema";
 
 // Repeat last action (Ctrl+Y with nothing to redo), as Google Docs does it
 // (SPEC.md §29, typing): the last formatting — a style added or taken away,
@@ -39,9 +39,9 @@ function formattingOf(tr: Transaction): Action | null {
     const step = tr.steps[i];
     // A suggestion's own marks are not formatting to repeat.
     if (step instanceof AddMarkStep) {
-      if (!SUGGESTION_MARKS.has(step.mark.type.name)) action.add.push(step.mark);
+      if (!SUGGESTION_MARK_TYPES.has(step.mark.type.name)) action.add.push(step.mark);
     } else if (step instanceof RemoveMarkStep) {
-      if (!SUGGESTION_MARKS.has(step.mark.type.name)) action.remove.push(step.mark.type);
+      if (!SUGGESTION_MARK_TYPES.has(step.mark.type.name)) action.remove.push(step.mark.type);
     }
     else if (step instanceof ReplaceAroundStep && isRestyle(step)) {
       const before = tr.docs[i].nodeAt(step.from);

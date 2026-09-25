@@ -9,6 +9,7 @@ import {
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { insertContext } from "@/components/docs/insert/context";
 import { isMac } from "@/components/docs/keys";
+import { viewingCopy } from "@/components/docs/page/download";
 import { blockText, runAutocorrect } from "@/components/docs/typing/autocorrect";
 import { wordAt } from "@/components/docs/typing/chars";
 import { findPlugin } from "@/components/docs/typing/find";
@@ -180,6 +181,8 @@ const DocsTyping = Extension.create({
           return true;
         },
         transformPastedHTML: (html) => pastedHtml(editor, html),
+        // Viewing mode copies what it shows: the text without its suggestions.
+        ...viewingCopy,
         clipboardTextParser(text, $context, _plain, view) {
           return plainTextSlice(view.state.schema, text, $context, view.state.storedMarks ?? $context.marks());
         },

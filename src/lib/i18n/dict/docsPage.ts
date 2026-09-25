@@ -45,6 +45,7 @@ const en = {
   copyDocument: "Copy document",
   copyName: "Name",
   copyOf: "Copy of {title}",
+  copySuggestions: "Copy comments and suggestions",
   // Page setup
   pagesTab: "Pages",
   pagelessTab: "Pageless",
@@ -146,6 +147,7 @@ const zh: Record<keyof typeof en, string> = {
   copyDocument: "复制文档",
   copyName: "名称",
   copyOf: "{title} 的副本",
+  copySuggestions: "复制评论和建议",
   pagesTab: "分页",
   pagelessTab: "无分页",
   orientation: "方向",

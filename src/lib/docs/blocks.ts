@@ -5,9 +5,10 @@ import { CHIP_NODE_TYPES, INDEXED_NODE_TYPES, newBlockId, type RichMark, type Ri
 // reader can select — a paragraph, a heading, a list item's paragraph, a
 // table cell's paragraph, a code block — plus images (FIGURE) and horizontal
 // lines (SEPARATOR). A row's id is the node's blockId and its text is the
-// node's words exactly as the editor draws them, so an anchor captured in the
-// editor (data-block-id + offsets, SPEC.md §5) resolves against the row. The
-// same function runs in the editor and on the server, so both sides agree.
+// node's words as if every suggestion were accepted, counted as the editor's
+// anchors count them (layer/anchor.ts), so an anchor captured in the editor
+// (data-block-id + offsets, SPEC.md §5) resolves against the row. The same
+// function runs in the editor and on the server, so both sides agree.
 
 export type DerivedBlockType = "PARAGRAPH" | "HEADING" | "LIST" | "CODE" | "FIGURE" | "SEPARATOR" | "EQUATION";
 
@@ -58,15 +59,42 @@ function runStyles(marks: RichMark[] | undefined): string[] {
   return out;
 }
 
-/** The words of one node as the editor draws them: text as it is, a line
-    break (Shift+Enter) as "\n". The zero-width space a suggestion keeps at a
-    suggested paragraph break (components/docs/ext/suggest.ts) is no word. */
+/** The words of one node as the paragraph index reads them, as if every
+    suggestion were accepted: text as it is, a line break (Shift+Enter) as
+    "\n". Words a suggestion removes, and the zero-width space that holds a
+    suggested paragraph break (components/docs/ext/suggest.ts), are no words. */
 export function inlineText(node: RichNode): string {
+  if (node.marks?.some((m) => m.type === "deletion")) return "";
   if (node.type === "text") return (node.text ?? "").replaceAll("\u200B", "");
   if (node.type === "hardBreak") return "\n";
   // A smart chip's words are its label; other atoms add none.
   if (CHIP_NODE_TYPES.has(node.type)) return typeof node.attrs?.label === "string" ? node.attrs.label : "";
   return (node.content ?? []).map(inlineText).join("");
+}
+
+/** Rich text as if every suggestion were rejected: added words and blocks
+    go, removed ones stay, a format change goes back, and the zero-width
+    spaces of a suggested break go. */
+export function withoutSuggestions(nodes: RichNode[]): RichNode[] {
+  return nodes.flatMap((node) => {
+    const marks = node.marks ?? [];
+    if (marks.some((m) => m.type === "insertion")) return [];
+    let { type, attrs } = node;
+    let kept = marks.filter((m) => m.type !== "deletion" && m.type !== "modification");
+    for (const { type: name, attrs: change } of marks) {
+      if (name !== "modification" || !change) continue;
+      if (change.type === "nodeType" && typeof change.previousValue === "string") type = change.previousValue;
+      if (change.type === "attr" && typeof change.attrName === "string") attrs = { ...attrs, [change.attrName]: change.previousValue };
+      if (change.type === "mark") {
+        kept = kept.filter((m) => m.type !== (change.newValue as RichMark | null)?.type);
+        if (change.previousValue) kept.push(change.previousValue as RichMark);
+      }
+    }
+    const out: RichNode = { ...node, type, attrs, marks: kept };
+    if (node.type === "text") out.text = (node.text ?? "").replaceAll("\u200B", "");
+    else if (node.content) out.content = withoutSuggestions(node.content);
+    return out.text === "" ? [] : [out];
+  });
 }
 
 function textblockRuns(node: RichNode): { text: string; styles: StyleSpan[]; links: LinkSpan[] } {
@@ -80,8 +108,10 @@ function textblockRuns(node: RichNode): { text: string; styles: StyleSpan[]; lin
     link = null;
   };
   const visit = (child: RichNode) => {
+    const piece = inlineText(child);
+    // What adds no words (a removed word, a footnote's number) leaves the runs open.
+    if (!piece) return;
     if (child.type !== "text") {
-      const piece = inlineText(child);
       // A line break carries no style: every open run closes before it.
       for (const [style, start] of open) {
         if (text.length > start) styles.push({ start, end: text.length, style, quotedText: text.slice(start, text.length) });
@@ -91,7 +121,6 @@ function textblockRuns(node: RichNode): { text: string; styles: StyleSpan[]; lin
       text += piece;
       return;
     }
-    const piece = inlineText(child);
     const here = new Set(runStyles(child.marks));
     for (const [style, start] of [...open]) {
       if (!here.has(style)) {
@@ -138,6 +167,8 @@ function tokens(node: RichNode, ctx: Context): string {
 export function deriveBlocks(doc: RichNode): DerivedBlock[] {
   const out: DerivedBlock[] = [];
   const walk = (node: RichNode, ctx: Context) => {
+    // A block a suggestion removes is read as removed.
+    if (node.marks?.some((m) => m.type === "deletion")) return;
     if (INDEXED_NODE_TYPES.has(node.type)) {
       const id = node.attrs?.blockId;
       if (typeof id !== "string" || !id) return;

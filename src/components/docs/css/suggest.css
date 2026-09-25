@@ -1,8 +1,6 @@
 /* The page editor: Suggesting mode (SPEC.md §29). Imported by docs.css.
-   A suggestion draws in its author's person color (--docs-suggest, one rule
-   per author from suggest/layer.tsx): added words underlined on a light
-   tint, removed words struck through, a format change dotted. The one whose
-   card is open takes a stronger tint (--docs-suggest-tint). */
+   Each author's person color is --docs-suggest (suggest/layer.tsx); the
+   suggestion whose card is open takes a stronger tint (--docs-suggest-tint). */
 
 :root {
   /* Google Docs' Suggesting pill: primary container. */
@@ -45,6 +43,18 @@
   outline-offset: 2px;
 }
 
+/* Blocks a suggestion puts back with the same words (a list toggled, a
+   paragraph moved) draw once: the removed copy hides, and a list changed in
+   place draws as a format change. */
+[data-docs-mode]:not([data-docs-mode="viewing"]) .docs-prose .docs-suggest-hidden {
+  display: none;
+}
+.docs-prose [data-suggestion-block="insertion"] > .docs-suggest-restyled {
+  color: inherit;
+  text-decoration-style: dotted;
+  background: color-mix(in srgb, var(--docs-suggest-ink) var(--docs-suggest-tint, 0%), transparent);
+}
+
 /* Viewing mode reads the document without its suggestions. */
 [data-docs-mode="viewing"] .docs-prose :is(ins[data-suggestion], [data-suggestion-block="insertion"]),
 [data-docs-mode="viewing"] .docs-prose del[data-suggestion] [contenteditable="false"] {
@@ -78,13 +88,29 @@
   color: #6dd58c;
 }
 
-/* A suggestion's card (suggest/card.tsx): the comment card's look, with
-   Accept and Reject in view. */
+/* A suggestion's card (suggest/card.tsx): the comment card's look. The
+   active card is white and lifted, with Accept and Reject in view; the
+   others are one line. */
+[data-page-editor] .docs-suggest-card[data-active] {
+  background: var(--docs-card-active);
+  box-shadow: var(--docs-card-shadow);
+}
 .docs-suggest-card .docs-comment-buttons {
   opacity: 1;
 }
 .docs-suggest-what {
   overflow-wrap: anywhere;
+}
+.docs-suggest-line {
+  flex-direction: row;
+  align-items: center;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.docs-suggest-line-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Review suggested edits (suggest/review.tsx): a box at the top right,

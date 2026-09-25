@@ -4,7 +4,7 @@ import type { Editor } from "@tiptap/react";
 import { DOMSerializer } from "@tiptap/pm/model";
 import katex from "katex";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useCollab } from "@/components/collab/collab-context";
+import { useAuthor } from "@/components/collab/collab-context";
 import { useLang, useT } from "@/components/lang-provider";
 import { MoreVertIcon } from "@/components/docs/icons";
 import { ArrowBackIcon } from "@/components/docs/insert/icons";
@@ -16,15 +16,13 @@ import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { namedStyleSheet } from "@/components/docs/toolbar/styles";
 import { markChanges } from "@/components/docs/versions/diff";
 import { api } from "@/lib/api";
+import { setVersionsOpen } from "@/lib/assistant/side-chat-open";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { KATEX_MACROS } from "@/lib/katex";
 import { personColor, type Person } from "@/lib/person";
 
-// Version history (SPEC.md §29), Google Docs' view: it covers the page
-// editor's pane. The top bar has the back arrow, the version's time, and
-// Restore this version; the version is drawn read-only on the page, with the
-// changes since the version before it; the panel on the right lists the
-// versions, newest first, grouped by day, the current version on top.
+// Version history (SPEC.md §29), Google Docs' view: the top bar, the version
+// drawn read-only on its page, and the panel of versions.
 
 type Version = { id: string; rev: number; savedAt: string; userId: string | null; name: string | null };
 type History = { current: Omit<Version, "id" | "name">; versions: Version[]; people: Record<string, Person> };
@@ -77,11 +75,16 @@ export function VersionView({
 }) {
   const t = useT();
   const lang = useLang();
-  const { people: known } = useCollab();
+  const authorOf = useAuthor();
   const store = pageStore(editor, documentId, pageSetup);
   const setup = usePageState(store, (s) => s.setup);
   const textWidth = usePageState(store, (s) => s.textWidth);
   const rect = usePaneRect(editor);
+  // The notes tray folds while the view is open, so the page has the room.
+  useEffect(() => {
+    setVersionsOpen(true);
+    return () => setVersionsOpen(false);
+  }, []);
   const [live] = useState(() => editor.getJSON() as RichNode);
   const [history, setHistory] = useState<History | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -142,7 +145,7 @@ export function VersionView({
     }
   }, [wantedKey, documentId, read, fail]);
 
-  const person = (userId: string | null) => (userId ? (history?.people[userId] ?? known[userId]) : undefined);
+  const person = (userId: string | null) => (userId ? (history?.people[userId] ?? authorOf(userId)) : undefined);
   const colorOf = (e: Entry) => person(e.userId)?.color ?? personColor(e.userId ?? "");
   const color = entry ? colorOf(entry) : "";
 
@@ -249,7 +252,7 @@ export function VersionView({
         <div className="docs-versions-bar">
           <button
             type="button"
-            className="docs-versions-icon"
+            className="docs-icon-btn"
             aria-label={t("docsVersions.back")}
             data-tip={t("docsVersions.back")}
             onClick={onClose}
@@ -326,7 +329,7 @@ export function VersionView({
                   {canEdit && (
                     <button
                       type="button"
-                      className="docs-versions-icon docs-versions-more"
+                      className="docs-icon-btn docs-versions-more"
                       aria-label={t("docsVersions.moreActions")}
                       data-tip={t("docsVersions.moreActions")}
                       aria-expanded={menu === e.id}
@@ -374,14 +377,7 @@ export function VersionView({
           title={t("docsVersions.restoreQuestion")}
           onClose={() => setConfirming(false)}
           closeButton={false}
-          actions={
-            <>
-              <DialogButton onClick={() => setConfirming(false)}>{t("common.cancel")}</DialogButton>
-              <DialogButton primary disabled={!doc} onClick={() => void restore()}>
-                {t("docsVersions.restoreButton")}
-              </DialogButton>
-            </>
-          }
+          submit={{ label: t("docsVersions.restoreButton"), disabled: !doc, run: () => void restore() }}
         >
           {t("docsVersions.restoreBody", { time: timeOf(entry.savedAt) })}
         </ToolbarDialog>

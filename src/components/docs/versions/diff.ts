@@ -1,17 +1,12 @@
 import { Fragment, type Mark, type Node as PMNode, type Schema } from "@tiptap/pm/model";
+import { OBJECT_CHAR } from "@/components/docs/typing/chars";
 import { diffSegments } from "@/lib/anchors/remap";
 
-// Show changes in version history (SPEC.md §29), as Google Docs draws them:
-// a version against the version before it, words added in the author's
-// color and underlined, words removed struck. Paragraphs pair up by blockId
-// at every level of the document; inside a changed paragraph the words pair
-// up by the anchors' word diff. The changes are drawn with the document's
-// own marks, so the version keeps the page's look.
+// Show changes in version history (SPEC.md §29): a version against the one
+// before it, drawn with the document's own marks, so it keeps the page's look.
 
 type Paint = (marks: readonly Mark[]) => readonly Mark[];
 
-/** An atom's place in a paragraph's words: one character, as in its content. */
-const ATOM = "\uFFFC";
 /** A letter or digit of a word the diff keeps whole: Chinese and Japanese
     characters stand alone. */
 const WORD = /[^\s\p{P}\p{S}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
@@ -59,7 +54,7 @@ export function markChanges(schema: Schema, doc: PMNode, before: PMNode | null, 
     return node.copy(Fragment.fromArray(out));
   };
 
-  const words = (node: PMNode) => node.textBetween(0, node.content.size, "", ATOM);
+  const words = (node: PMNode) => node.textBetween(0, node.content.size, "", OBJECT_CHAR);
 
   const inline = (next: PMNode, prev: PMNode): PMNode => {
     const a = words(prev);

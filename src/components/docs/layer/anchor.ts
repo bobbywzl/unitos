@@ -3,7 +3,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import type { SourceInput } from "@/lib/anchors/input";
 import { inlineText } from "@/lib/docs/blocks";
-import type { RichNode } from "@/lib/docs/schema";
+import { ZWSP, type RichNode } from "@/lib/docs/schema";
 
 // Anchors in the page editor (SPEC.md §5, §29): one segment per paragraph,
 // offsets in the paragraph's words as lib/docs/blocks.ts derives them. They
@@ -21,12 +21,7 @@ export function pageEditorIn(container: Element | null): Editor | null {
   return dom?.editor && !dom.editor.isDestroyed ? dom.editor : null;
 }
 
-// A suggested paragraph break holds zero-width spaces the paragraph index
-// does not count (lib/docs/blocks.ts); offsets here skip them the same way.
-const ZWSP = "\u200B";
-
 function inlineLength(node: PMNode): number {
-  if (node.type.name === "hardBreak") return 1;
   return inlineText(node.toJSON() as RichNode).length;
 }
 
@@ -37,32 +32,36 @@ function offsetInBlock(block: PMNode, blockPos: number, pos: number): number {
   let at = blockPos + 1;
   for (let i = 0; i < block.childCount && at < pos; i++) {
     const child = block.child(i);
-    if (child.isText && pos < at + child.nodeSize) return offset + (child.text ?? "").slice(0, pos - at).replaceAll(ZWSP, "").length;
+    if (child.isText && pos < at + child.nodeSize) return offset + inlineLength(child.cut(0, pos - at));
     offset += inlineLength(child);
     at += child.nodeSize;
   }
   return offset;
 }
 
-/** The position of an offset in a paragraph's words; inside a chip, after it. */
-export function posInBlock(block: PMNode, blockPos: number, offset: number): number {
-  let text = 0;
+/** The position of an offset in a paragraph's words; inside a chip, after
+    it. Where the offset falls on what counts no words (a removed word, a
+    zero-width space), a start goes past it and an end stops before it. */
+export function posInBlock(block: PMNode, blockPos: number, offset: number, end = false): number {
+  let left = offset;
   let pos = blockPos + 1;
   for (let i = 0; i < block.childCount; i++) {
     const child = block.child(i);
     const length = inlineLength(child);
-    if (offset <= text + length) {
-      if (child.isText) {
-        const chars = child.text ?? "";
-        let i = 0;
-        for (let left = offset - text; i < chars.length && (left > 0 || chars[i] === ZWSP); i++) {
-          if (chars[i] !== ZWSP) left--;
-        }
-        return pos + i;
+    if (end && left === 0) return pos;
+    if (child.isText && length > 0) {
+      const chars = child.text ?? "";
+      for (let j = 0; j < chars.length; j++) {
+        if (chars[j] === ZWSP) continue;
+        if (left === 0) return pos + j;
+        left--;
+        if (end && left === 0) return pos + j + 1;
       }
-      return offset === text ? pos : pos + child.nodeSize;
+    } else if (left < length) {
+      return left === 0 ? pos : pos + child.nodeSize;
+    } else {
+      left -= length;
     }
-    text += length;
     pos += child.nodeSize;
   }
   return pos;
@@ -87,6 +86,8 @@ function segmentsBetween(doc: PMNode, from: number, to: number): { segments: Pag
   const segments: PageSegment[] = [];
   let truncated = false;
   doc.nodesBetween(from, to, (node, pos) => {
+    // A block a suggestion removes has no words to quote.
+    if (node.marks.some((m) => m.type.name === "deletion")) return false;
     if (LEFT_OUT.has(node.type.name)) truncated = true;
     if (!node.isTextblock) return true;
     const blockId = node.attrs.blockId;
@@ -147,5 +148,5 @@ export function wordAtCaret(editor: Editor): { from: number; to: number } | null
     word = { start: part.index, end };
     if (offset < end) break;
   }
-  return word && { from: posInBlock(block, blockPos, word.start), to: posInBlock(block, blockPos, word.end) };
+  return word && { from: posInBlock(block, blockPos, word.start), to: posInBlock(block, blockPos, word.end, true) };
 }

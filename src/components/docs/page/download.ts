@@ -1,20 +1,21 @@
-import type { Editor } from "@tiptap/core";
-import type { Node as PMNode } from "@tiptap/pm/model";
+import { getHTMLFromFragment, getTextBetween, getTextSerializersFromSchema, type Editor } from "@tiptap/core";
+import { Fragment, Slice, type Node as PMNode, type Schema } from "@tiptap/pm/model";
+import type { EditorView } from "@tiptap/pm/view";
 import katex from "katex";
-import { fontStack } from "@/components/docs/fonts";
 import { insertContext, insertT, toast } from "@/components/docs/insert/context";
 import { levelsOf, styleOf, tocEntries } from "@/components/docs/insert/toc";
 import { flushDocument } from "@/components/docs/layer/flush";
 import { PX_PER_PT } from "@/components/docs/page/geometry";
-import { readStyles, STYLE_ORDER, styleFont } from "@/components/docs/toolbar/styles";
+import { namedStyleSheet } from "@/components/docs/toolbar/styles";
 import { fragmentToMarkdown } from "@/components/docs/typing/markdown";
-import { deriveBlocks } from "@/lib/docs/blocks";
+import { deriveBlocks, withoutSuggestions } from "@/lib/docs/blocks";
 import type { RichNode } from "@/lib/docs/schema";
 import { KATEX_MACROS } from "@/lib/katex";
 
 // File > Download (SPEC.md §29). Microsoft Word comes from the server
-// (/api/documents/[documentId]/export); the web page, Markdown, and plain
-// text are made here from the page; PDF is the print dialog's Save as PDF.
+// (/api/documents/[documentId]/export), the suggestions as tracked changes;
+// the web page, Markdown, and plain text are made here from the page as
+// Viewing mode shows it; PDF is the print dialog's Save as PDF.
 
 export type DownloadFormat = "docx" | "pdf" | "txt" | "html" | "md";
 
@@ -23,6 +24,30 @@ export function documentTitle(editor: Editor): string {
   const ctx = insertContext(editor);
   return ctx?.documents.find((d) => d.id === ctx.documentId)?.title ?? insertT(editor)("docsPage.untitled");
 }
+
+/** Content as Viewing mode shows it: without its suggestions. */
+function viewed(content: Fragment, schema: Schema): Fragment {
+  return Fragment.fromJSON(schema, withoutSuggestions((content.toJSON() as RichNode[] | null) ?? []));
+}
+
+const viewing = (view: EditorView) => Boolean(view.dom.closest('[data-docs-mode="viewing"]'));
+
+/** The page's clipboard props: a copy made in Viewing mode holds what it shows. */
+export const viewingCopy = {
+  transformCopied(slice: Slice, view: EditorView): Slice {
+    if (!viewing(view)) return slice;
+    const content = viewed(slice.content, view.state.schema);
+    const open = Slice.maxOpen(content);
+    return new Slice(content, Math.min(slice.openStart, open.openStart), Math.min(slice.openEnd, open.openEnd));
+  },
+  // Tiptap's own plain text reads the page, not the copy; this one runs first.
+  clipboardTextSerializer(slice: Slice, view: EditorView): string {
+    if (!viewing(view)) return "";
+    const { schema } = view.state;
+    const doc = schema.topNodeType.create(null, slice.content);
+    return getTextBetween(doc, { from: 0, to: doc.content.size }, { textSerializers: getTextSerializersFromSchema(schema) });
+  },
+};
 
 /** Save `blob` as `name`; the browser swaps what a file name cannot hold. */
 function save(blob: Blob, name: string): void {
@@ -35,9 +60,9 @@ function save(blob: Blob, name: string): void {
 }
 
 /** Each uploaded image as a data address, so the file shows it anywhere. */
-async function imageData(editor: Editor): Promise<Map<string, string>> {
+async function imageData(doc: PMNode): Promise<Map<string, string>> {
   const srcs = new Set<string>();
-  editor.state.doc.descendants((node) => {
+  doc.descendants((node) => {
     if (node.type.name === "image" && String(node.attrs.src).startsWith("/api/images/")) srcs.add(node.attrs.src);
   });
   const pairs = await Promise.all(
@@ -56,17 +81,29 @@ async function imageData(editor: Editor): Promise<Map<string, string>> {
   return new Map(pairs.filter((p) => p !== null));
 }
 
-/** Plain text: one line per paragraph, as the paragraph index reads it. */
-function plainText(editor: Editor): string {
-  return deriveBlocks(editor.getJSON() as RichNode)
+/** Plain text: one line per paragraph of the paragraph index, a footnote's
+    number as [n], and each footnote at the end after its number. */
+function plainText(doc: PMNode): string {
+  const numbers = new Map<string, number>();
+  const cite = (id: unknown) => `[${numbers.get(String(id)) ?? numbers.set(String(id), numbers.size + 1).size}]`;
+  const walk = (node: RichNode): RichNode => {
+    if (node.type === "footnoteReference") return { type: "text", text: cite(node.attrs?.footnoteId) };
+    const content = node.content?.map(walk);
+    const [first, ...rest] = content ?? [];
+    if (node.type === "footnote" && first) {
+      return { ...node, content: [{ ...first, content: [{ type: "text", text: `${cite(node.attrs?.footnoteId)} ` }, ...(first.content ?? [])] }, ...rest] };
+    }
+    return { ...node, content };
+  };
+  return deriveBlocks(walk(doc.toJSON() as RichNode))
     .filter((b) => b.type !== "FIGURE")
     .map((b) => b.text)
     .join("\n");
 }
 
 /** Markdown, its images at the end as data addresses, as Google Docs writes them. */
-function markdown(editor: Editor, images: Map<string, string>): string {
-  let md = fragmentToMarkdown(editor.state.doc.content);
+function markdown(doc: PMNode, images: Map<string, string>): string {
+  let md = fragmentToMarkdown(doc.content);
   const refs: string[] = [];
   for (const [src, data] of images) {
     const key = `image${refs.length + 1}`;
@@ -75,18 +112,6 @@ function markdown(editor: Editor, images: Map<string, string>): string {
   }
   return [md, ...refs].join("\n\n") + "\n";
 }
-
-const STYLE_SELECTOR = {
-  normal: "p",
-  title: 'p[data-doc-style="title"]',
-  subtitle: 'p[data-doc-style="subtitle"]',
-  h1: "h1",
-  h2: "h2",
-  h3: "h3",
-  h4: "h4",
-  h5: "h5",
-  h6: "h6",
-} as const;
 
 // What the page's style sheet draws that the editor's HTML leaves out.
 const PAGE_CSS = `
@@ -116,10 +141,10 @@ sup[data-footnote-ref]::after { content: counter(footnote); }
 [data-page-break] { break-after: page; }
 `;
 
-/** The web page: the editor's HTML with the document's named styles, its
+/** The web page: the page's HTML with the document's named styles, its
     images inside, its equations as MathML, and its tables of contents drawn. */
-function webPage(editor: Editor, title: string, images: Map<string, string>): string {
-  const page = new DOMParser().parseFromString(editor.getHTML(), "text/html");
+function webPage(editor: Editor, doc: PMNode, title: string, images: Map<string, string>): string {
+  const page = new DOMParser().parseFromString(getHTMLFromFragment(doc.content, editor.schema), "text/html");
   const body = page.body;
   for (const el of body.querySelectorAll<HTMLElement>("[data-latex]")) {
     el.innerHTML = katex.renderToString(el.dataset.latex ?? "", {
@@ -142,13 +167,13 @@ function webPage(editor: Editor, title: string, images: Map<string, string>): st
     if (data) img.setAttribute("src", data);
   }
   const tocs: PMNode[] = [];
-  editor.state.doc.descendants((node) => {
+  doc.descendants((node) => {
     if (node.type.name === "tableOfContents") tocs.push(node);
     return !node.isTextblock;
   });
   body.querySelectorAll("[data-toc]").forEach((el, i) => {
     if (!tocs[i]) return;
-    for (const entry of tocEntries(editor.state.doc, levelsOf(tocs[i]))) {
+    for (const entry of tocEntries(doc, levelsOf(tocs[i]))) {
       const line = el.appendChild(page.createElement("p"));
       line.style.marginLeft = `${(entry.level - 1) * 18}pt`;
       const words = line.appendChild(page.createElement(styleOf(tocs[i]) === "links" ? "a" : "span"));
@@ -156,19 +181,13 @@ function webPage(editor: Editor, title: string, images: Map<string, string>): st
       if (words instanceof HTMLAnchorElement) words.href = `#${entry.blockId}`;
     }
   });
-  const styles = readStyles(editor.state.doc);
-  const named = STYLE_ORDER.map((style) => {
-    const s = styles[style];
-    const underline = s.underline ? " text-decoration: underline;" : "";
-    return `${STYLE_SELECTOR[style]} { font: ${s.italic ? "italic " : ""}${s.bold ? 700 : 400} ${s.size}pt ${fontStack(styleFont(styles, style))}; color: ${s.color};${underline} line-height: calc(var(--docs-ls, ${s.lineSpacing}) * 1.15); padding: ${s.spaceBefore}pt 0 ${s.spaceAfter}pt; text-align: ${s.align}; }`;
-  });
   const setup = insertContext(editor)?.pageSetup;
   const width = setup ? `body { max-width: ${(setup.width - setup.margins.left - setup.margins.right) * PX_PER_PT}px; }` : "";
   page.title = title;
   const meta = page.createElement("meta");
   meta.setAttribute("charset", "utf-8");
   const css = page.createElement("style");
-  css.textContent = [PAGE_CSS, width, ...named].join("\n");
+  css.textContent = [PAGE_CSS, width, namedStyleSheet(doc, "body", true)].join("\n");
   page.head.prepend(meta);
   page.head.append(css);
   return `<!DOCTYPE html>\n${page.documentElement.outerHTML}\n`;
@@ -192,13 +211,16 @@ export async function downloadDocument(editor: Editor, format: DownloadFormat): 
       const res = await fetch(`/api/documents/${ctx.documentId}/export?format=docx`);
       if (res.ok) save(await res.blob(), `${title}.docx`);
       else toast(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? ctx.t("common.requestFailed"));
-    } else if (format === "txt") {
-      save(new Blob([plainText(editor)], { type: "text/plain;charset=utf-8" }), `${title}.txt`);
-    } else {
-      const images = await imageData(editor);
-      if (format === "md") save(new Blob([markdown(editor, images)], { type: "text/markdown;charset=utf-8" }), `${title}.md`);
-      else save(new Blob([webPage(editor, title, images)], { type: "text/html;charset=utf-8" }), `${title}.html`);
+      return;
     }
+    const doc = editor.state.doc.copy(viewed(editor.state.doc.content, editor.schema));
+    if (format === "txt") {
+      save(new Blob([plainText(doc)], { type: "text/plain;charset=utf-8" }), `${title}.txt`);
+      return;
+    }
+    const images = await imageData(doc);
+    if (format === "md") save(new Blob([markdown(doc, images)], { type: "text/markdown;charset=utf-8" }), `${title}.md`);
+    else save(new Blob([webPage(editor, doc, title, images)], { type: "text/html;charset=utf-8" }), `${title}.html`);
   } catch {
     toast(ctx.t("common.requestFailed"));
   }

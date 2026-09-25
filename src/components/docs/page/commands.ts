@@ -3,7 +3,6 @@ import { registerDocsCommands } from "@/components/docs/commands";
 import { ZOOMS } from "@/components/docs/toolbar";
 import { addPageNumbers } from "@/components/docs/page/header-footer";
 import { downloadDocument, type DownloadFormat } from "@/components/docs/page/download";
-import { openMakeCopy } from "@/components/docs/page/make-copy";
 import { PAGE_EVENT, findPageStore as store, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -197,7 +196,7 @@ registerDocsCommands([
     label: "docsPage.makeCopy",
     menu: "file",
     keywords: ["copy", "duplicate"],
-    run: openMakeCopy,
+    run: (editor) => store(editor)?.set({ dialog: "copy" }),
     enabled: (editor) => editor.isEditable,
   },
 ]);

@@ -1304,7 +1304,7 @@
 }
 
 /* ── Checklist: Do not strikethrough text when checked ────────────────── */
-.docs-prose ul[data-type="taskList"][data-list-style="CHECKLIST_NO_STRIKETHROUGH"] li[data-checked="true"] > div {
+.docs-prose ul[data-type="taskList"][data-list-style="CHECKLIST_NO_STRIKETHROUGH"] li[data-checked="true"] > div > p {
   text-decoration: none;
   color: inherit;
 }

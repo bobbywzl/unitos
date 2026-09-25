@@ -1,5 +1,5 @@
 import { inlineText } from "@/lib/docs/blocks";
-import { INDEXED_NODE_TYPES, newBlockId, type RichMark, type RichNode } from "@/lib/docs/schema";
+import { INDEXED_NODE_TYPES, newBlockId, ZWSP, type RichMark, type RichNode } from "@/lib/docs/schema";
 
 // Server-side edits to a blank document's rich text (SPEC.md §29). The block
 // routes — the assistant's approved plans, the history's restore, an image
@@ -255,7 +255,7 @@ export function toggleBlockStyle(
     const raw = (k: number) => {
       if (k >= len) return text.length;
       let i = 0;
-      for (let left = k; i < text.length && left > 0; i++) if (text[i] !== "\u200B") left--;
+      for (let left = k; i < text.length && left > 0; i++) if (text[i] !== ZWSP) left--;
       return i;
     };
     const cuts = [0, len, Math.max(0, Math.min(len, start - at)), Math.max(0, Math.min(len, end - at))];

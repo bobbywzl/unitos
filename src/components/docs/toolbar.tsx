@@ -235,8 +235,8 @@ export function DocsToolbar({
   };
 
   // Search the menus (Alt+/), and the modes' keys: Ctrl+Alt+Shift+Z is
-  // Editing, Ctrl+Alt+Shift+C and D are Viewing (Docs' help page and its
-  // code disagree on the letter; both work).
+  // Editing, Ctrl+Alt+Shift+X is Suggesting, Ctrl+Alt+Shift+C and D are
+  // Viewing (Docs' help page and its code disagree on the letter; both work).
   const modeRef = useRef({ canEdit, onMode });
   useEffect(() => {
     modeRef.current = { canEdit, onMode };
@@ -259,6 +259,9 @@ export function DocsToolbar({
       if (matchesCombo(e, "Mod+Alt+Shift+Z")) {
         e.preventDefault();
         modeRef.current.onMode("editing");
+      } else if (matchesCombo(e, "Mod+Alt+Shift+X")) {
+        e.preventDefault();
+        modeRef.current.onMode("suggesting");
       } else if (matchesCombo(e, "Mod+Alt+Shift+C") || matchesCombo(e, "Mod+Alt+Shift+D")) {
         e.preventDefault();
         modeRef.current.onMode("viewing");
@@ -415,6 +418,11 @@ export function DocsToolbar({
         enabled: true,
         shortcut: "Mod+Alt+Shift+Z",
         words: ["switch to editing", "return to editing"],
+      });
+      add("mode-suggesting", t("docsSuggest.suggestingMode"), "view", () => onMode("suggesting"), {
+        enabled: true,
+        shortcut: "Mod+Alt+Shift+X",
+        words: ["switch to suggesting", "suggest edits", "track changes", "建议"],
       });
       add("mode-viewing", t("docs.viewingMode"), "view", () => onMode("viewing"), { enabled: true, shortcut: "Mod+Alt+Shift+C", words: ["switch to viewing"] });
     }

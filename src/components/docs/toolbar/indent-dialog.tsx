@@ -4,7 +4,8 @@ import type { Editor } from "@tiptap/react";
 import { useState } from "react";
 import { useLang, useT } from "@/components/lang-provider";
 import { formatLength, lengthUnitFor, MIN_TEXT_PT, parseLength, PX_PER_PT } from "@/components/docs/page/geometry";
-import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { setIndents } from "@/components/docs/page/ruler";
+import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Format > Align & indent > Indentation options (SPEC.md §29): Left, Right,
@@ -50,10 +51,8 @@ export function IndentDialog({ editor, onClose }: { editor: Editor; onClose: () 
   const pt = l !== null && r !== null && b !== null && l + r + b <= initial.width - MIN_TEXT_PT ? { l, r, b } : null;
   const apply = () => {
     if (!pt) return;
-    const clean = (v: number) => (Math.abs(v) < 0.01 ? null : Math.round(v * 100) / 100);
     const hanging = special === "hanging";
-    const attrs = { indentLeft: clean(hanging ? pt.l + pt.b : pt.l), indentRight: clean(pt.r), indentFirstLine: clean(hanging ? -pt.b : pt.b) };
-    editor.chain().focus().updateAttributes("paragraph", attrs).updateAttributes("heading", attrs).run();
+    setIndents(editor, { indentLeft: hanging ? pt.l + pt.b : pt.l, indentRight: pt.r, indentFirstLine: hanging ? -pt.b : pt.b });
     onClose();
   };
   const field = (label: string, value: string, set: (value: string) => void, disabled = false) => (
@@ -71,56 +70,41 @@ export function IndentDialog({ editor, onClose }: { editor: Editor; onClose: () 
       title={t("docs.indentationOptions")}
       onClose={onClose}
       className="docs-fields-dialog"
-      actions={
-        <>
-          <DialogButton onClick={onClose}>{t("docs.cancel")}</DialogButton>
-          <DialogButton primary disabled={!pt} onClick={apply}>
-            {t("docs.apply")}
-          </DialogButton>
-        </>
-      }
+      submit={{ label: t("docs.apply"), disabled: !pt, run: apply }}
     >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          apply();
-        }}
-      >
-        <h3>{t(unit === "in" ? "docs.indentationInches" : "docs.indentationCentimeters")}</h3>
-        <div className="docs-fields-row">
-          <label>
-            <span className="docs-tb-label">{t("docsPage.left")}</span>
-            {field(t("docsPage.left"), left, setLeft)}
-          </label>
-          <label>
-            <span className="docs-tb-label">{t("docsPage.right")}</span>
-            {field(t("docsPage.right"), right, setRight)}
-          </label>
-        </div>
-        <h3>{t("docs.specialIndent")}</h3>
-        <div className="docs-fields-row">
-          <select
-            className="docs-tb-field"
-            aria-label={t("docs.specialIndent")}
-            value={special}
-            onChange={(e) => {
-              const next = e.target.value as Special;
-              setSpecial(next);
-              // Half an inch, Docs' first step, when there is no value yet.
-              if (next === "none") setBy("");
-              else if (!by) setBy(formatLength(36, unit));
-            }}
-          >
-            {SPECIALS.map(([value, key]) => (
-              <option key={value} value={value}>
-                {t(key)}
-              </option>
-            ))}
-          </select>
-          {field(t("docs.indentBy"), by, setBy, special === "none")}
-        </div>
-        <button type="submit" hidden />
-      </form>
+      <h3>{t(unit === "in" ? "docs.indentationInches" : "docs.indentationCentimeters")}</h3>
+      <div className="docs-fields-row">
+        <label>
+          <span className="docs-tb-label">{t("docsPage.left")}</span>
+          {field(t("docsPage.left"), left, setLeft)}
+        </label>
+        <label>
+          <span className="docs-tb-label">{t("docsPage.right")}</span>
+          {field(t("docsPage.right"), right, setRight)}
+        </label>
+      </div>
+      <h3>{t("docs.specialIndent")}</h3>
+      <div className="docs-fields-row">
+        <select
+          className="docs-tb-field"
+          aria-label={t("docs.specialIndent")}
+          value={special}
+          onChange={(e) => {
+            const next = e.target.value as Special;
+            setSpecial(next);
+            // Half an inch, Docs' first step, when there is no value yet.
+            if (next === "none") setBy("");
+            else if (!by) setBy(formatLength(36, unit));
+          }}
+        >
+          {SPECIALS.map(([value, key]) => (
+            <option key={value} value={value}>
+              {t(key)}
+            </option>
+          ))}
+        </select>
+        {field(t("docs.indentBy"), by, setBy, special === "none")}
+      </div>
     </ToolbarDialog>
   );
 }

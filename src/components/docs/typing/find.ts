@@ -1,6 +1,7 @@
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
+import { suggestEach } from "@/components/docs/ext/suggest";
 import { OBJECT_CHAR } from "@/components/docs/typing/chars";
 
 // Find and Find and replace (SPEC.md §29, typing), Google Docs' semantics:
@@ -402,7 +403,8 @@ export function replaceResult(view: EditorView, index: number, text: string): vo
   if (next.current >= 0) selectResult(view, next.current);
 }
 
-/** Replace every result as one undo step. Returns how many. */
+/** Replace every result as one undo step; in Suggesting mode each is a
+    suggestion of its own. Returns how many. */
 export function replaceAll(view: EditorView, text: string): number {
   const find = findState(view.state);
   if (!find.results.length || !view.editable) return 0;
@@ -414,6 +416,6 @@ export function replaceAll(view: EditorView, text: string): number {
     if (text) tr.replaceWith(m.from, m.to, state.schema.text(text, marks));
     else tr.delete(m.from, m.to);
   }
-  view.dispatch(tr);
+  view.dispatch(suggestEach(tr));
   return find.results.length;
 }

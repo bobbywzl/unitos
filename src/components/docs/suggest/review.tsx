@@ -1,39 +1,36 @@
 "use client";
 
-import { selectSuggestion } from "@handlewithcare/prosemirror-suggest-changes";
-import { useEditorState, type Editor } from "@tiptap/react";
+import type { Editor } from "@tiptap/react";
 import { createPortal } from "react-dom";
-import { settleSuggestions, suggestionAt, suggestionIds } from "@/components/docs/ext/suggest";
+import { focusSuggestion, settleSuggestions } from "@/components/docs/ext/suggest";
 import { CloseIcon, ExpandLessIcon, ExpandMoreIcon } from "@/components/docs/icons";
 import { DialogButton } from "@/components/docs/toolbar/dialog";
 import { useT } from "@/components/lang-provider";
 
-// Review suggested edits (SPEC.md §29), Google Docs' box at the top right
-// under the toolbar: how many suggestions the document holds, the previous
-// and the next one (the caret goes to it and its card opens), and, for an
-// editor, Accept all and Reject all.
+// Review suggested edits (SPEC.md §29): Google Docs' box under the toolbar.
 
 export function ReviewPanel({
   editor,
   header,
+  ids,
+  at,
   canSettle,
   onClose,
 }: {
   editor: Editor;
   /** The page editor's header: the box hangs from its bottom edge. */
   header: HTMLElement;
+  /** Every suggestion, in the order of the text, and the one the caret is in. */
+  ids: string[];
+  at: string | null;
   canSettle: boolean;
   onClose: () => void;
 }) {
   const t = useT();
-  const { ids, at } = useEditorState({
-    editor,
-    selector: ({ editor: e }) => ({ ids: suggestionIds(e.state.doc), at: suggestionAt(e.state) }),
-  });
   const step = (direction: 1 | -1) => {
     const index = at ? ids.indexOf(at) : direction === 1 ? -1 : 0;
     const next = ids[(index + direction + ids.length) % ids.length];
-    if (next && selectSuggestion(next)(editor.state, (tr) => editor.view.dispatch(tr))) editor.view.focus();
+    if (next) focusSuggestion(editor, next);
   };
   const none = ids.length === 0;
   const buttons = [

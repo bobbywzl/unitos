@@ -18,8 +18,8 @@ import { newBlockId, type RichNode } from "@/lib/docs/schema";
 
 export type SaveState = "saved" | "saving" | "unsaved" | "offline" | "error";
 
-const SAVE_DELAY_MS = 700;
-const MAX_WAIT_MS = 3_000;
+export const SAVE_DELAY_MS = 700;
+export const MAX_WAIT_MS = 3_000;
 /** The largest body a keepalive request may carry on unload. */
 const KEEPALIVE_LIMIT = 60_000;
 
@@ -104,6 +104,8 @@ export function useDocsSave({
           body: JSON.stringify({ richText: doc, rev: revRef.current }),
         });
         if (res.status === 409) {
+          // The server answered: the next save goes at the usual pace.
+          retryRef.current = 0;
           const body = (await res.json().catch(() => ({}))) as Response409;
           if (body.reason === "ids" && body.ids && !editor.isDestroyed) {
             // A pasted paragraph carried an id another document holds.
@@ -213,7 +215,8 @@ export function useDocsSave({
       if (!dirtyRef.current) return;
       const body = JSON.stringify({ richText: editor.getJSON(), rev: revRef.current });
       if (body.length <= KEEPALIVE_LIMIT) {
-        void fetch(url, { method: "PUT", headers: { "content-type": "application/json" }, body, keepalive: true });
+        // Offline, it fails quietly: the warning still asks.
+        fetch(url, { method: "PUT", headers: { "content-type": "application/json" }, body, keepalive: true }).catch(() => {});
       }
       e.preventDefault();
     };

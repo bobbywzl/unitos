@@ -16,6 +16,7 @@ export function ToolbarDialog({
   onClose,
   children,
   actions,
+  submit,
   className = "",
   dim = true,
   closeButton = true,
@@ -27,6 +28,9 @@ export function ToolbarDialog({
   onClose: () => void;
   children: ReactNode;
   actions?: ReactNode;
+  /** Cancel and the primary button (OK unless labelled). The body is a
+      form: Enter in a field presses the primary. */
+  submit?: { label?: string; disabled?: boolean; run: () => void };
   className?: string;
   /** False: the page behind stays undimmed. */
   dim?: boolean;
@@ -86,8 +90,29 @@ export function ToolbarDialog({
             )}
           </div>
         )}
-        <div className="docs-tb-dialog-body">{children}</div>
-        {actions && <div className="docs-tb-dialog-actions">{actions}</div>}
+        {submit ? (
+          <form
+            className="docs-tb-dialog-body"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit.run();
+            }}
+          >
+            {children}
+            <div className="docs-tb-dialog-actions">
+              <DialogButton onClick={() => closeRef.current()}>{t("docs.cancel")}</DialogButton>
+              <DialogButton primary type="submit" disabled={submit.disabled}>
+                {submit.label ?? t("docs.ok")}
+              </DialogButton>
+            </div>
+          </form>
+        ) : (
+          <>
+            <div className="docs-tb-dialog-body">{children}</div>
+            {actions && <div className="docs-tb-dialog-actions">{actions}</div>}
+          </>
+        )}
       </div>
     </div>,
     document.body,
@@ -96,18 +121,20 @@ export function ToolbarDialog({
 
 export function DialogButton({
   primary,
+  type = "button",
   disabled,
   onClick,
   children,
 }: {
   primary?: boolean;
+  type?: "button" | "submit";
   disabled?: boolean;
   onClick?: () => void;
   children: ReactNode;
 }) {
   return (
     <button
-      type="button"
+      type={type}
       disabled={disabled}
       onClick={onClick}
       className={primary ? "docs-tb-button docs-tb-button-primary" : "docs-tb-button"}

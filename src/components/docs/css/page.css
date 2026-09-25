@@ -101,12 +101,14 @@
 }
 .docs-status-error,
 .docs-status-offline,
-.docs-setup-error {
+.docs-setup-error,
+.docs-versions-error {
   color: #b3261e;
 }
 .dark .docs-status-error,
 .dark .docs-status-offline,
-.dark .docs-setup-error {
+.dark .docs-setup-error,
+.dark .docs-versions-error {
   color: #f2b8b5;
 }
 

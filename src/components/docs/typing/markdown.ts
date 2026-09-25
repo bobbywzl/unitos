@@ -176,12 +176,18 @@ function wrap(text: string, marks: readonly Mark[]): string {
   return `${lead}${out}${trail}`;
 }
 
+/** The footnotes' numbers in the Markdown being written, in the order the
+    text cites them: [^1] at the number, [^1]: at the footnote. */
+let cited = new Map<string, number>();
+const citation = (id: unknown) => `[^${cited.get(String(id)) ?? cited.set(String(id), cited.size + 1).size}]`;
+
 function inlineMd(node: PMNode): string {
   let out = "";
   node.forEach((child) => {
     if (child.isText) out += wrap(child.text ?? "", child.marks);
     else if (child.type.name === "hardBreak") out += "  \n";
     else if (child.type.name === "inlineMath") out += `$${String(child.attrs.latex ?? "")}$`;
+    else if (child.type.name === "footnoteReference") out += citation(child.attrs.footnoteId);
     else if (CHIP_NODE_TYPES.has(child.type.name)) out += String(child.attrs.label ?? "");
   });
   return out;
@@ -237,6 +243,15 @@ function blockMd(node: PMNode, indent = ""): string {
     }
     case "image":
       return `![${String(node.attrs.alt ?? "")}](${String(node.attrs.src ?? "")})`;
+    case "footnotes": {
+      const notes: string[] = [];
+      node.forEach((note) => {
+        const paragraphs: string[] = [];
+        note.forEach((p) => paragraphs.push(inlineMd(p)));
+        notes.push(`${citation(note.attrs.footnoteId)}: ${paragraphs.join("\n\n    ")}`);
+      });
+      return notes.join("\n");
+    }
     default:
       return node.textContent;
   }
@@ -244,6 +259,7 @@ function blockMd(node: PMNode, indent = ""): string {
 
 /** A document slice's content as Markdown. */
 export function fragmentToMarkdown(content: Fragment): string {
+  cited = new Map();
   const parts: string[] = [];
   content.forEach((node) => {
     if (node.isInline) parts.push(node.isText ? wrap(node.text ?? "", node.marks) : "");

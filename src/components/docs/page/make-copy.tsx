@@ -2,23 +2,22 @@
 
 import type { Editor } from "@tiptap/core";
 import { useState } from "react";
-import { createRoot } from "react-dom/client";
-import { LangProvider, useT } from "@/components/lang-provider";
+import { useT } from "@/components/lang-provider";
 import { projectDocHref } from "@/components/docs/insert/actions";
 import { insertContext, toast } from "@/components/docs/insert/context";
 import { flushDocument } from "@/components/docs/layer/flush";
 import { documentTitle } from "@/components/docs/page/download";
-import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { api } from "@/lib/api";
-import { DEFAULT_LANG } from "@/lib/i18n/config";
 
 // File > Make a copy (SPEC.md §29): Google Docs' Copy document dialog. The
-// copy takes the rich text and the page setup, never the notes, annotations,
-// or comments, and opens in this tab.
+// copy takes the rich text and the page setup, and the suggestions when
+// asked, never the notes, annotations, or comments, and opens in this tab.
 
-function CopyDialog({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+export function CopyDialog({ editor, onClose }: { editor: Editor; onClose: () => void }) {
   const t = useT();
   const [name, setName] = useState(() => t("docsPage.copyOf", { title: documentTitle(editor) }));
+  const [suggestions, setSuggestions] = useState(false);
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     const ctx = insertContext(editor);
@@ -32,6 +31,7 @@ function CopyDialog({ editor, onClose }: { editor: Editor; onClose: () => void }
         notebookId: ctx.notebookId,
         title,
         copyOf: ctx.documentId,
+        suggestions,
       });
       onClose();
       ctx.navigate(projectDocHref(ctx.notebookId, copy.id));
@@ -46,43 +46,18 @@ function CopyDialog({ editor, onClose }: { editor: Editor; onClose: () => void }
       onClose={onClose}
       className="docs-small-dialog"
       closeButton={false}
-      actions={
-        <>
-          <DialogButton onClick={onClose}>{t("docs.cancel")}</DialogButton>
-          <DialogButton primary disabled={!name.trim() || busy} onClick={() => void submit()}>
-            {t("docs.ok")}
-          </DialogButton>
-        </>
-      }
+      submit={{ disabled: !name.trim() || busy, run: () => void submit() }}
     >
-      <form
-        className="docs-setup-body"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-      >
+      <div className="docs-setup-body">
         <label className="docs-setup-margin">
           <span>{t("docsPage.copyName")}</span>
           <input className="docs-field" value={name} onChange={(e) => setName(e.target.value)} onFocus={(e) => e.currentTarget.select()} />
         </label>
-      </form>
+        <label className="docs-setup-radio">
+          <input type="checkbox" checked={suggestions} onChange={(e) => setSuggestions(e.target.checked)} />
+          {t("docsPage.copySuggestions")}
+        </label>
+      </div>
     </ToolbarDialog>
-  );
-}
-
-/** Open the Copy document dialog over the page; closed, the page takes the keys back. */
-export function openMakeCopy(editor: Editor): void {
-  const host = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(host);
-  const close = () => {
-    root.unmount();
-    host.remove();
-    if (!editor.isDestroyed) editor.commands.focus();
-  };
-  root.render(
-    <LangProvider lang={insertContext(editor)?.lang ?? DEFAULT_LANG}>
-      <CopyDialog editor={editor} onClose={close} />
-    </LangProvider>,
   );
 }

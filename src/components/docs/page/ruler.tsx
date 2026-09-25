@@ -284,7 +284,7 @@ function useIndents(editor: Editor, frame: PageFrame): Indents | null {
 }
 
 /** Set an indent on every paragraph in the selection, in points. */
-function setIndents(editor: Editor, patch: { indentLeft?: number; indentFirstLine?: number; indentRight?: number }) {
+export function setIndents(editor: Editor, patch: { indentLeft?: number; indentFirstLine?: number; indentRight?: number }) {
   const { state } = editor;
   const tr = state.tr;
   const clean = (v: number) => (Math.abs(v) < 0.01 ? null : Math.round(v * 100) / 100);

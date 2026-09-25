@@ -10,9 +10,9 @@ import { uploadImage } from "@/lib/images";
 // plain text becomes one paragraph per line (blank lines too) in the style at
 // the caret; Ctrl+Shift+V pastes the plain text alone; an image pasted or
 // dropped from the computer is uploaded and goes in as an image on its own
-// line. Pasted HTML keeps only the formatting a save keeps, and its pictures
-// are copied into Unitos. With Enable Markdown on, Paste from Markdown and
-// Copy as Markdown work too.
+// line. Pasted HTML keeps only the formatting a save keeps, Word's lists and
+// Google Docs' checklists included, and its pictures are copied into Unitos.
+// With Enable Markdown on, Paste from Markdown and Copy as Markdown work too.
 
 /** Points per CSS unit. A font size's em, rem, and % count against Normal
     text's 11 pt. */
@@ -41,13 +41,15 @@ function keepParagraphFormat(el: HTMLElement): void {
 
 /** A pasted element's color and highlight (Word's too) become #rrggbb and
     its size whole or half points, the values a save keeps
-    (lib/docs/schema.ts); what cannot be read goes. */
+    (lib/docs/schema.ts); what cannot be read goes. A table cell's
+    background is the cell's (data-bg, insert/table.ts). */
 function keepTextFormat(el: HTMLElement, hex: (value: string) => string | null): void {
   const s = el.style;
   const highlight = s.backgroundColor || /mso-highlight:\s*([^;]+)/i.exec(el.getAttribute("style") ?? "")?.[1] || "";
   if (!s.color && !highlight && !s.fontSize) return;
   const color = hex(s.color);
   const background = hex(highlight);
+  if (background && /^T[DH]$/.test(el.tagName)) el.setAttribute("data-bg", background);
   const pt = toPoints(s.fontSize, PT_PER_FONT_UNIT);
   for (const name of ["color", "background", "font-size"]) s.removeProperty(name);
   // Written as text: a color set through el.style would read back as rgb().
@@ -63,11 +65,70 @@ function keepTextFormat(el: HTMLElement, hex: (value: string) => string | null):
   else el.removeAttribute("style");
 }
 
-/** Pasted HTML as the page editor keeps it: its paragraph and text formats
-    (above), and its pictures copied into Unitos (copyImages). */
+/** Word's list paragraphs (style mso-list:lN levelM) become list items at
+    level M, without the marker Word writes before each. A marker in Symbol
+    or Wingdings, "o", or one character that is not a letter or a digit
+    ("·", "§", "•") means bullets; any other ("1.", "a.", "一、") numbers. */
+function wordLists(root: DocumentFragment): void {
+  // The list open at each level, and the Word list it holds.
+  let open: HTMLElement[] = [];
+  let openId = "";
+  root.querySelectorAll<HTMLElement>("p[style*='mso-list']").forEach((p) => {
+    const m = /mso-list:\s*(l\d+)\s+level(\d+)\s*(lfo\d+)?/i.exec(p.getAttribute("style") ?? "");
+    const nodes = [...p.childNodes];
+    const from = nodes.findIndex((n) => n instanceof Comment && n.data === "[if !supportLists]");
+    const to = nodes.findIndex((n, i) => i > from && n instanceof Comment && n.data === "[endif]");
+    if (!m || from < 0 || to < 0) return;
+    const marker = p.ownerDocument.createElement("span");
+    marker.append(...nodes.slice(from, to + 1));
+    const bullet = /^([^\p{L}\p{N}]|o)$/u.test(marker.textContent.trim()) || /font-family:\s*"?(symbol|wingdings)/i.test(marker.innerHTML);
+    const kind = bullet ? "UL" : "OL";
+    const id = `${m[1]} ${m[3]}`;
+    if (p.previousElementSibling !== open[0] || id !== openId) open = [];
+    openId = id;
+    const level = Math.min(Number(m[2]), open.length + 1);
+    open.length = Math.min(open.length, level);
+    if (open[level - 1]?.tagName !== kind) {
+      open.length = level - 1;
+      const list = p.ownerDocument.createElement(kind);
+      if (level === 1) p.before(list);
+      else open[level - 2].lastElementChild?.append(list);
+      open.push(list);
+    }
+    const item = p.ownerDocument.createElement("li");
+    open[level - 1].append(item);
+    item.append(p);
+    // The list indents the item.
+    p.style.removeProperty("margin-left");
+    p.style.removeProperty("text-indent");
+  });
+}
+
+/** A Google Docs checklist line (li role="checkbox") becomes a checklist
+    line, ticked or not, without its checkbox picture; a ticked line's
+    strikethrough is the checklist's, not the words'. */
+function docsChecklists(root: DocumentFragment): void {
+  root.querySelectorAll<HTMLElement>("li[role='checkbox']").forEach((li) => {
+    const checked = li.getAttribute("aria-checked") === "true";
+    li.parentElement?.setAttribute("data-type", "taskList");
+    li.setAttribute("data-type", "taskItem");
+    li.setAttribute("data-checked", String(checked));
+    li.querySelectorAll(":scope > img").forEach((img) => img.remove());
+    if (!checked) return;
+    for (const el of [li, ...li.querySelectorAll<HTMLElement>("[style]")]) {
+      el.style.textDecorationLine = el.style.textDecorationLine.replace("line-through", "");
+    }
+  });
+}
+
+/** Pasted HTML as the page editor keeps it: Word's lists, Google Docs'
+    checklists, its paragraph and text formats (above), and its pictures
+    copied into Unitos (copyImages). */
 export function pastedHtml(editor: Editor, html: string): string {
   const box = document.createElement("template");
   box.innerHTML = html;
+  wordLists(box.content);
+  docsChecklists(box.content);
   // The browser reads each color: a see-through one is drawn over the white
   // page; none, a keyword, or a color outside sRGB is null.
   const probe = document.body.appendChild(document.createElement("i"));

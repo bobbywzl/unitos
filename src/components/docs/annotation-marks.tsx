@@ -172,7 +172,7 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
       const covering = painted.filter((h) => h.start <= start && h.end >= end);
       if (covering.length === 0) continue;
       const from = posInBlock(node, pos, start);
-      const to = posInBlock(node, pos, end);
+      const to = posInBlock(node, pos, end, true);
       if (to <= from) continue;
       decorations.push(
         Decoration.inline(from, to, segmentAttrs(covering, id, t), { inclusiveStart: false, inclusiveEnd: false }),
@@ -181,7 +181,7 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
     // The chips at each mark's end.
     let side = 1;
     for (const h of painted) {
-      const at = posInBlock(node, pos, h.end);
+      const at = posInBlock(node, pos, h.end, true);
       for (const chip of chipsOf(h)) {
         decorations.push(
           Decoration.widget(at, chipWidget(chip, t), {

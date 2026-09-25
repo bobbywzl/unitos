@@ -12,7 +12,7 @@ import { useLang, useT } from "@/components/lang-provider";
 import { DocsFontFamily, fontStack } from "@/components/docs/fonts";
 import { DropDownIcon } from "@/components/docs/icons";
 import { DropdownPanel, MenuItem } from "@/components/docs/menu";
-import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { DEFAULT_HF_MARGIN_PT, formatLength, lengthUnitFor, parseLength, type PageFrame } from "@/components/docs/page/geometry";
 import { PAGE_EVENT, usePageState, type HeaderArea, type PageStore } from "@/components/docs/page/store";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
@@ -436,26 +436,9 @@ function SmallDialog({
       onClose={onClose}
       className="docs-small-dialog"
       closeButton={false}
-      actions={
-        <>
-          <DialogButton onClick={onClose}>{t("docs.cancel")}</DialogButton>
-          <DialogButton primary onClick={onApply}>
-            {t("docs.apply")}
-          </DialogButton>
-        </>
-      }
+      submit={{ label: t("docs.apply"), run: onApply }}
     >
-      <div
-        className="docs-setup-body"
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
-            e.preventDefault();
-            onApply();
-          }
-        }}
-      >
-        {children}
-      </div>
+      <div className="docs-setup-body">{children}</div>
     </ToolbarDialog>
   );
 }

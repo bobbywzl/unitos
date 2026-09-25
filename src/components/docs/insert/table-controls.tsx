@@ -10,7 +10,7 @@ import { AddIcon, DropDownIcon } from "@/components/docs/icons";
 import { MenuItem } from "@/components/docs/menu";
 import { PX_PER_PT } from "@/components/docs/page/geometry";
 import { DropBtn } from "@/components/docs/toolbar/controls";
-import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { BorderButtons, ColorButton } from "@/components/docs/insert/colors";
 import { onInsert, type InsertContext } from "@/components/docs/insert/context";
 import {
@@ -469,21 +469,14 @@ function SplitDialog({ editor, onClose }: { editor: Editor; onClose: () => void 
       title={t("docsInsert.splitCell")}
       onClose={onClose}
       className="docs-split-dialog"
-      actions={
-        <>
-          <DialogButton onClick={onClose}>{t("common.cancel")}</DialogButton>
-          <DialogButton
-            primary
-            disabled={!valid}
-            onClick={() => {
-              onClose();
-              editor.chain().focus().splitCellInto(cols, rows).run();
-            }}
-          >
-            {t("docsInsert.split")}
-          </DialogButton>
-        </>
-      }
+      submit={{
+        label: t("docsInsert.split"),
+        disabled: !valid,
+        run: () => {
+          onClose();
+          editor.chain().focus().splitCellInto(cols, rows).run();
+        },
+      }}
     >
       {field("docsInsert.columns", <TableColumnIcon />, cols, setCols)}
       {field("docsInsert.rows", <TableRowIcon />, rows, setRows)}

@@ -1,36 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
-import { registerDocsCommands } from "@/components/docs/commands";
 import { CheckIcon, EditIcon, SuggestIcon, ViewIcon } from "@/components/docs/icons";
-import { keys, matchesCombo } from "@/components/docs/keys";
+import { keys } from "@/components/docs/keys";
 import { DropdownPanel, keepFocus, MenuItem } from "@/components/docs/menu";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// The mode switcher (SPEC.md §29): a pill with the mode's symbol and name
-// at the toolbar's right end, and Google Docs' menu of modes — Editing,
-// Suggesting, Viewing — each with its line. Ctrl+Alt+Shift+Z switches to
-// Editing, Ctrl+Alt+Shift+C and D to Viewing (toolbar.tsx binds them), and
-// Ctrl+Alt+Shift+X to Suggesting (bound here, with its command).
+// The mode switcher (SPEC.md §29): the pill at the toolbar's right end and
+// Google Docs' menu of modes. toolbar.tsx binds the modes' keys.
 
 export type DocsMode = "editing" | "suggesting" | "viewing";
-
-/** Raised on the page's text with a mode: the mode switcher switches to it. */
-const MODE_EVENT = "docs:mode";
-
-registerDocsCommands([
-  {
-    id: "mode:suggesting",
-    label: "docsSuggest.suggestingMode",
-    menu: "view",
-    keywords: ["switch to suggesting", "suggest edits", "track changes", "建议"],
-    shortcut: "Mod+Alt+Shift+X",
-    run: (editor) => editor.view.dom.dispatchEvent(new CustomEvent<DocsMode>(MODE_EVENT, { bubbles: true, detail: "suggesting" })),
-    // Only an editor has the mode switcher.
-    enabled: (editor) => Boolean(editor.view.dom.closest("[data-docs-editor]")?.querySelector(".docs-mode-pill")),
-  },
-]);
 
 type ModeItem = {
   mode: DocsMode;
@@ -75,25 +55,6 @@ export function ModeSwitcher({ mode, onMode }: { mode: DocsMode; onMode: (mode: 
   const ref = useRef<HTMLButtonElement>(null);
   const current = MODES.find((m) => m.mode === mode) ?? MODES[0];
   const tip = t(current.tip);
-
-  useEffect(() => {
-    const shell = ref.current?.closest("[data-docs-editor]");
-    if (!shell) return;
-    const onKey = (e: KeyboardEvent) => {
-      const active = document.activeElement;
-      if (active && active !== document.body && !shell.contains(active)) return;
-      if (!matchesCombo(e, "Mod+Alt+Shift+X")) return;
-      e.preventDefault();
-      onMode("suggesting");
-    };
-    const onModeEvent = (e: Event) => onMode((e as CustomEvent<DocsMode>).detail);
-    window.addEventListener("keydown", onKey, true);
-    shell.addEventListener(MODE_EVENT, onModeEvent);
-    return () => {
-      window.removeEventListener("keydown", onKey, true);
-      shell.removeEventListener(MODE_EVENT, onModeEvent);
-    };
-  }, [onMode]);
 
   return (
     <>

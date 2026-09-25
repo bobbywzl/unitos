@@ -4,7 +4,7 @@ import type { Editor } from "@tiptap/core";
 import type { Mark, Node as PMNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
 import { useEffect, useRef, useState } from "react";
-import { SUGGESTION_MARKS } from "@/components/docs/ext/suggest";
+import { SUGGESTION_MARK_TYPES } from "@/lib/docs/schema";
 
 // Paint format (SPEC.md §29): a press copies the formatting where the
 // selection starts — its text formatting (every mark but a link) and its
@@ -42,7 +42,7 @@ export function captureFormatting(state: EditorState): Formatting {
   for (const name of PARAGRAPH_ATTRS) if (name in parent.attrs) attrs[name] = parent.attrs[name];
   if (parent.type.name === "heading") attrs.level = parent.attrs.level;
   return {
-    marks: marks.filter((m) => m.type.name !== "link" && !SUGGESTION_MARKS.has(m.type.name)),
+    marks: marks.filter((m) => m.type.name !== "link" && !SUGGESTION_MARK_TYPES.has(m.type.name)),
     block: parent.isTextblock && (parent.type.name === "paragraph" || parent.type.name === "heading") ? { type: parent.type.name, attrs } : null,
   };
 }
@@ -57,7 +57,7 @@ export function applyFormatting(editor: Editor, formatting: Formatting): void {
     tr.setStoredMarks(formatting.marks);
   } else {
     for (const type of Object.values(state.schema.marks)) {
-      if (type.name !== "link" && !SUGGESTION_MARKS.has(type.name)) tr.removeMark(from, to, type);
+      if (type.name !== "link" && !SUGGESTION_MARK_TYPES.has(type.name)) tr.removeMark(from, to, type);
     }
     for (const mark of formatting.marks) tr.addMark(from, to, mark);
   }

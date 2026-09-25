@@ -50,7 +50,7 @@ import {
 } from "@/lib/offline/saved";
 import { TierMark } from "@/components/tier-mark";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
-import { readSideChatOpen, subscribeSideChatOpen } from "@/lib/assistant/side-chat-open";
+import { readTrayFold, subscribeTrayFold } from "@/lib/assistant/side-chat-open";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { Presence } from "@/components/presence";
 import { flattenNotes, useOutline } from "@/components/outline/use-outline";
@@ -540,14 +540,14 @@ export function Workspace({
   }
 
   // A note floats over the article (dragged out of the tray), or a side chat
-  // is open in the reader (SPEC.md §7): the tray folds so the card has the
-  // room, and unfolds when the card docks or closes and the side chat is
-  // gone. Docking opens the tray on notes on its own (onDock below); this
-  // undoes only the fold it made, so a tray the reader had folded stays
-  // folded.
+  // or version history is open in the reader (SPEC.md §7, §29): the tray
+  // folds so they have the room, and unfolds when the card docks or closes
+  // and they are gone. Docking opens the tray on notes on its own (onDock
+  // below); this undoes only the fold it made, so a tray the reader had
+  // folded stays folded.
   const floatingId = actions.floating?.id ?? null;
-  const sideChatOpen = useSyncExternalStore(subscribeSideChatOpen, readSideChatOpen, () => false);
-  const needsRoom = floatingId !== null || sideChatOpen;
+  const trayFold = useSyncExternalStore(subscribeTrayFold, readTrayFold, () => false);
+  const needsRoom = floatingId !== null || trayFold;
   const collapsedRef = useRef(collapsed);
   useEffect(() => {
     collapsedRef.current = collapsed;

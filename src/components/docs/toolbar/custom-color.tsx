@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { EyedropperIcon } from "@/components/docs/icons";
 import { hasEyeDropper, hexToRgb, pickFromScreen, rgbToHex } from "@/components/docs/palette";
-import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 
 // The custom color picker (SPEC.md §29): Google Docs' dialog behind the
 // color menu's add button. A saturation and value area, the hue slider, a
@@ -117,7 +117,6 @@ export function CustomColorDialog({
     </label>
   );
 
-  const apply = () => onApply(hex);
   return (
     <ToolbarDialog
       label={t("docs.customColorPicker")}
@@ -125,14 +124,7 @@ export function CustomColorDialog({
       dim={false}
       closeButton={false}
       className="docs-color-dialog"
-      actions={
-        <>
-          <DialogButton onClick={onClose}>{t("docs.cancel")}</DialogButton>
-          <DialogButton primary onClick={apply}>
-            {t("docs.ok")}
-          </DialogButton>
-        </>
-      }
+      submit={{ run: () => onApply(hex) }}
     >
       <div
         className="docs-color-area"
@@ -209,12 +201,6 @@ export function CustomColorDialog({
               setFromHex(e.target.value);
             }}
             onBlur={() => setHexDraft(null)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                apply();
-              }
-            }}
           />
         </label>
         {channel(0, "R")}

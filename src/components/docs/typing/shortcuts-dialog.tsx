@@ -102,7 +102,7 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
   },
   {
     // The letters work on a focused comment card (layer/comment-card.tsx).
-    title: "docsLayer.comments",
+    title: "panels.comments",
     rows: [
       { label: "docsTyping.scComment", pc: ["Mod+Alt+M"] },
       { label: "docsLayer.showAllComments", pc: ["Mod+Alt+Shift+A", "Mod+Alt+Shift+W E"] },
@@ -128,6 +128,7 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
       nav("docsTyping.navBookmark", "B"),
       nav("docsTyping.navFootnote", "F"),
       nav("docsTyping.navTable", "T"),
+      nav("docsVersions.navSuggestion", "U"),
     ],
   },
 ];
