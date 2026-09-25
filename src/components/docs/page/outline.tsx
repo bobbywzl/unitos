@@ -2,25 +2,27 @@
 
 import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useT } from "@/components/lang-provider";
-import { ArrowBackIcon, ListIcon, TabDocIcon } from "@/components/docs/page/icons";
+import { DocIcon, OutlineIcon } from "@/components/docs/icons";
+import { ArrowBackIcon } from "@/components/docs/insert/icons";
+import { scrollParent } from "@/components/docs/page/geometry";
 import { OUTLINE_MAX, OUTLINE_MIN, usePageState, type PageStore } from "@/components/docs/page/store";
 
 // The tabs & outlines panel (SPEC.md §29), Google Docs' left panel: the
 // document's one tab ("Tab 1") and under it the document's headings — the
 // Title and Heading 1–6, never the Subtitle — each nested under the heading
-// above it. The heading that
-// owns the top of the view is marked blue as the page scrolls; a press on an
-// item scrolls to its heading and puts the caret there. While the panel is
-// closed, a small button at the canvas's top left opens it.
+// above it. The heading that owns the top of the view is marked blue as the
+// page scrolls; a press on an item scrolls to its heading and puts the caret
+// there. While the panel is closed, a small button at the canvas's top left
+// opens it.
 
-export type OutlineItem = { pos: number; level: number; depth: number; text: string };
+type OutlineItem = { pos: number; level: number; depth: number; text: string };
 
 /** The document's outline: the Title (level 0) and the headings, each nested
     under the nearest item above it with a lower level. Empty headings are
     left out. */
-export function outlineOf(doc: PMNode): OutlineItem[] {
+function outlineOf(doc: PMNode): OutlineItem[] {
   const items: OutlineItem[] = [];
   const open: number[] = [];
   doc.descendants((node, pos) => {
@@ -63,10 +65,9 @@ function useOutline(editor: Editor): OutlineItem[] {
 
 /** The heading at the top of the view: the last one whose top has passed
     the view's top. */
-function useCurrent(editor: Editor, items: OutlineItem[], viewTop: number, active: boolean): number {
+function useCurrent(editor: Editor, items: OutlineItem[], viewTop: number): number {
   const [current, setCurrent] = useState(-1);
   useEffect(() => {
-    if (!active) return;
     let frame = 0;
     const read = () => {
       frame = 0;
@@ -90,7 +91,7 @@ function useCurrent(editor: Editor, items: OutlineItem[], viewTop: number, activ
       document.removeEventListener("scroll", schedule, { capture: true });
       window.removeEventListener("resize", schedule);
     };
-  }, [editor, items, viewTop, active]);
+  }, [editor, items, viewTop]);
   return current;
 }
 
@@ -100,13 +101,8 @@ function goTo(editor: Editor, item: OutlineItem, viewTop: number) {
   const dom = editor.view.nodeDOM(item.pos);
   editor.chain().focus(undefined, { scrollIntoView: false }).setTextSelection(item.pos + 1).run();
   if (!(dom instanceof HTMLElement)) return;
-  for (let node = dom.parentElement; node; node = node.parentElement) {
-    const oy = getComputedStyle(node).overflowY;
-    if (oy === "auto" || oy === "scroll") {
-      node.scrollTop += dom.getBoundingClientRect().top - viewTop - 24;
-      return;
-    }
-  }
+  const scroller = scrollParent(dom);
+  if (scroller) scroller.scrollTop += dom.getBoundingClientRect().top - viewTop - 24;
 }
 
 export function OutlineButton({ store, left }: { store: PageStore; left: number }) {
@@ -122,7 +118,7 @@ export function OutlineButton({ store, left }: { store: PageStore; left: number 
       onMouseDown={(e) => e.preventDefault()}
       onClick={() => store.set({ outlineOpen: true })}
     >
-      <ListIcon size={20} />
+      <OutlineIcon size={20} />
     </button>
   );
 }
@@ -144,41 +140,35 @@ export function OutlinePanel({
   const t = useT();
   const width = usePageState(store, (s) => s.outlineWidth);
   const items = useOutline(editor);
-  const current = useCurrent(editor, items, viewTop, true);
+  const current = useCurrent(editor, items, viewTop);
   const [draftWidth, setDraftWidth] = useState<number | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
 
-  const startResize = useCallback(
-    (e: React.PointerEvent) => {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      const target = e.currentTarget as HTMLElement;
-      target.setPointerCapture(e.pointerId);
-      const x0 = e.clientX;
-      const w0 = width;
-      let next = w0;
-      const onMove = (ev: PointerEvent) => {
-        next = Math.max(OUTLINE_MIN, Math.min(OUTLINE_MAX, w0 + ev.clientX - x0));
-        setDraftWidth(next);
-      };
-      const onUp = () => {
-        target.removeEventListener("pointermove", onMove);
-        target.removeEventListener("pointerup", onUp);
-        target.removeEventListener("pointercancel", onUp);
-        setDraftWidth(null);
-        store.set({ outlineWidth: next });
-      };
-      target.addEventListener("pointermove", onMove);
-      target.addEventListener("pointerup", onUp);
-      target.addEventListener("pointercancel", onUp);
-    },
-    [store, width],
-  );
+  const startResize = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+    const x0 = e.clientX;
+    let next = width;
+    const onMove = (ev: PointerEvent) => {
+      next = Math.max(OUTLINE_MIN, Math.min(OUTLINE_MAX, width + ev.clientX - x0));
+      setDraftWidth(next);
+    };
+    const onUp = () => {
+      target.removeEventListener("pointermove", onMove);
+      target.removeEventListener("pointerup", onUp);
+      target.removeEventListener("pointercancel", onUp);
+      setDraftWidth(null);
+      store.set({ outlineWidth: next });
+    };
+    target.addEventListener("pointermove", onMove);
+    target.addEventListener("pointerup", onUp);
+    target.addEventListener("pointercancel", onUp);
+  };
 
   const shown = draftWidth ?? width;
   return (
     <nav
-      ref={panelRef}
       className="docs-outline"
       style={{ left, width: shown, height }}
       aria-label={t("docsPage.tabsOutlines")}
@@ -200,7 +190,7 @@ export function OutlinePanel({
       <div className="docs-outline-scroll">
         <div className="docs-outline-header">{t("docsPage.documentTabs")}</div>
         <div className="docs-outline-tab" aria-current="page">
-          <TabDocIcon size={20} />
+          <DocIcon size={20} />
           <span className="docs-outline-tab-name">{t("docsPage.firstTab")}</span>
         </div>
         {items.length === 0 ? (

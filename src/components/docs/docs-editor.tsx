@@ -51,18 +51,17 @@ function useDocsFonts() {
 function SaveStatus({ state }: { state: SaveState }) {
   const t = useT();
   const [last, setLast] = useState(state);
-  // Each finished save shows the saved words once, for 3 s.
-  const [finished, setFinished] = useState(0);
-  const [faded, setFaded] = useState(0);
+  // Each finished save shows the saved words for 3 s.
+  const [justSaved, setJustSaved] = useState(false);
   if (last !== state) {
     setLast(state);
-    if (state === "saved") setFinished((n) => n + 1);
+    setJustSaved(state === "saved");
   }
   useEffect(() => {
-    if (finished === 0) return;
-    const id = setTimeout(() => setFaded(finished), 3000);
+    if (!justSaved) return;
+    const id = setTimeout(() => setJustSaved(false), 3000);
     return () => clearTimeout(id);
-  }, [finished]);
+  }, [justSaved]);
   const caption =
     state === "saving" || state === "unsaved"
       ? t("docs.saving")
@@ -70,7 +69,7 @@ function SaveStatus({ state }: { state: SaveState }) {
         ? t("docs.offlineSaving")
         : state === "error"
           ? t("docs.saveFailed")
-          : finished > faded
+          : justSaved
             ? t("docsPage.savedCaption")
             : "";
   const [open, setOpen] = useState(false);

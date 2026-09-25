@@ -1,23 +1,19 @@
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 
-// Pagination (SPEC.md §29), the way Google Docs flows a document onto its
-// pages: line by line. The text is one continuous flow; a spacer at each
-// page's end pushes what follows to the next page's top margin. This module
-// reads the flow as it lies with every spacer hidden — the natural layout —
-// and works out where the spacers go:
+// Pagination (SPEC.md §29), Google Docs' way: line by line. A spacer at each
+// page's end pushes what follows to the next page's text top. This module
+// reads the layout with every spacer hidden and works out where they go:
 //
-// - a line that does not fit moves to the next page, so a paragraph splits
-//   between two lines (a "line" spacer inside it);
-// - a paragraph keeps at least two lines on each side of a split (widow and
-//   orphan control), or moves whole;
-// - a heading, the Title, and the Subtitle never split and stay on the page
-//   of the paragraph after them (keep with next);
+// - a line that does not fit moves to the next page ("line" spacer);
+// - a paragraph keeps at least two lines on each side of a split (Prevent
+//   single lines), or moves whole;
+// - a heading, the Title, and the Subtitle stay whole, on the page of the
+//   paragraph after them (Keep lines together, Keep with next);
 // - a table row, an image, and a line move whole ("row" and "block" spacers);
 // - a page break sends what follows to the next page.
 //
-// Geometry is in CSS px at 100% zoom, measured from the editor's top: the
-// "content" coordinates. A spacer's bottom lands on the next page's text top.
+// Every length is in CSS px at 100% zoom, from the editor's top.
 
 export type SpacerKind = "block" | "line" | "row";
 
@@ -25,22 +21,22 @@ export type SpacerPlan = {
   kind: SpacerKind;
   /** The document position the spacer sits at. */
   pos: number;
-  /** The page the spacer starts. */
-  page: number;
   /** Where the spacer's bottom goes: the page's text top, content px. */
   target: number;
 };
 
 /** Page i's text area, in px from the page's own top. */
-export type PageArea = { top: number; bottom: number };
+type PageArea = { top: number; bottom: number };
 
-export type PaginateConfig = {
+export type PaginationConfig = {
+  /** Pages format; pageless has no pages. */
+  enabled: boolean;
   /** From one page's top to the next page's top. */
   pitch: number;
   area: (page: number) => PageArea;
 };
 
-export type PaginateResult = {
+type PaginateResult = {
   spacers: SpacerPlan[];
   pages: number;
   /** Each textblock's natural height, content px: a later edit that keeps a
@@ -70,17 +66,16 @@ function flag(node: PMNode, name: string): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
-/** Title, Subtitle, and the headings keep with next and keep their lines
-    together; Normal text avoids single lines (Docs' named styles). A
-    paragraph's own keepWithNext, keepLinesTogether, avoidWidowAndOrphan,
-    and pageBreakBefore attributes win when it has them. */
+/** Docs' named styles: Title, Subtitle, and the headings keep with next and
+    keep their lines together; every style prevents single lines. A
+    paragraph's own flags (ext/toolbar.ts, Line & paragraph spacing) win. */
 function textFlags(node: PMNode) {
   const docStyle: unknown = node.attrs.docStyle;
   const titled = node.type.name === "heading" || docStyle === "title" || docStyle === "subtitle";
   return {
     keepNext: flag(node, "keepWithNext") ?? titled,
     together: flag(node, "keepLinesTogether") ?? titled,
-    widow: flag(node, "avoidWidowAndOrphan") ?? !titled,
+    widow: flag(node, "preventSingleLines") ?? true,
     breakBefore: flag(node, "pageBreakBefore") ?? false,
   };
 }
@@ -259,7 +254,7 @@ class Measure {
 
 /** Where the spacers go for the document as it lies now. Call it with every
     spacer hidden (display: none): it reads the natural layout. */
-export function paginate(view: EditorView, config: PaginateConfig): PaginateResult {
+export function paginate(view: EditorView, config: PaginationConfig): PaginateResult {
   const units = collectUnits(view);
   const m = new Measure(view);
   const first = config.area(0);
@@ -281,7 +276,7 @@ export function paginate(view: EditorView, config: PaginateConfig): PaginateResu
       is `after`, else the unit at `next`. */
   const blockSpacer = (pos: number, kind: "block" | "row", to: number, next: number) => {
     const target = areaOf(to).top;
-    out.push({ kind, pos, page: to, target });
+    out.push({ kind, pos, target });
     const after = view.nodeDOM(pos);
     if (after instanceof HTMLElement && !after.hasAttribute("data-docs-spacer")) {
       offset = target + (kind === "row" ? 0 : m.marginTop(after)) - m.box(after).top;
@@ -357,7 +352,7 @@ export function paginate(view: EditorView, config: PaginateConfig): PaginateResu
         const pos = m.lineStart(u, lines[x]);
         if (pos !== null) {
           const target = areaOf(page + 1).top;
-          out.push({ kind: "line", pos, page: page + 1, target });
+          out.push({ kind: "line", pos, target });
           offset = target - lines[x].top;
           page += 1;
           firstOnPage = k;

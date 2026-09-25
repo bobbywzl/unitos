@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { EyedropperIcon } from "@/components/docs/icons";
 import { hasEyeDropper, hexToRgb, pickFromScreen, rgbToHex } from "@/components/docs/palette";
@@ -59,8 +59,6 @@ export function CustomColorDialog({
   const [rgb, setRgb] = useState(() => hexToRgb(start));
   const [hexDraft, setHexDraft] = useState<string | null>(null);
   const [rgbDraft, setRgbDraft] = useState<(string | null)[]>([null, null, null]);
-  const areaRef = useRef<HTMLDivElement>(null);
-  const hueRef = useRef<HTMLDivElement>(null);
 
   const setColor = (next: Hsv) => {
     setHsv(next);
@@ -98,6 +96,7 @@ export function CustomColorDialog({
     <label className="docs-color-field docs-color-channel">
       <span>{label}</span>
       <input
+        className="docs-tb-field"
         value={rgbDraft[i] ?? String(rgb[i])}
         maxLength={3}
         inputMode="numeric"
@@ -136,7 +135,6 @@ export function CustomColorDialog({
       }
     >
       <div
-        ref={areaRef}
         className="docs-color-area"
         style={{ background: `hsl(${hsv.h} 100% 50%)` }}
         onPointerDown={(e) => drag(e, (x, y) => setColor({ ...hsv, s: x, v: 1 - y }))}
@@ -181,11 +179,10 @@ export function CustomColorDialog({
           </button>
         )}
         <div
-          ref={hueRef}
           className="docs-color-hue"
           onPointerDown={(e) => drag(e, (x) => setColor({ ...hsv, h: Math.min(359.9, x * 360) }))}
           role="slider"
-          aria-label="Hue"
+          aria-label={t("docs.hue")}
           aria-valuemin={0}
           aria-valuemax={360}
           aria-valuenow={Math.round(hsv.h)}
@@ -205,6 +202,7 @@ export function CustomColorDialog({
         <label className="docs-color-field docs-color-hex">
           <span>{t("docs.hex")}</span>
           <input
+            className="docs-tb-field"
             value={hexDraft ?? hex}
             maxLength={7}
             aria-label={t("docs.hexColor")}

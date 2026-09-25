@@ -8,27 +8,19 @@ import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CheckIcon, DocIcon, LinkIcon } from "@/components/docs/icons";
 import { Avatar } from "@/components/docs/insert/at-menu";
-import { emitInsert, onInsert, type InsertContext } from "@/components/docs/insert/context";
+import { emitInsert, onInsert, toast, type InsertContext } from "@/components/docs/insert/context";
 import { DatePicker } from "@/components/docs/insert/date-picker";
 import { DATE_FORMATS, dateLabel, longDayLabel, relativeLabel, today, isoOf, type DateFormat } from "@/components/docs/insert/dates";
-import {
-  chooseOption,
-  DropdownChipMenu,
-  DropdownDialog,
-  saveDropdown,
-  type Dropdown,
-} from "@/components/docs/insert/dropdown-ui";
-import { readOptions } from "@/components/docs/insert/dropdowns";
+import { chooseOption, DropdownChipMenu, DropdownDialog, saveDropdown } from "@/components/docs/insert/dropdown-ui";
+import { readOptions, type Dropdown } from "@/components/docs/insert/dropdowns";
 import { insertDropdownChip } from "@/components/docs/insert/actions";
+import { documentDropdowns } from "@/components/docs/insert/chips";
 import { CalendarIcon, DeleteIcon, SettingsIcon } from "@/components/docs/insert/icons";
-import { FloatingBox, toast, useEditorTick, type Anchor } from "@/components/docs/insert/ui";
+import { FloatingBox, useEditorTick, type Anchor } from "@/components/docs/insert/ui";
 
-// The smart chips' cards (SPEC.md §29), as Google Docs shows them: resting
-// the pointer on a chip, or selecting it, shows its card under it — a
-// date's day (press it to change the day), how far it is from today, and
-// its formats; a person's badge and name; a document's title, which opens
-// it. A dropdown chip's press shows its options. A bookmark's card copies
-// its link or removes it.
+// The smart chips' cards (SPEC.md §29), as Google Docs shows them on hover
+// or selection: a date's day and formats, a person's badge, a document's
+// title, a dropdown's options, a bookmark's link.
 
 type Target = { pos: number; node: PMNode; anchor: Anchor; pinned: boolean };
 
@@ -40,7 +32,7 @@ function targetAt(editor: Editor, pos: number, pinned: boolean): Target | null {
   const dom = editor.view.nodeDOM(pos);
   if (!(dom instanceof HTMLElement)) return null;
   const r = dom.getBoundingClientRect();
-  return { pos, node, anchor: { left: r.left, top: r.top, bottom: r.bottom, right: r.right }, pinned };
+  return { pos, node, anchor: { left: r.left, top: r.top, bottom: r.bottom }, pinned };
 }
 
 export function ChipCardsHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
@@ -255,7 +247,7 @@ function ChipCard({
         }}
         onEdit={() => {
           if (!editing) return;
-          emitInsert(editor, { type: "dropdown-dialog", dropdownId: String(node.attrs.dropdownId ?? ""), chipPos: pos });
+          emitInsert(editor, { type: "dropdown-dialog", dropdownId: String(node.attrs.dropdownId ?? "") });
         }}
       />
     );
@@ -296,7 +288,6 @@ function ChipCard({
     <FloatingBox
       anchor={target.anchor}
       className={`docs-chip-card docs-chip-card-${name}`}
-      gap={6}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -309,39 +300,31 @@ function ChipCard({
     one of the document's (saved onto every chip that has it). */
 function DropdownDialogHost({ editor }: { editor: Editor }) {
   const t = useT();
-  const [open, setOpen] = useState<{ dropdown: Dropdown; isNew: boolean } | null>(null);
+  const [open, setOpen] = useState<Dropdown | null>(null);
   useEffect(
     () =>
       onInsert(editor, (event) => {
         if (event.type !== "dropdown-dialog") return;
-        if (event.dropdownId) {
-          let found: Dropdown | null = null;
-          editor.state.doc.descendants((node) => {
-            if (found) return false;
-            if (node.type.name === "dropdownChip" && node.attrs.dropdownId === event.dropdownId) {
-              found = { id: event.dropdownId, name: String(node.attrs.name ?? ""), options: readOptions(node.attrs.dropdownOptions) };
-              return false;
-            }
-            return true;
-          });
-          if (found) setOpen({ dropdown: found, isNew: false });
+        if (!event.dropdownId) {
+          setOpen({ id: null, name: "", options: [] });
           return;
         }
-        setOpen({ dropdown: { id: null, name: "", options: [] }, isNew: true });
+        const found = documentDropdowns(editor.state.doc).find((d) => d.id === event.dropdownId);
+        if (found) setOpen({ id: found.id, name: found.name, options: readOptions(found.options) });
       }),
     [editor],
   );
   if (!open) return null;
   return (
     <DropdownDialog
-      initial={open.dropdown}
+      initial={open}
       onClose={() => {
         setOpen(null);
         editor.view.focus();
       }}
       onSave={(dropdown) => {
         setOpen(null);
-        if (open.isNew) insertDropdownChip(editor, { ...dropdown, name: dropdown.name || t("docsInsert.itemDropdown") });
+        if (open.id === null) insertDropdownChip(editor, { ...dropdown, name: dropdown.name || t("docsInsert.itemDropdown") });
         else saveDropdown(editor, dropdown);
         editor.view.focus();
       }}

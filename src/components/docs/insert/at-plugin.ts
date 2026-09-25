@@ -2,18 +2,15 @@ import { Extension, type Editor } from "@tiptap/core";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { ReplaceStep } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
-import { insertContext, insertLayerOn } from "@/components/docs/insert/context";
+import { insertLayerOn, insertT } from "@/components/docs/insert/context";
 
-// The "@" menu's trigger (SPEC.md §29), as Google Docs opens it: typing "@"
-// at the start of a line or after a space, a tab, "(" or "[" opens the menu
-// under it; the "@" and the words typed after it stay in the text as the
-// query, with a gray "Search menu" in place of the query until the first
-// letter. ":" and letters open the same menu with only emoji. The empty
-// line's "Type @ to insert" opens it with nothing typed. The menu itself is
-// the InsertLayer's (at-menu.tsx); this plugin tracks the query's range,
-// hands the keys to the menu while it is open, and draws the hints.
+// The "@" menu's trigger (SPEC.md §29): "@" at a line start or after a
+// space, a tab, "(" or "[" opens the menu, and the words typed after it are
+// the query; ":" and letters open it with emoji only. The empty line's
+// "Type @ to insert" opens it with nothing typed. The menu is at-menu.tsx;
+// this plugin tracks the query, hands the menu the keys, and draws the hints.
 
-export type AtTrigger = "@" | ":" | "";
+type AtTrigger = "@" | ":" | "";
 
 /** The menu's state. `range` is the "@query" text; `char` "" = opened from
     the empty line's hint, nothing typed before the query. The typing area
@@ -22,7 +19,7 @@ export type AtState = { active: boolean; char: AtTrigger; range: { from: number;
 
 const INACTIVE: AtState = { active: false, char: "@", range: { from: 0, to: 0 }, query: "" };
 
-export const atMenuKey = new PluginKey<AtState>("docsAtMenu");
+const atMenuKey = new PluginKey<AtState>("docsAtMenu");
 
 type Meta = { open: { from: number; char: AtTrigger } } | { close: true };
 
@@ -34,18 +31,6 @@ const keyHandlers = new WeakMap<EditorView, (event: KeyboardEvent) => boolean>()
 export function setAtKeyHandler(view: EditorView, handler: ((event: KeyboardEvent) => boolean) | null): void {
   if (handler) keyHandlers.set(view, handler);
   else keyHandlers.delete(view);
-}
-
-/** The colon opens emoji unless the reader turned it off (Tools >
-    Preferences > "Insert emojis using the colon character"). */
-export const COLON_PREF = "unitos.docs.colonEmoji";
-
-function colonOn(): boolean {
-  try {
-    return window.localStorage.getItem(COLON_PREF) !== "off";
-  } catch {
-    return true;
-  }
 }
 
 function prefixOk(state: EditorState, from: number): boolean {
@@ -109,7 +94,6 @@ function typedTrigger(tr: Transaction, next: EditorState): { from: number; char:
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (ch !== "@" && ch !== ":") continue;
-    if (ch === ":" && !colonOn()) continue;
     const ok = i === 0 ? prefixOk(next, later) : PREFIXES.has(text[i - 1]);
     if (ok) return { from: later + i, char: ch };
   }
@@ -214,8 +198,7 @@ export const AtMenu = Extension.create({
           },
           decorations(state) {
             const s = atMenuKey.getState(state);
-            const t = insertContext(editor)?.t;
-            if (!t) return null;
+            const t = insertT(editor);
             if (s?.active) {
               if (s.query || s.char === ":") return null;
               return DecorationSet.create(state.doc, [

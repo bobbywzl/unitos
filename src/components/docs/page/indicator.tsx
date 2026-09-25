@@ -3,6 +3,7 @@
 import type { Editor } from "@tiptap/core";
 import { useEffect, useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { scrollParent } from "@/components/docs/page/geometry";
 
 // The page indicator (SPEC.md §29), Google Docs': while the pointer is
 // within 20 px of the pane's right edge, a dark tip beside the scrollbar
@@ -25,17 +26,8 @@ export function PageIndicator({
   const [tip, setTip] = useState<{ x: number; y: number; n: number } | null>(null);
   useEffect(() => {
     const page = editor.view.dom.closest<HTMLElement>("[data-docs-page]");
-    if (!page || pages < 1) return;
-    let scroller: HTMLElement | null = null;
-    for (let node = page.parentElement; node; node = node.parentElement) {
-      const oy = getComputedStyle(node).overflowY;
-      if (oy === "auto" || oy === "scroll") {
-        scroller = node;
-        break;
-      }
-    }
-    if (!scroller) return;
-    const box = scroller;
+    const box = scrollParent(page);
+    if (!page || !box || pages < 1) return;
     let near = false;
     const place = () => {
       if (!near) {

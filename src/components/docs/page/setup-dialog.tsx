@@ -5,16 +5,9 @@ import { createPortal } from "react-dom";
 import { useLang, useT } from "@/components/lang-provider";
 import { DropdownPanel } from "@/components/docs/menu";
 import { PALETTE, colorName } from "@/components/docs/palette";
-import {
-  PAPERS,
-  PT_PER_UNIT,
-  formatLength,
-  isLandscape,
-  paperOf,
-  type LengthUnit,
-} from "@/components/docs/page/geometry";
+import { MIN_TEXT_PT, PAPERS, formatLength, paperOf, parseLength, type LengthUnit } from "@/components/docs/page/geometry";
 import { readPref, usePageState, writePref, type PageStore } from "@/components/docs/page/store";
-import type { PageSetup } from "@/lib/docs/schema";
+import { pageSetupSchema, type PageSetup } from "@/lib/docs/schema";
 
 // Page setup (SPEC.md §29), Google Docs' dialog: two tabs, Pages and
 // Pageless. Pages: the orientation, the paper size and the page color side
@@ -27,30 +20,18 @@ const DEFAULT_KEY = "unitos-docs-page-default";
 
 type Defaults = Pick<PageSetup, "width" | "height" | "margins" | "color">;
 
+const defaultsSchema = pageSetupSchema.pick({ width: true, height: true, margins: true, color: true });
+
 /** The Pages settings kept as this browser's default, if any. */
 export function readPageDefault(): Defaults | null {
-  const raw = readPref(DEFAULT_KEY);
-  if (!raw) return null;
   try {
-    const v = JSON.parse(raw) as Partial<Defaults>;
-    const m = v.margins;
-    if (
-      typeof v.width !== "number" ||
-      typeof v.height !== "number" ||
-      typeof v.color !== "string" ||
-      !/^#[0-9a-fA-F]{3,8}$/.test(v.color) ||
-      !m ||
-      [m.top, m.right, m.bottom, m.left].some((n) => typeof n !== "number" || !Number.isFinite(n) || n < 0)
-    ) {
-      return null;
-    }
-    return { width: v.width, height: v.height, margins: m, color: v.color };
+    const parsed = defaultsSchema.safeParse(JSON.parse(readPref(DEFAULT_KEY) ?? ""));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
 }
 
-const MIN_TEXT_PT = 36;
 type Side = "top" | "bottom" | "left" | "right";
 const SIDES: Side[] = ["top", "bottom", "left", "right"];
 
@@ -64,7 +45,7 @@ export function PageSetupDialog({ store, onClose }: { store: PageStore; onClose:
   const unit = lengthUnitFor(lang);
   const setup = usePageState(store, (s) => s.setup);
   const [tab, setTab] = useState<"pages" | "pageless">(setup.pageless ? "pageless" : "pages");
-  const [landscape, setLandscape] = useState(isLandscape(setup));
+  const [landscape, setLandscape] = useState(setup.width > setup.height);
   const [paper, setPaper] = useState(paperOf(setup)?.id ?? "custom");
   const [color, setColor] = useState(setup.color);
   const [margins, setMargins] = useState<Record<Side, string>>(() => ({
@@ -95,9 +76,9 @@ export function PageSetupDialog({ store, onClose }: { store: PageStore; onClose:
     const height = landscape ? short : long;
     const pt: Partial<Record<Side, number>> = {};
     for (const side of SIDES) {
-      const n = Number(margins[side].replace(",", "."));
-      if (!Number.isFinite(n) || n < 0 || margins[side].trim() === "") return null;
-      pt[side] = Math.round(n * PT_PER_UNIT[unit] * 100) / 100;
+      const v = parseLength(margins[side], unit);
+      if (v === null) return null;
+      pt[side] = v;
     }
     const m = { top: pt.top ?? 0, right: pt.right ?? 0, bottom: pt.bottom ?? 0, left: pt.left ?? 0 };
     if (m.top + m.bottom > height - MIN_TEXT_PT || m.left + m.right > width - MIN_TEXT_PT) return null;
@@ -132,6 +113,23 @@ export function PageSetupDialog({ store, onClose }: { store: PageStore; onClose:
     writePref(DEFAULT_KEY, JSON.stringify(pages));
     setSavedDefault(pages);
   };
+
+  const colorButton = (label: string) => (
+    <div className="docs-setup-group">
+      <span className="docs-setup-label">{label}</span>
+      <button
+        ref={colorRef}
+        type="button"
+        className="docs-setup-color"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={colorOpen}
+        onClick={() => setColorOpen((o) => !o)}
+      >
+        <span className="docs-setup-swatch" style={{ background: color }} />
+      </button>
+    </div>
+  );
 
   if (typeof document === "undefined") return null;
   return createPortal(
@@ -200,20 +198,7 @@ export function PageSetupDialog({ store, onClose }: { store: PageStore; onClose:
                   {paper === "custom" && <option value="custom">{t("docsPage.customSize")}</option>}
                 </select>
               </label>
-              <div className="docs-setup-group">
-                <span className="docs-setup-label">{t("docsPage.pageColor")}</span>
-                <button
-                  ref={colorRef}
-                  type="button"
-                  className="docs-setup-color"
-                  aria-label={t("docsPage.pageColor")}
-                  aria-haspopup="menu"
-                  aria-expanded={colorOpen}
-                  onClick={() => setColorOpen((o) => !o)}
-                >
-                  <span className="docs-setup-swatch" style={{ background: color }} />
-                </button>
-              </div>
+              {colorButton(t("docsPage.pageColor"))}
             </div>
             <fieldset className="docs-setup-group">
               <legend className="docs-setup-label">
@@ -251,20 +236,7 @@ export function PageSetupDialog({ store, onClose }: { store: PageStore; onClose:
             </div>
             <p className="docs-setup-about">{t("docsPage.pagelessAbout")}</p>
             {(setup.header || setup.footer) && <p className="docs-setup-note">{t("docsPage.pagelessHides")}</p>}
-            <div className="docs-setup-group">
-              <span className="docs-setup-label">{t("docsPage.backgroundColor")}</span>
-              <button
-                ref={colorRef}
-                type="button"
-                className="docs-setup-color"
-                aria-label={t("docsPage.backgroundColor")}
-                aria-haspopup="menu"
-                aria-expanded={colorOpen}
-                onClick={() => setColorOpen((o) => !o)}
-              >
-                <span className="docs-setup-swatch" style={{ background: color }} />
-              </button>
-            </div>
+            {colorButton(t("docsPage.backgroundColor"))}
           </div>
         )}
         <DropdownPanel open={colorOpen} anchorRef={colorRef} onClose={() => setColorOpen(false)} label={t("docsPage.pageColor")}>

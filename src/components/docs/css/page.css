@@ -92,9 +92,6 @@
 .dark .docs-sheet[data-white] {
   background: var(--docs-page);
 }
-.docs-page[data-pageless] .docs-sheets {
-  display: none;
-}
 
 /* The spacers the pagination puts at each page's end (ext/page.ts). */
 .docs-spacer {
@@ -597,7 +594,6 @@
   user-select: none;
   animation: docs-outline-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-[data-pageless] ~ .docs-side .docs-outline,
 .docs-side[data-pageless] .docs-outline {
   box-shadow: inset -1px 0 0 0 rgba(0, 0, 0, 0.15);
 }
@@ -923,6 +919,9 @@
   .docs-prose ::selection {
     background: transparent;
   }
+  .docs-caret {
+    display: none !important;
+  }
 }
 
 /* ── The title row: the title in Google Sans 18/22, a 1 px #747775 border
@@ -936,7 +935,6 @@
   font: 400 18px/22px var(--docs-ui-font);
 }
 .docs-title-row .docs-title-input {
-  border: 1px solid transparent;
   border-radius: 4px;
   color: var(--docs-text);
   text-overflow: ellipsis;
@@ -971,6 +969,14 @@
 .docs-title-row .docs-status-text {
   padding: 0 5px 0 3px;
   white-space: nowrap;
+}
+.docs-title-row button.docs-status {
+  cursor: pointer;
+}
+.docs-title-row button.docs-status:focus-visible {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: 2px;
+  border-radius: 14px;
 }
 .docs-title-row .docs-status-error,
 .docs-title-row .docs-status-offline {
@@ -1107,14 +1113,6 @@
   color: var(--docs-text);
   font: 400 12px/16px Roboto, var(--docs-ui-font);
 }
-.docs-title-row button.docs-status {
-  cursor: pointer;
-}
-.docs-title-row button.docs-status:focus-visible {
-  outline: 2px solid var(--docs-blue);
-  outline-offset: 2px;
-  border-radius: 14px;
-}
 
 /* ── The caret: Google Docs' 2 px bar, 500 ms on and 500 ms off, solid
    after every move (ext/page.ts DocsCaret draws it). ────────────────────── */
@@ -1148,10 +1146,5 @@
   }
   50% {
     opacity: 0;
-  }
-}
-@media print {
-  .docs-caret {
-    display: none !important;
   }
 }

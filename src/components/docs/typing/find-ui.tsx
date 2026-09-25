@@ -4,18 +4,10 @@ import { useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
-import { CloseIcon, MoreVertIcon } from "@/components/docs/icons";
+import { CloseIcon, ExpandLessIcon, ExpandMoreIcon, MoreVertIcon } from "@/components/docs/icons";
 import { keepFocus } from "@/components/docs/menu";
-import {
-  findState,
-  replaceAll,
-  replaceResult,
-  selectResult,
-  setFind,
-  stepResult,
-  type FindOptions,
-} from "@/components/docs/typing/find";
-import { ArrowDownIcon, ArrowUpIcon } from "@/components/docs/typing/icons";
+import { DialogButton } from "@/components/docs/toolbar/dialog";
+import { findState, replaceAll, replaceResult, searchFrom, stepResult, type FindOptions } from "@/components/docs/typing/find";
 
 // The find bar (Ctrl+F) and the Find and replace dialog (Ctrl+H), Google
 // Docs' own (SPEC.md §29, typing). The bar floats at the top right under the
@@ -120,8 +112,7 @@ export function FindBar({
   const view = editor.view;
   const search = (query: string) => {
     setDraft(query);
-    const next = setFind(view, { query, near: view.state.selection.from });
-    if (next.current >= 0) selectResult(view, next.current);
+    searchFrom(view, { query });
   };
   const none = find.count === 0;
   return createPortal(
@@ -165,7 +156,7 @@ export function FindBar({
           onMouseDown={keepFocus}
           onClick={() => stepResult(view, -1)}
         >
-          <ArrowUpIcon />
+          <ExpandLessIcon />
         </button>
         <button
           type="button"
@@ -176,7 +167,7 @@ export function FindBar({
           onMouseDown={keepFocus}
           onClick={() => stepResult(view, 1)}
         >
-          <ArrowDownIcon />
+          <ExpandMoreIcon />
         </button>
         <button
           type="button"
@@ -229,13 +220,11 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
   const search = (query: string) => {
     setDraft(query);
     setMessage("");
-    const next = setFind(view, { query, near: view.state.selection.from });
-    if (next.current >= 0) selectResult(view, next.current);
+    searchFrom(view, { query });
   };
   const setOption = (patch: Partial<FindOptions>) => {
     setMessage("");
-    const next = setFind(view, { options: { ...find.options, ...patch }, near: view.state.selection.from });
-    if (next.current >= 0) selectResult(view, next.current);
+    searchFrom(view, { options: { ...find.options, ...patch } });
   };
   const step = (dir: 1 | -1) => {
     const wrapped = stepResult(view, dir);
@@ -245,7 +234,7 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
     <div
       role="dialog"
       aria-label={t("docsTyping.findAndReplace")}
-      className="docs-ty-card docs-replace"
+      className="docs-replace"
       data-edit-control
       data-docs-typing
       onMouseUp={(e) => e.stopPropagation()}
@@ -257,7 +246,7 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
         }
       }}
     >
-      <div className="docs-ty-head">
+      <div className="docs-replace-head">
         <h2>{t("docsTyping.findAndReplace")}</h2>
         <button type="button" className="docs-find-btn" aria-label={t("docsTyping.close")} onClick={onClose}>
           <CloseIcon size={24} />
@@ -291,17 +280,7 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
           </label>
           <label className="docs-ty-check">
             <input type="checkbox" checked={find.options.regex} onChange={(e) => setOption({ regex: e.target.checked })} />
-            <span>
-              {t("docsTyping.useRegex")}{" "}
-              <a
-                href="https://support.google.com/docs/answer/62754#regular_expressions"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="docs-ty-link"
-              >
-                {t("docsTyping.help")}
-              </a>
-            </span>
+            {t("docsTyping.useRegex")}
           </label>
           <label className="docs-ty-check">
             <input
@@ -317,9 +296,7 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
         </p>
       </div>
       <div className="docs-replace-actions">
-        <button
-          type="button"
-          className="docs-ty-button"
+        <DialogButton
           disabled={none || !editor.isEditable}
           onClick={() => {
             setMessage("");
@@ -327,10 +304,8 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
           }}
         >
           {t("docsTyping.replace")}
-        </button>
-        <button
-          type="button"
-          className="docs-ty-button"
+        </DialogButton>
+        <DialogButton
           disabled={none || !editor.isEditable}
           onClick={() => {
             const query = find.query;
@@ -339,13 +314,13 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
           }}
         >
           {t("docsTyping.replaceAll")}
-        </button>
-        <button type="button" className="docs-ty-button" disabled={none} onClick={() => step(-1)}>
+        </DialogButton>
+        <DialogButton disabled={none} onClick={() => step(-1)}>
           {t("docsTyping.previous")}
-        </button>
-        <button type="button" className="docs-ty-button docs-ty-primary" disabled={none} onClick={() => step(1)}>
+        </DialogButton>
+        <DialogButton primary disabled={none} onClick={() => step(1)}>
           {t("docsTyping.next")}
-        </button>
+        </DialogButton>
       </div>
     </div>,
     document.body,

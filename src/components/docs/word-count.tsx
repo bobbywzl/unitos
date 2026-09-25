@@ -2,50 +2,37 @@
 
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { useLang, useT } from "@/components/lang-provider";
 import { DOCS_EVENT } from "@/components/docs/extensions";
-import { CheckIcon, CloseIcon, DropDownIcon } from "@/components/docs/icons";
+import { CheckIcon, DropDownIcon } from "@/components/docs/icons";
+import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { countRange, type Counts } from "@/components/docs/typing/count";
 import { serverTypingPrefs, setTypingPrefs, subscribeTypingPrefs, typingPrefs, type TypingPrefs } from "@/components/docs/typing/prefs";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// Word count (Ctrl+Shift+C), as Google Docs counts (SPEC.md §29, typing): a
-// word is a run of word characters; an apostrophe, a hyphen, or a dash never
-// splits one ("don't", "well-known", "a—b"); punctuation such as . / : @ ,
-// does. Characters leave out paragraph ends; "excluding spaces" leaves out
-// the space character alone (a tab or a line break still counts). With text
-// selected, each count reads "S of T". "Display word count while typing"
-// keeps a counter at the bottom left of the page area; a press on it picks
-// the count it shows, or hides it.
+// Word count (Ctrl+Shift+C), as Google Docs counts (typing/count.ts; SPEC.md
+// §29). With text selected, each count reads "S of T". "Display word count
+// while typing" keeps a counter at the bottom left of the page area; a press
+// on it picks the count it shows, or hides it.
 
 type Metric = TypingPrefs["counterMetric"];
 
 const SHOW_KEY = "unitos-docs-word-count";
 
-/** The pages the document fills, and the pages a range touches. */
+/** The pages the document fills (the page sheets drawn), and the pages a
+    range touches. */
 function pageCounts(editor: Editor, from: number, to: number, empty: boolean): { total: number; part: number } {
-  const sheets = editor.view.dom.closest("[data-docs-editor]")?.querySelectorAll<HTMLElement>("[data-docs-page-sheet]");
-  const tops: { top: number; bottom: number }[] = [];
-  if (sheets?.length) {
-    sheets.forEach((s) => {
-      const r = s.getBoundingClientRect();
-      tops.push({ top: r.top, bottom: r.bottom });
-    });
-  } else {
-    const page = editor.view.dom.closest<HTMLElement>("[data-docs-page]");
-    if (!page) return { total: 1, part: 1 };
-    const r = page.getBoundingClientRect();
-    const height = (parseFloat(page.style.minHeight || "1056") || 1056) * (r.width / (page.offsetWidth || r.width || 1));
-    const n = Math.max(1, Math.ceil((r.height - 1) / height));
-    for (let i = 0; i < n; i++) tops.push({ top: r.top + i * height, bottom: r.top + (i + 1) * height });
-  }
-  const total = tops.length;
+  const shell = editor.view.dom.closest("[data-docs-editor]");
+  const sheets = Array.from(shell?.querySelectorAll<HTMLElement>("[data-docs-page-sheet]") ?? []);
+  const total = Math.max(1, sheets.length);
   if (empty) return { total, part: 0 };
   try {
     const a = editor.view.coordsAtPos(from).top;
     const b = editor.view.coordsAtPos(to).bottom;
-    const part = tops.filter((p) => p.bottom > a && p.top < b).length;
+    const part = sheets.filter((sheet) => {
+      const r = sheet.getBoundingClientRect();
+      return r.bottom > a && r.top < b;
+    }).length;
     return { total, part: Math.max(1, part) };
   } catch {
     return { total, part: 1 };
@@ -154,7 +141,6 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
   const pageless = editor.storage.docsTyping?.pageless ?? false;
   const metric: Metric = pageless && prefs.counterMetric === "pages" ? "words" : prefs.counterMetric;
   const snap = useCounts(editor, open || show);
-  const okRef = useRef<HTMLButtonElement>(null);
   const counterRef = useRef<HTMLButtonElement>(null);
   const format = (n: number) => n.toLocaleString(lang === "zh" ? "zh-CN" : "en-US");
 
@@ -166,10 +152,6 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
     window.addEventListener(DOCS_EVENT.wordCount, onOpen);
     return () => window.removeEventListener(DOCS_EVENT.wordCount, onOpen);
   }, []);
-
-  useEffect(() => {
-    if (open) okRef.current?.focus();
-  }, [open]);
 
   useEffect(() => {
     if (!menu) return;
@@ -204,7 +186,6 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
   const shown = metricText(t, metric, snap, format);
   const metrics: Metric[] = pageless ? ["words", "characters", "charactersNoSpaces"] : ["pages", "words", "characters", "charactersNoSpaces"];
 
-  if (typeof document === "undefined") return null;
   return (
     <>
       {show && (
@@ -263,65 +244,43 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
           )}
         </div>
       )}
-      {open &&
-        createPortal(
-          <div
-            className="docs-ty-backdrop"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) closeDialog();
-            }}
-            onMouseUp={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.stopPropagation();
-                closeDialog();
-              }
-            }}
-            data-edit-control
-            data-docs-typing
-          >
-            <div role="dialog" aria-modal="true" aria-label={t("docsTyping.wordCount")} className="docs-ty-card docs-wc-dialog">
-              <div className="docs-ty-head">
-                <h2>{t("docsTyping.wordCount")}</h2>
-                <button type="button" className="docs-find-btn" aria-label={t("docsTyping.close")} onClick={closeDialog}>
-                  <CloseIcon size={24} />
-                </button>
-              </div>
-              <table className="docs-wc-table">
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.label}>
-                      <td>{t(r.label)}</td>
-                      <td>{r.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <label className="docs-ty-check docs-wc-show">
-                <input type="checkbox" checked={draftShow} onChange={(e) => setDraftShow(e.target.checked)} />
-                {t("docsTyping.displayWhileTyping")}
-              </label>
-              <div className="docs-ty-actions">
-                <button type="button" className="docs-ty-button" onClick={closeDialog}>
-                  {t("docsTyping.cancel")}
-                </button>
-                <button
-                  ref={okRef}
-                  type="button"
-                  className="docs-ty-button docs-ty-primary"
-                  onClick={() => {
-                    setShow(draftShow);
-                    writeShow(draftShow);
-                    closeDialog();
-                  }}
-                >
-                  {t("docsTyping.ok")}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+      {open && (
+        <ToolbarDialog
+          title={t("docsTyping.wordCount")}
+          onClose={closeDialog}
+          className="docs-wc-dialog"
+          actions={
+            <>
+              <DialogButton onClick={closeDialog}>{t("docsTyping.cancel")}</DialogButton>
+              <DialogButton
+                primary
+                onClick={() => {
+                  setShow(draftShow);
+                  writeShow(draftShow);
+                  closeDialog();
+                }}
+              >
+                {t("docsTyping.ok")}
+              </DialogButton>
+            </>
+          }
+        >
+          <table className="docs-wc-table">
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.label}>
+                  <td>{t(r.label)}</td>
+                  <td>{r.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <label className="docs-ty-check docs-wc-show">
+            <input type="checkbox" checked={draftShow} onChange={(e) => setDraftShow(e.target.checked)} />
+            {t("docsTyping.displayWhileTyping")}
+          </label>
+        </ToolbarDialog>
+      )}
     </>
   );
 }

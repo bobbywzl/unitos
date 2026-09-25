@@ -6,7 +6,7 @@ import { FontFamily } from "@tiptap/extension-text-style";
 // page draws it with a fallback of the same shape, so a computer without
 // Arial draws Arimo, its metric twin, instead of the browser's default serif.
 
-export type DocsFont = {
+type DocsFont = {
   name: string;
   fallback: string;
   /** Loaded from Google Fonts (the rest are the computer's own). */
@@ -75,7 +75,7 @@ export type UserFont = { name: string; fallback: string; weights: number[] };
 const MY_FONTS_KEY = "unitos-docs-my-fonts";
 const RECENT_KEY = "unitos-docs-recent-fonts";
 /** The font menu's RECENT section shows at most this many. */
-export const RECENT_MAX = 5;
+const RECENT_MAX = 5;
 const FONT_NAME = /^[\w\s'\-.]{1,80}$/;
 
 function readList(key: string): unknown[] {
@@ -171,11 +171,11 @@ function familyQuery(name: string, weights: number[], text?: string): string {
     metric twins of the computer's faces, and the toolbar's own face. The
     browser downloads a face only when something on the page uses it. */
 export function docsFontsUrl(): string {
-  const faces = DOCS_FONTS.filter((f) => f.web).map((f) => `family=${encodeURIComponent(f.name).replace(/%20/g, "+")}:ital,wght@0,400;0,700;1,400;1,700`);
-  const twins = ["Arimo", "Tinos", "Cousine", "Comic Neue", "Gelasio", "Anton", "Fira Sans"].map(
-    (f) => `family=${encodeURIComponent(f).replace(/%20/g, "+")}:ital,wght@0,400;0,700;1,400;1,700`,
-  );
-  return `https://fonts.googleapis.com/css2?${[...faces, ...twins, "family=Google+Sans:wght@400;500"].join("&")}&display=swap`;
+  const faces = [
+    ...DOCS_FONTS.filter((f) => f.web).map((f) => f.name),
+    ...["Arimo", "Tinos", "Cousine", "Comic Neue", "Gelasio", "Anton", "Fira Sans"],
+  ].map((f) => familyQuery(f, W2));
+  return `https://fonts.googleapis.com/css2?${[...faces, "family=Google+Sans:wght@400;500"].join("&")}&display=swap`;
 }
 
 const loaded = new Set<string>();
@@ -197,15 +197,12 @@ export function loadGoogleFont(name: string, weights: number[] = W2, preview = f
 }
 
 /** Load a face the document uses when the default stylesheet leaves it out:
-    a font the reader added, or any weight a web face is drawn in. */
+    a font the reader added, or a web face in a weight past regular and bold. */
 export function loadFontInUse(name: string, weight?: number): void {
   const font = BY_NAME.get(name.toLowerCase());
-  if (font && !font.web) return;
-  if (font && (!weight || weight === 400 || weight === 700)) return;
-  const known = font ? font.weights : fontWeights(name);
-  const isMine = !font && userFonts().some((f) => f.name.toLowerCase() === name.toLowerCase());
-  if (!font && !isMine) return;
-  loadGoogleFont(font?.name ?? name, weight ? [...new Set([400, 700, weight])].filter((w) => known.includes(w)) : known);
+  const mine = !font && userFonts().some((f) => f.name.toLowerCase() === name.toLowerCase());
+  if (font ? !font.web || !weight || weight === 400 || weight === 700 : !mine) return;
+  loadGoogleFont(font?.name ?? name, weight ? [400, 700, weight] : fontWeights(name));
 }
 
 const WEIGHTS = new Set([100, 200, 300, 400, 500, 600, 700, 800, 900]);

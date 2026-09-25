@@ -34,23 +34,20 @@ export function validMarkStyle(value: unknown): string | null {
   }
 }
 
-/** The paragraph mark's style as marks of `schema`. */
+/** The paragraph mark's style as marks of `schema`, in the schema's order. */
 function readMarkStyle(schema: Schema, value: unknown): Mark[] {
-  if (!validMarkStyle(value)) return [];
-  const parsed = MarksJson.parse(JSON.parse(value as string));
-  const marks: Mark[] = [];
+  if (typeof value !== "string" || !value) return [];
+  let parsed: z.infer<typeof MarksJson>;
+  try {
+    parsed = MarksJson.parse(JSON.parse(value));
+  } catch {
+    return [];
+  }
+  let set: readonly Mark[] = [];
   for (const m of parsed) {
     const type = schema.marks[m.type];
-    if (!type || !STYLE_MARKS.has(m.type)) continue;
-    try {
-      marks.push(type.create(m.attrs ?? null));
-    } catch {
-      // An attribute the mark no longer takes.
-    }
+    if (type && STYLE_MARKS.has(m.type)) set = type.create(m.attrs ?? null).addToSet(set);
   }
-  // In the schema's mark order, as ProseMirror keeps a set.
-  let set: readonly Mark[] = [];
-  for (const mark of marks) set = mark.addToSet(set);
   return [...set];
 }
 

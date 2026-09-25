@@ -3,12 +3,13 @@ import { Fragment, Slice, type Mark, type ResolvedPos, type Schema } from "@tipt
 import type { Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { fragmentToMarkdown, markdownToHtml } from "@/components/docs/typing/markdown";
+import { uploadImage } from "@/lib/images";
 
 // Paste in the page editor (SPEC.md §29, typing), as Google Docs pastes:
 // plain text becomes one paragraph per line (blank lines too) in the style at
-// the caret; Ctrl+Shift+V pastes the plain text alone; an image on the
-// clipboard or dropped from the computer is uploaded and goes in as an image.
-// With Enable Markdown on, Paste from Markdown and Copy as Markdown work too.
+// the caret; Ctrl+Shift+V pastes the plain text alone; an image pasted or
+// dropped from the computer is uploaded and goes in as an image. With Enable
+// Markdown on, Paste from Markdown and Copy as Markdown work too.
 
 /** Messages the paste code shows, in the page's language (set by the typing area). */
 export const pasteMessages = { uploadFailed: "Couldn't add the image", noClipboard: "Couldn't read the clipboard", copied: "Copied" };
@@ -63,7 +64,7 @@ export function armPlainPaste(view: EditorView): void {
   }, 150);
 }
 
-export function toast(text: string): void {
+function toast(text: string): void {
   window.dispatchEvent(new CustomEvent("dissect:toast", { detail: { text } }));
 }
 
@@ -77,22 +78,16 @@ export async function insertImageFiles(editor: Editor, files: File[], pos?: numb
   let at = pos;
   for (const file of files) {
     try {
-      const res = await fetch("/api/images", { method: "POST", body: file });
-      const body = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !body.url) {
-        toast(body.error ?? pasteMessages.uploadFailed);
-        continue;
-      }
-      const content = { type: "image", attrs: { src: body.url, alt: file.name } };
-      if (at === undefined) {
-        editor.chain().focus().insertContent(content).run();
-      } else {
-        const target = Math.min(at, editor.state.doc.content.size);
-        editor.chain().focus().insertContentAt(target, content).run();
+      const { url } = await uploadImage(file);
+      if (editor.isDestroyed) return;
+      const content = { type: "image", attrs: { src: url, alt: file.name } };
+      if (at === undefined) editor.chain().focus().insertContent(content).run();
+      else {
+        editor.chain().focus().insertContentAt(Math.min(at, editor.state.doc.content.size), content).run();
         at = editor.state.selection.to;
       }
-    } catch {
-      toast(pasteMessages.uploadFailed);
+    } catch (err) {
+      toast(err instanceof Error && err.message ? err.message : pasteMessages.uploadFailed);
     }
   }
 }

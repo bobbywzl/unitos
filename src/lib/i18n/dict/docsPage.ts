@@ -1,7 +1,7 @@
-// UI strings of the page editor's page area: the canvas, the pages, the rulers, the tabs & outlines panel,
-// page setup, headers and footers
-// (SPEC.md §29). The English follows Google Docs' own labels. zh glossary: dict/common.ts — page 页面 ·
-// document 文档 · pages(分页格式) 分页 · pageless 无分页.
+// UI strings of the page editor's page area (SPEC.md §29): the title row, the
+// pages, the rulers, the tabs & outlines panel, page setup, headers and
+// footers. The English follows Google Docs' own labels. zh glossary:
+// dict/common.ts — page 页面 · document 文档 · pages(分页格式) 分页 · pageless 无分页.
 
 const en = {
   // The title row
@@ -26,20 +26,12 @@ const en = {
   header: "Header",
   footer: "Footer",
   pageNumbers: "Page numbers",
-  pageCount: "Page count",
   numbersHeader: "Page numbers: header",
   numbersHeaderNotFirst: "Page numbers: header, not the first page",
   numbersFooter: "Page numbers: footer",
   numbersFooterNotFirst: "Page numbers: footer, not the first page",
-  print: "Print",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
-  zoom100: "Zoom 100%",
-  zoomFit: "Zoom to fit",
-  keepWithNext: "Keep with next",
-  keepLinesTogether: "Keep lines together",
-  preventSingleLines: "Prevent single lines",
-  pageBreakBefore: "Add page break before",
   showPrintLayout: "Show print layout",
   // Page setup
   pagesTab: "Pages",
@@ -66,7 +58,6 @@ const en = {
   cancel: "Cancel",
   ok: "OK",
   apply: "Apply",
-  saveFailed: "Couldn't save the page setup",
   // The ruler
   ruler: "Ruler",
   verticalRuler: "Vertical ruler",
@@ -93,7 +84,6 @@ const en = {
   removeHeader: "Remove header",
   removeFooter: "Remove footer",
   headersFooters: "Headers & footers",
-  margins: "Margins",
   layout: "Layout",
   position: "Position",
   showOnFirstPage: "Show on first page",
@@ -124,20 +114,12 @@ const zh: Record<keyof typeof en, string> = {
   header: "页眉",
   footer: "页脚",
   pageNumbers: "页码",
-  pageCount: "页数",
   numbersHeader: "页码：页眉",
   numbersHeaderNotFirst: "页码：页眉，首页除外",
   numbersFooter: "页码：页脚",
   numbersFooterNotFirst: "页码：页脚，首页除外",
-  print: "打印",
   zoomIn: "放大",
   zoomOut: "缩小",
-  zoom100: "缩放到 100%",
-  zoomFit: "适应宽度",
-  keepWithNext: "与下段同页",
-  keepLinesTogether: "段中不分页",
-  preventSingleLines: "孤行控制",
-  pageBreakBefore: "段前分页",
   showPrintLayout: "显示打印布局",
   pagesTab: "分页",
   pagelessTab: "无分页",
@@ -162,7 +144,6 @@ const zh: Record<keyof typeof en, string> = {
   cancel: "取消",
   ok: "确定",
   apply: "应用",
-  saveFailed: "无法保存页面设置",
   ruler: "标尺",
   verticalRuler: "垂直标尺",
   leftMargin: "左边距",
@@ -186,7 +167,6 @@ const zh: Record<keyof typeof en, string> = {
   removeHeader: "移除页眉",
   removeFooter: "移除页脚",
   headersFooters: "页眉和页脚",
-  margins: "边距",
   layout: "布局",
   position: "位置",
   showOnFirstPage: "在首页显示",

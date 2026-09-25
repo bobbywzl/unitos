@@ -27,9 +27,8 @@ import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 // reader's (block-view.tsx markedText), the chips at a mark's end are
 // data-anchor-skip widgets outside the document, and a press on a mark opens
 // what it opens in the reader, through the same window events. Offsets are
-// the paragraph index's (layer/anchor.ts), so a mark sits on the words its
-// anchor names. Every decoration maps through each edit until the next
-// repaint, so a mark follows the words while they are typed.
+// the paragraph index's (layer/anchor.ts); the decorations map through each
+// edit until the next repaint.
 
 export type MarksMeta = { highlights: Record<string, Highlight[]>; t: TFunc };
 
@@ -53,8 +52,7 @@ function chipWidget(chip: Chip, t: TFunc) {
       button.setAttribute("data-track", "tool-chip");
       button.dataset.docsOpen = "annotation";
       button.dataset.sourceId = h.sourceId ?? "";
-      // The pointer resting on the symbol shows the conversation's log, as
-      // on its words (SPEC.md §21).
+      // The pointer on the symbol shows the log, as on the words (SPEC.md §21).
       button.dataset.hoverSource = h.sourceId ?? "";
       root = createRoot(button);
       root.render(<ToolSymbol tool={h.tool} plus={h.plus} size={10} />);
@@ -102,14 +100,11 @@ function chipWidget(chip: Chip, t: TFunc) {
   };
 }
 
-/** The kinds the layer paints; the document's own formatting, terms, and web
-    links are the editor's to draw. */
+/** The kinds the layer paints; formatting, terms, and web links are the editor's. */
 const PAINTED = new Set<Highlight["kind"]>(["anchor", "selection", "pending-link", "salience", "simplify", "extract", "link"]);
 
-/** One stretch of words under the same highlights, as block-view.tsx
-    markedText draws it: a link over everything, else the smallest anchor
-    names the mark (stacked anchors underline double), and the selection tint
-    rides on top. */
+/** One stretch of words under the same highlights, drawn as block-view.tsx
+    markedText draws it: a link wins, else the smallest anchor names the mark. */
 function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<string, string> {
   const link = covering.find((h) => h.kind === "link");
   const anchors = covering.filter((h) => h.kind === "anchor");
@@ -125,8 +120,7 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<
       : " selection-mark"
     : "";
   const attrs: Record<string, string> = {};
-  // A mark made in this session sweeps in once (globals.css mark-sweep); the
-  // plugin's view reports the end, and the next repaint drops the class.
+  // A new mark sweeps in once; the flash plugin's view reports the end.
   const sweep = (h: Highlight | undefined) => {
     if (!h?.fresh || h.leaving) return "";
     attrs["data-sweep"] = `${blockId}:${h.start}:${h.end}`;
@@ -152,8 +146,7 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<
     attrs["data-tip"] = t("panes.extractOpenCard", { label: extractMark.extractLabel ?? "" });
   }
   if (link) {
-    // The linked words stay text to edit, and a click on them still opens the
-    // annotation or note under the link; the chain at their end goes to the
+    // The linked words stay text to edit; the chain at their end goes to the
     // other end.
     if (link.linkId) attrs["data-link-id"] = link.linkId;
     const tip = [link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : null, link.linkReason]
@@ -233,10 +226,8 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
   return DecorationSet.create(doc, decorations);
 }
 
-// ── The flash ────────────────────────────────────────────────────────────
-// A jump to a mark or a paragraph flashes it (SPEC.md §6): the reader
-// raises PAGE_FLASH_EVENT on the element, and the flash is a decoration over
-// the same words, gone after FLASH_MS.
+// A jump to a mark or a paragraph flashes it (SPEC.md §6): the reader raises
+// PAGE_FLASH_EVENT on the element, and the flash is a decoration.
 
 const FLASH_MS = 2000;
 const flashKey = new PluginKey<DecorationSet>("docsFlash");
@@ -252,8 +243,7 @@ function flashDecorations(view: EditorView, target: HTMLElement, id: string): De
     if (!block) return [];
     return [Decoration.node(block.pos, block.pos + block.node.nodeSize, { class: "anchor-flash" }, spec)];
   }
-  // A mark: every piece of it — a mark over two runs of text draws as two
-  // spans.
+  // A mark: every piece of it.
   const sourceId = target.dataset.sourceId;
   const linkId = target.dataset.linkId;
   const pieces = sourceId
@@ -306,8 +296,7 @@ function flashPlugin() {
           view.dispatch(view.state.tr.setMeta(flashKey, { remove: id }).setMeta("addToHistory", false));
         }, FLASH_MS);
       };
-      // A fresh mark's sweep ended: the reader forgets it is fresh
-      // (lib/mark-sweep.ts), and the next repaint paints it at rest.
+      // A new mark's sweep ended: the reader paints it at rest (lib/mark-sweep.ts).
       const onAnimationEnd = (e: AnimationEvent) => {
         if (e.animationName !== "mark-sweep" || !(e.target instanceof HTMLElement)) return;
         const [blockId, start, end] = (e.target.dataset.sweep ?? "").split(":");
@@ -350,11 +339,9 @@ export const AnnotationMarks = Extension.create({
             return annotationMarksKey.getState(state);
           },
           handleDOMEvents: {
-            // A click on a mark opens what the mark opens. The editor reads
-            // its new caret only after the click, so the browser's selection
-            // says whether this was a click or the end of a drag over words.
-            // A chip is a widget the editor leaves alone: the page's own
-            // click handler opens it.
+            // A click on a mark opens what it opens; the browser's selection
+            // tells a click from the end of a drag (the editor's is stale).
+            // A chip is the page's own click handler's.
             click(_view, event) {
               const target = event.target instanceof Element ? event.target : null;
               if (!target?.closest("[data-docs-open]") || target.closest("[data-anchor-skip]")) return false;

@@ -89,9 +89,9 @@ const changesSchema = z
   })
   .partial();
 
-export type StyleChanges = z.infer<typeof changesSchema>;
+type StyleChanges = z.infer<typeof changesSchema>;
 
-export function parseChanges(value: unknown): StyleChanges {
+function parseChanges(value: unknown): StyleChanges {
   if (typeof value !== "string" || value.length > 2000) return {};
   try {
     const parsed = changesSchema.safeParse(JSON.parse(value));
@@ -151,7 +151,7 @@ function diff(style: DocStyle, value: NamedStyle): StyleChanges {
 
 /** Store a style's changes on the doc node (one undo step with the rest of
     the transaction). */
-export function setStyleChanges(tr: Transaction, style: DocStyle, changes: StyleChanges): Transaction {
+function setStyleChanges(tr: Transaction, style: DocStyle, changes: StyleChanges): Transaction {
   const json = Object.keys(changes).length > 0 ? JSON.stringify(changes) : null;
   if ((tr.doc.attrs[STYLE_ATTR[style]] ?? null) === json) return tr;
   return tr.setDocAttribute(STYLE_ATTR[style], json);
@@ -170,7 +170,7 @@ type Run = { marks: readonly Mark[]; style: DocStyle };
 
 /** The runs of the selection with their paragraph's style; a collapsed
     selection is the text the next keystroke types. */
-export function selectionRuns(state: EditorState): Run[] {
+function selectionRuns(state: EditorState): Run[] {
   const { selection, doc } = state;
   const runs: Run[] = [];
   if (!selection.empty) {
@@ -244,7 +244,7 @@ export function deepestHeading(doc: PMNode): number {
 }
 
 /** The formatting at the caret, as a named style (Update 'X' to match). */
-export function styleAtCaret(state: EditorState, style: DocStyle): NamedStyle {
+function styleAtCaret(state: EditorState, style: DocStyle): NamedStyle {
   const styles = readStyles(state.doc);
   const current = styles[style];
   const $from = state.selection.$from;
@@ -271,7 +271,7 @@ export function styleAtCaret(state: EditorState, style: DocStyle): NamedStyle {
 /** Update 'Heading 1' to match: the style takes the formatting at the
     caret, every paragraph with the style follows, and the caret's
     paragraph drops the formatting that is now its style's. */
-export function updateStyleToMatch(editor: Editor, style: DocStyle): boolean {
+export function updateStyleToMatch(editor: Editor, style: DocStyle): void {
   const { state } = editor;
   const next = styleAtCaret(state, style);
   const tr = setStyleChanges(state.tr, style, diff(style, next));
@@ -309,14 +309,13 @@ export function updateStyleToMatch(editor: Editor, style: DocStyle): boolean {
     });
   }
   editor.view.dispatch(tr);
-  return true;
 }
 
 /** Every style's changes set at once (Use my default styles, Reset styles). */
 export function replaceAllChanges(editor: Editor, changes: Partial<Record<DocStyle, StyleChanges>>): void {
   let tr = editor.state.tr;
   for (const style of STYLE_ORDER) tr = setStyleChanges(tr, style, changes[style] ?? {});
-  if (tr.docChanged || tr.steps.length > 0) editor.view.dispatch(tr);
+  if (tr.docChanged) editor.view.dispatch(tr);
 }
 
 const DEFAULTS_KEY = "unitos-docs-default-styles";
@@ -349,28 +348,33 @@ export function savedDefaultStyles(): Partial<Record<DocStyle, StyleChanges>> {
   }
 }
 
-/** The CSS variables and flags that draw the document's changes (the doc
-    node's attributes → the editor root's style and data-docs-styles). */
+/** The variables that draw the document's changes, and the flags that
+    turn their rules on: a style's name when it changed anything but its
+    color, "<style>-color" when it changed its color (css/toolbar.css). */
 export function styleVariables(doc: PMNode): { style: string; flags: string } {
   const changes = readChanges(doc);
   const decls: string[] = [];
   const flags: string[] = [];
   for (const style of STYLE_ORDER) {
     const c = changes[style];
-    const add = (prop: string, value: string) => {
-      decls.push(`--docs-${style}-${prop}: ${value}`);
-      flags.push(`${style}-${prop}`);
-    };
-    if (c.font) add("font", fontStack(c.font));
-    if (c.size !== undefined) add("size", `${c.size}pt`);
-    if (c.color) add("color", c.color);
-    if (c.bold !== undefined) add("weight", c.bold ? "700" : "400");
-    if (c.italic !== undefined) add("italic", c.italic ? "italic" : "normal");
-    if (c.underline !== undefined) add("underline", c.underline ? "underline" : "none");
-    if (c.lineSpacing !== undefined) add("ls", String(c.lineSpacing));
-    if (c.spaceBefore !== undefined) add("before", `${c.spaceBefore}pt`);
-    if (c.spaceAfter !== undefined) add("after", `${c.spaceAfter}pt`);
-    if (c.align) add("align", c.align);
+    const values: [string, string | undefined][] = [
+      ["font", c.font && fontStack(c.font)],
+      ["size", c.size === undefined ? undefined : `${c.size}pt`],
+      ["weight", c.bold === undefined ? undefined : c.bold ? "700" : "400"],
+      ["italic", c.italic === undefined ? undefined : c.italic ? "italic" : "normal"],
+      ["underline", c.underline === undefined ? undefined : c.underline ? "underline" : "none"],
+      ["ls", c.lineSpacing === undefined ? undefined : String(c.lineSpacing)],
+      ["before", c.spaceBefore === undefined ? undefined : `${c.spaceBefore}pt`],
+      ["after", c.spaceAfter === undefined ? undefined : `${c.spaceAfter}pt`],
+      ["align", c.align],
+    ];
+    const set = values.filter((v): v is [string, string] => Boolean(v[1]));
+    for (const [prop, value] of set) decls.push(`--docs-${style}-${prop}: ${value}`);
+    if (set.length > 0) flags.push(style);
+    if (c.color) {
+      decls.push(`--docs-${style}-color: ${c.color}`);
+      flags.push(`${style}-color`);
+    }
   }
   return { style: decls.join("; "), flags: flags.join(" ") };
 }

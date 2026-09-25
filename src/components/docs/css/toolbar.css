@@ -153,8 +153,7 @@
   background: var(--docs-tb-on);
   color: var(--docs-tb-on-icon);
 }
-.docs-tb-btn:disabled,
-.docs-tb-btn[aria-disabled="true"] {
+.docs-tb-btn:disabled {
   opacity: 0.3;
   cursor: default;
 }
@@ -216,7 +215,7 @@
   border-radius: 4px;
   cursor: pointer;
 }
-.docs-tb-combo:hover:not([data-disabled], [data-open]) {
+.docs-tb-combo:hover:not([data-open]) {
   background: color-mix(in srgb, var(--docs-tb-icon) 8%, var(--docs-tb-bg));
 }
 .docs-tb-combo[data-open] {
@@ -288,7 +287,7 @@
   border: 1px solid var(--docs-tb-outline);
   border-radius: 4px;
 }
-.docs-size-box:hover:not([data-disabled], [data-open], :focus-within) {
+.docs-size-box:hover:not([data-open], :focus-within) {
   border-color: var(--docs-tb-text);
 }
 .docs-size-box[data-open],
@@ -310,9 +309,6 @@
 }
 .docs-size-box:focus-within input {
   color: var(--docs-tb-text);
-}
-.docs-size-box[data-disabled] {
-  opacity: 0.3;
 }
 
 /* Text color and Highlight color: the symbol, and a 22 × 4 bar of the
@@ -486,7 +482,8 @@
   color: var(--docs-tb-icon);
   cursor: text;
 }
-.docs-search > svg {
+.docs-search > svg,
+.docs-search-open > svg {
   position: absolute;
   left: 0;
   margin: 4px 8px;
@@ -528,12 +525,6 @@
 }
 .docs-search-open[data-results] {
   border-radius: 8px 8px 0 0;
-}
-.docs-search-open > svg {
-  position: absolute;
-  left: 0;
-  margin: 4px 8px;
-  pointer-events: none;
 }
 .docs-search-results {
   position: fixed;
@@ -740,7 +731,6 @@
   color: inherit;
 }
 .docs-menu-styles .docs-menu-item {
-  min-height: 32px;
   line-height: 1.2;
 }
 .docs-menu-styles .docs-style-options {
@@ -940,7 +930,6 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 5px;
   width: 80px;
   height: 90px;
   padding: 0;
@@ -984,10 +973,6 @@
   height: 3px;
   border-radius: 1px;
   background: #d9d9d9;
-}
-.docs-list-tile-check {
-  width: 81px;
-  height: 46px;
 }
 .docs-list-tile-check .docs-list-tile-face {
   width: 81px;
@@ -1248,21 +1233,6 @@
   color: var(--docs-tb-icon);
   font: 500 11px/16px var(--docs-tb-font);
 }
-.docs-color-field input {
-  box-sizing: border-box;
-  height: 36px;
-  padding: 1px 8px;
-  border: 1px solid var(--docs-tb-sep);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--docs-tb-text);
-  font: 400 14px/20px var(--docs-tb-font);
-  outline: none;
-}
-.docs-color-field input:focus {
-  padding: 0 7px;
-  border: 2px solid var(--docs-tb-primary);
-}
 .docs-color-hex input {
   width: 75px;
 }
@@ -1290,15 +1260,12 @@
 .docs-spacing-row label {
   flex: 1;
 }
-.docs-spacing-row .docs-tb-field,
-.docs-spacing-dialog .docs-tb-field {
-  width: 100%;
-}
 
 /* Insert image by URL. */
 .docs-image-dialog {
   width: min(560px, calc(100vw - 32px));
 }
+.docs-spacing-dialog .docs-tb-field,
 .docs-image-dialog .docs-tb-field {
   width: 100%;
 }
@@ -1540,579 +1507,220 @@
 }
 
 /* ── The document's named styles ──────────────────────────────────────────
-   Update 'Heading 1' to match stores a style's changes on the document
-   (toolbar/styles.ts); the editor's root carries each change as a variable
-   and names it in data-docs-styles, and only then does its rule apply —
-   everything else stays Google Docs' default look. */
-html .docs-prose[data-docs-styles~="normal-font"] {
-  font-family: var(--docs-normal-font);
+   A style the document changed (Update 'Heading 1' to match) is named in
+   the editor root's data-docs-styles and its changes are variables there
+   (toolbar/styles.ts); the fallbacks are Google Docs' defaults. */
+html .docs-prose[data-docs-styles~="normal"] {
+  font-family: var(--docs-normal-font, Arial, Arimo, "Liberation Sans", Helvetica, sans-serif);
+  font-size: var(--docs-normal-size, 11pt);
 }
-html .docs-prose[data-docs-styles~="normal-size"] {
-  font-size: var(--docs-normal-size);
+html .docs-prose[data-docs-styles~="normal"] p:not([data-doc-style]) {
+  font-weight: var(--docs-normal-weight, 400);
+  font-style: var(--docs-normal-italic, normal);
+  text-decoration-line: var(--docs-normal-underline, none);
+  line-height: calc(var(--docs-ls, var(--docs-normal-ls, 1.15)) * 1.15);
+  padding-top: var(--docs-normal-before, 0pt);
+  padding-bottom: var(--docs-normal-after, 0pt);
+  text-align: var(--docs-normal-align, left);
 }
 html .docs-prose[data-docs-styles~="normal-color"] {
   color: var(--docs-normal-color);
 }
-html .docs-prose[data-docs-styles~="normal-weight"] p:not([data-doc-style]) {
-  font-weight: var(--docs-normal-weight);
-}
-html .docs-prose[data-docs-styles~="normal-italic"] p:not([data-doc-style]) {
-  font-style: var(--docs-normal-italic);
-}
-html .docs-prose[data-docs-styles~="normal-underline"] p:not([data-doc-style]) {
-  text-decoration-line: var(--docs-normal-underline);
-}
-html .docs-prose[data-docs-styles~="normal-ls"] p:not([data-doc-style]) {
-  line-height: calc(var(--docs-ls, var(--docs-normal-ls)) * 1.15);
-}
-html .docs-prose[data-docs-styles~="normal-before"] p:not([data-doc-style]) {
-  padding-top: var(--docs-normal-before);
-}
-html .docs-prose[data-docs-styles~="normal-after"] p:not([data-doc-style]) {
-  padding-bottom: var(--docs-normal-after);
-}
-html .docs-prose[data-docs-styles~="normal-align"] p:not([data-doc-style]) {
-  text-align: var(--docs-normal-align);
-}
-html .docs-prose[data-docs-styles~="title-font"] p[data-doc-style="title"] {
-  font-family: var(--docs-title-font);
-}
-html .docs-prose[data-docs-styles~="title-size"] p[data-doc-style="title"] {
-  font-size: var(--docs-title-size);
+html .docs-prose[data-docs-styles~="title"] p[data-doc-style="title"] {
+  font-family: var(--docs-title-font, inherit);
+  font-size: var(--docs-title-size, 26pt);
+  font-weight: var(--docs-title-weight, 400);
+  font-style: var(--docs-title-italic, normal);
+  text-decoration-line: var(--docs-title-underline, none);
+  line-height: calc(var(--docs-ls, var(--docs-title-ls, 1.15)) * 1.15);
+  padding-top: var(--docs-title-before, 0pt);
+  padding-bottom: var(--docs-title-after, 3pt);
+  text-align: var(--docs-title-align, left);
 }
 html .docs-prose[data-docs-styles~="title-color"] p[data-doc-style="title"] {
   color: var(--docs-title-color);
 }
-html .docs-prose[data-docs-styles~="title-weight"] p[data-doc-style="title"] {
-  font-weight: var(--docs-title-weight);
-}
-html .docs-prose[data-docs-styles~="title-italic"] p[data-doc-style="title"] {
-  font-style: var(--docs-title-italic);
-}
-html .docs-prose[data-docs-styles~="title-underline"] p[data-doc-style="title"] {
-  text-decoration-line: var(--docs-title-underline);
-}
-html .docs-prose[data-docs-styles~="title-ls"] p[data-doc-style="title"] {
-  line-height: calc(var(--docs-ls, var(--docs-title-ls)) * 1.15);
-}
-html .docs-prose[data-docs-styles~="title-before"] p[data-doc-style="title"] {
-  padding-top: var(--docs-title-before);
-}
-html .docs-prose[data-docs-styles~="title-after"] p[data-doc-style="title"] {
-  padding-bottom: var(--docs-title-after);
-}
-html .docs-prose[data-docs-styles~="title-align"] p[data-doc-style="title"] {
-  text-align: var(--docs-title-align);
-}
-html .docs-prose[data-docs-styles~="subtitle-font"] p[data-doc-style="subtitle"] {
-  font-family: var(--docs-subtitle-font);
-}
-html .docs-prose[data-docs-styles~="subtitle-size"] p[data-doc-style="subtitle"] {
-  font-size: var(--docs-subtitle-size);
+html .docs-prose[data-docs-styles~="subtitle"] p[data-doc-style="subtitle"] {
+  font-family: var(--docs-subtitle-font, inherit);
+  font-size: var(--docs-subtitle-size, 15pt);
+  font-weight: var(--docs-subtitle-weight, 400);
+  font-style: var(--docs-subtitle-italic, normal);
+  text-decoration-line: var(--docs-subtitle-underline, none);
+  line-height: calc(var(--docs-ls, var(--docs-subtitle-ls, 1.15)) * 1.15);
+  padding-top: var(--docs-subtitle-before, 0pt);
+  padding-bottom: var(--docs-subtitle-after, 16pt);
+  text-align: var(--docs-subtitle-align, left);
 }
 html .docs-prose[data-docs-styles~="subtitle-color"] p[data-doc-style="subtitle"] {
   color: var(--docs-subtitle-color);
 }
-html .docs-prose[data-docs-styles~="subtitle-weight"] p[data-doc-style="subtitle"] {
-  font-weight: var(--docs-subtitle-weight);
-}
-html .docs-prose[data-docs-styles~="subtitle-italic"] p[data-doc-style="subtitle"] {
-  font-style: var(--docs-subtitle-italic);
-}
-html .docs-prose[data-docs-styles~="subtitle-underline"] p[data-doc-style="subtitle"] {
-  text-decoration-line: var(--docs-subtitle-underline);
-}
-html .docs-prose[data-docs-styles~="subtitle-ls"] p[data-doc-style="subtitle"] {
-  line-height: calc(var(--docs-ls, var(--docs-subtitle-ls)) * 1.15);
-}
-html .docs-prose[data-docs-styles~="subtitle-before"] p[data-doc-style="subtitle"] {
-  padding-top: var(--docs-subtitle-before);
-}
-html .docs-prose[data-docs-styles~="subtitle-after"] p[data-doc-style="subtitle"] {
-  padding-bottom: var(--docs-subtitle-after);
-}
-html .docs-prose[data-docs-styles~="subtitle-align"] p[data-doc-style="subtitle"] {
-  text-align: var(--docs-subtitle-align);
-}
-html .docs-prose[data-docs-styles~="h1-font"] h1 {
-  font-family: var(--docs-h1-font);
-}
-html .docs-prose[data-docs-styles~="h1-size"] h1 {
-  font-size: var(--docs-h1-size);
+html .docs-prose[data-docs-styles~="h1"] h1 {
+  font-family: var(--docs-h1-font, inherit);
+  font-size: var(--docs-h1-size, 20pt);
+  font-weight: var(--docs-h1-weight, 400);
+  font-style: var(--docs-h1-italic, normal);
+  text-decoration-line: var(--docs-h1-underline, none);
+  line-height: calc(var(--docs-ls, var(--docs-h1-ls, 1.15)) * 1.15);
+  padding-top: var(--docs-h1-before, 20pt);
+  padding-bottom: var(--docs-h1-after, 6pt);
+  text-align: var(--docs-h1-align, left);
 }
 html .docs-prose[data-docs-styles~="h1-color"] h1 {
   color: var(--docs-h1-color);
 }
-html .docs-prose[data-docs-styles~="h1-weight"] h1 {
-  font-weight: var(--docs-h1-weight);
-}
-html .docs-prose[data-docs-styles~="h1-italic"] h1 {
-  font-style: var(--docs-h1-italic);
-}
-html .docs-prose[data-docs-styles~="h1-underline"] h1 {
-  text-decoration-line: var(--docs-h1-underline);
-}
-html .docs-prose[data-docs-styles~="h1-ls"] h1 {
-  line-height: calc(var(--docs-ls, var(--docs-h1-ls)) * 1.15);
-}
-html .docs-prose[data-docs-styles~="h1-before"] h1 {
-  padding-top: var(--docs-h1-before);
-}
-html .docs-prose[data-docs-styles~="h1-after"] h1 {
-  padding-bottom: var(--docs-h1-after);
-}
-html .docs-prose[data-docs-styles~="h1-align"] h1 {
-  text-align: var(--docs-h1-align);
-}
-html .docs-prose[data-docs-styles~="h2-font"] h2 {
-  font-family: var(--docs-h2-font);
-}
-html .docs-prose[data-docs-styles~="h2-size"] h2 {
-  font-size: var(--docs-h2-size);
+html .docs-prose[data-docs-styles~="h2"] h2 {
+  font-family: var(--docs-h2-font, inherit);
+  font-size: var(--docs-h2-size, 16pt);
+  font-weight: var(--docs-h2-weight, 400);
+  font-style: var(--docs-h2-italic, normal);
+  text-decoration-line: var(--docs-h2-underline, none);
+  line-height: calc(var(--docs-ls, var(--docs-h2-ls, 1.15)) * 1.15);
+  padding-top: var(--docs-h2-before, 18pt);
+  padding-bottom: var(--docs-h2-after, 6pt);
+  text-align: var(--docs-h2-align, left);
 }
 html .docs-prose[data-docs-styles~="h2-color"] h2 {
   color: var(--docs-h2-color);
 }
-html .docs-prose[data-docs-styles~="h2-weight"] h2 {
-  font-weight: var(--docs-h2-weight);
-}
-html .docs-prose[data-docs-styles~="h2-italic"] h2 {
-  font-style: var(--docs-h2-italic);
-}
-html .docs-prose[data-docs-styles~="h2-underline"] h2 {
-  text-decoration-line: var(--docs-h2-underline);
-}
-html .docs-prose[data-docs-styles~="h2-ls"] h2 {
-  line-height: calc(var(--docs-ls, var(--docs-h2-ls)) * 1.15);
-}
-html .docs-prose[data-docs-styles~="h2-before"] h2 {
-  padding-top: var(--docs-h2-before);
-}
-html .docs-prose[data-docs-styles~="h2-after"] h2 {
-  padding-bottom: var(--docs-h2-after);
-}
-html .docs-prose[data-docs-styles~="h2-align"] h2 {
-  text-align: var(--docs-h2-align);
-}
-html .docs-prose[data-docs-styles~="h3-font"] h3 {
-  font-family: var(--docs-h3-font);
-}
-html .docs-prose[data-docs-styles~="h3-size"] h3 {
-  font-size: var(--docs-h3-size);
+html .docs-prose[data-docs-styles~="h3"] h3 {
+  font-family: var(--docs-h3-font, inherit);
+  font-size: var(--docs-h3-size, 14pt);
+  font-weight: var(--docs-h3-weight, 400);
+  font-style: var(--docs-h3-italic, normal);
+  text-decoration-line: var(--docs-h3-underline, none);
+  line-height: calc(var(--docs-ls, var(--docs-h3-ls, 1.15)) * 1.15);
+  padding-top: var(--docs-h3-before, 16pt);
+  padding-bottom: var(--docs-h3-after, 4pt);
+  text-align: var(--docs-h3-align, left);
 }
 html .docs-prose[data-docs-styles~="h3-color"] h3 {
   color: var(--docs-h3-color);
 }
-html .docs-prose[data-docs-styles~="h3-weight"] h3 {
-  font-weight: var(--docs-h3-weight);
-}
-html .docs-prose[data-docs-styles~="h3-italic"] h3 {
-  font-style: var(--docs-h3-italic);
-}
-html .docs-prose[data-docs-styles~="h3-underline"] h3 {
-  text-decoration-line: var(--docs-h3-underline);
-}
-html .docs-prose[data-docs-styles~="h3-ls"] h3 {
-  line-height: calc(var(--docs-ls, var(--docs-h3-ls)) * 1.15);
-}
-html .docs-prose[data-docs-styles~="h3-before"] h3 {
-  padding-top: var(--docs-h3-before);
-}
-html .docs-prose[data-docs-styles~="h3-after"] h3 {
-  padding-bottom: var(--docs-h3-after);
-}
-html .docs-prose[data-docs-styles~="h3-align"] h3 {
-  text-align: var(--docs-h3-align);
-}
-html .docs-prose[data-docs-styles~="h4-font"] h4 {
-  font-family: var(--docs-h4-font);
-}
-html .docs-prose[data-docs-styles~="h4-size"] h4 {
-  font-size: var(--docs-h4-size);
+html .docs-prose[data-docs-styles~="h4"] h4 {
+  font-family: var(--docs-h4-font, inherit);
+  font-size: var(--docs-h4-size, 12pt);
+  font-weight: var(--docs-h4-weight, 400);
+  font-style: var(--docs-h4-italic, normal);
+  text-decoration-line: var(--docs-h4-underline, none);
+  line-height: calc(var(--docs-ls, var(--docs-h4-ls, 1.15)) * 1.15);
+  padding-top: var(--docs-h4-before, 14pt);
+  padding-bottom: var(--docs-h4-after, 4pt);
+  text-align: var(--docs-h4-align, left);
 }
 html .docs-prose[data-docs-styles~="h4-color"] h4 {
   color: var(--docs-h4-color);
 }
-html .docs-prose[data-docs-styles~="h4-weight"] h4 {
-  font-weight: var(--docs-h4-weight);
-}
-html .docs-prose[data-docs-styles~="h4-italic"] h4 {
-  font-style: var(--docs-h4-italic);
-}
-html .docs-prose[data-docs-styles~="h4-underline"] h4 {
-  text-decoration-line: var(--docs-h4-underline);
-}
-html .docs-prose[data-docs-styles~="h4-ls"] h4 {
-  line-height: calc(var(--docs-ls, var(--docs-h4-ls)) * 1.15);
-}
-html .docs-prose[data-docs-styles~="h4-before"] h4 {
-  padding-top: var(--docs-h4-before);
-}
-html .docs-prose[data-docs-styles~="h4-after"] h4 {
-  padding-bottom: var(--docs-h4-after);
-}
-html .docs-prose[data-docs-styles~="h4-align"] h4 {
-  text-align: var(--docs-h4-align);
-}
-html .docs-prose[data-docs-styles~="h5-font"] h5 {
-  font-family: var(--docs-h5-font);
-}
-html .docs-prose[data-docs-styles~="h5-size"] h5 {
-  font-size: var(--docs-h5-size);
+html .docs-prose[data-docs-styles~="h5"] h5 {
+  font-family: var(--docs-h5-font, inherit);
+  font-size: var(--docs-h5-size, 11pt);
+  font-weight: var(--docs-h5-weight, 400);
+  font-style: var(--docs-h5-italic, normal);
+  text-decoration-line: var(--docs-h5-underline, none);
+  line-height: calc(var(--docs-ls, var(--docs-h5-ls, 1.15)) * 1.15);
+  padding-top: var(--docs-h5-before, 12pt);
+  padding-bottom: var(--docs-h5-after, 4pt);
+  text-align: var(--docs-h5-align, left);
 }
 html .docs-prose[data-docs-styles~="h5-color"] h5 {
   color: var(--docs-h5-color);
 }
-html .docs-prose[data-docs-styles~="h5-weight"] h5 {
-  font-weight: var(--docs-h5-weight);
-}
-html .docs-prose[data-docs-styles~="h5-italic"] h5 {
-  font-style: var(--docs-h5-italic);
-}
-html .docs-prose[data-docs-styles~="h5-underline"] h5 {
-  text-decoration-line: var(--docs-h5-underline);
-}
-html .docs-prose[data-docs-styles~="h5-ls"] h5 {
-  line-height: calc(var(--docs-ls, var(--docs-h5-ls)) * 1.15);
-}
-html .docs-prose[data-docs-styles~="h5-before"] h5 {
-  padding-top: var(--docs-h5-before);
-}
-html .docs-prose[data-docs-styles~="h5-after"] h5 {
-  padding-bottom: var(--docs-h5-after);
-}
-html .docs-prose[data-docs-styles~="h5-align"] h5 {
-  text-align: var(--docs-h5-align);
-}
-html .docs-prose[data-docs-styles~="h6-font"] h6 {
-  font-family: var(--docs-h6-font);
-}
-html .docs-prose[data-docs-styles~="h6-size"] h6 {
-  font-size: var(--docs-h6-size);
+html .docs-prose[data-docs-styles~="h6"] h6 {
+  font-family: var(--docs-h6-font, inherit);
+  font-size: var(--docs-h6-size, 11pt);
+  font-weight: var(--docs-h6-weight, 400);
+  font-style: var(--docs-h6-italic, italic);
+  text-decoration-line: var(--docs-h6-underline, none);
+  line-height: calc(var(--docs-ls, var(--docs-h6-ls, 1.15)) * 1.15);
+  padding-top: var(--docs-h6-before, 12pt);
+  padding-bottom: var(--docs-h6-after, 4pt);
+  text-align: var(--docs-h6-align, left);
 }
 html .docs-prose[data-docs-styles~="h6-color"] h6 {
   color: var(--docs-h6-color);
-}
-html .docs-prose[data-docs-styles~="h6-weight"] h6 {
-  font-weight: var(--docs-h6-weight);
-}
-html .docs-prose[data-docs-styles~="h6-italic"] h6 {
-  font-style: var(--docs-h6-italic);
-}
-html .docs-prose[data-docs-styles~="h6-underline"] h6 {
-  text-decoration-line: var(--docs-h6-underline);
-}
-html .docs-prose[data-docs-styles~="h6-ls"] h6 {
-  line-height: calc(var(--docs-ls, var(--docs-h6-ls)) * 1.15);
-}
-html .docs-prose[data-docs-styles~="h6-before"] h6 {
-  padding-top: var(--docs-h6-before);
-}
-html .docs-prose[data-docs-styles~="h6-after"] h6 {
-  padding-bottom: var(--docs-h6-after);
-}
-html .docs-prose[data-docs-styles~="h6-align"] h6 {
-  text-align: var(--docs-h6-align);
 }
 html .docs-prose[data-docs-styles] > :first-child {
   padding-top: 0;
 }
 
 /* ── List presets ─────────────────────────────────────────────────────────
-   A list draws level n with --docs-bullet-n or --docs-number-n. The page
-   sets Google Docs' defaults (● ○ ■, 1. a. i.); the outermost list's
-   preset (data-list-style) sets its own for everything inside it. The
-   levels count from the outermost list. */
-@counter-style docs-decimal-dot {
-  system: extends decimal;
-  suffix: ".\2003";
-}
-@counter-style docs-decimal-dotparen {
-  system: extends decimal;
-  suffix: ".)\2003";
-}
-@counter-style docs-decimal-leading-zero-dot {
-  system: extends decimal-leading-zero;
-  suffix: ".\2003";
-}
-@counter-style docs-decimal-paren {
-  system: extends decimal;
-  suffix: ")\2003";
-}
-@counter-style docs-decimal-parens {
-  system: extends decimal;
-  prefix: "(";
-  suffix: ")\2003";
-}
-@counter-style docs-lower-alpha-dot {
-  system: extends lower-alpha;
-  suffix: ".\2003";
-}
-@counter-style docs-lower-alpha-dotparen {
-  system: extends lower-alpha;
-  suffix: ".)\2003";
-}
-@counter-style docs-lower-alpha-paren {
-  system: extends lower-alpha;
-  suffix: ")\2003";
-}
-@counter-style docs-lower-alpha-parens {
-  system: extends lower-alpha;
-  prefix: "(";
-  suffix: ")\2003";
-}
-@counter-style docs-lower-roman-dot {
-  system: extends lower-roman;
-  suffix: ".\2003";
-}
-@counter-style docs-lower-roman-dotparen {
-  system: extends lower-roman;
-  suffix: ".)\2003";
-}
-@counter-style docs-lower-roman-paren {
-  system: extends lower-roman;
-  suffix: ")\2003";
-}
-@counter-style docs-lower-roman-parens {
-  system: extends lower-roman;
-  prefix: "(";
-  suffix: ")\2003";
-}
-@counter-style docs-upper-alpha-dot {
-  system: extends upper-alpha;
-  suffix: ".\2003";
-}
-@counter-style docs-upper-alpha-paren {
-  system: extends upper-alpha;
-  suffix: ")\2003";
-}
-@counter-style docs-upper-alpha-parens {
-  system: extends upper-alpha;
-  prefix: "(";
-  suffix: ")\2003";
-}
-@counter-style docs-upper-roman-dot {
-  system: extends upper-roman;
-  suffix: ".\2003";
-}
+   Level n of a list draws --docs-bullet-n or --docs-number-n, counted from
+   the outermost list, whose preset (data-list-style) sets them; the page
+   sets Google Docs' defaults (● ○ ■, 1. a. i.). */
+@counter-style docs-decimal-dot { system: extends decimal; suffix: ".\2003"; }
+@counter-style docs-decimal-dotparen { system: extends decimal; suffix: ".)\2003"; }
+@counter-style docs-decimal-leading-zero-dot { system: extends decimal-leading-zero; suffix: ".\2003"; }
+@counter-style docs-decimal-paren { system: extends decimal; suffix: ")\2003"; }
+@counter-style docs-decimal-parens { system: extends decimal; prefix: "("; suffix: ")\2003"; }
+@counter-style docs-lower-alpha-dot { system: extends lower-alpha; suffix: ".\2003"; }
+@counter-style docs-lower-alpha-dotparen { system: extends lower-alpha; suffix: ".)\2003"; }
+@counter-style docs-lower-alpha-paren { system: extends lower-alpha; suffix: ")\2003"; }
+@counter-style docs-lower-alpha-parens { system: extends lower-alpha; prefix: "("; suffix: ")\2003"; }
+@counter-style docs-lower-roman-dot { system: extends lower-roman; suffix: ".\2003"; }
+@counter-style docs-lower-roman-dotparen { system: extends lower-roman; suffix: ".)\2003"; }
+@counter-style docs-lower-roman-paren { system: extends lower-roman; suffix: ")\2003"; }
+@counter-style docs-lower-roman-parens { system: extends lower-roman; prefix: "("; suffix: ")\2003"; }
+@counter-style docs-upper-alpha-dot { system: extends upper-alpha; suffix: ".\2003"; }
+@counter-style docs-upper-alpha-paren { system: extends upper-alpha; suffix: ")\2003"; }
+@counter-style docs-upper-alpha-parens { system: extends upper-alpha; prefix: "("; suffix: ")\2003"; }
+@counter-style docs-upper-roman-dot { system: extends upper-roman; suffix: ".\2003"; }
 
 .docs-prose {
-  --docs-bullet-1: "●\2003";
-  --docs-bullet-2: "○\2003";
-  --docs-bullet-3: "■\2003";
-  --docs-bullet-4: "●\2003";
-  --docs-bullet-5: "○\2003";
-  --docs-bullet-6: "■\2003";
-  --docs-bullet-7: "●\2003";
-  --docs-bullet-8: "○\2003";
-  --docs-bullet-9: "■\2003";
-  --docs-number-1: docs-decimal-dot;
-  --docs-number-2: docs-lower-alpha-dot;
-  --docs-number-3: docs-lower-roman-dot;
-  --docs-number-4: docs-decimal-dot;
-  --docs-number-5: docs-lower-alpha-dot;
-  --docs-number-6: docs-lower-roman-dot;
-  --docs-number-7: docs-decimal-dot;
-  --docs-number-8: docs-lower-alpha-dot;
-  --docs-number-9: docs-lower-roman-dot;
+  --docs-bullet-1: "●\2003"; --docs-bullet-2: "○\2003"; --docs-bullet-3: "■\2003"; --docs-bullet-4: "●\2003"; --docs-bullet-5: "○\2003"; --docs-bullet-6: "■\2003"; --docs-bullet-7: "●\2003"; --docs-bullet-8: "○\2003"; --docs-bullet-9: "■\2003";
+  --docs-number-1: docs-decimal-dot; --docs-number-2: docs-lower-alpha-dot; --docs-number-3: docs-lower-roman-dot; --docs-number-4: docs-decimal-dot; --docs-number-5: docs-lower-alpha-dot; --docs-number-6: docs-lower-roman-dot; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
 }
 .docs-prose [data-list-style="BULLET_DIAMONDX_ARROW3D_SQUARE"] {
-  --docs-bullet-1: "❖\2003";
-  --docs-bullet-2: "➢\2003";
-  --docs-bullet-3: "■\2003";
-  --docs-bullet-4: "●\2003";
-  --docs-bullet-5: "◆\2003";
-  --docs-bullet-6: "➢\2003";
-  --docs-bullet-7: "■\2003";
-  --docs-bullet-8: "●\2003";
-  --docs-bullet-9: "◆\2003";
+  --docs-bullet-1: "❖\2003"; --docs-bullet-2: "➢\2003"; --docs-bullet-3: "■\2003"; --docs-bullet-4: "●\2003"; --docs-bullet-5: "◆\2003"; --docs-bullet-6: "➢\2003"; --docs-bullet-7: "■\2003"; --docs-bullet-8: "●\2003"; --docs-bullet-9: "◆\2003";
 }
 .docs-prose [data-list-style="BULLET_CHECKBOX"] {
-  --docs-bullet-1: "❏\2003";
-  --docs-bullet-2: "❏\2003";
-  --docs-bullet-3: "❏\2003";
-  --docs-bullet-4: "❏\2003";
-  --docs-bullet-5: "❏\2003";
-  --docs-bullet-6: "❏\2003";
-  --docs-bullet-7: "❏\2003";
-  --docs-bullet-8: "❏\2003";
-  --docs-bullet-9: "❏\2003";
+  --docs-bullet-1: "❏\2003"; --docs-bullet-2: "❏\2003"; --docs-bullet-3: "❏\2003"; --docs-bullet-4: "❏\2003"; --docs-bullet-5: "❏\2003"; --docs-bullet-6: "❏\2003"; --docs-bullet-7: "❏\2003"; --docs-bullet-8: "❏\2003"; --docs-bullet-9: "❏\2003";
 }
 .docs-prose [data-list-style="BULLET_ARROW_DIAMOND_DISC"] {
-  --docs-bullet-1: "➔\2003";
-  --docs-bullet-2: "◆\2003";
-  --docs-bullet-3: "●\2003";
-  --docs-bullet-4: "○\2003";
-  --docs-bullet-5: "◆\2003";
-  --docs-bullet-6: "●\2003";
-  --docs-bullet-7: "○\2003";
-  --docs-bullet-8: "◆\2003";
-  --docs-bullet-9: "●\2003";
+  --docs-bullet-1: "➔\2003"; --docs-bullet-2: "◆\2003"; --docs-bullet-3: "●\2003"; --docs-bullet-4: "○\2003"; --docs-bullet-5: "◆\2003"; --docs-bullet-6: "●\2003"; --docs-bullet-7: "○\2003"; --docs-bullet-8: "◆\2003"; --docs-bullet-9: "●\2003";
 }
 .docs-prose [data-list-style="BULLET_STAR_CIRCLE_SQUARE"] {
-  --docs-bullet-1: "★\2003";
-  --docs-bullet-2: "○\2003";
-  --docs-bullet-3: "■\2003";
-  --docs-bullet-4: "●\2003";
-  --docs-bullet-5: "○\2003";
-  --docs-bullet-6: "■\2003";
-  --docs-bullet-7: "●\2003";
-  --docs-bullet-8: "○\2003";
-  --docs-bullet-9: "■\2003";
+  --docs-bullet-1: "★\2003"; --docs-bullet-2: "○\2003"; --docs-bullet-3: "■\2003"; --docs-bullet-4: "●\2003"; --docs-bullet-5: "○\2003"; --docs-bullet-6: "■\2003"; --docs-bullet-7: "●\2003"; --docs-bullet-8: "○\2003"; --docs-bullet-9: "■\2003";
 }
 .docs-prose [data-list-style="BULLET_ARROW3D_CIRCLE_SQUARE"] {
-  --docs-bullet-1: "➢\2003";
-  --docs-bullet-2: "○\2003";
-  --docs-bullet-3: "■\2003";
-  --docs-bullet-4: "●\2003";
-  --docs-bullet-5: "○\2003";
-  --docs-bullet-6: "■\2003";
-  --docs-bullet-7: "●\2003";
-  --docs-bullet-8: "○\2003";
-  --docs-bullet-9: "■\2003";
+  --docs-bullet-1: "➢\2003"; --docs-bullet-2: "○\2003"; --docs-bullet-3: "■\2003"; --docs-bullet-4: "●\2003"; --docs-bullet-5: "○\2003"; --docs-bullet-6: "■\2003"; --docs-bullet-7: "●\2003"; --docs-bullet-8: "○\2003"; --docs-bullet-9: "■\2003";
 }
 .docs-prose [data-list-style="BULLET_DASH"] {
-  --docs-bullet-1: "-\2003";
-  --docs-bullet-2: "-\2003";
-  --docs-bullet-3: "-\2003";
-  --docs-bullet-4: "-\2003";
-  --docs-bullet-5: "-\2003";
-  --docs-bullet-6: "-\2003";
-  --docs-bullet-7: "-\2003";
-  --docs-bullet-8: "-\2003";
-  --docs-bullet-9: "-\2003";
+  --docs-bullet-1: "-\2003"; --docs-bullet-2: "-\2003"; --docs-bullet-3: "-\2003"; --docs-bullet-4: "-\2003"; --docs-bullet-5: "-\2003"; --docs-bullet-6: "-\2003"; --docs-bullet-7: "-\2003"; --docs-bullet-8: "-\2003"; --docs-bullet-9: "-\2003";
 }
 .docs-prose [data-list-style="BULLET_PLUS"] {
-  --docs-bullet-1: "+\2003";
-  --docs-bullet-2: "+\2003";
-  --docs-bullet-3: "+\2003";
-  --docs-bullet-4: "+\2003";
-  --docs-bullet-5: "+\2003";
-  --docs-bullet-6: "+\2003";
-  --docs-bullet-7: "+\2003";
-  --docs-bullet-8: "+\2003";
-  --docs-bullet-9: "+\2003";
+  --docs-bullet-1: "+\2003"; --docs-bullet-2: "+\2003"; --docs-bullet-3: "+\2003"; --docs-bullet-4: "+\2003"; --docs-bullet-5: "+\2003"; --docs-bullet-6: "+\2003"; --docs-bullet-7: "+\2003"; --docs-bullet-8: "+\2003"; --docs-bullet-9: "+\2003";
 }
 .docs-prose [data-list-style="NUMBERED_DECIMAL_ALPHA_ROMAN_PARENS"] {
-  --docs-number-1: docs-decimal-paren;
-  --docs-number-2: docs-lower-alpha-paren;
-  --docs-number-3: docs-lower-roman-paren;
-  --docs-number-4: docs-decimal-parens;
-  --docs-number-5: docs-lower-alpha-parens;
-  --docs-number-6: docs-lower-roman-parens;
-  --docs-number-7: docs-decimal-dot;
-  --docs-number-8: docs-lower-alpha-dot;
-  --docs-number-9: docs-lower-roman-dot;
+  --docs-number-1: docs-decimal-paren; --docs-number-2: docs-lower-alpha-paren; --docs-number-3: docs-lower-roman-paren; --docs-number-4: docs-decimal-parens; --docs-number-5: docs-lower-alpha-parens; --docs-number-6: docs-lower-roman-parens; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
 }
 .docs-prose [data-list-style="NUMBERED_DECIMAL_ALPHA_ROMAN_TWO_PARENS"] {
-  --docs-number-1: docs-decimal-parens;
-  --docs-number-2: docs-lower-alpha-parens;
-  --docs-number-3: docs-lower-roman-parens;
-  --docs-number-4: docs-decimal-paren;
-  --docs-number-5: docs-lower-alpha-paren;
-  --docs-number-6: docs-lower-roman-paren;
-  --docs-number-7: docs-decimal-dot;
-  --docs-number-8: docs-lower-alpha-dot;
-  --docs-number-9: docs-lower-roman-dot;
+  --docs-number-1: docs-decimal-parens; --docs-number-2: docs-lower-alpha-parens; --docs-number-3: docs-lower-roman-parens; --docs-number-4: docs-decimal-paren; --docs-number-5: docs-lower-alpha-paren; --docs-number-6: docs-lower-roman-paren; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
 }
 .docs-prose [data-list-style="NUMBERED_DECIMAL_ALPHA_ROMAN_PERIOD_PARENS"] {
-  --docs-number-1: docs-decimal-dotparen;
-  --docs-number-2: docs-lower-alpha-dotparen;
-  --docs-number-3: docs-lower-roman-dotparen;
-  --docs-number-4: docs-decimal-parens;
-  --docs-number-5: docs-lower-alpha-parens;
-  --docs-number-6: docs-lower-roman-parens;
-  --docs-number-7: docs-decimal-dot;
-  --docs-number-8: docs-lower-alpha-dot;
-  --docs-number-9: docs-lower-roman-dot;
+  --docs-number-1: docs-decimal-dotparen; --docs-number-2: docs-lower-alpha-dotparen; --docs-number-3: docs-lower-roman-dotparen; --docs-number-4: docs-decimal-parens; --docs-number-5: docs-lower-alpha-parens; --docs-number-6: docs-lower-roman-parens; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
 }
 .docs-prose [data-list-style="NUMBERED_ZERODECIMAL_ALPHA_ROMAN"] {
-  --docs-number-1: docs-decimal-leading-zero-dot;
-  --docs-number-2: docs-lower-alpha-dot;
-  --docs-number-3: docs-lower-roman-dot;
-  --docs-number-4: docs-decimal-dot;
-  --docs-number-5: docs-lower-alpha-dot;
-  --docs-number-6: docs-lower-roman-dot;
-  --docs-number-7: docs-decimal-dot;
-  --docs-number-8: docs-lower-alpha-dot;
-  --docs-number-9: docs-lower-roman-dot;
+  --docs-number-1: docs-decimal-leading-zero-dot; --docs-number-2: docs-lower-alpha-dot; --docs-number-3: docs-lower-roman-dot; --docs-number-4: docs-decimal-dot; --docs-number-5: docs-lower-alpha-dot; --docs-number-6: docs-lower-roman-dot; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
 }
 .docs-prose [data-list-style="NUMBERED_ALPHA_ROMAN_DECIMAL"] {
-  --docs-number-1: docs-lower-alpha-dot;
-  --docs-number-2: docs-lower-roman-dot;
-  --docs-number-3: docs-decimal-dot;
-  --docs-number-4: docs-lower-alpha-dot;
-  --docs-number-5: docs-lower-roman-dot;
-  --docs-number-6: docs-decimal-dot;
-  --docs-number-7: docs-lower-alpha-dot;
-  --docs-number-8: docs-lower-roman-dot;
-  --docs-number-9: docs-decimal-dot;
+  --docs-number-1: docs-lower-alpha-dot; --docs-number-2: docs-lower-roman-dot; --docs-number-3: docs-decimal-dot; --docs-number-4: docs-lower-alpha-dot; --docs-number-5: docs-lower-roman-dot; --docs-number-6: docs-decimal-dot; --docs-number-7: docs-lower-alpha-dot; --docs-number-8: docs-lower-roman-dot; --docs-number-9: docs-decimal-dot;
 }
 .docs-prose [data-list-style="NUMBERED_ALPHA_ROMAN_DECIMAL_PARENS"] {
-  --docs-number-1: docs-lower-alpha-paren;
-  --docs-number-2: docs-lower-roman-paren;
-  --docs-number-3: docs-decimal-paren;
-  --docs-number-4: docs-lower-alpha-parens;
-  --docs-number-5: docs-lower-roman-parens;
-  --docs-number-6: docs-decimal-parens;
-  --docs-number-7: docs-lower-alpha-dot;
-  --docs-number-8: docs-lower-roman-dot;
-  --docs-number-9: docs-decimal-dot;
+  --docs-number-1: docs-lower-alpha-paren; --docs-number-2: docs-lower-roman-paren; --docs-number-3: docs-decimal-paren; --docs-number-4: docs-lower-alpha-parens; --docs-number-5: docs-lower-roman-parens; --docs-number-6: docs-decimal-parens; --docs-number-7: docs-lower-alpha-dot; --docs-number-8: docs-lower-roman-dot; --docs-number-9: docs-decimal-dot;
 }
 .docs-prose [data-list-style="NUMBERED_ALPHA_ROMAN_DECIMAL_TWO_PARENS"] {
-  --docs-number-1: docs-lower-alpha-parens;
-  --docs-number-2: docs-lower-roman-parens;
-  --docs-number-3: docs-decimal-parens;
-  --docs-number-4: docs-lower-alpha-paren;
-  --docs-number-5: docs-lower-roman-paren;
-  --docs-number-6: docs-decimal-paren;
-  --docs-number-7: docs-lower-alpha-dot;
-  --docs-number-8: docs-lower-roman-dot;
-  --docs-number-9: docs-decimal-dot;
+  --docs-number-1: docs-lower-alpha-parens; --docs-number-2: docs-lower-roman-parens; --docs-number-3: docs-decimal-parens; --docs-number-4: docs-lower-alpha-paren; --docs-number-5: docs-lower-roman-paren; --docs-number-6: docs-decimal-paren; --docs-number-7: docs-lower-alpha-dot; --docs-number-8: docs-lower-roman-dot; --docs-number-9: docs-decimal-dot;
 }
 .docs-prose [data-list-style="NUMBERED_UPPERALPHA_ALPHA_ROMAN"] {
-  --docs-number-1: docs-upper-alpha-dot;
-  --docs-number-2: docs-lower-alpha-dot;
-  --docs-number-3: docs-lower-roman-dot;
-  --docs-number-4: docs-decimal-dot;
-  --docs-number-5: docs-lower-alpha-dot;
-  --docs-number-6: docs-lower-roman-dot;
-  --docs-number-7: docs-decimal-dot;
-  --docs-number-8: docs-lower-alpha-dot;
-  --docs-number-9: docs-lower-roman-dot;
+  --docs-number-1: docs-upper-alpha-dot; --docs-number-2: docs-lower-alpha-dot; --docs-number-3: docs-lower-roman-dot; --docs-number-4: docs-decimal-dot; --docs-number-5: docs-lower-alpha-dot; --docs-number-6: docs-lower-roman-dot; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
 }
 .docs-prose [data-list-style="NUMBERED_UPPERALPHA_ALPHA_ROMAN_PARENS"] {
-  --docs-number-1: docs-upper-alpha-paren;
-  --docs-number-2: docs-lower-alpha-paren;
-  --docs-number-3: docs-lower-roman-paren;
-  --docs-number-4: docs-decimal-parens;
-  --docs-number-5: docs-lower-alpha-parens;
-  --docs-number-6: docs-lower-roman-parens;
-  --docs-number-7: docs-decimal-dot;
-  --docs-number-8: docs-lower-alpha-dot;
-  --docs-number-9: docs-lower-roman-dot;
+  --docs-number-1: docs-upper-alpha-paren; --docs-number-2: docs-lower-alpha-paren; --docs-number-3: docs-lower-roman-paren; --docs-number-4: docs-decimal-parens; --docs-number-5: docs-lower-alpha-parens; --docs-number-6: docs-lower-roman-parens; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
 }
 .docs-prose [data-list-style="NUMBERED_UPPERALPHA_ALPHA_ROMAN_TWO_PARENS"] {
-  --docs-number-1: docs-upper-alpha-parens;
-  --docs-number-2: docs-lower-alpha-parens;
-  --docs-number-3: docs-lower-roman-parens;
-  --docs-number-4: docs-decimal-paren;
-  --docs-number-5: docs-lower-alpha-paren;
-  --docs-number-6: docs-lower-roman-paren;
-  --docs-number-7: docs-decimal-dot;
-  --docs-number-8: docs-lower-alpha-dot;
-  --docs-number-9: docs-lower-roman-dot;
+  --docs-number-1: docs-upper-alpha-parens; --docs-number-2: docs-lower-alpha-parens; --docs-number-3: docs-lower-roman-parens; --docs-number-4: docs-decimal-paren; --docs-number-5: docs-lower-alpha-paren; --docs-number-6: docs-lower-roman-paren; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
 }
 .docs-prose [data-list-style="NUMBERED_UPPERROMAN_UPPERALPHA_DECIMAL"] {
-  --docs-number-1: docs-upper-roman-dot;
-  --docs-number-2: docs-upper-alpha-dot;
-  --docs-number-3: docs-decimal-dot;
-  --docs-number-4: docs-lower-alpha-paren;
-  --docs-number-5: docs-decimal-parens;
-  --docs-number-6: docs-lower-alpha-parens;
-  --docs-number-7: docs-lower-roman-parens;
-  --docs-number-8: docs-lower-alpha-parens;
-  --docs-number-9: docs-lower-roman-parens;
+  --docs-number-1: docs-upper-roman-dot; --docs-number-2: docs-upper-alpha-dot; --docs-number-3: docs-decimal-dot; --docs-number-4: docs-lower-alpha-paren; --docs-number-5: docs-decimal-parens; --docs-number-6: docs-lower-alpha-parens; --docs-number-7: docs-lower-roman-parens; --docs-number-8: docs-lower-alpha-parens; --docs-number-9: docs-lower-roman-parens;
 }
 .docs-prose ul:not([data-type="taskList"]):not(li > *) > li {
   list-style-type: var(--docs-bullet-1);
@@ -2169,17 +1777,9 @@ html .docs-prose[data-docs-styles] > :first-child {
   list-style-type: var(--docs-number-9);
 }
 .docs-prose [data-list-style="NUMBERED_DECIMAL_NESTED"] {
-  --docs-number-1: docs-decimal-dot;
-  --docs-number-2: docs-decimal-dot;
-  --docs-number-3: docs-decimal-dot;
-  --docs-number-4: docs-decimal-dot;
-  --docs-number-5: docs-decimal-dot;
-  --docs-number-6: docs-decimal-dot;
-  --docs-number-7: docs-decimal-dot;
-  --docs-number-8: docs-decimal-dot;
-  --docs-number-9: docs-decimal-dot;
+  --docs-number-1: docs-decimal-dot; --docs-number-2: docs-decimal-dot; --docs-number-3: docs-decimal-dot; --docs-number-4: docs-decimal-dot; --docs-number-5: docs-decimal-dot; --docs-number-6: docs-decimal-dot; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-decimal-dot; --docs-number-9: docs-decimal-dot;
 }
-/* 1. 1.1. 1.1.1.: every level repeats the numbers above it. */
+/* 1. 1.1. 1.1.1.: each level repeats the numbers above it. */
 .docs-prose ol[data-list-style="NUMBERED_DECIMAL_NESTED"] li::marker {
   content: counters(list-item, ".") ".\2003";
 }

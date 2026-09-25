@@ -134,68 +134,7 @@
   color: var(--docs-code);
 }
 
-/* ── Shared pieces: cards, fields, buttons, checkboxes ────────────────── */
-.docs-ty-card {
-  background: var(--docs-menu-bg);
-  color: var(--docs-text);
-  border-radius: 28px;
-  box-shadow: var(--docs-menu-shadow);
-  font: 400 14px/20px var(--docs-ui-font);
-}
-.docs-ty-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  background: var(--docs-scrim);
-}
-.docs-ty-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24px 16px 16px 24px;
-}
-.docs-ty-head h2 {
-  font: 400 24px/32px var(--docs-ui-font);
-  color: var(--docs-text);
-}
-.docs-ty-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 24px;
-}
-.docs-ty-button {
-  height: 40px;
-  padding: 0 16px;
-  border-radius: 20px;
-  color: var(--docs-blue);
-  font: 500 14px/20px var(--docs-ui-font);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.docs-ty-button:hover:not(:disabled) {
-  background: var(--docs-hover);
-}
-.docs-ty-button:disabled {
-  opacity: 0.38;
-  cursor: default;
-}
-.docs-ty-primary {
-  padding: 0 24px;
-  background: var(--docs-blue);
-  color: #ffffff;
-}
-.dark .docs-ty-primary {
-  color: #062e6f;
-}
-.docs-ty-primary:hover:not(:disabled) {
-  background: var(--docs-blue);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
-}
+/* ── Shared pieces: checkboxes, icon buttons, fields ─────────────────── */
 .docs-ty-check {
   display: flex;
   align-items: flex-start;
@@ -211,10 +150,6 @@
   margin-top: 1px;
   accent-color: var(--docs-blue);
   cursor: pointer;
-}
-.docs-ty-link {
-  color: var(--docs-blue);
-  text-decoration: underline;
 }
 .docs-find-btn {
   flex: none;
@@ -241,7 +176,6 @@
   outline: none;
 }
 .docs-find-btn:focus-visible,
-.docs-ty-button:focus-visible,
 .docs-wc-widget:focus-visible,
 .docs-voice-mic:focus-visible {
   outline: 2px solid var(--docs-blue);
@@ -318,6 +252,20 @@
   transform: translate(-50%, -50%);
   width: min(396px, calc(100vw - 32px));
   min-width: 280px;
+  border-radius: 28px;
+  background: var(--docs-menu-bg);
+  box-shadow: var(--docs-menu-shadow);
+  color: var(--docs-text);
+  font: 400 14px/20px var(--docs-ui-font);
+}
+.docs-replace-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 16px 16px 24px;
+}
+.docs-replace-head h2 {
+  font: 400 24px/32px var(--docs-ui-font);
 }
 .docs-replace-body {
   display: flex;
@@ -377,24 +325,20 @@
   margin: 8px 24px 0;
   padding-bottom: 20px;
 }
-.docs-replace-actions .docs-ty-button {
+.docs-replace-actions .docs-tb-button {
   padding: 0 12px;
 }
-.docs-replace-actions .docs-ty-primary {
+.docs-replace-actions .docs-tb-button-primary {
   padding: 0 20px;
 }
 
 /* ── Preferences ──────────────────────────────────────────────────────── */
 .docs-prefs {
-  display: flex;
-  flex-direction: column;
-  width: min(560px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
+  width: 560px;
 }
 .docs-prefs-tabs {
   display: flex;
   gap: 4px;
-  padding: 0 24px;
   border-bottom: 1px solid var(--docs-sep);
 }
 .docs-prefs-tab {
@@ -414,8 +358,7 @@
   flex-direction: column;
   gap: 16px;
   min-height: 300px;
-  padding: 20px 24px 0;
-  overflow-y: auto;
+  padding-top: 20px;
 }
 .docs-subs {
   display: flex;
@@ -458,9 +401,6 @@
   border: 2px solid var(--docs-blue);
   padding: 0 7px;
 }
-.docs-subs-add {
-  height: 32px;
-}
 .docs-subs-list {
   max-height: 300px;
   overflow-y: auto;
@@ -474,16 +414,13 @@
 
 /* ── Keyboard shortcuts ───────────────────────────────────────────────── */
 .docs-shortcuts {
-  display: flex;
-  flex-direction: column;
-  width: min(760px, calc(100vw - 32px));
-  max-height: calc(100vh - 64px);
+  width: 760px;
 }
 .docs-shortcuts-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 24px 8px;
+  margin-bottom: 8px;
   padding: 0 12px;
   height: 40px;
   border: 1px solid var(--docs-field-line);
@@ -503,8 +440,7 @@
   outline: none;
 }
 .docs-shortcuts-body {
-  overflow-y: auto;
-  padding: 8px 24px 24px;
+  padding-top: 8px;
   columns: 2 320px;
   column-gap: 32px;
 }
@@ -541,11 +477,10 @@
 
 /* ── Word count: the dialog and the counter at the bottom left ────────── */
 .docs-wc-dialog {
-  width: min(420px, calc(100vw - 32px));
+  width: 420px;
 }
 .docs-wc-table {
-  width: calc(100% - 48px);
-  margin: 0 24px;
+  width: 100%;
   border-collapse: collapse;
 }
 .docs-wc-table td {
@@ -561,7 +496,7 @@
   font-variant-numeric: tabular-nums;
 }
 .docs-wc-show {
-  margin: 20px 24px 0;
+  margin-top: 20px;
 }
 .docs-wc-anchor {
   position: sticky;

@@ -4,10 +4,19 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import type { SaveState } from "@/components/docs/use-docs-save";
+import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The document status popup (SPEC.md §29), Google Docs': under the status
 // beside the title, a header in the state's color with its title, then one
 // line on what the state means. A press outside or Escape closes it.
+
+const TEXT: Record<SaveState, [title: TKey, body: TKey]> = {
+  saved: ["docs.saved", "docsPage.statusSaved"],
+  saving: ["docs.saving", "docsPage.statusSaving"],
+  unsaved: ["docs.saving", "docsPage.statusSaving"],
+  offline: ["docs.offlineSaving", "docsPage.statusOffline"],
+  error: ["docs.saveFailed", "docsPage.statusFailed"],
+};
 
 export function StatusPopup({
   state,
@@ -43,22 +52,7 @@ export function StatusPopup({
     };
   }, [anchorRef, onClose]);
   const failed = state === "error" || state === "offline";
-  const title =
-    state === "saved"
-      ? t("docs.saved")
-      : state === "offline"
-        ? t("docs.offlineSaving")
-        : state === "error"
-          ? t("docs.saveFailed")
-          : t("docs.saving");
-  const body =
-    state === "saved"
-      ? t("docsPage.statusSaved")
-      : state === "offline"
-        ? t("docsPage.statusOffline")
-        : state === "error"
-          ? t("docsPage.statusFailed")
-          : t("docsPage.statusSaving");
+  const title = t(TEXT[state][0]);
   if (typeof document === "undefined") return null;
   return createPortal(
     <div
@@ -70,7 +64,7 @@ export function StatusPopup({
       data-edit-control
     >
       <div className="docs-status-popup-head">{title}</div>
-      <p className="docs-status-popup-body">{body}</p>
+      <p className="docs-status-popup-body">{t(TEXT[state][1])}</p>
     </div>,
     document.body,
   );

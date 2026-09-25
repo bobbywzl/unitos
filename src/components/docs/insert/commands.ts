@@ -1,22 +1,18 @@
 import type { Editor } from "@tiptap/react";
 import { mergeCells, splitCell } from "@tiptap/pm/tables";
 import { registerDocsCommands, type DocsCommand } from "@/components/docs/commands";
-import { DOCS_EVENT } from "@/components/docs/extensions";
 import { insertBookmark, insertEquation, insertHorizontalLine } from "@/components/docs/insert/actions";
+import { openAtMenuHere } from "@/components/docs/insert/at-plugin";
 import { buildingBlock, type BuildingBlock } from "@/components/docs/insert/building-blocks";
 import { emitInsert, insertContext } from "@/components/docs/insert/context";
 import { insertFootnote } from "@/components/docs/insert/footnotes";
 import { selectAllMatching } from "@/components/docs/insert/format-match";
 import { imageViewAt, resetImage, selectedImage } from "@/components/docs/insert/image";
 import { distributeRows, tableRectOf } from "@/components/docs/insert/table";
-import { blockStyle, updateStyleToMatch } from "@/components/docs/toolbar/styles";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// What Google Docs keeps in its Insert and Format menus for this area
-// (SPEC.md §29), registered for Search the menus: images, tables, special
-// characters, emoji, equations, lines and breaks, footnotes, the table of
-// contents, bookmarks, links, smart chips, building blocks, code blocks,
-// the image's and the table's options, and the Format options.
+// This area's items of Google Docs' Insert and Format menus (SPEC.md §29),
+// registered for Search the menus.
 
 const hasImage = (editor: Editor) => selectedImage(editor.state) !== null;
 const inTable = (editor: Editor) => tableRectOf(editor.state) !== null;
@@ -39,28 +35,12 @@ function block(kind: BuildingBlock, label: TKey, keywords: string[]): DocsComman
 
 registerDocsCommands([
   {
-    id: "insert:image-upload",
-    label: "docs.uploadFromComputer",
-    menu: "insert",
-    keywords: ["image", "picture", "photo", "upload", "图片"],
-    enabled: editable,
-    run: (editor) => emitInsert(editor, { type: "image-insert", source: "upload" }),
-  },
-  {
-    id: "insert:image-url",
-    label: "docs.imageByUrl",
-    menu: "insert",
-    keywords: ["image", "picture", "url", "address", "图片"],
-    enabled: editable,
-    run: (editor) => emitInsert(editor, { type: "image-insert", source: "url" }),
-  },
-  {
     id: "insert:table",
     label: "docsInsert.itemTable",
     menu: "insert",
     keywords: ["table", "grid", "表格"],
     enabled: editable,
-    run: (editor) => emitInsert(editor, { type: "table-grid" }),
+    run: (editor) => emitInsert(editor, { type: "picker", kind: "table" }),
   },
   {
     id: "insert:special-characters",
@@ -76,7 +56,7 @@ registerDocsCommands([
     menu: "insert",
     keywords: ["emoji", "smiley", "表情"],
     enabled: editable,
-    run: (editor) => emitInsert(editor, { type: "emoji-picker" }),
+    run: (editor) => emitInsert(editor, { type: "picker", kind: "emoji" }),
   },
   {
     id: "insert:equation",
@@ -132,21 +112,12 @@ registerDocsCommands([
     run: (editor) => insertBookmark(editor),
   },
   {
-    id: "insert:link",
-    label: "docs.insertLink",
-    menu: "insert",
-    keywords: ["link", "hyperlink", "url", "链接"],
-    shortcut: "Mod+K",
-    enabled: editable,
-    run: () => window.dispatchEvent(new CustomEvent(DOCS_EVENT.link)),
-  },
-  {
     id: "insert:smart-chips",
     label: "docsInsert.sectionSmartChips",
     menu: "insert",
     keywords: ["smart chip", "chip", "person", "file", "@", "mention"],
     enabled: editable,
-    run: (editor) => emitInsert(editor, { type: "at-menu" }),
+    run: (editor) => openAtMenuHere(editor.view),
   },
   {
     id: "insert:date",
@@ -213,7 +184,7 @@ registerDocsCommands([
     enabled: hasImage,
     run: (editor) => {
       const hit = selectedImage(editor.state);
-      if (hit) void resetImage(editor, hit.pos);
+      if (hit) resetImage(editor, hit.pos);
     },
   },
   {
@@ -222,7 +193,7 @@ registerDocsCommands([
     menu: "format",
     keywords: ["replace", "image"],
     enabled: hasImage,
-    run: (editor) => emitInsert(editor, { type: "image-replace", source: "upload" }),
+    run: (editor) => emitInsert(editor, { type: "image-replace" }),
   },
   {
     id: "format:table-options",
@@ -362,13 +333,5 @@ registerDocsCommands([
     keywords: ["select matching", "same formatting", "format options"],
     enabled: editable,
     run: (editor) => selectAllMatching(editor),
-  },
-  {
-    id: "format:update-style-to-match",
-    label: "docsInsert.updateStyleToMatchPlain",
-    menu: "format",
-    keywords: ["update style to match", "paragraph styles", "update heading"],
-    enabled: editable,
-    run: (editor) => updateStyleToMatch(editor, blockStyle(editor.state.selection.$from.parent)),
   },
 ]);

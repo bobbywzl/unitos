@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { SearchIcon } from "@/components/docs/icons";
-import { keys } from "@/components/docs/keys";
+import { keys, withKeys } from "@/components/docs/keys";
 import { keepFocus } from "@/components/docs/menu";
 
 // Search the menus (SPEC.md §29): the toolbar's first control and the way
@@ -46,7 +46,7 @@ function score(action: SearchAction, query: string): number {
 }
 
 /** The actions that match, best first. */
-export function searchActions(actions: SearchAction[], query: string): SearchAction[] {
+function searchActions(actions: SearchAction[], query: string): SearchAction[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   return actions
@@ -128,10 +128,6 @@ export function SearchMenus({
     return () => window.removeEventListener(SEARCH_MENUS_EVENT, onOpen);
   }, []);
 
-  useLayoutEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
-
   const results = open && query.trim() ? [...valueActions(query), ...searchActions(all, query)] : [];
   const run = (action: SearchAction | undefined) => {
     if (!action || action.enabled === false) return;
@@ -187,7 +183,7 @@ export function SearchMenus({
         <div
           ref={anchorRef}
           className="docs-search"
-          data-tip={t("docs.searchMenus") + ` (${keys("Alt+/")})`}
+          data-tip={withKeys(t("docs.searchMenus"), "Alt+/")}
           data-tb-item
           style={open ? { visibility: "hidden" } : undefined}
           onMouseDown={(e) => {
@@ -210,7 +206,7 @@ export function SearchMenus({
           <button
             type="button"
             aria-label={t("docs.searchMenus")}
-            data-tip={`${t("docs.searchMenus")} (${keys("Alt+/")})`}
+            data-tip={withKeys(t("docs.searchMenus"), "Alt+/")}
             data-track="docs:search-menus"
             data-tb-item
             onMouseDown={keepFocus}

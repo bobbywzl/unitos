@@ -98,17 +98,15 @@ export function DialogButton({
   disabled,
   onClick,
   children,
-  type = "button",
 }: {
   primary?: boolean;
   disabled?: boolean;
   onClick?: () => void;
   children: ReactNode;
-  type?: "button" | "submit";
 }) {
   return (
     <button
-      type={type}
+      type="button"
       disabled={disabled}
       onClick={onClick}
       className={primary ? "docs-tb-button docs-tb-button-primary" : "docs-tb-button"}

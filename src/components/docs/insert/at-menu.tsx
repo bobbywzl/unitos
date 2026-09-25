@@ -25,7 +25,6 @@ import {
   insertDropdownChip,
   insertEquation,
   insertFileChip,
-  insertFootnoteAt,
   insertHorizontalLine,
   insertInline,
   insertPersonChip,
@@ -40,6 +39,7 @@ import { DatePicker } from "@/components/docs/insert/date-picker";
 import { matchDates } from "@/components/docs/insert/dates";
 import { DropdownPicker } from "@/components/docs/insert/dropdown-ui";
 import { EmojiPicker, rememberEmoji, useEmojiData } from "@/components/docs/insert/emoji-picker";
+import { insertFootnote } from "@/components/docs/insert/footnotes";
 import {
   AssignmentIcon,
   BookmarkIcon,
@@ -66,15 +66,9 @@ import { anchorAt, FloatingBox, useEditorTick, useViewportTick } from "@/compone
 import type { Person } from "@/lib/person";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// The "@" menu (SPEC.md §29), Google Docs' insert menu: under the typed "@",
-// sections with uppercase headers — People, Smart chips, Building blocks,
-// Files, Lists, Media, Headings, Tables, Page components, More; Dates and
-// Emojis appear while searching — filtered by the words typed after the
-// "@", the matching letters in bold. ↑/↓ move, Enter or Tab inserts, →
-// opens a section's full list and ← comes back, Escape closes and keeps the
-// typed words. An item deletes the "@query" and inserts, or opens its
-// picker at the same place: a date, a dropdown, a table's grid, emoji, an
-// image's sources, a table of contents' styles, a code block's language.
+// The "@" menu (SPEC.md §29), Google Docs' insert menu under the typed "@":
+// sections filtered by the words typed after it, the matching letters in
+// bold. An item deletes the "@query" and inserts, or opens its picker there.
 
 type Section =
   | "people"
@@ -129,7 +123,7 @@ const SECTION_LIMIT: Partial<Record<Section, number>> = { people: 3, blocks: 4, 
 const ORDER_EMPTY: Section[] = ["people", "chips", "blocks", "files", "lists", "media", "headings", "tables", "page", "more"];
 const ORDER_QUERY: Section[] = ["people", "dates", "chips", "files", "blocks", "emojis", "lists", "media", "headings", "tables", "page", "more"];
 
-export const CODE_LANGUAGES: { id: string; name: string }[] = [
+const CODE_LANGUAGES: { id: string; name: string }[] = [
   { id: "bash", name: "Bash" },
   { id: "c", name: "C" },
   { id: "cpp", name: "C++" },
@@ -409,7 +403,14 @@ function AtMenu({
         icon: <BookmarkIcon />,
         run: (range) => insertBookmark(editor, range),
       },
-      { key: "footnote", section: "more", label: t("docsInsert.itemFootnote"), words: "footnote note 脚注", icon: <FootnoteIcon />, run: (range) => insertFootnoteAt(editor, range) },
+      {
+        key: "footnote",
+        section: "more",
+        label: t("docsInsert.itemFootnote"),
+        words: "footnote note 脚注",
+        icon: <FootnoteIcon />,
+        run: (range) => replaceQuery(editor, range, () => insertFootnote(editor)),
+      },
       {
         key: "equation",
         section: "more",
@@ -646,12 +647,12 @@ function PickerBox({ editor, ctx, picker, onClose }: { editor: Editor; ctx: Inse
           onNew={() => {
             onClose();
             caretHere();
-            emitInsert(editor, { type: "dropdown-dialog", dropdownId: null, chipPos: null });
+            emitInsert(editor, { type: "dropdown-dialog", dropdownId: null });
           }}
           onEdit={(id) => {
             onClose();
             caretHere();
-            emitInsert(editor, { type: "dropdown-dialog", dropdownId: id, chipPos: null });
+            emitInsert(editor, { type: "dropdown-dialog", dropdownId: id });
           }}
         />
       );
@@ -683,12 +684,12 @@ function PickerBox({ editor, ctx, picker, onClose }: { editor: Editor; ctx: Inse
           onFile={(file) => {
             onClose();
             caretHere();
-            void insertImageFrom(editor, { file });
+            insertImageFrom(editor, { file });
           }}
           onUrl={(url) => {
             onClose();
             caretHere();
-            void insertImageFrom(editor, { url });
+            insertImageFrom(editor, { url });
           }}
         />
       );
@@ -701,8 +702,8 @@ function PickerBox({ editor, ctx, picker, onClose }: { editor: Editor; ctx: Inse
               key={style}
               type="button"
               className="docs-toc-style"
-              aria-label={t(style === "plain" ? "docsInsert.tocPlain" : style === "dotted" ? "docsInsert.tocDotted" : "docsInsert.tocLinks")}
-              data-tip={t(style === "plain" ? "docsInsert.tocPlain" : style === "dotted" ? "docsInsert.tocDotted" : "docsInsert.tocLinks")}
+              aria-label={t(TOC_STYLE_LABEL[style])}
+              data-tip={t(TOC_STYLE_LABEL[style])}
               onClick={() => {
                 onClose();
                 insertTableOfContents(editor, style, here);
@@ -746,6 +747,12 @@ function PickerBox({ editor, ctx, picker, onClose }: { editor: Editor; ctx: Inse
     </FloatingBox>
   );
 }
+
+export const TOC_STYLE_LABEL: Record<TocStyle, TKey> = {
+  plain: "docsInsert.tocPlain",
+  dotted: "docsInsert.tocDotted",
+  links: "docsInsert.tocLinks",
+};
 
 /** A table of contents style, drawn small: lines, dots, or blue links. */
 export function TocThumb({ style }: { style: TocStyle }) {

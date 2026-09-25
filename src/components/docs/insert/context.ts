@@ -1,15 +1,11 @@
 import type { Editor } from "@tiptap/core";
-import { useSyncExternalStore } from "react";
 import type { PageSetup } from "@/lib/docs/schema";
-import type { Lang } from "@/lib/i18n/config";
-import type { TFunc } from "@/lib/i18n/dictionaries";
+import { DEFAULT_LANG, type Lang } from "@/lib/i18n/config";
+import { translatorFor, type TFunc } from "@/lib/i18n/dictionaries";
 
-// What the insert area's parts share for one page editor (SPEC.md §29): the
-// document, its project, the project's documents, the page, the language.
-// The InsertLayer sets it; the link box, the node views, and the plugins read
-// it. And the bus the plugins and the commands use to open the area's
-// windows (the image options, the special characters, the @ menu) — one per
-// editor, so two page editors on screen never answer each other.
+// What the insert area's plugins and node views read for one page editor
+// (SPEC.md §29), set by the InsertLayer, and the per-editor bus that opens
+// the area's windows, so two page editors never answer each other.
 
 export type InsertContext = {
   documentId: string;
@@ -25,58 +21,33 @@ export type InsertContext = {
 };
 
 const contexts = new WeakMap<Editor, InsertContext>();
-const watchers = new WeakMap<Editor, Set<() => void>>();
 
-export function setInsertContext(editor: Editor, context: InsertContext): void {
-  contexts.set(editor, context);
-  for (const watch of watchers.get(editor) ?? []) watch();
-}
-
-export function clearInsertContext(editor: Editor): void {
-  contexts.delete(editor);
-  for (const watch of watchers.get(editor) ?? []) watch();
+export function setInsertContext(editor: Editor, context: InsertContext | null): void {
+  if (context) contexts.set(editor, context);
+  else contexts.delete(editor);
 }
 
 export function insertContext(editor: Editor): InsertContext | null {
   return contexts.get(editor) ?? null;
 }
 
-/** The context, re-read when the InsertLayer sets a new one. */
-export function useInsertContext(editor: Editor): InsertContext | null {
-  return useSyncExternalStore(
-    (onChange) => {
-      let set = watchers.get(editor);
-      if (!set) {
-        set = new Set();
-        watchers.set(editor, set);
-      }
-      set.add(onChange);
-      return () => set.delete(onChange);
-    },
-    () => contexts.get(editor) ?? null,
-    () => null,
-  );
+/** The page's translator; before the InsertLayer sets it, the default language's. */
+export function insertT(editor: Editor): TFunc {
+  return contexts.get(editor)?.t ?? translatorFor(DEFAULT_LANG);
 }
 
 /** A window of the insert area, opened from a key, a command, or a menu. */
 export type InsertEvent =
-  | { type: "at-menu" }
   | { type: "picker"; kind: "date" | "dropdown" | "table" | "emoji" | "image" | "toc" | "code" }
-  | { type: "context-menu"; x?: number; y?: number }
   | { type: "image-options"; section?: "size" | "wrap" | "recolor" | "adjust" | "alt" }
-  | { type: "image-replace"; source: "upload" | "url" }
-  | { type: "image-insert"; source: "upload" | "url" }
-  | { type: "crop" }
+  | { type: "image-replace" }
   | { type: "table-options" }
-  | { type: "table-grid" }
   | { type: "split-cell" }
   | { type: "special-characters" }
-  | { type: "emoji-picker" }
   | { type: "equation"; pos: number }
-  | { type: "dropdown-dialog"; dropdownId: string | null; chipPos: number | null }
+  | { type: "dropdown-dialog"; dropdownId: string | null }
   | { type: "toc-options"; pos: number }
-  | { type: "clipboard-blocked" }
-  | { type: "toast"; text: string };
+  | { type: "clipboard-blocked" };
 
 type Handler = (event: InsertEvent) => void;
 const buses = new WeakMap<Editor, Set<Handler>>();
@@ -98,4 +69,9 @@ export function onInsert(editor: Editor, handler: Handler): () => void {
 /** The InsertLayer of this editor is on screen: the "@" menu may open. */
 export function insertLayerOn(editor: Editor): boolean {
   return (buses.get(editor)?.size ?? 0) > 0;
+}
+
+/** Show a short message the way the app shows its toasts. */
+export function toast(text: string): void {
+  if (text) window.dispatchEvent(new CustomEvent("dissect:toast", { detail: { text } }));
 }

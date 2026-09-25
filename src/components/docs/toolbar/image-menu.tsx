@@ -14,11 +14,9 @@ import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
 export type ImageSource = { file: File } | { url: string };
 
 export function ImageMenu({
-  disabled,
   onInsert,
   onDone,
 }: {
-  disabled: boolean;
   onInsert: (source: ImageSource) => void;
   /** The page takes the focus back. */
   onDone: () => void;
@@ -32,7 +30,6 @@ export function ImageMenu({
         id="image"
         label={t("docs.insertImage")}
         track="image"
-        disabled={disabled}
         arrow={false}
         className="docs-tb-menu-btn"
         face={<ImageIcon />}
@@ -89,7 +86,7 @@ export function ImageMenu({
   );
 }
 
-export function ImageUrlDialog({ onClose, onInsert }: { onClose: () => void; onInsert: (url: string) => void }) {
+function ImageUrlDialog({ onClose, onInsert }: { onClose: () => void; onInsert: (url: string) => void }) {
   const t = useT();
   const [url, setUrl] = useState("");
   const [loaded, setLoaded] = useState<string | null>(null);

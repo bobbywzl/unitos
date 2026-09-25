@@ -46,7 +46,7 @@ const FLAGS: { flag: ParagraphFlag; key: "docs.keepWithNext" | "docs.keepLinesTo
 const same = (a: number, b: number) => Math.abs(a - b) < 0.001;
 
 /** A line spacing's "Custom: N": rounded to two decimals. */
-export function customLabel(value: number): string {
+function customLabel(value: number): string {
   return String(Math.round(value * 100) / 100);
 }
 
@@ -68,12 +68,10 @@ export function SpacingMenu({
   editor,
   para,
   pageless,
-  disabled,
 }: {
   editor: Editor;
   para: ParagraphState;
   pageless: boolean;
-  disabled: boolean;
 }) {
   const t = useT();
   const [dialog, setDialog] = useState(false);
@@ -86,7 +84,6 @@ export function SpacingMenu({
         id="line-spacing"
         label={t("docs.lineSpacing")}
         track="line-spacing"
-        disabled={disabled}
         arrow={false}
         className="docs-tb-menu-btn"
         face={<LineSpacingIcon />}
@@ -184,7 +181,7 @@ export function SpacingMenu({
 }
 
 /** Custom spacing: the line spacing and the space before and after, in points. */
-export function CustomSpacingDialog({ editor, para, onClose }: { editor: Editor; para: ParagraphState; onClose: () => void }) {
+function CustomSpacingDialog({ editor, para, onClose }: { editor: Editor; para: ParagraphState; onClose: () => void }) {
   const t = useT();
   const [line, setLine] = useState(customLabel(para.lineSpacing));
   const [before, setBefore] = useState(String(para.spaceBefore));
@@ -192,16 +189,7 @@ export function CustomSpacingDialog({ editor, para, onClose }: { editor: Editor;
   const lineValue = parseFloat(line);
   const beforeValue = parseFloat(before);
   const afterValue = parseFloat(after);
-  const valid =
-    Number.isFinite(lineValue) &&
-    lineValue > 0 &&
-    lineValue <= 100 &&
-    Number.isFinite(beforeValue) &&
-    beforeValue >= 0 &&
-    beforeValue <= 1584 &&
-    Number.isFinite(afterValue) &&
-    afterValue >= 0 &&
-    afterValue <= 1584;
+  const valid = lineValue > 0 && lineValue <= 100 && beforeValue >= 0 && beforeValue <= 1584 && afterValue >= 0 && afterValue <= 1584;
   const apply = () => {
     if (!valid) return;
     const chain = editor.chain().focus();

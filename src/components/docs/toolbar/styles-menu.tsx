@@ -79,7 +79,6 @@ export function StylesSelect({
   style,
   styles,
   deepest,
-  disabled,
   toast,
 }: {
   editor: Editor;
@@ -87,7 +86,6 @@ export function StylesSelect({
   style: DocStyle | null;
   styles: Record<DocStyle, NamedStyle>;
   deepest: number;
-  disabled: boolean;
   toast: (text: string) => void;
 }) {
   const t = useT();
@@ -97,7 +95,6 @@ export function StylesSelect({
       id="styles"
       label={t("docs.styles")}
       track="styles"
-      disabled={disabled}
       className="docs-tb-select docs-tb-styles"
       menuClassName="docs-menu-styles"
       face={<span className="docs-tb-caption">{style ? t(STYLE_LABEL[style]) : ""}</span>}

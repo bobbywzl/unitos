@@ -1,29 +1,24 @@
 import type { PageSetup } from "@/lib/docs/schema";
 
 // The page's numbers (SPEC.md §29), Google Docs': a point is 96/72 CSS px
-// at 100%, pages sit 8 px apart border to border with a 1 px border outside
-// each, and the paper sizes are Docs' list.
+// at 100%, and the paper sizes are Docs' list.
 
 export const PX_PER_PT = 96 / 72;
-/** Between two pages, border to border. */
-export const PAGE_GAP = 8;
-/** The page's border, drawn outside the page box. */
-export const PAGE_BORDER = 1;
-/** From one page's top to the next page's top, past the page's own height. */
-export const PAGE_PITCH_EXTRA = PAGE_GAP + 2 * PAGE_BORDER;
+/** From one page's top to the next page's top, past the page's height: 8 px
+    between pages, and each page's 1 px border outside the page box. */
+export const PAGE_PITCH_EXTRA = 10;
 /** Where the header and the footer start, from the page's edge, in points. */
 export const DEFAULT_HF_MARGIN_PT = 36;
+/** The least room the margins leave for text, in points. */
+export const MIN_TEXT_PT = 36;
 
-/** Pageless: the text column's width in px at 100% by Text width, and its
-    least width. */
-export const TEXT_WIDTHS = { narrow: 830, medium: 1030, wide: 1230, full: Number.POSITIVE_INFINITY } as const;
+/** Pageless: the text column's width in px at 100% by Text width. */
+const TEXT_WIDTHS = { narrow: 830, medium: 1030, wide: 1230, full: Number.POSITIVE_INFINITY } as const;
 export type TextWidth = keyof typeof TEXT_WIDTHS;
-export const PAGELESS_MIN_WIDTH = 600;
-/** Pageless: the least room beside the text column, and above it. */
-export const PAGELESS_SIDE = 40;
+/** Pageless: the room above the text column. */
 export const PAGELESS_TOP = 70;
 
-export type Paper = { id: string; name: string; width: number; height: number; inches: string; cm: string };
+type Paper = { id: string; name: string; width: number; height: number; inches: string; cm: string };
 
 /** Google Docs' paper sizes, in points (portrait). */
 export const PAPERS: Paper[] = [
@@ -48,10 +43,6 @@ export function paperOf(setup: Pick<PageSetup, "width" | "height">): Paper | nul
   return PAPERS.find((p) => Math.abs(p.width - short) <= 5 && Math.abs(p.height - long) <= 5) ?? null;
 }
 
-export function isLandscape(setup: Pick<PageSetup, "width" | "height">): boolean {
-  return setup.width > setup.height;
-}
-
 /** The ruler's and the dialog's unit: inches, or centimeters. */
 export type LengthUnit = "in" | "cm";
 export const PT_PER_UNIT: Record<LengthUnit, number> = { in: 72, cm: 72 / 2.54 };
@@ -62,10 +53,16 @@ export function formatLength(pt: number, unit: LengthUnit): string {
   return String(Object.is(v, -0) ? 0 : v);
 }
 
-/** The page in CSS px at 100%, with its margins and the header and footer
-    margins; pageless drops the margins' top and bottom. */
+/** A length typed in a unit ("1", "0,75"), in points; null when it is not a
+    number of 0 or more. */
+export function parseLength(text: string, unit: LengthUnit): number | null {
+  const n = Number(text.replace(",", "."));
+  return text.trim() === "" || !Number.isFinite(n) || n < 0 ? null : Math.round(n * PT_PER_UNIT[unit] * 100) / 100;
+}
+
+/** The page in CSS px at 100%: its size, its margins, and the header and
+    footer margins. */
 export type PageFrame = {
-  pageless: boolean;
   width: number;
   height: number;
   top: number;
@@ -82,7 +79,6 @@ export function pageFrame(setup: PageSetup): PageFrame {
   const m = setup.margins;
   const height = setup.height * PX_PER_PT;
   return {
-    pageless: setup.pageless,
     width: setup.width * PX_PER_PT,
     height,
     top: m.top * PX_PER_PT,
@@ -96,9 +92,18 @@ export function pageFrame(setup: PageSetup): PageFrame {
 }
 
 /** Pageless: the text column's width at 100% for a canvas `available` px
-    wide at `scale`: the room there is, at least 600 px, at most the Text
-    width's cap. */
+    wide at `scale`: the room there is less 40 px each side, at least 600 px,
+    at most the Text width's cap. */
 export function pagelessWidth(available: number, scale: number, width: TextWidth): number {
-  const room = available / scale - 2 * PAGELESS_SIDE;
-  return Math.max(PAGELESS_MIN_WIDTH, Math.min(room, TEXT_WIDTHS[width]));
+  return Math.max(600, Math.min(available / scale - 80, TEXT_WIDTHS[width]));
+}
+
+/** The pane that scrolls the pages: the nearest ancestor that scrolls
+    vertically. */
+export function scrollParent(el: Element | null): HTMLElement | null {
+  for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
+    const oy = getComputedStyle(node).overflowY;
+    if (oy === "auto" || oy === "scroll") return node;
+  }
+  return null;
 }

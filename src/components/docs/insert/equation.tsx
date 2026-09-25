@@ -5,10 +5,10 @@ import { NodeSelection } from "@tiptap/pm/state";
 import katex from "katex";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { DropBtn } from "@/components/docs/toolbar/controls";
 import { onInsert } from "@/components/docs/insert/context";
 import { caretAfter } from "@/components/docs/insert/actions";
 import { DeleteIcon } from "@/components/docs/insert/icons";
-import { DropButton } from "@/components/docs/insert/image-controls";
 import { FloatingBox, focusSoon, useEditorTick, useViewportTick, type Anchor } from "@/components/docs/insert/ui";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -109,7 +109,7 @@ export function EquationHost({ editor }: { editor: Editor }) {
   const dom = editor.view.nodeDOM(pos);
   if (!(dom instanceof HTMLElement)) return null;
   const r = dom.getBoundingClientRect();
-  const anchor: Anchor = { left: r.left, top: r.top, bottom: r.bottom, right: r.right };
+  const anchor: Anchor = { left: r.left, top: r.top, bottom: r.bottom };
   return (
     <EquationBox
       key={pos}
@@ -199,7 +199,13 @@ function EquationBox({
           {t("docsInsert.newEquation")}
         </button>
         {MENUS.map((menu) => (
-          <DropButton key={menu.label} label={t(menu.label)} face={<span className="docs-tb-text docs-equation-face">{menu.face}</span>} wide>
+          <DropBtn
+            key={menu.label}
+            label={t(menu.label)}
+            track="equation-symbols"
+            className="docs-tb-select"
+            face={<span className="docs-tb-caption docs-equation-face">{menu.face}</span>}
+          >
             {(close) => (
               <div className={`docs-symbol-grid${menu.symbols === MATH ? " is-wide" : ""}`}>
                 {menu.symbols.map((s) => (
@@ -218,7 +224,7 @@ function EquationBox({
                 ))}
               </div>
             )}
-          </DropButton>
+          </DropBtn>
         ))}
         <button
           type="button"

@@ -317,9 +317,15 @@ export function setFind(view: EditorView, patch: Patch): FindState {
   return findState(view.state);
 }
 
+/** Change the search from the caret: the first result after it is selected. */
+export function searchFrom(view: EditorView, patch: Patch): void {
+  const next = setFind(view, { ...patch, near: view.state.selection.from });
+  if (next.current >= 0) selectResult(view, next.current);
+}
+
 /** Make result `index` current: it is selected in the document and scrolled
     into view. */
-export function selectResult(view: EditorView, index: number): void {
+function selectResult(view: EditorView, index: number): void {
   const find = findState(view.state);
   const result = find.results[index];
   if (!result) return;

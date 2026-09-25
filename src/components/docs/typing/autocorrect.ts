@@ -1,4 +1,4 @@
-import type { Mark, MarkType, Node as PMNode, NodeType } from "@tiptap/pm/model";
+import type { MarkType, Node as PMNode, NodeType } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
 import { Selection, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
@@ -9,7 +9,7 @@ import {
   LINE_BREAK,
   OBJECT_CHAR,
 } from "@/components/docs/typing/chars";
-import { listForPrefix, listLabel } from "@/components/docs/typing/lists";
+import { isList, isListItem, listForPrefix, listLabel } from "@/components/docs/typing/lists";
 import { substitutionMap, typingPrefs, type TypingPrefs } from "@/components/docs/typing/prefs";
 import { spellingFix } from "@/components/docs/typing/spelling";
 import { blockCorrection, correctionDeleted, SPELLING_META } from "@/components/docs/typing/trace";
@@ -19,9 +19,6 @@ import { blockCorrection, correctionDeleted, SPELLING_META } from "@/components/
 // the word or the paragraph just finished. Each rule that fires is its own
 // transaction and its own undo step, so one Ctrl+Z gives back exactly what
 // was typed. Nothing runs during IME composition, on paste, or in code.
-
-/** The meta a transaction made by the engine carries: the rule's name. */
-const AUTOCORRECT_META = "docsAutocorrect";
 
 /** The words of a text block, one character per position: a line break is
     "\v", any other inline object one placeholder character. */
@@ -109,14 +106,9 @@ type Rule = (ctx: Ctx) => Transaction | null;
 
 const SPACE_LIKE = new Set([" ", "\n", "\t", LINE_BREAK]);
 
-/** The marks the characters in [from, to) carry: the first character's. */
-function marksAt(doc: PMNode, pos: number): readonly Mark[] {
-  return doc.nodeAt(pos)?.marks ?? [];
-}
-
+/** Replace [from, to) with `text` in the style of its first character. */
 function replaceText(tr: Transaction, from: number, to: number, text: string): Transaction {
-  const marks = marksAt(tr.doc, from);
-  return tr.replaceWith(from, to, tr.doc.type.schema.text(text, marks));
+  return tr.replaceWith(from, to, tr.doc.type.schema.text(text, tr.doc.nodeAt(from)?.marks));
 }
 
 /** Start of the whitespace-delimited token that ends at `end`. */
@@ -379,16 +371,7 @@ const correctSpelling: Rule = ({ state, prefs, start, text, trigger, at }) => {
   return tr;
 };
 
-
 // ── List detection ──────────────────────────────────────────────────────
-
-function isListItem(node: PMNode | null | undefined): boolean {
-  return node?.type.name === "listItem" || node?.type.name === "taskItem";
-}
-
-function isList(node: PMNode | null | undefined): boolean {
-  return node?.type.name === "bulletList" || node?.type.name === "orderedList" || node?.type.name === "taskList";
-}
 
 /** The text block that ends before `pos` (a position between blocks), or null. */
 export function previousTextblock(doc: PMNode, pos: number): { node: PMNode; start: number } | null {
@@ -399,17 +382,12 @@ export function previousTextblock(doc: PMNode, pos: number): { node: PMNode; sta
   return $at.parent.isTextblock ? { node: $at.parent, start: $at.start() } : null;
 }
 
-/** The text of the text block just before `pos` in the document, or "". */
-function previousBlockText(doc: PMNode, pos: number): string {
-  return previousTextblock(doc, pos)?.node.textContent ?? "";
-}
-
 /** The label a list would give its next top-level item: "4." after 3. */
 function nextLabel(list: PMNode): string | null {
   if (list.type.name !== "orderedList") return null;
   const start = typeof list.attrs.start === "number" ? list.attrs.start : 1;
   const style = typeof list.attrs.listStyle === "string" ? list.attrs.listStyle : null;
-  return listLabel(style, 0, start + list.childCount);
+  return listLabel(style, start + list.childCount);
 }
 
 const detectList: Rule = ({ state, prefs, block, start, text, trigger, at, virtual }) => {
@@ -421,7 +399,9 @@ const detectList: Rule = ({ state, prefs, block, start, text, trigger, at, virtu
   const before = text.slice(0, at);
   if (!/^\s*\S+$/.test(before)) return null;
   const prefix = before.trim();
-  if (previousBlockText(state.doc, $start.before()).trimStart().startsWith(prefix)) return null;
+  // A paragraph above that starts with the same text keeps this one literal.
+  const above = previousTextblock(state.doc, $start.before())?.node.textContent ?? "";
+  if (above.trimStart().startsWith(prefix)) return null;
   const { schema } = state;
   const blockPos = $start.before();
   const index = $start.index($start.depth - 1);
@@ -515,8 +495,8 @@ function enterContext(state: EditorState): Ctx | null {
 /** Run the rules for a trigger typed just before the caret ("\n" for Enter,
     after the new paragraph exists). Each rule that fires is dispatched as
     its own undo step; the typing that follows starts a new one. */
-export function runAutocorrect(view: EditorView, trigger: string): boolean {
-  if (view.composing || !view.editable) return false;
+export function runAutocorrect(view: EditorView, trigger: string): void {
+  if (view.composing || !view.editable) return;
   let fired = false;
   for (const rule of RULES) {
     const state = view.state;
@@ -528,13 +508,10 @@ export function runAutocorrect(view: EditorView, trigger: string): boolean {
     if (!tr || !tr.docChanged) continue;
     const stored = state.storedMarks;
     if (stored && !tr.storedMarksSet) tr.setStoredMarks(stored);
-    closeHistory(tr);
-    tr.setMeta(AUTOCORRECT_META, rule.name || "rule");
-    view.dispatch(tr);
+    view.dispatch(closeHistory(tr));
     fired = true;
   }
   if (fired) view.dispatch(closeHistory(view.state.tr));
-  return fired;
 }
 
 // ── Markdown code block (Enter) ─────────────────────────────────────────
@@ -602,9 +579,7 @@ export function runCodeFence(view: EditorView): boolean {
   const to = $from.after();
   const tr = state.tr.replaceWith(from, to, codeBlock.create({ language: language || null }));
   tr.setSelection(TextSelection.create(tr.doc, from + 1));
-  closeHistory(tr);
-  tr.setMeta(AUTOCORRECT_META, "markdownCodeBlock");
-  view.dispatch(tr);
+  view.dispatch(closeHistory(tr));
   view.dispatch(closeHistory(view.state.tr));
   return true;
 }

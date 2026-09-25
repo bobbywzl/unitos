@@ -1,9 +1,8 @@
 import type { Editor } from "@tiptap/core";
 import { registerDocsCommands } from "@/components/docs/commands";
 import { ZOOMS } from "@/components/docs/toolbar";
-import { togglePageFlag, type PageFlag } from "@/components/docs/ext/page";
 import { addPageNumbers } from "@/components/docs/page/header-footer";
-import { findPageStore, type HeaderArea } from "@/components/docs/page/store";
+import { findPageStore as store, type HeaderArea } from "@/components/docs/page/store";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The page area's commands (SPEC.md §29): what Google Docs keeps in its File,
@@ -24,9 +23,28 @@ export const PAGE_EVENT = {
 
 export type EditHeaderDetail = { area: HeaderArea };
 
-function store(editor: Editor) {
-  return findPageStore(editor);
-}
+/** The document can be edited and is in pages format. */
+const paged = (editor: Editor) => editor.isEditable && store(editor)?.get().setup.pageless === false;
+const pageless = (editor: Editor) => store(editor)?.get().setup.pageless === true;
+
+const editHeader = (area: HeaderArea) => () =>
+  window.dispatchEvent(new CustomEvent<EditHeaderDetail>(PAGE_EVENT.editHeader, { detail: { area } }));
+
+const TEXT_WIDTH_LABELS = {
+  narrow: "docsPage.textWidthNarrow",
+  medium: "docsPage.textWidthMedium",
+  wide: "docsPage.textWidthWide",
+  full: "docsPage.textWidthFull",
+} as const;
+
+// The page number presets: in the header or the footer, on every page or
+// from the second.
+const NUMBER_PRESETS: [HeaderArea, boolean, TKey][] = [
+  ["header", true, "docsPage.numbersHeader"],
+  ["header", false, "docsPage.numbersHeaderNotFirst"],
+  ["footer", true, "docsPage.numbersFooter"],
+  ["footer", false, "docsPage.numbersFooterNotFirst"],
+];
 
 registerDocsCommands([
   {
@@ -36,13 +54,6 @@ registerDocsCommands([
     keywords: ["margins", "paper", "orientation", "landscape", "portrait", "page color", "A4", "letter"],
     run: (editor) => store(editor)?.set({ dialog: "setup" }),
     enabled: (editor) => editor.isEditable,
-  },
-  {
-    id: "page:print",
-    label: "docsPage.print",
-    menu: "file",
-    shortcut: "Mod+P",
-    run: () => window.print(),
   },
   {
     id: "page:ruler",
@@ -63,7 +74,7 @@ registerDocsCommands([
       const s = store(editor);
       if (s) s.set({ printLayout: !s.get().printLayout });
     },
-    enabled: (editor) => store(editor)?.get().setup.pageless === false,
+    enabled: (editor) => !pageless(editor),
   },
   {
     id: "page:outline",
@@ -84,7 +95,7 @@ registerDocsCommands([
       const s = store(editor);
       if (s) void s.saveSetup({ ...s.get().setup, pageless: true });
     },
-    enabled: (editor) => editor.isEditable && store(editor)?.get().setup.pageless === false,
+    enabled: paged,
   },
   {
     id: "page:pages",
@@ -95,22 +106,15 @@ registerDocsCommands([
       const s = store(editor);
       if (s) void s.saveSetup({ ...s.get().setup, pageless: false });
     },
-    enabled: (editor) => editor.isEditable && store(editor)?.get().setup.pageless === true,
+    enabled: (editor) => editor.isEditable && pageless(editor),
   },
   ...(["narrow", "medium", "wide", "full"] as const).map((width) => ({
     id: `page:text-width-${width}`,
-    label: (
-      {
-        narrow: "docsPage.textWidthNarrow",
-        medium: "docsPage.textWidthMedium",
-        wide: "docsPage.textWidthWide",
-        full: "docsPage.textWidthFull",
-      } as const
-    )[width],
+    label: TEXT_WIDTH_LABELS[width],
     menu: "view" as const,
     keywords: ["pageless", "text width"],
     run: (editor: Editor) => store(editor)?.set({ textWidth: width }),
-    enabled: (editor: Editor) => store(editor)?.get().setup.pageless === true,
+    enabled: pageless,
   })),
   {
     id: "page:header",
@@ -118,8 +122,8 @@ registerDocsCommands([
     menu: "insert",
     keywords: ["header", "page elements"],
     shortcut: "Mod+Alt+O H",
-    run: () => window.dispatchEvent(new CustomEvent<EditHeaderDetail>(PAGE_EVENT.editHeader, { detail: { area: "header" } })),
-    enabled: (editor) => editor.isEditable && store(editor)?.get().setup.pageless === false,
+    run: editHeader("header"),
+    enabled: paged,
   },
   {
     id: "page:footer",
@@ -127,8 +131,8 @@ registerDocsCommands([
     menu: "insert",
     keywords: ["footer", "page elements"],
     shortcut: "Mod+Alt+O F",
-    run: () => window.dispatchEvent(new CustomEvent<EditHeaderDetail>(PAGE_EVENT.editHeader, { detail: { area: "footer" } })),
-    enabled: (editor) => editor.isEditable && store(editor)?.get().setup.pageless === false,
+    run: editHeader("footer"),
+    enabled: paged,
   },
   {
     id: "page:page-numbers",
@@ -136,33 +140,9 @@ registerDocsCommands([
     menu: "insert",
     keywords: ["page number", "numbering", "page elements"],
     run: (editor) => store(editor)?.set({ dialog: "pageNumbers" }),
-    enabled: (editor) => editor.isEditable && store(editor)?.get().setup.pageless === false,
+    enabled: paged,
   },
-  ...(
-    [
-      ["keepWithNext", "docsPage.keepWithNext"],
-      ["keepLinesTogether", "docsPage.keepLinesTogether"],
-      ["avoidWidowAndOrphan", "docsPage.preventSingleLines"],
-      ["pageBreakBefore", "docsPage.pageBreakBefore"],
-    ] as [PageFlag, TKey][]
-  ).map(([flag, label]) => ({
-    id: `page:${flag}`,
-    label,
-    menu: "format" as const,
-    keywords: ["pagination", "line & paragraph spacing", "page break"],
-    run: (editor: Editor) => togglePageFlag(editor, flag),
-    enabled: (editor: Editor) => editor.isEditable && store(editor)?.get().setup.pageless === false,
-  })),
-  // The page number presets: in the header or the footer, on every page or
-  // from the second.
-  ...(
-    [
-      ["header", true, "docsPage.numbersHeader"],
-      ["header", false, "docsPage.numbersHeaderNotFirst"],
-      ["footer", true, "docsPage.numbersFooter"],
-      ["footer", false, "docsPage.numbersFooterNotFirst"],
-    ] as [HeaderArea, boolean, TKey][]
-  ).map(([area, onFirst, label]) => ({
+  ...NUMBER_PRESETS.map(([area, onFirst, label]) => ({
     id: `page:numbers-${area}-${onFirst ? "all" : "not-first"}`,
     label,
     menu: "insert" as const,
@@ -171,7 +151,7 @@ registerDocsCommands([
       const s = store(editor);
       if (s) void s.saveSetup(addPageNumbers(s.get().setup, area, onFirst));
     },
-    enabled: (editor: Editor) => editor.isEditable && store(editor)?.get().setup.pageless === false,
+    enabled: paged,
   })),
   {
     id: "page:zoom-in",
@@ -192,19 +172,5 @@ registerDocsCommands([
       const s = store(editor);
       if (s) s.zoomTo(stepZoom(s.get().scale, -1));
     },
-  },
-  {
-    id: "page:zoom-100",
-    label: "docsPage.zoom100",
-    menu: "view",
-    shortcut: "Mod+0",
-    run: (editor) => store(editor)?.zoomTo(100),
-  },
-  {
-    id: "page:zoom-fit",
-    label: "docsPage.zoomFit",
-    menu: "view",
-    shortcut: "Mod+Alt+[",
-    run: (editor) => store(editor)?.zoomTo("fit"),
   },
 ]);

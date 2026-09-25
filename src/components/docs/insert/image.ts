@@ -1,24 +1,20 @@
 import { Extension, type Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { NodeSelection, Plugin, PluginKey, TextSelection, type EditorState } from "@tiptap/pm/state";
-import { Decoration, DecorationSet, type EditorView, type NodeView } from "@tiptap/pm/view";
-import { emitInsert, insertContext } from "@/components/docs/insert/context";
+import { NodeSelection, Plugin, TextSelection, type EditorState } from "@tiptap/pm/state";
+import type { EditorView, NodeView } from "@tiptap/pm/view";
+import { emitInsert, insertContext, toast } from "@/components/docs/insert/context";
+import { insertImageFiles } from "@/components/docs/typing/paste";
+import { uploadImage } from "@/lib/images";
 
-// Images (SPEC.md §29), the way Google Docs handles them: a new image keeps
-// its ratio and fits the text's width; selected, it gets the blue frame, the
-// eight handles (the corners keep the ratio, the sides stretch one way), and
-// the round rotation handle; a double press crops it (black handles, the
-// rest dimmed; Enter or a press outside applies, Escape cancels). Its layout
-// is Google Docs' five: In line, Wrap text, Break text, Behind text, In
-// front of text (a pageless page takes In line only). An image stays a block
-// of its own in the rich text (a FIGURE row), so In line sits on its own
-// line, aligned. Border, recolor, transparency, brightness, and contrast
-// are attributes too. Paste and drop upload the file (POST /api/images).
+// Images (SPEC.md §29), as Google Docs draws them: the blue frame with eight
+// handles and the rotation handle, crop on a double press, the five layouts
+// (a pageless page takes In line only), and the border and adjustments.
+// Paste and drop are the typing area's (typing/paste.ts).
 
 export type Wrap = "inline" | "wrap" | "break" | "behind" | "front";
-export const WRAPS: Wrap[] = ["inline", "wrap", "break", "behind", "front"];
+const WRAPS: Wrap[] = ["inline", "wrap", "break", "behind", "front"];
 export type WrapSide = "both" | "left" | "right";
-export type ImageAlign = "left" | "center" | "right";
+type ImageAlign = "left" | "center" | "right";
 export type Recolor = "none" | "grayscale" | "sepia" | "negative";
 export type Dash = "solid" | "dotted" | "dashed";
 
@@ -64,10 +60,12 @@ export function imageAttrs(node: PMNode) {
   };
 }
 
-export type ImageAttrs = ReturnType<typeof imageAttrs>;
+type ImageAttrs = ReturnType<typeof imageAttrs>;
 
 /** Every attribute back to the image as it was inserted. */
-export const RESET_ATTRS = {
+const RESET_ATTRS = {
+  width: null,
+  height: null,
   rotation: 0,
   cropTop: 0,
   cropRight: 0,
@@ -126,7 +124,7 @@ export function imageViewAt(view: EditorView, pos: number): ImageView | null {
   return dom instanceof HTMLElement ? imageViews.get(dom) ?? null : null;
 }
 
-export class ImageView implements NodeView {
+class ImageView implements NodeView {
   dom: HTMLElement;
   private box: HTMLElement;
   private frame: HTMLElement;
@@ -181,18 +179,13 @@ export class ImageView implements NodeView {
     return imageAttrs(this.node);
   }
 
-  private pageless(): boolean {
-    return insertContext(this.editor)?.pageSetup.pageless ?? false;
-  }
-
   /** Draw the node's attributes. */
   private render() {
     const a = this.attrs;
-    const wrap: Wrap = this.pageless() ? "inline" : a.wrap;
     const blockId = this.node.attrs.blockId as string | null | undefined;
     if (blockId) this.dom.setAttribute("data-block-id", blockId);
     else this.dom.removeAttribute("data-block-id");
-    this.dom.setAttribute("data-wrap", wrap);
+    this.dom.setAttribute("data-wrap", a.wrap);
     this.dom.setAttribute("data-align", a.align);
     this.dom.setAttribute("data-side", a.wrapSide);
     this.dom.style.setProperty("--docs-img-margin", `${a.wrapMargin}pt`);
@@ -205,8 +198,9 @@ export class ImageView implements NodeView {
     box.width = a.width !== null ? `${a.width}px` : "";
     box.aspectRatio = sized ? `${a.width} / ${a.height}` : "";
     box.transform = a.rotation ? `rotate(${a.rotation}deg)` : "";
-    box.left = wrap === "behind" || wrap === "front" ? `${a.offsetX}px` : "";
-    box.top = wrap === "behind" || wrap === "front" ? `${a.offsetY}px` : "";
+    const floating = a.wrap === "behind" || a.wrap === "front";
+    box.left = floating ? `${a.offsetX}px` : "";
+    box.top = floating ? `${a.offsetY}px` : "";
     this.box.classList.toggle("is-sized", sized);
     const cropped = sized && (a.cropTop || a.cropRight || a.cropBottom || a.cropLeft);
     const img = this.img.style;
@@ -221,7 +215,7 @@ export class ImageView implements NodeView {
       img.maxWidth = "none";
     } else {
       img.position = "";
-      img.width = sized ? "100%" : "";
+      img.width = a.width !== null ? "100%" : "";
       img.height = sized ? "100%" : "";
       img.left = "";
       img.top = "";
@@ -308,7 +302,7 @@ export class ImageView implements NodeView {
   }
 
   /** Write attributes and keep the image selected. */
-  commit(attrs: Record<string, unknown>) {
+  private commit(attrs: Record<string, unknown>) {
     const pos = this.pos();
     if (pos === null) return;
     const node = this.view.state.doc.nodeAt(pos);
@@ -445,10 +439,6 @@ export class ImageView implements NodeView {
 
   // ── Crop ─────────────────────────────────────────────────────────────
 
-  get cropping(): boolean {
-    return this.crop !== null;
-  }
-
   startCrop() {
     if (this.crop || !this.editor.isEditable) return;
     const a = this.attrs;
@@ -561,7 +551,7 @@ export class ImageView implements NodeView {
     this.chrome?.classList.remove("is-cropping");
   }
 
-  applyCrop() {
+  private applyCrop() {
     const c = this.crop;
     if (!c) return;
     this.endCrop();
@@ -577,144 +567,43 @@ export class ImageView implements NodeView {
     this.render();
   }
 
-  cancelCrop() {
+  private cancelCrop() {
     if (!this.crop) return;
     this.endCrop();
     this.render();
   }
 }
 
-// ── Uploads: paste and drop ─────────────────────────────────────────────
-
-type UploadMeta = { add: { id: object; pos: number } } | { remove: object };
-const uploadKey = new PluginKey<DecorationSet>("docsImageUpload");
-
-function uploadWidget() {
-  const span = document.createElement("span");
-  span.className = "docs-img-uploading";
-  span.setAttribute("data-anchor-skip", "");
-  return span;
+/** Insert an image from an address or a file at the selection. */
+export function insertImageFrom(editor: Editor, source: { url: string } | { file: File }): void {
+  if ("file" in source) void insertImageFiles(editor, [source.file]);
+  else editor.chain().focus().setImage({ src: source.url }).run();
 }
 
-function placeholderPos(state: EditorState, id: object): number | null {
-  const found = uploadKey.getState(state)?.find(undefined, undefined, (spec) => spec.id === id);
-  return found && found.length > 0 ? found[0].from : null;
-}
-
-/** The size a new image takes: its own, fitted to the text's width. */
-export function fittedSize(natural: { w: number; h: number }, maxWidth: number): { width: number; height: number } {
-  const scale = natural.w > maxWidth ? maxWidth / natural.w : 1;
-  return { width: Math.max(1, Math.round(natural.w * scale)), height: Math.max(1, Math.round(natural.h * scale)) };
-}
-
-export function naturalSize(src: string): Promise<{ w: number; h: number } | null> {
-  return new Promise((resolve) => {
-    const probe = new Image();
-    probe.onload = () => resolve({ w: probe.naturalWidth, h: probe.naturalHeight });
-    probe.onerror = () => resolve(null);
-    probe.src = src;
-  });
-}
-
-export async function uploadImageFile(file: File): Promise<string> {
-  const res = await fetch("/api/images", { method: "POST", body: file });
-  const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-  if (!res.ok || !body.url) throw new Error(body.error ?? "");
-  return body.url;
-}
-
-/** Build the image node for a source, fitted to the text's width. */
-export async function imageNodeFor(editor: Editor, src: string): Promise<PMNode | null> {
-  const type = editor.schema.nodes.image;
-  if (!type) return null;
-  const natural = await naturalSize(src);
-  const size = natural ? fittedSize(natural, textWidthPx(editor)) : { width: null, height: null };
-  return type.create({ src, ...size });
-}
-
-/** Upload the files and put each image where the placeholder stands. */
-export async function uploadImagesAt(editor: Editor, files: File[], pos: number): Promise<void> {
-  for (const file of files) {
-    const id = {};
-    const at = Math.max(0, Math.min(pos, editor.state.doc.content.size));
-    editor.view.dispatch(editor.state.tr.setMeta(uploadKey, { add: { id, pos: at } } satisfies UploadMeta));
-    try {
-      const url = await uploadImageFile(file);
-      const node = await imageNodeFor(editor, url);
-      if (editor.isDestroyed) return;
-      const here = placeholderPos(editor.state, id);
-      if (node && here !== null) {
-        const tr = editor.state.tr.setMeta(uploadKey, { remove: id } satisfies UploadMeta);
-        tr.replaceRangeWith(here, here, node);
-        editor.view.dispatch(tr);
-      } else {
-        editor.view.dispatch(editor.state.tr.setMeta(uploadKey, { remove: id } satisfies UploadMeta));
-      }
-    } catch (err) {
-      if (editor.isDestroyed) return;
-      editor.view.dispatch(editor.state.tr.setMeta(uploadKey, { remove: id } satisfies UploadMeta));
-      const t = insertContext(editor)?.t;
-      const text = err instanceof Error && err.message ? err.message : t ? t("common.requestFailed") : "";
-      emitInsert(editor, { type: "toast", text });
-    }
-  }
-}
-
-/** Insert an image from an address or an uploaded file at the selection. */
-export async function insertImageFrom(editor: Editor, source: { url: string } | { file: File }): Promise<void> {
-  if ("file" in source) {
-    await uploadImagesAt(editor, [source.file], editor.state.selection.from);
-    return;
-  }
-  const node = await imageNodeFor(editor, source.url);
-  if (!node || editor.isDestroyed) return;
-  const { from, to } = editor.state.selection;
-  editor.view.dispatch(editor.state.tr.replaceRangeWith(from, to, node).scrollIntoView());
-  editor.view.focus();
-}
-
-/** Replace the selected image's picture, keeping its place and width. */
+/** Replace the image's picture; the new one keeps the width, at its own ratio. */
 export async function replaceImage(editor: Editor, pos: number, source: { url: string } | { file: File }): Promise<void> {
-  let url: string;
+  let url = "";
   try {
-    url = "file" in source ? await uploadImageFile(source.file) : source.url;
+    url = "file" in source ? (await uploadImage(source.file)).url : source.url;
   } catch (err) {
-    const t = insertContext(editor)?.t;
-    emitInsert(editor, { type: "toast", text: err instanceof Error && err.message ? err.message : t ? t("common.requestFailed") : "" });
+    toast(err instanceof Error ? err.message : "");
     return;
   }
-  const natural = await naturalSize(url);
-  if (editor.isDestroyed) return;
   const node = editor.state.doc.nodeAt(pos);
-  if (!node || node.type.name !== "image") return;
-  const width = imageAttrs(node).width ?? (natural ? fittedSize(natural, textWidthPx(editor)).width : null);
-  const height = natural && width ? Math.round((natural.h / natural.w) * width) : null;
-  const tr = editor.state.tr.setNodeMarkup(pos, undefined, {
-    ...node.attrs,
-    ...RESET_ATTRS,
-    src: url,
-    width,
-    height,
-  });
+  if (node?.type.name !== "image") return;
+  const width = imageAttrs(node).width;
+  const tr = editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...RESET_ATTRS, src: url, width });
   tr.setSelection(NodeSelection.create(tr.doc, pos));
   editor.view.dispatch(tr);
 }
 
-/** Reset image: no crop, no turn, no adjustments, its own size fitted. */
-export async function resetImage(editor: Editor, pos: number): Promise<void> {
+/** Reset image: no crop, no turn, no adjustments, its own size. */
+export function resetImage(editor: Editor, pos: number): void {
   const node = editor.state.doc.nodeAt(pos);
-  if (!node || node.type.name !== "image") return;
-  const natural = await naturalSize(imageAttrs(node).src);
-  const size = natural ? fittedSize(natural, textWidthPx(editor)) : { width: null, height: null };
-  const current = editor.state.doc.nodeAt(pos);
-  if (!current || current.type.name !== "image") return;
-  const tr = editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, ...RESET_ATTRS, ...size });
+  if (node?.type.name !== "image") return;
+  const tr = editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...RESET_ATTRS });
   tr.setSelection(NodeSelection.create(tr.doc, pos));
   editor.view.dispatch(tr);
-}
-
-function imageFiles(list: FileList | null | undefined): File[] {
-  return Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
 }
 
 /** Resize or turn the selected image from the keys (Google Docs' Ctrl+Alt+K
@@ -830,48 +719,10 @@ export const DocsImage = Extension.create({
   addProseMirrorPlugins() {
     const editor = this.editor;
     return [
-      new Plugin<DecorationSet>({
-        key: uploadKey,
-        state: {
-          init: () => DecorationSet.empty,
-          apply(tr, set) {
-            let next = set.map(tr.mapping, tr.doc);
-            const meta = tr.getMeta(uploadKey) as UploadMeta | undefined;
-            if (meta && "add" in meta) {
-              next = next.add(tr.doc, [Decoration.widget(meta.add.pos, uploadWidget, { id: meta.add.id, side: 1 })]);
-            } else if (meta && "remove" in meta) {
-              next = next.remove(next.find(undefined, undefined, (spec) => spec.id === meta.remove));
-            }
-            return next;
-          },
-        },
+      new Plugin({
         props: {
-          decorations(state) {
-            return uploadKey.getState(state);
-          },
           nodeViews: {
             image: (node, view, getPos) => new ImageView(node, view, getPos, editor),
-          },
-          handlePaste(view, event) {
-            const files = imageFiles(event.clipboardData?.files);
-            if (files.length === 0 || !editor.isEditable) return false;
-            // Words copied with a picture of them (Word, a web page) paste as
-            // words; a picture alone uploads.
-            const html = event.clipboardData?.getData("text/html") ?? "";
-            const words = html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
-            if (words) return false;
-            event.preventDefault();
-            void uploadImagesAt(editor, files, view.state.selection.from);
-            return true;
-          },
-          handleDrop(view, event, _slice, moved) {
-            if (moved || !editor.isEditable) return false;
-            const files = imageFiles(event.dataTransfer?.files);
-            if (files.length === 0) return false;
-            event.preventDefault();
-            const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
-            void uploadImagesAt(editor, files, at?.pos ?? view.state.selection.from);
-            return true;
           },
         },
       }),

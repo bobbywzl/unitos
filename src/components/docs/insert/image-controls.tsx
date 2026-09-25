@@ -3,7 +3,9 @@
 import type { Editor } from "@tiptap/core";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
-import { CheckIcon, DropDownIcon, MoreVertIcon } from "@/components/docs/icons";
+import { MoreVertIcon } from "@/components/docs/icons";
+import { MenuItem } from "@/components/docs/menu";
+import { DropBtn } from "@/components/docs/toolbar/controls";
 import { Swatches } from "@/components/docs/insert/colors";
 import { onInsert, type InsertContext } from "@/components/docs/insert/context";
 import {
@@ -34,16 +36,14 @@ import {
   type Wrap,
   type WrapSide,
 } from "@/components/docs/insert/image";
-import { FloatingBox, PanelSection, SidePanel, useEditorTick, useViewportTick, type Anchor } from "@/components/docs/insert/ui";
+import { ImageSourcePicker } from "@/components/docs/insert/image-source";
+import { FloatingBox, PanelSection, SidePanel, useEditorTick, useViewportTick } from "@/components/docs/insert/ui";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// The image's own controls (SPEC.md §29), Google Docs' way: under a
-// selected image a floating toolbar — In line, Wrap text, Break text,
-// Behind text, In front of text, the margin from the text, and (the main
-// toolbar's image buttons, here beside them) Crop, Border color, Border
-// weight, Border dash, Replace image, Reset image, and More — and the Image
-// options panel: Size & rotation, Text wrapping, Recolor, Adjustments, Alt
-// text (Ctrl+Alt+Y opens it at the description).
+// The image's controls (SPEC.md §29), Google Docs' way: under a selected
+// image a floating toolbar (the five layouts, the margin from the text,
+// Crop, the border buttons, Replace image, Reset image, More), and the Image
+// options panel.
 
 const MODES: { wrap: Wrap; label: TKey; Icon: (p: { size?: number }) => ReactNode }[] = [
   { wrap: "inline", label: "docsInsert.inLine", Icon: InLineIcon },
@@ -74,87 +74,20 @@ export const DASHES: { dash: Dash; label: TKey }[] = [
 
 type Section = "size" | "wrap" | "recolor" | "adjust" | "alt";
 
-function rectOf(el: Element | null | undefined): Anchor | null {
-  if (!el) return null;
-  const r = el.getBoundingClientRect();
-  return { left: r.left, top: r.top, bottom: r.bottom, right: r.right };
-}
-
-/** A toolbar button whose press opens a small menu under it. */
-export function DropButton({
-  label,
-  face,
-  children,
-  wide,
-  disabled,
-}: {
-  label: string;
-  face: ReactNode;
-  children: (close: () => void) => ReactNode;
-  wide?: boolean;
-  disabled?: boolean;
-}) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const [anchor, setAnchor] = useState<Anchor | null>(null);
-  const open = anchor !== null;
-  const close = () => setAnchor(null);
-  return (
-    <>
-      <button
-        ref={ref}
-        type="button"
-        className={`docs-tb-btn docs-tb-drop${wide ? " docs-tb-wide" : ""}${open ? " docs-tb-open" : ""}`}
-        aria-label={label}
-        data-tip={open ? undefined : label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={() => setAnchor(anchor ? null : rectOf(ref.current))}
-      >
-        {face}
-        <DropDownIcon size={18} className="docs-tb-caret" />
-      </button>
-      {anchor && (
-        <FloatingBox anchor={anchor} className="docs-img-menu" role="menu" onDismiss={close}>
-          {children(close)}
-        </FloatingBox>
-      )}
-    </>
-  );
-}
-
-export function MenuRow({ checked, onSelect, children }: { checked?: boolean; onSelect: () => void; children: ReactNode }) {
-  return (
-    <button type="button" role="menuitemradio" aria-checked={checked} className="docs-dd-option" onClick={onSelect}>
-      <span className="docs-dd-check">{checked ? <CheckIcon size={18} /> : null}</span>
-      {children}
-    </button>
-  );
-}
-
 export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
   const t = useT();
   useEditorTick(editor);
   const hit = selectedImage(editor.state);
   useViewportTick(hit !== null);
   const [panel, setPanel] = useState<Section | null>(null);
-  const [byUrl, setByUrl] = useState(false);
-  const [url, setUrl] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [replacing, setReplacing] = useState(false);
   const hitPos = hit?.pos ?? null;
 
   useEffect(
     () =>
       onInsert(editor, (event) => {
         if (event.type === "image-options") setPanel(event.section ?? "size");
-        if (event.type === "crop") {
-          const found = selectedImage(editor.state);
-          if (found) imageViewAt(editor.view, found.pos)?.startCrop();
-        }
-        if (event.type === "image-replace") {
-          if (event.source === "upload") fileRef.current?.click();
-          else setByUrl(true);
-        }
+        if (event.type === "image-replace") setReplacing(true);
       }),
     [editor],
   );
@@ -165,35 +98,24 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
     setLastPos(hitPos);
     if (hitPos === null) {
       setPanel(null);
-      setByUrl(false);
+      setReplacing(false);
     }
   }
 
-  const file = (
-    <input
-      ref={fileRef}
-      type="file"
-      accept="image/*"
-      hidden
-      onChange={(e) => {
-        const chosen = e.target.files?.[0];
-        e.target.value = "";
-        const found = selectedImage(editor.state);
-        if (chosen && found) void replaceImage(editor, found.pos, { file: chosen });
-      }}
-    />
-  );
-  if (!hit || !ctx.editing) return file;
+  if (!hit || !ctx.editing) return null;
   const figure = editor.view.nodeDOM(hit.pos);
-  const box = figure instanceof HTMLElement ? figure.querySelector(".docs-img-box") : null;
-  const anchor = rectOf(box);
+  const box = figure instanceof HTMLElement ? figure.querySelector(".docs-img-box")?.getBoundingClientRect() : null;
+  const anchor = box ? { left: box.left, top: box.top, bottom: box.bottom } : null;
   const a = imageAttrs(hit.node);
   const pageless = ctx.pageSetup.pageless;
   const set = (attrs: Record<string, unknown>) => editor.chain().updateImage(attrs).run();
+  const replace = (source: { file: File } | { url: string }) => {
+    setReplacing(false);
+    void replaceImage(editor, hit.pos, source);
+  };
 
   return (
     <>
-      {file}
       {anchor && (
         <FloatingBox anchor={anchor} gap={12} className="docs-img-toolbar" role="toolbar" label={t("docsInsert.imageOptions")}>
           {MODES.map(({ wrap, label, Icon }) => {
@@ -214,26 +136,20 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
             );
           })}
           {!pageless && (a.wrap === "wrap" || a.wrap === "break") && (
-            <DropButton
+            <DropBtn
               label={t("docsInsert.margin")}
-              wide
-              face={<span className="docs-tb-text">{MARGINS.find(([pt]) => pt === a.wrapMargin)?.[1] ?? `${a.wrapMargin}pt`}</span>}
+              track="image-margin"
+              className="docs-tb-select"
+              face={<span className="docs-tb-caption">{MARGINS.find(([pt]) => pt === a.wrapMargin)?.[1] ?? `${a.wrapMargin}pt`}</span>}
             >
-              {(close) =>
+              {() =>
                 MARGINS.map(([pt, name]) => (
-                  <MenuRow
-                    key={pt}
-                    checked={a.wrapMargin === pt}
-                    onSelect={() => {
-                      set({ wrapMargin: pt });
-                      close();
-                    }}
-                  >
+                  <MenuItem key={pt} checked={a.wrapMargin === pt} onSelect={() => set({ wrapMargin: pt })}>
                     {name}
-                  </MenuRow>
+                  </MenuItem>
                 ))
               }
-            </DropButton>
+            </DropBtn>
           )}
           <span className="docs-tb-sep" aria-hidden />
           <button
@@ -245,7 +161,7 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
           >
             <CropIcon size={20} />
           </button>
-          <DropButton label={t("docsInsert.borderColor")} face={<BorderColorIcon size={20} />}>
+          <DropBtn label={t("docsInsert.borderColor")} track="image-border-color" face={<BorderColorIcon size={20} />}>
             {(close) => (
               <Swatches
                 current={a.borderColor}
@@ -259,141 +175,90 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
                 }}
               />
             )}
-          </DropButton>
-          <DropButton label={t("docsInsert.borderWidth")} face={<BorderWeightIcon size={20} />}>
-            {(close) =>
+          </DropBtn>
+          <DropBtn label={t("docsInsert.borderWidth")} track="image-border-width" face={<BorderWeightIcon size={20} />}>
+            {() =>
               BORDER_WEIGHTS.map((w) => (
-                <MenuRow
+                <MenuItem
                   key={w}
                   checked={a.borderWidth === w && (w > 0 || !a.borderColor)}
-                  onSelect={() => {
-                    set(w === 0 ? { borderWidth: 0 } : { borderWidth: w, borderColor: a.borderColor ?? "#000000" });
-                    close();
-                  }}
+                  onSelect={() => set(w === 0 ? { borderWidth: 0 } : { borderWidth: w, borderColor: a.borderColor ?? "#000000" })}
                 >
-                  <span className="docs-weight-row">
-                    <span className="docs-weight-line" style={{ borderTopWidth: `${Math.max(w, 0.5)}pt`, opacity: w ? 1 : 0.3 }} />
-                    {w} pt
-                  </span>
-                </MenuRow>
+                  <WeightRow width={w} />
+                </MenuItem>
               ))
             }
-          </DropButton>
-          <DropButton label={t("docsInsert.borderDash")} face={<BorderDashIcon size={20} />}>
-            {(close) =>
+          </DropBtn>
+          <DropBtn label={t("docsInsert.borderDash")} track="image-border-dash" face={<BorderDashIcon size={20} />}>
+            {() =>
               DASHES.map(({ dash, label }) => (
-                <MenuRow
+                <MenuItem
                   key={dash}
                   checked={a.borderDash === dash}
-                  onSelect={() => {
-                    set({ borderDash: dash, borderColor: a.borderColor ?? "#000000", borderWidth: a.borderWidth || 1 });
-                    close();
-                  }}
+                  onSelect={() => set({ borderDash: dash, borderColor: a.borderColor ?? "#000000", borderWidth: a.borderWidth || 1 })}
                 >
-                  <span className="docs-weight-row">
-                    <span className="docs-weight-line" style={{ borderTopStyle: dash, borderTopWidth: "2px" }} />
-                    {t(label)}
-                  </span>
-                </MenuRow>
+                  <DashRow dash={dash} label={t(label)} />
+                </MenuItem>
               ))
             }
-          </DropButton>
-          <DropButton label={t("docsInsert.replaceImage")} face={<ResetIcon size={20} />}>
-            {(close) => (
-              <>
-                <MenuRow
-                  onSelect={() => {
-                    close();
-                    fileRef.current?.click();
-                  }}
-                >
-                  {t("docs.uploadFromComputer")}
-                </MenuRow>
-                <MenuRow
-                  onSelect={() => {
-                    close();
-                    setByUrl(true);
-                  }}
-                >
-                  {t("docs.imageByUrl")}
-                </MenuRow>
-              </>
-            )}
-          </DropButton>
+          </DropBtn>
+          <button
+            type="button"
+            className="docs-tb-btn"
+            aria-label={t("docsInsert.replaceImage")}
+            data-tip={t("docsInsert.replaceImage")}
+            aria-expanded={replacing}
+            onClick={() => setReplacing((r) => !r)}
+          >
+            <ResetIcon size={20} />
+          </button>
           <button
             type="button"
             className="docs-tb-btn"
             aria-label={t("docsInsert.resetImage")}
             data-tip={t("docsInsert.resetImage")}
-            onClick={() => void resetImage(editor, hit.pos)}
+            onClick={() => resetImage(editor, hit.pos)}
           >
             <RefreshIcon size={20} />
           </button>
           <span className="docs-tb-sep" aria-hidden />
-          <DropButton label={t("docs.more")} face={<MoreVertIcon size={20} />}>
-            {(close) => (
+          <DropBtn label={t("docs.more")} track="image-more" arrow={false} face={<MoreVertIcon size={20} />}>
+            {() => (
               <>
-                <MenuRow
-                  onSelect={() => {
-                    close();
-                    setPanel("size");
-                  }}
-                >
-                  {t("docsInsert.sizeRotation")}
-                </MenuRow>
-                <MenuRow
-                  onSelect={() => {
-                    close();
-                    setPanel("alt");
-                  }}
-                >
-                  {t("docsInsert.altText")}
-                </MenuRow>
-                <MenuRow
-                  onSelect={() => {
-                    close();
-                    setPanel("wrap");
-                  }}
-                >
-                  {t("docsInsert.allImageOptions")}
-                </MenuRow>
+                <MenuItem onSelect={() => setPanel("size")}>{t("docsInsert.sizeRotation")}</MenuItem>
+                <MenuItem onSelect={() => setPanel("alt")}>{t("docsInsert.altText")}</MenuItem>
+                <MenuItem onSelect={() => setPanel("wrap")}>{t("docsInsert.allImageOptions")}</MenuItem>
               </>
             )}
-          </DropButton>
+          </DropBtn>
         </FloatingBox>
       )}
-      {byUrl && anchor && (
-        <FloatingBox anchor={{ ...anchor, top: anchor.bottom + 48, bottom: anchor.bottom + 48 }} className="docs-img-url" onDismiss={() => setByUrl(false)}>
-          <form
-            className="docs-image-url-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const value = url.trim();
-              if (!/^https?:\/\/\S+$/i.test(value)) return;
-              setByUrl(false);
-              setUrl("");
-              void replaceImage(editor, hit.pos, { url: value });
-            }}
-          >
-            <label className="docs-field-label" htmlFor="docs-replace-url">
-              {t("docs.imageByUrl")}
-            </label>
-            <input
-              id="docs-replace-url"
-              className="docs-field"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder={t("docsInsert.imageUrlPlaceholder")}
-              autoFocus
-            />
-            <button type="submit" className="docs-button-primary" disabled={!/^https?:\/\/\S+$/i.test(url.trim())}>
-              {t("docsInsert.replaceImage")}
-            </button>
-          </form>
+      {replacing && anchor && (
+        <FloatingBox anchor={{ ...anchor, bottom: anchor.bottom + 48 }} className="docs-picker" onDismiss={() => setReplacing(false)}>
+          <ImageSourcePicker onFile={(file) => replace({ file })} onUrl={(url) => replace({ url })} />
         </FloatingBox>
       )}
       {panel && <ImageOptionsPanel editor={editor} ctx={ctx} section={panel} onClose={() => setPanel(null)} />}
     </>
+  );
+}
+
+/** A border weight as Google Docs lists it: the line, then its points. */
+export function WeightRow({ width }: { width: number }) {
+  return (
+    <span className="docs-weight-row">
+      <span className="docs-weight-line" style={{ borderTopWidth: `${Math.max(width, 0.5)}pt`, opacity: width ? 1 : 0.3 }} />
+      {width} pt
+    </span>
+  );
+}
+
+export function DashRow({ dash, label }: { dash: Dash; label: string }) {
+  return (
+    <span className="docs-weight-row">
+      <span className="docs-weight-line" style={{ borderTopStyle: dash, borderTopWidth: "2px" }} />
+      {label}
+    </span>
   );
 }
 

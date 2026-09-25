@@ -100,7 +100,7 @@ const CUSTOM_KEY = "unitos-docs-custom-colors";
 const CUSTOM_MAX = 10;
 const HEX = /^#[0-9a-f]{6}$/;
 
-export function readCustomColors(): string[] {
+function readCustomColors(): string[] {
   try {
     const raw = localStorage.getItem(CUSTOM_KEY);
     const list = raw ? (JSON.parse(raw) as unknown) : [];
@@ -193,7 +193,7 @@ export function ColorMenu({
   };
   return (
     <div className="docs-palette">
-      {kind === "highlight" && onNone && (
+      {onNone && (
         <MenuItem onSelect={onNone} icon={<ColorResetIcon size={18} />} className="docs-palette-none" track="docs:highlight-none">
           {t("docs.noHighlight")}
         </MenuItem>

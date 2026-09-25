@@ -3,17 +3,13 @@
 import type { Editor } from "@tiptap/react";
 import { useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
-import { FONT_SIZES, stepSelectionFontSize } from "@/components/docs/extensions";
-import { AddIcon, RemoveIcon } from "@/components/docs/icons";
-import { withKeys } from "@/components/docs/keys";
-import { DropdownPanel, highlight, MenuItem } from "@/components/docs/menu";
-import { Btn } from "@/components/docs/toolbar/controls";
+import { FONT_SIZES } from "@/components/docs/extensions";
+import { DropdownPanel, highlight, highlighted, MenuItem, moveHighlight } from "@/components/docs/menu";
 
-// The size (SPEC.md §29): Decrease font size, the size box, Increase font
-// size. − and + move every run one point (Ctrl+Shift+, and .); the box
+// The size box (SPEC.md §29), between Decrease and Increase font size: it
 // takes a typed size — floored to half a point, clamped to 1–400 — and
-// opens Google Docs' list of sizes. A selection that mixes sizes leaves
-// the box blank.
+// opens Google Docs' list of sizes. A selection that mixes sizes leaves it
+// blank.
 
 /** A typed size: a positive number, floored to 0.5 and clamped to 1–400;
     null restores the previous value. */
@@ -30,7 +26,7 @@ export function formatSize(size: number | null): string {
   return Number.isInteger(floored) ? String(floored) : floored.toFixed(1);
 }
 
-export function FontSizeControl({ editor, size, disabled }: { editor: Editor; size: number | null; disabled: boolean }) {
+export function FontSizeBox({ editor, size }: { editor: Editor; size: number | null }) {
   const t = useT();
   const [draft, setDraft] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -46,38 +42,21 @@ export function FontSizeControl({ editor, size, disabled }: { editor: Editor; si
     setOpen(false);
     setMoved(false);
     inputRef.current?.blur();
-    if (n === null) {
-      editor.commands.focus();
-      return;
-    }
-    editor.chain().focus().setFontSize(`${n}pt`).run();
+    if (n === null) editor.commands.focus();
+    else editor.chain().focus().setFontSize(`${n}pt`).run();
   };
   const panel = () => document.querySelector<HTMLElement>(".docs-menu-sizes");
 
   return (
-    <div className="docs-size">
-      <Btn
-        label={t("docs.decreaseFontSize")}
-        tip={withKeys(t("docs.decreaseFontSize"), "Mod+Shift+,")}
-        track="font-size-down"
-        disabled={disabled}
-        className="docs-size-down"
-        onClick={() => {
-          stepSelectionFontSize(editor, -1);
-          editor.commands.focus();
-        }}
-      >
-        <RemoveIcon size={20} />
-      </Btn>
+    <>
       <span
         ref={boxRef}
         className="docs-size-box"
         data-open={open ? "" : undefined}
-        data-disabled={disabled ? "" : undefined}
         data-tip={open ? undefined : t("docs.fontSize")}
         data-tb-item
         onMouseDown={(e) => {
-          if (e.target === inputRef.current || disabled) return;
+          if (e.target === inputRef.current) return;
           e.preventDefault();
           inputRef.current?.focus();
         }}
@@ -85,7 +64,6 @@ export function FontSizeControl({ editor, size, disabled }: { editor: Editor; si
         <input
           ref={inputRef}
           value={shown}
-          disabled={disabled}
           tabIndex={-1}
           aria-label={t("docs.fontSizeValue", { n: formatSize(size) })}
           role="combobox"
@@ -115,14 +93,11 @@ export function FontSizeControl({ editor, size, disabled }: { editor: Editor; si
           }}
           onKeyDown={(e) => {
             const list = panel();
-            const active = list?.querySelector<HTMLElement>("[data-menu-item][data-active]");
+            const active = list && highlighted(list);
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {
               e.preventDefault();
               if (!list) return;
-              const all = [...list.querySelectorAll<HTMLElement>("[data-menu-item]")];
-              const i = active ? all.indexOf(active) : -1;
-              const next = e.key === "ArrowDown" ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, i - 1)];
-              highlight(list, next ?? null);
+              moveHighlight(list, e.key);
               setMoved(true);
             } else if (e.key === "Enter") {
               e.preventDefault();
@@ -137,7 +112,7 @@ export function FontSizeControl({ editor, size, disabled }: { editor: Editor; si
         />
       </span>
       <DropdownPanel
-        open={open && !disabled}
+        open={open}
         anchorRef={boxRef}
         onClose={() => setOpen(false)}
         className="docs-menu-plain docs-menu-sizes"
@@ -151,19 +126,6 @@ export function FontSizeControl({ editor, size, disabled }: { editor: Editor; si
           </MenuItem>
         ))}
       </DropdownPanel>
-      <Btn
-        label={t("docs.increaseFontSize")}
-        tip={withKeys(t("docs.increaseFontSize"), "Mod+Shift+.")}
-        track="font-size-up"
-        disabled={disabled}
-        className="docs-size-up"
-        onClick={() => {
-          stepSelectionFontSize(editor, 1);
-          editor.commands.focus();
-        }}
-      >
-        <AddIcon size={20} />
-      </Btn>
-    </div>
+    </>
   );
 }

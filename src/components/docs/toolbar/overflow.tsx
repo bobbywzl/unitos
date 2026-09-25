@@ -82,7 +82,7 @@ export function ToolbarRow({
     const base = rightEl.offsetWidth + 4 - (caption ? caption.offsetWidth + 2 : 0);
     const rightOpen = base + (caption ? CAPTION_OPEN : 0);
     const rightFolded = base + (caption ? CAPTION_FOLDED : 0);
-    const list = groups.map((g, i) => (widths.current.get(g.key) ?? 0) + (i > 0 && g.sep && !widths.current.has(g.key) ? 7 : 0));
+    const list = groups.map((g) => widths.current.get(g.key) ?? 0);
     const total = list.reduce((a, b) => a + b, 0);
     let nextShown = count;
     let nextFolded = false;
@@ -116,7 +116,6 @@ export function ToolbarRow({
     observer.observe(bar);
     return () => observer.disconnect();
   }, []);
-
 
   // Search the menus opens a menu that sits in the bubble: the bubble
   // opens first, then the menu.

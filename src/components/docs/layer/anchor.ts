@@ -4,16 +4,13 @@ import type { EditorView } from "@tiptap/pm/view";
 import { inlineText } from "@/lib/docs/blocks";
 import type { RichNode } from "@/lib/docs/schema";
 
-// Anchors in the page editor (SPEC.md §5, §29). A selection is one segment
-// per paragraph it touches, each the paragraph's blockId and offsets in its
-// words exactly as the paragraph index derives them (lib/docs/blocks.ts
-// inlineText). They are read from the editor's document, not from the DOM:
-// a line break draws as <br>, a chip draws its own text, and a mark's chip
-// is a widget — counted from the DOM, each would shift every offset after it.
-// Type imports only: the reader loads this module for every document, and
-// the editor library stays in the page editor's own bundle.
+// Anchors in the page editor (SPEC.md §5, §29): one segment per paragraph,
+// offsets in the paragraph's words as lib/docs/blocks.ts derives them. They
+// are read from the editor's document: the DOM's <br>s, chips, and mark
+// widgets would shift the offsets. Type imports only: the reader loads this
+// for every document.
 
-export type PageSegment = {
+type PageSegment = {
   blockId: string;
   startOffset: number;
   endOffset: number;
@@ -22,37 +19,23 @@ export type PageSegment = {
   suffix: string;
 };
 
-/** Prefix and suffix length (SPEC.md §5). */
 const CONTEXT = 32;
 
-/** The page editor's editor, found from its DOM (Tiptap keeps the instance on
-    the editable element). */
-export function pageEditorOf(el: Element | null): Editor | null {
-  const dom = el?.closest<HTMLElement & { editor?: Editor }>("[data-docs-body]");
-  const editor = dom?.editor;
-  return editor && !editor.isDestroyed ? editor : null;
-}
-
-/** The page editor inside a reader pane, if the pane shows a blank document. */
+/** The page editor inside a reader pane (Tiptap keeps it on its DOM). */
 export function pageEditorIn(container: Element | null): Editor | null {
-  return pageEditorOf(container?.querySelector("[data-docs-body]") ?? null);
+  const dom = container?.querySelector<HTMLElement & { editor?: Editor }>("[data-docs-body]");
+  return dom?.editor && !dom.editor.isDestroyed ? dom.editor : null;
 }
 
-/** Characters one inline node adds to its paragraph's words. */
 function inlineLength(node: PMNode): number {
   if (node.isText) return node.text?.length ?? 0;
   if (node.type.name === "hardBreak") return 1;
   return inlineText(node.toJSON() as RichNode).length;
 }
 
-/** A paragraph's words, as its Block row holds them. */
-export function blockWords(block: PMNode): string {
-  return inlineText(block.toJSON() as RichNode);
-}
-
-/** The offset in its paragraph's words of a position inside the paragraph
-    (blockPos is the position before the paragraph). */
-export function offsetInBlock(block: PMNode, blockPos: number, pos: number): number {
+/** The offset in its paragraph's words of a position in the paragraph
+    (blockPos is the position before it). */
+function offsetInBlock(block: PMNode, blockPos: number, pos: number): number {
   let offset = 0;
   let at = blockPos + 1;
   for (let i = 0; i < block.childCount && at < pos; i++) {
@@ -64,8 +47,7 @@ export function offsetInBlock(block: PMNode, blockPos: number, pos: number): num
   return offset;
 }
 
-/** The document position of an offset in a paragraph's words. An offset
-    inside a chip lands after it. */
+/** The position of an offset in a paragraph's words; inside a chip, after it. */
 export function posInBlock(block: PMNode, blockPos: number, offset: number): number {
   let text = 0;
   let pos = blockPos + 1;
@@ -87,31 +69,19 @@ export function findBlock(doc: PMNode, blockId: string): { node: PMNode; pos: nu
   let found: { node: PMNode; pos: number } | null = null;
   doc.descendants((node, pos) => {
     if (found) return false;
-    if (node.isTextblock && node.attrs.blockId === blockId) {
-      found = { node, pos };
-      return false;
-    }
+    if (node.isTextblock && node.attrs.blockId === blockId) found = { node, pos };
     return !node.isTextblock;
   });
   return found;
 }
 
-/** The nodes a passage leaves out: they hold no words to quote. */
+/** Images and equations hold no words to quote: a passage leaves them out. */
 const LEFT_OUT = new Set(["image", "blockMath"]);
 
-export type PageSelection = {
-  segments: PageSegment[];
-  /** The selection crossed an image or an equation on its own line, which
-      the passage leaves out. */
-  truncated: boolean;
-};
-
-/** One segment per paragraph between two document positions, in reading
-    order; a paragraph whose part is only whitespace takes none. */
-export function segmentsBetween(doc: PMNode, from: number, to: number): PageSelection {
+/** One segment per paragraph between two positions; whitespace takes none. */
+function segmentsBetween(doc: PMNode, from: number, to: number): { segments: PageSegment[]; truncated: boolean } {
   const segments: PageSegment[] = [];
   let truncated = false;
-  if (to <= from) return { segments, truncated };
   doc.nodesBetween(from, to, (node, pos) => {
     if (LEFT_OUT.has(node.type.name)) truncated = true;
     if (!node.isTextblock) return true;
@@ -119,8 +89,7 @@ export function segmentsBetween(doc: PMNode, from: number, to: number): PageSele
     if (typeof blockId !== "string" || !blockId) return false;
     const start = offsetInBlock(node, pos, Math.max(from, pos + 1));
     const end = offsetInBlock(node, pos, Math.min(to, pos + node.nodeSize - 1));
-    if (end <= start) return false;
-    const text = blockWords(node);
+    const text = inlineText(node.toJSON() as RichNode);
     const quotedText = text.slice(start, end);
     if (!quotedText.trim()) return false;
     segments.push({
@@ -136,8 +105,8 @@ export function segmentsBetween(doc: PMNode, from: number, to: number): PageSele
   return { segments, truncated };
 }
 
-/** A DOM boundary as a document position; the fallback when the boundary is
-    outside the editor's text (a drag that began in the page's margin). */
+/** A DOM boundary as a position; the fallback when it is outside the text (a
+    drag that began in the page's margin). */
 function positionOf(view: EditorView, node: Node, offset: number, fallback: number): number {
   if (!view.dom.contains(node)) return fallback;
   try {
@@ -147,9 +116,9 @@ function positionOf(view: EditorView, node: Node, offset: number, fallback: numb
   }
 }
 
-/** The passage a DOM range selects in the page editor: its segments, one per
-    paragraph. Null when the range is not in this editor's text. */
-export function pageSelectionOfRange(editor: Editor, range: Range): PageSelection | null {
+/** The passage a DOM range selects in the page editor; null when the range is
+    not in its text. */
+export function pageSelectionOfRange(editor: Editor, range: Range) {
   const { view, state } = editor;
   if (!view.dom.contains(range.startContainer) && !view.dom.contains(range.endContainer)) return null;
   const from = positionOf(view, range.startContainer, range.startOffset, state.selection.from);
@@ -157,35 +126,22 @@ export function pageSelectionOfRange(editor: Editor, range: Range): PageSelectio
   return segmentsBetween(state.doc, Math.min(from, to), Math.max(from, to));
 }
 
-const WORD = /[\p{L}\p{N}\p{M}_'’-]/u;
-
-/** The word the caret stands in or touches, as document positions — the words
-    Add comment takes with no selection, as in Google Docs. Null when the
-    selection is not a caret or the caret is not at a word. */
+/** The word the caret stands in or touches (Add comment with no selection, as
+    in Google Docs); the language's own word breaks, for Chinese too. */
 export function wordAtCaret(editor: Editor): { from: number; to: number } | null {
   const { selection } = editor.state;
   const $pos = selection.$from;
   if (!selection.empty || !$pos.parent.isTextblock) return null;
   const block = $pos.parent;
   const blockPos = $pos.before();
-  const text = blockWords(block);
   const offset = offsetInBlock(block, blockPos, $pos.pos);
-  let start = offset;
-  let end = offset;
-  const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
-  if (Segmenter) {
-    // The language's own word breaks: Chinese has no spaces between words.
-    for (const part of new Segmenter(undefined, { granularity: "word" }).segment(text)) {
-      const partEnd = part.index + part.segment.length;
-      if (!part.isWordLike || partEnd < offset || part.index > offset) continue;
-      start = part.index;
-      end = partEnd;
-      if (offset < partEnd) break;
-    }
-  } else {
-    while (start > 0 && WORD.test(text[start - 1])) start--;
-    while (end < text.length && WORD.test(text[end])) end++;
+  let word: { start: number; end: number } | null = null;
+  const text = inlineText(block.toJSON() as RichNode);
+  for (const part of new Intl.Segmenter(undefined, { granularity: "word" }).segment(text)) {
+    const end = part.index + part.segment.length;
+    if (!part.isWordLike || end < offset || part.index > offset) continue;
+    word = { start: part.index, end };
+    if (offset < end) break;
   }
-  if (end <= start) return null;
-  return { from: posInBlock(block, blockPos, start), to: posInBlock(block, blockPos, end) };
+  return word && { from: posInBlock(block, blockPos, word.start), to: posInBlock(block, blockPos, word.end) };
 }

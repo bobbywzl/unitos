@@ -169,12 +169,8 @@ type Popover = {
   truncated: boolean; // the selection crossed an equation or a page, which the passage leaves out
   figure?: boolean; // opened by the hold-and-circle gesture on a figure, equation, or table: the anchor is the whole block
   term?: boolean; // opened by clicking a key term; Extract leads, recommended
-  // Too close to the top of the pane for the bubbles above the toolbox:
-  // they drop below it. Unset: the top of the article decides.
-  nearTop?: boolean;
-  // The page editor's page as the toolbar opened, and its shift (SPEC.md
-  // §29): the toolbox sits beside the page's right edge, never over the text.
-  page?: { geo: PageGeometry; shift: number };
+  nearTop?: boolean; // the bubbles above the toolbox drop below it; unset: the article's top decides
+  page?: { geo: PageGeometry; shift: number }; // the page editor's page as the toolbar opened (SPEC.md §29)
   // Placement, by proximity to open tool blocks: right of the text first, then
   // left, then directly below the highlighted text. Bases are container coords.
   side: "right" | "left" | "below";
@@ -192,13 +188,10 @@ function isTextEntry(el: HTMLElement): boolean {
   );
 }
 
-// The keys that move the caret in the page editor: without Shift they drop a
-// selection made with the keyboard.
+// Without Shift, these keys drop a selection made with the keyboard.
 const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 
-// A jump flashes the mark or the block it lands on. In the page editor the
-// flash is the editor's own decoration (SPEC.md §29): a class written on its
-// text's DOM would be redrawn away.
+// A jump flashes the mark or the block it lands on; the page editor paints it.
 function flashElement(el: HTMLElement) {
   if (flashInPage(el)) return;
   el.classList.add("anchor-flash");
@@ -583,8 +576,7 @@ type AnnotationCard = {
   saved: string; // comment as loaded; Save enables on change
   top: number;
   left: number;
-  // The page editor's margin sets its width (SPEC.md §29); else 300.
-  width?: number;
+  width?: number; // set by the page editor's margin (SPEC.md §29); else 300
   busy: boolean;
 };
 
@@ -1417,9 +1409,8 @@ export function ReaderInteractions({
   const narrowRef = useRef(false);
   const splitRef = useRef(split);
   splitRef.current = split;
-  // The page editor (SPEC.md §29): how far its page moves left while cards
-  // sit in its margin, as Google Docs moves the page for its comments. The
-  // pane carries it as --docs-shift; 0 with no card open.
+  // How far the page editor's page moves left for the cards in its margin
+  // (--docs-shift, SPEC.md §29).
   const [docsShift, setDocsShift] = useState(0);
   const docsShiftRef = useRef(0);
   docsShiftRef.current = docsShift;
@@ -1483,10 +1474,8 @@ export function ReaderInteractions({
   ) {
     const { rects, articleLeft, articleRight, cw } = measureSideCards(containerRef.current, kind);
     // The page editor (SPEC.md §29): one column in the page's right margin,
-    // like Google Docs' comment cards — each card level with its words, below
-    // a card already there — and the page moves left to make room. A log
-    // card shows only while the pointer rests: it takes the margin as it is
-    // and never moves the page. With no room, cards dock under their words.
+    // each card level with its words or below the card above; the page moves
+    // left to make room, but not for a log card. No room: under the words.
     const shift = docsShiftRef.current;
     const page = richTextRef.current ? pageGeometry(containerRef.current, shift) : null;
     if (page) {
@@ -1780,9 +1769,8 @@ export function ReaderInteractions({
     if (!container || !selection || selection.isCollapsed || selection.rangeCount === 0) return null;
     const range = selection.getRangeAt(0);
     if (!container.contains(range.commonAncestorContainer)) return null;
-    // A blank document (SPEC.md §29): the passage is read from the page
-    // editor's own document, so its offsets are the paragraph index's — a
-    // line break or a chip counted from the DOM would shift them.
+    // A blank document's passage is read from the page editor's document
+    // (SPEC.md §29).
     const pageEditor = richTextRef.current ? pageEditorIn(container) : null;
     const pageSelection = pageEditor ? pageSelectionOfRange(pageEditor, range) : null;
     const pageSegments = pageSelection?.segments ?? null;
@@ -1873,10 +1861,8 @@ export function ReaderInteractions({
     const { rects, articleLeft, articleRight, cw } = measureSideCards(container);
     const articleMid = (articleLeft + articleRight) / 2;
     const POPOVER_ESTIMATE = 280;
-    // The page editor (SPEC.md §29): the toolbox sits beside the page's right
-    // edge at the selection's height, where Google Docs shows its floating
-    // buttons — over the page's margin when the pane is tight, never over the
-    // text; with room for neither it goes under the words.
+    // The page editor (SPEC.md §29): beside the page's right edge, else over
+    // its margin, else under the words.
     const shift = docsShiftRef.current;
     const pageGeo = pageEditor ? pageGeometry(container, shift) : null;
     const side = window.matchMedia("(pointer: coarse)").matches
@@ -1890,19 +1876,15 @@ export function ReaderInteractions({
           : blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
             ? ("left" as const)
             : ("below" as const);
-    // Google Docs centers its buttons on the selection's first line: the
-    // toolbox's first row sits there. The page editor's title row and
-    // toolbar stay at the top of the pane, so near them the bubbles above
-    // the toolbox drop below it.
+    // The toolbox's first row centers on the selection's first line, as
+    // Google Docs' buttons do.
     const firstLine = lineRects[0] ?? rect;
     const lineTop = firstLine.top + firstLine.height / 2 - 20;
     const headerBottom = pageGeo
       ? container.querySelector(".docs-header")?.getBoundingClientRect().bottom
       : undefined;
-    // Right under that toolbar the toolbox steps down: Add to notes keeps
-    // its room above it. Under the words (no room beside the page), the
-    // whole stack sits below them: Add to notes between the words and the
-    // toolbox, the colors under it.
+    // Under the page editor's toolbar, and under the words, the bubbles drop
+    // below the toolbox.
     const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
     const pageBelow = Boolean(pageGeo) && side === "below";
     return {
@@ -1956,8 +1938,7 @@ export function ReaderInteractions({
         setAnnotationCard(null);
         setExtractCard(null);
         setCloseLink(null);
-        // In the page editor the selection stays, as in Google Docs: the
-        // toolbar goes, the words stay selected for the next command.
+        // The page editor keeps the selection, as Google Docs does.
         if (!richTextRef.current) window.getSelection()?.removeAllRanges();
         return;
       }
@@ -1983,8 +1964,7 @@ export function ReaderInteractions({
       if (event.button !== 0) return;
       if (!popoverRef.current && !closeLinkRef.current) return;
       const target = event.target instanceof Element ? event.target : null;
-      // The page editor's title row and toolbar act on the selection the
-      // toolbar is open on (SPEC.md §29): a press there keeps it.
+      // The page editor's toolbar acts on the open selection: a press there keeps it.
       if (target?.closest("[data-selection-popover], .selection-mark, .link-pending-mark, [data-docs-editor] [data-edit-control]")) return;
       setPopover(null);
       setSubmenu(null);
@@ -2006,8 +1986,7 @@ export function ReaderInteractions({
         suppressNextMouseUp.current = false;
         return;
       }
-      // A press on the page editor's toolbar is a command, not the end of a
-      // selection: Add comment there opens the Comment tool itself.
+      // A press on the page editor's toolbar is a command, not a selection.
       if (
         event.target instanceof Element &&
         event.target.closest("[data-selection-popover], [data-docs-editor] [data-edit-control]")
@@ -2116,14 +2095,12 @@ export function ReaderInteractions({
     const onComment = (e: Event) => {
       const detail = (e as CustomEvent<{ documentId: string }>).detail;
       if (detail?.documentId !== documentId) return;
-      // Both panes of a split view can show the document: the pane whose
-      // page has the focus takes the command.
+      // In a split view of one document, the focused pane takes it.
       const editor = pageEditorIn(containerRef.current);
       const panes = document.querySelectorAll(`[data-reader-root][data-document-id="${documentId}"]`).length;
       if (!editor || (panes > 1 && !editor.view.hasFocus())) return;
       let captured = captureSelection();
-      // A caret in a word and no selection: the comment takes the word, as
-      // in Google Docs.
+      // A caret in a word: the comment takes the word, as in Google Docs.
       const word = captured ? null : wordAtCaret(editor);
       if (word) {
         editor.commands.setTextSelection(word);
@@ -2133,12 +2110,10 @@ export function ReaderInteractions({
         showToast(t("docs.selectToComment"));
         return;
       }
-      // Ctrl+Alt+M's keys come up before React renders: the keyup below reads
-      // the ref, finds this selection open, and leaves the Comment tool.
+      // Ctrl+Alt+M's keyup (below) can come before React renders: it reads
+      // the ref and leaves the Comment tool open.
       popoverRef.current = captured;
-      // The new comment takes the margin: the comment card a click on a mark
-      // opened closes, unless it holds unsaved words, and so does the on-mark
-      // card.
+      // The new comment takes the margin from a saved comment card.
       setCommentCard((c) => (c && !c.busy && c.draft === c.saved ? null : c));
       setAnnotationCard(null);
       setPopover(captured);
@@ -2557,9 +2532,8 @@ export function ReaderInteractions({
         text,
       });
       setQuoteDragImage(e.dataTransfer, text);
-      // In the page editor the same drag moves the words inside the page
-      // (SPEC.md §29), and the typing saves while the drag is on its way, so
-      // the note it lands on anchors on saved words.
+      // In the page editor the drag also moves words within the page, and
+      // the typing saves on the way, so the note anchors on saved words.
       if (richTextRef.current) {
         e.dataTransfer.effectAllowed = "copyMove";
         void flushEditRef.current?.();
@@ -2881,8 +2855,7 @@ export function ReaderInteractions({
         const width = 300;
         // A pure highlight stores its quote as content; its comment starts empty.
         const comment = summary.content === (summary.quotedText ?? "") ? "" : summary.content;
-        // The page editor (SPEC.md §29): the card docks in the page's right
-        // margin level with its words, like a Google Docs comment card.
+        // The page editor: the card docks in the margin, level with its words.
         const page =
           richTextRef.current && !splitRef.current ? pageGeometry(container, docsShiftRef.current) : null;
         const place = page ? marginPlace(page) : null;
@@ -3011,8 +2984,7 @@ export function ReaderInteractions({
     const container = containerRef.current;
     if (!container) return null;
     const measured = measureSideCards(container);
-    // The page editor (SPEC.md §29) is narrow when its margin has no room
-    // for a card even with the page moved left.
+    // The page editor is narrow when its margin has no room for a card.
     const page = richTextRef.current ? pageGeometry(container, docsShiftRef.current) : null;
     const isNarrow =
       splitRef.current ||
@@ -3047,8 +3019,7 @@ export function ReaderInteractions({
       const measured = applyNarrow();
       if (!measured) return;
       const { articleLeft, articleRight, cw } = measured;
-      // The page editor: the margin's column at the new width, and the shift
-      // it needs; with no room, under the words and the page back in place.
+      // The page editor: the margin at the new width, else under the words.
       const page = richTextRef.current ? pageGeometry(container, docsShiftRef.current) : null;
       const place = page && !narrowRef.current ? marginPlace(page) : null;
       if (page) setDocsShift(place && marginCardOpenRef.current ? place.shift : 0);
@@ -3078,11 +3049,8 @@ export function ReaderInteractions({
   useEffect(() => {
     applyNarrow();
   }, [split, applyNarrow]);
-  // The page editor's cards follow its page (SPEC.md §29): a card opens where
-  // the page will be once it has moved; at the end of the move (0.2 s, or at
-  // once under reduced motion) every card in the margin docks against where
-  // the page is, so a page that could not move as far still has its cards
-  // beside it.
+  // Once the page editor's page has moved (0.2 s), the margin's cards dock
+  // against where it is.
   const blankDocument = Boolean(richText);
   useEffect(() => {
     const container = containerRef.current;
@@ -3113,19 +3081,17 @@ export function ReaderInteractions({
       container.removeEventListener("transitionend", onMoved);
     };
   }, [docsShift, blankDocument]);
-  // The page moves back once no card sits in the margin and the toolbar is
-  // closed, and never under a held press: a press on the page closes the
-  // card, and the words would slide under the drag it starts. A press that
-  // makes a selection opens the toolbar (a frame after the mouseup), and the
-  // page stays where the toolbar measured it.
-  const pageHeld =
-    popover !== null ||
+  // The page moves back once no card and no toolbar is open, and not under a
+  // held press: the words would slide under the drag it starts.
+  const marginCardOpen =
     bubble !== null ||
     simplifyCard !== null ||
     assistantChat !== null ||
     commentCard !== null ||
     linkCard !== null ||
     annotationCard !== null;
+  marginCardOpenRef.current = marginCardOpen;
+  const pageHeld = marginCardOpen || popover !== null;
   const pressedRef = useRef(false);
   useEffect(() => {
     if (!blankDocument) return;
@@ -3162,9 +3128,7 @@ export function ReaderInteractions({
       window.removeEventListener("pointercancel", back);
     };
   }, [pageHeld, docsShift]);
-  // The page editor's words changed under the toolbar — typing, a paste, an
-  // undo: its anchor no longer names them, so the toolbar and the Close link
-  // chip close (components/docs/areas/layer.tsx raises the event).
+  // The page editor's words changed: the toolbar and the Close link chip close.
   useEffect(() => {
     if (!blankDocument) return;
     const onEdited = (e: Event) => {
@@ -3177,10 +3141,8 @@ export function ReaderInteractions({
     window.addEventListener(PAGE_EDITED_EVENT, onEdited);
     return () => window.removeEventListener(PAGE_EDITED_EVENT, onEdited);
   }, [blankDocument, documentId]);
-  // A selection made with the keyboard in the page editor opens the toolbar
-  // too, as Google Docs shows its buttons for one: once Shift, Ctrl, or Cmd is
-  // let go, so a selection still growing never chases the toolbar. A caret
-  // moved with the keys closes it.
+  // A keyboard selection in the page editor opens the toolbar once Shift,
+  // Ctrl, or Cmd is let go; a caret moved with the keys closes it.
   useEffect(() => {
     const container = containerRef.current;
     if (!blankDocument || !container) return;
@@ -3636,8 +3598,7 @@ export function ReaderInteractions({
 
   // Edit mode: unsaved typing must reach the server before an anchor referencing
   // the live text is stored — the anchor's offsets describe what is on screen.
-  // A blank document's page editor saves all of its typing first (SPEC.md
-  // §29), so the paragraph index holds the words the reader selected.
+  // A blank document saves all of its typing first (SPEC.md §29).
   async function flushLiveBlock(blockId: string) {
     if (richTextRef.current) {
       await flushEditRef.current?.();
@@ -5437,8 +5398,7 @@ export function ReaderInteractions({
   // The article's editor hands back a way to save what is being typed, so undo
   // can settle it first.
   const flushEditRef = useRef<(() => Promise<void>) | null>(null);
-  // A blank document's typing saves before the voice command in the notes
-  // tray reads the document (SPEC.md §29, components/docs/layer/flush.ts).
+  // The voice command saves a blank document's typing first (layer/flush.ts).
   useEffect(() => {
     if (!blankDocument) return;
     return registerDocumentFlush(documentId, () => flushEditRef.current?.() ?? Promise.resolve());
@@ -5993,8 +5953,7 @@ function blockFormatKind(
     ? (() => {
         const w =
           submenu === "ai" || submenu === "comment" ? (coarse ? 300 : 248) : coarse ? 220 : 176;
-        // The page editor: beside the page's right edge, or over its margin;
-        // a box widened by a submenu keeps to the pane's right edge.
+        // The page editor: a box widened by a submenu keeps inside the pane.
         if (popover.side === "right" && popover.page) {
           const left = toolbarLeft(popover.page.geo, popover.page.shift, w) ?? Math.max(6, popover.cw - w - 6);
           return { top: popover.yTop, left, width: w };
@@ -6012,18 +5971,8 @@ function blockFormatKind(
         return { top: popover.yTop, left: Math.max(6, popover.textLeft - w - 10), width: w };
       })()
     : { top: 0, left: 0, width: 0 };
-  // Near the top of the article, or of the page editor's pane under its
-  // toolbar, the bubbles above the toolbox drop below it.
+  // Near the top, the bubbles above the toolbox drop below it.
   const popoverNearTop = popover ? (popover.nearTop ?? popover.yTop < 54) : false;
-  // A card in the page editor's margin (the page moves back without one).
-  const marginCardOpen =
-    bubble !== null ||
-    simplifyCard !== null ||
-    assistantChat !== null ||
-    commentCard !== null ||
-    linkCard !== null ||
-    annotationCard !== null;
-  marginCardOpenRef.current = marginCardOpen;
   // One row of the toolbox. Coarse pointers get 44px-tall rows.
   const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
   // The open popover's content kind and its toolbar (SPEC.md §6).
@@ -6449,7 +6398,7 @@ function blockFormatKind(
       {split && (
         <div className={PANE_HEADER}>
           {paneHeader}
-          {/* A blank document has no Contents and no Collapse (SPEC.md §29). */}
+          {/* A blank document has no Contents and no Collapse. */}
           {!transcript && !richText && articleMenu}
           {!transcript && (
             <div className="relative ml-auto flex shrink-0 items-center gap-2">
@@ -6478,9 +6427,8 @@ function blockFormatKind(
       // The inline restore script finds this pane's stored reading position by
       // its document (lib/reading-position.ts). An embedded layer has none.
       data-document-id={embedded ? undefined : documentId}
-      // A blank document (SPEC.md §29): the cards take the page editor's
-      // look, and the page moves left by --docs-shift while cards sit in its
-      // margin (components/docs/layer/margin.ts).
+      // A blank document: the cards take the page editor's look, and the page
+      // moves left by --docs-shift (SPEC.md §29).
       data-page-editor={richText ? "" : undefined}
       data-docs-shift={richText && docsShift > 0 ? "" : undefined}
       style={richText ? ({ "--docs-shift": `${docsShift}px` } as React.CSSProperties) : undefined}
@@ -6819,8 +6767,7 @@ function blockFormatKind(
             if (target.closest("textarea, input")) return;
             e.preventDefault();
           }}
-          // Beside the page editor's page it fades in, as Google Docs'
-          // floating buttons do (docs/css/layer.css).
+          // Beside the page editor's page it fades in (docs/css/layer.css).
           className={`${popover.page && popover.side === "right" ? "docs-toolbar-in" : "pop-in"} absolute ${TOOL_LAYER} flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float`}
           style={popoverBox}
         >

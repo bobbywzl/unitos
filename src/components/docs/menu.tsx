@@ -9,7 +9,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -31,7 +30,7 @@ export const keepFocus = (e: React.MouseEvent) => e.preventDefault();
     edges with "below-right"), or beside a menu item (a submenu). */
 export type Placement = "below" | "below-right" | "right";
 
-type PanelEntry = { panel: React.RefObject<HTMLDivElement | null>; close: () => void };
+type PanelEntry = { panel: React.RefObject<HTMLDivElement | null> };
 /** The open panels, innermost last: only the innermost reads the keys. */
 const openPanels: PanelEntry[] = [];
 /** The last menu move came from the keyboard: a submenu it opens starts
@@ -44,7 +43,7 @@ function items(panel: HTMLElement): HTMLElement[] {
   return [...panel.querySelectorAll<HTMLElement>(ITEM)];
 }
 
-function highlighted(panel: HTMLElement): HTMLElement | null {
+export function highlighted(panel: HTMLElement): HTMLElement | null {
   return panel.querySelector<HTMLElement>("[data-menu-item][data-active]");
 }
 
@@ -83,6 +82,11 @@ function step(panel: HTMLElement, current: HTMLElement | null, key: string): HTM
   return list[(i + list.length) % list.length];
 }
 
+/** Up or Down in a list whose field keeps the focus (Zoom, the size box). */
+export function moveHighlight(panel: HTMLElement, key: string): void {
+  highlight(panel, step(panel, highlighted(panel), key));
+}
+
 type MenuCtx = {
   /** The submenu open in this panel, by its item's id. */
   openSub: string | null;
@@ -97,7 +101,6 @@ export function DropdownPanel({
   children,
   placement = "below",
   className = "",
-  style,
   label,
   id,
   highlightFirst = false,
@@ -109,7 +112,6 @@ export function DropdownPanel({
   children: ReactNode;
   placement?: Placement;
   className?: string;
-  style?: CSSProperties;
   /** The menu's accessible name. */
   label?: string;
   /** The element id (a combobox's aria-controls). */
@@ -195,7 +197,7 @@ export function DropdownPanel({
 
   useEffect(() => {
     if (!open) return;
-    const entry: PanelEntry = { panel: panelRef, close: () => closeRef.current() };
+    const entry: PanelEntry = { panel: panelRef };
     openPanels.push(entry);
     const onDown = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -315,11 +317,7 @@ export function DropdownPanel({
           highlight(panel, item.getAttribute("aria-disabled") === "true" ? null : item);
         }}
         className={`docs-menu ${className}`}
-        style={
-          pos
-            ? { ...style, top: pos.top, left: pos.left, maxHeight: pos.maxHeight }
-            : { ...style, visibility: "hidden", top: 0, left: 0 }
-        }
+        style={pos ? { top: pos.top, left: pos.left, maxHeight: pos.maxHeight } : { visibility: "hidden", top: 0, left: 0 }}
       >
         {children}
       </div>
@@ -341,7 +339,6 @@ export function MenuItem({
   label,
   role,
   className = "",
-  style,
   tip,
 }: {
   /** Runs on a click or Enter; an item with a submenu and no onSelect opens it. */
@@ -359,7 +356,6 @@ export function MenuItem({
   label?: string;
   role?: "menuitem" | "menuitemcheckbox" | "menuitemradio";
   className?: string;
-  style?: CSSProperties;
   tip?: string;
 }) {
   const ctx = useContext(MenuContext);
@@ -428,7 +424,6 @@ export function MenuItem({
         }}
         data-track={track}
         className={`docs-menu-item ${className}`}
-        style={style}
       >
         <span className="docs-menu-check" aria-hidden>
           {checked ? <CheckIcon size={18} /> : (icon ?? null)}

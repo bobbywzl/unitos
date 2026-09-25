@@ -307,6 +307,9 @@ export const DOCS_EVENT = {
 /** Google Docs' shortcuts that act on the document (SPEC.md §29). */
 const DocsKeymap = Extension.create({
   name: "docsKeymap",
+  // Before StarterKit's keys (100): Ctrl+Alt+1 keeps a heading a heading, and
+  // Ctrl+Enter breaks the page rather than the line.
+  priority: 150,
   addKeyboardShortcuts() {
     const style = (s: DocStyle) => () => this.editor.commands.setDocStyle(s);
     const fire = (name: string) => () => {
@@ -315,7 +318,7 @@ const DocsKeymap = Extension.create({
     };
     const size = (direction: 1 | -1) => () => stepSelectionFontSize(this.editor, direction);
     return {
-      "Mod-Alt-0": style("normal"),
+      // Normal text (Ctrl+Alt+0): ext/typing.ts, before Tiptap's paragraph key.
       "Mod-Alt-1": style("h1"),
       "Mod-Alt-2": style("h2"),
       "Mod-Alt-3": style("h3"),

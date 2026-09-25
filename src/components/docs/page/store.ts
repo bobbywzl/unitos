@@ -11,10 +11,9 @@ import type { TextWidth } from "@/components/docs/page/geometry";
 // with PATCH /api/documents/[documentId]/rich-text); the ruler, the outline,
 // and the text width are the reader's own, kept per browser.
 
-export type PageDialog = "setup" | "pageNumbers" | "headerFormat" | null;
 export type HeaderArea = "header" | "footer";
 
-export type PageState = {
+type PageState = {
   documentId: string;
   setup: PageSetup;
   /** The page's zoom as a factor, Fit worked out. */
@@ -29,11 +28,9 @@ export type PageState = {
   outlineOpen: boolean;
   outlineWidth: number;
   textWidth: TextWidth;
-  dialog: PageDialog;
+  dialog: "setup" | "pageNumbers" | "headerFormat" | null;
   /** The header or footer being edited, and on which page. */
   editing: { area: HeaderArea; page: number } | null;
-  /** The setup failed to save: the next change tries again. */
-  saveError: boolean;
 };
 
 type Listener = () => void;
@@ -87,7 +84,7 @@ export function writePref(key: string, value: string): void {
 
 const stores = new WeakMap<Editor, PageStore>();
 
-function createStore(editor: Editor, documentId: string, setup: PageSetup): PageStore {
+function createStore(documentId: string, setup: PageSetup): PageStore {
   const width = readPref(TEXT_WIDTH_KEY);
   const outlineWidth = Number(readPref(OUTLINE_WIDTH_KEY));
   // The outline's open state is kept per document; a new document opens it
@@ -105,7 +102,6 @@ function createStore(editor: Editor, documentId: string, setup: PageSetup): Page
     textWidth: width === "medium" || width === "wide" || width === "full" ? width : "narrow",
     dialog: null,
     editing: null,
-    saveError: false,
   };
   const listeners = new Set<Listener>();
   let saving: Promise<void> = Promise.resolve();
@@ -146,10 +142,9 @@ function createStore(editor: Editor, documentId: string, setup: PageSetup): Page
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ pageSetup: next }),
           });
-          store.set({ saveError: !res.ok });
           if (res.ok) savedHook();
         } catch {
-          store.set({ saveError: true });
+          // The next change saves the whole setup again.
         } finally {
           pending -= 1;
         }
@@ -168,16 +163,14 @@ function createStore(editor: Editor, documentId: string, setup: PageSetup): Page
       savedHook = fn;
     },
   };
-  void editor;
   return store;
 }
 
 /** The page store of an editor, made on first use. */
-export function pageStore(editor: Editor, documentId?: string, setup?: PageSetup): PageStore {
+export function pageStore(editor: Editor, documentId: string, setup: PageSetup): PageStore {
   let store = stores.get(editor);
   if (!store) {
-    if (!documentId || !setup) throw new Error("page store used before the page mounted");
-    store = createStore(editor, documentId, setup);
+    store = createStore(documentId, setup);
     stores.set(editor, store);
   }
   return store;

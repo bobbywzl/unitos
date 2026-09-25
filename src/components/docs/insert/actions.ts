@@ -3,12 +3,11 @@ import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import type { Person } from "@/lib/person";
 import type { Lang } from "@/lib/i18n/config";
 import { dateLabel, type DateFormat } from "@/components/docs/insert/dates";
-import { newDropdownId, optionColor, writeOptions, type DropdownOption } from "@/components/docs/insert/dropdowns";
-import { insertFootnote } from "@/components/docs/insert/footnotes";
+import { optionColor, writeOptions, type DropdownOption } from "@/components/docs/insert/dropdowns";
+import { newBlockId } from "@/lib/docs/schema";
 
-// What the "@" menu, the right-click menus, and the commands insert
-// (SPEC.md §29). Each takes the range to replace — the "@query" the menu
-// opened with, or the selection — and puts the object there, caret after.
+// What the "@" menu and the commands insert (SPEC.md §29), each in place of
+// a range (the "@query", or the selection), the caret after it.
 
 export type Range = { from: number; to: number };
 
@@ -82,7 +81,7 @@ export function insertDropdownChip(
       {
         type: "dropdownChip",
         attrs: {
-          dropdownId: dropdown.id ?? newDropdownId(),
+          dropdownId: dropdown.id ?? newBlockId(),
           name: dropdown.name,
           dropdownOptions: writeOptions(dropdown.options),
           label: first.label,
@@ -95,14 +94,8 @@ export function insertDropdownChip(
   );
 }
 
-export function newBookmarkId(): string {
-  const bytes = new Uint8Array(6);
-  crypto.getRandomValues(bytes);
-  return `id.${Array.from(bytes, (b) => b.toString(36)).join("").slice(0, 12)}`;
-}
-
 export function insertBookmark(editor: Editor, range?: Range): boolean {
-  return insertInline(editor, { type: "bookmark", attrs: { bookmarkId: newBookmarkId() } }, range);
+  return insertInline(editor, { type: "bookmark", attrs: { bookmarkId: newBlockId() } }, range);
 }
 
 /** Delete the "@query" first, then run `then` at the caret. */
@@ -110,10 +103,6 @@ export function replaceQuery(editor: Editor, range: Range | null, then: () => vo
   if (range && range.to > range.from) editor.chain().focus().deleteRange(range).run();
   else editor.commands.focus();
   then();
-}
-
-export function insertFootnoteAt(editor: Editor, range: Range | null): void {
-  replaceQuery(editor, range, () => insertFootnote(editor));
 }
 
 /** An equation: on an empty line it is its own block (an EQUATION row), in

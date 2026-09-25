@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useState } from "react";
 import { useT } from "@/components/lang-provider";
-import { CloseIcon, SearchIcon } from "@/components/docs/icons";
+import { SearchIcon } from "@/components/docs/icons";
 import { isMac, keys } from "@/components/docs/keys";
+import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Ctrl+/: the keyboard shortcuts the page editor answers (SPEC.md §29,
@@ -90,85 +90,51 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
   },
 ];
 
-export function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
   const [query, setQuery] = useState("");
-  const [wasOpen, setWasOpen] = useState(open);
-  if (wasOpen !== open) {
-    setWasOpen(open);
-    if (open) setQuery("");
-  }
-  const searchRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (open) searchRef.current?.focus();
-  }, [open]);
-  if (!open || typeof document === "undefined") return null;
   const mac = isMac();
   const q = query.trim().toLowerCase();
   const sections = SECTIONS.map((s) => ({
     title: s.title,
     rows: s.rows.filter((r) => !q || t(r.label).toLowerCase().includes(q)),
   })).filter((s) => s.rows.length > 0);
-  return createPortal(
-    <div
-      className="docs-ty-backdrop"
-      data-edit-control
-      data-docs-typing
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      onMouseUp={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.stopPropagation();
-          onClose();
-        }
-      }}
-    >
-      <div role="dialog" aria-modal="true" aria-label={t("docsTyping.keyboardShortcuts")} className="docs-ty-card docs-shortcuts">
-        <div className="docs-ty-head">
-          <h2>{t("docsTyping.keyboardShortcuts")}</h2>
-          <button type="button" className="docs-find-btn" aria-label={t("docsTyping.close")} onClick={onClose}>
-            <CloseIcon size={24} />
-          </button>
-        </div>
-        <label className="docs-shortcuts-search">
-          <SearchIcon size={20} />
-          <input
-            ref={searchRef}
-            value={query}
-            placeholder={t("docsTyping.searchShortcuts")}
-            aria-label={t("docsTyping.searchShortcuts")}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </label>
-        <div className="docs-shortcuts-body">
-          {sections.length === 0 && <p className="docs-shortcuts-empty">{t("docsTyping.noShortcuts")}</p>}
-          {sections.map((s) => (
-            <section key={s.title}>
-              <h3>{t(s.title)}</h3>
-              <table>
-                <tbody>
-                  {s.rows.map((r) => (
-                    <tr key={r.label}>
-                      <td>{t(r.label)}</td>
-                      <td>
-                        {(mac && r.mac ? r.mac : r.pc).map((combo, i) => (
-                          <span key={combo}>
-                            {i > 0 && <span className="docs-shortcuts-or"> / </span>}
-                            <kbd>{keys(combo)}</kbd>
-                          </span>
-                        ))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-          ))}
-        </div>
+  return (
+    <ToolbarDialog title={t("docsTyping.keyboardShortcuts")} onClose={onClose} className="docs-shortcuts">
+      <label className="docs-shortcuts-search">
+        <SearchIcon size={20} />
+        <input
+          value={query}
+          placeholder={t("docsTyping.searchShortcuts")}
+          aria-label={t("docsTyping.searchShortcuts")}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </label>
+      <div className="docs-shortcuts-body">
+        {sections.length === 0 && <p className="docs-shortcuts-empty">{t("docsTyping.noShortcuts")}</p>}
+        {sections.map((s) => (
+          <section key={s.title}>
+            <h3>{t(s.title)}</h3>
+            <table>
+              <tbody>
+                {s.rows.map((r) => (
+                  <tr key={r.label}>
+                    <td>{t(r.label)}</td>
+                    <td>
+                      {(mac && r.mac ? r.mac : r.pc).map((combo, i) => (
+                        <span key={combo}>
+                          {i > 0 && " / "}
+                          <kbd>{keys(combo)}</kbd>
+                        </span>
+                      ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ))}
       </div>
-    </div>,
-    document.body,
+    </ToolbarDialog>
   );
 }

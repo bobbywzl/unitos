@@ -1,5 +1,5 @@
 import type { Editor } from "@tiptap/core";
-import type { Node as PMNode, NodeType } from "@tiptap/pm/model";
+import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
 
 // Google Docs' list presets (SPEC.md §29): the glyphs a list draws level by
@@ -16,7 +16,7 @@ export type ListKind = "bulletList" | "orderedList" | "taskList";
 type Counter = "decimal" | "decimal-leading-zero" | "lower-alpha" | "upper-alpha" | "lower-roman" | "upper-roman";
 
 /** One level's glyph: a bullet character, or a counter with its text. */
-export type Glyph = { bullet: string } | { counter: Counter; before: string; after: string } | { nested: true };
+type Glyph = { bullet: string } | { counter: Counter; before: string; after: string } | { nested: true };
 
 export type ListPreset = {
   /** The listStyle value; null is the type's default preset. */
@@ -133,21 +133,17 @@ export function tileRows(preset: ListPreset): { level: number; glyph: string }[]
 }
 
 /** The outermost list of the kind around the selection's start, if any. */
-export function outermostList(state: EditorState, kind?: ListKind): { node: PMNode; pos: number } | null {
+function outermostList(state: EditorState, kind: ListKind): { node: PMNode; pos: number } | null {
   const $from = state.selection.$from;
   let found: { node: PMNode; pos: number } | null = null;
   for (let d = $from.depth; d > 0; d--) {
-    const node = $from.node(d);
-    const name = node.type.name;
-    if (name === "bulletList" || name === "orderedList" || name === "taskList") {
-      if (!kind || name === kind) found = { node, pos: $from.before(d) };
-    }
+    if ($from.node(d).type.name === kind) found = { node: $from.node(d), pos: $from.before(d) };
   }
   return found;
 }
 
-/** The preset of the list around the selection (null: the default, or no
-    list of that kind). */
+/** The preset of the list of the kind around the selection: null is the
+    default, undefined is no such list. */
 export function currentListStyle(state: EditorState, kind: ListKind): string | null | undefined {
   const list = outermostList(state, kind);
   if (!list) return undefined;
@@ -158,15 +154,12 @@ export function currentListStyle(state: EditorState, kind: ListKind): string | n
 /** Pick a preset: the list around the selection takes it (as a whole, as
     in Docs), a list of another type becomes this type, and paragraphs
     outside a list become one. */
-export function applyListPreset(editor: Editor, kind: ListKind, style: string | null): boolean {
+export function applyListPreset(editor: Editor, kind: ListKind, style: string | null): void {
   const toggle = { bulletList: "toggleBulletList", orderedList: "toggleOrderedList", taskList: "toggleTaskList" } as const;
-  if (!outermostList(editor.state, kind)) {
-    const chain = editor.chain().focus();
-    if (!chain[toggle[kind]]().run()) return false;
-  }
+  if (!outermostList(editor.state, kind)) editor.chain().focus()[toggle[kind]]().run();
   const list = outermostList(editor.state, kind);
-  if (!list) return false;
-  const type: NodeType = list.node.type;
+  if (!list) return;
+  const type = list.node.type;
   const tr = editor.state.tr.setNodeMarkup(list.pos, type, { ...list.node.attrs, listStyle: style });
   // Lists nested inside take no preset of their own.
   list.node.descendants((child, offset) => {
@@ -177,5 +170,4 @@ export function applyListPreset(editor: Editor, kind: ListKind, style: string | 
   });
   editor.view.dispatch(tr);
   editor.commands.focus();
-  return true;
 }

@@ -166,7 +166,6 @@ export function FontsDialog({ onClose }: { onClose: () => void }) {
             primary
             onClick={() => {
               setUserFonts(mine);
-              for (const f of mine) loadGoogleFont(f.name, [400], true);
               onClose();
             }}
           >

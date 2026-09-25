@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DropDownIcon } from "@/components/docs/icons";
-import { DropdownPanel, keepFocus, type Placement } from "@/components/docs/menu";
+import { DropdownPanel, keepFocus } from "@/components/docs/menu";
 
 // The toolbar's controls (SPEC.md §29): a button, a toggle, a menu button,
 // and a split button, in Google Docs' sizes (css/toolbar.css). No control
@@ -13,7 +13,6 @@ export function Btn({
   label,
   tip,
   onClick,
-  onDoubleClick,
   pressed,
   disabled,
   children,
@@ -25,7 +24,6 @@ export function Btn({
   /** The tooltip: the label and its shortcut. */
   tip?: string;
   onClick: () => void;
-  onDoubleClick?: () => void;
   pressed?: boolean;
   disabled?: boolean;
   children: ReactNode;
@@ -37,11 +35,10 @@ export function Btn({
       type="button"
       aria-label={label}
       data-tip={tip ?? label}
-      aria-pressed={pressed === undefined ? undefined : pressed}
+      aria-pressed={pressed}
       disabled={disabled}
       onMouseDown={keepFocus}
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
       data-track={`docs:${track}`}
       data-tb-item
       className={`docs-tb-btn ${className}`}
@@ -64,35 +61,24 @@ export const OPEN_MENU_EVENT = "docs:toolbar-open-menu";
 export function DropBtn({
   id,
   label,
-  tip,
   face,
   track,
   children,
   className = "",
   menuClassName = "",
-  menuLabel,
-  placement,
-  disabled,
   arrow = true,
-  keys,
   onOpenChange,
 }: {
   /** The id Search the menus opens it by. */
   id?: string;
   label: string;
-  tip?: string;
   face: ReactNode;
   track: string;
   children: (close: () => void) => ReactNode;
   className?: string;
   menuClassName?: string;
-  menuLabel?: string;
-  placement?: Placement;
-  disabled?: boolean;
   /** False hides the arrow (Insert image, Line & paragraph spacing). */
   arrow?: boolean;
-  /** False: the menu's own field reads the keys. */
-  keys?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -110,14 +96,14 @@ export function DropBtn({
   useEffect(() => {
     if (!id) return;
     const onOpen = (e: Event) => {
-      if ((e as CustomEvent<{ id: string }>).detail?.id !== id || disabled) return;
+      if ((e as CustomEvent<{ id: string }>).detail?.id !== id) return;
       setFromKeys(true);
       setOpen(true);
       changeRef.current?.(true);
     };
     window.addEventListener(OPEN_MENU_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_MENU_EVENT, onOpen);
-  }, [id, disabled]);
+  }, [id]);
   const close = () => set(false);
   return (
     <>
@@ -125,14 +111,13 @@ export function DropBtn({
         ref={anchorRef}
         type="button"
         aria-label={label}
-        data-tip={open ? undefined : (tip ?? label)}
+        data-tip={open ? undefined : label}
         aria-haspopup="menu"
         aria-expanded={open}
-        disabled={disabled}
         onMouseDown={keepFocus}
         onClick={() => set(!open)}
         onKeyDown={(e) => {
-          if (open || disabled) return;
+          if (open) return;
           if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             set(true, true);
@@ -140,7 +125,6 @@ export function DropBtn({
         }}
         data-track={`docs:${track}`}
         data-tb-item
-        data-tb-menu={id}
         className={`docs-tb-btn ${className}`}
       >
         {face}
@@ -151,10 +135,8 @@ export function DropBtn({
         anchorRef={anchorRef}
         onClose={close}
         className={menuClassName}
-        label={menuLabel ?? label}
-        placement={placement}
+        label={label}
         highlightFirst={fromKeys}
-        keys={keys}
       >
         {children(close)}
       </DropdownPanel>
@@ -170,11 +152,9 @@ export function SplitButton({
   tip,
   menuLabel,
   pressed,
-  disabled,
   onToggle,
   icon,
   track,
-  menuClassName,
   children,
 }: {
   id: string;
@@ -182,24 +162,14 @@ export function SplitButton({
   tip: string;
   menuLabel: string;
   pressed: boolean;
-  disabled?: boolean;
   onToggle: () => void;
   icon: ReactNode;
   track: string;
-  menuClassName?: string;
   children: (close: () => void) => ReactNode;
 }) {
   return (
     <span className="docs-tb-split">
-      <Btn
-        label={label}
-        tip={tip}
-        pressed={pressed}
-        disabled={disabled}
-        onClick={onToggle}
-        track={track}
-        className="docs-tb-split-left"
-      >
+      <Btn label={label} tip={tip} pressed={pressed} onClick={onToggle} track={track} className="docs-tb-split-left">
         {icon}
       </Btn>
       <DropBtn
@@ -207,9 +177,8 @@ export function SplitButton({
         label={menuLabel}
         face={null}
         track={`${track}-menu`}
-        disabled={disabled}
         className="docs-tb-split-right"
-        menuClassName={`docs-menu-lists ${menuClassName ?? ""}`}
+        menuClassName="docs-menu-lists"
       >
         {children}
       </DropBtn>

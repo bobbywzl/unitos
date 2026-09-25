@@ -6,15 +6,9 @@ import { flushSync } from "react-dom";
 import { useLang } from "@/components/lang-provider";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import type { Zoom } from "@/components/docs/toolbar";
-import { hostPagination, paginateNow, repaginate, type PaginationConfig } from "@/components/docs/ext/page";
+import { hostPagination, paginateNow, repaginate } from "@/components/docs/ext/page";
 import { PAGE_EVENT, stepZoom, type EditHeaderDetail } from "@/components/docs/page/commands";
-import {
-  PAGE_PITCH_EXTRA,
-  PAGELESS_TOP,
-  PX_PER_PT,
-  pageFrame,
-  pagelessWidth,
-} from "@/components/docs/page/geometry";
+import { PAGE_PITCH_EXTRA, PAGELESS_TOP, pageFrame, pagelessWidth, scrollParent } from "@/components/docs/page/geometry";
 import {
   HeaderFooterLayer,
   HeaderFooterText,
@@ -25,19 +19,16 @@ import {
 } from "@/components/docs/page/header-footer";
 import { PageIndicator } from "@/components/docs/page/indicator";
 import { OutlineButton, OutlinePanel } from "@/components/docs/page/outline";
+import type { PaginationConfig } from "@/components/docs/page/paginate";
 import { HorizontalRuler, VerticalRuler } from "@/components/docs/page/ruler";
 import { lengthUnitFor, PageSetupDialog, readPageDefault } from "@/components/docs/page/setup-dialog";
 import { pageStore, usePageState, type HeaderArea } from "@/components/docs/page/store";
 import { DEFAULT_PAGE_SETUP } from "@/lib/docs/schema";
 
 // The page area (SPEC.md §29): the canvas, the pages, and what sits on and
-// around them — the ruler under the toolbar, the vertical ruler and the
-// outline at the left, the headers and footers, page setup, and print.
-// Google Docs' numbers: the canvas #f8fafd, a Letter page 816 × 1056 px at
-// 100% with a 1 px #c4c7c5 border and no shadow, 8 px between pages, the
-// first page's border 10 px under the ruler.
-
-export { PX_PER_PT };
+// around them — the ruler under the toolbar, the vertical ruler and the tabs
+// & outlines panel at the left, the headers and footers, page setup, and
+// print.
 
 /** Pageless: the room under the last line. */
 const PAGELESS_RUNOUT = 300;
@@ -46,29 +37,13 @@ const FIT_GUTTER = 24;
 /** The canvas's padding above the first page. */
 const CANVAS_TOP = 11;
 
-function scrollParent(el: Element | null): HTMLElement | null {
-  for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
-    const oy = getComputedStyle(node).overflowY;
-    if (oy === "auto" || oy === "scroll") return node;
-  }
-  return null;
-}
-
 /** The ruler row under the toolbar. */
 export function PageRuler({ editor, documentId, pageSetup, editing }: DocsAreaProps & { zoom: Zoom }) {
   const lang = useLang();
-  const store = useMemo(() => pageStore(editor, documentId, pageSetup), [editor, documentId, pageSetup]);
+  const store = pageStore(editor, documentId, pageSetup);
   const showRuler = usePageState(store, (s) => s.showRuler);
   if (!showRuler) return null;
-  return (
-    <HorizontalRuler
-      editor={editor}
-      store={store}
-      editing={editing}
-      unit={lengthUnitFor(lang)}
-      onPageSetup={() => store.set({ dialog: "setup" })}
-    />
-  );
+  return <HorizontalRuler editor={editor} store={store} editing={editing} unit={lengthUnitFor(lang)} />;
 }
 
 /** The header's height and the room under it: the side's rulers and panel
@@ -112,12 +87,12 @@ export function PageCanvas({
   children,
 }: DocsAreaProps & {
   zoom: Zoom;
-  onZoom?: (zoom: Zoom) => void;
+  onZoom: (zoom: Zoom) => void;
   onPageClick: (e: React.MouseEvent) => void;
   children: ReactNode;
 }) {
   const lang = useLang();
-  const store = useMemo(() => pageStore(editor, documentId, pageSetup), [editor, documentId, pageSetup]);
+  const store = pageStore(editor, documentId, pageSetup);
   const setup = usePageState(store, (s) => s.setup);
   const pages = usePageState(store, (s) => s.pages);
   const textWidth = usePageState(store, (s) => s.textWidth);
@@ -147,12 +122,10 @@ export function PageCanvas({
   // A new document takes this browser's default page (Set as default), and
   // opens with the caret at its start.
   useEffect(() => {
-    if (!editing) return;
-    const doc = editor.state.doc;
-    const empty = doc.childCount === 1 && doc.firstChild?.isTextblock === true && doc.firstChild.content.size === 0;
-    if (empty) editor.commands.focus("start");
+    if (!editing || !editor.isEmpty) return;
+    editor.commands.focus("start");
     const fallback = readPageDefault();
-    if (!empty || !fallback || JSON.stringify(store.get().setup) !== JSON.stringify(DEFAULT_PAGE_SETUP)) return;
+    if (!fallback || JSON.stringify(store.get().setup) !== JSON.stringify(DEFAULT_PAGE_SETUP)) return;
     void store.saveSetup({ ...DEFAULT_PAGE_SETUP, ...fallback });
     // Once, when the page opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -160,7 +133,7 @@ export function PageCanvas({
 
   // The zoom is DocsEditor's; the commands and the shortcuts change it here.
   useEffect(() => {
-    store.bindZoom((next) => onZoom?.(next));
+    store.bindZoom(onZoom);
   }, [store, onZoom]);
 
   // A saved setup refreshes the page's props, so the other areas (the
@@ -277,10 +250,12 @@ export function PageCanvas({
   const area = useMemo(() => {
     if (compact) return () => ({ top: 0, bottom: frame.height });
     return (page: number) => {
-      const header = setup[slotFor(setup, "header", page)];
-      const footer = setup[slotFor(setup, "footer", page)];
-      const h = hasText(header) ? hfHeights[slotFor(setup, "header", page)] ?? 0 : 0;
-      const f = hasText(footer) ? hfHeights[slotFor(setup, "footer", page)] ?? 0 : 0;
+      const height = (a: HeaderArea) => {
+        const slot = slotFor(setup, a, page);
+        return hasText(setup[slot]) ? hfHeights[slot] ?? 0 : 0;
+      };
+      const h = height("header");
+      const f = height("footer");
       return {
         top: Math.max(frame.top, h > 0 ? frame.headerMargin + h : 0),
         bottom: Math.min(frame.height - frame.bottom, f > 0 ? frame.height - frame.footerMargin - f : frame.height),
@@ -294,20 +269,15 @@ export function PageCanvas({
     () => ({ enabled: !pageless, pitch: frame.pitch, area }),
     [pageless, frame, area],
   );
-  const configRef = useRef(config);
-  useLayoutEffect(() => {
-    configRef.current = config;
-    repaginate(editor);
-  }, [config, editor]);
   useLayoutEffect(
     () =>
       hostPagination(editor, {
-        config: () => configRef.current,
-        onLayout: (layout) => {
-          if (store.get().pages !== layout.pages) store.set({ pages: layout.pages });
+        config,
+        onPages: (pages) => {
+          if (store.get().pages !== pages) store.set({ pages });
         },
       }),
-    [editor, store],
+    [editor, store, config],
   );
 
   // Print: the pages at their size, laid out at 100%.
@@ -360,8 +330,7 @@ export function PageCanvas({
   useEffect(() => {
     const shell = canvasRef.current?.closest<HTMLElement>(".docs-shell");
     if (!shell) return;
-    if (pageless && !white) shell.style.setProperty("--docs-canvas", setup.color);
-    else if (pageless) shell.style.setProperty("--docs-canvas", "var(--docs-page)");
+    if (pageless) shell.style.setProperty("--docs-canvas", white ? "var(--docs-page)" : setup.color);
     else shell.style.removeProperty("--docs-canvas");
     return () => {
       shell.style.removeProperty("--docs-canvas");
@@ -384,11 +353,6 @@ export function PageCanvas({
     return { page, zone: local < a.top ? "header" : local > a.bottom ? "footer" : "body" };
   };
 
-  const editHeader = (areaName: HeaderArea, page: number) => {
-    if (!editor.isEditable || pageless) return;
-    store.set({ editing: { area: areaName, page } });
-  };
-
   // Insert > Header / Footer and the chords (hold Ctrl+Alt, press O then H
   // or F) edit the header or footer of the page that holds the caret.
   useEffect(() => {
@@ -404,37 +368,27 @@ export function PageCanvas({
         return 0;
       }
     };
-    const onEdit = (e: Event) => {
-      const detail = (e as CustomEvent<EditHeaderDetail>).detail;
-      if (!editor.isEditable || pageless || !detail) return;
-      store.set({ editing: { area: detail.area, page: Math.min(caretPage(), store.get().pages - 1) } });
+    const editAtCaret = (area: HeaderArea) => {
+      if (!editor.isEditable || store.get().setup.pageless) return;
+      store.set({ editing: { area, page: Math.min(caretPage(), store.get().pages - 1) } });
     };
+    const onEdit = (e: Event) => editAtCaret((e as CustomEvent<EditHeaderDetail>).detail.area);
     let chordAt = 0;
     const onKey = (e: KeyboardEvent) => {
       const shell = canvasRef.current?.closest(".docs-shell");
       const active = document.activeElement;
       if (!shell || !(active === document.body || (active && shell.contains(active)))) return;
-      const mod = e.ctrlKey || e.metaKey;
-      if (!mod) return;
+      if (!e.ctrlKey && !e.metaKey) return;
       // Zoom: the page's own, not the browser's.
-      if (!e.altKey && !e.shiftKey && (e.code === "Equal" || e.code === "NumpadAdd" || e.key === "=" || e.key === "+")) {
+      let zoom: number | "fit" | null = null;
+      if (!e.altKey && !e.shiftKey) {
+        if (e.code === "Equal" || e.code === "NumpadAdd" || e.key === "=" || e.key === "+") zoom = stepZoom(store.get().scale, 1);
+        else if (e.code === "Minus" || e.code === "NumpadSubtract" || e.key === "-") zoom = stepZoom(store.get().scale, -1);
+        else if (e.code === "Digit0" || e.code === "Numpad0") zoom = 100;
+      } else if (e.altKey && e.code === "BracketLeft") zoom = "fit";
+      if (zoom !== null) {
         e.preventDefault();
-        store.zoomTo(stepZoom(store.get().scale, 1));
-        return;
-      }
-      if (!e.altKey && !e.shiftKey && (e.code === "Minus" || e.code === "NumpadSubtract" || e.key === "-")) {
-        e.preventDefault();
-        store.zoomTo(stepZoom(store.get().scale, -1));
-        return;
-      }
-      if (!e.altKey && !e.shiftKey && (e.code === "Digit0" || e.code === "Numpad0")) {
-        e.preventDefault();
-        store.zoomTo(100);
-        return;
-      }
-      if (e.altKey && e.code === "BracketLeft") {
-        e.preventDefault();
-        store.zoomTo("fit");
+        store.zoomTo(zoom);
         return;
       }
       if (!e.altKey) return;
@@ -448,9 +402,7 @@ export function PageCanvas({
         chordAt = 0;
         e.preventDefault();
         e.stopPropagation();
-        if (editor.isEditable && !store.get().setup.pageless) {
-          store.set({ editing: { area: e.code === "KeyH" ? "header" : "footer", page: Math.min(caretPage(), store.get().pages - 1) } });
-        }
+        editAtCaret(e.code === "KeyH" ? "header" : "footer");
       }
     };
     window.addEventListener(PAGE_EVENT.editHeader, onEdit);
@@ -459,7 +411,7 @@ export function PageCanvas({
       window.removeEventListener(PAGE_EVENT.editHeader, onEdit);
       window.removeEventListener("keydown", onKey, true);
     };
-  }, [editor, store, pageless, frame.pitch]);
+  }, [editor, store, frame.pitch]);
 
   // A press in a page's margins puts the caret on the nearest line, as it
   // does in Google Docs; a press in the text leaves a header or footer.
@@ -482,7 +434,7 @@ export function PageCanvas({
   const onPageDoubleClick = (e: React.MouseEvent) => {
     if ((e.target as Element).closest("[data-docs-hf], [data-edit-control]")) return;
     const hit = hitPage(e.clientY);
-    if (hit && hit.zone !== "body") editHeader(hit.zone, hit.page);
+    if (hit && hit.zone !== "body" && editor.isEditable) store.set({ editing: { area: hit.zone, page: hit.page } });
   };
 
   const firstTop = pageless ? 0 : area(0).top;
@@ -491,7 +443,6 @@ export function PageCanvas({
         width: columnWidth,
         padding: `${PAGELESS_TOP - CANVAS_TOP}px 0 ${PAGELESS_RUNOUT}px`,
         zoom: scale === 1 ? undefined : scale,
-        "--docs-page-h": "0px",
       }
     : {
         width: frame.width,
@@ -514,10 +465,8 @@ export function PageCanvas({
   useEffect(() => {
     if (autoOpened.current || store.outlineChosen || canvasWidth === 0) return;
     autoOpened.current = true;
-    const doc = editor.state.doc;
-    const empty = doc.childCount === 1 && doc.firstChild?.isTextblock === true && doc.firstChild.content.size === 0;
     const room = (canvasWidth - pageVisual) / 2 >= outlineLeft + outlineWidth + 8;
-    if (empty && room && !pageless) store.set({ outlineOpen: true });
+    if (editor.isEmpty && room && !pageless) store.set({ outlineOpen: true });
   }, [canvasWidth, editor, store, pageVisual, outlineLeft, outlineWidth, pageless]);
 
   const unit = lengthUnitFor(lang);
@@ -557,7 +506,6 @@ export function PageCanvas({
           onDoubleClick={onPageDoubleClick}
           data-docs-page
           data-pageless={pageless || undefined}
-          data-docs-pages={pageless ? undefined : pages}
         >
           {!pageless && (
             <div className="docs-sheets" aria-hidden>

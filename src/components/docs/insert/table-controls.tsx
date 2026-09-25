@@ -7,6 +7,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { AddIcon, DropDownIcon } from "@/components/docs/icons";
+import { MenuItem } from "@/components/docs/menu";
+import { DropBtn } from "@/components/docs/toolbar/controls";
+import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { Swatches } from "@/components/docs/insert/colors";
 import { onInsert, type InsertContext } from "@/components/docs/insert/context";
 import {
@@ -25,7 +28,7 @@ import {
   TableRowIcon,
   UnpinIcon,
 } from "@/components/docs/insert/icons";
-import { BORDER_WEIGHTS, DASHES, DropButton, MenuRow } from "@/components/docs/insert/image-controls";
+import { BORDER_WEIGHTS, DashRow, DASHES, WeightRow } from "@/components/docs/insert/image-controls";
 import {
   BORDER_TARGETS,
   cellBorder,
@@ -35,18 +38,13 @@ import {
   type BorderTarget,
   type VAlign,
 } from "@/components/docs/insert/table";
-import { TableGridPicker } from "@/components/docs/insert/table-grid";
-import { anchorAt, Dialog, FloatingBox, keepSelection, PanelSection, SidePanel, useEditorTick, useViewportTick } from "@/components/docs/insert/ui";
+import { FloatingBox, keepSelection, PanelSection, SidePanel, useEditorTick, useViewportTick } from "@/components/docs/insert/ui";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// A table's controls (SPEC.md §29), Google Docs' way: resting the pointer on
-// a table shows the row's pill in the left margin (drag to move the row,
-// Pin header up to this row, Insert 1 row below) and the column's pill over
-// the top border (drag to move the column, Sort table, Insert 1 column
-// right); a row's bottom line drags to its minimum height; the ▾ in the
-// caret's cell chooses which borders the border buttons change; Split cell
-// asks for columns and rows; Table options is the side panel of Table,
-// Column, Row, Cell, and Color.
+// A table's controls (SPEC.md §29), Google Docs' way: the row and column
+// pills on hover, a row's bottom line that drags its height, the ▾ border
+// selector in the caret's cell, the Split cell dialog, and the Table
+// options panel.
 
 const PX_PER_PT = 96 / 72;
 const PX_PER_IN = 96;
@@ -106,7 +104,6 @@ export function TableControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
   const [hover, setHover] = useState<Hover | null>(null);
   const [panel, setPanel] = useState(false);
   const [split, setSplit] = useState(false);
-  const [grid, setGrid] = useState<number | null>(null);
   const hideTimer = useRef<number | null>(null);
   const inTable = tableRectOf(editor.state) !== null;
   useViewportTick(hover !== null || inTable);
@@ -116,7 +113,6 @@ export function TableControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
       onInsert(editor, (event) => {
         if (event.type === "table-options") setPanel(true);
         if (event.type === "split-cell") setSplit(true);
-        if (event.type === "table-grid") setGrid(editor.state.selection.from);
       }),
     [editor],
   );
@@ -159,32 +155,7 @@ export function TableControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
       {ctx.editing && <RowResizer editor={editor} />}
       {panel && inTable && <TableOptionsPanel editor={editor} onClose={closePanel} />}
       {split && inTable && <SplitDialog editor={editor} onClose={() => setSplit(false)} />}
-      {grid !== null && (
-        <GridAtCaret
-          editor={editor}
-          at={grid}
-          onClose={() => {
-            setGrid(null);
-            editor.view.focus();
-          }}
-        />
-      )}
     </>
-  );
-}
-
-function GridAtCaret({ editor, at, onClose }: { editor: Editor; at: number; onClose: () => void }) {
-  const anchor = anchorAt(editor, at);
-  if (!anchor) return null;
-  return (
-    <FloatingBox anchor={anchor} className="docs-picker docs-picker-table" onDismiss={onClose}>
-      <TableGridPicker
-        onPick={(rows, cols) => {
-          onClose();
-          editor.chain().focus().insertDocsTable(rows, cols).run();
-        }}
-      />
-    </FloatingBox>
   );
 }
 
@@ -459,7 +430,7 @@ function BorderSelector({ editor }: { editor: Editor }) {
       </button>
       {open && (
         <FloatingBox
-          anchor={{ left: corner.right - 18, top: corner.top, bottom: corner.top + 18, right: corner.right }}
+          anchor={{ left: corner.right - 18, top: corner.top, bottom: corner.top + 18 }}
           className="docs-border-pop"
           onDismiss={() => setOpen(false)}
           label={t("docsInsert.selectBorders")}
@@ -481,7 +452,7 @@ function BorderSelector({ editor }: { editor: Editor }) {
             ))}
           </div>
           <div className="docs-border-tools">
-            <DropButton label={t("docsInsert.backgroundColor")} face={<FillIcon size={20} />}>
+            <DropBtn label={t("docsInsert.backgroundColor")} track="table-background" face={<FillIcon size={20} />}>
               {(close) => (
                 <Swatches
                   current={background}
@@ -495,8 +466,8 @@ function BorderSelector({ editor }: { editor: Editor }) {
                   }}
                 />
               )}
-            </DropButton>
-            <DropButton label={t("docsInsert.borderColor")} face={<BorderColorIcon size={20} />}>
+            </DropBtn>
+            <DropBtn label={t("docsInsert.borderColor")} track="table-border-color" face={<BorderColorIcon size={20} />}>
               {(close) => (
                 <Swatches
                   current={border.color}
@@ -506,45 +477,25 @@ function BorderSelector({ editor }: { editor: Editor }) {
                   }}
                 />
               )}
-            </DropButton>
-            <DropButton label={t("docsInsert.borderWidth")} face={<BorderWeightIcon size={20} />}>
-              {(close) =>
+            </DropBtn>
+            <DropBtn label={t("docsInsert.borderWidth")} track="table-border-width" face={<BorderWeightIcon size={20} />}>
+              {() =>
                 BORDER_WEIGHTS.map((w) => (
-                  <MenuRow
-                    key={w}
-                    checked={border.width === w}
-                    onSelect={() => {
-                      apply({ width: w });
-                      close();
-                    }}
-                  >
-                    <span className="docs-weight-row">
-                      <span className="docs-weight-line" style={{ borderTopWidth: `${Math.max(w, 0.5)}pt`, opacity: w ? 1 : 0.3 }} />
-                      {w} pt
-                    </span>
-                  </MenuRow>
+                  <MenuItem key={w} checked={border.width === w} onSelect={() => apply({ width: w })}>
+                    <WeightRow width={w} />
+                  </MenuItem>
                 ))
               }
-            </DropButton>
-            <DropButton label={t("docsInsert.borderDash")} face={<BorderDashIcon size={20} />}>
-              {(close) =>
+            </DropBtn>
+            <DropBtn label={t("docsInsert.borderDash")} track="table-border-dash" face={<BorderDashIcon size={20} />}>
+              {() =>
                 DASHES.map(({ dash, label }) => (
-                  <MenuRow
-                    key={dash}
-                    checked={border.dash === dash}
-                    onSelect={() => {
-                      apply({ dash });
-                      close();
-                    }}
-                  >
-                    <span className="docs-weight-row">
-                      <span className="docs-weight-line" style={{ borderTopStyle: dash, borderTopWidth: "2px" }} />
-                      {t(label)}
-                    </span>
-                  </MenuRow>
+                  <MenuItem key={dash} checked={border.dash === dash} onSelect={() => apply({ dash })}>
+                    <DashRow dash={dash} label={t(label)} />
+                  </MenuItem>
                 ))
               }
-            </DropButton>
+            </DropBtn>
           </div>
         </FloatingBox>
       )}
@@ -619,18 +570,15 @@ function SplitDialog({ editor, onClose }: { editor: Editor; onClose: () => void 
   const [rows, setRows] = useState(1);
   const valid = cols >= 1 && rows >= 1 && cols <= 20 && rows <= 20 && !(cols === 1 && rows === 1);
   return (
-    <Dialog
+    <ToolbarDialog
       title={t("docsInsert.splitCell")}
       onClose={onClose}
       className="docs-split-dialog"
       actions={
         <>
-          <button type="button" className="docs-button-outline" onClick={onClose}>
-            {t("common.cancel")}
-          </button>
-          <button
-            type="button"
-            className="docs-button-primary"
+          <DialogButton onClick={onClose}>{t("common.cancel")}</DialogButton>
+          <DialogButton
+            primary
             disabled={!valid}
             onClick={() => {
               onClose();
@@ -638,7 +586,7 @@ function SplitDialog({ editor, onClose }: { editor: Editor; onClose: () => void 
             }}
           >
             {t("docsInsert.split")}
-          </button>
+          </DialogButton>
         </>
       }
     >
@@ -646,7 +594,7 @@ function SplitDialog({ editor, onClose }: { editor: Editor; onClose: () => void 
         <label className="docs-split-field">
           <TableColumnIcon size={20} />
           <span>{t("docsInsert.columns")}</span>
-          <input className="docs-field" type="number" min={1} max={20} value={cols} onChange={(e) => setCols(Math.round(Number(e.target.value)))} autoFocus />
+          <input className="docs-field" type="number" min={1} max={20} value={cols} onChange={(e) => setCols(Math.round(Number(e.target.value)))} />
         </label>
         <label className="docs-split-field">
           <TableRowIcon size={20} />
@@ -654,7 +602,7 @@ function SplitDialog({ editor, onClose }: { editor: Editor; onClose: () => void 
           <input className="docs-field" type="number" min={1} max={20} value={rows} onChange={(e) => setRows(Math.round(Number(e.target.value)))} />
         </label>
       </div>
-    </Dialog>
+    </ToolbarDialog>
   );
 }
 
@@ -803,7 +751,7 @@ function TableOptionsPanel({ editor, onClose }: { editor: Editor; onClose: () =>
       <PanelSection title={t("docsInsert.sectionColor")} open={open.color} onToggle={() => toggle("color")}>
         <span className="docs-side-label">{t("docsInsert.tableBorder")}</span>
         <div className="docs-side-row">
-          <DropButton label={t("docsInsert.borderColor")} face={<span className="docs-color-chip" style={{ backgroundColor: border.color }} />}>
+          <DropBtn label={t("docsInsert.borderColor")} track="table-options-border" face={<span className="docs-color-chip" style={{ backgroundColor: border.color }} />}>
             {(close) => (
               <Swatches
                 current={border.color}
@@ -813,7 +761,7 @@ function TableOptionsPanel({ editor, onClose }: { editor: Editor; onClose: () =>
                 }}
               />
             )}
-          </DropButton>
+          </DropBtn>
           <select
             className="docs-select"
             value={String(border.width)}
@@ -828,7 +776,11 @@ function TableOptionsPanel({ editor, onClose }: { editor: Editor; onClose: () =>
           </select>
         </div>
         <span className="docs-side-label">{t("docsInsert.cellBackground")}</span>
-        <DropButton label={t("docsInsert.cellBackground")} face={<span className="docs-color-chip" style={{ backgroundColor: background ?? "transparent" }} />}>
+        <DropBtn
+          label={t("docsInsert.cellBackground")}
+          track="table-options-background"
+          face={<span className="docs-color-chip" style={{ backgroundColor: background ?? "transparent" }} />}
+        >
           {(close) => (
             <Swatches
               current={background}
@@ -842,7 +794,7 @@ function TableOptionsPanel({ editor, onClose }: { editor: Editor; onClose: () =>
               }}
             />
           )}
-        </DropButton>
+        </DropBtn>
       </PanelSection>
     </SidePanel>
   );

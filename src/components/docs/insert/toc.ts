@@ -1,25 +1,23 @@
 import { Extension, Node, type Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
+import { Plugin } from "@tiptap/pm/state";
 import type { EditorView, NodeView } from "@tiptap/pm/view";
-import { emitInsert, insertContext } from "@/components/docs/insert/context";
+import { emitInsert, insertContext, insertT } from "@/components/docs/insert/context";
+import { jumpTo } from "@/components/docs/insert/links";
 
-// The table of contents (SPEC.md §29), Google Docs' three styles: plain text
-// with page numbers, a dotted leader to the page numbers, and blue links. It
-// is one block that draws the document's headings; each entry jumps to its
-// heading. It holds no words of its own, so the paragraph index skips it
-// (the headings are indexed where they stand). Selected, it shows Google
-// Docs' pill: Update table of contents, and More options.
+// The table of contents (SPEC.md §29) in Google Docs' three styles: plain
+// text with page numbers, dotted leaders to the page numbers, and blue
+// links. It draws the document's headings and holds no words of its own.
 
 export type TocStyle = "plain" | "dotted" | "links";
 export const TOC_STYLES: TocStyle[] = ["plain", "dotted", "links"];
 const DEFAULT_LEVELS = [1, 2, 3];
 const PX_PER_PT = 96 / 72;
 
-export type TocEntry = { level: number; text: string; blockId: string | null; pos: number };
+type TocEntry = { level: number; text: string; blockId: string | null; pos: number };
 
 /** The headings the table lists, in order: levels 1–3 unless it says others. */
-export function tocEntries(doc: PMNode, levels: number[] = DEFAULT_LEVELS): TocEntry[] {
+function tocEntries(doc: PMNode, levels: number[] = DEFAULT_LEVELS): TocEntry[] {
   const out: TocEntry[] = [];
   doc.descendants((node, pos) => {
     const name = node.type.name;
@@ -36,25 +34,14 @@ export function tocEntries(doc: PMNode, levels: number[] = DEFAULT_LEVELS): TocE
   return out;
 }
 
-function levelsOf(node: PMNode): number[] {
+export function levelsOf(node: PMNode): number[] {
   const raw = node.attrs.levels as unknown;
   return Array.isArray(raw) && raw.length > 0 ? raw.filter((n): n is number => typeof n === "number") : DEFAULT_LEVELS;
 }
 
-function styleOf(node: PMNode): TocStyle {
+export function styleOf(node: PMNode): TocStyle {
   const s = node.attrs.tocStyle as string;
   return TOC_STYLES.includes(s as TocStyle) ? (s as TocStyle) : "links";
-}
-
-/** Scroll to a heading and put the caret at its start. */
-export function jumpToPos(view: EditorView, pos: number): void {
-  const node = view.state.doc.nodeAt(pos);
-  if (!node) return;
-  const dom = view.nodeDOM(pos);
-  if (dom instanceof HTMLElement) dom.scrollIntoView({ block: "center", behavior: "smooth" });
-  const tr = view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(pos + 1)));
-  view.dispatch(tr);
-  view.focus();
 }
 
 const views = new WeakMap<EditorView, Set<TocView>>();
@@ -80,7 +67,6 @@ class TocView implements NodeView {
     this.pill = document.createElement("div");
     this.pill.className = "docs-toc-pill";
     this.dom.append(this.pill, this.list);
-    this.buildPill();
     let set = views.get(view);
     if (!set) {
       set = new Set();
@@ -90,8 +76,9 @@ class TocView implements NodeView {
     this.render(true);
   }
 
+  /** Google Docs' pill over a selected table: Update, and More options. */
   private buildPill() {
-    const t = insertContext(this.editor)?.t;
+    const t = insertT(this.editor);
     const button = (label: string, path: string, onPress: () => void) => {
       const b = document.createElement("button");
       b.type = "button";
@@ -108,12 +95,12 @@ class TocView implements NodeView {
     };
     this.pill.replaceChildren(
       button(
-        t ? t("docsInsert.updateToc") : "Update table of contents",
+        t("docsInsert.updateToc"),
         "M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z",
         () => this.render(true),
       ),
       button(
-        t ? t("docsInsert.tocMoreOptions") : "More table of contents options",
+        t("docsInsert.tocMoreOptions"),
         "M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z",
         () => {
           const pos = this.getPos();
@@ -126,20 +113,21 @@ class TocView implements NodeView {
   /** Draw the entries; `force` redraws even when the headings are the same. */
   render(force = false) {
     const style = styleOf(this.node);
-    const entries = tocEntries(this.view.state.doc, levelsOf(this.node));
-    const signature = JSON.stringify([style, entries.map((e) => [e.level, e.text, e.blockId])]);
+    const levels = levelsOf(this.node);
+    const entries = tocEntries(this.view.state.doc, levels);
+    const t = insertT(this.editor);
+    const signature = JSON.stringify([style, t("docsInsert.tocEmpty"), entries.map((e) => [e.level, e.text, e.blockId])]);
     if (!force && signature === this.signature) return;
     this.signature = signature;
     this.dom.setAttribute("data-toc-style", style);
-    const t = insertContext(this.editor)?.t;
     if (entries.length === 0) {
       const empty = document.createElement("div");
       empty.className = "docs-toc-empty";
-      empty.textContent = t ? t("docsInsert.tocEmpty") : "Add headings and they will appear in your table of contents.";
+      empty.textContent = t("docsInsert.tocEmpty");
       this.list.replaceChildren(empty);
       return;
     }
-    const rows = entries.map((entry) => {
+    const rows = entries.map((entry, index) => {
       const row = document.createElement("div");
       row.className = "docs-toc-entry";
       row.setAttribute("data-level", String(entry.level));
@@ -154,8 +142,9 @@ class TocView implements NodeView {
       link.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const target = entry.blockId ? findHeading(this.view.state.doc, entry.blockId) : entry.pos;
-        if (target !== null) jumpToPos(this.view, target);
+        // The heading as the document holds it now.
+        const heading = tocEntries(this.view.state.doc, levels)[index];
+        if (heading) jumpTo(this.editor, heading.pos + 1);
       });
       row.append(link);
       if (style !== "links") {
@@ -199,6 +188,7 @@ class TocView implements NodeView {
   }
 
   selectNode() {
+    this.buildPill();
     this.dom.classList.add("is-selected");
   }
 
@@ -220,20 +210,7 @@ class TocView implements NodeView {
   }
 }
 
-function findHeading(doc: PMNode, blockId: string): number | null {
-  let found: number | null = null;
-  doc.descendants((node, pos) => {
-    if (found !== null) return false;
-    if (node.type.name === "heading" && node.attrs.blockId === blockId) {
-      found = pos;
-      return false;
-    }
-    return !node.isTextblock;
-  });
-  return found;
-}
-
-export const TableOfContents = Node.create({
+const TableOfContents = Node.create({
   name: "tableOfContents",
   group: "block",
   atom: true,
@@ -256,16 +233,14 @@ export const TableOfContents = Node.create({
   },
 });
 
-/** Every table of contents redraws when the headings change. */
-export const TocKeeper = Extension.create({
+/** Every table of contents redraws when its headings (or the language) change. */
+const TocKeeper = Extension.create({
   name: "docsTocKeeper",
   addProseMirrorPlugins() {
     return [
       new Plugin({
-        key: new PluginKey("docsTocKeeper"),
         view: () => ({
-          update(view, prev) {
-            if (view.state.doc === prev.doc) return;
+          update(view) {
             for (const toc of views.get(view) ?? []) toc.render();
           },
         }),

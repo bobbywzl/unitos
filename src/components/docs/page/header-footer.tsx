@@ -13,7 +13,7 @@ import { useLang, useT } from "@/components/lang-provider";
 import { DocsFontFamily, fontStack } from "@/components/docs/fonts";
 import { DropDownIcon } from "@/components/docs/icons";
 import { DropdownPanel, MenuItem } from "@/components/docs/menu";
-import { DEFAULT_HF_MARGIN_PT, PT_PER_UNIT, formatLength, type PageFrame } from "@/components/docs/page/geometry";
+import { DEFAULT_HF_MARGIN_PT, formatLength, parseLength, type PageFrame } from "@/components/docs/page/geometry";
 import { lengthUnitFor } from "@/components/docs/page/setup-dialog";
 import { usePageState, type HeaderArea, type PageStore } from "@/components/docs/page/store";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
@@ -191,7 +191,7 @@ function HeaderEditor({
 }
 
 /** Put a right-aligned page number in a header or footer, once. */
-export function withPageNumber(doc: RichNode | null | undefined): RichNode {
+function withPageNumber(doc: RichNode | null | undefined): RichNode {
   const base = doc && (doc.content?.length ?? 0) > 0 ? doc : EMPTY_DOC;
   const has = (n: RichNode): boolean => n.type === "pageNumber" || (n.content ?? []).some(has);
   if (has(base)) return base;
@@ -221,7 +221,6 @@ export function HeaderFooterLayer({
   const editing = usePageState(store, (s) => s.editing);
   const [menuOpen, setMenuOpen] = useState(false);
   const optionsRef = useRef<HTMLButtonElement>(null);
-  const startRef = useRef<PageSetup | null>(null);
   // The edited header's or footer's height, so the bar never covers it.
   const editRef = useRef<HTMLDivElement>(null);
   const [textHeight, setTextHeight] = useState(20);
@@ -237,23 +236,13 @@ export function HeaderFooterLayer({
 
   // Leaving saves what changed, and so does closing the document mid-edit.
   useEffect(() => {
-    if (editing) {
-      if (!startRef.current) startRef.current = store.get().setup;
-      return;
-    }
-    const start = startRef.current;
-    startRef.current = null;
-    const now = store.get().setup;
-    if (start && JSON.stringify(start) !== JSON.stringify(now)) void store.saveSetup(now);
-  }, [editing, store]);
-  useEffect(
-    () => () => {
-      const start = startRef.current;
+    if (!editing) return;
+    const start = store.get().setup;
+    return () => {
       const now = store.get().setup;
-      if (start && JSON.stringify(start) !== JSON.stringify(now)) void store.saveSetup(now);
-    },
-    [store],
-  );
+      if (JSON.stringify(start) !== JSON.stringify(now)) void store.saveSetup(now);
+    };
+  }, [editing, store]);
 
   if (!editing || setup.pageless) return null;
   const { area, page } = editing;
@@ -271,6 +260,11 @@ export function HeaderFooterLayer({
 
   const exit = () => store.set({ editing: null });
   const change = (next: RichNode) => store.set({ setup: { ...store.get().setup, [slot]: next } });
+  // An Options item leaves the header or footer.
+  const choose = (patch: Parameters<PageStore["set"]>[0]) => () => {
+    setMenuOpen(false);
+    store.set({ ...patch, editing: null });
+  };
   const barHeight = 30;
   const textStyle: CSSProperties =
     area === "header"
@@ -311,29 +305,11 @@ export function HeaderFooterLayer({
           <DropDownIcon size={18} />
         </button>
         <DropdownPanel open={menuOpen} anchorRef={optionsRef} onClose={() => setMenuOpen(false)} placement="below-right">
-          <MenuItem
-            onSelect={() => {
-              setMenuOpen(false);
-              store.set({ dialog: "headerFormat", editing: null });
-            }}
-          >
+          <MenuItem onSelect={choose({ dialog: "headerFormat" })}>
             {t(area === "header" ? "docsPage.headerFormat" : "docsPage.footerFormat")}
           </MenuItem>
-          <MenuItem
-            onSelect={() => {
-              setMenuOpen(false);
-              store.set({ dialog: "pageNumbers", editing: null });
-            }}
-          >
-            {t("docsPage.pageNumbers")}
-          </MenuItem>
-          <MenuItem
-            onSelect={() => {
-              setMenuOpen(false);
-              const next = { ...store.get().setup, [slot]: null };
-              store.set({ setup: next, editing: null });
-            }}
-          >
+          <MenuItem onSelect={choose({ dialog: "pageNumbers" })}>{t("docsPage.pageNumbers")}</MenuItem>
+          <MenuItem onSelect={choose({ setup: { ...setup, [slot]: null } })}>
             {t(area === "header" ? "docsPage.removeHeader" : "docsPage.removeFooter")}
           </MenuItem>
         </DropdownPanel>
@@ -415,10 +391,7 @@ export function HeaderFormatDialog({ store, onClose }: { store: PageStore; onClo
   const [footer, setFooter] = useState(formatLength(setup.footerMargin ?? DEFAULT_HF_MARGIN_PT, unit));
   const [first, setFirst] = useState(setup.differentFirst === true);
   const apply = () => {
-    const pt = (v: string) => {
-      const n = Number(v.replace(",", "."));
-      return Number.isFinite(n) && n >= 0 ? Math.min(700, Math.round(n * PT_PER_UNIT[unit] * 100) / 100) : DEFAULT_HF_MARGIN_PT;
-    };
+    const pt = (v: string) => Math.min(700, parseLength(v, unit) ?? DEFAULT_HF_MARGIN_PT);
     void store.saveSetup({ ...setup, headerMargin: pt(header), footerMargin: pt(footer), differentFirst: first });
     onClose();
   };

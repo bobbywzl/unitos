@@ -65,7 +65,7 @@ function currentWeight(editor: Editor): number {
   return editor.isActive("bold") ? 700 : 400;
 }
 
-export function FontSelect({ editor, font, disabled }: { editor: Editor; font: string | null; disabled: boolean }) {
+export function FontSelect({ editor, font }: { editor: Editor; font: string | null }) {
   const t = useT();
   const [dialog, setDialog] = useState(false);
 
@@ -87,7 +87,6 @@ export function FontSelect({ editor, font, disabled }: { editor: Editor; font: s
         id="font"
         label={t("docs.font")}
         track="font"
-        disabled={disabled}
         className="docs-tb-select docs-tb-font"
         menuClassName="docs-menu-fonts"
         face={<span className="docs-tb-caption">{font ?? ""}</span>}

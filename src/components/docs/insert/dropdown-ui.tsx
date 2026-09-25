@@ -8,35 +8,21 @@ import { DeleteIcon, DragIcon } from "@/components/docs/insert/icons";
 import { documentDropdowns, dropdownChips } from "@/components/docs/insert/chips";
 import {
   DROPDOWN_COLORS,
-  DROPDOWN_PRESETS,
-  newDropdownId,
   optionColor,
   optionTextColor,
+  presetDropdowns,
   readOptions,
   writeOptions,
+  type Dropdown,
   type DropdownOption,
 } from "@/components/docs/insert/dropdowns";
-import { Dialog } from "@/components/docs/insert/ui";
-import type { TFunc } from "@/lib/i18n/dictionaries";
+import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { newBlockId } from "@/lib/docs/schema";
 
 // Dropdown chips' windows (SPEC.md §29), as Google Docs draws them: the
-// picker (New dropdown, the document's dropdowns, the presets, each
-// showing its options on hover), the chip's own menu (its options as
-// colored pills, a check on the current one, Add / Edit options), and the
-// Dropdown options dialog (a template name, one row per option with its
-// color, New option, Cancel and Save).
+// picker, the chip's menu of options, and the Dropdown options dialog.
 
-export type Dropdown = { id: string | null; name: string; options: DropdownOption[] };
-
-export function presetDropdowns(t: TFunc): Dropdown[] {
-  return DROPDOWN_PRESETS.map((p) => ({
-    id: null,
-    name: t(p.name),
-    options: p.options.map((o) => ({ label: t(o.label), color: o.color })),
-  }));
-}
-
-export function OptionPill({ option, selected }: { option: DropdownOption; selected?: boolean }) {
+function OptionPill({ option, selected }: { option: DropdownOption; selected?: boolean }) {
   const color = optionColor(option.color);
   return (
     <span className="docs-option-pill" style={{ backgroundColor: color, color: optionTextColor(color) }}>
@@ -186,29 +172,26 @@ export function DropdownDialog({
   const set = (i: number, patch: Partial<DropdownOption>) => setOptions((list) => list.map((o, j) => (j === i ? { ...o, ...patch } : o)));
   const canSave = options.some((o) => o.label.trim());
   return (
-    <Dialog
+    <ToolbarDialog
       title={t("docsInsert.dropdownOptions")}
       onClose={onClose}
       className="docs-dd-dialog"
       actions={
         <>
-          <button type="button" className="docs-button-outline" onClick={onClose}>
-            {t("common.cancel")}
-          </button>
-          <button
-            type="button"
-            className="docs-button-outline docs-button-blue"
+          <DialogButton onClick={onClose}>{t("common.cancel")}</DialogButton>
+          <DialogButton
+            primary
             disabled={!canSave}
-            onClick={() => onSave({ id: initial.id ?? newDropdownId(), name: name.trim(), options: options.filter((o) => o.label.trim()) })}
+            onClick={() => onSave({ id: initial.id ?? newBlockId(), name: name.trim(), options: options.filter((o) => o.label.trim()) })}
           >
             {t("docsInsert.save")}
-          </button>
+          </DialogButton>
         </>
       }
     >
       <label className="docs-outlined-field">
         <span>{t("docsInsert.templateName")}</span>
-        <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        <input value={name} onChange={(e) => setName(e.target.value)} />
       </label>
       <ol className="docs-dd-options">
         {options.map((o, i) => (
@@ -305,6 +288,6 @@ export function DropdownDialog({
         <AddIcon size={18} />
         {t("docsInsert.newOption")}
       </button>
-    </Dialog>
+    </ToolbarDialog>
   );
 }

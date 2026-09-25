@@ -37,15 +37,9 @@ import { armPlainPaste, imageFiles, insertImageFiles, notePaste, plainTextSlice 
 import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
 import { tracePlugin } from "@/components/docs/typing/trace";
 
-// The page editor's typing extensions (SPEC.md §29): Google Docs' keys, its
-// autocorrect engine, paste, and find. extensions.ts spreads this list into
-// the editor.
-//
-// The typing extension runs before every other one (priority 1001): its
-// keys win over Tiptap's defaults, and it owns typed text, so Tiptap's own
-// input rules (StarterKit's Markdown shortcuts and the like) never run —
-// Google Docs autoformats through its own rules, with Markdown off by
-// default. A "@" or ":" menu (any @tiptap/suggestion plugin) keeps its keys.
+// The page editor's typing (SPEC.md §29): Google Docs' keys, autocorrect,
+// paste, and find. It runs first (priority 1001), so its keys win over
+// Tiptap's and Tiptap's own input rules never run.
 
 declare module "@tiptap/core" {
   interface Storage {
@@ -202,8 +196,7 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
       // Keys Tiptap binds and Docs does not: inline code, a quote.
       "Mod-e": () => true,
       "Mod-Shift-b": () => true,
-      // Center, bound again here: with Caps Lock on, Ctrl+Shift+E reads as
-      // Ctrl+E, which the line above would take.
+      // With Caps Lock on, Ctrl+Shift+E reads as Ctrl+E.
       "Mod-Shift-e": () => e.commands.setTextAlign("center"),
     };
     if (mac) {
@@ -213,7 +206,6 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
         "Alt-Delete": () => deleteForward(e, true, mac),
         "Mod-Shift-x": () => e.chain().toggleStrike().run(),
         "Alt-Shift-k": () => toggleSmallCaps(e),
-        // Word and paragraph moves by Docs' classes; Shift extends.
         "Alt-ArrowLeft": () => moveWord(e, -1, false, mac),
         "Alt-ArrowRight": () => moveWord(e, 1, false, mac),
         "Alt-Shift-ArrowLeft": () => moveWord(e, -1, true, mac),
@@ -233,7 +225,6 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
         "Ctrl-Space": () => e.commands.clearFormatting(),
         "Alt-Shift-ArrowUp": move(-1),
         "Alt-Shift-ArrowDown": move(1),
-        // Word and paragraph moves by Docs' classes; Shift extends a word move.
         "Ctrl-ArrowLeft": () => moveWord(e, -1, false, mac),
         "Ctrl-ArrowRight": () => moveWord(e, 1, false, mac),
         "Ctrl-Shift-ArrowLeft": () => moveWord(e, -1, true, mac),
@@ -273,20 +264,19 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
         },
         handlePaste(view, event) {
           notePaste();
+          // An image alone on the clipboard uploads; words copied with a
+          // picture of them paste as words.
           const images = imageFiles(event.clipboardData?.files);
           const html = event.clipboardData?.getData("text/html") ?? "";
-          if (images.length && !html.trim() && view.editable) {
-            void insertImageFiles(editor, images);
-            return true;
-          }
-          return false;
+          if (!images.length || html.replace(/<[^>]*>|&nbsp;/g, "").trim() || !view.editable) return false;
+          void insertImageFiles(editor, images);
+          return true;
         },
         handleDrop(view, event, _slice, moved) {
           const images = imageFiles(event.dataTransfer?.files);
           if (moved || !images.length || !view.editable) return false;
-          const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
           event.preventDefault();
-          void insertImageFiles(editor, images, at?.pos);
+          void insertImageFiles(editor, images, view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos);
           return true;
         },
         handleDOMEvents: {
@@ -321,9 +311,8 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
           },
         },
       },
-      // The pending style (Bold pressed with no selection) survives the
-      // bookkeeping transactions other plugins append — a new paragraph's
-      // block id — which ProseMirror would let clear it.
+      // The pending style survives the bookkeeping other plugins append
+      // (a new paragraph's block id).
       appendTransaction(transactions, oldState, newState) {
         if (!oldState.storedMarks || newState.storedMarks || !newState.selection.empty) return null;
         const bookkeeping = transactions.every(
@@ -335,14 +324,11 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
           .setMeta("addToHistory", false)
           .setMeta(TYPING_RESTORE_META, true);
       },
-      // Tiptap's own input rules never change the text (the typing area's
-      // rules are Docs' rules), and a paste keeps its Markdown markers.
+      // Tiptap's input rules never run, and a paste keeps its Markdown markers.
       filterTransaction(tr, state) {
         for (const p of state.plugins) {
           if ((p.spec as { isInputRules?: boolean }).isInputRules && tr.getMeta(p)) return false;
         }
-        // The transactions a paste appends are filtered while the paste
-        // applies, in the same task.
         const origin = tr.getMeta("uiEvent") as string | undefined;
         if (origin === "paste" || origin === "drop") {
           pasting = true;

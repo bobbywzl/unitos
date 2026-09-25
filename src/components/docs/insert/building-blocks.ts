@@ -2,7 +2,8 @@ import type { JSONContent } from "@tiptap/core";
 import type { Lang } from "@/lib/i18n/config";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { dateLabel, isoOf, today } from "@/components/docs/insert/dates";
-import { DROPDOWN_PRESETS, newDropdownId, writeOptions } from "@/components/docs/insert/dropdowns";
+import { presetDropdowns, writeOptions } from "@/components/docs/insert/dropdowns";
+import { newBlockId } from "@/lib/docs/schema";
 
 // Google Docs' building blocks (SPEC.md §29), inserted as content: Meeting
 // notes (today's date chip and a title, attendees, notes, action items),
@@ -35,22 +36,15 @@ function cell(content: JSONContent[], header = false): JSONContent {
 }
 
 function dropdownChip(presetIndex: number, id: string, t: TFunc): JSONContent {
-  const preset = DROPDOWN_PRESETS[presetIndex];
-  const options = preset.options.map((o) => ({ label: t(o.label), color: o.color }));
+  const { name, options } = presetDropdowns(t)[presetIndex];
   return {
     type: "dropdownChip",
-    attrs: {
-      dropdownId: id,
-      name: t(preset.name),
-      dropdownOptions: writeOptions(options),
-      label: options[0].label,
-      backgroundColor: options[0].color,
-    },
+    attrs: { dropdownId: id, name, dropdownOptions: writeOptions(options), label: options[0].label, backgroundColor: options[0].color },
   };
 }
 
 function tracker(columns: string[], statusColumn: number, preset: number, t: TFunc): JSONContent[] {
-  const id = newDropdownId();
+  const id = newBlockId();
   const header: JSONContent = { type: "tableRow", content: columns.map((c) => cell(text(c, true), true)) };
   const body = [0, 1].map(
     (): JSONContent => ({

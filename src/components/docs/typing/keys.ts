@@ -7,27 +7,16 @@ import { canSplit } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
 import { blockText, previousTextblock, runAutocorrect, runCodeFence } from "@/components/docs/typing/autocorrect";
 import { firstGraphemeLength, lastGraphemeLength, wordEndAfter, wordStartBefore } from "@/components/docs/typing/chars";
+import { isList, isListItem } from "@/components/docs/typing/lists";
 
-// Google Docs' Enter, Backspace, Delete, Tab, and move-paragraph (SPEC.md §29,
-// typing). ProseMirror's defaults differ where Docs is particular: Enter at
-// the end of a heading gives Normal text; Backspace at the start of a list
-// item takes the bullet away and leaves the text where it was, steps a
-// centered or right-aligned line back, and removes an indent before it
-// joins; a join keeps the lower paragraph's style unless the upper one is a
-// list item; Tab at the start of a paragraph sets a first-line indent.
+// Google Docs' Enter, Backspace, Delete, Tab, move paragraph, and word and
+// paragraph caret moves (SPEC.md §29, typing), where Docs differs from
+// ProseMirror's defaults.
 
 /** One indent step, in points. */
 const STEP_PT = 36;
 /** Docs nests lists nine levels deep: 0 to 8. */
 const MAX_LEVEL = 8;
-
-function isListItemNode(node: PMNode | null | undefined): boolean {
-  return node?.type.name === "listItem" || node?.type.name === "taskItem";
-}
-
-function isListNode(node: PMNode | null | undefined): boolean {
-  return node?.type.name === "bulletList" || node?.type.name === "orderedList" || node?.type.name === "taskList";
-}
 
 function isCell(node: PMNode | null | undefined): boolean {
   return node?.type.name === "tableCell" || node?.type.name === "tableHeader";
@@ -82,9 +71,9 @@ function listItemAt($pos: ResolvedPos): ItemAt | null {
   const d = $pos.depth - 1;
   if (d < 1) return null;
   const item = $pos.node(d);
-  if (!isListItemNode(item) || $pos.index(d) !== 0) return null;
+  if (!isListItem(item) || $pos.index(d) !== 0) return null;
   let level = -1;
-  for (let i = d - 1; i > 0; i--) if (isListNode($pos.node(i))) level++;
+  for (let i = d - 1; i > 0; i--) if (isList($pos.node(i))) level++;
   return { node: item, pos: $pos.before(d), depth: d, level: Math.max(0, level) };
 }
 
@@ -234,7 +223,7 @@ function deleteBlock(tr: Transaction, pos: number): boolean {
   while (depth > 0) {
     const parent = $pos.node(depth);
     if (parent.childCount !== 1) break;
-    if (!isListItemNode(parent) && !isListNode(parent) && parent.type.name !== "blockquote") break;
+    if (!isListItem(parent) && !isList(parent) && parent.type.name !== "blockquote") break;
     from = $pos.before(depth);
     to = $pos.after(depth);
     depth--;
@@ -256,7 +245,7 @@ function joinInto(tr: Transaction, upperPos: number, lowerPos: number): boolean 
   if (!upper?.isTextblock || !lower?.isTextblock) return false;
   if (upper.type.spec.code || lower.type.spec.code) return false;
   const $upper = tr.doc.resolve(upperPos + 1);
-  const keepUpper = isListItemNode($upper.node($upper.depth - 1));
+  const keepUpper = isListItem($upper.node($upper.depth - 1));
   if (keepUpper) {
     const join = upperPos + 1 + upper.content.size;
     const before = tr.steps.length;
@@ -355,7 +344,7 @@ function backspaceAtStart(view: EditorView, $from: ResolvedPos, word: boolean): 
     // 5. The start of the document or of a table cell: nothing.
     if (container.type.name === "doc" || isCell(container)) return true;
     // The word-delete modifier at a list item's start joins it to the line above.
-    if (isListItemNode(container)) {
+    if (isListItem(container)) {
       const prev = previousTextblock(state.doc, blockPos);
       if (!prev || inTable(state.doc.resolve(prev.start)) !== inTable($from)) return true;
       tr = joinBlocks(state, prev.start - 1, blockPos);
@@ -377,7 +366,7 @@ function backspaceAtStart(view: EditorView, $from: ResolvedPos, word: boolean): 
     } else if (prev.isTextblock) {
       // 8. Join, the Docs way.
       tr = joinBlocks(state, prevPos, blockPos);
-    } else if (isListNode(prev)) {
+    } else if (isList(prev)) {
       const last = previousTextblock(state.doc, blockPos);
       if (last) tr = joinBlocks(state, last.start - 1, blockPos);
     }
@@ -458,7 +447,7 @@ export function deleteForward(editor: Editor, word: boolean, mac: boolean): bool
   let tr: Transaction | null = null;
   if (index === container.childCount - 1) {
     if (container.type.name === "doc" || isCell(container)) return true;
-    if (isListItemNode(container)) {
+    if (isListItem(container)) {
       const next = nextTextblock(state.doc, after);
       if (!next || inTable(state.doc.resolve(next.pos + 1)) !== inTable($from)) return true;
       // A table right after the list: nothing.
@@ -473,7 +462,7 @@ export function deleteForward(editor: Editor, word: boolean, mac: boolean): bool
       tr = state.tr.delete(after, after + next.nodeSize);
     } else if (next.isTextblock) {
       tr = joinBlocks(state, blockPos, after);
-    } else if (isListNode(next)) {
+    } else if (isList(next)) {
       const first = nextTextblock(state.doc, after);
       if (first) tr = joinBlocks(state, blockPos, first.pos);
     }
@@ -624,7 +613,7 @@ export function moveParagraphs(editor: Editor, dir: -1 | 1): boolean {
   let startIndex = range.startIndex;
   let endIndex = range.endIndex;
   // A range that starts a list item moves the items.
-  while (depth > 0 && isListItemNode($a.node(depth)) && startIndex === 0) {
+  while (depth > 0 && isListItem($a.node(depth)) && startIndex === 0) {
     depth -= 1;
     startIndex = $a.index(depth);
     endIndex = $b.index(depth) + 1;
@@ -650,7 +639,7 @@ export function moveParagraphs(editor: Editor, dir: -1 | 1): boolean {
     tr.insert(startPos, Fragment.from(next).append(moved));
     shift = next.nodeSize;
     region = [startPos, endPos + next.nodeSize];
-  } else if (isListNode(parent) && depth > 0 && !isListItemNode($a.node(depth - 1))) {
+  } else if (isList(parent) && depth > 0 && !isListItem($a.node(depth - 1))) {
     const moved = leaveList(tr, state, $a, depth, startIndex, endIndex, dir);
     if (moved === null) return true;
     shift = moved.shift;
@@ -677,7 +666,7 @@ export function moveParagraphs(editor: Editor, dir: -1 | 1): boolean {
 /** Two lists that read as one: the same kind and style, and a numbered
     list's second part numbered on from the first. */
 function listsJoin(a: PMNode, b: PMNode): boolean {
-  if (!isListNode(a) || a.type !== b.type || (a.attrs.listStyle ?? null) !== (b.attrs.listStyle ?? null)) return false;
+  if (!isList(a) || a.type !== b.type || (a.attrs.listStyle ?? null) !== (b.attrs.listStyle ?? null)) return false;
   if (a.type.name !== "orderedList") return true;
   return (Number(b.attrs.start) || 1) === (Number(a.attrs.start) || 1) + a.childCount;
 }
@@ -745,7 +734,7 @@ function leaveList(
 // ── Caret: words and paragraphs ─────────────────────────────────────────
 
 /** Right-to-left script: the browser moves the caret there, visually. */
-const RTL = /[֐-ࣿיִ-﷿ﹰ-ﻼ]/;
+const RTL = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/;
 
 function moveHead(view: EditorView, sel: TextSelection, target: number, extend: boolean): true {
   const doc = view.state.doc;

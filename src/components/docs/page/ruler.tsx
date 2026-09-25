@@ -1,14 +1,15 @@
 "use client";
 
 import type { Editor } from "@tiptap/core";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
-import { PageIcon } from "@/components/docs/page/icons";
 import {
+  MIN_TEXT_PT,
   PT_PER_UNIT,
   PX_PER_PT,
   pageFrame,
+  scrollParent,
   type LengthUnit,
   type PageFrame,
 } from "@/components/docs/page/geometry";
@@ -25,25 +26,15 @@ import type { PageSetup } from "@/lib/docs/schema";
 // holds the caret. Both follow the zoom.
 
 /** The page's place on screen, client px. */
-export type PageRect = { left: number; top: number; width: number; height: number; scale: number };
+type PageRect = { left: number; top: number; width: number; height: number; scale: number };
 
 /** Ticks closer than this draw only the major ones; numbers need more. */
 const MIN_TICK = 5;
 const MIN_NUMBER_TICK = 7;
-/** The least room a text column keeps, in points. */
-const MIN_TEXT_PT = 36;
-
-function scrollParent(el: HTMLElement | null): HTMLElement | null {
-  for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
-    const oy = getComputedStyle(node).overflowY;
-    if (oy === "auto" || oy === "scroll") return node;
-  }
-  return null;
-}
 
 /** Where the page is on screen, kept up to date through scrolling, resizing,
     zooming, and the page's moves. */
-export function usePageRect(editor: Editor, deps: unknown[]): PageRect | null {
+function usePageRect(editor: Editor, deps: unknown[]): PageRect | null {
   const [rect, setRect] = useState<PageRect | null>(null);
   useEffect(() => {
     const page = editor.view.dom.closest<HTMLElement>("[data-docs-page]");
@@ -105,7 +96,7 @@ export function usePageRect(editor: Editor, deps: unknown[]): PageRect | null {
 }
 
 /** A value in the ruler's unit, to two decimals, never "-0.00". */
-export function formatRulerValue(pt: number, unit: LengthUnit): string {
+function formatRulerValue(pt: number, unit: LengthUnit): string {
   const v = pt / PT_PER_UNIT[unit];
   return (Math.abs(v) < 0.005 ? 0 : v).toFixed(2);
 }
@@ -195,22 +186,46 @@ function startDrag(
     last = vertical ? ev.clientY : ev.clientX;
     move(last);
   };
-  const onUp = () => {
+  const finish = (value: number | null) => {
     target.removeEventListener("pointermove", onMove);
     target.removeEventListener("pointerup", onUp);
     target.removeEventListener("pointercancel", onCancel);
-    end(last);
+    end(value);
   };
-  const onCancel = () => {
-    target.removeEventListener("pointermove", onMove);
-    target.removeEventListener("pointerup", onUp);
-    target.removeEventListener("pointercancel", onCancel);
-    end(null);
-  };
+  const onUp = () => finish(last);
+  const onCancel = () => finish(null);
   target.addEventListener("pointermove", onMove);
   target.addEventListener("pointerup", onUp);
   target.addEventListener("pointercancel", onCancel);
   move(vertical ? e.clientY : e.clientX);
+}
+
+type Side = keyof PageSetup["margins"];
+const OPPOSITE: Record<Side, Side> = { left: "right", right: "left", top: "bottom", bottom: "top" };
+
+/** Drag a page margin: it follows the pointer from where the press started,
+    snapped, and leaves the text MIN_TEXT_PT; `show` gets the margin in
+    points while it moves, null at the end. The setup saves on release. */
+function dragMargin(e: React.PointerEvent, store: PageStore, side: Side, unit: LengthUnit, scale: number, show: (pt: number | null) => void) {
+  const setup = store.get().setup;
+  const vertical = side === "top" || side === "bottom";
+  const sign = side === "left" || side === "top" ? 1 : -1;
+  const initial = setup.margins[side];
+  const limit = (vertical ? setup.height : setup.width) - setup.margins[OPPOSITE[side]] - MIN_TEXT_PT;
+  const start = vertical ? e.clientY : e.clientX;
+  let value = initial;
+  startDrag(
+    e,
+    vertical,
+    (client) => {
+      value = Math.max(0, Math.min(limit, snapPt(initial + (sign * (client - start)) / scale / PX_PER_PT, unit)));
+      show(value);
+    },
+    (last) => {
+      show(null);
+      if (last !== null) void store.saveSetup({ ...setup, margins: { ...setup.margins, [side]: Math.round(value * 100) / 100 } });
+    },
+  );
 }
 
 /** The paragraph under the caret: its indents in points and its container's
@@ -289,13 +304,11 @@ export function HorizontalRuler({
   store,
   editing,
   unit,
-  onPageSetup,
 }: {
   editor: Editor;
   store: PageStore;
   editing: boolean;
   unit: LengthUnit;
-  onPageSetup: () => void;
 }) {
   const t = useT();
   const setup = usePageState(store, (s) => s.setup);
@@ -341,33 +354,18 @@ export function HorizontalRuler({
   const toPt = (px: number) => px / s / PX_PER_PT;
   const tipY = strip ? strip.bottom - 16 : 0;
 
-  const dragMargin = (side: "left" | "right") => (e: React.PointerEvent) => {
+  const onMargin = (side: "left" | "right") => (e: React.PointerEvent) => {
     if (!editing || !page || !strip || pageless) return;
-    const other = side === "left" ? frame.right : frame.left;
-    const limit = frame.width - other - MIN_TEXT_PT * PX_PER_PT; // px at 100%
-    const initial = side === "left" ? setup.margins.left : setup.margins.right;
-    let value = initial;
-    // The margin moves with the pointer from where the drag started.
-    const startX = e.clientX;
-    startDrag(
-      e,
-      false,
-      (clientX) => {
-        const moved = toPt(side === "left" ? clientX - startX : startX - clientX);
-        const pt = Math.max(0, Math.min(limit / PX_PER_PT, snapPt(initial + moved, unit)));
-        value = pt;
-        const at = side === "left" ? pt * PX_PER_PT * s : pageWidth - pt * PX_PER_PT * s;
-        setDraft({ key: `margin-${side}`, at });
-        setTip({ x: page.left + at, y: tipY, text: formatRulerValue(pt, unit), vertical: false, guide: page.left + at });
-      },
-      (last) => {
+    dragMargin(e, store, side, unit, s, (pt) => {
+      if (pt === null) {
         setDraft(null);
         setTip(null);
-        if (last === null) return;
-        const next: PageSetup = { ...setup, margins: { ...setup.margins, [side]: Math.round(value * 100) / 100 } };
-        void store.saveSetup(next);
-      },
-    );
+        return;
+      }
+      const at = side === "left" ? pt * PX_PER_PT * s : pageWidth - pt * PX_PER_PT * s;
+      setDraft({ key: `margin-${side}`, at });
+      setTip({ x: page.left + at, y: tipY, text: formatRulerValue(pt, unit), vertical: false, guide: page.left + at });
+    });
   };
 
   const dragIndent = (key: "left" | "first" | "right") => (e: React.PointerEvent) => {
@@ -382,19 +380,13 @@ export function HorizontalRuler({
       false,
       (clientX) => {
         const x = clientX - page.left;
-        let at = 0;
-        if (key === "right") {
-          const pt = Math.max(0, Math.min(boxWidthPt - indents.left - MIN_TEXT_PT, snapPt(toPt(boxRight - x), unit)));
-          value = pt;
-          at = boxRight - pt * PX_PER_PT * s;
-          setTip({ x: page.left + at, y: tipY, text: formatRulerValue(pt, unit), vertical: false, guide: page.left + at });
-        } else {
-          const pt = Math.max(0, Math.min(boxWidthPt - indents.right - MIN_TEXT_PT, snapPt(toPt(x - boxLeft), unit)));
-          value = pt;
-          at = boxLeft + pt * PX_PER_PT * s;
-          setTip({ x: page.left + at, y: tipY, text: formatRulerValue(pt, unit), vertical: false, guide: page.left + at });
-        }
+        const right = key === "right";
+        const room = boxWidthPt - (right ? indents.left : indents.right) - MIN_TEXT_PT;
+        const pt = Math.max(0, Math.min(room, snapPt(toPt(right ? boxRight - x : x - boxLeft), unit)));
+        value = pt;
+        const at = right ? boxRight - pt * PX_PER_PT * s : boxLeft + pt * PX_PER_PT * s;
         setDraft({ key, at });
+        setTip({ x: page.left + at, y: tipY, text: formatRulerValue(pt, unit), vertical: false, guide: page.left + at });
       },
       (last) => {
         setDraft(null);
@@ -436,9 +428,11 @@ export function HorizontalRuler({
             data-tip={t("docsPage.pageSetup")}
             data-track="docs:page-setup-corner"
             onMouseDown={(e) => e.preventDefault()}
-            onClick={onPageSetup}
+            onClick={() => store.set({ dialog: "setup" })}
           >
-            <PageIcon size={14} />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden focusable="false">
+              <path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 19c0 1.1.89 2 1.99 2H17c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H7V5h10v14z" />
+            </svg>
           </button>
         )}
       </div>
@@ -460,14 +454,14 @@ export function HorizontalRuler({
                   className="docs-ruler-margin docs-ruler-margin-start"
                   style={{ left: 0, width: Math.max(0, marginLeftAt) }}
                   data-tip={draft ? undefined : t("docsPage.leftMargin")}
-                  onPointerDown={dragMargin("left")}
+                  onPointerDown={onMargin("left")}
                   data-edit={editing || undefined}
                 />
                 <span
                   className="docs-ruler-margin docs-ruler-margin-end"
                   style={{ left: marginRightAt, width: Math.max(0, pageWidth - marginRightAt) }}
                   data-tip={draft ? undefined : t("docsPage.rightMargin")}
-                  onPointerDown={dragMargin("right")}
+                  onPointerDown={onMargin("right")}
                   data-edit={editing || undefined}
                 />
               </>
@@ -537,7 +531,7 @@ export function VerticalRuler({
   /** The ruler's top on screen, client px. */
   top: number;
   height: number;
-}): ReactNode {
+}) {
   const t = useT();
   const setup = usePageState(store, (s) => s.setup);
   const pages = usePageState(store, (s) => s.pages);
@@ -594,34 +588,20 @@ export function VerticalRuler({
   const marginTop = frame.top * s;
   const marginBottom = frame.bottom * s;
   const list = ticks(unit, s, marginTop, pageHeight, marginTop, pageHeight - marginBottom);
-  const toPt = (px: number) => px / s / PX_PER_PT;
 
-  const drag = (side: "top" | "bottom") => (e: React.PointerEvent) => {
+  const onMargin = (side: "top" | "bottom") => (e: React.PointerEvent) => {
     if (!editing) return;
-    const other = side === "top" ? frame.bottom : frame.top;
-    const limit = (frame.height - other) / PX_PER_PT - MIN_TEXT_PT;
-    const initial = side === "top" ? setup.margins.top : setup.margins.bottom;
-    let value = initial;
     const edge = top + pageTop;
-    const startY = e.clientY;
-    startDrag(
-      e,
-      true,
-      (clientY) => {
-        const moved = toPt(side === "top" ? clientY - startY : startY - clientY);
-        const pt = Math.max(0, Math.min(limit, snapPt(initial + moved, unit)));
-        value = pt;
-        const at = side === "top" ? pt * PX_PER_PT * s : pageHeight - pt * PX_PER_PT * s;
-        setDraft({ key: side, at });
-        setTip({ x: 16, y: 0, text: formatRulerValue(pt, unit), vertical: true, guide: edge + at });
-      },
-      (last) => {
+    dragMargin(e, store, side, unit, s, (pt) => {
+      if (pt === null) {
         setDraft(null);
         setTip(null);
-        if (last === null) return;
-        void store.saveSetup({ ...setup, margins: { ...setup.margins, [side]: Math.round(value * 100) / 100 } });
-      },
-    );
+        return;
+      }
+      const at = side === "top" ? pt * PX_PER_PT * s : pageHeight - pt * PX_PER_PT * s;
+      setDraft({ key: side, at });
+      setTip({ x: 16, y: 0, text: formatRulerValue(pt, unit), vertical: true, guide: edge + at });
+    });
   };
   const topAt = draft?.key === "top" ? draft.at : marginTop;
   const bottomAt = draft?.key === "bottom" ? draft.at : pageHeight - marginBottom;
@@ -642,14 +622,14 @@ export function VerticalRuler({
           className="docs-vruler-margin docs-vruler-margin-start"
           style={{ top: 0, height: Math.max(0, topAt) }}
           data-tip={draft ? undefined : t("docsPage.topMargin")}
-          onPointerDown={drag("top")}
+          onPointerDown={onMargin("top")}
           data-edit={editing || undefined}
         />
         <span
           className="docs-vruler-margin docs-vruler-margin-end"
           style={{ top: bottomAt, height: Math.max(0, pageHeight - bottomAt) }}
           data-tip={draft ? undefined : t("docsPage.bottomMargin")}
-          onPointerDown={drag("bottom")}
+          onPointerDown={onMargin("bottom")}
           data-edit={editing || undefined}
         />
       </div>

@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { DropDownIcon } from "@/components/docs/icons";
-import { DropdownPanel, highlight, MenuItem, MenuSeparator } from "@/components/docs/menu";
+import { DropdownPanel, highlighted, MenuItem, MenuSeparator, moveHighlight } from "@/components/docs/menu";
 
 // Zoom (SPEC.md §29): Google Docs' combobox. The menu is Fit, then 50% to
 // 200%; a typed number is clamped to 50–200, "fit" means Fit, anything
@@ -15,7 +15,7 @@ export const ZOOMS = [50, 75, 90, 100, 125, 150, 200] as const;
 export type Zoom = number | "fit";
 
 /** The zoom a typed text asks for, or null to keep the current one. */
-export function parseZoom(text: string): Zoom | null {
+function parseZoom(text: string): Zoom | null {
   const trimmed = text.trim().toLowerCase();
   if (trimmed === "fit") return "fit";
   const n = parseInt(trimmed, 10);
@@ -95,14 +95,10 @@ export function ZoomBox({
         }}
         onKeyDown={(e) => {
           const list = panel();
-          const active = list?.querySelector<HTMLElement>("[data-menu-item][data-active]");
+          const active = list && highlighted(list);
           if (e.key === "ArrowDown" || e.key === "ArrowUp") {
             e.preventDefault();
-            if (!list) return;
-            const all = [...list.querySelectorAll<HTMLElement>("[data-menu-item]")];
-            const i = active ? all.indexOf(active) : -1;
-            const next = e.key === "ArrowDown" ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, i - 1)];
-            highlight(list, next ?? null);
+            if (list) moveHighlight(list, e.key);
           } else if (e.key === "Enter") {
             e.preventDefault();
             if (active && draft === null) active.click();

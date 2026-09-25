@@ -9,7 +9,7 @@ import { setTypingStorage } from "@/components/docs/ext/typing";
 import { isMac } from "@/components/docs/keys";
 import { AutocorrectBubble } from "@/components/docs/typing/autocorrect-bubble";
 import { TYPING_EVENT, fireTyping } from "@/components/docs/typing/events";
-import { findState, selectResult, setFind, stepResult } from "@/components/docs/typing/find";
+import { findState, searchFrom, setFind, stepResult } from "@/components/docs/typing/find";
 import { FindBar, FindReplaceDialog, type FindMode } from "@/components/docs/typing/find-ui";
 import { copyMarkdown, pasteMarkdown, pasteMessages } from "@/components/docs/typing/paste";
 import { typingPrefs } from "@/components/docs/typing/prefs";
@@ -131,9 +131,7 @@ export function TypingLayer({ editor, pageSetup }: DocsAreaProps) {
       const { state } = view;
       const { from, to, empty } = state.selection;
       const selected = empty ? "" : state.doc.textBetween(from, to, "\n").split("\n")[0].slice(0, 200);
-      const query = selected || findState(state).query;
-      const next = setFind(view, { open: true, query, near: from });
-      if (next.current >= 0) selectResult(view, next.current);
+      searchFrom(view, { open: true, query: selected || findState(state).query });
       setFindMode(mode);
       setFocusToken((n) => n + 1);
     };
@@ -208,20 +206,22 @@ export function TypingLayer({ editor, pageSetup }: DocsAreaProps) {
         onMore={() => setFindMode("dialog")}
       />
       <FindReplaceDialog editor={editor} open={findMode === "dialog"} onClose={closeFind} />
-      <PreferencesDialog
-        open={prefsOpen}
-        onClose={() => {
-          setPrefsOpen(false);
-          editor.commands.focus();
-        }}
-      />
-      <ShortcutsDialog
-        open={shortcutsOpen}
-        onClose={() => {
-          setShortcutsOpen(false);
-          editor.commands.focus();
-        }}
-      />
+      {prefsOpen && (
+        <PreferencesDialog
+          onClose={() => {
+            setPrefsOpen(false);
+            editor.commands.focus();
+          }}
+        />
+      )}
+      {shortcutsOpen && (
+        <ShortcutsDialog
+          onClose={() => {
+            setShortcutsOpen(false);
+            editor.commands.focus();
+          }}
+        />
+      )}
       <VoiceTyping editor={editor} open={voiceOpen} onClose={() => setVoiceOpen(false)} />
       <AutocorrectBubble editor={editor} />
     </>

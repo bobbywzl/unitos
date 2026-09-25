@@ -63,24 +63,16 @@ type Placed = {
   orphaned: boolean;
 };
 
-// ── Where the anchors go ─────────────────────────────────────────────────
-// A save carries every change since the last one: most often one stretch of
-// typing, an Enter, a Backspace, a paste, or a delete. The paragraphs around
-// an anchor that changed or left form a run between two paragraphs that did
-// not change; the run's words before and after the save, paragraphs joined
-// by a separator, share a start and an end and differ in one stretch. A mark
-// outside that stretch moves exactly — into the new paragraph after an
-// Enter, into the joined one after a Backspace. A mark the stretch touches
-// grows with typing inside it and shrinks with a delete; typing right before
-// or after it stays outside, as in Google Docs. A mark inside a longer
-// stretch (two edits in one save, a replace-all) is found by its words
-// there, else the word diff of its paragraph decides, as the block edit
-// route's does (lib/anchors/remap.ts). A mark an Enter cut in two keeps its
-// larger part, and covers its quote again once the quote's words stand
-// together again. Last, the quote is looked for across the document; the
-// mark orphans only when its words are gone (SPEC.md §5).
+// Where the anchors go (SPEC.md §5). The paragraphs that changed or left
+// between two unchanged ones form a run; its words before and after the save
+// (paragraphs joined by SEP) differ in one stretch. A mark outside the
+// stretch moves with its words, into the new paragraph after an Enter or the
+// joined one after a Backspace; typing right before or after a mark stays
+// outside it, typing inside grows it, a delete shrinks it. A mark inside a
+// longer stretch is found by its quote, else by its paragraph's word diff,
+// else by its quote across the document; it orphans only when its words are
+// gone.
 
-/** Joins a run's paragraphs: no paragraph's words hold it. */
 const SEP = "\u0000";
 
 type Span = { blockId: string; start: number; end: number };
@@ -92,13 +84,11 @@ type Run = {
   oldStart: Map<string, number>;
   /** The run's new paragraphs and their starts in newText. */
   newBlocks: { id: string; start: number; text: string }[];
-  /** The length of the shared start, and of the shared end left after it:
-      the changed stretch as far right as it can sit. */
+  /** The shared start, and the shared end left after it. */
   head: number;
   tail: number;
-  /** The length of the longest shared end: the changed stretch as far left
-      as it can sit. Typing a letter the mark begins with, right before the
-      mark, reads either way; the mark keeps its words. */
+  /** The longest shared end: a letter typed right before a mark that begins
+      with it stays outside the mark. */
   longTail: number;
 };
 
@@ -113,8 +103,7 @@ type Moves = {
   runs: Map<string, Run | null>;
 };
 
-function movesOf(old: OldBlock[], derived: DerivedBlock[]): Moves {
-  const newById = new Map(derived.map((d) => [d.id, d]));
+function movesOf(old: OldBlock[], derived: DerivedBlock[], newById: Map<string, DerivedBlock>): Moves {
   return {
     old,
     oldIndex: new Map(old.map((b, i) => [b.id, i])),
@@ -197,15 +186,13 @@ function mapInRun(run: Run, anchor: { blockId: string; startOffset: number; endO
   const delta = run.newText.length - run.oldText.length;
   // Before the change (typing right after the mark stays outside it).
   if (end <= run.head) return spanIn(run, start, end);
-  // After the change (typing right before the mark stays outside it), with
-  // the change as far left as it can sit.
+  // After the change (typing right before the mark stays outside it).
   if (start >= run.oldText.length - run.longTail) return spanIn(run, start + delta, end + delta);
-  // Words added inside the mark: it grows. An Enter inside it cuts it in
-  // two, and it keeps the larger part.
+  // Words added inside the mark grow it; an Enter cuts it, and it keeps the
+  // larger part.
   if (run.head === oldEnd) return spanIn(run, start, end + delta);
   if (start >= run.head && end <= oldEnd) return "inside";
-  // The change takes one end of the mark: the rest stays, with what was
-  // typed over that end.
+  // The change takes one end of the mark: the rest stays.
   return spanIn(run, start < run.head ? start : run.head, end > oldEnd ? end + delta : newEnd);
 }
 
@@ -277,17 +264,14 @@ function relocate(anchor: Anchor, m: Moves): Placed {
       orphaned: false,
     };
   }
-  const found = resolveAnchor(
-    m.derived.map((d) => ({ id: d.id, text: d.text })),
-    {
-      blockId: anchor.blockId,
-      startOffset: anchor.startOffset,
-      endOffset: anchor.endOffset,
-      quotedText: anchor.quote,
-      prefix: anchor.prefix,
-      suffix: anchor.suffix,
-    },
-  );
+  const found = resolveAnchor(m.derived, {
+    blockId: anchor.blockId,
+    startOffset: anchor.startOffset,
+    endOffset: anchor.endOffset,
+    quotedText: anchor.quote,
+    prefix: anchor.prefix,
+    suffix: anchor.suffix,
+  });
   if (found) return { ...found, orphaned: false };
   return {
     blockId: anchor.blockId,
@@ -386,7 +370,7 @@ export async function syncRichText({
 
       // Anchors on paragraphs whose words changed or left.
       const affected = [...textChanged.map((k) => k.d.id), ...removed.map((b) => b.id)];
-      const moves = movesOf(old, derived);
+      const moves = movesOf(old, derived, newById);
       if (affected.length > 0) {
         const [sources, links] = await Promise.all([
           tx.source.findMany({
