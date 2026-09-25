@@ -3,7 +3,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import { Fragment, type Node as PMNode, type NodeType, type ResolvedPos } from "@tiptap/pm/model";
 import { Selection, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { liftListItem, sinkListItem } from "@tiptap/pm/schema-list";
-import { canSplit } from "@tiptap/pm/transform";
+import { canSplit, liftTarget } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
 import { atMenuState } from "@/components/docs/insert/at-plugin";
 import { blockText, previousTextblock, runAutocorrect, runCodeFence } from "@/components/docs/typing/autocorrect";
@@ -363,38 +363,26 @@ function backspaceAtStart(view: EditorView, $from: ResolvedPos, word: boolean): 
   return true;
 }
 
-/** Backspace at the start of a list item: the item leaves the list and its
-    text keeps its place. After an item, the paragraph joins that item as a
-    paragraph of its own; as a list's first item, it moves out before the
-    list with the level's indent. */
+/** Backspace at the start of a list item: the line leaves the list as a
+    paragraph of its own, at the level's indent, so its text keeps its place.
+    The list splits around it; a numbered list's second part numbers on. */
 function removeBullet(view: EditorView, $from: ResolvedPos, item: ItemAt): boolean {
   const state = view.state;
-  const tr = state.tr;
   const list = $from.node(item.depth - 1);
-  const listPos = $from.before(item.depth - 1);
   const index = $from.index(item.depth - 1);
-  if (index > 0) {
-    tr.join(item.pos);
-  } else {
-    const paragraph = item.node.firstChild;
-    const content = paragraph
-      ? item.node.content.replaceChild(
-          0,
-          paragraph.type.create(
-            { ...paragraph.attrs, indentLeft: num(paragraph.attrs.indentLeft) + STEP_PT },
-            paragraph.content,
-            paragraph.marks,
-          ),
-        )
-      : item.node.content;
-    if (list.childCount === 1) {
-      tr.replaceWith(listPos, listPos + list.nodeSize, content);
-    } else {
-      tr.delete(item.pos, item.pos + item.node.nodeSize);
-      tr.insert(listPos, content);
-    }
-    tr.setSelection(TextSelection.create(tr.doc, listPos + 1));
+  const range = state.doc.resolve(item.pos + 1).blockRange(state.doc.resolve(item.pos + item.node.nodeSize - 1));
+  const target = range && liftTarget(range);
+  if (!range || target === null) return false;
+  const tr = state.tr.lift(range, target);
+  const pos = tr.mapping.map(item.pos + 1);
+  const paragraph = tr.doc.nodeAt(pos);
+  if (!paragraph) return false;
+  tr.setNodeMarkup(pos, undefined, { ...paragraph.attrs, indentLeft: num(paragraph.attrs.indentLeft) + STEP_PT });
+  if (list.type.name === "orderedList" && index > 0 && index < list.childCount - 1) {
+    const after = pos + item.node.content.size;
+    tr.setNodeMarkup(after, undefined, { ...list.attrs, start: (Number(list.attrs.start) || 1) + index });
   }
+  tr.setSelection(TextSelection.create(tr.doc, pos + 1));
   dispatch(view, groupEdit(view, tr, "structure"));
   endStructure(view);
   return true;

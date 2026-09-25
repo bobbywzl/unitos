@@ -19,6 +19,7 @@ import { UnitosLayer } from "@/components/docs/areas/layer";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageCanvas, PageRuler } from "@/components/docs/areas/page";
 import { StatusPopup } from "@/components/docs/page/status-popup";
+import { useSaveState } from "@/components/docs/page/store";
 import { TypingLayer } from "@/components/docs/areas/typing";
 import { VersionHistory, VersionHistoryButton } from "@/components/docs/versions/version-history";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
@@ -246,6 +247,8 @@ export function DocsEditor({
     richText,
     enabled: canEdit,
   });
+  // The header's and footer's saves show in the same status.
+  const shownSaveState = useSaveState(editor, documentId, pageSetup, saveState);
 
   useEffect(() => {
     flushRef.current = flush;
@@ -327,7 +330,7 @@ export function DocsEditor({
                 else (document.activeElement as HTMLElement | null)?.blur();
               }}
             />
-            {canEdit && <SaveStatus state={saveState} />}
+            {canEdit && <SaveStatus state={shownSaveState} />}
             {editor && <VersionHistoryButton editor={editor} />}
           </div>
         )}

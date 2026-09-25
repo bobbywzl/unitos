@@ -4,12 +4,18 @@ import type { Editor } from "@tiptap/core";
 import { useSyncExternalStore } from "react";
 import type { PageSetup } from "@/lib/docs/schema";
 import type { TextWidth } from "@/components/docs/page/geometry";
+import type { SaveState } from "@/components/docs/use-docs-save";
 
 // The page area's state (SPEC.md §29), one store per editor: the ruler
 // under the toolbar, the canvas, the dialogs, and the commands Search the
 // menus runs all read and change it. The page setup is the document's (saved
 // with PATCH /api/documents/[documentId]/rich-text); the ruler, the outline,
 // and the text width are the reader's own, kept per browser.
+
+/** A header or footer saves as the text does (use-docs-save.ts): after a
+    pause of SAVE_DELAY_MS, or MAX_WAIT_MS of steady typing. */
+const SAVE_DELAY_MS = 700;
+const MAX_WAIT_MS = 3_000;
 
 export type HeaderArea = "header" | "footer";
 
@@ -41,6 +47,8 @@ type PageState = {
   dialog: "setup" | "pageNumbers" | "headerFormat" | null;
   /** The header or footer being edited, and on which page. */
   editing: { area: HeaderArea; page: number } | null;
+  /** The page setup's save, for the title row's status. */
+  setupSave: SaveState;
 };
 
 type Listener = () => void;
@@ -53,6 +61,8 @@ export type PageStore = {
   subscribe: (listener: Listener) => () => void;
   /** Change the page setup and save it. */
   saveSetup: (next: PageSetup) => Promise<void>;
+  /** Change the page setup and save it after a pause (header typing). */
+  editSetup: (next: PageSetup) => void;
   /** Change DocsEditor's zoom. */
   zoomTo: (zoom: number | "fit") => void;
   /** The canvas hands in DocsEditor's zoom setter. */
@@ -62,7 +72,7 @@ export type PageStore = {
   /** The canvas hands in what runs after a setup is saved: the page's
       props refresh, so every area reads the new setup. */
   bindSaved: (fn: () => void) => void;
-  /** Saves not answered yet. */
+  /** Saves waiting or not answered yet. */
   pendingSaves: () => number;
 };
 
@@ -112,12 +122,29 @@ function createStore(documentId: string, setup: PageSetup): PageStore {
     textWidth: width === "medium" || width === "wide" || width === "full" ? width : "narrow",
     dialog: null,
     editing: null,
+    setupSave: "saved",
   };
   const listeners = new Set<Listener>();
   let saving: Promise<void> = Promise.resolve();
   let zoomSetter: (zoom: number | "fit") => void = () => {};
   let savedHook: () => void = () => {};
   let pending = 0;
+  // The save a change waits for, since when changes wait, and the failed
+  // saves in a row.
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let firstChangeAt: number | null = null;
+  let retries = 0;
+  const saveLater = (wait: number) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => void store.saveSetup(state.setup), wait);
+  };
+  const url = `/api/documents/${documentId}/rich-text`;
+  // Leaving with a change not saved: one last save, and the browser's warning.
+  const onLeave = (e: BeforeUnloadEvent) => {
+    const body = JSON.stringify({ pageSetup: state.setup });
+    void fetch(url, { method: "PATCH", headers: { "content-type": "application/json" }, body, keepalive: true });
+    e.preventDefault();
+  };
   // Printing turns the print layout on for the length of the print.
   let printing = false;
   const store: PageStore = {
@@ -142,26 +169,48 @@ function createStore(documentId: string, setup: PageSetup): PageStore {
       return () => listeners.delete(listener);
     },
     saveSetup: async (next) => {
-      store.set({ setup: next });
+      // This save carries every change made so far.
+      if (timer) clearTimeout(timer);
+      timer = null;
+      firstChangeAt = null;
+      store.set({ setup: next, setupSave: "saving" });
+      window.addEventListener("beforeunload", onLeave);
       pending += 1;
       // Saves run one after another, so the last change is the one stored.
       saving = saving.then(async () => {
+        let result: SaveState = "offline";
         try {
-          const res = await fetch(`/api/documents/${state.documentId}/rich-text`, {
+          const res = await fetch(url, {
             method: "PATCH",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ pageSetup: next }),
           });
+          result = res.ok ? "saved" : res.status >= 500 ? "offline" : "error";
           if (res.ok) savedHook();
         } catch {
-          // The next change saves the whole setup again.
-        } finally {
-          pending -= 1;
+          // No connection: tried again below.
         }
+        pending -= 1;
+        if (pending > 0 || timer) return;
+        if (result === "saved") {
+          retries = 0;
+          window.removeEventListener("beforeunload", onLeave);
+        } else {
+          // A failed save tries again, waiting longer each time.
+          retries = Math.min(retries + 1, 5);
+          saveLater(1000 * 2 ** retries);
+        }
+        store.set({ setupSave: result });
       });
       await saving;
     },
-    pendingSaves: () => pending,
+    editSetup: (next) => {
+      store.set({ setup: next, setupSave: "saving" });
+      window.addEventListener("beforeunload", onLeave);
+      firstChangeAt ??= Date.now();
+      saveLater(Date.now() - firstChangeAt >= MAX_WAIT_MS ? 0 : SAVE_DELAY_MS);
+    },
+    pendingSaves: () => pending + (timer ? 1 : 0),
     zoomTo: (zoom) => zoomSetter(zoom),
     bindZoom: (fn) => {
       zoomSetter = fn;
@@ -198,4 +247,18 @@ export function usePageState<T>(store: PageStore, select: (state: PageState) => 
     () => select(store.get()),
     () => select(store.get()),
   );
+}
+
+const noStore = () => () => {};
+
+/** The title row's save state: the text's (use-docs-save.ts) until the text
+    is saved, then the page setup's. */
+export function useSaveState(editor: Editor | null, documentId: string, setup: PageSetup, text: SaveState): SaveState {
+  const store = editor ? pageStore(editor, documentId, setup) : null;
+  const page = useSyncExternalStore<SaveState>(
+    store?.subscribe ?? noStore,
+    () => store?.get().setupSave ?? "saved",
+    () => "saved",
+  );
+  return text === "saved" ? page : text;
 }

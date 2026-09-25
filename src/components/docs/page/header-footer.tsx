@@ -237,16 +237,6 @@ export function HeaderFooterLayer({
     return () => ro.disconnect();
   }, [editing]);
 
-  // Leaving saves what changed, and so does closing the document mid-edit.
-  useEffect(() => {
-    if (!editing) return;
-    const start = store.get().setup;
-    return () => {
-      const now = store.get().setup;
-      if (JSON.stringify(start) !== JSON.stringify(now)) void store.saveSetup(now);
-    };
-  }, [editing, store]);
-
   if (!editing || setup.pageless) return null;
   const { area, page } = editing;
   const slot = slotFor(setup, area, page);
@@ -262,11 +252,13 @@ export function HeaderFooterLayer({
         : t(area === "header" ? "docsPage.header" : "docsPage.footer");
 
   const exit = () => store.set({ editing: null });
-  const change = (next: RichNode) => store.set({ setup: { ...store.get().setup, [slot]: next } });
-  // An Options item leaves the header or footer.
-  const choose = (patch: Parameters<PageStore["set"]>[0]) => () => {
+  // Typing saves after a pause, as the text does.
+  const change = (next: RichNode) => store.editSetup({ ...store.get().setup, [slot]: next });
+  // An Options item leaves the header or footer; a changed setup saves.
+  const choose = ({ setup: next, ...patch }: Parameters<PageStore["set"]>[0]) => () => {
     setMenuOpen(false);
     store.set({ ...patch, editing: null });
+    if (next) void store.saveSetup(next);
   };
   const barHeight = 30;
   const textStyle: CSSProperties =
@@ -291,7 +283,7 @@ export function HeaderFooterLayer({
           <input
             type="checkbox"
             checked={setup.differentFirst === true}
-            onChange={(e) => store.set({ setup: { ...store.get().setup, differentFirst: e.target.checked } })}
+            onChange={(e) => store.editSetup({ ...store.get().setup, differentFirst: e.target.checked })}
           />
           {t("docsPage.differentFirstPage")}
         </label>
