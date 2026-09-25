@@ -1,1 +1,642 @@
-/* The page editor: typing (SPEC.md §29). Imported by docs.css. */
+/* The page editor: typing (SPEC.md §29). Imported by docs.css. Find and
+   find and replace, Preferences, the keyboard shortcuts, the word count,
+   voice typing, and the marks typing leaves in the text. */
+
+:root {
+  --docs-find-result: #c4eed0;
+  --docs-find-current: #6dd58c;
+  --docs-field-line: #747775;
+  --docs-scrim: rgba(0, 0, 0, 0.32);
+  --docs-code: #188038;
+  --docs-autocorrect: #9e9e9e;
+  --docs-voice-on: #d93025;
+}
+.dark {
+  --docs-find-result: rgba(109, 213, 140, 0.3);
+  --docs-find-current: rgba(109, 213, 140, 0.62);
+  --docs-field-line: #8e918f;
+  --docs-scrim: rgba(0, 0, 0, 0.55);
+  --docs-code: #81c995;
+  --docs-autocorrect: #8a8a8a;
+  --docs-voice-on: #f28b82;
+}
+
+/* ── Find: every result light green, the current one green ─────────────── */
+.docs-find-result {
+  background: var(--docs-find-result);
+  border-radius: 2px;
+}
+.docs-find-result.docs-find-current {
+  background: var(--docs-find-current);
+}
+
+/* Markdown's inline code: Roboto Mono in Docs' code green. */
+.docs-prose code {
+  color: var(--docs-code);
+}
+
+/* ── Shared pieces: cards, fields, buttons, checkboxes ────────────────── */
+.docs-ty-card {
+  background: var(--docs-menu-bg);
+  color: var(--docs-text);
+  border-radius: 28px;
+  box-shadow: var(--docs-menu-shadow);
+  font: 400 14px/20px var(--docs-ui-font);
+}
+.docs-ty-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--docs-scrim);
+}
+.docs-ty-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 16px 16px 24px;
+}
+.docs-ty-head h2 {
+  font: 400 24px/32px var(--docs-ui-font);
+  color: var(--docs-text);
+}
+.docs-ty-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 24px;
+}
+.docs-ty-button {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 20px;
+  color: var(--docs-blue);
+  font: 500 14px/20px var(--docs-ui-font);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.docs-ty-button:hover:not(:disabled) {
+  background: var(--docs-hover);
+}
+.docs-ty-button:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.docs-ty-primary {
+  padding: 0 24px;
+  background: var(--docs-blue);
+  color: #ffffff;
+}
+.dark .docs-ty-primary {
+  color: #062e6f;
+}
+.docs-ty-primary:hover:not(:disabled) {
+  background: var(--docs-blue);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
+}
+.docs-ty-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font: 400 14px/20px var(--docs-ui-font);
+  color: var(--docs-text);
+  cursor: pointer;
+}
+.docs-ty-check input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  accent-color: var(--docs-blue);
+  cursor: pointer;
+}
+.docs-ty-link {
+  color: var(--docs-blue);
+  text-decoration: underline;
+}
+.docs-find-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--docs-icon);
+  cursor: pointer;
+}
+.docs-find-btn:hover:not(:disabled) {
+  background: var(--docs-hover);
+}
+.docs-find-btn:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.docs-find-input:focus-visible,
+.docs-outlined input:focus-visible,
+.docs-subs-input:focus-visible,
+.docs-shortcuts-search input:focus-visible {
+  outline: none;
+}
+.docs-find-btn:focus-visible,
+.docs-ty-button:focus-visible,
+.docs-wc-widget:focus-visible,
+.docs-voice-mic:focus-visible {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: 1px;
+}
+
+/* ── The find bar: top right, under the toolbar ───────────────────────── */
+.docs-findbar {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--docs-menu-bg);
+  box-shadow: var(--docs-menu-shadow);
+  color: var(--docs-text);
+  font-family: var(--docs-ui-font);
+}
+.docs-find-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.docs-find-input {
+  width: 208px;
+  height: 40px;
+  padding: 0 12px 0 16px;
+  border: 1px solid var(--docs-field-line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--docs-text);
+  font: 400 16px/24px var(--docs-ui-font);
+  outline: none;
+}
+.docs-find-input::placeholder {
+  color: var(--docs-muted);
+}
+.docs-find-input:focus {
+  border: 2px solid var(--docs-blue);
+  padding: 0 11px 0 15px;
+}
+.docs-find-field .docs-find-input {
+  padding-right: 76px;
+}
+.docs-find-field .docs-find-input:focus {
+  padding-right: 75px;
+}
+.docs-find-counter {
+  position: absolute;
+  right: 0;
+  max-width: 120px;
+  padding: 0 12px;
+  overflow: hidden;
+  color: var(--docs-icon);
+  font: 400 16px/24px var(--docs-ui-font);
+  text-align: right;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.docs-find-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 12px;
+}
+
+/* ── Find and replace ─────────────────────────────────────────────────── */
+.docs-replace {
+  position: fixed;
+  z-index: 65;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(396px, calc(100vw - 32px));
+  min-width: 280px;
+}
+.docs-replace-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 8px 24px 0;
+}
+.docs-outlined {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.docs-outlined input {
+  width: 100%;
+  height: 40px;
+  padding: 0 76px 0 16px;
+  border: 1px solid var(--docs-field-line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--docs-text);
+  font: 400 16px/24px var(--docs-ui-font);
+  outline: none;
+}
+.docs-outlined input:focus {
+  border: 2px solid var(--docs-blue);
+  padding: 0 75px 0 15px;
+}
+.docs-outlined-label {
+  position: absolute;
+  top: -9px;
+  left: 12px;
+  padding: 0 4px;
+  background: var(--docs-menu-bg);
+  color: var(--docs-muted);
+  font: 400 12px/16px var(--docs-ui-font);
+  pointer-events: none;
+}
+.docs-outlined:focus-within .docs-outlined-label {
+  color: var(--docs-blue);
+}
+.docs-replace-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 0;
+}
+.docs-replace-message {
+  min-height: 20px;
+  margin-top: -12px;
+  color: var(--docs-muted);
+  font-size: 13px;
+}
+.docs-replace-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  margin: 8px 24px 0;
+  padding-bottom: 20px;
+}
+.docs-replace-actions .docs-ty-button {
+  padding: 0 12px;
+}
+.docs-replace-actions .docs-ty-primary {
+  padding: 0 20px;
+}
+
+/* ── Preferences ──────────────────────────────────────────────────────── */
+.docs-prefs {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+}
+.docs-prefs-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--docs-sep);
+}
+.docs-prefs-tab {
+  height: 44px;
+  padding: 0 16px;
+  border-bottom: 3px solid transparent;
+  color: var(--docs-muted);
+  font: 500 14px/20px var(--docs-ui-font);
+  cursor: pointer;
+}
+.docs-prefs-tab[aria-selected="true"] {
+  border-bottom-color: var(--docs-blue);
+  color: var(--docs-blue);
+}
+.docs-prefs-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 300px;
+  padding: 20px 24px 0;
+  overflow-y: auto;
+}
+.docs-subs {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.docs-subs[aria-disabled="true"] {
+  opacity: 0.6;
+}
+.docs-subs-row {
+  display: grid;
+  grid-template-columns: 24px 1fr 1fr 40px;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  padding: 2px 0;
+}
+.docs-subs-entry {
+  grid-template-columns: 24px 1fr 1fr auto;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--docs-sep);
+}
+.docs-subs-box {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--docs-blue);
+}
+.docs-subs-input {
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--docs-field-line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--docs-text);
+  font: 400 14px/20px var(--docs-ui-font);
+  outline: none;
+}
+.docs-subs-input:focus {
+  border: 2px solid var(--docs-blue);
+  padding: 0 7px;
+}
+.docs-subs-add {
+  height: 32px;
+}
+.docs-subs-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+.docs-subs-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: Arial, Arimo, sans-serif;
+}
+
+/* ── Keyboard shortcuts ───────────────────────────────────────────────── */
+.docs-shortcuts {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+}
+.docs-shortcuts-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 24px 8px;
+  padding: 0 12px;
+  height: 40px;
+  border: 1px solid var(--docs-field-line);
+  border-radius: 20px;
+  color: var(--docs-icon);
+}
+.docs-shortcuts-search:focus-within {
+  border: 2px solid var(--docs-blue);
+  padding: 0 11px;
+}
+.docs-shortcuts-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  color: var(--docs-text);
+  font: 400 14px/20px var(--docs-ui-font);
+  outline: none;
+}
+.docs-shortcuts-body {
+  overflow-y: auto;
+  padding: 8px 24px 24px;
+  columns: 2 320px;
+  column-gap: 32px;
+}
+.docs-shortcuts-body section {
+  break-inside: avoid;
+  margin-bottom: 20px;
+}
+.docs-shortcuts-body h3 {
+  margin-bottom: 6px;
+  color: var(--docs-blue);
+  font: 500 14px/20px var(--docs-ui-font);
+}
+.docs-shortcuts-body table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.docs-shortcuts-body td {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--docs-sep);
+  vertical-align: top;
+}
+.docs-shortcuts-body td:last-child {
+  padding-left: 12px;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--docs-muted);
+}
+.docs-shortcuts-body kbd {
+  font: 500 13px/18px var(--docs-ui-font);
+}
+.docs-shortcuts-empty {
+  color: var(--docs-muted);
+}
+
+/* ── Word count: the dialog and the counter at the bottom left ────────── */
+.docs-wc-dialog {
+  width: min(420px, calc(100vw - 32px));
+}
+.docs-wc-table {
+  width: calc(100% - 48px);
+  margin: 0 24px;
+  border-collapse: collapse;
+}
+.docs-wc-table td {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--docs-sep);
+}
+.docs-wc-table td:first-child {
+  min-width: 180px;
+}
+.docs-wc-table td:last-child {
+  min-width: 85px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.docs-wc-show {
+  margin: 20px 24px 0;
+}
+.docs-wc-anchor {
+  position: sticky;
+  bottom: 16px;
+  z-index: 20;
+  width: 0;
+  height: 0;
+  margin-left: 16px;
+}
+.docs-wc-widget {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 10px 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--docs-menu-bg);
+  box-shadow: 0 2px 6px 2px rgba(0, 0, 0, 0.15);
+  color: var(--docs-text);
+  font: 400 14px/20px var(--docs-ui-font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.docs-wc-caption {
+  min-width: 138px;
+  margin-right: 8px;
+  text-align: left;
+}
+.docs-wc-caption b,
+.docs-wc-item b {
+  font-weight: 700;
+}
+.docs-wc-menu {
+  position: absolute;
+  left: 0;
+  bottom: 52px;
+  min-width: 240px;
+  padding: 6px 0;
+  border-radius: 4px;
+  background: var(--docs-menu-bg);
+  box-shadow: var(--docs-menu-shadow);
+  font: 400 14px/20px var(--docs-ui-font);
+  color: var(--docs-text);
+}
+.docs-wc-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 16px 4px 8px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.docs-wc-item:hover {
+  background: var(--docs-hover);
+}
+.docs-wc-check {
+  display: inline-flex;
+  justify-content: center;
+  width: 28px;
+  flex: none;
+  color: var(--docs-icon);
+}
+.docs-wc-sep {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--docs-sep);
+}
+
+/* ── Voice typing: the microphone box ─────────────────────────────────── */
+.docs-voice {
+  position: fixed;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 132px;
+  padding: 4px 8px 12px;
+  border-radius: 8px;
+  background: var(--docs-menu-bg);
+  box-shadow: var(--docs-menu-shadow);
+  color: var(--docs-text);
+  font: 400 12px/16px var(--docs-ui-font);
+}
+.docs-voice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  color: var(--docs-muted);
+  cursor: grab;
+  touch-action: none;
+}
+.docs-voice-lang {
+  max-width: 116px;
+  height: 28px;
+  padding: 0 4px;
+  border: 1px solid var(--docs-sep);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--docs-text);
+  font: 400 12px/16px var(--docs-ui-font);
+}
+.docs-voice-mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border: 1px solid var(--docs-sep);
+  border-radius: 50%;
+  background: var(--docs-menu-bg);
+  color: var(--docs-icon);
+  cursor: pointer;
+}
+.docs-voice-mic:hover:not(:disabled) {
+  background: var(--docs-hover);
+}
+.docs-voice-mic:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.docs-voice-mic.docs-voice-on {
+  border-color: transparent;
+  background: var(--docs-voice-on);
+  color: #ffffff;
+  animation: docs-voice-pulse 1.4s ease-out infinite;
+}
+@keyframes docs-voice-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(217, 48, 37, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgba(217, 48, 37, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .docs-voice-mic.docs-voice-on {
+    animation: none;
+  }
+}
+.docs-voice-status {
+  max-width: 116px;
+  color: var(--docs-muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .docs-find-input {
+    width: 150px;
+  }
+  .docs-findbar {
+    padding: 8px;
+  }
+  .docs-replace-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
+@media print {
+  .docs-findbar,
+  .docs-replace,
+  .docs-wc-anchor,
+  .docs-voice {
+    display: none !important;
+  }
+  .docs-find-result,
+  .docs-find-result.docs-find-current {
+    background: none;
+  }
+}

@@ -8,7 +8,7 @@
    Every color the shell uses is a --docs-* token, set for light and dark. */
 
 :root {
-  --docs-canvas: #f9fbfd;
+  --docs-canvas: #f8fafd;
   --docs-page: #ffffff;
   --docs-ink: #000000;
   --docs-toolbar: #edf2fa;
@@ -24,7 +24,8 @@
   --docs-menu-bg: #ffffff;
   --docs-menu-shadow: 0 2px 6px 2px rgba(60, 64, 67, 0.15), 0 1px 2px 0 rgba(60, 64, 67, 0.3);
   --docs-page-shadow: 0 1px 3px 1px rgba(60, 64, 67, 0.15), 0 1px 2px 0 rgba(60, 64, 67, 0.3);
-  --docs-selection: #c7dcfc;
+  /* Google Docs' selection: #4e8ff8 at half strength over the white page. */
+  --docs-selection: #a7c7fc;
   --docs-link: #1155cc;
   --docs-placeholder: #9aa0a6;
   --docs-ui-font: "Google Sans", Roboto, "Segoe UI", Arial, sans-serif;
@@ -459,22 +460,13 @@ div:has([data-docs-editor]) > .reader-fade {
   color: var(--docs-muted);
 }
 
-/* ── The canvas and the page ───────────────────────────────────────────── */
-.docs-canvas {
-  padding: 12px 24px 96px;
-  overflow-x: auto;
-}
+/* ── The canvas and the page (css/page.css draws the canvas and the sheets:
+   white, a 1 px #c4c7c5 border, square corners, no shadow) ─────────────── */
 .docs-page {
   position: relative;
   box-sizing: border-box;
   margin: 0 auto;
-  background: var(--docs-page);
-  box-shadow: var(--docs-page-shadow);
   cursor: text;
-}
-.dark .docs-page[style*="background: rgb(255, 255, 255)"],
-.dark .docs-page[style*="background:#ffffff"] {
-  background: var(--docs-page) !important;
 }
 
 /* ── The document's text: Google Docs' Normal text and styles ─────────── */
@@ -717,23 +709,21 @@ div:has([data-docs-editor]) > .reader-fade {
   outline: 2px solid var(--docs-blue);
 }
 
-/* A page break: in one long sheet it reads as the gap between two pages. */
+/* A page break takes no room: the spacer after it starts the next page
+   (ext/page.ts). Selected, it shows as a blue line where its page ends. */
 .docs-page-break {
   position: relative;
-  height: 28px;
-  margin: 12px 0;
+  height: 0;
+  margin: 0;
   user-select: none;
 }
-.docs-page-break::before {
+.docs-page-break.ProseMirror-selectednode::before {
   content: "";
   position: absolute;
-  left: -100vw;
-  right: -100vw;
-  top: 50%;
-  border-top: 1px dashed #b0b0b0;
-}
-.docs-page-break.ProseMirror-selectednode::before {
-  border-top-color: var(--docs-blue);
+  left: 0;
+  right: 0;
+  top: -1px;
+  border-top: 2px solid var(--docs-blue);
 }
 
 /* Paint format: the cursor carries the roller. */
@@ -914,30 +904,10 @@ div:has([data-docs-editor]) > .reader-fade {
   font: 500 14px/20px var(--docs-ui-font);
 }
 
-/* ── Print: the pages alone ────────────────────────────────────────────── */
+/* ── Print: the pages alone (css/page.css lays them out) ───────────────── */
 @media print {
   .docs-header,
   .docs-word-counter {
     display: none !important;
-  }
-  .docs-shell,
-  .docs-canvas {
-    background: #ffffff !important;
-    padding: 0 !important;
-  }
-  .docs-page {
-    box-shadow: none !important;
-    width: auto !important;
-    min-height: 0 !important;
-    padding: 0 !important;
-    zoom: 1 !important;
-  }
-  .docs-page-break {
-    break-after: page;
-    height: 0;
-    margin: 0;
-  }
-  .docs-page-break::before {
-    display: none;
   }
 }

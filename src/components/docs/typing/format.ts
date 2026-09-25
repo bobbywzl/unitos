@@ -1,8 +1,9 @@
 import type { Editor } from "@tiptap/core";
+import type { Mark } from "@tiptap/pm/model";
 
 // The text shortcuts Google Docs binds beyond Bold, Italic, and Underline
-// (SPEC.md §29, typing): small caps, clear formatting, open the link under
-// the caret, tick a checklist line.
+// (SPEC.md §29, typing): small caps, clear formatting, copy and paste text
+// formatting, open the link under the caret, tick a checklist line.
 
 /** Small caps on or off (a textStyle attribute). */
 export function toggleSmallCaps(editor: Editor): boolean {
@@ -51,5 +52,36 @@ export function toggleCheckbox(editor: Editor): boolean {
       return true;
     }
   }
+  return true;
+}
+
+const copied = new WeakMap<Editor, readonly Mark[]>();
+
+/** Ctrl+Alt+C: remember the text formatting at the selection's start. */
+export function copyFormatting(editor: Editor): boolean {
+  const { state } = editor;
+  const { from, empty, $from } = state.selection;
+  const marks = empty ? (state.storedMarks ?? $from.marks()) : (state.doc.nodeAt(from)?.marks ?? $from.marks());
+  copied.set(
+    editor,
+    marks.filter((m) => m.type.name !== "link"),
+  );
+  return true;
+}
+
+/** Ctrl+Alt+V: the remembered formatting replaces the selection's (links stay). */
+export function pasteFormatting(editor: Editor): boolean {
+  const marks = copied.get(editor);
+  if (!marks || !editor.isEditable) return true;
+  const { state } = editor;
+  const { from, to, empty } = state.selection;
+  const tr = state.tr;
+  if (empty) {
+    tr.setStoredMarks(marks);
+  } else {
+    for (const type of Object.values(state.schema.marks)) if (type.name !== "link") tr.removeMark(from, to, type);
+    for (const mark of marks) tr.addMark(from, to, mark);
+  }
+  editor.view.dispatch(tr);
   return true;
 }

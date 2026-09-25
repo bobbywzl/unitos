@@ -393,7 +393,7 @@ function ToolbarRow({ children, moreLabel }: { children: ReactNode[]; moreLabel:
             open={moreOpen}
             anchorRef={moreRef}
             onClose={() => setMoreOpen(false)}
-            align="right"
+            placement="below-right"
             className="docs-menu-more"
           >
             <div className="docs-more-row">

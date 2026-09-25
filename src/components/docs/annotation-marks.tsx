@@ -16,7 +16,7 @@ import {
   type Highlight,
 } from "@/components/reader/block-view";
 import { findBlock, posInBlock } from "@/components/docs/layer/anchor";
-import { PAGE_FLASH_EVENT } from "@/components/docs/layer/flash";
+import { PAGE_FLASH_EVENT } from "@/components/docs/layer/events";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 

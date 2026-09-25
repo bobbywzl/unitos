@@ -125,7 +125,7 @@ import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { pageEditorIn, pageSegmentsOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
-import { flashInPage } from "@/components/docs/layer/flash";
+import { flashInPage, PAGE_EDITED_EVENT } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
 import {
   belowSlot,
@@ -191,6 +191,10 @@ function isTextEntry(el: HTMLElement): boolean {
     el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el.isContentEditable
   );
 }
+
+// The keys that move the caret in the page editor: without Shift they drop a
+// selection made with the keyboard.
+const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 
 // A jump flashes the mark or the block it lands on. In the page editor the
 // flash is the editor's own decoration (SPEC.md §29): a class written on its
@@ -1895,8 +1899,11 @@ export function ReaderInteractions({
       ? container.querySelector(".docs-header")?.getBoundingClientRect().bottom
       : undefined;
     // Right under that toolbar the toolbox steps down: Add to notes keeps
-    // its room above it.
+    // its room above it. Under the words (no room beside the page), the
+    // whole stack sits below them: Add to notes between the words and the
+    // toolbox, the colors under it.
     const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
+    const pageBelow = Boolean(pageGeo) && side === "below";
     return {
       anchor: {
         blockId,
@@ -1908,7 +1915,7 @@ export function ReaderInteractions({
         ...(segments.length > 1 ? { segments } : {}),
       },
       x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
-      y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6),
+      y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6) + (pageBelow ? 48 : 0),
       yTop:
         pageGeo && side === "right"
           ? Math.max(8, pageTop - containerRect.top + container.scrollTop)
@@ -1920,7 +1927,7 @@ export function ReaderInteractions({
       side,
       rightBase: articleRight + 10,
       cw,
-      ...(headerBottom !== undefined ? { nearTop: lineTop - headerBottom < 96 } : {}),
+      ...(headerBottom !== undefined ? { nearTop: pageBelow || lineTop - headerBottom < 96 } : {}),
       ...(pageGeo ? { page: { geo: pageGeo, shift } } : {}),
     };
   }, []);
@@ -1948,7 +1955,9 @@ export function ReaderInteractions({
         setAnnotationCard(null);
         setExtractCard(null);
         setCloseLink(null);
-        window.getSelection()?.removeAllRanges();
+        // In the page editor the selection stays, as in Google Docs: the
+        // toolbar goes, the words stay selected for the next command.
+        if (!richTextRef.current) window.getSelection()?.removeAllRanges();
         return;
       }
       if (editModeRef.current) leaveEditMode();
@@ -1973,7 +1982,9 @@ export function ReaderInteractions({
       if (event.button !== 0) return;
       if (!popoverRef.current && !closeLinkRef.current) return;
       const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest("[data-selection-popover], .selection-mark, .link-pending-mark")) return;
+      // The page editor's title row and toolbar act on the selection the
+      // toolbar is open on (SPEC.md §29): a press there keeps it.
+      if (target?.closest("[data-selection-popover], .selection-mark, .link-pending-mark, [data-docs-editor] [data-edit-control]")) return;
       setPopover(null);
       setSubmenu(null);
       setCloseLink(null);
@@ -1994,7 +2005,13 @@ export function ReaderInteractions({
         suppressNextMouseUp.current = false;
         return;
       }
-      if (event.target instanceof Element && event.target.closest("[data-selection-popover]")) return;
+      // A press on the page editor's toolbar is a command, not the end of a
+      // selection: Add comment there opens the Comment tool itself.
+      if (
+        event.target instanceof Element &&
+        event.target.closest("[data-selection-popover], [data-docs-editor] [data-edit-control]")
+      )
+        return;
       // A drag that started inside the comment box can end over the article —
       // that is text editing, not a new selection.
       if (document.activeElement?.closest("[data-selection-popover]")) return;
@@ -3075,6 +3092,59 @@ export function ReaderInteractions({
     container.addEventListener("transitionend", onMoved);
     return () => container.removeEventListener("transitionend", onMoved);
   }, [docsShift, blankDocument]);
+  // The page editor's words changed under the toolbar — typing, a paste, an
+  // undo: its anchor no longer names them, so the toolbar and the Close link
+  // chip close (components/docs/areas/layer.tsx raises the event).
+  useEffect(() => {
+    if (!blankDocument) return;
+    const onEdited = (e: Event) => {
+      if ((e as CustomEvent<{ documentId: string }>).detail?.documentId !== documentId) return;
+      if (!popoverRef.current && !closeLinkRef.current) return;
+      setPopover(null);
+      setSubmenu(null);
+      setCloseLink(null);
+    };
+    window.addEventListener(PAGE_EDITED_EVENT, onEdited);
+    return () => window.removeEventListener(PAGE_EDITED_EVENT, onEdited);
+  }, [blankDocument, documentId]);
+  // A selection made with the keyboard in the page editor opens the toolbar
+  // too, as Google Docs shows its buttons for one: once Shift, Ctrl, or Cmd is
+  // let go, so a selection still growing never chases the toolbar. A caret
+  // moved with the keys closes it.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!blankDocument || !container) return;
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!canEditRef.current || !(e.target instanceof Element) || !e.target.closest("[data-docs-body]")) return;
+      const released = e.key === "Shift" || e.key === "Control" || e.key === "Meta";
+      if (!released && !(CARET_KEYS.has(e.key) && !e.shiftKey)) return;
+      requestAnimationFrame(() => {
+        if (!released) {
+          if (window.getSelection()?.isCollapsed && popoverRef.current) {
+            setPopover(null);
+            setSubmenu(null);
+          }
+          return;
+        }
+        const captured = captureSelectionRef.current();
+        if (!captured) return;
+        const open = popoverRef.current ?? closeLinkRef.current;
+        if (open && JSON.stringify(open.anchor) === JSON.stringify(captured.anchor)) return;
+        if (pendingLinkRef.current) {
+          setPopover(null);
+          setSubmenu(null);
+          setCloseLink({ anchor: captured.anchor, left: captured.endLeft, top: captured.endTop });
+          return;
+        }
+        setPopover(captured);
+        setSubmenu(null);
+        setCloseLink(null);
+        setCommentDraft("");
+      });
+    };
+    container.addEventListener("keyup", onKeyUp);
+    return () => container.removeEventListener("keyup", onKeyUp);
+  }, [blankDocument]);
 
   // The on-mark card closes on a click anywhere else. A click on another mark
   // stays: the open handler replaces the card.
@@ -6310,10 +6380,11 @@ function blockFormatKind(
       {split && (
         <div className={PANE_HEADER}>
           {paneHeader}
-          {!transcript && articleMenu}
+          {/* A blank document has no Contents and no Collapse (SPEC.md §29). */}
+          {!transcript && !richText && articleMenu}
           {!transcript && (
             <div className="relative ml-auto flex shrink-0 items-center gap-2">
-              {collapseButton}
+              {!richText && collapseButton}
               {distillButton}
               {/* The article's errors: under the buttons, over the text. */}
               <div className="absolute top-full right-0 mt-2">

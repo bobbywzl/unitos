@@ -1,1 +1,343 @@
-/* The page editor: page (SPEC.md §29). Imported by docs.css. */
+/* The page editor: page (SPEC.md §29). Imported by docs.css.
+   Google Docs' page area: the canvas, the pages and the spacers that
+   paginate the text, the rulers, the tabs & outlines panel, the headers and
+   footers, the page setup dialog, and print. */
+
+:root {
+  --docs-page-border: #c4c7c5;
+  --docs-ruler-bg: #f8fafd;
+  --docs-ruler-line: #c4c7c5;
+  --docs-ruler-tick: #747775;
+  --docs-ruler-tick-text: #c4c7c5;
+  --docs-ruler-number: #444746;
+  --docs-ruler-marker: #4285f4;
+  --docs-guide: #0b57d0;
+  --docs-tip-bg: #303030;
+  --docs-tip-fg: #f2f2f2;
+  --docs-outline-line: #dde3ea;
+  --docs-outline-text: #1f1f1f;
+  --docs-outline-sub: #444746;
+  --docs-tab-bg: #d3e3fd;
+  --docs-tab-fg: #0842a0;
+  --docs-pill: #e9eef6;
+  --docs-hf-bar: #f8fafd;
+}
+.dark {
+  --docs-page-border: #444746;
+  --docs-ruler-bg: var(--docs-canvas);
+  --docs-ruler-line: #444746;
+  --docs-ruler-tick: #8e918f;
+  --docs-ruler-tick-text: #5c5f5e;
+  --docs-ruler-number: #c4c7c5;
+  --docs-ruler-marker: #7cacf8;
+  --docs-guide: #a8c7fa;
+  --docs-tip-bg: #e3e3e3;
+  --docs-tip-fg: #1f1f1f;
+  --docs-outline-line: #3c4043;
+  --docs-outline-text: #e3e3e3;
+  --docs-outline-sub: #c4c7c5;
+  --docs-tab-bg: #004a77;
+  --docs-tab-fg: #c2e7ff;
+  --docs-pill: #2d2f31;
+  --docs-hf-bar: #1f2021;
+}
+
+/* ── The canvas ────────────────────────────────────────────────────────────
+   One flat color under the chrome; the first page's border sits 10 px under
+   the ruler. The canvas scrolls sideways when the page is wider than the
+   pane. While Unitos cards sit in the page's right margin the reader pane
+   carries --docs-shift, and the page moves left by that much, as Google
+   Docs moves the page for its comments; while the outline would cover the
+   page, the page moves right past it. */
+.docs-canvas {
+  position: relative;
+  padding: 11px 24px 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--docs-canvas);
+  transition:
+    padding-right 0.2s ease,
+    padding-left 0.2s ease;
+}
+[data-docs-shift] .docs-canvas {
+  padding-right: calc(24px + 2 * var(--docs-shift, 0px));
+}
+.docs-canvas[data-outline-push] {
+  padding-left: calc(var(--docs-outline-w, 0px) + 16px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .docs-canvas {
+    transition: none;
+  }
+}
+
+/* The page stack: one sheet per page behind one flow of text. */
+.docs-page {
+  isolation: isolate;
+}
+.docs-sheets {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.docs-sheet {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  overflow: hidden;
+  background: var(--docs-sheet-color, var(--docs-page));
+  outline: 1px solid var(--docs-page-border);
+}
+.dark .docs-sheet[data-white] {
+  background: var(--docs-page);
+}
+.docs-page[data-pageless] .docs-sheets {
+  display: none;
+}
+
+/* The spacers the pagination puts at each page's end (ext/page.ts). */
+.docs-spacer {
+  user-select: none;
+  pointer-events: none;
+}
+.docs-spacer-block,
+.docs-spacer-line {
+  display: block;
+  height: var(--docs-spacer-h, 0px);
+}
+.docs-prose .docs-spacer-row > td {
+  height: var(--docs-spacer-h, 0px);
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.docs-spacer::selection,
+.docs-spacer ::selection {
+  background: transparent;
+}
+
+/* ── The side: the vertical ruler and the outline stay put while the canvas
+   scrolls under them. */
+.docs-side {
+  position: sticky;
+  top: var(--docs-header-h, 0px);
+  z-index: 20;
+  height: 0;
+}
+
+/* ── The ruler row under the toolbar: the corner (Page setup), then the
+   15 px strip, 16 px in from each side. ──────────────────────────────────── */
+.docs-ruler-row {
+  position: relative;
+  display: flex;
+  height: 16px;
+  margin: 4px -12px -6px;
+  background: var(--docs-ruler-bg);
+}
+.docs-ruler-corner {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+.docs-ruler-corner-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  color: var(--docs-icon);
+  cursor: pointer;
+}
+.docs-ruler-corner-btn:hover {
+  background: var(--docs-hover);
+}
+.docs-ruler-corner-btn:focus-visible {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: -2px;
+}
+.docs-ruler {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 15px;
+  margin-right: 16px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--docs-ruler-line);
+  background: var(--docs-ruler-bg);
+  font-family: "Google Sans Mono", "Google Sans", Roboto, sans-serif;
+  cursor: default;
+  user-select: none;
+}
+.docs-ruler-face {
+  position: absolute;
+  top: 0;
+  height: 15px;
+}
+.docs-ruler-tick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 15px;
+  pointer-events: none;
+}
+.docs-ruler-tick::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  border-left: 1px solid var(--docs-ruler-tick);
+}
+.docs-ruler-minor::after,
+.docs-ruler-unit::after {
+  height: 4px;
+}
+.docs-ruler-major::after {
+  height: 8px;
+}
+.docs-ruler-active::after {
+  border-color: var(--docs-ruler-tick-text);
+}
+.docs-ruler-number {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translateX(-50%);
+  color: var(--docs-ruler-number);
+  font-size: 11px;
+  line-height: 11px;
+  white-space: nowrap;
+}
+.docs-ruler-active .docs-ruler-number {
+  font-weight: 500;
+}
+/* The margin areas: a shade darker than the text column's. */
+.docs-ruler-margin {
+  position: absolute;
+  top: 0;
+  height: 15px;
+  background: color-mix(in srgb, var(--docs-ruler-tick) 9%, transparent);
+}
+.docs-ruler-margin-start[data-edit] {
+  cursor: e-resize;
+}
+.docs-ruler-margin-end[data-edit] {
+  cursor: w-resize;
+}
+.docs-ruler-marker {
+  position: absolute;
+  z-index: 1;
+  margin-left: -6px;
+  color: var(--docs-ruler-marker);
+  line-height: 0;
+}
+.docs-ruler-marker svg {
+  display: block;
+}
+.docs-ruler-indent-first {
+  top: 2px;
+  width: 12px;
+  height: 4px;
+  background: currentColor;
+}
+.docs-ruler-indent-start,
+.docs-ruler-indent-end {
+  top: 6px;
+  width: 12px;
+  height: 6px;
+}
+
+/* While a marker or a margin moves: the guide down the page and the tip. */
+.docs-ruler-guide {
+  position: fixed;
+  z-index: 75;
+  background: var(--docs-guide);
+  pointer-events: none;
+}
+.docs-ruler-guide-v {
+  bottom: 0;
+  width: 1px;
+}
+.docs-ruler-guide-h {
+  right: 0;
+  height: 1px;
+}
+.docs-ruler-tip {
+  position: fixed;
+  z-index: 76;
+  transform: translate(-50%, -100%);
+  padding: 5px 8px;
+  border-radius: 2px;
+  background: var(--docs-tip-bg);
+  color: var(--docs-tip-fg);
+  font: 400 13px/16px var(--docs-ui-font);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.docs-ruler-tip-v {
+  transform: translateY(-105%);
+}
+
+/* The vertical ruler: the page's top and bottom margins, beside the canvas. */
+.docs-vruler {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 15px;
+  overflow: hidden;
+  border-right: 1px solid var(--docs-ruler-line);
+  background: var(--docs-ruler-bg);
+  font-family: "Google Sans Mono", "Google Sans", Roboto, sans-serif;
+  user-select: none;
+}
+.docs-vruler-face {
+  position: absolute;
+  left: 0;
+  width: 15px;
+}
+.docs-vruler-tick {
+  position: absolute;
+  left: 0;
+  width: 15px;
+  height: 1px;
+  pointer-events: none;
+}
+.docs-vruler-tick::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-top: 1px solid var(--docs-ruler-tick);
+}
+.docs-vruler-tick.docs-ruler-minor::after,
+.docs-vruler-tick.docs-ruler-unit::after {
+  width: 4px;
+}
+.docs-vruler-tick.docs-ruler-major::after {
+  width: 8px;
+}
+.docs-vruler-tick.docs-ruler-active::after {
+  border-color: var(--docs-ruler-tick-text);
+}
+.docs-vruler-tick .docs-ruler-number {
+  top: 0;
+  right: 3px;
+  left: auto;
+  transform: translateY(-50%) rotate(-90deg);
+}
+.docs-vruler-margin {
+  position: absolute;
+  left: 0;
+  width: 15px;
+  background: color-mix(in srgb, var(--docs-ruler-tick) 9%, transparent);
+}
+.docs-vruler-margin-start[data-edit] {
+  cursor: s-resize;
+}
+.docs-vruler-margin-end[data-edit] {
+  cursor: n-resize;
+}

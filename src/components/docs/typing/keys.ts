@@ -66,6 +66,13 @@ function endStructure(view: EditorView): void {
   lastKind.set(view, "structure");
 }
 
+/** Before a paste, a cut, or a drop: what comes next is its own undo step,
+    and so is the typing after it. */
+export function closeEdit(view: EditorView): void {
+  view.dispatch(closeHistory(view.state.tr).setMeta("addToHistory", false));
+  lastKind.set(view, "structure");
+}
+
 // ── Where the caret is ──────────────────────────────────────────────────
 
 type ItemAt = { node: PMNode; pos: number; depth: number; level: number };

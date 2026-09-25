@@ -1,5 +1,8 @@
-// The page editor's toolbar symbols (SPEC.md §29): Google's Material icons
-// (Apache 2.0), the set Google Docs draws its toolbar with, on a 24-unit grid.
+// The page editor's symbols (SPEC.md §29). The toolbar, its menus, and its
+// dialogs draw Google's Material Symbols Outlined at optical size 20, weight
+// 400, fill 0 (Apache 2.0) — the set Google Docs draws its toolbar with — on
+// the symbols' 960-unit grid. The title row's document and cloud symbols
+// keep Material Icons on a 24-unit grid.
 
 type Props = { size?: number; className?: string };
 
@@ -23,134 +26,73 @@ function icon(path: string, name: string) {
   return Icon;
 }
 
-export const UndoIcon = icon(
-  "M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z",
-  "UndoIcon",
-);
-export const RedoIcon = icon(
-  "M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z",
-  "RedoIcon",
-);
-export const PrintIcon = icon(
-  "M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z",
-  "PrintIcon",
-);
-export const SpellcheckIcon = icon(
-  "M12.45 16h2.09L9.43 3H7.57L2.46 16h2.09l1.12-3h5.64l1.14 3zm-6.02-5L8.5 5.48 10.57 11H6.43zm15.16.59l-8.09 8.09L9.83 16l-1.41 1.41 5.09 5.09L23 13l-1.41-1.41z",
-  "SpellcheckIcon",
-);
-export const PaintFormatIcon = icon(
-  "M18 4V3c0-.55-.45-1-1-1H5c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1h12c.55 0 1-.45 1-1V6h1v4H9v11c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-9h8V4h-3z",
-  "PaintFormatIcon",
-);
-export const BoldIcon = icon(
-  "M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z",
-  "BoldIcon",
-);
-export const ItalicIcon = icon("M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z", "ItalicIcon");
-export const UnderlineIcon = icon(
-  "M12 17c3.31 0 6-2.69 6-6V3h-2.5v8c0 1.93-1.57 3.5-3.5 3.5S8.5 12.93 8.5 11V3H6v8c0 3.31 2.69 6 6 6zm-7 2v2h14v-2H5z",
-  "UnderlineIcon",
-);
+function symbol(path: string, name: string) {
+  function Symbol({ size = 20, className }: Props) {
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 -960 960 960"
+        fill="currentColor"
+        aria-hidden
+        focusable="false"
+        className={className}
+      >
+        <path d={path} />
+      </svg>
+    );
+  }
+  Symbol.displayName = name;
+  return Symbol;
+}
+
+export const SearchIcon = symbol("M765-144 526-383q-30 22-65.79 34.5-35.79 12.5-76.18 12.5Q284-336 214-406t-70-170q0-100 70-170t170-70q100 0 170 70t70 170.03q0 40.39-12.5 76.18Q599-464 577-434l239 239-51 51ZM384-408q70 0 119-49t49-119q0-70-49-119t-119-49q-70 0-119 49t-49 119q0 70 49 119t119 49Z", "SearchIcon");
+export const UndoIcon = symbol("M288-192v-72h288q50 0 85-35t35-85q0-50-35-85t-85-35H330l93 93-51 51-180-180 180-180 51 51-93 93h246q80 0 136 56t56 136q0 80-56 136t-136 56H288Z", "UndoIcon");
+export const RedoIcon = symbol("M384-192q-80 0-136-56t-56-136q0-80 56-136t136-56h246l-93-93 51-51 180 180-180 180-51-51 93-93H384q-50 0-85 35t-35 85q0 50 35 85t85 35h288v72H384Z", "RedoIcon");
+export const PrintIcon = symbol("M648-624v-120H312v120h-72v-192h480v192h-72Zm-480 72h625-625Zm539.79 96q15.21 0 25.71-10.29t10.5-25.5q0-15.21-10.29-25.71t-25.5-10.5q-15.21 0-25.71 10.29t-10.5 25.5q0 15.21 10.29 25.71t25.5 10.5ZM648-216v-144H312v144h336Zm72 72H240v-144H96v-240q0-40 28-68t68-28h576q40 0 68 28t28 68v240H720v144Zm73-216v-153.67Q793-530 781-541t-28-11H206q-16.15 0-27.07 11.04Q168-529.92 168-513.6V-360h72v-72h480v72h73Z", "PrintIcon");
+export const SpellcheckIcon = symbol("M544-144 375-314l51-51 118 119 221-221 51 51-272 272ZM144-384l180-480h86l180 480h-83l-42-123H271l-44 123h-83Zm152-192h143l-70-199h-4l-69 199Z", "SpellcheckIcon");
+export const PaintFormatIcon = symbol("M456-96q-29.7 0-50.85-21.15Q384-138.3 384-168v-167H264q-29.7 0-50.85-21.15Q192-377.3 192-407v-265q0-61 42-102.5T336-816h432v409q0 29.7-21.5 50.85Q725-335 696-335H576v167q0 29.7-21.5 50.85Q533-96 504-96h-48ZM264-552h432v-192h-48v144h-72v-144h-48v73h-72v-73H336q-29.7 0-50.85 20.5Q264-703 264-672v120Zm0 145h432v-73H264v73Zm0 0v-73 73Z", "PaintFormatIcon");
+export const DropDownIcon = symbol("M480-384 288-576h384L480-384Z", "DropDownIcon");
+export const RemoveIcon = symbol("M232-444v-72h496v72H232Z", "RemoveIcon");
+export const AddIcon = symbol("M444-444H240v-72h204v-204h72v204h204v72H516v204h-72v-204Z", "AddIcon");
+export const BoldIcon = symbol("M266-192v-576h227.95q67.05 0 123.55 41.32Q674-685.35 674-612q0 51-22.5 79.5T609-490.96Q635-479 665-448t30 91q0 91-67.03 128t-125.81 37H266Zm127-118h104.68Q546-310 556-334.5t10-35.5q0-11-10.5-35.5T494-430H393v120Zm0-232h93q33 0 48.5-17.5T550-597q0-24-17.11-39t-44.28-15H393v109Z", "BoldIcon");
+export const ItalicIcon = symbol("M216-192v-96h160l124-384H336v-96h408v96H596L472-288h152v96H216Z", "ItalicIcon");
+export const UnderlineIcon = symbol("M240-144v-72h480v72H240Zm91.5-203.4Q279-406.8 279-504.86V-816h97.21v317.09q0 52.85 26.43 85.88Q429.07-380 480.03-380q50.97 0 77.39-33.03 26.41-33.03 26.41-85.88V-816H681v311.14q0 98.06-52.5 157.46Q576-288 480-288t-148.5-59.4Z", "UnderlineIcon");
+export const TextColorGlyph = symbol("M96 0v-192h768V0H96Zm161-336 180-480h86l180 480h-83l-43-123H384l-44 123h-83Zm151-192h144l-70-194h-4l-70 194Z", "TextColorGlyph");
+export const HighlightGlyph = symbol("m548-410-90-91-193 193 91 91 192-193Zm-38-143 90 91 192-192-90-91-192 192Zm-77-24 192 192-218 218q-22 20-50.5 21.5T308-164l-20 20H96l116-116q-21-20-20-49.5t23-49.5l218-218Zm0 0 218-218q21-21 51-21t51 21l90 90q20 22 20 51t-20 51L625-385 433-577Z", "HighlightGlyph");
+export const LinkIcon = symbol("M432-288H288q-79.68 0-135.84-56.23Q96-400.45 96-480.23 96-560 152.16-616q56.16-56 135.84-56h144v72H288q-50 0-85 35t-35 85q0 50 35 85t85 35h144v72Zm-96-156v-72h288v72H336Zm192 156v-72h144q50 0 85-35t35-85q0-50-35-85t-85-35H528v-72h144q79.68 0 135.84 56.23 56.16 56.22 56.16 136Q864-400 807.84-344 751.68-288 672-288H528Z", "LinkIcon");
+export const AddCommentIcon = symbol("M444-384h72v-132h132v-72H516v-132h-72v132H312v72h132v132ZM96-96v-696q0-29.7 21.15-50.85Q138.3-864 168-864h624q29.7 0 50.85 21.15Q864-821.7 864-792v480q0 29.7-21.15 50.85Q821.7-240 792-240H240L96-96Zm114-216h582v-480H168v522l42-42Zm-42 0v-480 480Z", "AddCommentIcon");
+export const ImageIcon = symbol("M216-144q-29.7 0-50.85-21.5Q144-187 144-216v-528q0-29 21.15-50.5T216-816h528q29.7 0 50.85 21.5Q816-773 816-744v528q0 29-21.15 50.5T744-144H216Zm0-72h528v-528H216v528Zm48-72h432L552-480 444-336l-72-96-108 144Zm-48 72v-528 528Z", "ImageIcon");
+export const AlignLeftIcon = symbol("M144-144v-72h672v72H144Zm0-150v-72h480v72H144Zm0-150v-72h672v72H144Zm0-150v-72h480v72H144Zm0-150v-72h672v72H144Z", "AlignLeftIcon");
+export const AlignCenterIcon = symbol("M144-144v-72h672v72H144Zm144-150v-72h384v72H288ZM144-444v-72h672v72H144Zm144-150v-72h384v72H288ZM144-744v-72h672v72H144Z", "AlignCenterIcon");
+export const AlignRightIcon = symbol("M144-744v-72h672v72H144Zm192 150v-72h480v72H336ZM144-444v-72h672v72H144Zm192 150v-72h480v72H336ZM144-144v-72h672v72H144Z", "AlignRightIcon");
+export const AlignJustifyIcon = symbol("M144-144v-72h672v72H144Zm0-150v-72h672v72H144Zm0-150v-72h672v72H144Zm0-150v-72h672v72H144Zm0-150v-72h672v72H144Z", "AlignJustifyIcon");
+export const LineSpacingIcon = symbol("M240-192 96-336l51-51 57 57v-300l-57 57-51-51 144-144 144 144-51 51-57-57v300l57-57 51 51-144 144Zm240-48v-72h384v72H480Zm0-204v-72h384v72H480Zm0-204v-72h384v72H480Z", "LineSpacingIcon");
+export const ChecklistIcon = symbol("M232-216 96-352l51-51 84 85 170-170 52 51-221 221Zm0-312L96-664l51-51 85 85 169-170 52 51-221 221Zm296 240v-72h336v72H528Zm0-312v-72h336v72H528Z", "ChecklistIcon");
+export const BulletListIcon = symbol("M360-240v-72h456v72H360Zm0-204v-72h456v72H360Zm0-204v-72h456v72H360ZM215.79-204Q186-204 165-225.21t-21-51Q144-306 165.21-327t51-21Q246-348 267-326.79t21 51Q288-246 266.79-225t-51 21Zm0-204Q186-408 165-429.21t-21-51Q144-510 165.21-531t51-21Q246-552 267-530.79t21 51Q288-450 266.79-429t-51 21ZM165-633.21q-21-21.21-21-51T165.21-735q21.21-21 51-21T267-734.79q21 21.21 21 51T266.79-633q-21.21 21-51 21T165-633.21Z", "BulletListIcon");
+export const NumberedListIcon = symbol("M144-144v-48h96v-24h-48v-48h48v-24h-96v-48h120q10.2 0 17.1 6.9 6.9 6.9 6.9 17.1v48q0 10.2-6.9 17.1-6.9 6.9-17.1 6.9 10.2 0 17.1 6.9 6.9 6.9 6.9 17.1v48q0 10.2-6.9 17.1-6.9 6.9-17.1 6.9H144Zm0-240v-96q0-10.2 6.9-17.1 6.9-6.9 17.1-6.9h72v-24h-96v-48h120q10.2 0 17.1 6.9 6.9 6.9 6.9 17.1v72q0 10.2-6.9 17.1-6.9 6.9-17.1 6.9h-72v24h96v48H144Zm48-240v-144h-48v-48h96v192h-48Zm168 384v-72h456v72H360Zm0-204v-72h456v72H360Zm0-204v-72h456v72H360Z", "NumberedListIcon");
+export const IndentDecreaseIcon = symbol("M144-144v-72h672v72H144Zm288-150v-72h384v72H432Zm0-150v-72h384v72H432Zm0-150v-72h384v72H432ZM144-744v-72h672v72H144Zm144 408L144-480l144-144v288Z", "IndentDecreaseIcon");
+export const IndentIncreaseIcon = symbol("M144-144v-72h672v72H144Zm288-150v-72h384v72H432Zm0-150v-72h384v72H432Zm0-150v-72h384v72H432ZM144-744v-72h672v72H144Zm0 408v-288l144 144-144 144Z", "IndentIncreaseIcon");
+export const ClearFormattingIcon = symbol("m503-558-73-73-88-88h426v96H531l-28 65ZM768-89 442-415l-76 176H262l107-249L90-767l51-51 678 678-51 51Z", "ClearFormattingIcon");
+export const MoreVertIcon = symbol("M479.79-192Q450-192 429-213.21t-21-51Q408-294 429.21-315t51-21Q510-336 531-314.79t21 51Q552-234 530.79-213t-51 21Zm0-216Q450-408 429-429.21t-21-51Q408-510 429.21-531t51-21Q510-552 531-530.79t21 51Q552-450 530.79-429t-51 21Zm0-216Q450-624 429-645.21t-21-51Q408-726 429.21-747t51-21Q510-768 531-746.79t21 51Q552-666 530.79-645t-51 21Z", "MoreVertIcon");
+export const EditIcon = symbol("M216-216h51l375-375-51-51-375 375v51Zm-72 72v-153l498-498q11-11 23.84-16 12.83-5 27-5 14.16 0 27.16 5t24 16l51 51q11 11 16 24t5 26.54q0 14.45-5.02 27.54T795-642L297-144H144Zm600-549-51-51 51 51Zm-127.95 76.95L591-642l51 51-25.95-25.05Z", "EditIcon");
+export const SuggestIcon = symbol("M240-384h113l209-209q7-7.17 10.5-16.32 3.5-9.16 3.5-17.92 0-8.76-3.89-17.16T562-660l-45-45q-6-7-14.8-11t-18.4-4q-8.8 0-18.14 3.5Q456.31-713 449-706L240-496v112Zm288-243-45-45 45 45ZM288-432v-45l130-129 21 21 23 24-129 129h-45Zm151-153 23 24-44-45 21 21Zm-19 201h300v-72H492l-72 72ZM96-96v-696q0-29.7 21.15-50.85Q138.3-864 168-864h624q29.7 0 50.85 21.15Q864-821.7 864-792v480q0 29.7-21.15 50.85Q821.7-240 792-240H240L96-96Zm114-216h582v-480H168v522l42-42Zm-42 0v-480 480Z", "SuggestIcon");
+export const ViewIcon = symbol("M599-361q49-49 49-119t-49-119q-49-49-119-49t-119 49q-49 49-49 119t49 119q49 49 119 49t119-49Zm-187-51q-28-28-28-68t28-68q28-28 68-28t68 28q28 28 28 68t-28 68q-28 28-68 28t-68-28ZM220-270.5Q103-349 48-480q55-131 172-209.5T480-768q143 0 260 78.5T912-480q-55 131-172 209.5T480-192q-143 0-260-78.5ZM480-480Zm207 158q95-58 146-158-51-100-146-158t-207-58q-112 0-207 58T127-480q51 100 146 158t207 58q112 0 207-58Z", "ViewIcon");
+export const ExpandLessIcon = symbol("m291-336-51-51 240-240 240 240-51 51-189-189-189 189Z", "ExpandLessIcon");
+export const ExpandMoreIcon = symbol("M480-333 240-573l51-51 189 189 189-189 51 51-240 240Z", "ExpandMoreIcon");
+export const ColorResetIcon = symbol("M768-438q0 29-6 58t-18 56l-57-57q4-14 6.5-28.5T696-438q0-40-13-77.5T641-582L480-762l-82 92-51-51 133-149 214 240q38 38 56 88t18 104Zm0 342L654.52-210Q617-181 572.5-165.5 528-150 480.26-150q-119.81 0-204.03-84Q192-318 192-438q0-47.83 15.5-91.92Q223-574 252-612L90-775l51-51 678 679-51 51ZM480-222q33 0 64.5-10t58.5-30L303-561q-18 28-28.5 59.02Q264-470.96 264-438q0 89.69 63 152.85Q390-222 480-222Zm-27-189Zm97-108Z", "ColorResetIcon");
+export const AddCircleIcon = symbol("M444-288h72v-156h156v-72H516v-156h-72v156H288v72h156v156Zm36.28 192Q401-96 331-126t-122.5-82.5Q156-261 126-330.96t-30-149.5Q96-560 126-629.5q30-69.5 82.5-122T330.96-834q69.96-30 149.5-30t149.04 30q69.5 30 122 82.5T834-629.28q30 69.73 30 149Q864-401 834-331t-82.5 122.5Q699-156 629.28-126q-69.73 30-149 30Zm-.28-72q130 0 221-91t91-221q0-130-91-221t-221-91q-130 0-221 91t-91 221q0 130 91 221t221 91Zm0-312Z", "AddCircleIcon");
+export const EyedropperIcon = symbol("M144-144v-178l342-342-54-53 51-51 72 72 110.22-110.22q4.45-4.45 11.11-7.11Q683-816 691-816t15 2.5q7 2.5 12 7.5l87 88q4.55 5.83 7.27 12.64 2.73 6.8 2.73 14.58t-2.66 14.44q-2.67 6.66-7.11 11.1L696-556l72 73-51 51-54-54-341 342H144Zm72-72h76l320-320-75-76-321 320v76Zm424-385 90-91-38-39-91 90 39 40Zm0 0-39-40 39 40Z", "EyedropperIcon");
+export const CheckIcon = symbol("M389-267 195-460l51-52 143 143 325-324 51 51-376 375Z", "CheckIcon");
+export const UploadIcon = symbol("M444-336v-342L339-573l-51-51 192-192 192 192-51 51-105-105v342h-72ZM263.72-192Q234-192 213-213.15T192-264v-72h72v72h432v-72h72v72q0 29.7-21.16 50.85Q725.68-192 695.96-192H263.72Z", "UploadIcon");
+export const CameraIcon = symbol("M480-264q72 0 120-49t48-119q0-69-48-118.5T480-600q-72 0-120 49.5t-48 119q0 69.5 48 118.5t120 49Zm0-72q-42 0-69-28.13T384-433q0-39.9 27-67.45Q438-528 480-528t69 27.55q27 27.55 27 67.45 0 40.74-27 68.87Q522-336 480-336ZM168-144q-29 0-50.5-21.5T96-216v-432q0-29 21.5-50.5T168-720h120l72-96h240l72 96h120q29.7 0 50.85 21.5Q864-677 864-648v432q0 29-21.15 50.5T792-144H168Zm0-72h624v-432H636l-72.1-96H396l-72 96H168v432Zm312-217Z", "CameraIcon");
+export const CloseIcon = symbol("m291-240-51-51 189-189-189-189 51-51 189 189 189-189 51 51-189 189 189 189-51 51-189-189-189 189Z", "CloseIcon");
+export const AddFontsIcon = symbol("m89-240 180.19-480H355l180 480h-83l-43.45-123H216l-44.06 123H89Zm151-192h144l-70-199h-4l-70 199Zm444 96v-108H576v-72h108v-108h72v108h108v72H756v108h-72Z", "AddFontsIcon");
+export const SubmenuArrowIcon = symbol("M384-288v-384l192 192-192 192Z", "SubmenuArrowIcon");
+
 export const StrikeIcon = icon(
   "M10 19h4v-3h-4v3zM5 4v3h5v3h4V7h5V4H5zM3 14h18v-2H3v2z",
   "StrikeIcon",
-);
-/** The letter A over a bar; the bar is drawn in the current text color. */
-export const TextColorGlyph = icon(
-  "M5.49 17h2.42l1.27-3.58h5.65L16.09 17h2.42L13.25 3h-2.5L5.49 17zm4.42-5.61l2.03-5.79h.12l2.03 5.79H9.91z",
-  "TextColorGlyph",
-);
-/** A marker pen; its bar is drawn in the current highlight color. */
-export const HighlightGlyph = icon(
-  "M13.06 3.19l3.75 3.75L7.75 16H4v-3.75l9.06-9.06zm4.82 2.68l-3.75-3.75 1.83-1.83c.39-.39 1.02-.39 1.41 0l2.34 2.34c.39.39.39 1.02 0 1.41l-1.83 1.83z",
-  "HighlightGlyph",
-);
-export const LinkIcon = icon(
-  "M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z",
-  "LinkIcon",
-);
-export const AddCommentIcon = icon(
-  "M22 4c0-1.1-.9-2-2-2H4c-1.1 0-1.99.9-1.99 2L2 16c0 1.1.9 2 2 2h14l4 4V4zm-2 13.17L18.83 16H4V4h16v13.17zM13 5h-2v4H7v2h4v4h2v-4h4V9h-4z",
-  "AddCommentIcon",
-);
-export const ImageIcon = icon(
-  "M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.86 8.86l-3 3.87L9 13.14 6 17h12l-3.86-5.14z",
-  "ImageIcon",
-);
-export const AlignLeftIcon = icon(
-  "M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z",
-  "AlignLeftIcon",
-);
-export const AlignCenterIcon = icon(
-  "M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z",
-  "AlignCenterIcon",
-);
-export const AlignRightIcon = icon(
-  "M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z",
-  "AlignRightIcon",
-);
-export const AlignJustifyIcon = icon(
-  "M3 21h18v-2H3v2zm0-4h18v-2H3v2zm0-4h18v-2H3v2zm0-4h18V7H3v2zm0-6v2h18V3H3z",
-  "AlignJustifyIcon",
-);
-export const LineSpacingIcon = icon(
-  "M6 7h2.5L5 3.5 1.5 7H4v10H1.5L5 20.5 8.5 17H6V7zm4-2v2h12V5H10zm0 14h12v-2H10v2zm0-6h12v-2H10v2z",
-  "LineSpacingIcon",
-);
-export const ChecklistIcon = icon(
-  "M22 7h-9v2h9V7zm0 8h-9v2h9v-2zM5.54 11L2 7.46l1.41-1.41 2.12 2.12 4.24-4.24 1.41 1.41L5.54 11zm0 8L2 15.46l1.41-1.41 2.12 2.12 4.24-4.24 1.41 1.41L5.54 19z",
-  "ChecklistIcon",
-);
-export const BulletListIcon = icon(
-  "M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 19h14v-2H7v2zm0-6h14v-2H7v2zm0-8v2h14V5H7z",
-  "BulletListIcon",
-);
-export const NumberedListIcon = icon(
-  "M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z",
-  "NumberedListIcon",
-);
-export const IndentDecreaseIcon = icon(
-  "M11 17h10v-2H11v2zm-8-5l4 4V8l-4 4zm0 9h18v-2H3v2zM3 3v2h18V3H3zm8 6h10V7H11v2zm0 4h10v-2H11v2z",
-  "IndentDecreaseIcon",
-);
-export const IndentIncreaseIcon = icon(
-  "M3 21h18v-2H3v2zM3 8v8l4-4-4-4zm8 9h10v-2H11v2zM3 3v2h18V3H3zm8 6h10V7H11v2zm0 4h10v-2H11v2z",
-  "IndentIncreaseIcon",
-);
-export const ClearFormattingIcon = icon(
-  "M3.27 5L2 6.27l6.97 6.97L6.5 19h3l1.57-3.66L16.73 21 18 19.73 3.55 5.27 3.27 5zM6 5v.18L8.82 8h2.4l-.72 1.68 2.1 2.1L14.21 8H20V5H6z",
-  "ClearFormattingIcon",
-);
-export const EditIcon = icon(
-  "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
-  "EditIcon",
-);
-export const SuggestIcon = icon(
-  "M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 14v-2.47l6.88-6.88c.2-.2.51-.2.71 0l1.77 1.77c.2.2.2.51 0 .71L8.47 14H6zm12 0h-7.5l2-2H18v2z",
-  "SuggestIcon",
-);
-export const ViewIcon = icon(
-  "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z",
-  "ViewIcon",
-);
-export const ExpandLessIcon = icon("M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z", "ExpandLessIcon");
-export const ExpandMoreIcon = icon("M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z", "ExpandMoreIcon");
-export const DropDownIcon = icon("M7 10l5 5 5-5z", "DropDownIcon");
-export const SearchIcon = icon(
-  "M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
-  "SearchIcon",
-);
-export const AddIcon = icon("M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z", "AddIcon");
-export const RemoveIcon = icon("M19 13H5v-2h14v2z", "RemoveIcon");
-export const MoreVertIcon = icon(
-  "M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z",
-  "MoreVertIcon",
-);
-export const CheckIcon = icon("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z", "CheckIcon");
-export const CloseIcon = icon(
-  "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z",
-  "CloseIcon",
 );
 export const DocIcon = icon(
   "M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z",

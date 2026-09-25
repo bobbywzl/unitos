@@ -78,6 +78,11 @@ const BlockIds = Extension.create({
     const strip = (fragment: Fragment): Fragment => {
       const nodes: PMNode[] = [];
       fragment.forEach((node) => {
+        // Text carries no id, and a text node is never built by its type.
+        if (node.isText) {
+          nodes.push(node);
+          return;
+        }
         const attrs = INDEXED_NODE_TYPES.has(node.type.name) ? { ...node.attrs, blockId: null } : node.attrs;
         nodes.push(node.type.create(attrs, node.isLeaf ? null : strip(node.content), node.marks));
       });

@@ -4,21 +4,21 @@ import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { OBJECT_CHAR } from "@/components/docs/typing/chars";
 
 // Find and Find and replace (SPEC.md §29, typing), Google Docs' semantics:
-// case-insensitive unless Match case; a straight quote in the query finds
+// case-insensitive unless Match case is on; a straight quote in the query finds
 // the curly ones too; "…" and "..." find each other; Ignore diacritics folds
-// é to e and æ to ae on both sides; a match never crosses a table cell. The
-// matches are decorations: every match light green, the current one green.
+// é to e and æ to ae on both sides; a result never crosses a table cell. The
+// results are decorations: every result light green, the current one green.
 
 export type FindOptions = { matchCase: boolean; regex: boolean; ignoreDiacritics: boolean };
-export type FindMatch = { from: number; to: number };
+export type FindResult = { from: number; to: number };
 
 export type FindState = {
   /** The find bar or the Find and replace dialog is open. */
   open: boolean;
   query: string;
   options: FindOptions;
-  matches: FindMatch[];
-  /** Index of the current match, or -1. */
+  results: FindResult[];
+  /** Index of the current result, or -1. */
   current: number;
 };
 
@@ -28,12 +28,12 @@ export const EMPTY_FIND: FindState = {
   open: false,
   query: "",
   options: { matchCase: false, regex: false, ignoreDiacritics: false },
-  matches: [],
+  results: [],
   current: -1,
 };
 
 type Patch = Partial<Pick<FindState, "open" | "query" | "options" | "current">> & {
-  /** Pick the first match at or after this position. */
+  /** Pick the first result at or after this position. */
   near?: number;
 };
 
@@ -42,7 +42,7 @@ type Patch = Partial<Pick<FindState, "open" | "query" | "options" | "current">> 
 type Segment = { text: string; starts: number[]; ends: number[] };
 
 /** One segment per table cell and one for everything else: paragraphs join
-    with "\n", a line break is "\v", an inline object never matches. */
+    with "\n", a line break is "\v", an inline object is never found. */
 function segments(doc: PMNode): Segment[] {
   const body: Segment = { text: "", starts: [], ends: [] };
   const out: Segment[] = [body];
@@ -194,9 +194,9 @@ function literalPattern(query: string): string {
   return out;
 }
 
-/** The matches of `query` in the document, in document order. An invalid
+/** The results of `query` in the document, in document order. An invalid
     regular expression finds nothing. */
-export function findMatches(doc: PMNode, query: string, options: FindOptions): FindMatch[] {
+export function findResults(doc: PMNode, query: string, options: FindOptions): FindResult[] {
   if (!query) return [];
   const q = options.ignoreDiacritics ? foldText(query) : query;
   let re: RegExp;
@@ -205,7 +205,7 @@ export function findMatches(doc: PMNode, query: string, options: FindOptions): F
   } catch {
     return [];
   }
-  const out: FindMatch[] = [];
+  const out: FindResult[] = [];
   for (const raw of segments(doc)) {
     const seg = options.ignoreDiacritics ? foldSegment(raw) : raw;
     re.lastIndex = 0;
@@ -226,10 +226,10 @@ export function findMatches(doc: PMNode, query: string, options: FindOptions): F
   return out;
 }
 
-/** The first match at or after `pos`, wrapping to the first one. */
-export function matchNear(matches: FindMatch[], pos: number): number {
-  if (!matches.length) return -1;
-  const i = matches.findIndex((m) => m.from >= pos);
+/** The first result at or after `pos`, wrapping to the first one. */
+export function resultNear(results: FindResult[], pos: number): number {
+  if (!results.length) return -1;
+  const i = results.findIndex((m) => m.from >= pos);
   return i === -1 ? 0 : i;
 }
 
@@ -245,7 +245,7 @@ export function findPlugin(): Plugin<FindState> {
         if (!patch && !(tr.docChanged && value.open)) return value;
         const { near, ...rest } = patch ?? {};
         const next: FindState = { ...value, ...rest };
-        if (patch && "open" in patch && !patch.open) return { ...next, matches: [], current: -1 };
+        if (patch && "open" in patch && !patch.open) return { ...next, results: [], current: -1 };
         if (!next.open) return next;
         const research =
           !patch ||
@@ -255,12 +255,12 @@ export function findPlugin(): Plugin<FindState> {
           patch.options !== undefined ||
           patch.open !== undefined;
         if (research) {
-          const before = value.current >= 0 ? value.matches[value.current] : null;
-          next.matches = findMatches(state.doc, next.query, next.options);
-          if (near !== undefined) next.current = matchNear(next.matches, near);
-          else if (patch?.current !== undefined) next.current = Math.min(patch.current, next.matches.length - 1);
-          else if (before) next.current = matchNear(next.matches, tr.mapping.map(before.from));
-          else next.current = next.matches.length ? 0 : -1;
+          const before = value.current >= 0 ? value.results[value.current] : null;
+          next.results = findResults(state.doc, next.query, next.options);
+          if (near !== undefined) next.current = resultNear(next.results, near);
+          else if (patch?.current !== undefined) next.current = Math.min(patch.current, next.results.length - 1);
+          else if (before) next.current = resultNear(next.results, tr.mapping.map(before.from));
+          else next.current = next.results.length ? 0 : -1;
         }
         return next;
       },
@@ -268,12 +268,12 @@ export function findPlugin(): Plugin<FindState> {
     props: {
       decorations(state) {
         const find = findKey.getState(state);
-        if (!find?.open || !find.matches.length) return null;
+        if (!find?.open || !find.results.length) return null;
         return DecorationSet.create(
           state.doc,
-          find.matches.map((m, i) =>
+          find.results.map((m, i) =>
             Decoration.inline(m.from, m.to, {
-              class: i === find.current ? "docs-find-match docs-find-current" : "docs-find-match",
+              class: i === find.current ? "docs-find-result docs-find-current" : "docs-find-result",
             }),
           ),
         );
@@ -286,37 +286,37 @@ export function findState(state: EditorState): FindState {
   return findKey.getState(state) ?? EMPTY_FIND;
 }
 
-/** Change the search; the matches follow. */
+/** Change the search; the results follow. */
 export function setFind(view: EditorView, patch: Patch): FindState {
   view.dispatch(view.state.tr.setMeta(findKey, patch).setMeta("addToHistory", false));
   return findState(view.state);
 }
 
-/** Make match `index` current: it is selected in the document and scrolled
+/** Make result `index` current: it is selected in the document and scrolled
     into view. */
-export function selectMatch(view: EditorView, index: number): void {
+export function selectResult(view: EditorView, index: number): void {
   const find = findState(view.state);
-  const match = find.matches[index];
-  if (!match) return;
+  const result = find.results[index];
+  if (!result) return;
   const tr = view.state.tr.setMeta(findKey, { current: index }).setMeta("addToHistory", false);
   try {
-    tr.setSelection(TextSelection.create(tr.doc, match.from, match.to));
+    tr.setSelection(TextSelection.create(tr.doc, result.from, result.to));
   } catch {
-    // A match over a block boundary keeps the old selection.
+    // A result over a block boundary keeps the old selection.
   }
   view.dispatch(tr);
-  revealPos(view, match.from);
+  revealPos(view, result.from);
 }
 
-/** Step to the next (1) or previous (-1) match, wrapping around. Returns
+/** Step to the next (1) or previous (-1) result, wrapping around. Returns
     true when the step wrapped. */
-export function stepMatch(view: EditorView, dir: 1 | -1): boolean {
+export function stepResult(view: EditorView, dir: 1 | -1): boolean {
   const find = findState(view.state);
-  const count = find.matches.length;
+  const count = find.results.length;
   if (!count) return false;
   let next = find.current + dir;
   let wrapped = false;
-  if (find.current < 0) next = dir === 1 ? matchNear(find.matches, view.state.selection.to) : count - 1;
+  if (find.current < 0) next = dir === 1 ? resultNear(find.results, view.state.selection.to) : count - 1;
   if (next >= count) {
     next = 0;
     wrapped = true;
@@ -324,7 +324,7 @@ export function stepMatch(view: EditorView, dir: 1 | -1): boolean {
     next = count - 1;
     wrapped = true;
   }
-  selectMatch(view, next);
+  selectResult(view, next);
   return wrapped;
 }
 
@@ -353,36 +353,36 @@ export function revealPos(view: EditorView, pos: number): void {
   else window.scrollBy({ top: delta });
 }
 
-/** Replace match `index` with `text`, which takes the formatting of the
-    match's first character; the next match becomes current. */
-export function replaceMatch(view: EditorView, index: number, text: string): void {
+/** Replace result `index` with `text`, which takes the formatting of the
+    result's first character; the next result becomes current. */
+export function replaceResult(view: EditorView, index: number, text: string): void {
   const find = findState(view.state);
-  const match = find.matches[index];
-  if (!match || !view.editable) return;
+  const result = find.results[index];
+  if (!result || !view.editable) return;
   const { state } = view;
-  const marks = state.doc.nodeAt(match.from)?.marks ?? [];
+  const marks = state.doc.nodeAt(result.from)?.marks ?? [];
   const tr = state.tr;
-  if (text) tr.replaceWith(match.from, match.to, state.schema.text(text, marks));
-  else tr.delete(match.from, match.to);
-  const after = tr.mapping.map(match.to);
+  if (text) tr.replaceWith(result.from, result.to, state.schema.text(text, marks));
+  else tr.delete(result.from, result.to);
+  const after = tr.mapping.map(result.to);
   tr.setMeta(findKey, { near: after });
   view.dispatch(tr);
   const next = findState(view.state);
-  if (next.current >= 0) selectMatch(view, next.current);
+  if (next.current >= 0) selectResult(view, next.current);
 }
 
-/** Replace every match as one undo step. Returns how many. */
+/** Replace every result as one undo step. Returns how many. */
 export function replaceAll(view: EditorView, text: string): number {
   const find = findState(view.state);
-  if (!find.matches.length || !view.editable) return 0;
+  if (!find.results.length || !view.editable) return 0;
   const { state } = view;
   const tr = state.tr;
-  for (let i = find.matches.length - 1; i >= 0; i--) {
-    const m = find.matches[i];
+  for (let i = find.results.length - 1; i >= 0; i--) {
+    const m = find.results[i];
     const marks = state.doc.nodeAt(m.from)?.marks ?? [];
     if (text) tr.replaceWith(m.from, m.to, state.schema.text(text, marks));
     else tr.delete(m.from, m.to);
   }
   view.dispatch(tr);
-  return find.matches.length;
+  return find.results.length;
 }

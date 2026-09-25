@@ -40,7 +40,13 @@ export type PaginateConfig = {
   area: (page: number) => PageArea;
 };
 
-export type PaginateResult = { spacers: SpacerPlan[]; pages: number };
+export type PaginateResult = {
+  spacers: SpacerPlan[];
+  pages: number;
+  /** Each textblock's natural height, content px: a later edit that keeps a
+      paragraph's height changes nothing on the pages. */
+  heights: Map<HTMLElement, number>;
+};
 
 type Unit = {
   type: "text" | "atom" | "row" | "break";
@@ -384,5 +390,11 @@ export function paginate(view: EditorView, config: PaginateConfig): PaginateResu
     snaps.set(k, { page, offset, outLength: out.length, firstOnPage });
   }
 
-  return { spacers: out, pages: page + 1 };
+  const heights = new Map<HTMLElement, number>();
+  units.forEach((u, i) => {
+    if (u.type !== "text") return;
+    const box = m.unit(i, u);
+    heights.set(u.dom, box.bottom - box.top);
+  });
+  return { spacers: out, pages: page + 1, heights };
 }
