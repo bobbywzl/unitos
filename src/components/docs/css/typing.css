@@ -30,6 +30,86 @@
   background: var(--docs-find-current);
 }
 
+/* A word Docs corrected: a dashed gray underline over a white halo. */
+.docs-autocorrected {
+  text-decoration: underline dashed var(--docs-autocorrect);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+}
+.docs-ac-bubble {
+  position: fixed;
+  z-index: 58;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--docs-menu-bg);
+  box-shadow: var(--docs-menu-shadow);
+}
+.docs-ac-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  padding: 6px 0;
+  border-radius: 4px;
+  background: var(--docs-menu-bg);
+  box-shadow: var(--docs-menu-shadow);
+  font: 400 14px/20px var(--docs-ui-font);
+  color: var(--docs-text);
+}
+.docs-ac-menu .docs-wc-item {
+  padding-left: 16px;
+}
+.docs-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Non-printing characters (Ctrl+Shift+P). */
+.tiptap-invisible-character {
+  height: 0;
+  padding: 0;
+  pointer-events: none;
+  user-select: none;
+  width: 0;
+}
+.tiptap-invisible-character::before {
+  display: inline-block;
+  width: 0;
+  color: var(--docs-placeholder);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1em;
+}
+.tiptap-invisible-character--space::before {
+  content: "·";
+}
+.tiptap-invisible-character--tab::before {
+  content: "→";
+}
+.tiptap-invisible-character--break::before {
+  content: "↵";
+}
+.tiptap-invisible-character--paragraph::before {
+  content: "¶";
+}
+.tiptap-invisible-character + img.ProseMirror-separator {
+  height: 0 !important;
+  width: 0 !important;
+  pointer-events: none;
+  user-select: none;
+}
+.is-empty[data-placeholder] > .tiptap-invisible-character--paragraph {
+  display: none;
+}
+
 /* Markdown's inline code: Roboto Mono in Docs' code green. */
 .docs-prose code {
   color: var(--docs-code);
@@ -632,8 +712,15 @@
   .docs-findbar,
   .docs-replace,
   .docs-wc-anchor,
-  .docs-voice {
+  .docs-voice,
+  .docs-ac-bubble {
     display: none !important;
+  }
+  .docs-autocorrected {
+    text-decoration: none;
+  }
+  .tiptap-invisible-character {
+    display: none;
   }
   .docs-find-result,
   .docs-find-result.docs-find-current {

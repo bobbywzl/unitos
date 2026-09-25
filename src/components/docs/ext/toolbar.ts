@@ -159,7 +159,7 @@ const DocsToolbar = Extension.create({
         key: namedStyles,
         props: {
           // The named styles' changes as variables on the editor's root.
-          attributes: (state) => {
+          attributes: (state): Record<string, string> => {
             const { style, flags } = styleVariables(state.doc);
             return flags ? { style, "data-docs-styles": flags } : {};
           },

@@ -541,19 +541,24 @@ export function VerticalRuler({
   const [tip, setTip] = useState<DragTip>(null);
   const [draft, setDraft] = useState<{ key: "top" | "bottom"; at: number } | null>(null);
 
+  // The page that holds the caret; when that page is out of view, the page
+  // most in view.
   const readCaretPage = useCallback(() => {
     const art = editor.view.dom.closest<HTMLElement>("[data-docs-page]");
     if (!art) return;
+    const r = art.getBoundingClientRect();
+    const s = art.offsetWidth > 0 ? r.width / art.offsetWidth : 1;
+    const pageAt = (clientY: number) => Math.max(0, Math.min(pages - 1, Math.floor((clientY - r.top) / s / frame.pitch)));
     try {
       const c = editor.view.coordsAtPos(editor.state.selection.head);
-      const r = art.getBoundingClientRect();
-      const s = art.offsetWidth > 0 ? r.width / art.offsetWidth : 1;
-      const y = (c.top - r.top) / s;
-      setCaretPage(Math.max(0, Math.min(pages - 1, Math.floor(y / frame.pitch))));
+      const caret = pageAt(c.top);
+      const pageTop = r.top + caret * frame.pitch * s;
+      const visible = pageTop < top + height && pageTop + frame.height * s > top;
+      setCaretPage(visible ? caret : pageAt(top + height / 2));
     } catch {
-      // The caret is not drawn yet.
+      setCaretPage(pageAt(top + height / 2));
     }
-  }, [editor, pages, frame.pitch]);
+  }, [editor, pages, frame.pitch, frame.height, top, height]);
 
   useEffect(() => {
     let id = 0;
@@ -565,10 +570,12 @@ export function VerticalRuler({
     };
     editor.on("selectionUpdate", schedule);
     editor.on("update", schedule);
+    document.addEventListener("scroll", schedule, { capture: true, passive: true });
     schedule();
     return () => {
       editor.off("selectionUpdate", schedule);
       editor.off("update", schedule);
+      document.removeEventListener("scroll", schedule, { capture: true });
       if (id) cancelAnimationFrame(id);
     };
   }, [editor, readCaretPage]);

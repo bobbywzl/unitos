@@ -1,13 +1,12 @@
 "use client";
 
-import type { Node as PMNode } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useLang, useT } from "@/components/lang-provider";
 import { DOCS_EVENT } from "@/components/docs/extensions";
 import { CheckIcon, CloseIcon, DropDownIcon } from "@/components/docs/icons";
-import { charClass } from "@/components/docs/typing/chars";
+import { countRange, type Counts } from "@/components/docs/typing/count";
 import { serverTypingPrefs, setTypingPrefs, subscribeTypingPrefs, typingPrefs, type TypingPrefs } from "@/components/docs/typing/prefs";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -20,68 +19,9 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // keeps a counter at the bottom left of the page area; a press on it picks
 // the count it shows, or hides it.
 
-export type Counts = { words: number; chars: number; charsNoSpaces: number };
-
 type Metric = TypingPrefs["counterMetric"];
 
 const SHOW_KEY = "unitos-docs-word-count";
-
-/** Google Docs' counts over [from, to) of the document. */
-export function countRange(doc: PMNode, from: number, to: number): Counts {
-  let words = 0;
-  let chars = 0;
-  let charsNoSpaces = 0;
-  let inWord = false;
-  const see = (ch: string) => {
-    chars++;
-    if (ch !== " ") charsNoSpaces++;
-    const cls = charClass(ch);
-    if (cls === "t") return;
-    const word = cls === "w";
-    if (word && !inWord) words++;
-    inWord = word;
-  };
-  doc.nodesBetween(from, to, (node, pos) => {
-    if (node.isTextblock) {
-      inWord = false;
-      return true;
-    }
-    if (node.isText) {
-      const text = node.text ?? "";
-      for (const ch of text.slice(Math.max(0, from - pos), Math.max(0, to - pos))) see(ch);
-      return false;
-    }
-    if (node.type.name === "hardBreak") {
-      chars++;
-      charsNoSpaces++;
-      inWord = false;
-    }
-    return true;
-  });
-  return { words, chars, charsNoSpaces };
-}
-
-/** The same counts for a string (tests, and any text outside a document). */
-export function countText(text: string): Counts {
-  let words = 0;
-  let chars = 0;
-  let charsNoSpaces = 0;
-  let inWord = false;
-  for (const ch of text) {
-    if (ch === "\n") {
-      inWord = false;
-      continue;
-    }
-    chars++;
-    if (ch !== " ") charsNoSpaces++;
-    const cls = charClass(ch);
-    if (cls === "t") continue;
-    const word = cls === "w";
-    if (word && !inWord) words++;
-    inWord = word;
-  }
-  return { words, chars, charsNoSpaces };
-}
 
 /** The pages the document fills, and the pages a range touches. */
 function pageCounts(editor: Editor, from: number, to: number, empty: boolean): { total: number; part: number } {

@@ -43,43 +43,82 @@ function useDocsFonts() {
   }, []);
 }
 
+/** The document's status beside the title, as Google Docs shows it: the
+    arrows and "Saving…" while a change waits or saves, then the cloud with a
+    check and "Saved to Unitos" for 3 s, then the cloud alone. A lost
+    connection or a failed save reads in words until it clears. */
 function SaveStatus({ state }: { state: SaveState }) {
   const t = useT();
-  const label =
-    state === "saving"
+  const [last, setLast] = useState(state);
+  // Each finished save shows the saved words once, for 3 s.
+  const [finished, setFinished] = useState(0);
+  const [faded, setFaded] = useState(0);
+  if (last !== state) {
+    setLast(state);
+    if (state === "saved") setFinished((n) => n + 1);
+  }
+  useEffect(() => {
+    if (finished === 0) return;
+    const id = setTimeout(() => setFaded(finished), 3000);
+    return () => clearTimeout(id);
+  }, [finished]);
+  const caption =
+    state === "saving" || state === "unsaved"
       ? t("docs.saving")
-      : state === "unsaved"
-        ? t("docs.unsaved")
-        : state === "offline"
-          ? t("docs.offlineSaving")
-          : state === "error"
-            ? t("docs.saveFailed")
-            : t("docs.saved");
+      : state === "offline"
+        ? t("docs.offlineSaving")
+        : state === "error"
+          ? t("docs.saveFailed")
+          : finished > faded
+            ? t("docsPage.savedCaption")
+            : "";
+  const tip = state === "saved" ? t("docs.saved") : caption;
   const Icon = state === "saved" ? CloudDoneIcon : state === "offline" || state === "error" ? CloudOffIcon : CloudSyncIcon;
   return (
-    <span className={`docs-status docs-status-${state}`} data-tip={label} aria-live="polite">
-      <Icon size={18} />
-      <span className="docs-status-text">{state === "saved" ? "" : label}</span>
+    <span className={`docs-status docs-status-${state}`} data-tip={tip} aria-label={tip} role="status">
+      <Icon size={20} />
+      {caption && <span className="docs-status-text">{caption}</span>}
     </span>
   );
 }
 
-function TitleField({ documentId, title, canEdit }: { documentId: string; title: string; canEdit: boolean }) {
+/** The title, Google Docs' way: a click selects it all; Enter keeps the new
+    title and goes back to the text, Escape puts the old one back, leaving
+    the field keeps it. An empty title is the untitled one, drawn gray. */
+function TitleField({
+  documentId,
+  title,
+  canEdit,
+  onDone,
+}: {
+  documentId: string;
+  title: string;
+  canEdit: boolean;
+  /** Back to the document's text. */
+  onDone: () => void;
+}) {
   const t = useT();
   const router = useRouter();
   const [draft, setDraft] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const shown = saved ?? title;
   const inputRef = useRef<HTMLInputElement>(null);
+  const cancelRef = useRef(false);
   const [prevTitle, setPrevTitle] = useState(title);
   if (prevTitle !== title) {
     setPrevTitle(title);
     setSaved(null);
   }
+  const untitledText = t("docsPage.untitled");
   async function commit() {
-    const next = (draft ?? shown).trim();
+    const typed = (draft ?? shown).trim();
     setDraft(null);
-    if (!next || next === shown) return;
+    if (cancelRef.current) {
+      cancelRef.current = false;
+      return;
+    }
+    const next = typed || untitledText;
+    if (next === shown) return;
     setSaved(next);
     try {
       await api(`/api/documents/${documentId}`, "PATCH", { title: next });
@@ -89,6 +128,7 @@ function TitleField({ documentId, title, canEdit }: { documentId: string; title:
     }
   }
   const value = draft ?? shown;
+  const untitled = draft === null && (shown === untitledText || shown === "Untitled document");
   return (
     <span className="docs-title-wrap" data-value={value || " "}>
       <input
@@ -101,15 +141,16 @@ function TitleField({ documentId, title, canEdit }: { documentId: string; title:
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            inputRef.current?.blur();
+            onDone();
           } else if (e.key === "Escape") {
-            setDraft(null);
-            requestAnimationFrame(() => inputRef.current?.blur());
+            e.preventDefault();
+            cancelRef.current = true;
+            onDone();
           }
         }}
         aria-label={t("docs.renameTitle")}
-        data-tip={canEdit ? t("docs.renameTitle") : undefined}
-        className="docs-title-input"
+        data-tip={canEdit ? t("docs.renameTitle") : shown}
+        className={`docs-title-input${untitled ? " docs-title-untitled" : ""}`}
       />
     </span>
   );
@@ -276,7 +317,15 @@ export function DocsEditor({
         {!headerHidden && (
           <div className="docs-title-row">
             <DocIcon size={26} className="docs-title-icon" />
-            <TitleField documentId={documentId} title={title} canEdit={canEdit} />
+            <TitleField
+              documentId={documentId}
+              title={title}
+              canEdit={canEdit}
+              onDone={() => {
+                if (editor && !editor.isDestroyed) editor.commands.focus();
+                else (document.activeElement as HTMLElement | null)?.blur();
+              }}
+            />
             {canEdit && <SaveStatus state={saveState} />}
           </div>
         )}
@@ -299,7 +348,7 @@ export function DocsEditor({
         {area && <PageRuler {...area} zoom={zoom} />}
       </div>
       {area ? (
-        <PageCanvas {...area} zoom={zoom} onPageClick={onPageClick}>
+        <PageCanvas {...area} zoom={zoom} onZoom={setZoom} onPageClick={onPageClick}>
           <EditorContent editor={editor} />
         </PageCanvas>
       ) : (

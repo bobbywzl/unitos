@@ -124,7 +124,7 @@ import { ANNOTATION_PARAM, referenceContent, referenceWords, type AnnotationRefe
 import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
-import { pageEditorIn, pageSegmentsOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
+import { pageEditorIn, pageSelectionOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
 import { flashInPage, PAGE_EDITED_EVENT } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
 import {
@@ -1784,7 +1784,8 @@ export function ReaderInteractions({
     // editor's own document, so its offsets are the paragraph index's — a
     // line break or a chip counted from the DOM would shift them.
     const pageEditor = richTextRef.current ? pageEditorIn(container) : null;
-    const pageSegments = pageEditor ? pageSegmentsOfRange(pageEditor, range) : null;
+    const pageSelection = pageEditor ? pageSelectionOfRange(pageEditor, range) : null;
+    const pageSegments = pageSelection?.segments ?? null;
 
     const blockOf = (node: Node): HTMLElement | null => {
       const el = node instanceof HTMLElement ? node : node.parentElement;
@@ -1808,7 +1809,7 @@ export function ReaderInteractions({
       container.querySelectorAll<HTMLElement>("[data-block-id], [data-edit-block]"),
     ).filter((el) => own(el) && (el === startBlock || el === endBlock || range.intersectsNode(el)));
     const segments: Segment[] = pageSegments ?? [];
-    let truncated = false;
+    let truncated = pageSelection?.truncated ?? false;
     // A core's words (SPEC.md §28) take the core key: their anchor is in the
     // collapsed view's layer. A passage stays in one layer — the first
     // block's — and a block of the other layer is left out.
@@ -2548,6 +2549,13 @@ export function ReaderInteractions({
         text,
       });
       setQuoteDragImage(e.dataTransfer, text);
+      // In the page editor the same drag moves the words inside the page
+      // (SPEC.md §29), and the typing saves while the drag is on its way, so
+      // the note it lands on anchors on saved words.
+      if (richTextRef.current) {
+        e.dataTransfer.effectAllowed = "copyMove";
+        void flushEditRef.current?.();
+      }
     };
     container.addEventListener("pointerdown", onDown);
     container.addEventListener("pointermove", onMove);
@@ -3062,11 +3070,13 @@ export function ReaderInteractions({
   useEffect(() => {
     applyNarrow();
   }, [split, applyNarrow]);
-  // The page editor's cards follow its page (SPEC.md §29): once the page has
-  // taken its shift — at once, or at the end of its move — every card in the
-  // margin docks against where the page is now.
+  // The page editor's cards follow its page (SPEC.md §29): a card opens where
+  // the page will be once it has moved; at the end of the move (0.2 s, or at
+  // once under reduced motion) every card in the margin docks against where
+  // the page is, so a page that could not move as far still has its cards
+  // beside it.
   const blankDocument = Boolean(richText);
-  useLayoutEffect(() => {
+  useEffect(() => {
     const container = containerRef.current;
     if (!blankDocument || !container) return;
     const redock = () => {
@@ -3085,12 +3095,15 @@ export function ReaderInteractions({
         c && c.width !== undefined && (c.left !== slot.left || c.width !== slot.width) ? { ...c, ...slot } : c,
       );
     };
-    redock();
     const onMoved = (e: TransitionEvent) => {
       if (e.target instanceof Element && e.target.matches("[data-docs-page], .docs-canvas")) redock();
     };
+    const settled = window.setTimeout(redock, 260);
     container.addEventListener("transitionend", onMoved);
-    return () => container.removeEventListener("transitionend", onMoved);
+    return () => {
+      window.clearTimeout(settled);
+      container.removeEventListener("transitionend", onMoved);
+    };
   }, [docsShift, blankDocument]);
   // The page editor's words changed under the toolbar — typing, a paste, an
   // undo: its anchor no longer names them, so the toolbar and the Close link
@@ -6757,7 +6770,7 @@ function blockFormatKind(
         >
           {popover.truncated && (
             <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">
-              {t("reader.anchorsFirstParagraph")}
+              {t(popover.page ? "docsLayer.leftOut" : "reader.anchorsFirstParagraph")}
             </p>
           )}
           {popoverKind !== "text" && (

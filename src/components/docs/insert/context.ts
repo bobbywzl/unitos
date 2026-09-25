@@ -20,6 +20,8 @@ export type InsertContext = {
   t: TFunc;
   /** The page takes typing now. */
   editing: boolean;
+  /** Open an address of the app in this tab (a project document). */
+  navigate: (href: string) => void;
 };
 
 const contexts = new WeakMap<Editor, InsertContext>();

@@ -3,7 +3,9 @@ import { AtMenu } from "@/components/docs/insert/at-plugin";
 import { Bookmark } from "@/components/docs/insert/bookmark";
 import { CHIP_EXTENSIONS } from "@/components/docs/insert/chips";
 import { FOOTNOTE_EXTENSIONS } from "@/components/docs/insert/footnotes";
+import { MultiRangeDraw } from "@/components/docs/insert/format-match";
 import { DocsImage } from "@/components/docs/insert/image";
+import { DocsLinks } from "@/components/docs/insert/links";
 import { MATH_EXTENSIONS } from "@/components/docs/insert/math";
 import { DocsTable } from "@/components/docs/insert/table";
 import { TOC_EXTENSIONS } from "@/components/docs/insert/toc";
@@ -22,4 +24,6 @@ export const insertExtensions: AnyExtension[] = [
   ...TOC_EXTENSIONS,
   DocsImage,
   DocsTable,
+  DocsLinks,
+  MultiRangeDraw,
 ];

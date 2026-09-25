@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLang, useT } from "@/components/lang-provider";
 import { DropdownPanel } from "@/components/docs/menu";
-import { ColorPalette } from "@/components/docs/palette";
+import { PALETTE, colorName } from "@/components/docs/palette";
 import {
   PAPERS,
   PT_PER_UNIT,
@@ -259,19 +259,24 @@ export function PageSetupDialog({ store, onClose }: { store: PageStore; onClose:
             </div>
           </div>
         )}
-        <DropdownPanel open={colorOpen} anchorRef={colorRef} onClose={() => setColorOpen(false)}>
-          <ColorPalette
-            current={color}
-            onPick={(hex) => {
-              setColor(hex);
-              setColorOpen(false);
-            }}
-            onReset={() => {
-              setColor("#ffffff");
-              setColorOpen(false);
-            }}
-            resetLabel={t("docs.resetColor")}
-          />
+        <DropdownPanel open={colorOpen} anchorRef={colorRef} onClose={() => setColorOpen(false)} label={t("docsPage.pageColor")}>
+          <div className="docs-page-colors">
+            {PALETTE.flat().map((hex) => (
+              <button
+                key={hex}
+                type="button"
+                className="docs-page-color"
+                style={{ background: hex }}
+                aria-label={colorName(t, hex)}
+                data-tip={colorName(t, hex)}
+                aria-pressed={color.toLowerCase() === hex}
+                onClick={() => {
+                  setColor(hex);
+                  setColorOpen(false);
+                }}
+              />
+            ))}
+          </div>
         </DropdownPanel>
         <div className="docs-setup-actions">
           {tab === "pages" && (

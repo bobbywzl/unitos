@@ -341,3 +341,717 @@
 .docs-vruler-margin-end[data-edit] {
   cursor: n-resize;
 }
+
+/* ── Page setup: a GM3 dialog, 28 px corners, the Pages and Pageless tabs. */
+.docs-setup-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 24px 24px 20px;
+  border-radius: 28px;
+  background: var(--docs-menu-bg);
+  box-shadow: var(--docs-menu-shadow);
+  color: var(--docs-text);
+  font: 400 14px/20px var(--docs-ui-font);
+}
+.docs-setup-title {
+  margin: 0 0 12px;
+  font: 400 24px/32px var(--docs-ui-font);
+}
+.docs-setup-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--docs-sep);
+}
+.docs-setup-tab {
+  position: relative;
+  flex: 1;
+  height: 48px;
+  color: var(--docs-muted);
+  font: 500 14px/20px var(--docs-ui-font);
+  cursor: pointer;
+}
+.docs-setup-tab:hover {
+  background: var(--docs-hover);
+}
+.docs-setup-tab[aria-selected="true"] {
+  color: var(--docs-blue);
+}
+.docs-setup-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  right: 25%;
+  bottom: 0;
+  left: 25%;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--docs-blue);
+}
+.docs-setup-tab:focus-visible {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: -2px;
+}
+.docs-setup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 0 8px;
+}
+.docs-setup-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.docs-setup-grow {
+  flex: 1;
+}
+.docs-setup-label {
+  padding: 0;
+  color: var(--docs-text);
+  font: 500 14px/20px var(--docs-ui-font);
+}
+.docs-setup-radios {
+  display: flex;
+  gap: 24px;
+}
+.docs-setup-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.docs-setup-radio input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--docs-blue);
+}
+.docs-setup-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+.docs-setup-select,
+.docs-setup-input {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--docs-sep);
+  border-radius: 4px;
+  background: var(--docs-menu-bg);
+  color: var(--docs-text);
+  font: 400 14px/20px var(--docs-ui-font);
+  outline: none;
+}
+.docs-setup-select:focus,
+.docs-setup-input:focus {
+  border: 2px solid var(--docs-blue);
+  padding: 0 9px;
+}
+.docs-setup-color {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 36px;
+  border: 1px solid var(--docs-sep);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.docs-setup-color:hover {
+  background: var(--docs-hover);
+}
+.docs-setup-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+.docs-setup-margins {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.docs-setup-margin {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--docs-muted);
+  font-size: 12px;
+}
+.docs-setup-margin .docs-setup-input {
+  width: 100%;
+}
+.docs-setup-error {
+  margin: 0;
+  color: #b3261e;
+  font-size: 13px;
+}
+.dark .docs-setup-error {
+  color: #f2b8b5;
+}
+.docs-setup-about,
+.docs-setup-note {
+  margin: 0;
+  color: var(--docs-text);
+}
+.docs-setup-note {
+  color: var(--docs-muted);
+  font-size: 13px;
+}
+/* The pageless drawing: a column of text lines with no page edges. */
+.docs-setup-pageless-art {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 32px;
+  border-radius: 12px;
+  background: var(--docs-pill);
+}
+.docs-setup-pageless-art span {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--docs-sep);
+}
+.docs-setup-pageless-art span:nth-child(2) {
+  width: 86%;
+}
+.docs-setup-pageless-art span:nth-child(3) {
+  width: 64%;
+}
+.docs-setup-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.docs-setup-spacer {
+  flex: 1;
+}
+.docs-setup-text-btn {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  color: var(--docs-blue);
+  font: 500 14px/20px var(--docs-ui-font);
+  cursor: pointer;
+}
+.docs-setup-text-btn:hover:not(:disabled) {
+  background: var(--docs-hover);
+}
+.docs-setup-text-btn:disabled {
+  color: var(--docs-muted);
+  cursor: default;
+}
+.docs-setup-dialog .docs-button-primary {
+  height: 36px;
+  padding: 0 24px;
+  border-radius: 18px;
+}
+@media (max-width: 480px) {
+  .docs-setup-margins {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .docs-setup-row {
+    flex-wrap: wrap;
+  }
+}
+
+/* ── Tabs & outlines: the panel over the canvas's left side, and the button
+   that opens it. ─────────────────────────────────────────────────────────── */
+.docs-outline-open {
+  position: absolute;
+  top: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: var(--docs-pill);
+  color: var(--docs-icon);
+  cursor: pointer;
+}
+.docs-outline-open:hover {
+  background: color-mix(in srgb, var(--docs-text) 8%, var(--docs-pill));
+}
+.docs-outline-open:focus-visible,
+.docs-outline-close:focus-visible,
+.docs-outline-item:focus-visible {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: -2px;
+}
+.docs-outline {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  padding-top: 8px;
+  background: var(--docs-canvas);
+  user-select: none;
+  animation: docs-outline-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+[data-pageless] ~ .docs-side .docs-outline,
+.docs-side[data-pageless] .docs-outline {
+  box-shadow: inset -1px 0 0 0 rgba(0, 0, 0, 0.15);
+}
+@keyframes docs-outline-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .docs-outline {
+    animation: none;
+  }
+}
+.docs-outline-hat {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 52px;
+}
+.docs-outline-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-left: 13px;
+  border-radius: 9999px;
+  color: var(--docs-icon);
+  cursor: pointer;
+}
+.docs-outline-close:hover {
+  background: var(--docs-hover);
+}
+.docs-outline-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 50px;
+}
+.docs-outline-header {
+  margin-left: 16px;
+  padding: 16px 0 16px 12px;
+  color: var(--docs-icon);
+  font: 400 14px/20px var(--docs-ui-font);
+}
+.docs-outline-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  margin: 0 8px 0 16px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 9999px;
+  background: var(--docs-tab-bg);
+  color: var(--docs-tab-fg);
+}
+.docs-outline-tab-name {
+  overflow: hidden;
+  font: 500 14px/16px var(--docs-ui-font);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.docs-outline-empty {
+  margin: 0;
+  padding: 8px 16px 16px 24px;
+  color: var(--docs-icon);
+  font: italic 400 13px/16px Roboto, var(--docs-ui-font);
+  letter-spacing: 0.00625rem;
+}
+.docs-outline-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.docs-outline-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: calc(100% - 16px - 27px);
+  height: 36px;
+  margin-left: 27px;
+  padding-right: 16px;
+  color: var(--docs-outline-sub);
+  font: 400 14px/16px Roboto, var(--docs-ui-font);
+  text-align: left;
+  cursor: pointer;
+}
+/* The guide down the outline's left, blue beside the current heading. */
+.docs-outline-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: var(--docs-outline-line);
+}
+.docs-outline-current::before {
+  top: 10px;
+  bottom: 10px;
+  background: var(--docs-blue);
+}
+.docs-outline-top {
+  color: var(--docs-outline-text);
+  font: 500 14px/16px var(--docs-ui-font);
+  letter-spacing: 0.1px;
+}
+.docs-outline-current {
+  color: var(--docs-blue);
+}
+.docs-outline-item:hover .docs-outline-text {
+  color: color-mix(in srgb, currentColor 92%, var(--docs-page));
+  text-decoration: none;
+}
+.docs-outline-item:hover {
+  background: var(--docs-hover);
+}
+.docs-outline-text {
+  overflow: hidden;
+  padding: 10px 0;
+  white-space: pre;
+  text-overflow: ellipsis;
+}
+.docs-outline-resize {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+}
+.docs-outline-resize:hover::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  background: var(--docs-ruler-tick);
+}
+.docs-page-colors {
+  display: grid;
+  grid-template-columns: repeat(10, 20px);
+  gap: 3px;
+  padding: 8px 12px;
+}
+.docs-page-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+.docs-page-color:hover {
+  transform: scale(1.15);
+}
+.docs-page-color[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px var(--docs-menu-bg),
+    0 0 0 3.5px var(--docs-blue);
+}
+.docs-page-color:focus-visible {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: 2px;
+}
+
+/* ── Headers and footers: on every page, and the one being edited with
+   Docs' bar at its inner edge. ────────────────────────────────────────────── */
+.docs-hf,
+.docs-hf-edit {
+  position: absolute;
+  color: var(--docs-ink);
+  font-family: Arial, Arimo, "Liberation Sans", Helvetica, sans-serif;
+  font-size: 11pt;
+  line-height: calc(1.15 * 1.15);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.docs-hf p,
+.docs-hf-edit p {
+  margin: 0;
+}
+.docs-hf-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.docs-hf-edit,
+.docs-hf-bar {
+  pointer-events: auto;
+}
+.docs-hf-edit {
+  cursor: text;
+}
+.docs-hf-prose {
+  min-height: calc(11pt * 1.15 * 1.15);
+  outline: none;
+  caret-color: var(--docs-ink);
+}
+.docs-hf-prose ::selection {
+  background: var(--docs-selection);
+}
+.docs-hf-field {
+  white-space: nowrap;
+}
+.docs-hf-prose .docs-hf-field.ProseMirror-selectednode {
+  outline: 2px solid var(--docs-blue);
+}
+.docs-hf-bar {
+  position: absolute;
+  right: 0;
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 2px 0;
+  border-top: 1px solid var(--docs-page-border);
+  border-bottom: 1px solid var(--docs-page-border);
+  background: var(--docs-hf-bar);
+  color: var(--docs-text);
+  font: 400 11px/16px var(--docs-ui-font);
+  user-select: none;
+}
+.docs-hf-label {
+  flex-grow: 1;
+  padding: 0 14px;
+  font: 500 14px/20px var(--docs-ui-font);
+}
+.docs-hf-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 14px;
+  font: 400 14px/20px var(--docs-ui-font);
+  cursor: pointer;
+}
+.docs-hf-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--docs-blue);
+}
+.docs-hf-options {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  margin-right: 10px;
+  margin-left: auto;
+  padding: 0 4px 0 8px;
+  border-radius: 4px;
+  color: var(--docs-blue);
+  font: 500 14px/20px var(--docs-ui-font);
+  cursor: pointer;
+}
+.docs-hf-options:hover,
+.docs-hf-options[aria-expanded="true"] {
+  background: var(--docs-hover);
+}
+.docs-small-dialog {
+  width: min(380px, calc(100vw - 32px));
+}
+.docs-setup-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.docs-setup-short {
+  width: 96px;
+}
+
+/* ── Print: the pages alone, one sheet each at the page's size (the @page
+   rule comes from the canvas), with no gaps, borders, or chrome. Each spacer
+   loses the 10 px gap between two pages, so every page's text lands where it
+   did on screen. ─────────────────────────────────────────────────────────── */
+@media print {
+  .docs-side,
+  .docs-ruler-row,
+  .docs-hf-layer,
+  .docs-ruler-feedback {
+    display: none !important;
+  }
+  .docs-shell,
+  .docs-canvas {
+    background: transparent !important;
+  }
+  .docs-canvas {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  .docs-page {
+    zoom: 1 !important;
+    margin: 0 !important;
+  }
+  .docs-page:not([data-pageless]) {
+    height: var(--docs-print-h) !important;
+  }
+  .docs-page[data-pageless] {
+    width: auto !important;
+    padding: 0 !important;
+  }
+  .docs-sheet {
+    top: calc(var(--docs-sheet-i) * var(--docs-page-h)) !important;
+    outline: none !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .docs-spacer-block,
+  .docs-spacer-line {
+    height: calc(var(--docs-spacer-h, 0px) - 10px) !important;
+  }
+  .docs-prose .docs-spacer-row > td {
+    height: calc(var(--docs-spacer-h, 0px) - 10px) !important;
+  }
+  .docs-prose ::selection {
+    background: transparent;
+  }
+}
+
+/* ── The title row: the title in Google Sans 18/22, a 1 px #747775 border
+   under the pointer, a 2 px blue one while renaming, the untitled title in
+   #444746; the status beside it: a 28 px round badge with a 20 px icon and a
+   12 px caption. ──────────────────────────────────────────────────────────── */
+.docs-title-row .docs-title-input,
+.docs-title-row .docs-title-wrap::after {
+  padding: 1px 6px;
+  font: 400 18px/22px var(--docs-ui-font);
+}
+.docs-title-row .docs-title-input {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--docs-text);
+  text-overflow: ellipsis;
+}
+.docs-title-row .docs-title-input:hover {
+  border-color: var(--docs-ruler-tick);
+}
+.docs-title-row .docs-title-input:focus {
+  padding: 0 5px;
+  border: 2px solid var(--docs-blue);
+  box-shadow: none;
+  color: var(--docs-text);
+}
+.docs-title-row .docs-title-untitled {
+  color: var(--docs-icon);
+}
+.docs-title-row .docs-status {
+  gap: 0;
+  margin-left: 0;
+  color: var(--docs-icon);
+  font: 400 12px/16px var(--docs-ui-font);
+}
+.docs-title-row .docs-status > svg {
+  box-sizing: content-box;
+  flex: none;
+  padding: 4px;
+  border-radius: 9999px;
+}
+.docs-title-row .docs-status > svg:hover {
+  background: var(--docs-hover);
+}
+.docs-title-row .docs-status-text {
+  padding: 0 5px 0 3px;
+  white-space: nowrap;
+}
+.docs-title-row .docs-status-error,
+.docs-title-row .docs-status-offline {
+  color: #b3261e;
+}
+.dark .docs-title-row .docs-status-error,
+.dark .docs-title-row .docs-status-offline {
+  color: #f2b8b5;
+}
+
+/* The page indicator beside the scrollbar's thumb: "3 of 12". */
+.docs-page-indicator {
+  position: fixed;
+  z-index: 40;
+  transform: translate(-100%, -50%);
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: var(--docs-tip-bg);
+  color: var(--docs-tip-fg);
+  font: 500 12px/16px var(--docs-ui-font);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: docs-indicator-in 0.13s ease-out;
+}
+@keyframes docs-indicator-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Google Docs' scrollbars: a 16 px track, an 8 px thumb #e1e3e1 with round
+   ends, #444746 under the pointer. */
+[data-page-editor]::-webkit-scrollbar,
+.docs-canvas::-webkit-scrollbar,
+.docs-outline-scroll::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+[data-page-editor]::-webkit-scrollbar-button,
+.docs-canvas::-webkit-scrollbar-button,
+.docs-outline-scroll::-webkit-scrollbar-button {
+  width: 0;
+  height: 0;
+}
+[data-page-editor]::-webkit-scrollbar-track,
+.docs-canvas::-webkit-scrollbar-track,
+.docs-outline-scroll::-webkit-scrollbar-track {
+  margin: 0 4px;
+  background: none;
+  box-shadow: none;
+}
+[data-page-editor]::-webkit-scrollbar-thumb,
+.docs-canvas::-webkit-scrollbar-thumb,
+.docs-outline-scroll::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  border: 4px solid transparent;
+  border-radius: 8px;
+  background-clip: padding-box;
+  background-color: #e1e3e1;
+}
+[data-page-editor]::-webkit-scrollbar-thumb:hover,
+[data-page-editor]::-webkit-scrollbar-thumb:active,
+.docs-canvas::-webkit-scrollbar-thumb:hover,
+.docs-outline-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #444746;
+}
+.dark [data-page-editor]::-webkit-scrollbar-thumb,
+.dark .docs-canvas::-webkit-scrollbar-thumb,
+.dark .docs-outline-scroll::-webkit-scrollbar-thumb {
+  background-color: #444746;
+}
+.dark [data-page-editor]::-webkit-scrollbar-thumb:hover,
+.dark .docs-canvas::-webkit-scrollbar-thumb:hover {
+  background-color: #8e918f;
+}
+[data-page-editor]::-webkit-scrollbar-corner,
+.docs-canvas::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Pageless: the ruler and the outline sit on the page's own color. */
+.docs-shell:has(.docs-canvas[data-pageless]) {
+  --docs-ruler-bg: var(--docs-canvas);
+}
+
+/* Show print layout off: the pages' text areas edge to edge, a dotted line
+   where each page after the first starts. */
+.docs-page-compact .docs-sheet {
+  outline: none;
+  border-top: 1px dotted var(--docs-page-border);
+  box-sizing: border-box;
+}
+.docs-page-compact .docs-sheet:first-child {
+  border-top: none;
+}
+.docs-page-compact .docs-sheets {
+  outline: 1px solid var(--docs-page-border);
+}

@@ -10,11 +10,8 @@
 const MARGIN_GAP = 16;
 /** Between a card and the pane's right edge. */
 const EDGE = 12;
-/** The page never moves closer than this to the pane's left edge: the
-    canvas's own padding (docs.css .docs-canvas). */
-const MIN_LEFT = 24;
 /** A card in the margin: Google Docs' comment card is 282 px wide. */
-export const MARGIN_CARD_WIDTH = 282;
+const MARGIN_CARD_WIDTH = 282;
 /** The narrowest card the margin takes before cards dock under their words. */
 const CARD_MIN = 260;
 /** Google Docs' floating buttons: a 40 px pill centered 28 px right of the
@@ -30,6 +27,9 @@ export type PageGeometry = {
   pageRight: number;
   textLeft: number;
   textRight: number;
+  /** The leftmost the page can sit: the canvas's own left padding, which
+      the outline panel widens when it is open. */
+  minLeft: number;
 };
 
 /** The page's geometry in a pane that shows the page editor, with `shift` —
@@ -42,12 +42,17 @@ export function pageGeometry(container: HTMLElement | null, shift: number): Page
   const crect = container.getBoundingClientRect();
   const p = page.getBoundingClientRect();
   const t = text.getBoundingClientRect();
+  const canvas = page.parentElement;
+  const minLeft = canvas
+    ? canvas.getBoundingClientRect().left - crect.left + (parseFloat(getComputedStyle(canvas).paddingLeft) || 0)
+    : 0;
   return {
     cw: container.clientWidth,
     pageLeft: p.left - crect.left + shift,
     pageRight: p.right - crect.left + shift,
     textLeft: t.left - crect.left + shift,
     textRight: t.right - crect.left + shift,
+    minLeft,
   };
 }
 
@@ -69,7 +74,7 @@ export type MarginPlace = { shift: number; left: number; width: number };
     page's margin with the page at its left edge. Null when the pane is too
     narrow for all three: the card docks under its words. */
 export function marginPlace(geo: PageGeometry): MarginPlace | null {
-  const most = Math.max(0, Math.floor(geo.pageLeft - MIN_LEFT));
+  const most = Math.max(0, Math.floor(geo.pageLeft - geo.minLeft));
   for (const width of [MARGIN_CARD_WIDTH, CARD_MIN]) {
     const need = Math.max(0, Math.ceil(geo.pageRight + MARGIN_GAP + width + EDGE - geo.cw));
     const slot = need <= most ? slotAt(geo, need) : null;

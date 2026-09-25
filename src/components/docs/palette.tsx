@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useT } from "@/components/lang-provider";
-import { AddIcon } from "@/components/docs/icons";
-import { keepFocus } from "@/components/docs/menu";
+import { AddCircleIcon, CheckIcon, ColorResetIcon, EyedropperIcon } from "@/components/docs/icons";
+import { MenuHeader, MenuItem, keepFocus } from "@/components/docs/menu";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 
-// The color grid Google Docs shows under Text color and Highlight color: a
-// row of grays, a row of bright hues, and six rows of their tints and
-// shades, then the reader's own custom colors (kept in this browser).
+// The color menu Google Docs opens from Text color and Highlight color
+// (SPEC.md §29): Highlight color's None, then the palette — a row of grays,
+// a row of bright hues, and six rows of their tints and shades — and the
+// CUSTOM row: add a color, the eyedropper where the browser has one, and
+// the reader's own colors (kept in this browser). A swatch applies its
+// color and closes the menu.
 
 export const PALETTE: string[][] = [
   ["#000000", "#434343", "#666666", "#999999", "#b7b7b7", "#cccccc", "#d9d9d9", "#efefef", "#f3f3f3", "#ffffff"],
@@ -20,113 +24,237 @@ export const PALETTE: string[][] = [
   ["#5b0f00", "#660000", "#783f04", "#7f6000", "#274e13", "#0c343d", "#1c4587", "#073763", "#20124d", "#4c1130"],
 ];
 
-const CUSTOM_KEY = "unitos-docs-custom-colors";
+const GRAYS = [
+  "docs.colorBlack",
+  "docs.colorDarkGray4",
+  "docs.colorDarkGray3",
+  "docs.colorDarkGray2",
+  "docs.colorDarkGray1",
+  "docs.colorGray",
+  "docs.colorLightGray1",
+  "docs.colorLightGray2",
+  "docs.colorLightGray3",
+  "docs.colorWhite",
+] as const;
+const HUES = [
+  "docs.colorRedBerry",
+  "docs.colorRed",
+  "docs.colorOrange",
+  "docs.colorYellow",
+  "docs.colorGreen",
+  "docs.colorCyan",
+  "docs.colorCornflowerBlue",
+  "docs.colorBlue",
+  "docs.colorPurple",
+  "docs.colorMagenta",
+] as const;
+/** Rows 3–8: light 3, 2, 1, then dark 1, 2, 3 of the row-2 hue. */
+const SHADES: { key: "docs.colorLight" | "docs.colorDark"; n: number }[] = [
+  { key: "docs.colorLight", n: 3 },
+  { key: "docs.colorLight", n: 2 },
+  { key: "docs.colorLight", n: 1 },
+  { key: "docs.colorDark", n: 1 },
+  { key: "docs.colorDark", n: 2 },
+  { key: "docs.colorDark", n: 3 },
+];
 
-function readCustom(): string[] {
+function paletteName(t: TFunc, row: number, col: number): string {
+  if (row === 0) return t(GRAYS[col]);
+  const hue = t(HUES[col]);
+  if (row === 1) return hue;
+  const shade = SHADES[row - 2];
+  return t(shade.key, { name: hue, n: shade.n });
+}
+
+export function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+export function rgbToHex(r: number, g: number, b: number): string {
+  return `#${[r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** A color's name: the palette's, or "#rrggbb, close to <the nearest>". */
+export function colorName(t: TFunc, hex: string): string {
+  const [r, g, b] = hexToRgb(hex);
+  let best = { d: Infinity, row: 0, col: 0 };
+  PALETTE.forEach((row, i) =>
+    row.forEach((c, j) => {
+      const [cr, cg, cb] = hexToRgb(c);
+      const d = (cr - r) ** 2 + (cg - g) ** 2 + (cb - b) ** 2;
+      if (d < best.d) best = { d, row: i, col: j };
+    }),
+  );
+  const name = paletteName(t, best.row, best.col);
+  return best.d === 0 ? name : t("docs.colorNear", { hex, name });
+}
+
+/** Light swatches get a hairline border and a black check. */
+function isLight(hex: string): boolean {
+  const [r, g, b] = hexToRgb(hex);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 200;
+}
+
+const CUSTOM_KEY = "unitos-docs-custom-colors";
+const CUSTOM_MAX = 10;
+const HEX = /^#[0-9a-f]{6}$/;
+
+export function readCustomColors(): string[] {
   try {
     const raw = localStorage.getItem(CUSTOM_KEY);
     const list = raw ? (JSON.parse(raw) as unknown) : [];
-    return Array.isArray(list) ? list.filter((c): c is string => typeof c === "string" && /^#[0-9a-f]{6}$/.test(c)).slice(0, 10) : [];
+    return Array.isArray(list)
+      ? list.filter((c): c is string => typeof c === "string" && HEX.test(c)).slice(0, CUSTOM_MAX)
+      : [];
   } catch {
     return [];
   }
 }
 
-function writeCustom(list: string[]) {
+/** A new custom color goes first in the CUSTOM row. */
+export function addCustomColor(hex: string): string[] {
+  const next = [hex.toLowerCase(), ...readCustomColors().filter((c) => c !== hex.toLowerCase())].slice(0, CUSTOM_MAX);
   try {
-    localStorage.setItem(CUSTOM_KEY, JSON.stringify(list.slice(0, 10)));
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify(next));
   } catch {
     // Private mode: the color still applies, it is just not kept.
   }
+  return next;
 }
 
+type EyeDropperResult = { sRGBHex: string };
+type EyeDropperCtor = new () => { open: () => Promise<EyeDropperResult> };
+
+function eyeDropper(): EyeDropperCtor | null {
+  if (typeof window === "undefined") return null;
+  const ctor = (window as unknown as { EyeDropper?: EyeDropperCtor }).EyeDropper;
+  return typeof ctor === "function" ? ctor : null;
+}
+
+/** The browser's eyedropper (Chrome and Edge): the color under the next
+    click anywhere on the screen, as #rrggbb, or null when cancelled. */
+export async function pickFromScreen(): Promise<string | null> {
+  const Ctor = eyeDropper();
+  if (!Ctor) return null;
+  try {
+    const { sRGBHex } = await new Ctor().open();
+    if (HEX.test(sRGBHex.toLowerCase())) return sRGBHex.toLowerCase();
+    const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(sRGBHex);
+    return m ? rgbToHex(Number(m[1]), Number(m[2]), Number(m[3])) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function hasEyeDropper(): boolean {
+  return eyeDropper() !== null;
+}
+
+export function ColorMenu({
+  kind,
+  current,
+  onPick,
+  onNone,
+  onCustom,
+}: {
+  kind: "text" | "highlight";
+  /** The selection's color (#rrggbb), or null for the default. */
+  current: string | null;
+  onPick: (hex: string) => void;
+  /** Highlight color's None. */
+  onNone?: () => void;
+  /** The add button: the custom color picker. */
+  onCustom: () => void;
+}) {
+  const t = useT();
+  const [custom, setCustom] = useState<string[]>(() => (typeof window === "undefined" ? [] : readCustomColors()));
+  const norm = current?.toLowerCase() ?? (kind === "text" ? "#000000" : null);
+  const swatch = (hex: string, name: string, small = false) => {
+    const on = norm === hex;
+    return (
+      <button
+        key={hex}
+        type="button"
+        role="menuitemradio"
+        aria-checked={on}
+        aria-label={name}
+        data-tip={name}
+        data-menu-item
+        tabIndex={-1}
+        onMouseDown={keepFocus}
+        onClick={() => onPick(hex)}
+        className={`docs-swatch${small ? " docs-swatch-custom" : ""}${isLight(hex) ? " docs-swatch-light" : ""}${on ? " docs-swatch-on" : ""}`}
+        style={{ background: hex }}
+      >
+        {on && !small && <CheckIcon size={16} />}
+      </button>
+    );
+  };
+  return (
+    <div className="docs-palette">
+      {kind === "highlight" && onNone && (
+        <MenuItem onSelect={onNone} icon={<ColorResetIcon size={18} />} className="docs-palette-none" track="docs:highlight-none">
+          {t("docs.noHighlight")}
+        </MenuItem>
+      )}
+      <div className="docs-palette-grid" data-grid-cols={10} role="group">
+        {PALETTE.map((row, i) => (
+          <div key={i} className={`docs-palette-row${i < 2 ? " docs-palette-row-gap" : ""}`}>
+            {row.map((hex, j) => swatch(hex, paletteName(t, i, j)))}
+          </div>
+        ))}
+      </div>
+      <MenuHeader>{t("docs.customColors")}</MenuHeader>
+      <div className="docs-palette-custom" data-grid-cols={12}>
+        <button
+          type="button"
+          data-menu-item
+          tabIndex={-1}
+          aria-label={t("docs.addCustomColor")}
+          data-tip={t("docs.addCustomColor")}
+          onMouseDown={keepFocus}
+          onClick={onCustom}
+          className="docs-palette-tool"
+        >
+          <AddCircleIcon size={20} />
+        </button>
+        {hasEyeDropper() && (
+          <button
+            type="button"
+            data-menu-item
+            tabIndex={-1}
+            aria-label={t("docs.eyedropper")}
+            data-tip={t("docs.eyedropper")}
+            onMouseDown={keepFocus}
+            onClick={() => {
+              void pickFromScreen().then((hex) => {
+                if (!hex) return;
+                setCustom(addCustomColor(hex));
+                onPick(hex);
+              });
+            }}
+            className="docs-palette-tool"
+          >
+            <EyedropperIcon size={20} />
+          </button>
+        )}
+        {custom.map((hex) => swatch(hex, colorName(t, hex), true))}
+      </div>
+    </div>
+  );
+}
+
+/** The color menu under its old name, while the toolbar moves to ColorMenu. */
 export function ColorPalette({
   current,
   onPick,
   onReset,
-  resetLabel,
 }: {
   current: string | null;
   onPick: (hex: string) => void;
   onReset: () => void;
   resetLabel: string;
 }) {
-  const t = useT();
-  const [custom, setCustom] = useState<string[]>(() => (typeof window === "undefined" ? [] : readCustom()));
-  const inputRef = useRef<HTMLInputElement>(null);
-  const pickRef = useRef(onPick);
-  const customRef = useRef(custom);
-  useEffect(() => {
-    pickRef.current = onPick;
-    customRef.current = custom;
-  });
-  // The browser's picker: the color applies once, when the picker closes
-  // ("change"), not on every move inside it ("input").
-  useEffect(() => {
-    const input = inputRef.current;
-    if (!input) return;
-    const onChange = () => {
-      const hex = input.value.toLowerCase();
-      const next = [hex, ...customRef.current.filter((c) => c !== hex)].slice(0, 10);
-      setCustom(next);
-      writeCustom(next);
-      pickRef.current(hex);
-    };
-    input.addEventListener("change", onChange);
-    return () => input.removeEventListener("change", onChange);
-  }, []);
-  const norm = current?.toLowerCase() ?? null;
-  const swatch = (hex: string) => (
-    <button
-      key={hex}
-      type="button"
-      onMouseDown={keepFocus}
-      onClick={() => onPick(hex)}
-      aria-label={hex}
-      data-tip={hex}
-      className={`docs-swatch${norm === hex ? " docs-swatch-on" : ""}${hex === "#ffffff" ? " docs-swatch-white" : ""}`}
-      style={{ background: hex }}
-    />
-  );
-  return (
-    <div className="docs-palette">
-      <button type="button" onMouseDown={keepFocus} onClick={onReset} className="docs-palette-reset">
-        <span className="docs-palette-none" aria-hidden />
-        {resetLabel}
-      </button>
-      <div className="docs-palette-grid">
-        {PALETTE[0].map(swatch)}
-      </div>
-      <div className="docs-palette-grid docs-palette-gap">{PALETTE[1].map(swatch)}</div>
-      <div className="docs-palette-grid docs-palette-gap">{PALETTE.slice(2).flat().map(swatch)}</div>
-      <div className="docs-palette-custom-label">{t("docs.customColors")}</div>
-      <div className="docs-palette-grid">
-        {custom.map(swatch)}
-        <button
-          type="button"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            const input = inputRef.current;
-            if (!input) return;
-            try {
-              input.showPicker();
-            } catch {
-              input.click();
-            }
-          }}
-          aria-label={t("docs.addCustomColor")}
-          data-tip={t("docs.addCustomColor")}
-          className="docs-swatch docs-swatch-add"
-        >
-          <AddIcon size={14} />
-        </button>
-        <input
-          ref={inputRef}
-          type="color"
-          tabIndex={-1}
-          className="pointer-events-none absolute size-0 opacity-0"
-        />
-      </div>
-    </div>
-  );
+  return <ColorMenu kind="highlight" current={current} onPick={onPick} onNone={onReset} onCustom={() => undefined} />;
 }

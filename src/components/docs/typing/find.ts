@@ -39,42 +39,42 @@ type Patch = Partial<Pick<FindState, "open" | "query" | "options" | "current">> 
 
 // ── The text the search runs over ───────────────────────────────────────
 
-type Segment = { text: string; starts: number[]; ends: number[] };
+/** A stretch of a segment's text: `size` characters from `offset`, which
+    stand at `pos` in the document — a text node character by character, an
+    inline object as one character, a paragraph break as none. */
+type Run = { offset: number; size: number; pos: number; kind: "text" | "object" | "break"; nodeSize: number };
+type Segment = { text: string; runs: Run[]; /** End of the last block's words. */ end: number };
 
 /** One segment per table cell and one for everything else: paragraphs join
     with "\n", a line break is "\v", an inline object is never found. */
 function segments(doc: PMNode): Segment[] {
-  const body: Segment = { text: "", starts: [], ends: [] };
+  const body: Segment = { text: "", runs: [], end: 0 };
   const out: Segment[] = [body];
   const addBlock = (seg: Segment, node: PMNode, pos: number) => {
-    if (seg.text) {
+    if (seg.runs.length) {
+      seg.runs.push({ offset: seg.text.length, size: 1, pos: seg.end, kind: "break", nodeSize: 0 });
       seg.text += "\n";
-      const at = seg.ends[seg.ends.length - 1] ?? pos;
-      seg.starts.push(at);
-      seg.ends.push(at);
     }
     let p = pos + 1;
     node.forEach((child) => {
       if (child.isText) {
         const text = child.text ?? "";
-        for (let i = 0; i < text.length; i++) {
-          seg.starts.push(p + i);
-          seg.ends.push(p + i + 1);
-        }
+        seg.runs.push({ offset: seg.text.length, size: text.length, pos: p, kind: "text", nodeSize: child.nodeSize });
         seg.text += text;
       } else {
+        seg.runs.push({ offset: seg.text.length, size: 1, pos: p, kind: "object", nodeSize: child.nodeSize });
         seg.text += child.type.name === "hardBreak" ? "\v" : OBJECT_CHAR;
-        seg.starts.push(p);
-        seg.ends.push(p + child.nodeSize);
       }
       p += child.nodeSize;
     });
+    seg.end = pos + node.nodeSize - 1;
+    if (!seg.runs.length) seg.runs.push({ offset: 0, size: 0, pos: seg.end, kind: "break", nodeSize: 0 });
   };
   const walk = (node: PMNode, pos: number, seg: Segment) => {
     node.forEach((child, offset) => {
       const childPos = pos + offset;
       if (child.type.name === "tableCell" || child.type.name === "tableHeader") {
-        const cell: Segment = { text: "", starts: [], ends: [] };
+        const cell: Segment = { text: "", runs: [], end: childPos + 1 };
         out.push(cell);
         walk(child, childPos + 1, cell);
       } else if (child.isTextblock) {
@@ -86,6 +86,29 @@ function segments(doc: PMNode): Segment[] {
   };
   walk(doc, 0, body);
   return out;
+}
+
+/** The run holding character `i` of a segment. */
+function runAt(seg: Segment, i: number): Run {
+  let lo = 0;
+  let hi = seg.runs.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (seg.runs[mid].offset <= i) lo = mid;
+    else hi = mid - 1;
+  }
+  return seg.runs[lo];
+}
+
+/** Where character `i` starts in the document, and where it ends. */
+function startOf(seg: Segment, i: number): number {
+  const run = runAt(seg, i);
+  return run.kind === "text" ? run.pos + (i - run.offset) : run.pos;
+}
+function endOf(seg: Segment, i: number): number {
+  const run = runAt(seg, i);
+  if (run.kind === "text") return run.pos + (i - run.offset) + 1;
+  return run.kind === "object" ? run.pos + run.nodeSize : run.pos;
 }
 
 const LIGATURES: Record<string, string> = {
@@ -137,7 +160,7 @@ const BASES: Record<string, string> = {
 };
 
 const DROPPED =
-  /[ʰ-˿̀-ͯ᪰-᫿᷀-᷿⃐-⃿︠-֑︯-ֽ؀-؅ؐ-ًؚ-ٰٟٴۖ-۝۟-۪ۨ-ۭ܏ܑܰ-݊ަ-ްࠖ-࠭]/;
+  /[\u02B0-\u02FF\u0300-\u036F\u1AB0-\u1AFF\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F\u0591-\u05BD\u0600-\u0605\u0610-\u061A\u064B-\u065F\u0670\u0674\u06D6-\u06DD\u06DF-\u06E8\u06EA-\u06ED\u070F\u0711\u0730-\u074A\u07A6-\u07B0\u0816-\u082D]/;
 
 /** One character with its diacritics folded away: "" when it is a mark. */
 export function foldChar(ch: string): string {
@@ -148,23 +171,24 @@ export function foldChar(ch: string): string {
   if ((code >= 0xc0 && code <= 0x24f) || (code >= 0x1e00 && code <= 0x1eff)) {
     if ("ÐðÞþ".includes(ch)) return ch;
     if (BASES[ch]) return BASES[ch];
-    const base = ch.normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const base = ch.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return base.length === 1 ? base : ch;
   }
   return ch;
 }
 
-function foldSegment(seg: Segment): Segment {
-  const out: Segment = { text: "", starts: [], ends: [] };
+/** A segment's text with diacritics folded, and for each folded character
+    the character of the segment it came from. */
+function foldSegment(seg: Segment): { text: string; source: Int32Array } {
+  let text = "";
+  const source: number[] = [];
   for (let i = 0; i < seg.text.length; i++) {
-    const folded = foldChar(seg.text[i]);
-    for (const ch of folded) {
-      out.text += ch;
-      out.starts.push(seg.starts[i]);
-      out.ends.push(seg.ends[i]);
+    for (const ch of foldChar(seg.text[i])) {
+      text += ch;
+      source.push(i);
     }
   }
-  return out;
+  return { text, source: Int32Array.from(source) };
 }
 
 export function foldText(text: string): string {
@@ -206,20 +230,21 @@ export function findResults(doc: PMNode, query: string, options: FindOptions): F
     return [];
   }
   const out: FindResult[] = [];
-  for (const raw of segments(doc)) {
-    const seg = options.ignoreDiacritics ? foldSegment(raw) : raw;
+  for (const seg of segments(doc)) {
+    const folded = options.ignoreDiacritics ? foldSegment(seg) : null;
+    const text = folded ? folded.text : seg.text;
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     let guard = 0;
-    while ((m = re.exec(seg.text)) && guard++ < 100000) {
+    while ((m = re.exec(text)) && guard++ < 100000) {
       if (m[0].length === 0) {
         re.lastIndex++;
         continue;
       }
-      const s = m.index;
-      const e = s + m[0].length;
       if (m[0].includes(OBJECT_CHAR)) continue;
-      out.push({ from: seg.starts[s], to: seg.ends[e - 1] });
+      const s = folded ? folded.source[m.index] : m.index;
+      const e = folded ? folded.source[m.index + m[0].length - 1] : m.index + m[0].length - 1;
+      out.push({ from: startOf(seg, s), to: endOf(seg, e) });
     }
   }
   out.sort((a, b) => a.from - b.from);

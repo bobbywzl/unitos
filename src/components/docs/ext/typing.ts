@@ -1,4 +1,11 @@
 import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
+import {
+  HardBreakNode,
+  InvisibleCharacter,
+  InvisibleCharacters,
+  ParagraphNode,
+  SpaceCharacter,
+} from "@tiptap/extension-invisible-characters";
 import { Plugin, PluginKey, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { AddMarkStep, ReplaceStep } from "@tiptap/pm/transform";
 import { isMac } from "@/components/docs/keys";
@@ -7,7 +14,6 @@ import { wordAt } from "@/components/docs/typing/chars";
 import { findPlugin } from "@/components/docs/typing/find";
 import { TYPING_EVENT, fireTyping } from "@/components/docs/typing/events";
 import {
-  clearFormatting,
   copyFormatting,
   openLinkAtCaret,
   pasteFormatting,
@@ -16,6 +22,8 @@ import {
 } from "@/components/docs/typing/format";
 import { backspace, closeEdit, deleteForward, enter, groupEdit, lineBreak, moveParagraphs, tab } from "@/components/docs/typing/keys";
 import { armPlainPaste, imageFiles, insertImageFiles, notePaste, plainTextSlice } from "@/components/docs/typing/paste";
+import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
+import { tracePlugin } from "@/components/docs/typing/trace";
 
 // The page editor's typing extensions (SPEC.md §29): Google Docs' keys, its
 // autocorrect engine, paste, and find. extensions.ts spreads this list into
@@ -91,13 +99,6 @@ function keepParagraphFormat(html: string): string {
   return doc.body.innerHTML;
 }
 
-/** Clear formatting (Ctrl+\): the toolbar's command, which also resets the
-    paragraphs to their style; the text-only clear until it is there. */
-function clearAll(editor: Editor): boolean {
-  const command = (editor.commands as unknown as Record<string, (() => boolean) | undefined>).clearFormatting;
-  return command ? command() : clearFormatting(editor);
-}
-
 const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
   name: "docsTyping",
   priority: 1001,
@@ -148,7 +149,8 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
       "Shift-Tab": () => tab(e, true),
       // Normal text: Tiptap's paragraph binds the same keys first otherwise.
       "Mod-Alt-0": () => e.commands.setDocStyle("normal"),
-      "Mod-\\": () => clearAll(e),
+      // Clear formatting: the toolbar's command, the same as its button.
+      "Mod-\\": () => e.commands.clearFormatting(),
       "Ctrl-Shift-ArrowUp": move(-1),
       "Ctrl-Shift-ArrowDown": move(1),
       "Alt-Enter": () => openLinkAtCaret(e),
@@ -159,10 +161,14 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
         armPlainPaste(e.view);
         return false;
       },
+      // Redo; with nothing to redo, repeat the last formatting.
       "Mod-y": () => {
-        e.commands.redo();
+        if (e.can().redo()) e.commands.redo();
+        else repeatLastAction(e.view);
         return true;
       },
+      // View > Show non-printing characters.
+      "Mod-Shift-p": () => e.commands.toggleInvisibleCharacters(),
       "Mod-Alt-c": () => copyFormatting(e),
       "Mod-Alt-v": () => pasteFormatting(e),
       // Voice typing; Tiptap's strikethrough takes these keys otherwise.
@@ -189,7 +195,7 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
         "Alt-Shift-5": () => e.chain().toggleStrike().run(),
         "Ctrl-Shift-k": () => toggleSmallCaps(e),
         "Alt-Shift-k": () => toggleSmallCaps(e),
-        "Ctrl-Space": () => clearAll(e),
+        "Ctrl-Space": () => e.commands.clearFormatting(),
         "Alt-Shift-ArrowUp": move(-1),
         "Alt-Shift-ArrowDown": move(1),
       });
@@ -279,7 +285,7 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
       appendTransaction(transactions, oldState, newState) {
         if (!oldState.storedMarks || newState.storedMarks || !newState.selection.empty) return null;
         const bookkeeping = transactions.every(
-          (tr) => tr.getMeta("addToHistory") === false && !tr.selectionSet && !tr.storedMarksSet,
+          (tr) => (!tr.docChanged || tr.getMeta("addToHistory") === false) && !tr.selectionSet && !tr.storedMarksSet,
         );
         if (!bookkeeping || !oldState.selection.eq(newState.selection)) return null;
         return newState.tr.setStoredMarks(oldState.storedMarks).setMeta("addToHistory", false);
@@ -303,8 +309,21 @@ const DocsTyping = Extension.create<Record<string, never>, DocsTypingStorage>({
         return !(pasting && isMarkdownPasteRule(tr));
       },
     });
-    return [plugin, findPlugin()];
+    return [plugin, findPlugin(), tracePlugin(), repeatPlugin()];
   },
 });
 
-export const typingExtensions: AnyExtension[] = [DocsTyping];
+/** Non-printing characters (Ctrl+Shift+P): ¶ at a paragraph's end, ↵ at a
+    line break, → for a tab, · for a space. Hidden until asked for. */
+const NonPrinting = InvisibleCharacters.configure({
+  visible: false,
+  injectCSS: false,
+  builders: [
+    new SpaceCharacter(),
+    new InvisibleCharacter({ type: "tab", predicate: (ch) => ch === "\t" }),
+    new ParagraphNode(),
+    new HardBreakNode(),
+  ],
+});
+
+export const typingExtensions: AnyExtension[] = [DocsTyping, NonPrinting];

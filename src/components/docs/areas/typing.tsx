@@ -7,10 +7,12 @@ import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands } from "@/components/docs/commands";
 import { setTypingStorage } from "@/components/docs/ext/typing";
 import { isMac } from "@/components/docs/keys";
+import { AutocorrectBubble } from "@/components/docs/typing/autocorrect-bubble";
 import { TYPING_EVENT, fireTyping } from "@/components/docs/typing/events";
 import { findState, selectResult, setFind, stepResult } from "@/components/docs/typing/find";
 import { FindBar, FindReplaceDialog, type FindMode } from "@/components/docs/typing/find-ui";
-import { pasteMessages } from "@/components/docs/typing/paste";
+import { copyMarkdown, pasteMarkdown, pasteMessages } from "@/components/docs/typing/paste";
+import { typingPrefs } from "@/components/docs/typing/prefs";
 import { PreferencesDialog } from "@/components/docs/typing/preferences-dialog";
 import { ShortcutsDialog } from "@/components/docs/typing/shortcuts-dialog";
 import { VoiceTyping } from "@/components/docs/typing/voice-typing";
@@ -62,6 +64,22 @@ registerDocsCommands([
     run: () => fireTyping(TYPING_EVENT.voice),
   },
   {
+    id: "typing:paste-markdown",
+    label: "docsTyping.pasteFromMarkdown",
+    menu: "edit",
+    keywords: ["markdown", "paste"],
+    run: (editor) => void pasteMarkdown(editor),
+    enabled: (editor) => typingPrefs().markdown && editor.isEditable,
+  },
+  {
+    id: "typing:copy-markdown",
+    label: "docsTyping.copyAsMarkdown",
+    menu: "edit",
+    keywords: ["markdown", "copy"],
+    run: (editor) => void copyMarkdown(editor),
+    enabled: (editor) => typingPrefs().markdown && !editor.state.selection.empty,
+  },
+  {
     id: "typing:shortcuts",
     label: "docsTyping.keyboardShortcuts",
     menu: "tools",
@@ -102,6 +120,8 @@ export function TypingLayer({ editor, pageSetup }: DocsAreaProps) {
 
   useEffect(() => {
     pasteMessages.uploadFailed = t("docsTyping.uploadFailed");
+    pasteMessages.noClipboard = t("docsTyping.pasteNoClipboard");
+    pasteMessages.copied = t("docsTyping.copied");
   }, [t]);
 
   useEffect(() => {
@@ -203,6 +223,7 @@ export function TypingLayer({ editor, pageSetup }: DocsAreaProps) {
         }}
       />
       <VoiceTyping editor={editor} open={voiceOpen} onClose={() => setVoiceOpen(false)} />
+      <AutocorrectBubble editor={editor} />
     </>
   );
 }

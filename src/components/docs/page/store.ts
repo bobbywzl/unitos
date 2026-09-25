@@ -22,7 +22,12 @@ export type PageState = {
   /** The pages the pagination drew. */
   pages: number;
   showRuler: boolean;
+  /** Show print layout: off, the pages sit edge to edge without their top
+      and bottom margins (Docs' compact view). */
+  printLayout: boolean;
+  /** The tabs & outlines panel: open, and its width in px. */
   outlineOpen: boolean;
+  outlineWidth: number;
   textWidth: TextWidth;
   dialog: PageDialog;
   /** The header or footer being edited, and on which page. */
@@ -34,20 +39,30 @@ export type PageState = {
 type Listener = () => void;
 
 export type PageStore = {
+  /** The reader chose to open or close the outline on this document before. */
+  outlineChosen: boolean;
   get: () => PageState;
   set: (patch: Partial<PageState>) => void;
   subscribe: (listener: Listener) => () => void;
   /** Change the page setup and save it. */
   saveSetup: (next: PageSetup) => Promise<void>;
-  /** DocsEditor's zoom; set by the canvas. */
+  /** Change DocsEditor's zoom. */
   zoomTo: (zoom: number | "fit") => void;
-  /** The zoom as DocsEditor holds it. */
-  zoom: number | "fit";
+  /** The canvas hands in DocsEditor's zoom setter. */
+  bindZoom: (zoomTo: (zoom: number | "fit") => void) => void;
+  /** While printing, layout changes are not the reader's choice. */
+  setPrinting: (on: boolean) => void;
 };
 
 const RULER_KEY = "unitos-docs-ruler";
+const PRINT_LAYOUT_KEY = "unitos-docs-print-layout";
 const OUTLINE_KEY = "unitos-docs-outline";
+const OUTLINE_WIDTH_KEY = "unitos-docs-outline-width";
 const TEXT_WIDTH_KEY = "unitos-docs-text-width";
+
+/** The panel's width bounds, Docs': 163 to 280 px. */
+export const OUTLINE_MIN = 163;
+export const OUTLINE_MAX = 280;
 
 export function readPref(key: string): string | null {
   try {
@@ -69,15 +84,19 @@ const stores = new WeakMap<Editor, PageStore>();
 
 function createStore(editor: Editor, documentId: string, setup: PageSetup): PageStore {
   const width = readPref(TEXT_WIDTH_KEY);
+  const outlineWidth = Number(readPref(OUTLINE_WIDTH_KEY));
+  // The outline's open state is kept per document; a new document opens it
+  // (the canvas decides, it knows whether the document is new).
+  const outlinePref = readPref(`${OUTLINE_KEY}:${documentId}`);
   let state: PageState = {
     documentId,
     setup,
     scale: 1,
     pages: 1,
     showRuler: readPref(RULER_KEY) !== "0",
-    // The outline opens by itself on a new document, as Docs' panel does;
-    // otherwise it keeps the reader's last choice.
-    outlineOpen: readPref(OUTLINE_KEY) === "1",
+    printLayout: readPref(PRINT_LAYOUT_KEY) !== "0",
+    outlineOpen: outlinePref === "1",
+    outlineWidth: Number.isFinite(outlineWidth) && outlineWidth >= OUTLINE_MIN && outlineWidth <= OUTLINE_MAX ? outlineWidth : 240,
     textWidth: width === "medium" || width === "wide" || width === "full" ? width : "narrow",
     dialog: null,
     editing: null,
@@ -85,12 +104,22 @@ function createStore(editor: Editor, documentId: string, setup: PageSetup): Page
   };
   const listeners = new Set<Listener>();
   let saving: Promise<void> = Promise.resolve();
+  let zoomSetter: (zoom: number | "fit") => void = () => {};
+  // Printing turns the print layout on for the length of the print.
+  let printing = false;
   const store: PageStore = {
+    outlineChosen: outlinePref !== null,
     get: () => state,
     set: (patch) => {
       const next = { ...state, ...patch };
       if (patch.showRuler !== undefined && patch.showRuler !== state.showRuler) writePref(RULER_KEY, patch.showRuler ? "1" : "0");
-      if (patch.outlineOpen !== undefined && patch.outlineOpen !== state.outlineOpen) writePref(OUTLINE_KEY, patch.outlineOpen ? "1" : "0");
+      if (patch.printLayout !== undefined && patch.printLayout !== state.printLayout && !printing) {
+        writePref(PRINT_LAYOUT_KEY, patch.printLayout ? "1" : "0");
+      }
+      if (patch.outlineOpen !== undefined && patch.outlineOpen !== state.outlineOpen) {
+        writePref(`${OUTLINE_KEY}:${state.documentId}`, patch.outlineOpen ? "1" : "0");
+      }
+      if (patch.outlineWidth !== undefined && patch.outlineWidth !== state.outlineWidth) writePref(OUTLINE_WIDTH_KEY, String(patch.outlineWidth));
       if (patch.textWidth !== undefined && patch.textWidth !== state.textWidth) writePref(TEXT_WIDTH_KEY, patch.textWidth);
       state = next;
       for (const listener of listeners) listener();
@@ -116,8 +145,13 @@ function createStore(editor: Editor, documentId: string, setup: PageSetup): Page
       });
       await saving;
     },
-    zoomTo: () => {},
-    zoom: 100,
+    zoomTo: (zoom) => zoomSetter(zoom),
+    bindZoom: (fn) => {
+      zoomSetter = fn;
+    },
+    setPrinting: (on) => {
+      printing = on;
+    },
   };
   void editor;
   return store;

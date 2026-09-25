@@ -13,6 +13,7 @@ import {
 import { listForPrefix, listLabel } from "@/components/docs/typing/lists";
 import { substitutionMap, typingPrefs, type TypingPrefs } from "@/components/docs/typing/prefs";
 import { spellingFix } from "@/components/docs/typing/spelling";
+import { blockCorrection, correctionDeleted, SPELLING_META } from "@/components/docs/typing/trace";
 
 // Google Docs' autocorrect engine (SPEC.md §29, typing). Each rule fires on
 // the character just typed (or on Enter, Tab, Shift+Enter) and looks only at
@@ -150,7 +151,7 @@ const autoCapitalize: Rule = ({ state, prefs, start, text, trigger, at }) => {
   let f = s;
   while (f < at && `'"‘’“”`.includes(text[f])) f++;
   const first = String.fromCodePoint(text.codePointAt(f) ?? 0);
-  if (f >= at || first.toUpperCase() === first || /[Ⴀ-ჿ]/.test(first)) return null;
+  if (f >= at || first.toUpperCase() === first || /[\u10A0-\u10FF]/.test(first)) return null;
   let b = s;
   while (b > 0 && (text[b - 1] === " " || text[b - 1] === "\t")) b--;
   let capitalize: boolean;
@@ -321,7 +322,7 @@ const markdownFormatting: Rule = ({ state, prefs, start, text, trigger, at, virt
 
 const smartQuotes: Rule = ({ state, prefs, block, start, text, trigger, at, virtual }) => {
   if (!prefs.smartQuotes || virtual || (trigger !== "'" && trigger !== '"')) return null;
-  if (/^[^A-Za-zÀ-ɏ]*[֐-ࣿ]/.test(block.textContent)) return null;
+  if (/^[^A-Za-z\u00C0-\u024F]*[\u0590-\u08FF]/.test(block.textContent)) return null;
   const double = trigger === '"';
   const b = at > 0 ? text[at - 1] : undefined;
   const opening =
@@ -379,15 +380,19 @@ const correctSpelling: Rule = ({ state, prefs, start, text, trigger, at }) => {
   if (s === at) return null;
   if (s > 0 && !isWordBoundary(text[s - 1]) && text[s - 1] !== OBJECT_CHAR) return null;
   const word = text.slice(s, at);
-  const fix = spellingFix(word, trigger);
-  if (!fix || prefs.spellingBlocklist.includes(word.toLowerCase())) return null;
+  const found = spellingFix(word, trigger);
+  if (!found || prefs.spellingBlocklist.includes(word.toLowerCase())) return null;
+  // Deleted right after its correction and typed again: the word stays.
+  if (correctionDeleted(word)) {
+    blockCorrection(word);
+    return null;
+  }
+  const fix = prefs.smartQuotes ? found.replace(/'/g, "’") : found;
   const tr = replaceText(state.tr, start + s, start + at, fix);
   tr.setMeta(SPELLING_META, { from: start + s, to: start + s + fix.length, original: word });
   return tr;
 };
 
-/** A spelling correction's meta: the corrected range and the word typed. */
-export const SPELLING_META = "docsSpellingFix";
 
 // ── List detection ──────────────────────────────────────────────────────
 

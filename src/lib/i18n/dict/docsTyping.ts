@@ -128,9 +128,17 @@ const en = {
   spellingCheck: "Spelling and grammar check",
   spellingOn: "Spelling suggestions are underlined in red. Right-click a word to see them.",
   spellingOff: "Spelling suggestions have been turned off.",
+  // Autocorrect
+  autocorrectedTo: "Autocorrected to {word}",
+  undoAutocorrect: "Undo",
+  stopCorrecting: "Stop correcting “{word}”",
+  autocorrectOptions: "Autocorrect options",
   // Paste
   uploadFailed: "Couldn't add the image",
-  pasteNoClipboard: "Press Ctrl+V to paste. The browser keeps the clipboard from this menu.",
+  pasteNoClipboard: "Couldn't read the clipboard",
+  pasteFromMarkdown: "Paste from Markdown",
+  copyAsMarkdown: "Copy as Markdown",
+  copied: "Copied",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -251,8 +259,15 @@ const zh: Record<keyof typeof en, string> = {
   spellingCheck: "拼写和语法检查",
   spellingOn: "拼写建议以红色下划线标出。右键点击单词即可查看。",
   spellingOff: "拼写建议已关闭。",
+  autocorrectedTo: "已自动更正为 {word}",
+  undoAutocorrect: "撤销",
+  stopCorrecting: "停止更正“{word}”",
+  autocorrectOptions: "自动更正选项",
   uploadFailed: "无法添加图片",
-  pasteNoClipboard: "请按 Ctrl+V 粘贴。浏览器不允许从此菜单读取剪贴板。",
+  pasteNoClipboard: "无法读取剪贴板",
+  pasteFromMarkdown: "从 Markdown 粘贴",
+  copyAsMarkdown: "复制为 Markdown",
+  copied: "已复制",
 };
 
 export const docsTyping = { en, zh } as const;

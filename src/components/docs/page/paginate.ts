@@ -168,7 +168,16 @@ class Measure {
   unit(index: number, u: Unit): Box {
     let box = this.rects.get(index);
     if (!box) {
-      box = this.box(u.dom);
+      const r = u.dom.getBoundingClientRect();
+      // A unit that is not drawn (display: none) takes no room where the
+      // unit before it ends.
+      if (r.width === 0 && r.height === 0 && r.top === 0 && r.left === 0) {
+        const before = index > 0 ? this.rects.get(index - 1) : undefined;
+        const at = before ? before.bottom : 0;
+        box = { top: at, bottom: at };
+      } else {
+        box = { top: this.y(r.top), bottom: this.y(r.bottom) };
+      }
       this.rects.set(index, box);
     }
     return box;
@@ -282,7 +291,8 @@ export function paginate(view: EditorView, config: PaginateConfig): PaginateResu
     page = to;
   };
 
-  let guard = units.length * 6 + 64;
+  // Every pass through the loop places a unit or starts a page.
+  let guard = units.length * 6 + 5000;
   let k = 0;
   while (k < units.length && guard-- > 0) {
     const u = units[k];

@@ -99,11 +99,11 @@ export function longDayLabel(iso: string, lang: Lang): string {
 
 /** A typed time ("3pm", "15:30", "9:05 am") as "HH:MM", or null. */
 export function parseTime(raw: string): string | null {
-  const m = /^\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?\s*$/i.exec(raw);
+  const m = /^\s*(上午|下午)?\s*(\d{1,2})(?:[:：](\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?\s*$/i.exec(raw);
   if (!m) return null;
-  let h = Number(m[1]);
-  const min = m[2] ? Number(m[2]) : 0;
-  const ampm = m[3]?.toLowerCase().replace(/\./g, "");
+  let h = Number(m[2]);
+  const min = m[3] ? Number(m[3]) : 0;
+  const ampm = m[1] ? (m[1] === "上午" ? "am" : "pm") : m[4]?.toLowerCase().replace(/\./g, "");
   if (min > 59) return null;
   if (ampm) {
     if (h < 1 || h > 12) return null;

@@ -165,10 +165,12 @@ export function enter(editor: Editor): boolean {
     // paragraph above takes a fresh one.
     after = { type: node.type, attrs: { ...node.attrs, blockId: atStart ? node.attrs.blockId : null } };
   }
+  // A page break before the paragraph stays with the first half.
+  if ("pageBreakBefore" in after.attrs) after.attrs.pageBreakBefore = null;
   if (!canSplit(tr.doc, $pos.pos, 1, [after])) return false;
   const beforePos = $pos.before();
   tr.split($pos.pos, 1, [after]);
-  if (atStart && "blockId" in node.attrs) tr.setNodeMarkup(beforePos, undefined, { ...node.attrs, blockId: null });
+  if (atStart) tr.setNodeMarkup(beforePos, undefined, { ...node.attrs, blockId: null });
   if (!(heading && atEnd)) {
     const marks = pending ?? ($pos.parentOffset > 0 ? $pos.marks() : null);
     if (marks) tr.ensureMarks(marks);
@@ -232,33 +234,39 @@ function deleteBlock(tr: Transaction, pos: number): boolean {
   return true;
 }
 
-/** Join two text blocks, `upper` before `lower` (positions before each).
-    The joined paragraph keeps the lower paragraph's style — Docs keeps the
-    lower paragraph's end — unless the upper one is a list item, whose
-    style and list then win. The caret goes to the join. */
-function joinBlocks(state: EditorState, upperPos: number, lowerPos: number): Transaction | null {
-  const upper = state.doc.nodeAt(upperPos);
-  const lower = state.doc.nodeAt(lowerPos);
-  if (!upper?.isTextblock || !lower?.isTextblock) return null;
-  if (upper.type.spec.code || lower.type.spec.code) return null;
-  const $upper = state.doc.resolve(upperPos + 1);
+/** Join two text blocks of `tr`'s document, `upper` before `lower`
+    (positions before each). The joined paragraph keeps the lower
+    paragraph's style — Docs keeps the lower paragraph's end — unless the
+    upper one is a list item, whose style and list then win. The caret goes
+    to the join. False when they cannot join; `tr` is then to be dropped. */
+function joinInto(tr: Transaction, upperPos: number, lowerPos: number): boolean {
+  const upper = tr.doc.nodeAt(upperPos);
+  const lower = tr.doc.nodeAt(lowerPos);
+  if (!upper?.isTextblock || !lower?.isTextblock) return false;
+  if (upper.type.spec.code || lower.type.spec.code) return false;
+  const $upper = tr.doc.resolve(upperPos + 1);
   const keepUpper = isListItemNode($upper.node($upper.depth - 1));
-  const tr = state.tr;
   if (keepUpper) {
     const join = upperPos + 1 + upper.content.size;
+    const before = tr.steps.length;
     tr.insert(join, lower.content);
-    if (!deleteBlock(tr, tr.mapping.map(lowerPos))) return null;
+    if (!deleteBlock(tr, tr.mapping.slice(before).map(lowerPos))) return false;
     tr.setSelection(TextSelection.create(tr.doc, join));
   } else {
     const join = lowerPos + 1;
     tr.insert(join, upper.content);
     const caret = join + upper.content.size;
     const before = tr.steps.length;
-    if (!deleteBlock(tr, upperPos)) return null;
-    const mapped = tr.mapping.slice(before).map(caret);
-    tr.setSelection(TextSelection.create(tr.doc, mapped));
+    if (!deleteBlock(tr, upperPos)) return false;
+    tr.setSelection(TextSelection.create(tr.doc, tr.mapping.slice(before).map(caret)));
   }
-  return tr;
+  return true;
+}
+
+/** The join as a transaction of its own, or null. */
+function joinBlocks(state: EditorState, upperPos: number, lowerPos: number): Transaction | null {
+  const tr = state.tr;
+  return joinInto(tr, upperPos, lowerPos) ? tr : null;
 }
 
 /** The text block that starts after `pos` (a position between blocks), or null. */
@@ -351,11 +359,8 @@ function backspaceAtStart(view: EditorView, $from: ResolvedPos, word: boolean): 
       tr = state.tr.delete(prevPos, blockPos);
       const above = index >= 2 ? container.child(index - 2) : null;
       if (above?.isTextblock && !above.type.spec.code) {
-        const joined = joinBlocks(state.apply(tr), prevPos - above.nodeSize, prevPos);
-        if (joined) {
-          for (const step of joined.steps) tr.step(step);
-          tr.setSelection(TextSelection.create(tr.doc, joined.selection.from));
-        }
+        const joined = state.tr.delete(prevPos, blockPos);
+        tr = joinInto(joined, prevPos - above.nodeSize, prevPos) ? joined : tr;
       }
     } else if (prev.isTextblock) {
       // 8. Join, the Docs way.

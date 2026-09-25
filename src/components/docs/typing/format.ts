@@ -2,8 +2,8 @@ import type { Editor } from "@tiptap/core";
 import type { Mark } from "@tiptap/pm/model";
 
 // The text shortcuts Google Docs binds beyond Bold, Italic, and Underline
-// (SPEC.md §29, typing): small caps, clear formatting, copy and paste text
-// formatting, open the link under the caret, tick a checklist line.
+// (SPEC.md §29, typing): small caps, copy and paste text formatting, open
+// the link under the caret, tick a checklist line.
 
 /** Small caps on or off (a textStyle attribute). */
 export function toggleSmallCaps(editor: Editor): boolean {
@@ -14,22 +14,6 @@ export function toggleSmallCaps(editor: Editor): boolean {
     .setMark("textStyle", { fontVariant: on ? null : "small-caps" })
     .removeEmptyTextStyle()
     .run();
-  return true;
-}
-
-/** Ctrl+\: the text loses every style but its link. */
-export function clearFormatting(editor: Editor): boolean {
-  if (!editor.isEditable) return false;
-  const { state } = editor;
-  const { from, to, empty, $from } = state.selection;
-  const link = state.schema.marks.link;
-  const tr = state.tr;
-  if (empty) {
-    tr.setStoredMarks((state.storedMarks ?? $from.marks()).filter((m) => m.type === link));
-  } else {
-    for (const type of Object.values(state.schema.marks)) if (type !== link) tr.removeMark(from, to, type);
-  }
-  editor.view.dispatch(tr);
   return true;
 }
 

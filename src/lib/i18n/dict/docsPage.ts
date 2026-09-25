@@ -27,6 +27,11 @@ const en = {
   zoomOut: "Zoom out",
   zoom100: "Zoom 100%",
   zoomFit: "Zoom to fit",
+  keepWithNext: "Keep with next",
+  keepLinesTogether: "Keep lines together",
+  preventSingleLines: "Prevent single lines",
+  pageBreakBefore: "Add page break before",
+  showPrintLayout: "Show print layout",
   // Page setup
   pagesTab: "Pages",
   pagelessTab: "Pageless",
@@ -86,6 +91,7 @@ const en = {
   numbering: "Numbering",
   startAt: "Start at",
   pageIndicator: "{n} of {total}",
+  outlineLevel: "{text}, level {n}",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -111,6 +117,11 @@ const zh: Record<keyof typeof en, string> = {
   zoomOut: "缩小",
   zoom100: "缩放到 100%",
   zoomFit: "适应宽度",
+  keepWithNext: "与下段同页",
+  keepLinesTogether: "段中不分页",
+  preventSingleLines: "孤行控制",
+  pageBreakBefore: "段前分页",
+  showPrintLayout: "显示打印布局",
   pagesTab: "分页",
   pagelessTab: "无分页",
   orientation: "方向",
@@ -165,6 +176,7 @@ const zh: Record<keyof typeof en, string> = {
   numbering: "编号",
   startAt: "起始页码",
   pageIndicator: "{n} / {total}",
+  outlineLevel: "{text}，第 {n} 级",
 };
 
 export const docsPage = { en, zh } as const;

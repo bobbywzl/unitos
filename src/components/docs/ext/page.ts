@@ -53,6 +53,11 @@ export function repaginate(editor: Editor): void {
   controllers.get(editor)?.refresh();
 }
 
+/** Run a pass now: printing lays the pages out before the next frame. */
+export function paginateNow(editor: Editor): void {
+  controllers.get(editor)?.runNow();
+}
+
 export const paginationKey = new PluginKey<DecorationSet>("docsPagination");
 
 type Meta = { spacers: (SpacerPlan & { id: string })[] };
@@ -168,6 +173,14 @@ class Paginator {
     const rect = this.view.dom.getBoundingClientRect();
     const scale = width > 0 && rect.width > 0 ? rect.width / width : 1;
     return Math.abs(el.getBoundingClientRect().height / scale - before) < 0.5;
+  }
+
+  /** A full pass, now. */
+  runNow() {
+    if (this.frame) cancelAnimationFrame(this.frame);
+    this.frame = 0;
+    this.touched = "all";
+    this.run();
   }
 
   /** A full pass on the next frame. */
@@ -292,6 +305,71 @@ class Paginator {
   }
 }
 
+/** Docs' paragraph options for the pages (Format > Line & paragraph
+    spacing): Keep with next, Keep lines together, Prevent single lines,
+    and Add page break before. Absent, a paragraph follows its style: the
+    Title, the Subtitle, and the headings keep with next and keep their
+    lines together; Normal text prevents single lines (page/paginate.ts). */
+const PAGE_FLAGS = [
+  ["keepWithNext", "data-keep-with-next"],
+  ["keepLinesTogether", "data-keep-lines"],
+  ["avoidWidowAndOrphan", "data-single-lines"],
+  ["pageBreakBefore", "data-break-before"],
+] as const;
+
+export type PageFlag = (typeof PAGE_FLAGS)[number][0];
+
+const PageFlags = Extension.create({
+  name: "docsPageFlags",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["paragraph", "heading"],
+        attributes: Object.fromEntries(
+          PAGE_FLAGS.map(([name, attr]) => [
+            name,
+            {
+              default: null,
+              parseHTML: (el: HTMLElement) => {
+                const v = el.getAttribute(attr);
+                return v === null ? null : v !== "false";
+              },
+              renderHTML: (attrs: Record<string, unknown>) =>
+                typeof attrs[name] === "boolean" ? { [attr]: String(attrs[name]) } : {},
+            },
+          ]),
+        ),
+      },
+    ];
+  },
+});
+
+/** The value a paragraph option has on the paragraph under the caret, its
+    own or its style's. */
+export function pageFlagOf(editor: Editor, flag: PageFlag): boolean {
+  const node = editor.state.selection.$head.parent;
+  const own: unknown = node.attrs[flag];
+  if (typeof own === "boolean") return own;
+  const titled = node.type.name === "heading" || node.attrs.docStyle === "title" || node.attrs.docStyle === "subtitle";
+  if (flag === "keepWithNext" || flag === "keepLinesTogether") return titled;
+  if (flag === "avoidWidowAndOrphan") return !titled;
+  return false;
+}
+
+/** Turn a paragraph option on or off for every paragraph in the selection. */
+export function togglePageFlag(editor: Editor, flag: PageFlag): void {
+  const next = !pageFlagOf(editor, flag);
+  const { state } = editor;
+  const tr = state.tr;
+  state.doc.nodesBetween(state.selection.from, state.selection.to, (node, pos) => {
+    if (node.type.name !== "paragraph" && node.type.name !== "heading") return true;
+    tr.setNodeMarkup(pos, undefined, { ...node.attrs, [flag]: next });
+    return false;
+  });
+  if (tr.docChanged) editor.view.dispatch(tr);
+  editor.commands.focus();
+}
+
 /** Google Docs' pages: the spacers, and the controller that places them. */
 const Pagination = Extension.create({
   name: "docsPagination",
@@ -328,4 +406,4 @@ const Pagination = Extension.create({
   },
 });
 
-export const pageExtensions: AnyExtension[] = [Pagination];
+export const pageExtensions: AnyExtension[] = [Pagination, PageFlags];

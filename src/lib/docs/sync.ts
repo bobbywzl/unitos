@@ -92,9 +92,14 @@ type Run = {
   oldStart: Map<string, number>;
   /** The run's new paragraphs and their starts in newText. */
   newBlocks: { id: string; start: number; text: string }[];
-  /** The length of the shared start and of the shared end. */
+  /** The length of the shared start, and of the shared end left after it:
+      the changed stretch as far right as it can sit. */
   head: number;
   tail: number;
+  /** The length of the longest shared end: the changed stretch as far left
+      as it can sit. Typing a letter the mark begins with, right before the
+      mark, reads either way; the mark keeps its words. */
+  longTail: number;
 };
 
 type Moves = {
@@ -156,7 +161,11 @@ function runAround(m: Moves, blockId: string): Run | null {
     while (head < most && oldText[head] === newText[head]) head++;
     let tail = 0;
     while (tail < most - head && oldText[oldText.length - 1 - tail] === newText[newText.length - 1 - tail]) tail++;
-    run = { oldText, newText, oldStart, newBlocks, head, tail };
+    let longTail = tail;
+    while (longTail < most && oldText[oldText.length - 1 - longTail] === newText[newText.length - 1 - longTail]) {
+      longTail++;
+    }
+    run = { oldText, newText, oldStart, newBlocks, head, tail, longTail };
   }
   m.runs.set(key, run);
   return run;
@@ -188,8 +197,9 @@ function mapInRun(run: Run, anchor: { blockId: string; startOffset: number; endO
   const delta = run.newText.length - run.oldText.length;
   // Before the change (typing right after the mark stays outside it).
   if (end <= run.head) return spanIn(run, start, end);
-  // After the change (typing right before the mark stays outside it).
-  if (start >= oldEnd) return spanIn(run, start + delta, end + delta);
+  // After the change (typing right before the mark stays outside it), with
+  // the change as far left as it can sit.
+  if (start >= run.oldText.length - run.longTail) return spanIn(run, start + delta, end + delta);
   // Words added inside the mark: it grows. An Enter inside it cuts it in
   // two, and it keeps the larger part.
   if (run.head === oldEnd) return spanIn(run, start, end + delta);

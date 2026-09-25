@@ -96,12 +96,24 @@ export function findBlock(doc: PMNode, blockId: string): { node: PMNode; pos: nu
   return found;
 }
 
+/** The nodes a passage leaves out: they hold no words to quote. */
+const LEFT_OUT = new Set(["image", "blockMath"]);
+
+export type PageSelection = {
+  segments: PageSegment[];
+  /** The selection crossed an image or an equation on its own line, which
+      the passage leaves out. */
+  truncated: boolean;
+};
+
 /** One segment per paragraph between two document positions, in reading
     order; a paragraph whose part is only whitespace takes none. */
-export function segmentsBetween(doc: PMNode, from: number, to: number): PageSegment[] {
+export function segmentsBetween(doc: PMNode, from: number, to: number): PageSelection {
   const segments: PageSegment[] = [];
-  if (to <= from) return segments;
+  let truncated = false;
+  if (to <= from) return { segments, truncated };
   doc.nodesBetween(from, to, (node, pos) => {
+    if (LEFT_OUT.has(node.type.name)) truncated = true;
     if (!node.isTextblock) return true;
     const blockId = node.attrs.blockId;
     if (typeof blockId !== "string" || !blockId) return false;
@@ -121,7 +133,7 @@ export function segmentsBetween(doc: PMNode, from: number, to: number): PageSegm
     });
     return false;
   });
-  return segments;
+  return { segments, truncated };
 }
 
 /** A DOM boundary as a document position; the fallback when the boundary is
@@ -137,7 +149,7 @@ function positionOf(view: EditorView, node: Node, offset: number, fallback: numb
 
 /** The passage a DOM range selects in the page editor: its segments, one per
     paragraph. Null when the range is not in this editor's text. */
-export function pageSegmentsOfRange(editor: Editor, range: Range): PageSegment[] | null {
+export function pageSelectionOfRange(editor: Editor, range: Range): PageSelection | null {
   const { view, state } = editor;
   if (!view.dom.contains(range.startContainer) && !view.dom.contains(range.endContainer)) return null;
   const from = positionOf(view, range.startContainer, range.startOffset, state.selection.from);

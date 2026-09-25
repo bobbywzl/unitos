@@ -1,5 +1,5 @@
 import { Extension, Node, mergeAttributes, type Editor } from "@tiptap/core";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
 import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
 import StarterKit from "@tiptap/starter-kit";
 import { BackgroundColor, Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
@@ -15,6 +15,7 @@ import { insertExtensions } from "@/components/docs/ext/insert";
 import { layerExtensions } from "@/components/docs/ext/layer";
 import { pageExtensions } from "@/components/docs/ext/page";
 import { toolbarExtensions } from "@/components/docs/ext/toolbar";
+import { blockStyle, readStyles, selectionSize, sizeInPt } from "@/components/docs/toolbar/styles";
 import { typingExtensions } from "@/components/docs/ext/typing";
 import { INDEXED_NODE_TYPES, newBlockId } from "@/lib/docs/schema";
 
@@ -22,7 +23,8 @@ import { INDEXED_NODE_TYPES, newBlockId } from "@/lib/docs/schema";
 // Tiptap. A new node type is added here, in lib/docs/schema.ts
 // (RICH_NODE_TYPES), and in lib/docs/blocks.ts when it carries words.
 
-/** The font sizes Google Docs lists, in points; + and − step through them. */
+/** The font sizes Google Docs' size list offers, in points. + and − do not
+    step through them: they move each run by one point (stepSelectionFontSize). */
 export const FONT_SIZES = [8, 9, 10, 11, 12, 14, 18, 24, 30, 36, 48, 60, 72, 96] as const;
 /** Normal text's size in points. */
 export const DEFAULT_FONT_SIZE = 11;
@@ -167,34 +169,33 @@ const ParagraphFormat = Extension.create({
     ];
   },
   addCommands() {
+    // The paragraphs the selection touches, changed on the command's own
+    // transaction, so the commands chain (editor.chain().focus()...).
     const eachParagraph = (
-      editor: Editor,
+      { tr, dispatch }: { tr: Transaction; dispatch?: unknown },
       fn: (node: PMNode, pos: number) => Record<string, unknown> | null,
     ): boolean => {
-      const { state } = editor;
-      const tr = state.tr;
       let changed = false;
-      state.doc.nodesBetween(state.selection.from, state.selection.to, (node, pos) => {
+      tr.doc.nodesBetween(tr.selection.from, tr.selection.to, (node, pos) => {
         if (node.type.name !== "paragraph" && node.type.name !== "heading") return true;
         const next = fn(node, pos);
         if (next) {
-          tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...next });
+          if (dispatch) tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...next });
           changed = true;
         }
         return false;
       });
-      if (changed) editor.view.dispatch(tr);
       return changed;
     };
     return {
       setLineSpacing:
         (value) =>
-        ({ editor }) =>
-          eachParagraph(editor, () => ({ lineSpacing: value })),
+        (props) =>
+          eachParagraph(props, () => ({ lineSpacing: value })),
       setParagraphSpace:
         (side, pt) =>
-        ({ editor }) =>
-          eachParagraph(editor, () => (side === "before" ? { spaceBefore: pt } : { spaceAfter: pt })),
+        (props) =>
+          eachParagraph(props, () => (side === "before" ? { spaceBefore: pt } : { spaceAfter: pt })),
       setDocStyle:
         (style) =>
         ({ chain }) => {
@@ -209,7 +210,7 @@ const ParagraphFormat = Extension.create({
         },
       indentStep:
         (direction) =>
-        ({ editor, commands }) => {
+        ({ editor, commands, tr, dispatch }) => {
           // A list line nests or lifts; any other paragraph moves its left
           // indent by half an inch.
           const inTask = editor.isActive("taskItem");
@@ -218,7 +219,7 @@ const ParagraphFormat = Extension.create({
             const item = inTask ? "taskItem" : "listItem";
             return direction === 1 ? commands.sinkListItem(item) : commands.liftListItem(item);
           }
-          return eachParagraph(editor, (node) => {
+          return eachParagraph({ tr, dispatch }, (node) => {
             const current = typeof node.attrs.indentLeft === "number" ? node.attrs.indentLeft : 0;
             const next = Math.max(0, current + direction * INDENT_STEP_PT);
             if (next === current) return null;
@@ -251,18 +252,48 @@ const PageBreak = Node.create({
   },
 });
 
-/** The font size under the caret in points, or null when the selection mixes sizes. */
+/** The size of the selection in points — a run's own size, else its named
+    style's — or null when the selection mixes sizes. */
 export function currentFontSize(editor: Editor): number | null {
-  const size = editor.getAttributes("textStyle").fontSize as string | undefined;
-  if (!size) return DEFAULT_FONT_SIZE;
-  const n = parseFloat(size);
-  return Number.isFinite(n) ? n : null;
+  return selectionSize(editor.state, readStyles(editor.state.doc));
 }
 
-/** The next size up or down Google Docs' list from `size`. */
+/** One point up or down from `size`, clamped to 1–400 (Google Docs' + and −). */
 export function stepFontSize(size: number, direction: 1 | -1): number {
-  if (direction === 1) return FONT_SIZES.find((s) => s > size) ?? Math.min(400, size + 1);
-  return [...FONT_SIZES].reverse().find((s) => s < size) ?? Math.max(1, size - 1);
+  return Math.max(1, Math.min(400, size + direction));
+}
+
+/** + and − (Ctrl+Shift+. and ,) on the selection: every run moves one point
+    from its own size, so a 10/14 pt mix becomes 11/15 pt; a collapsed caret
+    changes the size the next typed text gets. */
+export function stepSelectionFontSize(editor: Editor, direction: 1 | -1): boolean {
+  const { state } = editor;
+  const type = state.schema.marks.textStyle;
+  if (!type || !editor.isEditable) return false;
+  const styles = readStyles(state.doc);
+  const tr = state.tr;
+  if (state.selection.empty) {
+    const existing = (state.storedMarks ?? state.selection.$from.marks()).find((m) => m.type === type);
+    const size = currentFontSize(editor) ?? DEFAULT_FONT_SIZE;
+    tr.addStoredMark(type.create({ ...existing?.attrs, fontSize: `${stepFontSize(size, direction)}pt` }));
+  } else {
+    for (const range of state.selection.ranges) {
+      const start = range.$from.pos;
+      const end = range.$to.pos;
+      state.doc.nodesBetween(start, end, (node, pos, parent) => {
+        if (!node.isText || !parent) return true;
+        const existing = node.marks.find((m) => m.type === type);
+        const size = sizeInPt(existing?.attrs.fontSize) ?? styles[blockStyle(parent)].size;
+        const next = stepFontSize(size, direction);
+        if (next !== size) {
+          tr.addMark(Math.max(pos, start), Math.min(pos + node.nodeSize, end), type.create({ ...existing?.attrs, fontSize: `${next}pt` }));
+        }
+        return false;
+      });
+    }
+  }
+  editor.view.dispatch(tr);
+  return true;
 }
 
 /** The events the keymap raises for the page editor's own dialogs. */
@@ -282,10 +313,7 @@ const DocsKeymap = Extension.create({
       window.dispatchEvent(new CustomEvent(name));
       return true;
     };
-    const size = (direction: 1 | -1) => () => {
-      const now = currentFontSize(this.editor) ?? DEFAULT_FONT_SIZE;
-      return this.editor.chain().focus().setFontSize(`${stepFontSize(now, direction)}pt`).run();
-    };
+    const size = (direction: 1 | -1) => () => stepSelectionFontSize(this.editor, direction);
     return {
       "Mod-Alt-0": style("normal"),
       "Mod-Alt-1": style("h1"),
@@ -303,7 +331,7 @@ const DocsKeymap = Extension.create({
       "Mod-Shift-j": () => this.editor.commands.setTextAlign("justify"),
       "Mod-]": () => this.editor.commands.indentStep(1),
       "Mod-[": () => this.editor.commands.indentStep(-1),
-      "Mod-\\": () => this.editor.chain().focus().unsetAllMarks().run(),
+      // Clear formatting (Ctrl+\, Ctrl+Space): ext/typing.ts.
       "Mod-.": () => this.editor.commands.toggleSuperscript(),
       "Mod-,": () => this.editor.commands.toggleSubscript(),
       // Strikethrough: Alt+Shift+5, ⌘+Shift+X on a Mac (ext/typing.ts).
