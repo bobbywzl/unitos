@@ -59,14 +59,14 @@ export const LAWYER: ReaderProfileCtx = {
 };
 
 export const CASES: EvalCase[] = [
-  // ── Define: one word or one phrase, in its sentence ──
-  { id: "define-paper-retention-loss", tool: "define", fixture: "paper-sparse-routing", lang: "en", profile: NOVICE, selection: { block: 5, text: "retention loss" }, expect: "The document's own definition: the loss that trains the router to keep the keys the dense model attended to most." },
+  // ── Define: one word, in its sentence; never Chinese text, so the zh cases read English ──
+  { id: "define-paper-retention", tool: "define", fixture: "paper-sparse-routing", lang: "en", profile: NOVICE, selection: { block: 5, text: "retention" }, expect: "Retention as in the retention loss, which the document names here: the loss that rewards the router for keeping the keys the dense model attended to most." },
   { id: "define-paper-router-zh", tool: "define", fixture: "paper-sparse-routing", lang: "zh", profile: null, selection: { block: 5, text: "router" }, expect: "In Chinese: the small network in each attention layer that picks the 4,096 key tokens attention runs over; not a network device." },
   { id: "define-memo-ebitda", tool: "define", fixture: "report-earnings-memo", lang: "en", profile: NOVICE, selection: { block: 3, text: "EBITDA" }, expect: "Spells out earnings before interest, taxes, depreciation, and amortization: a measure of operating profit; net debt at 2.1 times it measures debt." },
-  { id: "define-memo-spot-rates", tool: "define", fixture: "report-earnings-memo", lang: "en", profile: ANALYST, selection: { block: 10, text: "spot rates" }, expect: "The market price to lease trucks when needed, put at 30 percent above the owned fleet's cost per mile." },
-  { id: "define-docs-token-bucket", tool: "define", fixture: "docs-rate-limiting", lang: "en", profile: LAWYER, selection: { block: 1, text: "token bucket" }, expect: "A budget of at most 600 requests that refills at 10 per second, one token per request; an empty bucket refuses with 429." },
+  { id: "define-memo-ebitda-zh", tool: "define", fixture: "report-earnings-memo", lang: "zh", profile: null, selection: { block: 3, text: "EBITDA" }, expect: "In Chinese: spells out EBITDA (息税折旧摊销前利润) and says it measures operating profit; net debt at 2.1 times it measures debt." },
+  { id: "define-memo-spot", tool: "define", fixture: "report-earnings-memo", lang: "en", profile: ANALYST, selection: { block: 10, text: "spot" }, expect: "Spot as in spot rates: the current market price to lease trucks when needed, put at 30 percent above the owned fleet's cost per mile." },
+  { id: "define-docs-bucket", tool: "define", fixture: "docs-rate-limiting", lang: "en", profile: LAWYER, selection: { block: 1, text: "bucket" }, expect: "The token bucket: the key's request budget, at most 600 requests, refilling at 10 per second, one token per request; an empty bucket refuses with 429." },
   { id: "define-transcript-provenance", tool: "define", fixture: "transcript-podcast", lang: "en", profile: null, selection: { block: 2, text: "Provenance" }, expect: "Where an answer came from: the span of the document each claim rests on. The everyday meaning (the origin of an object, such as a painting) differs, so a second sentence may give it." },
-  { id: "define-zh-long-tail", tool: "define", fixture: "zh-platform-fees", lang: "zh", profile: null, selection: { block: 6, text: "长尾商家" }, expect: "依赖平台曝光、订单量随补贴变化的中小商家；抽成降低后订单量下降 18%。" },
   // ── Simplify ──
   { id: "simplify-paper-method", tool: "simplify", fixture: "paper-sparse-routing", lang: "en", profile: NOVICE, selection: { block: 5 } },
   { id: "simplify-memo-fuel", tool: "simplify", fixture: "report-earnings-memo", lang: "en", profile: null, selection: { block: 6 } },

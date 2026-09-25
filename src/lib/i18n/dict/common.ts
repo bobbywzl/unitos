@@ -24,7 +24,7 @@
 //   floating card 浮动卡片 · wrap text(文本环绕笔记) 环绕文本 ·
 //   attach(加入项目) 加入 · detach 移出 · figure 插图 · passage 片段 ·
 //   key term 关键术语 · Edits(页签) 编辑记录 · notes tray 笔记栏 ·
-//   define(选中一个词或短语的工具) 定义 · definition 定义 ·
+//   define(选中一个词的工具) 定义 · definition 定义 ·
 //   command 指令 · voice command(笔记栏里说出的指令) 语音指令 · key takeaways 主要收获 ·
 //   selection 选中内容 · bullet-point notes 分条笔记 · gaps(检查) 疏漏 ·
 //   anchor unresolved 无法定位 · app tab 页签 · browser tab 标签页 ·

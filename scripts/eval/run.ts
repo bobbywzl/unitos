@@ -146,7 +146,7 @@ const adapters: Record<EvalTool, Adapter> = {
     const text = r.text.trim();
     const sentences = splitSentences(text).length;
     const checks: Check[] = [
-      { name: "the selection is one word or one phrase", ok: definable(ctx.anchoredText), detail: ctx.anchoredText },
+      { name: "the selection is one word", ok: definable(ctx.anchoredText), detail: ctx.anchoredText },
       capCheck(text, 40),
       { name: "two sentences at most", ok: sentences <= 2, detail: `${sentences} sentences` },
       { name: "does not open with the selection", ok: !text.toLowerCase().startsWith(ctx.anchoredText.trim().toLowerCase()) },

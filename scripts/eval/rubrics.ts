@@ -7,7 +7,7 @@ export type Rubric = { tool: string; what: string; criteria: { key: string; ask:
 export const RUBRICS: Record<string, Rubric> = {
   define: {
     tool: "Define",
-    what: "The meaning the selected word or phrase has in its sentence, in words the reader already has: read at a glance, without leaving the text.",
+    what: "The meaning the selected word has in its sentence, in words the reader already has: read at a glance, without leaving the text.",
     criteria: [
       { key: "in_context", ask: "Does it give the meaning the word has in this sentence of this document — the document's own definition when the document gives one — and not a generic dictionary sense?" },
       { key: "plain", ask: "Is it in plain words the reader already knows, with no word harder than the one defined, and never the word itself?" },

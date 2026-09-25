@@ -54,7 +54,7 @@ const en = {
   readAloud: "Read the selection aloud",
   stopReading: "Stop reading",
   defineTitle:
-    "The AI defines the selected word or phrase as this sentence uses it, tuned to your background. Nothing is saved.",
+    "The AI defines the selected word as this sentence uses it, tuned to your background. Nothing is saved.",
   assistantTitle:
     "Tell the assistant what to do with the selection. It proposes a plan or replies beside the article.",
   explainTitle:
@@ -90,6 +90,7 @@ const en = {
   collapseTitle:
     "Collapse every block to its core: what it really says, in plain words, at a tenth to a third of its length. Click a collapsed block to read it whole.",
   collapseOffTitle: "Show the article whole again",
+  collapseStopTitle: "Stop collapsing. Nothing is saved, and the article stays whole.",
   collapseViewer: "No cores yet. An editor can collapse the article.",
   collapseFailed: "The article could not be collapsed. {reason}",
   coreExpandTitle: "Read this block whole",
@@ -324,7 +325,7 @@ const zh: Record<keyof typeof en, string> = {
   highlightInWithNote: "以{color}高亮并附上评论",
   readAloud: "朗读选中内容",
   stopReading: "停止朗读",
-  defineTitle: "AI 结合你的背景，给出选中的词或短语在这句话里的定义。不保存。",
+  defineTitle: "AI 结合你的背景，给出选中的词在这句话里的定义。不保存。",
   assistantTitle: "告诉助手要对选中内容做什么。它会提出计划，或在文章旁回复。",
   explainTitle: "AI 结合你的背景，用通俗的语言解释选中内容。保存在批注下。",
   explainFigureTitle: "AI 解读这幅图展示的内容",
@@ -351,6 +352,7 @@ const zh: Record<keyof typeof en, string> = {
   collapsing: "正在折叠…",
   collapseTitle: "把每个块折叠为它的核心：它真正要说的，用大白话，长度是原文的十分之一到三分之一。点击折叠后的块可读全文。",
   collapseOffTitle: "重新显示整篇文章",
+  collapseStopTitle: "停止折叠。不保存任何内容，文章保持完整。",
   collapseViewer: "还没有核心。编辑者可以折叠文章。",
   collapseFailed: "文章无法折叠。{reason}",
   coreExpandTitle: "阅读这个块的全文",

@@ -1,10 +1,11 @@
 // UI verification for Define (SPEC.md §6): the first row of the AI toolbar
-// on a selection of one word or one phrase, right under the highlight
-// colors, on every surface the reader draws — an article, a transcript,
-// slides, a sheet, a blank document in the page editor, a core in the
-// collapsed view, a key term — and never on a longer selection. The
-// definition streams under the row; a key term's is the glossary's, with
-// no call. The route refuses a longer selection.
+// on a selection of one word, right under the highlight colors, on every
+// surface the reader draws — an article, a transcript, slides, a sheet, a
+// blank document in the page editor, a core in the collapsed view, a key
+// term — and never on two words, a list, a sentence, or Chinese text, in
+// either interface language. The definition streams under the row; a key
+// term's is the glossary's, with no call. The route refuses anything but
+// one word.
 //
 // Usage: DATABASE_URL=... NB=<notebook> DOC=<article> AUDIO=<audio document>
 //   ZH=<Chinese document> CHROME=<chromium> node scripts/qa/ui-define.mjs
@@ -128,7 +129,7 @@ await db.$disconnect();
 process.exit(results.some((r) => r.startsWith("FAIL") || r.startsWith("CRASH")) ? 1 : 0);
 
 async function run() {
-  // ── The route: one word or one phrase, nothing longer ──
+  // ── The route: one word, nothing else ──
   const docRow = await db.document.findUnique({ where: { id: DOC }, include: { blocks: { orderBy: { order: "asc" } } } });
   const paragraph = docRow.blocks.find((b) => b.type === "PARAGRAPH" && b.text.includes("monetization"));
   const at = paragraph.text.indexOf("monetization");
@@ -151,7 +152,9 @@ async function run() {
   check("route: DEFINE streams a definition", ok.status === 200 && okText.includes("Mock definition of monetization"), okText.trim().slice(0, 80));
   const long = await derive(anchor(0, Math.min(paragraph.text.length, 160)));
   const longBody = await long.json().catch(() => ({}));
-  check("route: a longer selection is refused", long.status === 400 && /one word or one phrase/.test(longBody.error ?? ""), `${long.status} ${longBody.error ?? ""}`);
+  check("route: a longer selection is refused", long.status === 400 && /one word/.test(longBody.error ?? ""), `${long.status} ${longBody.error ?? ""}`);
+  const two = await derive(anchor(at, at + "monetization edge".length));
+  check("route: two words are refused", two.status === 400, `${two.status}`);
   const notes = await db.note.count({ where: { derivationType: "DEFINE" } });
   check("route: nothing persists", notes === 0, `${notes} DEFINE notes`);
 
@@ -188,9 +191,16 @@ async function run() {
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
 
-  // A phrase shows Define; a sentence, and a selection over a sentence end, do not.
-  await select(page, para, "Google earns roughly three times");
-  check("article: Define shows on a phrase", (await defineRow(page).count()) === 1);
+  // A word with its period shows Define; two words, a list, a sentence, and
+  // a selection over a sentence end do not.
+  await select(page, para, "targeting.");
+  check("article: Define shows on a word with its period", (await defineRow(page).count()) === 1);
+  await page.keyboard.press("Escape");
+  await select(page, para, "monetization edge");
+  check("article: no Define on two words", (await toolbar(page).count()) === 1 && (await defineRow(page).count()) === 0);
+  await page.keyboard.press("Escape");
+  await select(page, para, "more advertisers, better targeting.");
+  check("article: no Define on a list", (await toolbar(page).count()) === 1 && (await defineRow(page).count()) === 0);
   await page.keyboard.press("Escape");
   const sentence = paragraph.text.split(". ")[0];
   await select(page, para, sentence);
@@ -202,17 +212,30 @@ async function run() {
   check("article: no Define over a sentence end", (await defineRow(page).count()) === 0, JSON.stringify(across));
   await page.keyboard.press("Escape");
 
-  // ── A key term: the glossary's definition, no call ──
+  // ── A key term: one word's is the glossary's definition, no call; a
+  // longer one has no Define (its hover shows the definition) ──
   const termBlock = docRow.blocks.find((b) => b.type === "PARAGRAPH" && b.text.includes("Alice study"));
-  const glossaryDefinition = "Google's internal model of what Microsoft would have to pay Apple to take the default.";
+  const slotBlock = docRow.blocks.find((b) => b.type === "PARAGRAPH" && b.text.includes("default slot"));
+  const glossaryDefinition = "Google's internal study of what Microsoft would have to pay Apple to take the default.";
+  const slotDefinition = "The browser's or the phone's preset search engine, sold to the highest bidder.";
   await db.document.update({
     where: { id: DOC },
-    data: { glossary: [{ term: "Alice study", definition: glossaryDefinition, blockIds: [termBlock.id], lang: "en", definitions: { en: glossaryDefinition } }] },
+    data: {
+      glossary: [
+        { term: "Alice", definition: glossaryDefinition, blockIds: [termBlock.id], lang: "en", definitions: { en: glossaryDefinition } },
+        { term: "default slot", definition: slotDefinition, blockIds: [slotBlock.id], lang: "en", definitions: { en: slotDefinition } },
+      ],
+    },
   });
   await page.goto(`${base}/n/${NB}?doc=${DOC}`, { waitUntil: "networkidle" });
   await page.waitForSelector(".glossary-term", { timeout: 20000 });
   const termCalls = defineCalls.length;
-  await page.locator(".glossary-term").first().dispatchEvent("mousedown", { button: 0 });
+  await page.locator(".glossary-term", { hasText: "default slot" }).first().dispatchEvent("mousedown", { button: 0 });
+  await page.waitForTimeout(400);
+  check("key term of two words: no Define", (await toolbar(page).count()) === 1 && (await defineRow(page).count()) === 0);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  await page.locator(".glossary-term", { hasText: /^Alice$/ }).first().dispatchEvent("mousedown", { button: 0 });
   await page.waitForTimeout(400);
   check("key term: Define shows on the term's toolbar", (await defineRow(page).count()) === 1);
   await defineRow(page).click();
@@ -253,12 +276,15 @@ async function run() {
   const line = audioRow.blocks.find((b) => b.type === "TRANSCRIPT" && b.text.includes("default"));
   await page.waitForSelector(`[data-block-id="${line.id}"]`, { timeout: 20000 });
   await select(page, `[data-block-id="${line.id}"]`, "default search engine");
-  check("transcript: Define shows on a phrase of a line", (await defineRow(page).count()) === 1);
+  check("transcript: no Define on three words", (await toolbar(page).count()) === 1 && (await defineRow(page).count()) === 0);
+  await page.keyboard.press("Escape");
+  await select(page, `[data-block-id="${line.id}"]`, "default");
+  check("transcript: Define shows on a word of a line", (await defineRow(page).count()) === 1);
   const transcriptLayout = await layout(page);
   check("transcript: Define is the first tool", transcriptLayout?.first === "define", transcriptLayout?.first ?? "none");
   await defineRow(page).click();
   const lineMeaning = await definitionText(page);
-  check("transcript: the definition lands", lineMeaning.includes("Mock definition of default search engine"), lineMeaning.replace(/\s+/g, " ").slice(0, 90));
+  check("transcript: the definition lands", lineMeaning.includes("Mock definition of default:"), lineMeaning.replace(/\s+/g, " ").slice(0, 90));
   await page.screenshot({ path: `${SHOT}/define-transcript.png` });
   await page.keyboard.press("Escape");
 
@@ -319,22 +345,34 @@ async function run() {
   await page.screenshot({ path: `${SHOT}/define-page-editor.png` });
   await page.keyboard.press("Escape");
 
-  // ── Chinese ──
-  await context.addCookies([{ name: "dissect-lang", value: "zh", url: base }]);
+  // ── Chinese text: no Define, in either interface language; the Chinese
+  // interface keeps Define on an English word ──
   await page.goto(`${base}/n/${NB}?doc=${ZH}`, { waitUntil: "networkidle" });
   const zhRow = await db.document.findUnique({ where: { id: ZH }, include: { blocks: { orderBy: { order: "asc" } } } });
   const zhParagraph = zhRow.blocks.find((b) => b.type === "PARAGRAPH" && b.text.includes("规模经济"));
-  await page.waitForSelector(`[data-block-id="${zhParagraph.id}"]`, { timeout: 20000 });
-  await select(page, `[data-block-id="${zhParagraph.id}"]`, "规模经济");
-  check("zh: the row reads 定义", (await defineRow(page).innerText()).includes("定义"));
+  const zhBlock = `[data-block-id="${zhParagraph.id}"]`;
+  await page.waitForSelector(zhBlock, { timeout: 20000 });
+  await select(page, zhBlock, "规模经济");
+  check("Chinese text: no Define on a word", (await toolbar(page).count()) === 1 && (await defineRow(page).count()) === 0);
+  await page.keyboard.press("Escape");
+  await select(page, zhBlock, "规");
+  check("Chinese text: no Define on one character", (await toolbar(page).count()) === 1 && (await defineRow(page).count()) === 0);
+  await page.keyboard.press("Escape");
+  await context.addCookies([{ name: "dissect-lang", value: "zh", url: base }]);
+  await page.goto(`${base}/n/${NB}?doc=${ZH}`, { waitUntil: "networkidle" });
+  await page.waitForSelector(zhBlock, { timeout: 20000 });
+  await select(page, zhBlock, "规模经济");
+  check("Chinese interface, Chinese text: no Define", (await toolbar(page).count()) === 1 && (await defineRow(page).count()) === 0);
+  await page.keyboard.press("Escape");
+  await page.goto(`${base}/n/${NB}?doc=${DOC}`, { waitUntil: "networkidle" });
+  await page.waitForSelector(para, { timeout: 20000 });
+  await select(page, para, "monetization");
+  check("Chinese interface: the row reads 定义 on an English word", (await defineRow(page).innerText()).includes("定义"));
   await defineRow(page).click();
   const zhText = await definitionText(page);
-  check("zh: the definition lands", zhText.includes("规模经济"), zhText.replace(/\s+/g, " ").slice(0, 60));
+  check("Chinese interface: the definition lands", zhText.includes("Mock definition of monetization"), zhText.replace(/\s+/g, " ").slice(0, 60));
   await page.screenshot({ path: `${SHOT}/define-zh.png` });
   await page.keyboard.press("Escape");
-  const clause = zhParagraph.text.split("，")[0] + "，" + zhParagraph.text.split("，")[1].slice(0, 2);
-  await select(page, `[data-block-id="${zhParagraph.id}"]`, clause);
-  check("zh: no Define over a clause break", (await defineRow(page).count()) === 0, clause);
   await context.clearCookies({ name: "dissect-lang" });
 
   // ── A touch screen: Define right after the colors row ──

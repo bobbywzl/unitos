@@ -722,8 +722,8 @@ async function handle(req: Request, t: TFunc) {
       return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
   }
-  // DEFINE takes one word or one phrase, in one block (lib/define.ts): the
-  // toolbar offers it on nothing longer.
+  // DEFINE takes one word, in one block, never Chinese text (lib/define.ts):
+  // the toolbar offers it on nothing else.
   if (data.type === "DEFINE" && (passage.length !== 1 || !definable(anchored?.anchoredText ?? ""))) {
     return NextResponse.json({ error: t("api.defineNeedsWord") }, { status: 400 });
   }
