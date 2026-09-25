@@ -137,20 +137,13 @@ function change(base: Unit[], other: Unit[]) {
 }
 
 /** Both copies' changes to one paragraph's words, or null when they touch
-    the same words. Two insertions at one point: the stored copy's words
-    come first (typed earlier); when one begins with the other's words (a
-    save whose answer was lost, a reload), the longer one stands once. */
+    the same words. */
 function mergeWords(base: RichNode[], local: RichNode[], remote: RichNode[]): RichNode[] | null {
   const b = units(base);
   const lc = change(b, units(local));
   const rc = change(b, units(remote));
   if (lc.start < rc.end && rc.start < lc.end) return null;
-  if (lc.start === rc.start && lc.end === lc.start && rc.end === rc.start) {
-    const [long, short] = lc.insert.length >= rc.insert.length ? [lc, rc] : [rc, lc];
-    const words = (u: Unit) => u.node.text ?? u.key;
-    if (short.insert.every((u, i) => words(u) === words(long.insert[i]))) short.insert = [];
-  }
-  const [first, second] = rc.start < lc.start || (rc.start === lc.start && rc.end <= lc.end) ? [rc, lc] : [lc, rc];
+  const [first, second] = rc.start < lc.start || (rc.start === lc.start && rc.end < lc.end) ? [rc, lc] : [lc, rc];
   const merged = [
     ...b.slice(0, first.start),
     ...first.insert,

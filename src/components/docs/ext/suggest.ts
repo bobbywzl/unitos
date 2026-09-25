@@ -1,6 +1,6 @@
 import { Extension, Mark, type AnyExtension, type Editor } from "@tiptap/core";
-import type { Fragment, Mark as PMMark, MarkSpec, Node as PMNode } from "@tiptap/pm/model";
-import { AllSelection, EditorState, Plugin, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
+import type { Mark as PMMark, MarkSpec, Node as PMNode } from "@tiptap/pm/model";
+import { EditorState, Plugin, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
 import {
   AddMarkStep,
   AddNodeMarkStep,
@@ -39,7 +39,6 @@ export const isSuggestionMark = (mark: PMMark) => SUGGESTION_MARK_TYPES.has(mark
 /** Words added or removed: an insertion or a deletion mark. */
 const isWordMark = (mark: PMMark) => mark.type.name === "insertion" || mark.type.name === "deletion";
 const isModification = (mark: PMMark) => mark.type.name === "modification";
-const isInsertion = (mark: PMMark) => mark.type.name === "insertion";
 
 /** The suggestion the marks carry; a deletion first, as it can lie over
     another person's added words. */
@@ -104,12 +103,6 @@ function outerBlock(doc: PMNode, pos: number): [number, number] {
   while (depth > 0 && $pos.node(depth).childCount === 1 && (isList($pos.node(depth)) || isListItem($pos.node(depth)))) depth--;
   const from = depth === $pos.depth ? pos : $pos.before(depth + 1);
   return [from, from + (doc.nodeAt(from)?.nodeSize ?? 0)];
-}
-
-/** The deletion that strikes every word of a text block, if one does. */
-function struckBy(node: PMNode): PMMark | undefined {
-  const mark = node.firstChild?.marks.find((m) => m.type.name === "deletion");
-  return mark && node.content.content.every((child) => mark.isInSet(child.marks)) ? mark : undefined;
 }
 
 /** Both sides are whole blocks with the same words: see `Suggestion.same`. */
@@ -186,8 +179,8 @@ export function readSuggestions(doc: PMNode): Suggestion[] {
       }
       // A paragraph whose words one suggestion strikes whole is a block it
       // removes (a bullet taken off a one-line list).
-      const mark = struckBy(node);
-      struck = mark ? draft(String(mark.attrs.id), pos) : null;
+      const mark = node.firstChild?.marks.find((m) => m.type.name === "deletion");
+      struck = mark && node.content.content.every((child) => mark.isInSet(child.marks)) ? draft(String(mark.attrs.id), pos) : null;
       if (struck && !open.some((o) => o.d === struck)) {
         struck.blocks.removed.push(outerBlock(doc, pos));
         struck.texts.removed.push(node.textContent);
@@ -330,28 +323,23 @@ function suggestMark(tr: Transaction, step: AddMarkStep | RemoveMarkStep, id: st
 }
 
 /** A block changed again keeps the value from before its first change, and
-    a change back to it is no suggestion at all. A block a suggestion adds,
-    or one inside it, takes the change as it is and stays added (the library
-    would drop its insertion mark for the modification). */
+    a change back to it is no suggestion at all. */
 function chainBlockChanges(tr: Transaction, before: PMNode, id: string): void {
   tr.doc.descendants((node, pos) => {
     const fresh = node.marks.filter((m) => isModification(m) && m.attrs.id === id);
     if (fresh.length === 0) return true;
-    const was = before.nodeAt(pos);
-    const added = was?.marks.find(isInsertion);
-    const $pos = before.resolve(pos);
-    let asIs = Boolean(added);
-    for (let depth = $pos.depth; depth > 0; depth--) asIs ||= $pos.node(depth).marks.some(isInsertion);
     let marks = node.marks;
     for (const mod of fresh) {
-      const earlier = was?.marks.find((m) => isModification(m) && m.attrs.type === mod.attrs.type && m.attrs.attrName === mod.attrs.attrName);
+      const earlier = before
+        .nodeAt(pos)
+        ?.marks.find((m) => isModification(m) && m.attrs.type === mod.attrs.type && m.attrs.attrName === mod.attrs.attrName);
       const previousValue: unknown = earlier ? earlier.attrs.previousValue : mod.attrs.previousValue;
       marks = mod.removeFromSet(marks);
-      if (!asIs && !same(previousValue, mod.attrs.newValue)) {
+      if (!same(previousValue, mod.attrs.newValue)) {
         marks = mod.type.create({ ...mod.attrs, id: keptId(earlier, id), previousValue }).addToSet(marks);
       }
     }
-    tr.setNodeMarkup(pos, undefined, node.attrs, added ? added.addToSet(marks) : marks);
+    tr.setNodeMarkup(pos, undefined, node.attrs, marks);
     return true;
   });
 }
@@ -529,14 +517,14 @@ function asReplace(step: Step, doc: PMNode): Step {
   return (words && replaceStep(doc, back.map(start), back.map(end), applied.slice(start, end))) || step;
 }
 
-/** One replace of the whole blocks that differ between `before` and `doc`,
-    in the parent both share; null when none differ. A transaction that
-    moves blocks in more than one step (a line lifted out of a list, then
-    wrapped in a list of another kind; a list toggled, then joined to its
-    neighbor) goes to the library as that replace, with the words as they
-    stand: it reads each step against the text before it, and a step on
-    blocks an earlier step moved loses its place. */
-function oneReplace(before: PMNode, doc: PMNode): Step | null {
+/** A transaction that moves blocks in more than one step (a line lifted
+    out of a list, then wrapped in a list of another kind; a list toggled,
+    then joined to its neighbor) as one replace of the blocks it changes,
+    with the words as they stand: the library reads each step against the
+    text before it, and a step on blocks an earlier step moved loses its
+    place. */
+function asOneReplace(tr: Transaction): Step | null {
+  const { before, doc } = tr;
   const start = before.content.findDiffStart(doc.content);
   const end = before.content.findDiffEnd(doc.content);
   if (start === null || !end) return null;
@@ -577,7 +565,7 @@ function othersAdded(tr: Transaction, author: string): Aside[] {
     sees those marks, and they come back on their words (a block's on it). */
 function track(tr: Transaction, state: EditorState, aside: Aside[], id: () => string): Transaction {
   const run = (edit: Transaction, base: EditorState) => {
-    const one = edit.steps.length > 1 && edit.steps.some(movesBlocks) ? oneReplace(edit.before, edit.doc) : null;
+    const one = edit.steps.length > 1 && edit.steps.some(movesBlocks) ? asOneReplace(edit) : null;
     const steps = one ? [one] : edit.steps.map((step, i) => asReplace(step, edit.docs[i]));
     return transformToSuggestionTransaction(steps.some((step, i) => step !== edit.steps[i]) ? redo(edit, base, steps) : edit, base, id);
   };
@@ -598,92 +586,6 @@ function track(tr: Transaction, state: EditorState, aside: Aside[], id: () => st
   return out;
 }
 
-/** `doc` with these suggestions taken back: what they remove stays, what
-    they add goes. */
-function takeBack(doc: PMNode, own: Suggestion[]): Transform {
-  const ids = new Set(own.map((s) => s.id));
-  const t = new Transform(doc);
-  doc.descendants((node, pos) => {
-    const mark = node.marks.find((m) => m.type.name === "deletion" && ids.has(String(m.attrs.id)));
-    if (mark && node.isInline) t.removeMark(pos, pos + node.nodeSize, mark);
-    else if (mark) t.removeNodeMark(pos, mark);
-  });
-  for (const [from, to] of own.flatMap((s) => s.blocks.added).sort((a, b) => b[0] - a[0])) t.delete(from, to);
-  return t;
-}
-
-/** `doc` as the author of these suggestions sees it: the blocks they remove
-    taken out, and their marks off the blocks they add. A list item left
-    starting with a list gives its place to that list's items (an edit
-    wrapped a removed line in an item of its own). */
-function asSeen(doc: PMNode, ids: Set<string>): Transform {
-  const t = new Transform(doc);
-  const mine = (mark: PMMark | undefined): mark is PMMark => mark !== undefined && ids.has(String(mark.attrs.id));
-  const removed: number[] = [];
-  doc.descendants((node, pos) => {
-    if (node.isInline) return false;
-    const added = node.marks.find(isInsertion);
-    if (mine(added)) t.removeNodeMark(pos, added);
-    if (!mine(node.marks.find((m) => m.type.name === "deletion")) && !(node.isTextblock && mine(struckBy(node)))) return true;
-    removed.push(pos);
-    return false;
-  });
-  for (const pos of removed.reverse()) {
-    const [from, to] = outerBlock(t.doc, pos);
-    const $from = t.doc.resolve(from);
-    const item = $from.parent;
-    const list = isListItem(item) && $from.index() === 0 ? item.maybeChild(1) : null;
-    if (!list || !isList(list)) {
-      t.delete(from, to);
-      continue;
-    }
-    const items = list.content.content.map((child) => (child.type === item.type ? child : item.type.create(null, child.content, child.marks)));
-    const last = items.length - 1;
-    items[last] = items[last].copy(items[last].content.append(item.content.cut(to - from + list.nodeSize)));
-    t.replaceWith($from.before(), $from.after(), items);
-  }
-  return t;
-}
-
-/** Two stretches of blocks read the same, whatever their block ids (the
-    copy a suggestion adds takes new ones). */
-function sameBlocks(a: Fragment, b: Fragment): boolean {
-  if (a.childCount !== b.childCount) return false;
-  return a.content.every((x, i) => {
-    const y = b.child(i);
-    if (x.isText) return x.eq(y);
-    const attrs = "blockId" in x.attrs ? { ...y.attrs, blockId: x.attrs.blockId } : y.attrs;
-    return x.hasMarkup(y.type, attrs, y.marks) && sameBlocks(x.content, y.content);
-  });
-}
-
-/** A block edit that meets this author's own list changes (a list toggled
-    again, a line of their new list nested) takes their place: the text
-    before them, and the edit's result as the author sees it, make one list
-    change, or none when they read the same. */
-function replaceListChanges(tr: Transaction, state: EditorState, author: string, id: string): { tr: Transaction; seen: Transform } | null {
-  const start = state.doc.content.findDiffStart(tr.doc.content);
-  const end = state.doc.content.findDiffEnd(tr.doc.content);
-  if (start === null || !end) return null;
-  const meets = ([from, to]: [number, number]) => from < Math.max(start, end.a) && to > start;
-  const own = readSuggestions(state.doc).filter(
-    (s) => Array.isArray(s.same) && suggestionAuthor(s.id) === author && [...s.blocks.removed, ...s.blocks.added].some(meets),
-  );
-  if (own.length === 0) return null;
-  const before = takeBack(state.doc, own);
-  const seen = asSeen(tr.doc, new Set(own.map((s) => s.id)));
-  const step = oneReplace(before.doc, seen.doc);
-  if (!step && !before.doc.eq(seen.doc)) return null;
-  const out = state.tr;
-  for (const s of before.steps) out.step(s);
-  if (step && !(step instanceof ReplaceStep && sameBlocks(before.doc.slice(step.from, step.to).content, step.slice.content))) {
-    const base = EditorState.create({ doc: before.doc });
-    const edit = base.tr.step(step);
-    for (const tracked of track(edit, base, othersAdded(edit, author), () => id).steps) out.step(tracked);
-  }
-  return { tr: carry(out, tr), seen };
-}
-
 function suggest(edit: Transaction, state: EditorState, author: string): Transaction {
   const id = newId(author);
   if (edit.steps.every(isFormatStep)) return dropIdChanges(suggestFormat(edit, state, id));
@@ -691,8 +593,7 @@ function suggest(edit: Transaction, state: EditorState, author: string): Transac
   const tr = edit.steps.length > 1 && !each ? caseChange(edit, state) : edit;
   const back = takeBackBreak(tr, state);
   if (back) return back;
-  const own = tr.steps.some(movesBlocks) ? replaceListChanges(tr, state, author, id) : null;
-  const tracked = own?.tr ?? track(tr, state, othersAdded(tr, author), () => (each ? newId(author) : id));
+  const tracked = track(tr, state, othersAdded(tr, author), () => (each ? newId(author) : id));
   keepAuthors(tracked, state.doc, author, id);
   dropIdChanges(tracked);
   const step = tr.steps[0];
@@ -700,8 +601,7 @@ function suggest(edit: Transaction, state: EditorState, author: string): Transac
   const caret = state.selection.empty ? state.selection.from : -1;
   if (inAdded(tr)) {
     // The same place in the tracked copy: both read alike once accepted.
-    const mapping = new Mapping(own?.seen.mapping.maps);
-    mapping.appendMapping(acceptMapping(own?.seen.doc ?? tr.doc));
+    const mapping = acceptMapping(tr.doc);
     mapping.appendMapping(acceptMapping(tracked.doc).invert());
     const at = (pos: number) => tracked.doc.resolve(Math.min(Math.max(0, mapping.map(pos)), tracked.doc.content.size));
     tracked.setSelection(TextSelection.between(at(tr.selection.anchor), at(tr.selection.head)));
@@ -829,21 +729,6 @@ function sameWordsDecorations(doc: PMNode): DecorationSet {
   return DecorationSet.create(doc, decorations);
 }
 
-/** Select all in Suggesting mode, from the first letter the page shows: a
-    removed copy hidden at the top would make a list command read every line
-    as plain. Null when none is hidden there. */
-function shownAll(doc: PMNode): Selection | null {
-  const hidden = readSuggestions(doc).flatMap((s) => (s.same ? s.blocks.removed : []));
-  const first = (pos: number): Selection | null => {
-    const sel = Selection.findFrom(doc.resolve(pos), 1, true);
-    const range = sel && hidden.find(([from, to]) => from < sel.from && sel.from < to);
-    return range ? first(range[1]) : sel;
-  };
-  const start = first(0);
-  const end = Selection.atEnd(doc);
-  return start && start.from !== Selection.atStart(doc).from && start.from < end.to ? TextSelection.between(start.$from, end.$to) : null;
-}
-
 const Suggesting = Extension.create({
   name: "docsSuggesting",
   // Every node that holds blocks takes the suggestion marks on them (a new
@@ -876,8 +761,6 @@ const Suggesting = Extension.create({
   },
   dispatchTransaction({ transaction: tr, next }) {
     const author = suggesters.get(this.editor);
-    const shown = author && tr.selection instanceof AllSelection ? shownAll(tr.doc) : null;
-    if (shown) tr.setSelection(shown);
     const passes =
       !author ||
       !tr.docChanged ||
