@@ -34,6 +34,7 @@ import { probeChatModel } from "@/lib/model-update";
 // called as written.
 
 export type Feature =
+  | "define"
   | "explain"
   | "simplify"
   | "salience"
@@ -68,6 +69,7 @@ export type Feature =
 
 /** Each feature's default model: the constant in lib/derive/config.ts. */
 export const FEATURE_DEFAULTS: Record<Feature, string> = {
+  define: DERIVATION_MODEL.DEFINE,
   explain: DERIVATION_MODEL.EXPLAIN,
   simplify: DERIVATION_MODEL.SIMPLIFY,
   salience: DERIVATION_MODEL.SALIENCE,
@@ -104,6 +106,7 @@ export const FEATURE_DEFAULTS: Record<Feature, string> = {
 /** The order the admin page lists the features in: the reader's tools, the
     assistant, the readings, the import. */
 export const FEATURE_ORDER: Feature[] = [
+  "define",
   "explain",
   "simplify",
   "salience",
@@ -158,6 +161,7 @@ const DERIVATION_FEATURE: Record<DerivationType, Feature> = {
   ANALYZE: "analyze",
   VOICE: "voice",
   VISUALIZE: "visualize",
+  DEFINE: "define",
 };
 
 export function derivationFeature(type: DerivationType): Feature {

@@ -219,6 +219,7 @@ const en = {
   // The admin menu (components/admin/admin-sidebar.tsx)
   menu: "Menu",
   clicksGroups: "By group (90 d)",
+  featDefine: "Define",
   featExplain: "Explain",
   featSimplify: "Simplify",
   featSalience: "Salient passages",
@@ -629,6 +630,7 @@ const zh: Record<keyof typeof en, string> = {
   featureSaveFailed: "未保存",
   menu: "菜单",
   clicksGroups: "按分组（90 天）",
+  featDefine: "定义",
   featExplain: "解释",
   featSimplify: "简化",
   featSalience: "要点",
