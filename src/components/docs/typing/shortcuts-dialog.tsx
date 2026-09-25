@@ -128,7 +128,7 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
       nav("docsTyping.navBookmark", "B"),
       nav("docsTyping.navFootnote", "F"),
       nav("docsTyping.navTable", "T"),
-      nav("docsVersions.navSuggestion", "U"),
+      nav("docsTyping.navSuggestion", "U"),
     ],
   },
 ];

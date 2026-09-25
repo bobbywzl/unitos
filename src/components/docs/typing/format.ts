@@ -33,14 +33,15 @@ export function setCase(editor: Editor, mode: TextCase): boolean {
         return false;
       }
       const end = Math.min(pos + node.nodeSize, $to.pos);
-      const text = node.text.slice(start - pos, end - pos);
-      let next = "";
-      for (const ch of text) {
+      let at = start;
+      for (const ch of node.text.slice(start - pos, end - pos)) {
         const cls = charClass(ch);
-        next += mode === "upper" || (mode === "title" && cls === "w" && !inWord) ? ch.toUpperCase() : ch.toLowerCase();
+        const next = mode === "upper" || (mode === "title" && cls === "w" && !inWord) ? ch.toUpperCase() : ch.toLowerCase();
         if (cls !== "t") inWord = cls === "w";
+        // One step per changed letter: the marks painted over the words keep their ends.
+        if (next !== ch) tr.replaceWith(tr.mapping.map(at), tr.mapping.map(at + ch.length), state.schema.text(next, node.marks));
+        at += ch.length;
       }
-      if (next !== text) tr.replaceWith(tr.mapping.map(start), tr.mapping.map(end), state.schema.text(next, node.marks));
       return false;
     });
   }

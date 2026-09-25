@@ -6,20 +6,12 @@ import { memo, type ReactNode } from "react";
 import { useAuthor } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { replyTime } from "@/components/collab/reply-thread";
-import {
-  focusSuggestion,
-  readSuggestions,
-  settleSuggestions,
-  suggestionAt,
-  suggestionAuthor,
-  suggestionTime,
-  type Suggestion,
-} from "@/components/docs/ext/suggest";
+import { focusSuggestion, readSuggestions, settleSuggestions, suggestionAt, type Suggestion } from "@/components/docs/ext/suggest";
 import { CheckIcon, CloseIcon } from "@/components/docs/icons";
 import { blockStyle } from "@/components/docs/toolbar/styles";
 import { STYLE_LABEL } from "@/components/docs/toolbar/styles-menu";
 import { useLang, useT } from "@/components/lang-provider";
-import type { RichMark } from "@/lib/docs/schema";
+import { suggestionAuthor, suggestionTime, type RichMark } from "@/lib/docs/schema";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { personColor } from "@/lib/person";
 

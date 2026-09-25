@@ -16,7 +16,8 @@ const NAMED = new Set(["[", "]", "=", "-"]);
 export function keys(combo: string): string {
   const parts = combo.split(/\+(?!$)/);
   if (!isMac()) return parts.map((p) => (p === "Mod" ? "Ctrl" : p)).join("+");
-  const mac = parts.map((p) => (p === "Alt" ? "Option" : p));
+  // A chord (two presses) holds Ctrl+⌘ on a Mac, as Google Docs does.
+  const mac = parts.map((p) => (p === "Alt" ? (combo.includes(" ") ? "Ctrl" : "Option") : p));
   if (mac[0] === "Mod") {
     const rest = mac.slice(1);
     if (rest.length === 1 && [...rest[0]].length === 1 && !NAMED.has(rest[0])) return `⌘${rest[0]}`;

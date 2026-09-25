@@ -44,7 +44,7 @@ import { listPreset } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, styleFont, type NamedStyle } from "@/components/docs/toolbar/styles";
 import { db } from "@/lib/db";
 import { hex6, inlineText } from "@/lib/docs/blocks";
-import { ZWSP, type PageSetup, type RichMark, type RichNode } from "@/lib/docs/schema";
+import { suggestionAuthor, suggestionTime, ZWSP, type PageSetup, type RichMark, type RichNode } from "@/lib/docs/schema";
 import { MAX_IMAGE_BYTES, sniffImage } from "@/lib/images";
 import { outboundFetch } from "@/lib/outbound-fetch";
 
@@ -134,14 +134,11 @@ function bookmark(ctx: Ctx, name: string, children: ParagraphChild[]): Bookmark 
 /** The words a suggestion adds or removes: its insertion or deletion mark. */
 const changeOf = (node: RichNode) => node.marks?.find((m) => m.type === "insertion" || m.type === "deletion");
 
-/** The account a suggestion's id ("<account id>.<ms>") names. */
-const authorOf = (mark: RichMark) => String(mark.attrs?.id).replace(/\.\d+$/, "");
-
 /** A suggestion as Word's revision: its author's name (else Unitos) and the
     time its id holds, to the second. */
 function revision(ctx: Ctx, mark: RichMark) {
-  const ms = Number(/\.(\d+)$/.exec(String(mark.attrs?.id))?.[1]);
-  return { id: ++ctx.ids, author: ctx.authors.get(authorOf(mark)) ?? "Unitos", date: new Date(ms).toISOString().replace(/\.\d+Z$/, "Z") };
+  const id = mark.attrs?.id;
+  return { id: ++ctx.ids, author: ctx.authors.get(suggestionAuthor(id)) ?? "Unitos", date: new Date(suggestionTime(id)).toISOString().replace(/\.\d+Z$/, "Z") };
 }
 
 /** Inside a block a suggestion adds or removes as a whole, every run is added or removed. */
@@ -574,7 +571,7 @@ async function authorNames(doc: RichNode): Promise<Map<string, string>> {
   const ids = new Set<string>();
   const walk = (node: RichNode) => {
     const change = changeOf(node);
-    if (change) ids.add(authorOf(change));
+    if (change) ids.add(suggestionAuthor(change.attrs?.id));
     node.content?.forEach(walk);
   };
   walk(doc);

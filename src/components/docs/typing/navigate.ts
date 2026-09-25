@@ -86,7 +86,7 @@ const TARGETS: Record<string, Target> = {
   F: { what: "docsTyping.navFootnote", find: (s) => starts(s, named("footnoteReference")) },
   T: { what: "docsTyping.navTable", find: (s) => starts(s, named("table")) },
   C: { what: "docsTyping.navComment", find: comments },
-  U: { what: "docsVersions.navSuggestion", find: (s) => readSuggestions(s.doc).map((x) => Selection.near(s.doc.resolve(x.from))) },
+  U: { what: "docsTyping.navSuggestion", find: (s) => readSuggestions(s.doc).map((x) => Selection.near(s.doc.resolve(x.from))) },
 };
 
 /** The first of `found` after the selection's start, or the last before it,

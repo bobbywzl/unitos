@@ -95,6 +95,14 @@ export function useDocsSave({
     if (!dirtyRef.current) return;
     const version = versionRef.current;
     const doc = editor.getJSON() as RichNode;
+    // The text is the stored copy again (typed and taken back): nothing to
+    // send, and the page's revision still names the screen.
+    if (JSON.stringify(doc) === JSON.stringify(baseRef.current)) {
+      dirtyRef.current = false;
+      firstDirtyAtRef.current = null;
+      setState("saved");
+      return;
+    }
     setState("saving");
     const run = (async () => {
       try {

@@ -1,4 +1,4 @@
-import { CHIP_NODE_TYPES, INDEXED_NODE_TYPES, newBlockId, type RichMark, type RichNode } from "@/lib/docs/schema";
+import { CHIP_NODE_TYPES, INDEXED_NODE_TYPES, newBlockId, ZWSP, type RichMark, type RichNode } from "@/lib/docs/schema";
 
 // The paragraph index of a blank document (SPEC.md §29). The rich text is the
 // document; its Block rows are derived from it on every save, one per node a
@@ -65,7 +65,7 @@ function runStyles(marks: RichMark[] | undefined): string[] {
     suggested paragraph break (components/docs/ext/suggest.ts), are no words. */
 export function inlineText(node: RichNode): string {
   if (node.marks?.some((m) => m.type === "deletion")) return "";
-  if (node.type === "text") return (node.text ?? "").replaceAll("\u200B", "");
+  if (node.type === "text") return (node.text ?? "").replaceAll(ZWSP, "");
   if (node.type === "hardBreak") return "\n";
   // A smart chip's words are its label; other atoms add none.
   if (CHIP_NODE_TYPES.has(node.type)) return typeof node.attrs?.label === "string" ? node.attrs.label : "";
@@ -91,7 +91,7 @@ export function withoutSuggestions(nodes: RichNode[]): RichNode[] {
       }
     }
     const out: RichNode = { ...node, type, attrs, marks: kept };
-    if (node.type === "text") out.text = (node.text ?? "").replaceAll("\u200B", "");
+    if (node.type === "text") out.text = (node.text ?? "").replaceAll(ZWSP, "");
     else if (node.content) out.content = withoutSuggestions(node.content);
     return out.text === "" ? [] : [out];
   });

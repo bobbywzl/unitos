@@ -244,9 +244,10 @@ export function toggleBlockStyle(
   let at = 0;
   for (const child of hit.node.content ?? []) {
     // Offsets count as the paragraph index counts: a chip as its label, a
-    // suggested break's zero-width spaces not at all.
+    // suggested break's zero-width spaces and a removed word not at all; a
+    // removed word stays as it is.
     const len = inlineText(child).length;
-    if (child.type !== "text") {
+    if (child.type !== "text" || len === 0) {
       pieces.push({ node: child, from: at, to: at + len });
       at += len;
       continue;
@@ -270,12 +271,12 @@ export function toggleBlockStyle(
     }
     at += len;
   }
-  const inside = pieces.filter((p) => p.node.type === "text" && p.from >= start && p.to <= end);
+  const inside = pieces.filter((p) => p.node.type === "text" && p.from < p.to && p.from >= start && p.to <= end);
   if (inside.length === 0) return null;
   const on = !inside.every((p) => hasStyle(p.node.marks, style));
   const content = mergeRuns(
     pieces.map((p) => {
-      if (p.node.type !== "text" || p.from < start || p.to > end) return p.node;
+      if (!inside.includes(p)) return p.node;
       const marks = withStyle(p.node.marks, style, on);
       const { marks: _old, ...rest } = p.node;
       void _old;

@@ -27,7 +27,7 @@ import {
   transformToSuggestionTransaction,
 } from "@handlewithcare/prosemirror-suggest-changes";
 import { isList, isListItem } from "@/components/docs/typing/lists";
-import { SUGGESTION_MARK_TYPES, ZWSP } from "@/lib/docs/schema";
+import { SUGGESTION_MARK_TYPES, suggestionAuthor, ZWSP } from "@/lib/docs/schema";
 
 // Suggesting mode (SPEC.md §29), on @handlewithcare/prosemirror-suggest-changes.
 
@@ -51,18 +51,6 @@ export function suggestionAt(state: EditorState): string | null {
   let id = (empty ? idIn($from.nodeBefore?.marks) : null) ?? idIn($from.nodeAfter?.marks);
   for (let depth = $from.depth; !id && depth > 0; depth--) id = idIn($from.node(depth).marks);
   return id;
-}
-
-/** The account id a suggestion's id names. */
-export function suggestionAuthor(id: unknown): string {
-  const s = String(id);
-  return s.slice(0, Math.max(0, s.lastIndexOf(".")));
-}
-
-/** When a suggestion was made (ms since epoch). */
-export function suggestionTime(id: unknown): number {
-  const s = String(id);
-  return Number(s.slice(s.lastIndexOf(".") + 1));
 }
 
 type Side = "added" | "removed";

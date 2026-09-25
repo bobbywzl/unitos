@@ -133,6 +133,7 @@ const en = {
   navFootnote: "footnote",
   navTable: "table",
   navComment: "comment",
+  navSuggestion: "suggestion",
   navMisspelling: "misspelling",
   // Autocorrect
   autocorrectedTo: "Autocorrected to {word}",
@@ -267,6 +268,7 @@ const zh: Record<keyof typeof en, string> = {
   navFootnote: "脚注",
   navTable: "表格",
   navComment: "评论",
+  navSuggestion: "建议",
   navMisspelling: "拼写错误",
   autocorrectedTo: "已自动更正为 {word}",
   stopCorrecting: "停止更正“{word}”",

@@ -6,10 +6,11 @@ import { createPortal } from "react-dom";
 import { useCollab } from "@/components/collab/collab-context";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands } from "@/components/docs/commands";
-import { readSuggestions, setSuggesting, settleSuggestions, suggestionAt, suggestionAuthor } from "@/components/docs/ext/suggest";
+import { readSuggestions, setSuggesting, settleSuggestions, suggestionAt } from "@/components/docs/ext/suggest";
 import { belowSlot, pageGeometry, slotAt } from "@/components/docs/layer/margin";
 import { SuggestionCard } from "@/components/docs/suggest/card";
 import { ReviewPanel } from "@/components/docs/suggest/review";
+import { suggestionAuthor } from "@/lib/docs/schema";
 import { personColor } from "@/lib/person";
 
 // Suggesting mode in the page editor (SPEC.md §29): the authors' colors,
@@ -148,18 +149,16 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
       ),
     [ids, people],
   );
-  const header = editor.view.dom.closest("[data-docs-editor]")?.querySelector<HTMLElement>(".docs-header");
   const canSettle = canEdit && editing;
+  // The cards, made once per list: typing re-renders the page, not them.
+  const cards = useMemo(() => ids.map((id) => <SuggestionCard key={id} editor={editor} id={id} canSettle={canSettle} />), [ids, editor, canSettle]);
+  const header = editor.view.dom.closest("[data-docs-editor]")?.querySelector<HTMLElement>(".docs-header");
   return (
     <>
       <style>
         {[...colors, active && !viewing ? `.docs-prose [data-suggestion="${CSS.escape(active)}"]{--docs-suggest-tint:24%}` : ""].join("\n")}
       </style>
-      {pane &&
-        createPortal(
-          ids.map((id) => <SuggestionCard key={id} editor={editor} id={id} canSettle={canSettle} />),
-          pane,
-        )}
+      {pane && createPortal(cards, pane)}
       {reviewing && header && !viewing && (
         <ReviewPanel
           editor={editor}
