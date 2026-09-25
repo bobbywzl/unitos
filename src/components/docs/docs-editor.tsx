@@ -10,6 +10,7 @@ import { annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/doc
 import { LinkBubble, LinkDialog } from "@/components/docs/link-dialog";
 import { DOCS_EVENT, docsExtensions } from "@/components/docs/extensions";
 import { docsFontsUrl } from "@/components/docs/fonts";
+import { DocsFrame, UNTITLED } from "@/components/docs/frame";
 import { CloudDoneIcon, CloudOffIcon, CloudSyncIcon, DocIcon } from "@/components/docs/icons";
 import { DocsToolbar, type DocsMode, type Zoom } from "@/components/docs/toolbar";
 import { useDocsSave, type SaveState } from "@/components/docs/use-docs-save";
@@ -28,8 +29,6 @@ import type { Highlight } from "@/components/reader/block-view";
 import { api } from "@/lib/api";
 import { inlineText } from "@/lib/docs/blocks";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
-import { LANGS } from "@/lib/i18n/config";
-import { translatorFor } from "@/lib/i18n/dictionaries";
 
 // The page editor (SPEC.md §29): a blank document is written here the way a
 // Google Doc is written — a title row, the toolbar, and white pages on a gray
@@ -106,9 +105,6 @@ function SaveStatus({ state }: { state: SaveState }) {
     </>
   );
 }
-
-/** A new blank document's title, in every language. */
-const UNTITLED = new Set(LANGS.flatMap((lang) => (["docsPage.untitled", "panes.untitledDocument"] as const).map((key) => translatorFor(lang)(key))));
 
 /** The first line's words once a line follows it, else "". */
 function firstLineOf(editor: Editor): string {
@@ -299,16 +295,34 @@ export function DocsEditor({
   // painted marks move with the typing.
   const marksSignature = useMemo(() => JSON.stringify(highlightsByBlock), [highlightsByBlock]);
   const paintedRef = useRef<{ editor: Editor | null; signature: string }>({ editor: null, signature: "" });
+  // The marks made on this screen and painted ahead of the stored copy.
+  const aheadRef = useRef(new Set<string>());
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
     const painted = paintedRef.current;
     if (painted.editor === editor && painted.signature === marksSignature) return;
     if (!matches(rev)) {
+      // A mark made on this screen and not stored yet (a new comment or
+      // highlight) paints at once from its anchor, which reads the screen.
+      const ahead: Record<string, Highlight[]> = {};
+      for (const [blockId, list] of Object.entries(highlightsByBlock)) {
+        for (const h of list) {
+          const key = `${blockId}:${h.start}:${h.end}`;
+          if (h.kind !== "anchor" || h.sourceId || aheadRef.current.has(key)) continue;
+          aheadRef.current.add(key);
+          (ahead[blockId] ??= []).push(h);
+        }
+      }
+      if (Object.keys(ahead).length > 0) {
+        const meta: MarksMeta = { highlights: ahead, t, add: true };
+        editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
+      }
       // Saved, but the page's revision is behind (its own saves need no
       // refresh): ask for the stored copy's highlights.
       if (saveState === "saved") window.dispatchEvent(new Event(REFRESH_EVENT));
       return;
     }
+    aheadRef.current.clear();
     paintedRef.current = { editor, signature: marksSignature };
     const meta: MarksMeta = { highlights: highlightsByBlock, t };
     editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
@@ -370,11 +384,11 @@ export function DocsEditor({
   // the toolbar and the pages are built again only when their own inputs
   // change (on a long document one rebuild costs more than a frame).
   const chrome = useMemo(
-    () => (
-      <>
-        {editor && (
+    () =>
+      area && (
+        <>
           <DocsToolbar
-            editor={editor}
+            editor={area.editor}
             mode={mode}
             onMode={setMode}
             canEdit={canEdit}
@@ -386,34 +400,33 @@ export function DocsEditor({
             onToggleHeader={() => setHeaderHidden((h) => !h)}
             onInsertImage={insertImage}
           />
-        )}
-        {area && <PageRuler {...area} />}
-      </>
-    ),
-    [editor, area, mode, canEdit, zoom, pageSetup.pageless, aiControls, headerHidden, insertImage],
+          <PageRuler {...area} />
+        </>
+      ),
+    [area, mode, canEdit, zoom, pageSetup.pageless, aiControls, headerHidden, insertImage],
   );
   const pages = useMemo(
-    () => (
-      <>
-        {area ? (
+    () =>
+      area && (
+        <>
           <PageCanvas {...area} zoom={zoom} onZoom={setZoom} onPageClick={onPageClick}>
-            <EditorContent editor={editor} />
+            <EditorContent editor={area.editor} />
           </PageCanvas>
-        ) : (
-          <div className="docs-canvas" />
-        )}
-        {area && <InsertLayer {...area} />}
-        {area && <TypingLayer {...area} />}
-        {area && <UnitosLayer {...area} />}
-        {area && <SuggestLayer {...area} suggesting={mode === "suggesting"} />}
-        {area && <VersionHistory key={documentId} {...area} />}
-        {editor && <LinkDialog editor={editor} />}
-        {editor && <LinkBubble editor={editor} canEdit={editing} />}
-        {editor && <WordCountDialog editor={editor} />}
-      </>
-    ),
-    [editor, area, zoom, onPageClick, mode, documentId, editing],
+          <InsertLayer {...area} />
+          <TypingLayer {...area} />
+          <UnitosLayer {...area} />
+          <SuggestLayer {...area} suggesting={mode === "suggesting"} />
+          <VersionHistory key={documentId} {...area} />
+          <LinkDialog editor={area.editor} />
+          <LinkBubble editor={area.editor} canEdit={editing} />
+          <WordCountDialog editor={area.editor} />
+        </>
+      ),
+    [area, zoom, onPageClick, mode, documentId, editing],
   );
+
+  // Until the editor stands, the frame the reader drew while this code loaded.
+  if (!editor) return <DocsFrame title={title} pageSetup={pageSetup} />;
 
   return (
     <div className="docs-shell" data-docs-editor data-docs-mode={mode}>

@@ -28,7 +28,8 @@ import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 // (block-view.tsx markedText). The text never changes: a mark's chips are
 // data-anchor-skip widgets, and a press opens what it opens in the reader.
 
-export type MarksMeta = { highlights: Record<string, Highlight[]>; t: TFunc };
+/** `add`: paint these over the painted marks instead of in their place. */
+export type MarksMeta = { highlights: Record<string, Highlight[]>; t: TFunc; add?: boolean };
 
 export const annotationMarksKey = new PluginKey<DecorationSet>("docsAnnotationMarks");
 
@@ -360,6 +361,7 @@ export const AnnotationMarks = Extension.create({
           init: () => DecorationSet.empty,
           apply(tr, set) {
             const meta = tr.getMeta(annotationMarksKey) as MarksMeta | undefined;
+            if (meta?.add) return set.add(tr.doc, build(tr.doc, meta.highlights, meta.t).find());
             if (meta) return build(tr.doc, meta.highlights, meta.t);
             return tr.docChanged ? keepMoved(tr, set, set.map(tr.mapping, tr.doc)) : set;
           },

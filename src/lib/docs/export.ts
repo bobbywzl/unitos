@@ -62,7 +62,7 @@ import { outboundFetch } from "@/lib/outbound-fetch";
 type Block = Paragraph | Table;
 type Picture = { data: Uint8Array; type: "png" | "jpg" | "gif" | "bmp"; width: number; height: number };
 /** A comment on the text: its anchors (one per paragraph of its words), its author's account, time, and words. */
-export type DocxComment = {
+type DocxComment = {
   sources: { blockId: string; startOffset: number; endOffset: number }[];
   authorId: string | null;
   date: Date;
@@ -82,7 +82,7 @@ type Ctx = {
   numbering: { reference: string; levels: ILevelsOptions[] }[];
   /** A page break came last: the next paragraph starts a page. */
   breakBefore: boolean;
-  /** The last id Word's bookmarks and tracked changes took: each takes its own. */
+  /** The last id Word's bookmarks, tracked changes, and comments took: each takes its own. */
   ids: number;
   /** The names of the accounts that made suggestions and comments, by account id. */
   authors: Map<string, string>;

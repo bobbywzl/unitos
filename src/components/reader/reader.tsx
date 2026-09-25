@@ -42,41 +42,19 @@ import type { PageSize } from "@/lib/handwritten/pages";
 import { DocumentTitle } from "@/components/reader/document-title";
 import { formatTime, type Speaker, type TranscriptLine } from "@/lib/video/types";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
-import { DocIcon } from "@/components/docs/icons";
-import { pageFrame } from "@/components/docs/page/geometry";
+import { DocsFrame } from "@/components/docs/frame";
 
 // The page editor (SPEC.md §29) loads with a blank document only: its editor
 // library stays out of every other document's bundle. Until it has loaded,
-// its frame stands there: the title row, the toolbar, and an empty page.
+// its frame stands there.
+const DocsFrameContext = createContext<{ title: string; pageSetup: PageSetup } | null>(null);
 const DocsEditor = dynamic(() => import("@/components/docs/docs-editor").then((m) => m.DocsEditor), {
   ssr: false,
-  loading: () => <DocsFrame />,
+  loading: function Loading() {
+    const frame = useContext(DocsFrameContext);
+    return frame && <DocsFrame {...frame} />;
+  },
 });
-const DocsFrameContext = createContext<{ title: string; pageSetup: PageSetup } | null>(null);
-
-function DocsFrame() {
-  const frame = useContext(DocsFrameContext);
-  const page = frame && !frame.pageSetup.pageless ? pageFrame(frame.pageSetup) : null;
-  return (
-    <div className="docs-shell">
-      <div className="docs-header">
-        <div className="docs-title-row">
-          <DocIcon size={26} className="docs-title-icon" />
-          <span className="docs-title-input">{frame?.title}</span>
-        </div>
-        <div className="docs-toolbar" />
-        <div className="docs-ruler-row" />
-      </div>
-      <div className="docs-canvas">
-        {page && (
-          <div className="docs-page" style={{ width: page.width, height: page.height }}>
-            <div className="docs-sheet" style={{ top: 0, height: page.height }} />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
 // The article's horizontal padding (px-6 on both sides), added to the
