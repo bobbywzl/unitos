@@ -1,3 +1,9 @@
+@import "./css/toolbar.css";
+@import "./css/page.css";
+@import "./css/insert.css";
+@import "./css/typing.css";
+@import "./css/layer.css";
+
 /* The page editor (SPEC.md §29): Google Docs' look. Imported by globals.css.
    Every color the shell uses is a --docs-* token, set for light and dark. */
 

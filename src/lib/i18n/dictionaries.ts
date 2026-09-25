@@ -4,6 +4,10 @@ import { assistant } from "@/lib/i18n/dict/assistant";
 import { billing } from "@/lib/i18n/dict/billing";
 import { common } from "@/lib/i18n/dict/common";
 import { docs } from "@/lib/i18n/dict/docs";
+import { docsInsert } from "@/lib/i18n/dict/docsInsert";
+import { docsLayer } from "@/lib/i18n/dict/docsLayer";
+import { docsPage } from "@/lib/i18n/dict/docsPage";
+import { docsTyping } from "@/lib/i18n/dict/docsTyping";
 import { legal } from "@/lib/i18n/dict/legal";
 import { outline } from "@/lib/i18n/dict/outline";
 import { panels } from "@/lib/i18n/dict/panels";
@@ -30,6 +34,10 @@ const NAMESPACES = {
   outline,
   reader,
   docs,
+  docsPage,
+  docsInsert,
+  docsTyping,
+  docsLayer,
   assistant,
   billing,
   panels,

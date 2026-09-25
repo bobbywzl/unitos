@@ -580,6 +580,8 @@ export function Reader({
     pageSetup: PageSetup;
     canEdit: boolean;
     aiControls?: React.ReactNode;
+    notebookId: string;
+    documents: { id: string; title: string }[];
   } | null;
   /** The article card in the video pane (SPEC.md §11): no column padding, no block count. */
   embedded?: boolean;
@@ -1183,6 +1185,8 @@ export function Reader({
     return (
       <DocsEditor
         documentId={documentId}
+        notebookId={richText.notebookId}
+        documents={richText.documents}
         title={title}
         richText={richText.doc}
         rev={richText.rev}

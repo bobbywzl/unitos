@@ -12,6 +12,11 @@ import Image from "@tiptap/extension-image";
 import { CharacterCount, Placeholder } from "@tiptap/extensions";
 import Typography from "@tiptap/extension-typography";
 import { DocsFontFamily } from "@/components/docs/fonts";
+import { insertExtensions } from "@/components/docs/ext/insert";
+import { layerExtensions } from "@/components/docs/ext/layer";
+import { pageExtensions } from "@/components/docs/ext/page";
+import { toolbarExtensions } from "@/components/docs/ext/toolbar";
+import { typingExtensions } from "@/components/docs/ext/typing";
 import { INDEXED_NODE_TYPES, newBlockId } from "@/lib/docs/schema";
 
 // The page editor's schema and behavior (SPEC.md §29): Google Docs' model on
@@ -346,5 +351,10 @@ export function docsExtensions({ placeholder }: { placeholder: string }) {
     ParagraphFormat,
     PageBreak,
     DocsKeymap,
+    ...toolbarExtensions,
+    ...pageExtensions,
+    ...insertExtensions,
+    ...typingExtensions,
+    ...layerExtensions,
   ];
 }

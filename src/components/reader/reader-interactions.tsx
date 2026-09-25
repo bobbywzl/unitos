@@ -6276,7 +6276,13 @@ function blockFormatKind(
         flushRef={flushEditRef}
         richText={
           richText
-            ? { ...richText, canEdit, aiControls: !split && !embedded ? distillButton : null }
+            ? {
+                ...richText,
+                canEdit,
+                aiControls: !split && !embedded ? distillButton : null,
+                notebookId,
+                documents: attachedDocuments,
+              }
             : null
         }
         transcript={transcript}

@@ -3,7 +3,7 @@
 import type { JSONContent } from "@tiptap/core";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
 import { AnnotationMarks, annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/docs/annotation-marks";
 import { LinkBubble, LinkDialog } from "@/components/docs/link-dialog";
@@ -13,6 +13,11 @@ import { CloudDoneIcon, CloudOffIcon, CloudSyncIcon, DocIcon } from "@/component
 import { DocsToolbar, type DocsMode, type Zoom } from "@/components/docs/toolbar";
 import { useDocsSave, type SaveState } from "@/components/docs/use-docs-save";
 import { WordCountDialog } from "@/components/docs/word-count";
+import { InsertLayer } from "@/components/docs/areas/insert";
+import { UnitosLayer } from "@/components/docs/areas/layer";
+import { PageCanvas, PageRuler } from "@/components/docs/areas/page";
+import { TypingLayer } from "@/components/docs/areas/typing";
+import type { DocsAreaProps } from "@/components/docs/areas/types";
 import type { Highlight } from "@/components/reader/block-view";
 import { api } from "@/lib/api";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
@@ -25,7 +30,6 @@ import type { PageSetup, RichNode } from "@/lib/docs/schema";
 // (annotation-marks.tsx), and the paragraph index every AI tool reads, kept
 // in step by each save (use-docs-save.ts).
 
-const PX_PER_PT = 96 / 72;
 const FONTS_LINK_ID = "unitos-docs-fonts";
 
 function useDocsFonts() {
@@ -113,6 +117,8 @@ function TitleField({ documentId, title, canEdit }: { documentId: string; title:
 
 export function DocsEditor({
   documentId,
+  notebookId,
+  documents,
   title,
   richText,
   rev,
@@ -123,6 +129,9 @@ export function DocsEditor({
   aiControls,
 }: {
   documentId: string;
+  notebookId: string;
+  /** The project's documents, for links and file chips. */
+  documents: { id: string; title: string }[];
   title: string;
   richText: RichNode;
   rev: number;
@@ -140,8 +149,6 @@ export function DocsEditor({
   const [zoom, setZoom] = useState<Zoom>(100);
   const [spellcheck, setSpellcheck] = useState(true);
   const [headerHidden, setHeaderHidden] = useState(false);
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const [fitScale, setFitScale] = useState(1);
 
   const extensions = useMemo(
     () => [...docsExtensions({ placeholder: t("docs.typeAtToInsert") }), AnnotationMarks],
@@ -227,18 +234,6 @@ export function DocsEditor({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Fit: the page scales to the canvas's width.
-  const pageWidthPx = pageSetup.width * PX_PER_PT;
-  useLayoutEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || zoom !== "fit") return;
-    const measure = () => setFitScale(Math.max(0.25, Math.min(3, (canvas.clientWidth - 48) / pageWidthPx)));
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(canvas);
-    return () => observer.disconnect();
-  }, [zoom, pageWidthPx]);
-  const scale = zoom === "fit" ? fitScale : zoom / 100;
 
   const insertImage = useCallback(
     async (source: { file: File } | { url: string }) => {
@@ -271,17 +266,9 @@ export function DocsEditor({
     if (editor.state.selection.empty) openMarkAt(target);
   };
 
-  const pagePadding = pageSetup.margins;
-  const pageStyle: React.CSSProperties = {
-    width: pageWidthPx,
-    minHeight: pageSetup.pageless ? undefined : pageSetup.height * PX_PER_PT,
-    paddingTop: pagePadding.top * PX_PER_PT,
-    paddingRight: pagePadding.right * PX_PER_PT,
-    paddingBottom: pagePadding.bottom * PX_PER_PT,
-    paddingLeft: pagePadding.left * PX_PER_PT,
-    background: pageSetup.color,
-    zoom: scale === 1 ? undefined : scale,
-  };
+  const area: DocsAreaProps | null = editor
+    ? { editor, documentId, notebookId, canEdit, editing: canEdit && mode === "editing", pageSetup, documents }
+    : null;
 
   return (
     <div className="docs-shell" data-docs-editor data-docs-mode={mode}>
@@ -309,12 +296,18 @@ export function DocsEditor({
             onInsertImage={(source) => void insertImage(source)}
           />
         )}
+        {area && <PageRuler {...area} zoom={zoom} />}
       </div>
-      <div ref={canvasRef} className="docs-canvas">
-        <article className="docs-page" style={pageStyle} onClick={onPageClick} data-docs-page>
+      {area ? (
+        <PageCanvas {...area} zoom={zoom} onPageClick={onPageClick}>
           <EditorContent editor={editor} />
-        </article>
-      </div>
+        </PageCanvas>
+      ) : (
+        <div className="docs-canvas" />
+      )}
+      {area && <InsertLayer {...area} />}
+      {area && <TypingLayer {...area} />}
+      {area && <UnitosLayer {...area} />}
       {editor && <LinkDialog editor={editor} />}
       {editor && <LinkBubble editor={editor} canEdit={canEdit && mode === "editing"} />}
       {editor && <WordCountDialog editor={editor} />}
