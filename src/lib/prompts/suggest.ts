@@ -18,7 +18,7 @@ export const SUGGEST_COMMANDS = {
   formal: "Make the selected words more formal: the same points in a formal register.",
   casual: "Make the selected words more casual: the same points in plain, everyday words.",
   bulleted: "Turn the selected words into a bulleted list, one point per line.",
-  grammar: "Fix the spelling and grammar of the selected words. Change nothing else.",
+  fix: "Fix the spelling and grammar of the selected words. Change nothing else.",
 } as const;
 export type SuggestCommand = keyof typeof SUGGEST_COMMANDS;
 
