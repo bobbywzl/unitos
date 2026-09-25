@@ -120,6 +120,12 @@ export function CommentCard({
 
   const person = written?.by ? authorOf(written.by) : undefined;
 
+  /** A toast in this card's pane. */
+  const say = (text: string) => {
+    const editor = pageEditorIn(cardRef.current?.closest("[data-reader-root]") ?? null);
+    if (editor) toast(text, editor);
+  };
+
   // The card goes with the mark, and the text takes the keys again; a failed
   // request paints the mark again.
   async function resolve() {
@@ -129,16 +135,16 @@ export function CommentCard({
       await setCommentResolved(noteId, true);
       router.refresh();
     } catch (err) {
-      toast(err instanceof Error ? err.message : t("common.requestFailed"));
+      say(err instanceof Error ? err.message : t("common.requestFailed"));
     }
   }
 
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(new URL(link, window.location.origin).href);
-      toast(t("docs.linkCopied"));
+      say(t("docs.linkCopied"));
     } catch {
-      toast(t("reader.copyFailed"));
+      say(t("reader.copyFailed"));
     }
   }
 
@@ -284,7 +290,13 @@ export function CommentCard({
             {t("common.delete")}
           </MenuItem>
         )}
-        <MenuItem track="comment-link" onSelect={choose(() => void copyLink())}>
+        <MenuItem
+          track="comment-link"
+          onSelect={() => {
+            setMenuOpen(false);
+            void copyLink();
+          }}
+        >
           {t("docsLayer.getLink")}
         </MenuItem>
       </DropdownPanel>

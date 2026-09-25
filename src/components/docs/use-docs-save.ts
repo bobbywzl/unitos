@@ -53,11 +53,11 @@ function pairKey(node: PMNode): string {
 }
 
 /** Make the node at `pos` (-1: the document) into `next`, touching only what
-    differs, from the end backwards so the positions before stay true. A
-    paragraph takes one replace of the words that differ. Elsewhere two
-    children pair when their pairKeys match, or when they are of one type and
-    neither key is on the other side (changed in place); a pair is patched,
-    and a child without a partner is removed or added whole. */
+    differs, from the end backwards so the positions before stay true: a
+    paragraph takes one replace of the words that differ; other children pair
+    by pairKey, or in place by type when neither key is on the other side,
+    and a child without a partner is removed or added whole (of two that
+    moved past each other, the one that moved farther). */
 function patch(tr: Transaction, node: PMNode, next: PMNode, pos: number): void {
   if (node.eq(next)) return;
   if (pos >= 0 && !node.sameMarkup(next)) tr.setNodeMarkup(pos, undefined, next.attrs, next.marks);
@@ -72,31 +72,35 @@ function patch(tr: Transaction, node: PMNode, next: PMNode, pos: number): void {
     tr.replaceWith(start + from, start + a, next.content.cut(from, b));
     return;
   }
-  // The keys of the children not yet walked, on each side.
-  const left = new Map<string, number>();
-  const right = new Map<string, number>();
-  const count = (keys: Map<string, number>, key: string, by: number) => keys.set(key, (keys.get(key) ?? 0) + by);
-  node.forEach((child) => count(left, pairKey(child), 1));
-  next.forEach((child) => count(right, pairKey(child), 1));
+  // The places of the children not walked yet, by pairKey, on each side.
+  const places = (parent: PMNode) => {
+    const at = new Map<string, number[]>();
+    parent.forEach((child, _, k) => at.set(pairKey(child), [...(at.get(pairKey(child)) ?? []), k]));
+    return at;
+  };
+  const [left, right] = [places(node), places(next)];
   let [i, j, end] = [node.childCount, next.childCount, start + node.content.size];
   while (i > 0 || j > 0) {
     const a = i > 0 ? node.child(i - 1) : null;
     const b = j > 0 ? next.child(j - 1) : null;
     const [ka, kb] = [a ? pairKey(a) : "", b ? pairKey(b) : ""];
-    if (a && b && (ka === kb || (a.type === b.type && !left.get(kb) && !right.get(ka)))) {
+    // Where b stands on screen, and a in the stored copy (-1: nowhere).
+    const p = left.get(kb)?.at(-1) ?? -1;
+    const q = right.get(ka)?.at(-1) ?? -1;
+    if (a && b && (ka === kb || (a.type === b.type && p < 0 && q < 0))) {
       patch(tr, a, b, end - a.nodeSize);
-      count(right, kb, -1);
+      right.get(kb)?.pop();
       j--;
-    } else if (b && !left.get(kb)) {
+    } else if (b && (p < 0 || (q >= 0 && j - 1 - q < i - 1 - p))) {
       tr.insert(end, b);
-      count(right, kb, -1);
+      right.get(kb)?.pop();
       j--;
       continue;
     } else if (a) {
       tr.delete(end - a.nodeSize, end);
     }
     if (a) {
-      count(left, ka, -1);
+      left.get(ka)?.pop();
       end -= a.nodeSize;
       i--;
     }

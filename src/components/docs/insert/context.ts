@@ -75,7 +75,7 @@ export function insertLayerOn(editor: Editor): boolean {
 }
 
 /** Show a short message the way the app shows its toasts, in the pane of
-    `editor`; without one, in every page editor's pane. */
-export function toast(text: string, editor?: Editor): void {
-  if (text) (editor?.view.dom ?? window).dispatchEvent(new CustomEvent("dissect:toast", { bubbles: true, detail: { text } }));
+    `editor`. */
+export function toast(text: string, editor: Editor): void {
+  if (text) editor.view.dom.dispatchEvent(new CustomEvent("dissect:toast", { bubbles: true, detail: { text } }));
 }

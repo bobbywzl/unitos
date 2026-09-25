@@ -2185,15 +2185,15 @@ export function ReaderInteractions({
     // A toast raised on no page editor shows in every pane.
     const onToast = (e: Event) => {
       const text = (e as CustomEvent<{ text: string }>).detail?.text;
-      if (text && (e.target === window || container.contains(e.target as Node))) showToast(text);
+      if (text) showToast(text);
     };
     container.addEventListener(DOCS_EVENT.comment, onComment);
     container.addEventListener(DOCS_EVENT.tool, onTool);
-    window.addEventListener("dissect:toast", onToast);
+    container.addEventListener("dissect:toast", onToast);
     return () => {
       container.removeEventListener(DOCS_EVENT.comment, onComment);
       container.removeEventListener(DOCS_EVENT.tool, onTool);
-      window.removeEventListener("dissect:toast", onToast);
+      container.removeEventListener("dissect:toast", onToast);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [captureSelection, Boolean(richText)]);

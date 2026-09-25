@@ -15,7 +15,8 @@ import { MAX_WAIT_MS, SAVE_DELAY_MS, retryWait, saveOnLeave, type SaveState } fr
 
 export type HeaderArea = "header" | "footer";
 
-/** The commands reach the page's parts through these window events. */
+/** The commands reach the page's parts through these events, raised on the
+    page's text (fireDocs). */
 export const PAGE_EVENT = {
   /** Enter the header or the footer of the page that holds the caret. */
   editHeader: "docs:page-edit-header",
