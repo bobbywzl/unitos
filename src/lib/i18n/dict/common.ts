@@ -66,7 +66,8 @@
 //   collapse(整篇文章按块折叠为核心) 折叠 · core(块的核心) 核心 ·
 //   annotations full page 整页批注 · kind color(每类批注的颜色) 类别色 ·
 //   folder(项目里的文档分组) 文件夹 ·
-//   release(一次上线的新功能) 版本更新 · New glow(新功能光晕) 新功能光晕
+//   release(一次上线的新功能) 版本更新 · New glow(新功能光晕) 新功能光晕 ·
+//   reading position 阅读位置 · left-off mark(上次读到的块上方的小书签) 阅读标记
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
 const en = {

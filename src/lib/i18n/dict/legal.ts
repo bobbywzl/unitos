@@ -33,7 +33,7 @@ const en = {
   pCollectFeedback:
     "Feedback you send: the message, the page you sent it from, and your browser's user-agent string.",
   pCollectUsage:
-    "Usage: which controls you click, with the open project, and each AI call's provider, model, token counts, and cost — never the text of the call. Settings → Your data shows these counts.",
+    "Usage: where you left off in each document, which controls you click, with the open project, and each AI call's provider, model, token counts, and cost — never the text of the call. Settings → Your data shows these counts.",
   pCollectLogs:
     "Ordinary server logs kept by the hosting provider, such as IP addresses and request times.",
 
@@ -176,7 +176,7 @@ const zh: Record<keyof typeof en, string> = {
   pCollectPrefs: "你的偏好：界面语言和主题。",
   pCollectFeedback: "你发送的反馈：内容本身、发送时所在的页面，以及浏览器的 user-agent 字符串。",
   pCollectUsage:
-    "使用情况：你点击了哪些控件及当时打开的项目，以及每次 AI 调用的服务商、模型、token 数和费用——不含调用的文字内容。设置 → 你的数据 显示这些计数。",
+    "使用情况：你在每个文档上次读到的位置，你点击了哪些控件及当时打开的项目，以及每次 AI 调用的服务商、模型、token 数和费用——不含调用的文字内容。设置 → 你的数据 显示这些计数。",
   pCollectLogs: "托管服务商保留的常规服务器日志，例如 IP 地址和请求时间。",
 
   pCookiesHeading: "Cookie",

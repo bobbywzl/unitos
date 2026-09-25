@@ -376,6 +376,37 @@ function BlockBookmark({
   );
 }
 
+// The left-off mark (SPEC.md §6): a small ribbon above the block where the
+// reader left off, and a faint line across the column, so the place still
+// shows once the reader scrolls on or away. It sits in the gap above the
+// block, clear of the grip at the block's first line and the core toggle at
+// its right; it takes no room and is no part of the block's text.
+function LeftOffMark() {
+  const t = useT();
+  const label = t("reader.leftOffHere");
+  return (
+    <span
+      data-anchor-skip
+      className="pointer-events-none absolute -top-[9px] right-0 left-0 h-0 select-none motion-safe:animate-[fade-in_0.4s_ease-out_both] print:hidden"
+    >
+      <span
+        aria-hidden
+        className="absolute top-0 right-0 -left-1.5 h-[1.5px] -translate-y-1/2 bg-linear-to-r from-clay/70 to-transparent to-85%"
+      />
+      <span
+        role="img"
+        aria-label={label}
+        data-tip={label}
+        className="pointer-events-auto absolute -top-2.5 -left-[25px] flex size-5 items-center justify-center text-clay"
+      >
+        <svg aria-hidden width="10" height="13" viewBox="0 0 10 13">
+          <path d="M1 0h8a1 1 0 0 1 1 1v12l-5-3.2L0 13V1a1 1 0 0 1 1-1z" fill="currentColor" />
+        </svg>
+      </span>
+    </span>
+  );
+}
+
 const FONT_STACK: Record<string, string | undefined> = {
   default: undefined,
   // CJK serif fallbacks: without them Windows falls back to SimSun for
@@ -558,9 +589,16 @@ export function Reader({
   collapse,
   transcript,
   embedded,
+  leftOffBlockId,
+  accountPositionAtOpen = false,
 }: {
   title: string;
   blocks: BlockData[];
+  /** The block the left-off mark sits above (SPEC.md §6); reading mode only. */
+  leftOffBlockId?: string | null;
+  /** The account had a reading position here when the document opened: the
+      reader resumes there, so the first-open reveal stays off. */
+  accountPositionAtOpen?: boolean;
   /** The article card in the video pane (SPEC.md §11): no column padding, no block count. */
   embedded?: boolean;
   /** Above the title: the Translate offer (SPEC.md §19). */
@@ -951,8 +989,8 @@ export function Reader({
   }, [wrapSpacer, spacerKey, wrapClears, typeById]);
 
   // A first open reveals the blocks as the reader scrolls (reveal.tsx);
-  // reading mode only, never the transcript.
-  const reveal = useReveal(documentId, mode === "read" && !transcript);
+  // reading mode only, never the transcript, never over a resume.
+  const reveal = useReveal(documentId, mode === "read" && !transcript && !accountPositionAtOpen);
   const blockReveal = mode === "read" ? reveal : inactiveReveal;
   const masthead = hasMasthead(blocks);
   // A leading kicker renders above the title, still through BlockView.
@@ -1147,6 +1185,17 @@ export function Reader({
           {documentId && <BlockBookmark documentId={documentId} blockId={block.id} text={block.text} />}
           {blockNode(block)}
           {translationOf(block)}
+        </div>
+      );
+    }
+    // The left-off mark: reading mode only, outside the block's hover group,
+    // so pointing at it leaves the grip hidden. The wrapper has no padding or
+    // border, so the block's margins collapse through it as before.
+    if (mode === "read" && block.id === leftOffBlockId) {
+      node = (
+        <div className="relative">
+          <LeftOffMark />
+          {node}
         </div>
       );
     }

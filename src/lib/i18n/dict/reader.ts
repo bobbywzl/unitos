@@ -11,6 +11,8 @@ const en = {
   // The bookmark on a hovered block (SPEC.md §6): drag it into a note, and
   // the block lands there as a quote that points back here.
   bookmarkBlock: "Drag into a note as a quote",
+  // The left-off mark above the block where the reader left off (SPEC.md §6).
+  leftOffHere: "You left off here",
   // Selection popover
   copied: "Copied",
   copyFailed: "Could not copy. Your browser blocked it.",
@@ -279,6 +281,7 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   bookmarkBlock: "拖入笔记，作为引用",
+  leftOffHere: "你上次读到这里",
   // Selection popover
   copied: "已复制",
   copyFailed: "无法复制。浏览器阻止了此操作。",

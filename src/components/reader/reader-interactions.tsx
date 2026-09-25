@@ -6,14 +6,22 @@ import { api } from "@/lib/api";
 import { blockKind } from "@/lib/block-kind";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
+  ACCOUNT_SAVE_MAX_MS,
+  ACCOUNT_SAVE_SETTLE_MS,
   applyReadingPosition,
   atReadingPosition,
+  chooseReadingPosition,
+  LEFT_OFF_MIN_SHARE,
   parseReadingPosition,
   POSITION_HOLD_MS,
   readingPositionKey,
+  readingPositionScroll,
   readReadingPosition,
+  type BlockPosition,
   type ReadingPosition,
 } from "@/lib/reading-position";
+import { ACCOUNT_HEADER } from "@/lib/constants";
+import { tabAccount } from "@/lib/tab-account";
 import type { SourceInput } from "@/lib/anchors/input";
 import { anchorableOffset, anchorableText } from "@/lib/anchors/dom";
 import {
@@ -645,6 +653,28 @@ type AnchorHighlightMap = Record<
   }[]
 >;
 
+// The account's copy of the reading position (SPEC.md §6,
+// PUT /api/documents/[documentId]/position). Fire and forget, like click
+// telemetry, and never in the save indicator: a lost save costs a place, not
+// work. keepalive lets it outlive the page. The tab's account rides along, so
+// a tab the browser has since signed into another account saves nothing.
+function saveAccountPosition(documentId: string, position: BlockPosition, keepalive: boolean): void {
+  const account = tabAccount();
+  fetch(`/api/documents/${documentId}/position`, {
+    method: "PUT",
+    keepalive,
+    headers: { "Content-Type": "application/json", ...(account ? { [ACCOUNT_HEADER]: account } : {}) },
+    body: JSON.stringify({
+      blockId: position.blockId,
+      offset: position.offset,
+      height: position.height,
+      at: Math.round(position.at),
+    }),
+  }).catch(() => {
+    // offline, or the network dropped: the tab's copy still holds the place
+  });
+}
+
 // Client layer over the reader: selection capture, popover, EXPLAIN bubble,
 // SIMPLIFY bubble, SALIENCE overlay toggle, DISTILL page, the article menu,
 // jump-to-anchor.
@@ -680,9 +710,14 @@ export function ReaderInteractions({
   figureRender,
   translationAvailable,
   transcript,
+  accountPosition,
 }: {
   documentId: string;
   notebookId: string;
+  /** The account's copy of the reading position in this document (SPEC.md
+      §6), as the page read it; null = none yet. The reader opens there when
+      it is newer than the tab's copy. */
+  accountPosition?: BlockPosition | null;
   /** DEEPL_API_KEY is set: the Translate offer shows when the languages differ (SPEC.md §19). */
   translationAvailable: boolean;
   // A video document's transcript (SPEC.md §11): the blocks are its lines,
@@ -853,36 +888,63 @@ export function ReaderInteractions({
   const conversationViewRef = useRef(false);
   conversationViewRef.current = conversationView !== null;
   const conversationReturnScroll = useRef<number | null>(null);
-  // The reading position survives a full page load and a remount: a note, an
-  // annotation, or an AI tool refreshes the page, and when the refresh turns
-  // into a full load (a new deploy, a dropped response) the reader came back
-  // at the top (reader report). Saved per tab and per document as the block
-  // at the top of the pane and its offset (lib/reading-position.ts). The
-  // workspace's inline script restores it before the first paint; this
-  // re-applies it after hydration and holds it while the layout under it
-  // settles — a figure above the position loading late moves everything
-  // below it — until the reader scrolls. A ?src, ?block, or ?link jump wins:
-  // with one in the URL nothing restores.
+  // The reading position survives a full page load, a remount, a new tab,
+  // and another device (lib/reading-position.ts): a note, an annotation, or
+  // an AI tool refreshes the page, and when the refresh turns into a full
+  // load (a new deploy, a dropped response) the reader came back at the top
+  // (reader report); and a reader who comes back another day starts where
+  // they left off. Two copies, each the block at the reading line and its
+  // offset: the tab's, saved as the reader scrolls, and the account's, saved
+  // a little later. On open the newer one wins. The workspace's inline
+  // script applies it before the first paint; this re-applies it after
+  // hydration and holds it while the layout under it settles — a figure
+  // above the position loading late moves everything below it — until the
+  // reader scrolls. The left-off mark goes above the position's block. A
+  // ?src, ?block, or ?link jump wins: with one in the URL nothing restores,
+  // and the mark still shows.
   const positionStoreKey = readingPositionKey(documentId);
   const jumpOnOpen = useRef(
     Boolean(searchParams.get("src") || searchParams.get("block") || searchParams.get("link")),
   );
+  // A transcript keeps the tab's copy alone (playback moves its pane) and
+  // has no left-off mark; an embedded layer keeps no position at all.
+  const isTranscript = transcript !== undefined;
+  const keepsAccountCopy = !isTranscript && !embedded;
+  // The account's copy as it was when the document opened: a refresh that
+  // brings this tab's own later save moves neither the reader nor the mark.
+  const [accountAtOpen] = useState(() => (keepsAccountCopy ? (accountPosition ?? null) : null));
+  // When the reader last moved in this document, ms by this browser's clock:
+  // the time both copies carry, so the newer copy wins on the next open.
+  const lastMovedAt = useRef(0);
+  // The block the left-off mark sits above (reader.tsx LeftOffMark).
+  const [leftOffBlockId, setLeftOffBlockId] = useState<string | null>(null);
   // While the hold keeps the stored position, saves pause: a clamped
   // intermediate position must not overwrite the stored one.
   const positionHeld = useRef(false);
   useLayoutEffect(() => {
     const container = containerRef.current;
     // An embedded layer does not scroll: the pane around it keeps the position.
-    if (!container || jumpOnOpen.current || embedded) return;
-    let stored: ReadingPosition | null = null;
+    if (!container || embedded) return;
+    let tabCopy: ReadingPosition | null = null;
     try {
-      stored = parseReadingPosition(sessionStorage.getItem(positionStoreKey));
+      tabCopy = parseReadingPosition(sessionStorage.getItem(positionStoreKey));
     } catch {
-      stored = null; // storage unavailable: the reader starts at the top
+      tabCopy = null; // storage unavailable: the account's copy alone
     }
-    if (!stored) return;
-    const position = stored;
-    let expected = applyReadingPosition(container, position);
+    const chosen = chooseReadingPosition(tabCopy, accountAtOpen);
+    if (!chosen) return;
+    const { position, resume } = chosen;
+    lastMovedAt.current = position.at;
+    // The mark shows once the position is past the first screen: a reader
+    // still on it has no place to come back to.
+    if (!isTranscript && "blockId" in position) {
+      const top = readingPositionScroll(container, position, resume);
+      if (top !== null && top >= container.clientHeight * LEFT_OFF_MIN_SHARE) {
+        setLeftOffBlockId(position.blockId);
+      }
+    }
+    if (jumpOnOpen.current) return;
+    let expected = applyReadingPosition(container, position, resume);
     if (expected === null) return; // the block is gone (a re-parse): nothing to hold
     positionHeld.current = true;
     // The browser's own scroll anchoring would keep whichever block it picked
@@ -913,13 +975,13 @@ export function ReaderInteractions({
     };
     const hold = () => {
       if (!positionHeld.current) return;
-      expected = applyReadingPosition(container, position);
+      expected = applyReadingPosition(container, position, resume);
       if (expected === null) release();
     };
     const onScroll = () => {
       // The hold's own moves land on expected. Any other scroll is the
       // reader's, or a jump the reader asked for: the hold ends.
-      if (container.scrollTop === expected || atReadingPosition(container, position)) return;
+      if (container.scrollTop === expected || atReadingPosition(container, position, resume)) return;
       release();
     };
     const observer = new ResizeObserver(hold);
@@ -930,11 +992,39 @@ export function ReaderInteractions({
     container.addEventListener("pointerdown", release);
     const timer = setTimeout(release, POSITION_HOLD_MS);
     return cleanup;
-  }, [positionStoreKey, embedded]);
+  }, [positionStoreKey, embedded, isTranscript, accountAtOpen]);
   useEffect(() => {
     const container = containerRef.current;
     if (!container || embedded) return;
     let raf = 0;
+    // The account's copy saves once the reader stops scrolling
+    // (ACCOUNT_SAVE_SETTLE_MS), at least every ACCOUNT_SAVE_MAX_MS while
+    // they keep scrolling, and at once when the tab hides, the page goes, or
+    // the document closes. Only a move since the last save sends one.
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let maxTimer: ReturnType<typeof setTimeout> | null = null;
+    let accountDirty = false;
+    // The position, read live while the pane shows the article, else the
+    // last one read: a document switch removes the pane before this
+    // effect's cleanup runs (a removed pane reads as the top of the
+    // document), and a page opened over the article scrolls the pane.
+    let lastRead: ReadingPosition | null = null;
+    const readPosition = (): ReadingPosition | null => {
+      if (container.isConnected && !distillOpenRef.current && !conversationViewRef.current) {
+        lastRead = readReadingPosition(container, lastMovedAt.current);
+      }
+      return lastRead && { ...lastRead, at: lastMovedAt.current };
+    };
+    const saveAccount = (keepalive: boolean) => {
+      if (settleTimer) clearTimeout(settleTimer);
+      if (maxTimer) clearTimeout(maxTimer);
+      settleTimer = null;
+      maxTimer = null;
+      if (!accountDirty || positionHeld.current) return;
+      accountDirty = false;
+      const position = readPosition();
+      if (position && "blockId" in position) saveAccountPosition(documentId, position, keepalive);
+    };
     const save = () => {
       raf = 0;
       // The distilled page and the extract page scroll the pane to the top while open; that
@@ -946,24 +1036,51 @@ export function ReaderInteractions({
         positionHeld.current
       )
         return;
+      const position = readPosition();
+      if (!position) return; // not read yet: the stored position stands
       try {
-        sessionStorage.setItem(positionStoreKey, JSON.stringify(readReadingPosition(container)));
+        sessionStorage.setItem(positionStoreKey, JSON.stringify(position));
       } catch {
         // storage unavailable: nothing to remember
       }
     };
     const onScroll = () => {
       if (!raf) raf = requestAnimationFrame(save);
+      // The reader moved — not the hold's own moves, not a page opened over
+      // the article, not a layout shift in a tab out of sight.
+      if (
+        positionHeld.current ||
+        distillOpenRef.current ||
+        conversationViewRef.current ||
+        document.visibilityState !== "visible"
+      )
+        return;
+      lastMovedAt.current = Date.now();
+      if (!keepsAccountCopy) return;
+      accountDirty = true;
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => saveAccount(false), ACCOUNT_SAVE_SETTLE_MS);
+      maxTimer ??= setTimeout(() => saveAccount(false), ACCOUNT_SAVE_MAX_MS);
+    };
+    const onPageHide = () => {
+      save();
+      saveAccount(true);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") saveAccount(true);
     };
     container.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("pagehide", save);
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       container.removeEventListener("scroll", onScroll);
-      window.removeEventListener("pagehide", save);
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibility);
       if (raf) cancelAnimationFrame(raf);
       save();
+      saveAccount(true);
     };
-  }, [positionStoreKey, embedded]);
+  }, [positionStoreKey, embedded, keepsAccountCopy, documentId]);
   const [distillShownId, setDistillShownId] = useState<string | null>(null);
   const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
   const [distillError, setDistillError] = useState<string | null>(null);
@@ -6112,8 +6229,12 @@ function blockFormatKind(
         void imageDrop.handlers.onDrop(e);
       }}
       // The inline restore script finds this pane's stored reading position by
-      // its document (lib/reading-position.ts). An embedded layer has none.
+      // its document (lib/reading-position.ts), and the account's copy here.
+      // An embedded layer has none.
       data-document-id={embedded ? undefined : documentId}
+      data-account-position={
+        keepsAccountCopy && accountPosition ? JSON.stringify(accountPosition) : undefined
+      }
       // While the extract page is open it scrolls itself; the article
       // underneath must not scroll away, so the pane clips instead. An
       // embedded layer scrolls with the pane around it.
@@ -6238,6 +6359,8 @@ function blockFormatKind(
         }
         translations={translations}
         collapse={cores ? { cores, on: collapseOn, flipped: flippedBlocks, flip: flipBlock } : null}
+        leftOffBlockId={leftOffBlockId}
+        accountPositionAtOpen={accountAtOpen !== null}
       />
 
       <Bibliography references={references} />

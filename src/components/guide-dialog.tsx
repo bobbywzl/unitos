@@ -100,6 +100,12 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
           </p>
         </section>
 
+        {/* Where you left off (SPEC.md §6): the reading position and the left-off mark. */}
+        <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
+          <span className={h}>{t("works.guideLeftOffHeader")}</span>
+          <p className="text-[13px] leading-relaxed text-sand-800">{t("works.guideLeftOffBody")}</p>
+        </section>
+
         {/* Circle & ask (the signature move), emphasized. */}
         <section className="flex flex-col gap-1.5 rounded-2xl bg-clay-100/70 p-4">
           <span className={h}>{t("works.guideCircleHeader")}</span>

@@ -126,10 +126,17 @@ const en = {
     "The Collapse button at the top right of the article, beside Extract. Every paragraph, list, figure, table, and equation shows its core: what it really says, in plain words, at a tenth to a third of its length, written in the light of the whole article.",
   guideCollapseWholeBody:
     "Click a collapsed block to read it whole; the chip under it folds it again. Press Collapse again to show the article whole. Contents, at the top left, lists the article's parts and stays there as you scroll.",
+  // The reading position and the left-off mark (SPEC.md §6).
+  guideLeftOffHeader: "Where you left off",
+  guideLeftOffBody:
+    "A document opens where you left off, in any tab and on any device you sign in on. A small ribbon above the block marks the place, so you can find it again after you scroll away.",
   // The release notifications (SPEC.md §18, lib/releases.ts): one per release, on the dashboard.
   release20260924Title: "New: Collapse, the annotations full page, By document, Conversations",
   release20260924Body:
     "- **Collapse** — the button at the top right of the article, beside Extract. Every block shows its core: what it really says, in plain words. Click a collapsed block to read it whole.\n- **Annotations full page** — the four arrows in the Annotations tab: every annotation of the project, grouped by document. Every kind of annotation now carries one color everywhere: comment blue, explain red, simplify green, analyze teal, visualize magenta, assistant violet.\n- **By document** — on the notes full page: the project's notes as a grid, one column per document, one row per section. The notes tray now shows the open document's notes only.\n- **Conversations** — at the top of the Assistant tab: your conversations of the project, one click to open each. New conversation keeps the old one. The scope and thinking rows sit right above the box.\n- **Drag an annotation onto a note** — the note gets the quote, a row that opens the annotation, and the annotation's text.\n- **Contents** stays at the top left as you scroll.\n\nThe controls that are new glow until you press them. Press ? at the top of the reader for the guide.",
+  release20260925Title: "New: the reader opens where you left off",
+  release20260925Body:
+    "- **Where you left off** — a document opens where you left off, in any tab and on any device you sign in on.\n- **The left-off mark** — a small ribbon above the block marks the place, so you can find it again after you scroll away.\n\nPress ? at the top of the reader for the guide.",
   // Feedback button
   feedback: "Feedback",
   sendFeedback: "Send feedback",
@@ -278,9 +285,15 @@ const zh: Record<keyof typeof en, string> = {
     "文章右上角、提取旁边的折叠按钮。每个段落、列表、插图、表格和公式都显示为它的核心：它真正要说的，用大白话，长度是原文的十分之一到三分之一，结合整篇文章写成。",
   guideCollapseWholeBody:
     "点击折叠后的块可读全文；块下方的小标签把它重新折叠。再按一次折叠，文章恢复完整。左上角的目录列出文章的各个部分，滚动时一直停在原处。",
+  guideLeftOffHeader: "上次读到的位置",
+  guideLeftOffBody:
+    "文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。块上方的小书签标出这个位置，滚动离开后也能找回来。",
   release20260924Title: "新功能：折叠、整页批注、按文档、对话列表",
   release20260924Body:
     "- **折叠**——文章右上角、提取旁边的按钮。每个块显示为它的核心：它真正要说的，用大白话。点击折叠后的块可读全文。\n- **整页批注**——批注页签里的四个箭头：项目里的每条批注，按文档分组。每类批注现在在各处都用同一种颜色：评论蓝、解释红、简化绿、分析青、可视化品红、助手紫。\n- **按文档**——整页笔记上：项目的笔记排成网格，每个文档一列，每个章节一行。笔记栏现在只显示当前文档的笔记。\n- **对话列表**——助手页签顶部：你在此项目中的对话，点击即可打开。新对话会保留当前对话。范围和思考两行就在输入框正上方。\n- **把批注拖到笔记上**——笔记会得到引文、一条打开批注的批注链接和批注内容。\n- **目录**在滚动时一直停在左上角。\n\n新功能的按钮会发光，直到你按下它。按阅读器顶部的 ? 打开指南。",
+  release20260925Title: "新功能：阅读器在你上次读到的位置打开",
+  release20260925Body:
+    "- **上次读到的位置**——文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。\n- **阅读标记**——块上方的小书签标出这个位置，滚动离开后也能找回来。\n\n按阅读器顶部的 ? 打开指南。",
   // Feedback button
   feedback: "反馈",
   sendFeedback: "发送反馈",

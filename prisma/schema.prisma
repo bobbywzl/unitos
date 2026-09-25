@@ -522,11 +522,34 @@ model Document {
   references    Json? // the article's reference list, extracted at ingest: [{id, label, text, url}]
   video         VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
   images        ImageAsset[] // images the parse captured (chart animations)
+  readingPositions ReadingPosition[]
   // A generated document (SPEC.md §22): Stitch wrote it from the project's
   // documents. generatedCommand is the command that made it; a document with
   // one is a generated document of the project it is attached to.
   generatedCommand String?
   createdAt     DateTime           @default(now())
+}
+
+// The reading position an account left in a document (SPEC.md §6,
+// lib/reading-position.ts): the block at the reading line when it last read
+// there, the offset from the line to the block's top (negative = the line
+// cut into the block), the block's height then (another screen scales the
+// offset), and when the reader was there, by the reading browser's clock.
+// One row per account per document; a save replaces the row only when it is
+// newer. The reader opens the document there and draws the left-off mark
+// above the block. userId is a soft reference like Notebook.userId ("user-1"
+// = the local reader).
+model ReadingPosition {
+  userId     String
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  blockId    String
+  offset     Float
+  height     Float
+  at         DateTime
+
+  @@id([userId, documentId])
+  @@index([documentId])
 }
 
 // One row per user change to a document: block text edits and link add/remove.
