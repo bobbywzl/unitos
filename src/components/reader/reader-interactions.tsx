@@ -445,6 +445,7 @@ const ACTION_LABEL_KEY: Record<AssistantAction["type"], TKey> = {
   link: "reader.actionLink",
   format_block: "reader.actionFormat",
   style: "reader.actionStyle",
+  suggest: "reader.actionSuggest",
 };
 
 // The assistant's commands on selected words (SPEC.md §29), in the chips'
@@ -597,19 +598,13 @@ type AssistantBar = {
 // The page editor's suggestion code, loaded with the first command: the
 // reader loads for every document, this code only for a blank document.
 const suggestCode = () =>
-  import("@/components/docs/ext/suggest").then((ext) => ({
-    readSuggestions: ext.readSuggestions,
-    settleSuggestions: (editor: Editor, accept: boolean, ids: string[]) => ids.forEach((id) => ext.settleSuggestions(editor, accept, id)),
-    applyAssistantOps: (
-      editor: Editor,
-      ops: ResolvedOp[],
-      author: string,
-      replacing: readonly string[],
-    ): { ids: string[]; skipped: { i: number; reason: SkipReason }[] } => ({
-      ids: replacing.length > 0 ? [author] : [],
-      skipped: ops.map((op) => ({ i: op.i, reason: "changed" as const })),
+  Promise.all([import("@/components/docs/ext/suggest"), import("@/components/docs/suggest/assistant")]).then(
+    ([ext, assistant]) => ({
+      readSuggestions: ext.readSuggestions,
+      settleSuggestions: ext.settleSuggestions,
+      applyAssistantOps: assistant.applyAssistantOps,
     }),
-  }));
+  );
 
 // The picture a stored visualization's markdown points at, and its caption
 // (SPEC.md §20): the card's Open button shows them in the viewer.
@@ -1526,6 +1521,8 @@ export function ReaderInteractions({
   const [columnHost, setColumnHost] = useState<HTMLDivElement | null>(null);
   const inColumn = (cards: React.ReactNode) => (columnHost ? createPortal(cards, columnHost) : cards);
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
+  // The assistant's bar at the bottom of the pane (SPEC.md §29).
+  const [bar, setBar] = useState<AssistantBar | null>(null);
   // Highlighting an answer in the chat card (SPEC.md §7): Start side chat,
   // Ask about this, Comment.
   const {
@@ -1563,6 +1560,7 @@ export function ReaderInteractions({
     bubble !== null ||
     simplifyCard !== null ||
     assistantChat !== null ||
+    bar !== null ||
     annotationCard !== null ||
     commentCard !== null ||
     linkCard !== null ||
@@ -2044,6 +2042,7 @@ export function ReaderInteractions({
         chatAbortRef.current?.abort();
         chatAbortRef.current = null;
         setAssistantChat(null);
+        setBar(null);
         setCommentCard(null);
         setLinkCard(null);
         setAnnotationCard(null);
@@ -4929,7 +4928,6 @@ export function ReaderInteractions({
   // in the text. A follow-up takes the place of the edit still pending; a
   // turn with no suggestions (an answer, a plan) goes on in the chat card.
   // Closing the bar stops nothing: what lands stays pending, with its cards.
-  const [bar, setBar] = useState<AssistantBar | null>(null);
   const barRef = useRef(bar);
   barRef.current = bar;
   const barAbortRef = useRef<AbortController | null>(null);

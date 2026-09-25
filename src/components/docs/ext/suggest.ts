@@ -333,8 +333,11 @@ function suggestMark(tr: Transaction, step: AddMarkStep | RemoveMarkStep, id: st
 /** A block changed again keeps the value from before its first change, and
     a change back to it is no suggestion at all. A block a suggestion adds,
     or one inside it, takes the change as it is and stays added (the library
-    would drop its insertion mark for the modification). */
-function chainBlockChanges(tr: Transaction, before: PMNode, id: string): void {
+    would drop its insertion mark for the modification). A block keeps the
+    attributes the edit gave it (`after`), its id and alignment among them:
+    for a change of type the library sets the new type's defaults and only
+    the attributes that differ. */
+function chainBlockChanges(tr: Transaction, before: PMNode, after: PMNode, id: string): void {
   tr.doc.descendants((node, pos) => {
     const fresh = node.marks.filter((m) => isModification(m) && m.attrs.id === id);
     if (fresh.length === 0) return true;
@@ -352,7 +355,8 @@ function chainBlockChanges(tr: Transaction, before: PMNode, id: string): void {
         marks = mod.type.create({ ...mod.attrs, id: keptId(earlier, id), previousValue }).addToSet(marks);
       }
     }
-    tr.setNodeMarkup(pos, undefined, node.attrs, added ? added.addToSet(marks) : marks);
+    const edited = after.nodeAt(pos);
+    tr.setNodeMarkup(pos, undefined, edited?.type === node.type ? edited.attrs : node.attrs, added ? added.addToSet(marks) : marks);
     return true;
   });
 }
@@ -363,7 +367,7 @@ function suggestFormat(tr: Transaction, state: EditorState, id: string): Transac
   const blocks = state.tr;
   for (const step of tr.steps) if (!isMarkStep(step)) blocks.step(step);
   const out = blocks.docChanged ? transformToSuggestionTransaction(blocks, state, () => id) : blocks;
-  if (blocks.docChanged) chainBlockChanges(out, state.doc, id);
+  if (blocks.docChanged) chainBlockChanges(out, state.doc, blocks.doc, id);
   for (const step of tr.steps) if (isMarkStep(step)) suggestMark(out, step, id);
   if (tr.selectionSet) out.setSelection(tr.selection.map(out.doc, new Mapping()));
   if (tr.storedMarksSet) out.setStoredMarks(tr.storedMarks);

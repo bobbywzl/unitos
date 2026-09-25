@@ -4,7 +4,8 @@
 // import's model (lib/claude.ts). Sniffs each prompt and returns valid,
 // context-aware output: real block ids, real quotes, schema-exact JSON — so
 // every AI flow (SIMPLIFY, SALIENCE, DISTILL, assistant ask and act with matches,
-// the import's passes) runs end-to-end with zero external calls. Point the app
+// the assistant's suggestions, the import's passes) runs end-to-end with zero
+// external calls. Point the app
 // at it with
 //   MOONSHOT_API_KEY=mock MOONSHOT_BASE_URL=http://localhost:3399/v1
 //   ANTHROPIC_API_KEY=mock ANTHROPIC_BASE_URL=http://localhost:3399/v1
@@ -28,7 +29,64 @@ function parseBlocks(all) {
   return blocks;
 }
 
+// The assistant's suggestions (SPEC.md §29): ops on the scope's real blocks.
+// Over blocks: the first paragraph's first three words replaced, the second
+// paragraph rewritten with one word changed, a heading and a paragraph after
+// the first heading, the last paragraph (of three or more) set to h2, and a
+// first draft in a document with no words. On selected words: their first
+// three words replaced. Every answer ends with one misquoted change, which
+// the server skips.
+function suggestOps(all) {
+  const at = all.indexOf("Suggest edits to the document above.");
+  const ask = all.slice(at);
+  const styled = ask.match(/^Paragraph styles in the scope: (.*)$/m)?.[1] ?? "";
+  const scope = new Set([...styled.matchAll(/\[block ([^\]]+)\]/g)].map((m) => m[1]));
+  const blocks = parseBlocks(all.slice(0, at))
+    .map((b) => ({ ...b, text: b.text.trim() }))
+    .filter((b) => scope.has(b.id));
+  const firstWords = (text) => text.split(/\s+/).slice(0, 3).join(" ");
+  const ops = [];
+  const selected = ask.match(/^Scope: the selected words\.\n\[block ([^\]]+)\] "([^\n]*)"$/m);
+  if (selected) {
+    ops.push({ op: "replace_words", blockId: selected[1], find: firstWords(selected[2]), text: "Mock words", why: "Mock: the first words, reworded." });
+  } else {
+    const paragraphs = blocks.filter((b) => b.type === "PARAGRAPH" && b.text.split(/\s+/).length >= 3);
+    const heading = blocks.find((b) => b.type === "HEADING");
+    const [first, second] = paragraphs;
+    if (first) ops.push({ op: "replace_words", blockId: first.id, find: firstWords(first.text), text: "Mock opening", why: "Mock: the opening words, reworded." });
+    if (second) {
+      const words = second.text.split(" ");
+      words[1] = "mock";
+      ops.push({ op: "rewrite_block", blockId: second.id, text: words.join(" "), why: "Mock: one word changed." });
+    }
+    if (heading) ops.push({ op: "insert_blocks", afterBlockId: heading.id, markdown: "## Mock heading\n\nMock paragraph.", why: "Mock: a heading and a paragraph added." });
+    if (paragraphs.length >= 3) ops.push({ op: "set_style", blockId: paragraphs[paragraphs.length - 1].id, style: "h2", why: "Mock: the last paragraph made a heading." });
+    if (!first && ask.includes("Scope: the whole document.")) {
+      ops.push({ op: "insert_blocks", afterBlockId: null, markdown: "# Mock draft\n\nMock paragraph.", why: "Mock: a first draft." });
+    }
+  }
+  const misquoted = selected?.[1] ?? blocks.find((b) => b.type === "PARAGRAPH")?.id;
+  if (misquoted) ops.push({ op: "replace_words", blockId: misquoted, find: "words the document never had", text: "anything", why: "Mock: a misquoted change." });
+  console.log("[mock suggest]", ops.length, "ops");
+  return JSON.stringify({ summary: `Mock: ${ops.length} changes suggested.`, ops });
+}
+
+// A message that asks for a change (the selection chat's command, the
+// panel's question) on a document with rich text becomes one suggest action.
+const CHANGE_RX = /\b(make|rewrite|rephrase|shorten|shorter|fix|change|edit|turn|formal|casual|add|remove|delete)\b/i;
+
 function buildResponse(all) {
+  if (all.includes("Suggest edits to the document above.")) return suggestOps(all);
+  // The panel at This page scope: the answer, then the actions fence.
+  if (all.includes("Rules for actions:") && all.includes("- suggest {") && CHANGE_RX.test(all.match(/^Question: (.*)$/m)?.[1] ?? "")) {
+    const action = { type: "suggest", instruction: "Make the whole document formal.", description: "Make the document formal" };
+    return `Mock answer: the suggestions make the document formal.\n\n\`\`\`actions\n${JSON.stringify([action])}\n\`\`\``;
+  }
+  // The selection chat: no reply, one suggest action.
+  if (all.includes('"actions"') && all.includes("- suggest {") && CHANGE_RX.test(all.match(/^Command: (.*)$/m)?.[1] ?? "")) {
+    return JSON.stringify({ reply: null, actions: [{ type: "suggest", instruction: "Shorten it", description: "Shorten" }], matches: [] });
+  }
+
   const blocks = parseBlocks(all);
   const paragraphs = blocks.filter((b) => b.type === "PARAGRAPH" && b.text.length > 40);
 
@@ -177,7 +235,7 @@ function buildResponse(all) {
   }
 
   // Assistant act: plan JSON with real quotes.
-  if (all.includes('"actions"') && all.includes("format_block")) {
+  if (all.includes('"actions"') && (all.includes("format_block") || all.includes("- suggest {"))) {
     const p = paragraphs[0];
     if (!p) return JSON.stringify({ reply: "No paragraphs found.", actions: [] });
     const quote = p.text.slice(0, Math.min(48, p.text.length)).trim();
