@@ -171,7 +171,7 @@ function enterFootnote(editor: Editor): void {
   editor.view.dispatch(editor.state.tr.setSelection(words).scrollIntoView());
 }
 
-const runCommand =(command: DocsCommand): Run => (editor) => {
+const runCommand = (command: DocsCommand): Run => (editor) => {
   if (command.enabled?.(editor) ?? true) command.run(editor);
 };
 const runId = (id: string): Run => (editor) => {

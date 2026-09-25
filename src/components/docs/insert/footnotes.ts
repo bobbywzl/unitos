@@ -109,12 +109,15 @@ function footnotesOf(doc: PMNode): { byId: Map<string, PMNode>; blocks: { pos: n
     by id, as JSON: another page editor has its own schema. */
 const copiedWords = new Map<string, unknown>();
 
+/** The nodes a body ends with, the trailing node's list (extensions.ts). */
+const LINE_ENDS = new Set(["paragraph", "heading", "bulletList", "orderedList", "taskList"]);
+
 /** Bring the footnotes in line with the numbers in `tr`'s document: a
     number pasted into a footnote goes, a duplicated number gets its own
     footnote (a copy of the words), every number has a footnote (a pasted
     one takes the words it was copied with), no footnote lacks a number, the
     footnotes follow the numbers' order, and they sit in one block at the
-    very end. Returns whether anything changed. */
+    very end, after a line. Returns whether anything changed. */
 function normalizeFootnotes(tr: Transaction): boolean {
   const schema = tr.doc.type.schema;
   const refType = schema.nodes.footnoteReference;
@@ -153,20 +156,29 @@ function normalizeFootnotes(tr: Transaction): boolean {
     have.childCount === want.length &&
     want.every((id, i) => have.child(i).attrs.footnoteId === id) &&
     lastIsBlock;
-  if (inOrder) return changed;
-  // Rebuild the block: remove every footnotes block, then add one at the end.
-  for (const block of [...blocks].reverse()) {
-    tr.delete(block.pos, block.pos + block.node.nodeSize);
+  if (!inOrder) {
+    // Rebuild the block: remove every footnotes block, then add one at the end.
+    for (const block of [...blocks].reverse()) {
+      tr.delete(block.pos, block.pos + block.node.nodeSize);
+    }
+    if (want.length > 0) {
+      const notes = want.map((id) => {
+        const words = copiedWords.get(id);
+        const content = words ? Fragment.fromJSON(schema, words) : paragraph.create();
+        return byId.get(id) ?? copies.get(id) ?? noteType.create({ footnoteId: id }, content);
+      });
+      tr.insert(tr.doc.content.size, blockType.create(null, Fragment.fromArray(notes)));
+    }
+    changed = true;
   }
-  if (want.length > 0) {
-    const notes = want.map((id) => {
-      const words = copiedWords.get(id);
-      const content = words ? Fragment.fromJSON(schema, words) : paragraph.create();
-      return byId.get(id) ?? copies.get(id) ?? noteType.create({ footnoteId: id }, content);
-    });
-    tr.insert(tr.doc.content.size, blockType.create(null, Fragment.fromArray(notes)));
+  // The body ends on a line, as a document without footnotes does: a table
+  // or another object before the footnotes gets an empty line after it.
+  const last = tr.doc.lastChild;
+  if (last?.type === blockType && tr.doc.childCount > 1 && !LINE_ENDS.has(tr.doc.child(tr.doc.childCount - 2).type.name)) {
+    tr.insert(tr.doc.content.size - last.nodeSize, paragraph.create());
+    changed = true;
   }
-  return true;
+  return changed;
 }
 
 /** Footnote words pasted or dropped go in as paragraphs, never as a second

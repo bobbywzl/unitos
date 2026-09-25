@@ -6,7 +6,7 @@ import type { EditorView, NodeView } from "@tiptap/pm/view";
 import { emitInsert, insertContext, toast } from "@/components/docs/insert/context";
 import { lengthUnitFor, PT_PER_UNIT, PX_PER_PT } from "@/components/docs/page/geometry";
 import type { ImageSource } from "@/components/docs/toolbar/image-menu";
-import { insertImage, insertImageFiles } from "@/components/docs/typing/paste";
+import { caretUnderImage, insertImage, insertImageFiles } from "@/components/docs/typing/paste";
 import { uploadImage } from "@/lib/images";
 
 // Images (SPEC.md §29), as Google Docs draws them: the blue frame with eight
@@ -630,22 +630,13 @@ function moveFloating(editor: Editor, dx: number, dy: number, pixel: boolean): b
   if (!hit || !ctx || ctx.pageSetup.pageless) return false;
   const a = imageAttrs(hit.node);
   if (a.wrap !== "behind" && a.wrap !== "front") return false;
-  const unit = lengthUnitFor(ctx.lang);
-  const step = pixel ? 1 : (unit === "in" ? PT_PER_UNIT.in / 4 : PT_PER_UNIT.cm) * PX_PER_PT;
+  const step = pixel ? 1 : (lengthUnitFor(ctx.lang) === "cm" ? PT_PER_UNIT.cm : PT_PER_UNIT.in / 4) * PX_PER_PT;
   return setImageAttrs(editor.view, hit.pos, { offsetX: Math.round(a.offsetX + dx * step), offsetY: Math.round(a.offsetY + dy * step) });
 }
 
-const ARROWS: [string, number, number][] = [
-  ["ArrowLeft", -1, 0],
-  ["ArrowRight", 1, 0],
-  ["ArrowUp", 0, -1],
-  ["ArrowDown", 0, 1],
-];
-
-/** An image drag in progress: the image's toolbar steps aside (insert.css). */
-function setMoving(on: boolean): boolean {
-  document.body.classList.toggle("docs-img-moving", on);
-  return false;
+/** While an image is dragged, its toolbar steps aside (insert.css). */
+function endMove() {
+  document.body.classList.remove("docs-img-moving");
 }
 
 export const DocsImage = Extension.create({
@@ -693,12 +684,16 @@ export const DocsImage = Extension.create({
   },
   addKeyboardShortcuts() {
     const key = (fn: (a: ImageAttrs, w: number, h: number) => Record<string, unknown>) => () => nudge(this.editor, fn);
-    const arrows = ARROWS.flatMap(([name, dx, dy]) => [
-      [name, () => moveFloating(this.editor, dx, dy, false)],
-      [`Shift-${name}`, () => moveFloating(this.editor, dx, dy, true)],
-    ]);
+    const move = (dx: number, dy: number, pixel: boolean) => () => moveFloating(this.editor, dx, dy, pixel);
     return {
-      ...Object.fromEntries(arrows),
+      ArrowLeft: move(-1, 0, false),
+      ArrowRight: move(1, 0, false),
+      ArrowUp: move(0, -1, false),
+      ArrowDown: move(0, 1, false),
+      "Shift-ArrowLeft": move(-1, 0, true),
+      "Shift-ArrowRight": move(1, 0, true),
+      "Shift-ArrowUp": move(0, -1, true),
+      "Shift-ArrowDown": move(0, 1, true),
       "Mod-Alt-y": () => {
         if (!selectedImage(this.editor.state)) return false;
         emitInsert(this.editor, { type: "image-options", section: "alt" });
@@ -728,6 +723,13 @@ export const DocsImage = Extension.create({
     const editor = this.editor;
     return [
       new Plugin({
+        // A pasted image (a copied one, or pasted words that end with one)
+        // leaves the caret under it, as insertImage does.
+        appendTransaction: (transactions, _old, state) => {
+          if (!transactions.some((tr) => tr.getMeta("uiEvent") === "paste")) return null;
+          const tr = state.tr;
+          return caretUnderImage(tr) ? tr : null;
+        },
         props: {
           nodeViews: {
             image: (node, view, getPos) => new ImageView(node, view, getPos, editor),
@@ -737,12 +739,12 @@ export const DocsImage = Extension.create({
             // with the drop caret): the reader's figure gesture never sees
             // the drag, which would cancel it.
             dragstart: (_view, event) => {
-              if (!(event.target instanceof Element && event.target.closest(".docs-img"))) return false;
+              if (!(event.target instanceof Element && event.target.closest(".docs-img"))) return;
               event.stopPropagation();
-              return setMoving(true);
+              document.body.classList.add("docs-img-moving");
             },
-            drop: () => setMoving(false),
-            dragend: () => setMoving(false),
+            drop: endMove,
+            dragend: endMove,
           },
         },
       }),

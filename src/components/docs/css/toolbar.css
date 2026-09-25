@@ -325,8 +325,8 @@
 }
 
 /* The mode switcher: a pill with the mode's symbol, its name, and a small
-   triangle, 161 × 30. When the bar runs short, the name folds away first
-   and Extract keeps only its symbol (toolbar/overflow.tsx). */
+   triangle, 161 × 30. When the bar runs short, Extract keeps only its symbol
+   first, then the name folds away (toolbar/overflow.tsx). */
 .docs-mode-pill {
   display: inline-flex;
   align-items: center;
@@ -366,10 +366,10 @@
   overflow: hidden;
   vertical-align: top;
 }
-.docs-tb-right[data-folded] .docs-mode-caption {
+.docs-tb-right[data-folded="mode"] .docs-mode-caption {
   width: 26px;
 }
-.docs-tb-right[data-folded] .docs-mode-caption-text {
+.docs-tb-right[data-folded="mode"] .docs-mode-caption-text {
   opacity: 0;
 }
 .docs-tb-right[data-folded] .docs-tb-unitos button {

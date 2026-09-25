@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { Fragment, Slice, type Mark, type Node as PMNode, type ResolvedPos, type Schema } from "@tiptap/pm/model";
-import { NodeSelection, TextSelection } from "@tiptap/pm/state";
+import { NodeSelection, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { insertPoint } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
 import { insertT, toast } from "@/components/docs/insert/context";
@@ -294,10 +294,20 @@ export async function insertImageFiles(editor: Editor, files: File[], pos?: numb
   }
 }
 
+/** A new image selected in `tr` hands the caret to the empty line under it,
+    a new one when the next line holds words, as Google Docs leaves the caret
+    after a new image: the next key never replaces it. */
+export function caretUnderImage(tr: Transaction): boolean {
+  if (!(tr.selection instanceof NodeSelection) || tr.selection.node.type.name !== "image") return false;
+  const after = tr.selection.to;
+  const next = tr.doc.resolve(after).nodeAfter;
+  if (!next?.isTextblock || next.content.size > 0) tr.insert(after, tr.doc.type.schema.nodes.paragraph.create());
+  tr.setSelection(TextSelection.create(tr.doc, after + 1));
+  return true;
+}
+
 /** An image on its own line after the paragraph at `pos` (else the
-    selection, which it replaces), or in place of an empty line. The caret
-    goes to the empty line under it, a new one when the next line holds
-    words: the next key never replaces the image. */
+    selection, which it replaces), or in place of an empty line. */
 export function insertImage(editor: Editor, attrs: { src: string }, pos?: number): void {
   editor
     .chain()
@@ -307,14 +317,7 @@ export function insertImage(editor: Editor, attrs: { src: string }, pos?: number
       const spot = pos ?? tr.deleteSelection().mapping.map(from);
       return commands.insertContentAt(imageSpot(tr.doc, Math.min(spot, tr.doc.content.size)), { type: "image", attrs });
     })
-    .command(({ tr }) => {
-      if (!(tr.selection instanceof NodeSelection)) return false;
-      const after = tr.selection.to;
-      const next = tr.doc.resolve(after).nodeAfter;
-      if (!next?.isTextblock || next.content.size > 0) tr.insert(after, tr.doc.type.schema.nodes.paragraph.create());
-      tr.setSelection(TextSelection.create(tr.doc, after + 1));
-      return true;
-    })
+    .command(({ tr }) => caretUnderImage(tr))
     .run();
 }
 

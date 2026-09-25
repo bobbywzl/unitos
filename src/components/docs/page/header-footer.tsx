@@ -193,7 +193,7 @@ function HeaderEditor({
     editor.commands.focus("end");
     onEditor(editor);
     // Page count (Search the menus) goes in at the caret: the command's
-    // event comes up from this page's text.
+    // event comes up from the page editor's text.
     const shell = editor.view.dom.closest("[data-docs-editor]");
     const insert = () => editor.chain().focus().insertContent({ type: "pageCount" }).run();
     shell?.addEventListener(PAGE_EVENT.pageCount, insert);

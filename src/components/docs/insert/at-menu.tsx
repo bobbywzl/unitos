@@ -324,8 +324,9 @@ function AtMenu({
       ...PAGE_COMPONENTS.flatMap(([id, words, icon]): Item[] => {
         const command = docsCommands().find((c) => c.id === id);
         if (!command) return [];
-        const off = ctx.pageSetup.pageless ? "docsInsert.pagesOnly" : command.enabled?.(editor) === false ? "docsInsert.headersOnly" : null;
-        return [{ ...item(id, "page", command.label, words, icon, here(() => command.run(editor))), disabled: off ? t(off) : undefined }];
+        const off = command.enabled?.(editor) === false;
+        const why = ctx.pageSetup.pageless ? "docsInsert.pagesOnly" : "docsInsert.headersOnly";
+        return [{ ...item(id, "page", command.label, words, icon, here(() => command.run(editor))), disabled: off ? t(why) : undefined }];
       }),
       {
         ...item("pagebreak", "page", "docsInsert.itemPageBreak", "page break 分页", <PageBreakIcon />, here(() => editor.chain().focus().setPageBreak().run())),

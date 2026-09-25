@@ -6,7 +6,7 @@ import { DropdownPanel, keepFocus } from "@/components/docs/menu";
 import { OPEN_MENU_EVENT, Sep, ToolbarEditor } from "@/components/docs/toolbar/controls";
 
 // The toolbar's row (SPEC.md §29). When the controls do not fit, the right
-// end's captions fold first — the mode's name, and Extract to its symbol —
+// end's captions fold first — Extract to its symbol, then the mode's name —
 // then whole groups move, right to left, into More (⋮). The row is one Tab
 // stop: Left and Right move between controls, Escape goes back to the page.
 
@@ -55,7 +55,7 @@ export function ToolbarRow({
   const unitosOpen = useRef(0);
   const moreRef = useRef<HTMLButtonElement>(null);
   const [shown, setShown] = useState(groups.length);
-  const [folded, setFolded] = useState(false);
+  const [folded, setFolded] = useState<"extract" | "mode" | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const count = groups.length;
   // The groups that just came back from the bubble fade in.
@@ -80,10 +80,11 @@ export function ToolbarRow({
     if (unitos && !rightEl.hasAttribute("data-folded")) unitosOpen.current = unitos.offsetWidth;
     const base = rightEl.offsetWidth + 4 - (caption?.offsetWidth ?? 0) - (unitos?.offsetWidth ?? 0);
     const rightOpen = base + (caption ? CAPTION_OPEN : 0) + (unitos ? unitosOpen.current : 0);
+    const rightExtract = base + (caption ? CAPTION_OPEN : 0) + (unitos ? UNITOS_FOLDED : 0);
     const rightFolded = base + (caption ? CAPTION_FOLDED : 0) + (unitos ? UNITOS_FOLDED : 0);
     const list = groups.map((g) => widths.current.get(g.key) ?? 0);
     const total = list.reduce((a, b) => a + b, 0);
-    const nextFolded = total > inner - rightOpen;
+    const nextFolded = total <= inner - rightOpen ? null : total <= inner - rightExtract ? "extract" : "mode";
     let nextShown = count;
     const room = inner - rightFolded;
     if (total > room) {
@@ -236,7 +237,7 @@ export function ToolbarRow({
           </>
         )}
       </div>
-      <div ref={rightRef} className="docs-tb-right" data-folded={folded ? "" : undefined}>
+      <div ref={rightRef} className="docs-tb-right" data-folded={folded ?? undefined}>
         {right}
       </div>
     </div>

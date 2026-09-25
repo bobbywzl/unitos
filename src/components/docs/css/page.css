@@ -541,11 +541,6 @@ body:has(> [data-docs-menu]) .docs-prose {
 .docs-outline-open:hover {
   background: color-mix(in srgb, var(--docs-text) 8%, var(--docs-pill));
 }
-.docs-outline-open[data-hidden] {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s;
-}
 .docs-outline-open:focus-visible,
 .docs-outline-close:focus-visible,
 .docs-outline-item:focus-visible {
