@@ -21,7 +21,7 @@ import { blockCorrection, correctionDeleted, SPELLING_META } from "@/components/
 // was typed. Nothing runs during IME composition, on paste, or in code.
 
 /** The meta a transaction made by the engine carries: the rule's name. */
-export const AUTOCORRECT_META = "docsAutocorrect";
+const AUTOCORRECT_META = "docsAutocorrect";
 
 /** The words of a text block, one character per position: a line break is
     "\v", any other inline object one placeholder character. */
@@ -48,7 +48,7 @@ const LINK_SOURCE = EMAIL + "|\\b" + WITH_SCHEME + "|\\b" + BARE_WITH_PATH + "|\
 
 /** The first address in `text`, with the href Docs gives it: an email gets
     mailto:, an address without a scheme gets http://. */
-export function findLink(text: string): { index: number; length: number; href: string } | null {
+function findLink(text: string): { index: number; length: number; href: string } | null {
   const m = new RegExp(LINK_SOURCE, "i").exec(text);
   if (!m) return null;
   const found = m[0];
@@ -58,19 +58,6 @@ export function findLink(text: string): { index: number; length: number; href: s
   else if (/^ftp:\/\//i.test(found)) return null;
   else href = `http://${found}`;
   return { index: m.index, length: found.length, href };
-}
-
-/** Every address in `text` (for pasted text). */
-export function findLinks(text: string): { index: number; length: number; href: string }[] {
-  const out: { index: number; length: number; href: string }[] = [];
-  let offset = 0;
-  while (offset < text.length) {
-    const found = findLink(text.slice(offset));
-    if (!found) break;
-    out.push({ ...found, index: found.index + offset });
-    offset += found.index + Math.max(1, found.length);
-  }
-  return out;
 }
 
 // ── Automatic capitalization ────────────────────────────────────────────
@@ -89,7 +76,7 @@ function isAbbrev(s: string): boolean {
 /** Whether a token ends a sentence: it ends in . ! or ?, the text before a
     final "." is no abbreviation, and the dots are no ellipsis. A trailing
     quote or parenthesis means no. */
-export function isSentenceEnd(token: string): boolean {
+function isSentenceEnd(token: string): boolean {
   const t = token.replace(/^['{"(\[‘“]+/, "");
   if (!t) return false;
   const last = t[t.length - 1];
@@ -331,7 +318,7 @@ const smartQuotes: Rule = ({ state, prefs, block, start, text, trigger, at, virt
 };
 
 /** A capital in the typed text carries over: "TM" gives "™", "Tm" too. */
-export function transferCase(original: string, value: string): string {
+function transferCase(original: string, value: string): string {
   const f = original[0];
   if (f && /\p{L}/u.test(f) && f === f.toUpperCase() && f !== f.toLowerCase()) {
     return original === original.toUpperCase() ? value.toUpperCase() : value.charAt(0).toUpperCase() + value.slice(1);
@@ -587,7 +574,7 @@ const CODE_LANGUAGES: Record<string, string> = {
 
 /** The language a fence line asks for: "" for a bare ```, null when the
     line is no fence Docs knows. */
-export function fenceLanguage(text: string): string | null {
+function fenceLanguage(text: string): string | null {
   const m = /^```(\S*)$/.exec(text);
   if (!m) return null;
   if (!m[1]) return "";

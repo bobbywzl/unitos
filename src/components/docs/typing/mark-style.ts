@@ -13,7 +13,7 @@ import { z } from "zod";
 // keeps its style in the `markStyle` attribute: its marks as JSON.
 
 /** The meta on the transactions this plugin appends. */
-export const MARK_STYLE_META = "docsMarkStyle";
+const MARK_STYLE_META = "docsMarkStyle";
 /** The meta on the typing plugin's own restore of the pending style. */
 export const TYPING_RESTORE_META = "docsTypingRestore";
 
@@ -35,7 +35,7 @@ export function validMarkStyle(value: unknown): string | null {
 }
 
 /** The paragraph mark's style as marks of `schema`. */
-export function readMarkStyle(schema: Schema, value: unknown): Mark[] {
+function readMarkStyle(schema: Schema, value: unknown): Mark[] {
   if (!validMarkStyle(value)) return [];
   const parsed = MarksJson.parse(JSON.parse(value as string));
   const marks: Mark[] = [];
@@ -55,7 +55,7 @@ export function readMarkStyle(schema: Schema, value: unknown): Mark[] {
 }
 
 /** Marks as the attribute stores them: the text style ones, null when none. */
-export function writeMarkStyle(marks: readonly Mark[]): string | null {
+function writeMarkStyle(marks: readonly Mark[]): string | null {
   const style = marks.filter((m) => STYLE_MARKS.has(m.type.name));
   if (!style.length) return null;
   return JSON.stringify(

@@ -2,6 +2,7 @@ import type { Editor } from "@tiptap/core";
 import { registerDocsCommands } from "@/components/docs/commands";
 import { ZOOMS } from "@/components/docs/toolbar";
 import { togglePageFlag, type PageFlag } from "@/components/docs/ext/page";
+import { addPageNumbers } from "@/components/docs/page/header-footer";
 import { findPageStore, type HeaderArea } from "@/components/docs/page/store";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -150,6 +151,26 @@ registerDocsCommands([
     menu: "format" as const,
     keywords: ["pagination", "line & paragraph spacing", "page break"],
     run: (editor: Editor) => togglePageFlag(editor, flag),
+    enabled: (editor: Editor) => editor.isEditable && store(editor)?.get().setup.pageless === false,
+  })),
+  // The page number presets: in the header or the footer, on every page or
+  // from the second.
+  ...(
+    [
+      ["header", true, "docsPage.numbersHeader"],
+      ["header", false, "docsPage.numbersHeaderNotFirst"],
+      ["footer", true, "docsPage.numbersFooter"],
+      ["footer", false, "docsPage.numbersFooterNotFirst"],
+    ] as [HeaderArea, boolean, TKey][]
+  ).map(([area, onFirst, label]) => ({
+    id: `page:numbers-${area}-${onFirst ? "all" : "not-first"}`,
+    label,
+    menu: "insert" as const,
+    keywords: ["page number", "page elements", "numbering"],
+    run: (editor: Editor) => {
+      const s = store(editor);
+      if (s) void s.saveSetup(addPageNumbers(s.get().setup, area, onFirst));
+    },
     enabled: (editor: Editor) => editor.isEditable && store(editor)?.get().setup.pageless === false,
   })),
   {

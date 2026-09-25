@@ -42,26 +42,3 @@ export function countRange(doc: PMNode, from: number, to: number): Counts {
   });
   return { words, chars, charsNoSpaces };
 }
-
-/** The same counts for a string (tests, and any text outside a document). */
-export function countText(text: string): Counts {
-  let words = 0;
-  let chars = 0;
-  let charsNoSpaces = 0;
-  let inWord = false;
-  for (const ch of text) {
-    if (ch === "\n") {
-      inWord = false;
-      continue;
-    }
-    chars++;
-    if (ch !== " ") charsNoSpaces++;
-    const cls = charClass(ch);
-    if (cls === "t") continue;
-    const word = cls === "w";
-    if (word && !inWord) words++;
-    inWord = word;
-  }
-  return { words, chars, charsNoSpaces };
-}
-

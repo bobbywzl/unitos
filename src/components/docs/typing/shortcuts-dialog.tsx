@@ -46,6 +46,8 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
       { label: "docsTyping.scBigger", pc: ["Mod+Shift+."] },
       { label: "docsTyping.scSmaller", pc: ["Mod+Shift+,"] },
       { label: "docsTyping.scSmallCaps", pc: ["Ctrl+Shift+K"], mac: ["Alt+Shift+K"] },
+      { label: "docsTyping.scCopyFormatting", pc: ["Mod+Alt+C"] },
+      { label: "docsTyping.scPasteFormatting", pc: ["Mod+Alt+V"] },
     ],
   },
   {
@@ -79,6 +81,8 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
     rows: [
       { label: "docsTyping.scWordCount", pc: ["Mod+Shift+C"] },
       { label: "docsTyping.scComment", pc: ["Mod+Alt+M"] },
+      { label: "docsTyping.scFootnote", pc: ["Mod+Alt+F"] },
+      { label: "docsTyping.spellingCheck", pc: ["Mod+Alt+X", "F7"] },
       { label: "docsTyping.scVoice", pc: ["Mod+Shift+S"] },
       { label: "docsTyping.scToggleCheckbox", pc: ["Mod+Alt+Enter"] },
       { label: "docsTyping.scNonPrinting", pc: ["Mod+Shift+P"] },

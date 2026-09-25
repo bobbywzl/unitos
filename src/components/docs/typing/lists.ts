@@ -66,10 +66,10 @@ const LR = "lower-roman";
 const UR = "upper-roman";
 
 /** The default numbered list: 1. a. i. on every three levels. */
-export const DEFAULT_NUMBER_GLYPHS: Glyph[] = [P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR)];
+const DEFAULT_NUMBER_GLYPHS: Glyph[] = [P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR), P(DEC), P(LA), P(LR)];
 
 /** Each numbered preset's glyphs, levels 1 to 9. */
-export const STYLE_GLYPHS: Partial<Record<ListStyle, Glyph[]>> = {
+const STYLE_GLYPHS: Partial<Record<ListStyle, Glyph[]>> = {
   NUMBERED_DECIMAL_ALPHA_ROMAN_PARENS: [R(DEC), R(LA), R(LR), RR(DEC), RR(LA), RR(LR), P(DEC), P(LA), P(LR)],
   NUMBERED_DECIMAL_ALPHA_ROMAN_TWO_PARENS: [RR(DEC), RR(LA), RR(LR), R(DEC), R(LA), R(LR), P(DEC), P(LA), P(LR)],
   NUMBERED_DECIMAL_ALPHA_ROMAN_PERIOD_PARENS: [PR(DEC), PR(LA), PR(LR), RR(DEC), RR(LA), RR(LR), P(DEC), P(LA), P(LR)],

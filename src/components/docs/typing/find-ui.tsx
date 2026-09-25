@@ -25,7 +25,7 @@ import { ArrowDownIcon, ArrowUpIcon } from "@/components/docs/typing/icons";
 export type FindMode = "bar" | "dialog" | null;
 
 /** The search as the plugin holds it, re-read on every transaction. */
-export function useFind(editor: Editor) {
+function useFind(editor: Editor) {
   return useEditorState({
     editor,
     selector: ({ editor: e }) => {

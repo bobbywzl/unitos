@@ -342,6 +342,17 @@ export function HeaderFooterLayer({
   );
 }
 
+/** Put page numbers in the header or the footer, on the first page or not. */
+export function addPageNumbers(setup: PageSetup, area: HeaderArea, onFirst: boolean): PageSetup {
+  const next: PageSetup = { ...setup, [area]: withPageNumber(setup[area]) };
+  if (!onFirst) next.differentFirst = true;
+  else if (next.differentFirst) {
+    const first = area === "header" ? "firstHeader" : "firstFooter";
+    next[first] = withPageNumber(setup[first]);
+  }
+  return next;
+}
+
 /** Page numbers: in the header or the footer, on the first page or not, and
     the first page's number. */
 export function PageNumbersDialog({ store, onClose }: { store: PageStore; onClose: () => void }) {
@@ -353,16 +364,8 @@ export function PageNumbersDialog({ store, onClose }: { store: PageStore; onClos
 
   const apply = () => {
     const n = Math.round(Number(startAt));
-    const next: PageSetup = { ...setup, pageNumberStart: Number.isFinite(n) ? Math.max(0, Math.min(999, n)) : 1 };
-    next[area] = withPageNumber(setup[area]);
-    if (onFirst) {
-      if (next.differentFirst) {
-        const first = area === "header" ? "firstHeader" : "firstFooter";
-        next[first] = withPageNumber(setup[first]);
-      }
-    } else {
-      next.differentFirst = true;
-    }
+    const next = addPageNumbers(setup, area, onFirst);
+    next.pageNumberStart = Number.isFinite(n) ? Math.max(0, Math.min(999, n)) : 1;
     void store.saveSetup(next);
     onClose();
   };

@@ -67,7 +67,7 @@ const SPOKEN: [RegExp, string][] = [
 type Piece = { text: string } | { lineBreak: true } | { paragraph: true };
 
 /** A heard phrase as what to type: text, line breaks, new paragraphs. */
-export function spokenPieces(phrase: string, english: boolean): Piece[] {
+function spokenPieces(phrase: string, english: boolean): Piece[] {
   let text = phrase;
   if (english) for (const [re, mark] of SPOKEN) text = text.replace(re, mark);
   const out: Piece[] = [];

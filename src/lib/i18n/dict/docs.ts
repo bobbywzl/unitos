@@ -240,11 +240,6 @@ const en = {
   modeViewingHint: "Read or print final document",
   hideMenus: "Hide the menus",
   showMenus: "Show the menus",
-  // Kept while the toolbar moves to the keys above.
-  resetColor: "Reset",
-  mode: "Editing mode",
-  hideTitle: "Hide the menus",
-  showTitle: "Show the menus",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -473,10 +468,6 @@ const zh: Record<keyof typeof en, string> = {
   modeViewingHint: "阅读或打印最终文档",
   hideMenus: "隐藏菜单",
   showMenus: "显示菜单",
-  resetColor: "重置",
-  mode: "编辑模式",
-  hideTitle: "隐藏菜单",
-  showTitle: "显示菜单",
 };
 
 export const docs = { en, zh } as const;

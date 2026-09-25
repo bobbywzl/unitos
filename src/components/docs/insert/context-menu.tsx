@@ -11,7 +11,8 @@ import { AddCommentIcon, AddIcon, ClearFormattingIcon, EditIcon, LinkIcon, Outli
 import { DOCS_EVENT } from "@/components/docs/extensions";
 import { keys } from "@/components/docs/keys";
 import { emitInsert, onInsert, type InsertContext } from "@/components/docs/insert/context";
-import { paragraphStyle, selectAllMatching, updateStyleToMatch } from "@/components/docs/insert/format-match";
+import { selectAllMatching } from "@/components/docs/insert/format-match";
+import { blockStyle, updateStyleToMatch } from "@/components/docs/toolbar/styles";
 import {
   AltTextIcon,
   ArrowDownIcon,
@@ -596,8 +597,8 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
       },
       {
         key: "update-style",
-        label: t("docsInsert.updateStyleToMatch", { style: styleName(paragraphStyle(parent), t) }),
-        run: () => updateStyleToMatch(editor),
+        label: t("docsInsert.updateStyleToMatch", { style: styleName(blockStyle(parent), t) }),
+        run: () => updateStyleToMatch(editor, blockStyle(editor.state.selection.$from.parent)),
       },
     ],
   });

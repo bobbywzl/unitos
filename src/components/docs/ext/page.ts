@@ -407,9 +407,10 @@ class DocsCaretView {
       this.place();
     });
   }
+  /** Placed on the next frame: the browser lays the text out once. */
   update(view: EditorView) {
     this.view = view;
-    this.place();
+    this.schedule();
   }
   /** Show the browser's caret instead of the page's. */
   private native(on: boolean) {

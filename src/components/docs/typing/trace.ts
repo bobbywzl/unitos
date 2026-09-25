@@ -7,12 +7,12 @@ import { setTypingPrefs, typingPrefs } from "@/components/docs/typing/prefs";
 // autocorrect bubble offers Undo. Undo, or deleting the word and typing it
 // again as it was, stops that correction for good.
 
-export type Trace = { from: number; to: number; original: string; fixed: string };
+type Trace = { from: number; to: number; original: string; fixed: string };
 
 /** A spelling correction's meta: the corrected range and the word typed. */
 export const SPELLING_META = "docsSpellingFix";
 
-export const traceKey = new PluginKey<Trace[]>("docsAutocorrectTrace");
+const traceKey = new PluginKey<Trace[]>("docsAutocorrectTrace");
 
 /** Words whose correction was just deleted: typed again, they stay. */
 const deleted = new Map<string, number>();

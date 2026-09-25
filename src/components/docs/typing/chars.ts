@@ -4,7 +4,7 @@
 // transparent (never splits a word: don't, well-known, a—b), and word
 // (everything else: letters, digits, "_", CJK, "…").
 
-export type CharClass = "s" | "p" | "t" | "w";
+type CharClass = "s" | "p" | "t" | "w";
 
 /** A line break (Shift+Enter) as the editor's text helpers write it. */
 export const LINE_BREAK = "\v";
@@ -31,7 +31,7 @@ export function isTransparent(ch: string | undefined): boolean {
 }
 
 /** CJK ideographs: a boundary for substitutions and spelling. */
-export function isCjkIdeograph(ch: string): boolean {
+function isCjkIdeograph(ch: string): boolean {
   return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(ch);
 }
 

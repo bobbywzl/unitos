@@ -26,7 +26,7 @@ export type TypingPrefs = {
 };
 
 /** Google Docs' default substitutions: exactly these 27 pairs, in this order. */
-export const DEFAULT_SUBSTITUTIONS: ReadonlyArray<readonly [string, string]> = [
+const DEFAULT_SUBSTITUTIONS: ReadonlyArray<readonly [string, string]> = [
   ["(c)", "©"],
   ["(r)", "®"],
   ["tm", "™"],
@@ -56,7 +56,7 @@ export const DEFAULT_SUBSTITUTIONS: ReadonlyArray<readonly [string, string]> = [
   ["---", "—"],
 ];
 
-export const DEFAULT_PREFS: TypingPrefs = {
+const DEFAULT_PREFS: TypingPrefs = {
   autoCapitalize: true,
   smartQuotes: true,
   detectLinks: true,

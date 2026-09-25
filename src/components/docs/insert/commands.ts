@@ -6,9 +6,10 @@ import { insertBookmark, insertEquation, insertHorizontalLine } from "@/componen
 import { buildingBlock, type BuildingBlock } from "@/components/docs/insert/building-blocks";
 import { emitInsert, insertContext } from "@/components/docs/insert/context";
 import { insertFootnote } from "@/components/docs/insert/footnotes";
-import { selectAllMatching, updateStyleToMatch } from "@/components/docs/insert/format-match";
+import { selectAllMatching } from "@/components/docs/insert/format-match";
 import { imageViewAt, resetImage, selectedImage } from "@/components/docs/insert/image";
 import { distributeRows, tableRectOf } from "@/components/docs/insert/table";
+import { blockStyle, updateStyleToMatch } from "@/components/docs/toolbar/styles";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // What Google Docs keeps in its Insert and Format menus for this area
@@ -368,6 +369,6 @@ registerDocsCommands([
     menu: "format",
     keywords: ["update style to match", "paragraph styles", "update heading"],
     enabled: editable,
-    run: (editor) => updateStyleToMatch(editor),
+    run: (editor) => updateStyleToMatch(editor, blockStyle(editor.state.selection.$from.parent)),
   },
 ]);

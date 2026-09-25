@@ -3,12 +3,13 @@ import type { Mark, Node as PMNode, ResolvedPos } from "@tiptap/pm/model";
 import { Plugin, PluginKey, Selection, SelectionRange, TextSelection } from "@tiptap/pm/state";
 import type { Mappable } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { blockStyle } from "@/components/docs/toolbar/styles";
 
 // Format options (SPEC.md §29), from the right-click menu: Select all
 // matching text selects every run of the document formatted like the
 // selection, as one selection of many ranges that the next formatting
-// command changes at once; Update '<style>' to match gives every paragraph
-// of the selection's paragraph style the selection's formatting.
+// command changes at once. (Update '<style>' to match is the named styles'
+// own, toolbar/styles.ts.)
 
 /** A selection of several ranges. The page draws them (it cannot show
     more than one range itself); every command that walks the selection's
@@ -60,13 +61,6 @@ function marksKey(marks: readonly Mark[]): string {
     .join("|");
 }
 
-/** A paragraph's style: Normal text, Title, Subtitle, or a heading level. */
-export function paragraphStyle(node: PMNode): string {
-  if (node.type.name === "heading") return `h${Number(node.attrs.level) || 1}`;
-  const style = node.attrs.docStyle as string | null | undefined;
-  return style === "title" || style === "subtitle" ? style : "normal";
-}
-
 function runAt($pos: ResolvedPos): PMNode | null {
   const after = $pos.nodeAfter;
   if (after?.isText) return after;
@@ -82,10 +76,10 @@ export function selectAllMatching(editor: Editor): boolean {
   const sample = runAt($from);
   if (!sample || !$from.parent.isTextblock) return false;
   const key = marksKey(sample.marks);
-  const style = paragraphStyle($from.parent);
+  const style = blockStyle($from.parent);
   const ranges: SelectionRange[] = [];
   state.doc.descendants((node, pos, parent) => {
-    if (node.isTextblock) return paragraphStyle(node) === style;
+    if (node.isTextblock) return blockStyle(node) === style;
     if (!node.isText) return true;
     if (!parent || marksKey(node.marks) !== key) return false;
     const last = ranges[ranges.length - 1];
@@ -100,42 +94,6 @@ export function selectAllMatching(editor: Editor): boolean {
   const selection = ranges.length === 1 ? TextSelection.create(state.doc, ranges[0].$from.pos, ranges[0].$to.pos) : new MultiRangeSelection(ranges);
   view.dispatch(state.tr.setSelection(selection));
   view.focus();
-  return true;
-}
-
-/** Give every paragraph of the selection's style the selection's
-    formatting: its character formatting (the link stays where it is) and
-    its paragraph spacing. */
-export function updateStyleToMatch(editor: Editor): boolean {
-  const { state, view } = editor;
-  const $from = state.selection.$from;
-  const parent = $from.parent;
-  if (!parent.isTextblock) return false;
-  const style = paragraphStyle(parent);
-  const sample = runAt($from);
-  const marks = (sample?.marks ?? []).filter((m) => m.type.name !== "link");
-  const spacing = {
-    lineSpacing: parent.attrs.lineSpacing ?? null,
-    spaceBefore: parent.attrs.spaceBefore ?? null,
-    spaceAfter: parent.attrs.spaceAfter ?? null,
-  };
-  const tr = state.tr;
-  state.doc.descendants((node, pos) => {
-    if (!node.isTextblock) return true;
-    if (paragraphStyle(node) !== style || node.type.spec.code) return false;
-    tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...spacing });
-    const from = pos + 1;
-    const to = pos + node.nodeSize - 1;
-    if (to > from) {
-      for (const type of Object.values(state.schema.marks)) {
-        if (type.name !== "link") tr.removeMark(from, to, type);
-      }
-      for (const mark of marks) tr.addMark(from, to, mark);
-    }
-    return false;
-  });
-  if (!tr.docChanged) return false;
-  view.dispatch(tr);
   return true;
 }
 

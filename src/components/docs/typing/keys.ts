@@ -17,15 +17,15 @@ import { firstGraphemeLength, lastGraphemeLength, wordEndAfter, wordStartBefore 
 // list item; Tab at the start of a paragraph sets a first-line indent.
 
 /** One indent step, in points. */
-export const STEP_PT = 36;
+const STEP_PT = 36;
 /** Docs nests lists nine levels deep: 0 to 8. */
 const MAX_LEVEL = 8;
 
-export function isListItemNode(node: PMNode | null | undefined): boolean {
+function isListItemNode(node: PMNode | null | undefined): boolean {
   return node?.type.name === "listItem" || node?.type.name === "taskItem";
 }
 
-export function isListNode(node: PMNode | null | undefined): boolean {
+function isListNode(node: PMNode | null | undefined): boolean {
   return node?.type.name === "bulletList" || node?.type.name === "orderedList" || node?.type.name === "taskList";
 }
 
@@ -34,7 +34,7 @@ function isCell(node: PMNode | null | undefined): boolean {
 }
 
 /** A pending "@" or ":" menu (any @tiptap/suggestion plugin) owns the keys. */
-export function suggestionActive(state: EditorState): boolean {
+function suggestionActive(state: EditorState): boolean {
   return state.plugins.some((plugin) => {
     const value: unknown = plugin.getState(state);
     return (
@@ -78,7 +78,7 @@ export function closeEdit(view: EditorView): void {
 type ItemAt = { node: PMNode; pos: number; depth: number; level: number };
 
 /** The list item whose first paragraph holds `$pos`, with its nesting level (0-based). */
-export function listItemAt($pos: ResolvedPos): ItemAt | null {
+function listItemAt($pos: ResolvedPos): ItemAt | null {
   const d = $pos.depth - 1;
   if (d < 1) return null;
   const item = $pos.node(d);
@@ -291,7 +291,7 @@ function nextTextblock(doc: PMNode, pos: number): { node: PMNode; pos: number } 
 
 // ── Backspace ───────────────────────────────────────────────────────────
 
-export type DeleteMode = "char" | "word" | "line";
+type DeleteMode = "char" | "word" | "line";
 
 /** Backspace, Google Docs' way. `word` is Ctrl+Backspace (Option on a Mac);
     `line` is ⌘+Backspace, the browser's own delete to the line start. */

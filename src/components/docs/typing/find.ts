@@ -10,9 +10,9 @@ import { OBJECT_CHAR } from "@/components/docs/typing/chars";
 // results are decorations: every result light green, the current one green.
 
 export type FindOptions = { matchCase: boolean; regex: boolean; ignoreDiacritics: boolean };
-export type FindResult = { from: number; to: number };
+type FindResult = { from: number; to: number };
 
-export type FindState = {
+type FindState = {
   /** The find bar or the Find and replace dialog is open. */
   open: boolean;
   query: string;
@@ -22,9 +22,9 @@ export type FindState = {
   current: number;
 };
 
-export const findKey = new PluginKey<FindState>("docsFind");
+const findKey = new PluginKey<FindState>("docsFind");
 
-export const EMPTY_FIND: FindState = {
+const EMPTY_FIND: FindState = {
   open: false,
   query: "",
   options: { matchCase: false, regex: false, ignoreDiacritics: false },
@@ -163,7 +163,7 @@ const DROPPED =
   /[\u02B0-\u02FF\u0300-\u036F\u1AB0-\u1AFF\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F\u0591-\u05BD\u0600-\u0605\u0610-\u061A\u064B-\u065F\u0670\u0674\u06D6-\u06DD\u06DF-\u06E8\u06EA-\u06ED\u070F\u0711\u0730-\u074A\u07A6-\u07B0\u0816-\u082D]/;
 
 /** One character with its diacritics folded away: "" when it is a mark. */
-export function foldChar(ch: string): string {
+function foldChar(ch: string): string {
   if (LIGATURES[ch]) return LIGATURES[ch];
   if (ch === "×") return "x";
   if (DROPPED.test(ch)) return "";
@@ -191,7 +191,7 @@ function foldSegment(seg: Segment): { text: string; source: Int32Array } {
   return { text, source: Int32Array.from(source) };
 }
 
-export function foldText(text: string): string {
+function foldText(text: string): string {
   let out = "";
   for (const ch of text) out += foldChar(ch);
   return out;
@@ -220,7 +220,7 @@ function literalPattern(query: string): string {
 
 /** The results of `query` in the document, in document order. An invalid
     regular expression finds nothing. */
-export function findResults(doc: PMNode, query: string, options: FindOptions): FindResult[] {
+function findResults(doc: PMNode, query: string, options: FindOptions): FindResult[] {
   if (!query) return [];
   const q = options.ignoreDiacritics ? foldText(query) : query;
   let re: RegExp;
@@ -252,7 +252,7 @@ export function findResults(doc: PMNode, query: string, options: FindOptions): F
 }
 
 /** The first result at or after `pos`, wrapping to the first one. */
-export function resultNear(results: FindResult[], pos: number): number {
+function resultNear(results: FindResult[], pos: number): number {
   if (!results.length) return -1;
   const i = results.findIndex((m) => m.from >= pos);
   return i === -1 ? 0 : i;
@@ -354,7 +354,7 @@ export function stepResult(view: EditorView, dir: 1 | -1): boolean {
 }
 
 /** Scroll the pane so `pos` shows below the sticky header. */
-export function revealPos(view: EditorView, pos: number): void {
+function revealPos(view: EditorView, pos: number): void {
   let coords: { top: number; bottom: number };
   try {
     coords = view.coordsAtPos(pos);

@@ -34,7 +34,7 @@ export function plainTextSlice(schema: Schema, text: string, $context: ResolvedP
 }
 
 /** Insert plain text at the selection, in the style at the caret. */
-export function insertPlainText(view: EditorView, text: string): void {
+function insertPlainText(view: EditorView, text: string): void {
   const { state } = view;
   const marks = state.storedMarks ?? state.selection.$from.marks();
   const slice = plainTextSlice(state.schema, text, state.selection.$from, marks);

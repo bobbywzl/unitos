@@ -53,7 +53,7 @@ declare module "@tiptap/core" {
   }
 }
 
-export type DocsTypingStorage = {
+type DocsTypingStorage = {
   /** The document is pageless: no page breaks, no page count. */
   pageless: boolean;
   /** The browser underlines misspelled words (Spelling and grammar check). */
