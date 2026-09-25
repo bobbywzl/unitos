@@ -410,14 +410,16 @@ function keepAuthors(tr: Transaction, before: PMNode, author: string, id: string
     const origin = back.mapResult(from, 1);
     const was = origin.deletedAfter ? undefined : before.nodeAt(origin.pos)?.marks.find((m) => m.type === mark.type);
     const markAuthor = suggestionAuthor(mark.attrs.id);
-    const own = apart ? undefined : beside.find((m) => m.type === mark.type && suggestionAuthor(m.attrs.id) === author);
-    const want = was
-      ? suggestionAuthor(was.attrs.id) === markAuthor && !apart
-        ? mark.attrs.id
-        : was.attrs.id
-      : markAuthor === author && !apart
-        ? mark.attrs.id
-        : (own?.attrs.id ?? id);
+    const own = beside.find((m) => m.type === mark.type && suggestionAuthor(m.attrs.id) === author);
+    const want = apart
+      ? (was?.attrs.id ?? id)
+      : was
+        ? suggestionAuthor(was.attrs.id) === markAuthor
+          ? mark.attrs.id
+          : was.attrs.id
+        : markAuthor === author
+          ? mark.attrs.id
+          : (own?.attrs.id ?? id);
     if (want === mark.attrs.id) return;
     const last = fixes.at(-1);
     if (last && !block && last.to === from && last.old.eq(mark) && last.mark.attrs.id === want) last.to = to;

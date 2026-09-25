@@ -5792,7 +5792,13 @@ export function ReaderInteractions({
   }
 
   // Voice command: browser speech recognition fills the box.
-  function toggleVoice() {
+  // The spoken command goes to the selection box's field, or to the bar's.
+  function toggleVoice(
+    write = (text: string) => {
+      aiCommandRef.current = text;
+      setAiCommand(text);
+    },
+  ) {
     if (aiListening) {
       recognitionRef.current?.stop();
       return;
@@ -5817,8 +5823,7 @@ export function ReaderInteractions({
         e.results as ArrayLike<ArrayLike<{ transcript: string }>>,
         (r) => r[0].transcript,
       ).join(" ");
-      setAiCommand(transcript);
-      aiCommandRef.current = transcript;
+      write(transcript);
     };
     rec.onend = () => {
       setAiListening(false);
@@ -7374,7 +7379,7 @@ function blockFormatKind(
               </div>
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={toggleVoice}
+                  onClick={() => toggleVoice()}
                   data-track="assistant-voice"
                   aria-label={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
                   data-tip={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
@@ -8619,6 +8624,18 @@ function blockFormatKind(
               aria-label={t("reader.barPlaceholder")}
               className="min-w-0 flex-1 rounded-xl bg-sand-100 px-3 py-1.5 text-[13px] outline-none placeholder:text-sand-500"
             />
+            <button
+              type="button"
+              onClick={() => toggleVoice((input) => setBar((b) => (b ? { ...b, input } : b)))}
+              data-track="assistant-voice"
+              aria-label={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
+              data-tip={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
+              className={`flex size-7 shrink-0 items-center justify-center rounded-full ${
+                aiListening ? "animate-pulse bg-red-500 text-white" : "text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+              }`}
+            >
+              <MicIcon size={13} />
+            </button>
             <button
               type="button"
               disabled={bar.busy || !bar.input.trim()}
