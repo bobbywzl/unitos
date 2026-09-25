@@ -2,7 +2,7 @@
 
 import type { Editor } from "@tiptap/core";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { OWN_SAVE_EVENT } from "@/components/collab/use-sync";
+import { OWN_SAVE_EVENT, REFRESH_EVENT } from "@/components/collab/use-sync";
 import { mergeRichText } from "@/lib/docs/merge";
 import { newBlockId, type RichNode } from "@/lib/docs/schema";
 
@@ -147,8 +147,10 @@ export function useDocsSave({
           retryRef.current = Math.min(retryRef.current + 1, 5);
           return;
         }
-        const body = (await res.json()) as { rev: number; notebookRevs?: Record<string, number> };
+        const body = (await res.json()) as { rev: number; notebookRevs?: Record<string, number>; marksChanged?: boolean };
         window.dispatchEvent(new CustomEvent(OWN_SAVE_EVENT, { detail: body.notebookRevs ?? {} }));
+        // A mark lost or found again: the page takes the stored highlights now.
+        if (body.marksChanged) window.dispatchEvent(new Event(REFRESH_EVENT));
         revRef.current = body.rev;
         baseRef.current = doc;
         retryRef.current = 0;

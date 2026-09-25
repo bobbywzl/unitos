@@ -25,7 +25,8 @@ function hasFiles(e: DragEvent): boolean {
 // dropped on the page's text goes into the text only (the text takes the
 // drop and cancels it), and the rest of the page editor refuses files.
 function overPageEditor(e: DragEvent): boolean {
-  return e.target instanceof Element && e.target.closest("[data-docs-editor]") !== null;
+  // The page editor's own boxes (the image toolbar, menus) float outside it.
+  return e.target instanceof Element && e.target.closest("[data-docs-editor], [data-docs-insert-popover], [data-docs-menu]") !== null;
 }
 
 // Chrome's dragleave for a drag that left the window carries (0, 0);

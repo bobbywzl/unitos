@@ -71,7 +71,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ documentId: str
   after(() => refreshSkeleton(documentId, access.user.id).catch(() => {}));
   // The page that saved needs no refresh for its own save unless a mark was
   // lost or found again (components/collab/use-sync.ts).
-  return NextResponse.json({ rev: result.rev, notebookRevs: result.marksChanged ? {} : notebookRevs });
+  return NextResponse.json({ rev: result.rev, notebookRevs: result.marksChanged ? {} : notebookRevs, marksChanged: result.marksChanged });
 }
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
