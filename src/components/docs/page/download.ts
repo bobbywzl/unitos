@@ -198,7 +198,7 @@ export async function downloadDocument(editor: Editor, format: DownloadFormat): 
   const ctx = insertContext(editor);
   if (!ctx) return;
   if (format === "pdf") {
-    toast(ctx.t("docsPage.choosePdf"));
+    toast(ctx.t("docsPage.choosePdf"), editor);
     // The toast shows before the print dialog takes the page.
     window.setTimeout(() => window.print(), 300);
     return;
@@ -210,7 +210,7 @@ export async function downloadDocument(editor: Editor, format: DownloadFormat): 
       await flushDocument(ctx.documentId);
       const res = await fetch(`/api/documents/${ctx.documentId}/export?format=docx`);
       if (res.ok) save(await res.blob(), `${title}.docx`);
-      else toast(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? ctx.t("common.requestFailed"));
+      else toast(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? ctx.t("common.requestFailed"), editor);
       return;
     }
     const doc = editor.state.doc.copy(viewed(editor.state.doc.content, editor.schema));
@@ -222,6 +222,6 @@ export async function downloadDocument(editor: Editor, format: DownloadFormat): 
     if (format === "md") save(new Blob([markdown(doc, images)], { type: "text/markdown;charset=utf-8" }), `${title}.md`);
     else save(new Blob([webPage(editor, doc, title, images)], { type: "text/html;charset=utf-8" }), `${title}.html`);
   } catch {
-    toast(ctx.t("common.requestFailed"));
+    toast(ctx.t("common.requestFailed"), editor);
   }
 }

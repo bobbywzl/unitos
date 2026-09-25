@@ -292,20 +292,21 @@ export function DocsEditor({
   }, [flush, flushRef]);
 
   // The Unitos marks: repainted when the reader's highlights change — by
-  // content, not by object. A repaint redraws the text and puts the editor's
-  // selection back into the page, so a repaint for nothing would undo a
-  // selection the reader is still growing with Shift+arrow. The highlights'
-  // offsets are the stored copy's: a repaint waits until the screen holds
-  // that copy (typing saved, the page's revision caught up); meanwhile the
-  // painted marks move with the typing.
+  // content, not by object — and when a new stored revision is on screen
+  // (someone else's words, whose marks the server moved). A repaint redraws
+  // the text and puts the editor's selection back into the page, so a
+  // repaint for nothing would undo a selection the reader is still growing
+  // with Shift+arrow. The highlights' offsets are the stored copy's: a
+  // repaint waits until the screen holds that copy (typing saved, the page's
+  // revision caught up); meanwhile the painted marks move with the typing.
   const marksSignature = useMemo(() => JSON.stringify(highlightsByBlock), [highlightsByBlock]);
-  const paintedRef = useRef<{ editor: Editor | null; signature: string }>({ editor: null, signature: "" });
+  const paintedRef = useRef<{ editor: Editor | null; signature: string; rev: number }>({ editor: null, signature: "", rev: -1 });
   // The marks made on this screen and painted ahead of the stored copy.
   const aheadRef = useRef(new Set<string>());
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
     const painted = paintedRef.current;
-    if (painted.editor === editor && painted.signature === marksSignature) return;
+    if (painted.editor === editor && painted.signature === marksSignature && painted.rev === rev) return;
     if (!matches(rev)) {
       // A mark made on this screen and not stored yet (a new comment or
       // highlight) paints at once from its anchor, which reads the screen.
@@ -328,7 +329,7 @@ export function DocsEditor({
       return;
     }
     aheadRef.current.clear();
-    paintedRef.current = { editor, signature: marksSignature };
+    paintedRef.current = { editor, signature: marksSignature, rev };
     const meta: MarksMeta = { highlights: highlightsByBlock, t };
     editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
   }, [editor, marksSignature, highlightsByBlock, t, matches, rev, saveState]);

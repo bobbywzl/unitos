@@ -141,7 +141,8 @@
 }
 /* Dark mode draws a white page dark and its words light. A page with a color
    stays in its color, so its words keep the light theme's colors. */
-.dark .docs-page:has(> .docs-sheets > :not([data-white])) {
+.dark .docs-page:has(> .docs-sheets > :not([data-white])),
+.dark .docs-versions-page:not([data-white]) {
   --docs-ink: #000000;
   --docs-link: #1155cc;
   --docs-selection: #a7c7fc;
@@ -197,10 +198,6 @@
 /* Footnotes in pages: each at the foot of the page that holds its number,
    the page's first under a short line; the block at the document's end
    takes no room. */
-.docs-page:not([data-pageless]) .docs-prose .docs-footnotes {
-  margin: 0;
-  padding: 0;
-}
 .docs-page:not([data-pageless]) .docs-prose .docs-footnotes::before {
   display: none;
 }
@@ -219,20 +216,11 @@
   border-top: 1px solid #a0a0a0;
 }
 
-/* A page break takes no room: the spacer after it starts the next page.
-   Selected, it shows as a blue line where its page ends. */
+/* A page break takes no room: the spacer after it starts the next page. */
 .docs-page-break {
   position: relative;
   height: 0;
   user-select: none;
-}
-.docs-page-break.ProseMirror-selectednode::before {
-  content: "";
-  position: absolute;
-  top: -1px;
-  right: 0;
-  left: 0;
-  border-top: 2px solid var(--docs-blue);
 }
 
 /* ── The caret: Google Docs' 2 px bar, 500 ms on and 500 ms off, solid after

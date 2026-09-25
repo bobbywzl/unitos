@@ -3718,7 +3718,7 @@ export function ReaderInteractions({
         .split("\n")
         .map((line) => (line ? `> ${line}` : ">"))
         .join("\n");
-      await api("/api/notes", "POST", {
+      const note = await api<{ id: string }>("/api/notes", "POST", {
         sectionId,
         content: quote,
         source: { documentId, ...anchorBody(popover.anchor) },
@@ -3728,6 +3728,9 @@ export function ReaderInteractions({
       setPopover(null);
       window.getSelection()?.removeAllRanges();
       router.refresh();
+      // A blank document opens with the tray folded (SPEC.md §29): the tray
+      // opens on the new note, so the reader sees where it went.
+      if (richTextRef.current) window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.addFailed"));
     } finally {
@@ -7210,24 +7213,34 @@ function blockFormatKind(
                 <NotesIcon size={coarse ? 14 : 12} />
                 {t("reader.addToNotes")}
               </button>
-          <Collapse open={submenu === "add"}>
-              {submenu === "add" && (
-                <div className="flex max-h-44 flex-col overflow-y-auto">
-                  {sectionChoices.map((choice) => (
-                    <button
-                      key={choice.id}
-                      disabled={busy}
-                      onClick={() => void addToSection(choice.id)}
-                      data-track="add-to-notes-section"
-                      data-tip={t("reader.addPendingNote", { section: choice.label })}
-                      className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
-                    >
-                      {choice.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-          </Collapse>
+          {(() => {
+            // Beside the page editor's page the list drops down over the
+            // tools: growing upward, it would go under the page editor's
+            // header.
+            const list = submenu === "add" && (
+              <div
+                className={
+                  popover.page && !coarse
+                    ? "absolute top-full left-0 z-10 mt-1 flex max-h-44 w-full flex-col overflow-y-auto rounded-2xl bg-card p-1.5 shadow-float"
+                    : "flex max-h-44 flex-col overflow-y-auto"
+                }
+              >
+                {sectionChoices.map((choice) => (
+                  <button
+                    key={choice.id}
+                    disabled={busy}
+                    onClick={() => void addToSection(choice.id)}
+                    data-track="add-to-notes-section"
+                    data-tip={t("reader.addPendingNote", { section: choice.label })}
+                    className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+              </div>
+            );
+            return popover.page && !coarse ? list : <Collapse open={submenu === "add"}>{list}</Collapse>;
+          })()}
             </div>
           )}
 

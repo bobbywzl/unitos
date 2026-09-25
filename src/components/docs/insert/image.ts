@@ -591,7 +591,7 @@ export async function replaceImage(editor: Editor, pos: number, source: ImageSou
     const node = editor.state.doc.nodeAt(pos);
     if (node) setImageAttrs(editor.view, pos, { ...RESET_ATTRS, src, width: imageAttrs(node).width });
   } catch (err) {
-    toast(err instanceof Error ? err.message : "");
+    toast(err instanceof Error ? err.message : "", editor);
   }
 }
 

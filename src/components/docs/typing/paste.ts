@@ -220,7 +220,7 @@ function setImageSrc(editor: Editor, from: string, to: string | null): void {
 }
 
 function uploadFailed(editor: Editor, err: unknown): void {
-  toast(err instanceof Error && err.message ? err.message : insertT(editor)("docsTyping.uploadFailed"));
+  toast(err instanceof Error && err.message ? err.message : insertT(editor)("docsTyping.uploadFailed"), editor);
 }
 
 let lastPasteAt = 0;
@@ -337,7 +337,7 @@ export async function pasteMarkdown(editor: Editor): Promise<void> {
     const text = await navigator.clipboard.readText();
     if (text && editor.isEditable) editor.chain().focus().insertContent(markdownToHtml(text)).run();
   } catch {
-    toast(insertT(editor)("docsTyping.pasteNoClipboard"));
+    toast(insertT(editor)("docsTyping.pasteNoClipboard"), editor);
   }
 }
 
@@ -347,8 +347,8 @@ export async function copyMarkdown(editor: Editor): Promise<void> {
   if (empty) return;
   try {
     await navigator.clipboard.writeText(fragmentToMarkdown(editor.state.doc.slice(from, to).content));
-    toast(insertT(editor)("docsTyping.copied"));
+    toast(insertT(editor)("docsTyping.copied"), editor);
   } catch {
-    toast(insertT(editor)("docsTyping.pasteNoClipboard"));
+    toast(insertT(editor)("docsTyping.pasteNoClipboard"), editor);
   }
 }

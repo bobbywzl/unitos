@@ -37,7 +37,7 @@ export function CopyDialog({ editor, onClose }: { editor: Editor; onClose: () =>
       ctx.navigate(projectDocHref(ctx.notebookId, copy.id));
     } catch (err) {
       setBusy(false);
-      toast(err instanceof Error && err.message ? err.message : t("common.requestFailed"));
+      toast(err instanceof Error && err.message ? err.message : t("common.requestFailed"), editor);
     }
   };
   return (

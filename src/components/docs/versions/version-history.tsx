@@ -83,13 +83,13 @@ export function VersionHistory({ editor, documentId, pageSetup, canEdit }: DocsA
           onClose={() => setOpen(false)}
         />
       )}
-      {naming && <NameDialog documentId={documentId} onClose={() => setNaming(false)} />}
+      {naming && <NameDialog editor={editor} documentId={documentId} onClose={() => setNaming(false)} />}
     </>
   );
 }
 
 /** Name current version: the text as it stands, kept as a named version. */
-function NameDialog({ documentId, onClose }: { documentId: string; onClose: () => void }) {
+function NameDialog({ editor, documentId, onClose }: { editor: Editor; documentId: string; onClose: () => void }) {
   const t = useT();
   const [name, setName] = useState("");
   const save = async () => {
@@ -99,7 +99,7 @@ function NameDialog({ documentId, onClose }: { documentId: string; onClose: () =
       await api(`/api/documents/${documentId}/versions`, "POST", { name });
       onClose();
     } catch (err) {
-      toast(err instanceof Error && err.message ? err.message : t("common.requestFailed"));
+      toast(err instanceof Error && err.message ? err.message : t("common.requestFailed"), editor);
     }
   };
   return (

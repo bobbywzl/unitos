@@ -232,13 +232,14 @@ export function VersionView({
   const canvasWidth = rect.width - panelWidth;
   // The page fits the canvas, down to half its size; a narrower canvas scrolls.
   const scale = Math.max(0.5, Math.min(1, (canvasWidth - 64) / frame.width));
+  const white = setup.pageless || /^#f{3}(f{3})?$/i.test(setup.color);
   const pageStyle: React.CSSProperties = setup.pageless
     ? { width: pagelessWidth(canvasWidth, 1, textWidth) }
     : {
         width: frame.width,
         minHeight: frame.height,
         padding: `${frame.top}px ${frame.right}px ${frame.bottom}px ${frame.left}px`,
-        background: /^#f{3}(f{3})?$/i.test(setup.color) ? undefined : setup.color,
+        background: white ? undefined : setup.color,
         zoom: scale < 1 ? scale : undefined,
       };
   const visible = namedOnly ? entries.filter((e) => e.current || e.name) : entries;
@@ -278,7 +279,7 @@ export function VersionView({
         </div>
         <div className="docs-versions-canvas">
           {ready ? (
-            <article className="docs-versions-page" data-pageless={setup.pageless || undefined} style={pageStyle}>
+            <article className="docs-versions-page" data-pageless={setup.pageless || undefined} data-white={white || undefined} style={pageStyle}>
               <style ref={styleRef} />
               <div ref={proseRef} className="docs-prose" data-docs-styles="version" />
             </article>

@@ -77,13 +77,15 @@ export function SearchMenus({
   const listRef = useRef<HTMLDivElement>(null);
   const [all, setAll] = useState<SearchAction[]>([]);
 
-  // A white field above 1600 px of window, a symbol button at and below.
+  // A white field when the toolbar is wider than Docs' at a 1600 px window
+  // (a 1568 px bar), a symbol button otherwise: the notes tray and the rail
+  // take room Docs' window has.
   useEffect(() => {
-    const media = window.matchMedia("(min-width: 1601px)");
-    const update = () => setWide(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
+    const bar = anchorRef.current?.closest(".docs-toolbar");
+    if (!bar) return;
+    const observer = new ResizeObserver(() => setWide(bar.getBoundingClientRect().width > 1568));
+    observer.observe(bar);
+    return () => observer.disconnect();
   }, []);
 
   const actionsRef = useRef(actions);

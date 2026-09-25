@@ -39,6 +39,7 @@ export const isSuggestionMark = (mark: PMMark) => SUGGESTION_MARK_TYPES.has(mark
 /** Words added or removed: an insertion or a deletion mark. */
 const isWordMark = (mark: PMMark) => mark.type.name === "insertion" || mark.type.name === "deletion";
 const isModification = (mark: PMMark) => mark.type.name === "modification";
+const isInsertion = (mark: PMMark) => mark.type.name === "insertion";
 
 /** The suggestion the marks carry; a deletion first, as it can lie over
     another person's added words. */
@@ -333,21 +334,20 @@ function suggestMark(tr: Transaction, step: AddMarkStep | RemoveMarkStep, id: st
     or one inside it, takes the change as it is and stays added (the library
     would drop its insertion mark for the modification). */
 function chainBlockChanges(tr: Transaction, before: PMNode, id: string): void {
-  const isAdded = (node: PMNode) => node.marks.find((m) => m.type.name === "insertion");
   tr.doc.descendants((node, pos) => {
     const fresh = node.marks.filter((m) => isModification(m) && m.attrs.id === id);
     if (fresh.length === 0) return true;
     const was = before.nodeAt(pos);
+    const added = was?.marks.find(isInsertion);
     const $pos = before.resolve(pos);
-    let inAddedBlock = false;
-    for (let depth = $pos.depth; depth > 0 && !inAddedBlock; depth--) inAddedBlock = Boolean(isAdded($pos.node(depth)));
-    const added = was && isAdded(was);
+    let asIs = Boolean(added);
+    for (let depth = $pos.depth; depth > 0; depth--) asIs ||= $pos.node(depth).marks.some(isInsertion);
     let marks = node.marks;
     for (const mod of fresh) {
       const earlier = was?.marks.find((m) => isModification(m) && m.attrs.type === mod.attrs.type && m.attrs.attrName === mod.attrs.attrName);
       const previousValue: unknown = earlier ? earlier.attrs.previousValue : mod.attrs.previousValue;
       marks = mod.removeFromSet(marks);
-      if (!added && !inAddedBlock && !same(previousValue, mod.attrs.newValue)) {
+      if (!asIs && !same(previousValue, mod.attrs.newValue)) {
         marks = mod.type.create({ ...mod.attrs, id: keptId(earlier, id), previousValue }).addToSet(marks);
       }
     }
@@ -618,12 +618,12 @@ function takeBack(doc: PMNode, own: Suggestion[]): Transform {
     wrapped a removed line in an item of its own). */
 function asSeen(doc: PMNode, ids: Set<string>): Transform {
   const t = new Transform(doc);
-  const mine = (mark: PMMark | undefined) => mark !== undefined && ids.has(String(mark.attrs.id));
+  const mine = (mark: PMMark | undefined): mark is PMMark => mark !== undefined && ids.has(String(mark.attrs.id));
   const removed: number[] = [];
   doc.descendants((node, pos) => {
     if (node.isInline) return false;
-    const added = node.marks.find((m) => m.type.name === "insertion");
-    if (added && mine(added)) t.removeNodeMark(pos, added);
+    const added = node.marks.find(isInsertion);
+    if (mine(added)) t.removeNodeMark(pos, added);
     if (!mine(node.marks.find((m) => m.type.name === "deletion")) && !(node.isTextblock && mine(struckBy(node)))) return true;
     removed.push(pos);
     return false;

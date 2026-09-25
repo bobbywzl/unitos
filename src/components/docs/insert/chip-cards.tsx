@@ -257,7 +257,7 @@ function ChipCard({
           className="docs-icon-btn"
           aria-label={t("docs.copyLink")}
           data-tip={t("docs.copyLink")}
-          onClick={() => void navigator.clipboard.writeText(url).then(() => toast(t("docs.linkCopied")), () => emitInsert(editor, { type: "clipboard-blocked" }))}
+          onClick={() => void navigator.clipboard.writeText(url).then(() => toast(t("docs.linkCopied"), editor), () => emitInsert(editor, { type: "clipboard-blocked" }))}
         >
           <LinkIcon size={18} />
         </button>
