@@ -1,5 +1,6 @@
 import type { DerivationType, NoteStatus } from "@prisma/client";
 import type { ChatTurn } from "@/lib/conversation";
+import type { SuggestResult } from "@/lib/docs/assistant-suggestions";
 
 /** One reply in the discussion under a note, an edit, or a link. */
 export type ReplyView = {
@@ -434,7 +435,10 @@ export type AssistantAction =
       kind: "paragraph" | "h1" | "h2" | "h3";
       description: string;
     }
-  | { type: "style"; anchor: AssistantAnchor; style: "bold" | "italic"; description: string };
+  | { type: "style"; anchor: AssistantAnchor; style: "bold" | "italic"; description: string }
+  // A change to a document with rich text (SPEC.md §29): the reader runs it
+  // as the assistant's suggestions, never through the plan card.
+  | { type: "suggest"; instruction: string; blockIds?: string[]; description: string };
 
 export type AssistantPlan = {
   reply: string | null;
@@ -442,6 +446,8 @@ export type AssistantPlan = {
   warnings: string[];
   // The persisted conversation note, when the chat is anchored to a selection.
   conversationNoteId: string | null;
+  // The selection chat's suggestions: the page lands their ops.
+  suggestions?: SuggestResult;
 };
 
 /** One row of the Edits tab. TEXT_EDIT rows can revert (PATCH the block back

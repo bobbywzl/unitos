@@ -3,15 +3,17 @@
 import { useEditorState, type Editor } from "@tiptap/react";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { memo, type ReactNode } from "react";
-import { useAuthor } from "@/components/collab/collab-context";
+import { useAuthor, useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { replyTime } from "@/components/collab/reply-thread";
 import { focusSuggestion, readSuggestions, settleSuggestions, suggestionAt, type Suggestion } from "@/components/docs/ext/suggest";
 import { CheckIcon, CloseIcon } from "@/components/docs/icons";
 import { openLine } from "@/components/docs/layer/comment-card";
+import { whyOf } from "@/components/docs/suggest/assistant";
 import { blockStyle } from "@/components/docs/toolbar/styles";
 import { STYLE_LABEL } from "@/components/docs/toolbar/styles-menu";
 import { useLang, useT } from "@/components/lang-provider";
+import { askerOf, isAssistantAuthor } from "@/lib/docs/assistant-suggestions";
 import { suggestionAuthor, suggestionTime, type RichMark } from "@/lib/docs/schema";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { personColor } from "@/lib/person";
@@ -147,7 +149,9 @@ function sameCard(a: Suggestion | null, b: Suggestion | null): boolean {
 /** One suggestion's card in the margin: the one the caret stands in shows
     whole, with Accept and Reject for an editor; the others show one line,
     and a press opens them. The layer places it. A card reads its own
-    suggestion, and draws again only when what it shows changed. */
+    suggestion, and draws again only when what it shows changed. The
+    assistant's card names who asked, in a shared project, and says why
+    under the change while the page that landed it is open. */
 export const SuggestionCard = memo(function SuggestionCard({
   editor,
   id,
@@ -169,9 +173,12 @@ export const SuggestionCard = memo(function SuggestionCard({
   const t = useT();
   const lang = useLang();
   const authorOf = useAuthor();
+  const { shared } = useCollab();
   if (!suggestion) return null;
   const author = suggestionAuthor(id);
   const person = authorOf(author);
+  const asker = shared && isAssistantAuthor(author) ? authorOf(askerOf(author)) : undefined;
+  const why = whyOf(id);
   const lines = describe(suggestion, t);
   const settle = (accept: boolean) => settleSuggestions(editor, accept, id);
   const style = { borderColor: person?.color ?? personColor(author) };
@@ -211,6 +218,7 @@ export const SuggestionCard = memo(function SuggestionCard({
         <div className="docs-comment-who">
           {person && <div className="docs-comment-name">{person.name}</div>}
           <div className="docs-comment-time">{replyTime(new Date(suggestionTime(id)).toISOString(), lang)}</div>
+          {asker && <div className="docs-comment-time">{t("docsSuggest.askedBy", { name: asker.name })}</div>}
         </div>
         {canSettle && (
           <div className="docs-comment-buttons">
@@ -242,6 +250,7 @@ export const SuggestionCard = memo(function SuggestionCard({
           {line}
         </p>
       ))}
+      {why && <p className="docs-suggest-why">{why}</p>}
     </div>
   );
 });

@@ -93,6 +93,12 @@
   background: var(--docs-canvas);
 }
 
+/* A pageless page's color fills the canvas and, in the light theme, the
+   chrome (areas/page.tsx); in dark mode the chrome keeps the dark paper. */
+.dark :is(.docs-header, .docs-side) {
+  --docs-canvas: var(--paper);
+}
+
 /* ── The canvas: the paper under the chrome; the first page's border
    sits 10 px under the ruler, and the canvas scrolls sideways when the page
    is wider than the pane. The page stands between the side paddings (the

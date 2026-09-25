@@ -18,6 +18,8 @@ const en = {
   checked: "Checked",
   unchecked: "Unchecked",
   otherFormat: "other formatting",
+  // The assistant's suggestion's card, in a shared project
+  askedBy: "Asked by {name}",
   // Review suggested edits
   reviewSuggestedEdits: "Review suggested edits",
   oneSuggestion: "1 suggestion",
@@ -47,6 +49,7 @@ const zh: Record<keyof typeof en, string> = {
   checked: "已勾选",
   unchecked: "未勾选",
   otherFormat: "其他格式",
+  askedBy: "请求人：{name}",
   reviewSuggestedEdits: "审阅建议",
   oneSuggestion: "1 条建议",
   suggestionCount: "{n} 条建议",
