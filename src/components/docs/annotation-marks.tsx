@@ -301,6 +301,20 @@ export const AnnotationMarks = Extension.create({
           decorations(state) {
             return annotationMarksKey.getState(state);
           },
+          handleDOMEvents: {
+            // A click on a mark opens what the mark opens. The editor reads
+            // its new caret only after the click, so the browser's selection
+            // says whether this was a click or the end of a drag over words.
+            // A chip is a widget the editor leaves alone: the page's own
+            // click handler opens it.
+            click(_view, event) {
+              const target = event.target instanceof Element ? event.target : null;
+              if (!target?.closest("[data-docs-open]") || target.closest("[data-anchor-skip]")) return false;
+              if (!(window.getSelection()?.isCollapsed ?? true)) return false;
+              if (openMarkAt(target)) event.stopPropagation();
+              return false;
+            },
+          },
         },
       }),
       flashPlugin(),

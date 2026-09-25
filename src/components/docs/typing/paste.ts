@@ -1,0 +1,96 @@
+import type { Editor } from "@tiptap/core";
+import { Fragment, Slice, type Mark, type ResolvedPos, type Schema } from "@tiptap/pm/model";
+import type { Transaction } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
+
+// Paste in the page editor (SPEC.md §29, typing), as Google Docs pastes:
+// plain text becomes one paragraph per line (blank lines too) in the style at
+// the caret; Ctrl+Shift+V pastes the plain text alone; an image on the
+// clipboard or dropped from the computer is uploaded and goes in as an image.
+
+/** Messages the paste code shows, in the page's language (set by the typing area). */
+export const pasteMessages = { uploadFailed: "Couldn't add the image" };
+
+let lastPasteAt = 0;
+let plainArmedAt = 0;
+
+export function notePaste(): void {
+  lastPasteAt = Date.now();
+}
+
+/** Plain text as a slice: a paragraph per line, each in `marks`; inside
+    code the text stays as it is. */
+export function plainTextSlice(schema: Schema, text: string, $context: ResolvedPos, marks: readonly Mark[]): Slice {
+  const clean = text.replace(/\r\n?/g, "\n");
+  if ($context.parent.type.spec.code) {
+    return clean ? new Slice(Fragment.from(schema.text(clean)), 0, 0) : Slice.empty;
+  }
+  const paragraph = schema.nodes.paragraph;
+  const lines = clean.split("\n");
+  const nodes = lines.map((line) => paragraph.create(null, line ? schema.text(line, marks) : null));
+  return new Slice(Fragment.from(nodes), 1, 1);
+}
+
+/** Insert plain text at the selection, in the style at the caret. */
+export function insertPlainText(view: EditorView, text: string): void {
+  const { state } = view;
+  const marks = state.storedMarks ?? state.selection.$from.marks();
+  const slice = plainTextSlice(state.schema, text, state.selection.$from, marks);
+  const tr: Transaction = state.tr.replaceSelection(slice).scrollIntoView();
+  tr.setMeta("paste", true);
+  view.dispatch(tr);
+}
+
+/** Ctrl+Shift+V: the browser's own paste event carries plain text (the
+    editor sees Shift held). Where the browser fires none, the clipboard is
+    read and its text goes in plain. */
+export function armPlainPaste(view: EditorView): void {
+  plainArmedAt = Date.now();
+  const armed = plainArmedAt;
+  window.setTimeout(() => {
+    if (lastPasteAt >= armed || plainArmedAt !== armed) return;
+    const read = navigator.clipboard?.readText?.bind(navigator.clipboard);
+    if (!read) return;
+    read()
+      .then((text) => {
+        if (text && view.editable && !view.isDestroyed) insertPlainText(view, text);
+      })
+      .catch(() => {
+        // No permission to read the clipboard: nothing to paste.
+      });
+  }, 150);
+}
+
+function toast(text: string): void {
+  window.dispatchEvent(new CustomEvent("dissect:toast", { detail: { text } }));
+}
+
+/** The image files among `files`. */
+export function imageFiles(files: FileList | null | undefined): File[] {
+  return Array.from(files ?? []).filter((f) => f.type.startsWith("image/"));
+}
+
+/** Upload images and insert them at `pos` (the selection when absent). */
+export async function insertImageFiles(editor: Editor, files: File[], pos?: number): Promise<void> {
+  let at = pos;
+  for (const file of files) {
+    try {
+      const res = await fetch("/api/images", { method: "POST", body: file });
+      const body = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !body.url) {
+        toast(body.error ?? pasteMessages.uploadFailed);
+        continue;
+      }
+      const content = { type: "image", attrs: { src: body.url, alt: file.name } };
+      if (at === undefined) {
+        editor.chain().focus().insertContent(content).run();
+      } else {
+        const target = Math.min(at, editor.state.doc.content.size);
+        editor.chain().focus().insertContentAt(target, content).run();
+        at = editor.state.selection.to;
+      }
+    } catch {
+      toast(pasteMessages.uploadFailed);
+    }
+  }
+}

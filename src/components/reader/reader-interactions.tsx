@@ -6672,7 +6672,9 @@ function blockFormatKind(
             if (target.closest("textarea, input")) return;
             e.preventDefault();
           }}
-          className={`pop-in absolute ${TOOL_LAYER} flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float`}
+          // Beside the page editor's page it fades in, as Google Docs'
+          // floating buttons do (docs/css/layer.css).
+          className={`${popover.page && popover.side === "right" ? "docs-toolbar-in" : "pop-in"} absolute ${TOOL_LAYER} flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float`}
           style={popoverBox}
         >
           {popover.truncated && (

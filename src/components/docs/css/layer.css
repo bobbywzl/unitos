@@ -1,1 +1,82 @@
-/* The page editor: layer (SPEC.md §29). Imported by docs.css. */
+/* The page editor: layer (SPEC.md §29). Imported by docs.css.
+   The Unitos layer over the page: the selection toolbar beside the page's
+   right edge and the cards in its margin take Google Docs' place and card
+   numbers (its floating buttons and comment cards); the marks keep the
+   Unitos kind colors (SPEC.md §6), which Google's one comment yellow would
+   erase. */
+
+:root {
+  /* Google Docs' comment card: at rest, on hover, and active. */
+  --docs-card-rest: #f0f4f9;
+  --docs-card-hover: #e9eef6;
+  --docs-card-active: #ffffff;
+  --docs-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 8px 3px rgba(0, 0, 0, 0.15);
+}
+.dark {
+  --docs-card-rest: #2a2c2e;
+  --docs-card-hover: #323538;
+  --docs-card-active: #37393c;
+  --docs-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 4px 8px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* The page editor's title row and toolbar stay above the Unitos layer: the
+   selection toolbar and the cards scroll under them, as Google Docs' comment
+   cards scroll under its toolbar. Under the dialogs (z-50). */
+[data-page-editor] .docs-header {
+  z-index: 45;
+}
+
+/* The cards over a blank document take Google Docs' comment card: 12 px
+   corners, flat at rest, a shade darker under the pointer, and lifted in
+   white while the reader works in it. The border keeps the annotation's
+   kind color. */
+[data-page-editor] [data-side-card],
+[data-page-editor] [data-log-card],
+[data-page-editor] [data-annotation-card] {
+  border-radius: 12px;
+  background: var(--docs-card-rest);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-page-editor] [data-side-card],
+  [data-page-editor] [data-annotation-card] {
+    transition:
+      background-color 0.15s ease,
+      box-shadow 0.15s ease,
+      top 0.35s ease;
+  }
+}
+[data-page-editor] [data-side-card]:hover,
+[data-page-editor] [data-log-card]:hover,
+[data-page-editor] [data-annotation-card]:hover {
+  background: var(--docs-card-hover);
+}
+[data-page-editor] [data-side-card]:focus-within,
+[data-page-editor] [data-annotation-card]:focus-within,
+[data-page-editor] [data-side-card][data-dragging] {
+  background: var(--docs-card-active);
+  box-shadow: var(--docs-card-shadow);
+}
+
+/* The selection toolbar fades in over 250 ms, as Google Docs' floating
+   buttons do. */
+@keyframes docs-toolbar-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .docs-toolbar-in {
+    animation: docs-toolbar-in 0.25s ease-in-out;
+  }
+}
+
+/* A mark's chip sits on the page, so its ring is the page's color. */
+.docs-prose .mark-chip {
+  box-shadow: 0 0 0 1.5px var(--docs-page);
+}
+.docs-prose .mark-chip svg,
+.docs-prose .link-chain svg {
+  pointer-events: none;
+}
