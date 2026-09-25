@@ -9,7 +9,6 @@ import Superscript from "@tiptap/extension-superscript";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
-import { CharacterCount, Placeholder } from "@tiptap/extensions";
 import { DocsFontFamily } from "@/components/docs/fonts";
 import { insertExtensions } from "@/components/docs/ext/insert";
 import { layerExtensions } from "@/components/docs/ext/layer";
@@ -361,8 +360,8 @@ const DocsKeymap = Extension.create({
   },
 });
 
-/** The page editor's extensions. `placeholder` is the hint on an empty line. */
-export function docsExtensions({ placeholder }: { placeholder: string }) {
+/** The page editor's extensions. */
+export function docsExtensions() {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3, 4, 5, 6] },
@@ -392,8 +391,6 @@ export function docsExtensions({ placeholder }: { placeholder: string }) {
     TaskItem.configure({ nested: true }),
     TableKit.configure({ table: { resizable: true, cellMinWidth: 32 } }),
     Image.configure({ inline: false, allowBase64: false }),
-    Placeholder.configure({ placeholder, showOnlyCurrent: true, includeChildren: true }),
-    CharacterCount,
     // No Typography: Google Docs' substitutions and smart quotes are the
     // typing area's autocorrect (ext/typing.ts).
     BlockIds,

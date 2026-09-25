@@ -242,23 +242,6 @@ div:has([data-docs-editor]) > .reader-fade {
 .docs-prose hr.ProseMirror-selectednode {
   outline: 2px solid var(--docs-blue);
 }
-/* An empty line keeps the hint the caret's line shows: Type @ to insert. */
-.docs-prose p.is-empty::before,
-.docs-prose h1.is-empty::before,
-.docs-prose h2.is-empty::before,
-.docs-prose h3.is-empty::before {
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  color: var(--docs-placeholder);
-  pointer-events: none;
-}
-.docs-prose:not(:focus) .is-empty::before {
-  content: none;
-}
-[data-docs-mode="viewing"] .docs-prose .is-empty::before {
-  content: none;
-}
 
 /* Lists: Google Docs' bullets and numbers, level by level. */
 .docs-prose ul,

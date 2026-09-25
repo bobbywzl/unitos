@@ -856,6 +856,8 @@ export function ReaderInteractions({
   // selection alive, which also keeps a native select from ever opening.
   const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment">(null);
   const [commentDraft, setCommentDraft] = useState("");
+  // The page editor's right-click Explain, waiting for its popover (below).
+  const [pendingExplain, setPendingExplain] = useState(false);
   // The lead tool Jev predicts for a popover (SPEC.md §6), keyed by the
   // popover it answers: another popover reads it as null until its own
   // answer lands. Null answers: no key, no confident answer, a fixed lead.
@@ -2121,14 +2123,32 @@ export function ReaderInteractions({
       setCloseLink(null);
       setCommentDraft("");
     };
+    // The page editor's right-click menu: Add to notes, Explain, and Ask the
+    // assistant open the same tools on the selection as this toolbar does.
+    const onTool = (e: Event) => {
+      const detail = (e as CustomEvent<{ documentId: string; tool: "add-to-notes" | "explain" | "assistant" }>).detail;
+      if (detail?.documentId !== documentId || !pageEditorIn(containerRef.current)) return;
+      const captured = captureSelection();
+      if (!captured) {
+        showToast(t("docsLayer.selectWordsFirst"));
+        return;
+      }
+      popoverRef.current = captured;
+      setPopover(captured);
+      setCloseLink(null);
+      setSubmenu(detail.tool === "add-to-notes" ? "add" : detail.tool === "assistant" ? "ai" : null);
+      if (detail.tool === "explain") setPendingExplain(true);
+    };
     const onToast = (e: Event) => {
       const text = (e as CustomEvent<{ text: string }>).detail?.text;
       if (text) showToast(text);
     };
     window.addEventListener("docs:comment-selection", onComment);
+    window.addEventListener("docs:unitos-tool", onTool);
     window.addEventListener("dissect:toast", onToast);
     return () => {
       window.removeEventListener("docs:comment-selection", onComment);
+      window.removeEventListener("docs:unitos-tool", onTool);
       window.removeEventListener("dissect:toast", onToast);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3681,6 +3701,15 @@ export function ReaderInteractions({
   async function explain() {
     await streamBubble("explain");
   }
+  // Explain asked for from outside the toolbar (the page editor's right-click
+  // menu) runs once the popover it needs has rendered.
+  useEffect(() => {
+    if (!pendingExplain || !popover) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPendingExplain(false);
+    void explain();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingExplain, popover]);
   async function analyze() {
     await streamBubble("analyze");
   }

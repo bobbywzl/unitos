@@ -125,9 +125,6 @@
   pointer-events: none;
   user-select: none;
 }
-.is-empty[data-placeholder] > .tiptap-invisible-character--paragraph {
-  display: none;
-}
 
 /* Markdown's inline code: Roboto Mono in Docs' code green. */
 .docs-prose code {

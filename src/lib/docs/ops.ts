@@ -58,6 +58,7 @@ export function inlineNodes(text: string, marks?: RichMark[]): RichNode[] {
 export function replaceBlockText(doc: RichNode, blockId: string, text: string): RichNode | null {
   const hit = findBlock(doc, blockId);
   if (!hit || hit.node.type === "image" || hit.node.type === "horizontalRule") return null;
+  if (hit.node.type === "blockMath") return spliceAt(doc, hit.path, (n) => [{ ...n, attrs: { ...n.attrs, latex: text } }]);
   const firstMarks = hit.node.content?.find((c) => c.type === "text")?.marks;
   return spliceAt(doc, hit.path, (node) => [
     { ...node, content: node.type === "codeBlock" ? (text ? [{ type: "text", text }] : []) : inlineNodes(text, firstMarks) },

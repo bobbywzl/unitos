@@ -251,11 +251,6 @@
 [data-docs-mode="viewing"] .docs-at-hint {
   display: none;
 }
-/* The hint is the insert area's widget, drawn where the caret is and never
-   in a table cell; the editor's placeholder text steps aside for it. */
-.docs-shell .docs-prose .is-empty::before {
-  content: none;
-}
 
 /* ── Pickers ───────────────────────────────────────────────────────────── */
 .docs-picker {
@@ -489,7 +484,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: 81px;
+  width: 72px;
   padding: 6px 4px;
 }
 .docs-toc-thumb-line {
@@ -898,6 +893,9 @@
   flex-direction: column;
   gap: 10px;
   padding: 0 16px 14px;
+}
+.docs-side-section-body > .docs-tb-btn {
+  align-self: flex-start;
 }
 .docs-side-label {
   color: var(--docs-section-ink);

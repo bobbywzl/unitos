@@ -13,6 +13,7 @@ import { CloudDoneIcon, CloudOffIcon, CloudSyncIcon, DocIcon } from "@/component
 import { DocsToolbar, type DocsMode, type Zoom } from "@/components/docs/toolbar";
 import { useDocsSave, type SaveState } from "@/components/docs/use-docs-save";
 import { WordCountDialog } from "@/components/docs/word-count";
+import { insertImageFiles } from "@/components/docs/typing/paste";
 import { InsertLayer } from "@/components/docs/areas/insert";
 import { UnitosLayer } from "@/components/docs/areas/layer";
 import { PageCanvas, PageRuler } from "@/components/docs/areas/page";
@@ -210,13 +211,7 @@ export function DocsEditor({
   const [zoom, setZoom] = useState<Zoom>(100);
   const [headerHidden, setHeaderHidden] = useState(false);
 
-  const extensions = useMemo(
-    () => [...docsExtensions({ placeholder: t("docs.typeAtToInsert") }), AnnotationMarks],
-    // The extensions are built once per editor; the hint's language is the
-    // page's.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  const extensions = useMemo(() => [...docsExtensions(), AnnotationMarks], []);
   const editor = useEditor(
     {
       extensions,
@@ -291,22 +286,12 @@ export function DocsEditor({
 
 
   const insertImage = useCallback(
-    async (source: { file: File } | { url: string }) => {
+    (source: { file: File } | { url: string }) => {
       if (!editor) return;
-      if ("url" in source) {
-        editor.chain().focus().setImage({ src: source.url }).run();
-        return;
-      }
-      try {
-        const res = await fetch("/api/images", { method: "POST", body: source.file });
-        const body = (await res.json()) as { url?: string; error?: string };
-        if (res.ok && body.url) editor.chain().focus().setImage({ src: body.url, alt: source.file.name }).run();
-        else window.dispatchEvent(new CustomEvent("dissect:toast", { detail: { text: body.error ?? t("common.requestFailed") } }));
-      } catch {
-        window.dispatchEvent(new CustomEvent("dissect:toast", { detail: { text: t("common.requestFailed") } }));
-      }
+      if ("url" in source) editor.chain().focus().setImage({ src: source.url }).run();
+      else void insertImageFiles(editor, [source.file]);
     },
-    [editor, t],
+    [editor],
   );
 
   // A press on a mark or a chip opens what it opens in the reader; a drag
@@ -355,7 +340,7 @@ export function DocsEditor({
             aiControls={aiControls}
             headerHidden={headerHidden}
             onToggleHeader={() => setHeaderHidden((h) => !h)}
-            onInsertImage={(source) => void insertImage(source)}
+            onInsertImage={insertImage}
           />
         )}
         {area && <PageRuler {...area} zoom={zoom} />}

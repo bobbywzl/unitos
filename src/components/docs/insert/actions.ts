@@ -105,8 +105,8 @@ export function replaceQuery(editor: Editor, range: Range | null, then: () => vo
   then();
 }
 
-/** An equation: on an empty line it is its own block (an EQUATION row), in
-    a line of words it sits in the line. Returns the node's position. */
+/** An equation: on an empty line it is its own block (an EQUATION row) over
+    that line, in a line of words it sits in the line. Returns its position. */
 export function insertEquation(editor: Editor, range: Range | null): number | null {
   let at: number | null = null;
   replaceQuery(editor, range, () => {
@@ -115,7 +115,7 @@ export function insertEquation(editor: Editor, range: Range | null): number | nu
     const emptyLine = $from.parent.type.name === "paragraph" && $from.parent.content.size === 0 && $from.depth === 1;
     if (emptyLine && state.schema.nodes.blockMath) {
       const pos = $from.before();
-      const tr = state.tr.replaceWith(pos, pos + $from.parent.nodeSize, state.schema.nodes.blockMath.create({ latex: "" }));
+      const tr = state.tr.insert(pos, state.schema.nodes.blockMath.create({ latex: "" }));
       tr.setSelection(NodeSelection.create(tr.doc, pos));
       editor.view.dispatch(tr);
       at = pos;

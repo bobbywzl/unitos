@@ -135,9 +135,11 @@ function ChipCard({
       const current = editor.state.doc.nodeAt(pos);
       if (!current || current.type.name !== name) return;
       const tr = editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, ...attrs });
+      // The chip stays selected, so its card stays open.
+      if (target.pinned) tr.setSelection(NodeSelection.create(tr.doc, pos));
       editor.view.dispatch(tr);
     },
-    [editor, pos, name],
+    [editor, pos, name, target.pinned],
   );
 
   let body: React.ReactNode = null;
