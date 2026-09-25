@@ -126,7 +126,7 @@ export function ModeSwitcher({ mode, onMode }: { mode: DocsMode; onMode: (mode: 
           </MenuItem>
         ))}
         {lock && (
-          <p role="presentation" className="max-w-[268px] px-4 pt-1.5 pb-1 pl-9 text-[12px] leading-[1.45] text-sand-600">
+          <p role="presentation" className="max-w-[268px] pt-1.5 pr-4 pb-1 pl-9 text-[12px] leading-[1.45] text-sand-600">
             {t(lock)}
           </p>
         )}

@@ -49,9 +49,11 @@ const COMMENT_COMMANDS: DocsCommand[] = [
 ];
 registerDocsCommands(COMMENT_COMMANDS);
 
-export function UnitosLayer({ editor, documentId, canEdit, editing }: DocsAreaProps) {
+export function UnitosLayer({ editor, documentId, canEdit, editing, imported = false }: DocsAreaProps & { imported?: boolean }) {
   // Viewing mode hides the comments, as in Google Docs; Editing shows them.
-  const viewing = canEdit && !editing;
+  // An import's comments are the reader's annotations, the reason the reader
+  // is there: Viewing shows them.
+  const viewing = canEdit && !editing && !imported;
   const wasViewing = useRef(viewing);
   useEffect(() => {
     if (wasViewing.current === viewing) return;

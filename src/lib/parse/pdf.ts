@@ -1952,6 +1952,26 @@ function lastListNumber(text: string): number | null {
   return matches.length > 0 ? Number(matches[matches.length - 1][1]) : null;
 }
 
+// The page a segment's first words are on, and the page its last words are on.
+function firstPageOf(s: Segment): number {
+  return s.firstPage ?? s.page;
+}
+function lastPageOf(s: Segment): number {
+  return s.breaks && s.breaks.length > 0 ? s.breaks[s.breaks.length - 1].page : firstPageOf(s);
+}
+
+// target's page starts once source's words join its text at offset (target's
+// own text moved by shift): the join is a page start when source's words sit
+// on a later page than target's last words. The merge also joins a segment
+// on the page target already ends on, and that is no page start. Segments
+// reach the merge on one page each, so source brings no page starts of its own.
+function joinBreaks(target: Segment, source: Segment, offset: number, shift = 0): PageBreak[] {
+  const breaks = (target.breaks ?? []).map((b) => ({ offset: b.offset + shift, page: b.page }));
+  const page = firstPageOf(source);
+  if (page > lastPageOf(target)) breaks.push({ offset, page });
+  return breaks;
+}
+
 // A page-top float (figure, table, its caption) between the two halves of a
 // paragraph: the halves join and the float follows the paragraph.
 function liftFloatsOffParagraphBreaks(segments: Segment[]): Segment[] {
@@ -2000,6 +2020,7 @@ function mergeAcrossPages(input: Segment[]): Segment[] {
     ) {
       const glue = /[A-Za-z0-9][-–]$/.test(prev.text) && /^[A-Za-z0-9(]/.test(segment.text) ? "" : " ";
       const offset = prev.text.length + glue.length;
+      prev.breaks = joinBreaks(prev, segment, offset);
       prev.text = prev.text + glue + segment.text;
       shiftSpansInto(prev, segment, offset);
       continue;
@@ -2012,6 +2033,7 @@ function mergeAcrossPages(input: Segment[]): Segment[] {
       Boolean(prev.tocEntries) === Boolean(segment.tocEntries)
     ) {
       const offset = prev.text.length + 1;
+      prev.breaks = joinBreaks(prev, segment, offset);
       prev.text = prev.text + "\n" + segment.text;
       shiftSpansInto(prev, segment, offset);
       if (segment.tocEntries) {
@@ -2036,6 +2058,7 @@ function mergeAcrossPages(input: Segment[]): Segment[] {
     ) {
       const lastNum = lastListNumber(prev.text);
       const offset = prev.text.length + 1;
+      prev.breaks = joinBreaks(prev, segment, offset);
       prev.text = prev.text + " " + segment.text;
       shiftSpansInto(prev, segment, offset);
       if (lastNum !== null) {
@@ -2061,6 +2084,10 @@ function mergeAcrossPages(input: Segment[]): Segment[] {
     if (segment.type === "LIST" && prev.type === "PARAGRAPH" && prev.listItem && !segment.tocEntries) {
       const marker = BULLET_RE.test(prev.text) ? "" : "- ";
       const offset = marker.length;
+      // The list now starts with the item's words, on the item's page; its
+      // page stays the list's, the page the merge compares against.
+      segment.breaks = joinBreaks(prev, segment, marker.length + prev.text.length + 1, marker.length);
+      segment.firstPage = firstPageOf(prev);
       segment.text = marker + prev.text + "\n" + segment.text;
       segment.runs = [
         ...(prev.runs ?? []).map((r) => ({ ...r, start: r.start + offset, end: r.end + offset })),
@@ -2077,6 +2104,8 @@ function mergeAcrossPages(input: Segment[]): Segment[] {
     if (segment.type === "PARAGRAPH" && segment.listItem && prev.type === "LIST" && !prev.tocEntries) {
       const marker = BULLET_RE.test(segment.text) ? "" : "- ";
       const offset = prev.text.length + 1 + marker.length;
+      // The page starts at the item's line, its marker included.
+      prev.breaks = joinBreaks(prev, segment, prev.text.length + 1);
       prev.text = prev.text + "\n" + marker + segment.text;
       shiftSpansInto(prev, segment, offset);
       continue;
@@ -2097,6 +2126,7 @@ function mergeAcrossPages(input: Segment[]): Segment[] {
             .replace(/^<table>/, "<table>");
         }
         if (rows.length > 0) {
+          prev.breaks = joinBreaks(prev, segment, prev.text.length + 1);
           prev.text = prev.text + "\n" + rows.join("\n");
           const prevBody = /<\/tbody><\/table>$/.test(prev.html);
           const newBody = /<tbody>(.*)<\/tbody><\/table>$/.exec(html);
@@ -2388,7 +2418,8 @@ function attachFigureRegions(
   ctx: PageContext,
   pageWidth: number,
   pageHeight: number,
-  drawing: PageDrawing = { images: [], paths: [] },
+  drawing: PageDrawing,
+  page: number, // 0-based
 ): Segment[] {
   const images = drawing.images;
   const toRegion = (box: Box) => regionOf(box, pageWidth, pageHeight);
@@ -2598,7 +2629,8 @@ function attachFigureRegions(
     kept.splice(at, 0, {
       type: "FIGURE",
       text: "",
-      page: placed[0]?.page ?? 0,
+      // The page's own number: a page with no text has no segment to read it from.
+      page,
       box: img,
       region: toRegion(img),
       lineSize: ctx.bodySize,
@@ -2825,7 +2857,7 @@ export async function parsePdf(
     );
     const ctx = { bodySize, leading, columnLeft, hasBold, pageMinX, labelColumn, frames };
     const pageSegments = segmentPage(lines, ctx);
-    const withFigures = attachFigureRegions(pageSegments, lines, ctx, pageWidths[p], pageHeights[p], pageDrawings[p]);
+    const withFigures = attachFigureRegions(pageSegments, lines, ctx, pageWidths[p], pageHeights[p], pageDrawings[p], p);
     // Text inside a figure's box (a hidden chart title, a stray label) is
     // part of the picture.
     const figureBoxes = withFigures.filter((s) => s.type === "FIGURE" && s.region && s.box).map((s) => s.box!);
