@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import type { ReferencedAnnotation } from "@/lib/annotation-reference";
 import { annotationKind } from "@/lib/annotations/kind";
-import { noteAccess } from "@/lib/collab";
+import { bumpNotebook, noteAccess } from "@/lib/collab";
 import { conversationTurns } from "@/lib/conversation";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { parseBody } from "@/lib/validate";
 
 // One annotation, for an annotation reference in a note (SPEC.md §6,
 // lib/annotation-reference.ts): the notes full page shows it beside the
@@ -40,4 +42,31 @@ export async function GET(req: Request, ctx: { params: Promise<{ noteId: string 
     conversation: conversationTurns(note),
   };
   return NextResponse.json(view);
+}
+
+const patchSchema = z.object({ resolved: z.boolean() });
+
+// Resolve or reopen a comment (SPEC.md §29). Any editor can, as with a
+// reply: a resolved comment paints no mark and lists under Resolved in the
+// Annotations tab.
+export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: string }> }) {
+  const t = await serverT();
+  const { noteId } = await ctx.params;
+  const { data, error } = await parseBody(req, patchSchema);
+  if (error) return error;
+  const access = await noteAccess(noteId, "editor");
+  if (access instanceof NextResponse) return access;
+  const note = await db.note.findUnique({
+    where: { id: noteId },
+    select: { derivationType: true, color: true, section: { select: { hidden: true, notebookId: true } } },
+  });
+  if (!note?.section.hidden || annotationKind(note) !== "comment") {
+    return NextResponse.json({ error: t("api.onlyCommentsResolved") }, { status: 400 });
+  }
+  await db.note.update({
+    where: { id: noteId },
+    data: { resolvedById: data.resolved ? access.user.id : null },
+  });
+  await bumpNotebook(note.section.notebookId);
+  return NextResponse.json({ ok: true });
 }

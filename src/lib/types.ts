@@ -212,6 +212,8 @@ export type AnnotationItem = {
   quotedText: string | null;
   orphaned: boolean;
   createdById: string | null;
+  // A resolved comment (SPEC.md §29): it paints no mark and lists under Resolved.
+  resolved: boolean;
   replies: ReplyView[];
   // Set when the anchor sits on a figure, table, or equation block: the label
   // ("A1", "A2", …) shown at the block in the reader and on this card.

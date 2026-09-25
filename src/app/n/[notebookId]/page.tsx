@@ -173,7 +173,14 @@ export default async function NotebookPage(props: {
         : (attached.find((d) => d.id !== activeId)?.id ?? activeId)
       : null;
 
-  const noteById = new Map(notebook.sections.flatMap((s) => s.notes).map((n) => [n.id, n]));
+  // The notes that paint. A resolved comment paints no mark, so it opens no
+  // card; it lists under Resolved in the Annotations tab (SPEC.md §29).
+  const noteById = new Map(
+    notebook.sections
+      .flatMap((s) => s.notes)
+      .filter((n) => !n.resolvedById)
+      .map((n) => [n.id, n]),
+  );
   const annotationNoteIds = new Set(
     notebook.sections.filter((s) => s.hidden).flatMap((s) => s.notes.map((n) => n.id)),
   );

@@ -66,6 +66,7 @@ const en = {
 
   // Annotations
   commentEmpty: "Comment is empty",
+  onlyCommentsResolved: "Only comments can be resolved",
   noVideo: "This document has no video",
   noVideoBlock: "This document has no video block",
 
@@ -357,6 +358,7 @@ const zh: Record<keyof typeof en, string> = {
   linkSelfTarget: "文档级链接不能指向自身",
 
   commentEmpty: "评论为空",
+  onlyCommentsResolved: "只有评论可以解决",
   noVideo: "此文档没有视频",
   noVideoBlock: "此文档没有视频块",
 

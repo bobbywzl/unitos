@@ -289,6 +289,9 @@ model Note {
   // Account that wrote the note (or ran the derivation that produced it).
   // Soft reference like Notebook.userId; null = before attribution existed.
   createdById    String?
+  // A resolved comment (SPEC.md §29): the account that resolved it; null =
+  // open. It paints no mark and lists under Resolved in the Annotations tab.
+  resolvedById   String?
   // The document the note was written in (SPEC.md §6): the open document
   // when the note was typed in the tray, spoken in it, or made from a
   // passage. The notes tray lists the open document's notes — those written
