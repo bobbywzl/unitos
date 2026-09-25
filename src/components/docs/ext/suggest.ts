@@ -1,7 +1,7 @@
 import { Extension, Mark, type AnyExtension, type Editor } from "@tiptap/core";
 import type { Mark as PMMark, MarkSpec, Node as PMNode } from "@tiptap/pm/model";
-import { EditorState, type Transaction } from "@tiptap/pm/state";
-import { AddMarkStep, AddNodeMarkStep, AttrStep, Mapping, RemoveMarkStep, ReplaceAroundStep, type Step } from "@tiptap/pm/transform";
+import { EditorState, Selection, type Transaction } from "@tiptap/pm/state";
+import { AddMarkStep, AddNodeMarkStep, AttrStep, Mapping, RemoveMarkStep, ReplaceAroundStep, ReplaceStep, type Step } from "@tiptap/pm/transform";
 import {
   applySuggestion,
   applySuggestions,
@@ -260,6 +260,13 @@ function suggest(tr: Transaction, state: EditorState, author: string): Transacti
   if (tr.steps.every(isFormatStep)) return suggestFormat(tr, state, id);
   const tracked = transformToSuggestionTransaction(tr, state, () => id);
   keepAuthors(tracked, state.doc, author, id);
+  // The library puts the caret after what an edit adds, as typing does. An
+  // edit away from the caret (autocorrect's capital) leaves the caret where it was.
+  const step = tr.steps[0];
+  const caret = state.selection.empty ? state.selection.from : -1;
+  if (!tr.selectionSet && tr.steps.length === 1 && step instanceof ReplaceStep && caret >= 0 && (step.to < caret || step.from > caret)) {
+    tracked.setSelection(Selection.near(tracked.doc.resolve(tracked.mapping.map(caret))));
+  }
   return tracked;
 }
 

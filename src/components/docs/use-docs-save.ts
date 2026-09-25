@@ -228,6 +228,10 @@ export function useDocsSave({
     };
   }, [save]);
 
+  /** The screen holds exactly the stored copy of revision `rev`: nothing
+      waits to be saved and no save runs. */
+  const matches = useCallback((rev: number) => !dirtyRef.current && !inFlightRef.current && revRef.current === rev, []);
+
   /** Save now and resolve once the stored copy matches the screen. */
   const flush = useCallback(async () => {
     for (let i = 0; i < 4 && (dirtyRef.current || inFlightRef.current); i++) {
@@ -236,5 +240,5 @@ export function useDocsSave({
     }
   }, [save]);
 
-  return { state, flush };
+  return { state, flush, matches };
 }

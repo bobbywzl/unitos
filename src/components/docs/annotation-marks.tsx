@@ -22,7 +22,7 @@ import type { TFunc } from "@/lib/i18n/dictionaries";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 
 // The Unitos layer over the page editor (SPEC.md §29): the reader's marks —
-// notes, annotations, links, extractions, and the selection tint — painted
+// notes, annotations, links, and extractions — painted
 // over the rich text as decorations, with the reader's classes
 // (block-view.tsx markedText). The text never changes: a mark's chips are
 // data-anchor-skip widgets, and a press opens what it opens in the reader.
@@ -80,7 +80,7 @@ function chipWidget({ kind, highlight: h }: Chip, t: TFunc) {
 }
 
 /** The kinds the layer paints; formatting, terms, and web links are the editor's. */
-const PAINTED = new Set<Highlight["kind"]>(["anchor", "selection", "pending-link", "salience", "simplify", "extract", "link"]);
+const PAINTED = new Set<Highlight["kind"]>(["anchor", "pending-link", "salience", "simplify", "extract", "link"]);
 
 /** One stretch of words under the same highlights, drawn as block-view.tsx
     markedText draws it: a link wins, else the smallest anchor names the mark. */
@@ -92,12 +92,9 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<
   const salience = covering.find((h) => h.kind === "salience");
   const simplify = covering.find((h) => h.kind === "simplify");
   const extract = covering.find((h) => h.kind === "extract");
-  const selection = covering.find((h) => h.kind === "selection" || h.kind === "pending-link");
-  const selectionClass = selection
-    ? selection.kind === "pending-link"
-      ? " link-pending-mark"
-      : " selection-mark"
-    : "";
+  // The page draws its own selection (SPEC.md §29, The caret): only a link
+  // waiting for its other end is painted here.
+  const selectionClass = covering.some((h) => h.kind === "pending-link") ? " link-pending-mark" : "";
   const attrs: Record<string, string> = {};
   // A new mark sweeps in once; the flash plugin's view reports the end.
   const sweep = (h: Highlight | undefined) => {

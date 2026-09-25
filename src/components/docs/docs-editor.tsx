@@ -240,7 +240,7 @@ export function DocsEditor({
     (window as unknown as { __docsEditor?: Editor }).__docsEditor = editor;
   }, [editor]);
 
-  const { state: saveState, flush } = useDocsSave({
+  const { state: saveState, flush, matches } = useDocsSave({
     documentId,
     editor,
     rev,
@@ -260,17 +260,20 @@ export function DocsEditor({
   // The Unitos marks: repainted when the reader's highlights change — by
   // content, not by object. A repaint redraws the text and puts the editor's
   // selection back into the page, so a repaint for nothing would undo a
-  // selection the reader is still growing with Shift+arrow.
+  // selection the reader is still growing with Shift+arrow. The highlights'
+  // offsets are the stored copy's: a repaint waits until the screen holds
+  // that copy (typing saved, the page's revision caught up); meanwhile the
+  // painted marks move with the typing.
   const marksSignature = useMemo(() => JSON.stringify(highlightsByBlock), [highlightsByBlock]);
   const paintedRef = useRef<{ editor: Editor | null; signature: string }>({ editor: null, signature: "" });
   useEffect(() => {
-    if (!editor || editor.isDestroyed) return;
+    if (!editor || editor.isDestroyed || !matches(rev)) return;
     const painted = paintedRef.current;
     if (painted.editor === editor && painted.signature === marksSignature) return;
     paintedRef.current = { editor, signature: marksSignature };
     const meta: MarksMeta = { highlights: highlightsByBlock, t };
     editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
-  }, [editor, marksSignature, highlightsByBlock, t]);
+  }, [editor, marksSignature, highlightsByBlock, t, matches, rev, saveState]);
 
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;

@@ -260,7 +260,7 @@ export function HeaderFooterLayer({
     store.set({ ...patch, editing: null });
     if (next) void store.saveSetup(next);
   };
-  const barHeight = 30;
+  const barHeight = 28;
   const textStyle: CSSProperties =
     area === "header"
       ? { top: top + frame.headerMargin, left: frame.left, right: frame.right }
@@ -269,8 +269,8 @@ export function HeaderFooterLayer({
   // footer, never over their text.
   const barTop =
     area === "header"
-      ? top + Math.max(bodyArea(page).top - barHeight, frame.headerMargin + textHeight + 2)
-      : top + Math.min(bodyArea(page).bottom, frame.height - frame.footerMargin - textHeight - barHeight - 2);
+      ? top + Math.max(bodyArea(page).top - barHeight, frame.headerMargin + textHeight)
+      : top + Math.min(bodyArea(page).bottom, frame.height - frame.footerMargin - textHeight - barHeight);
 
   return (
     <div className="docs-hf-layer" data-docs-hf data-edit-control>
