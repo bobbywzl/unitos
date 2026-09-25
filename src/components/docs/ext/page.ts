@@ -538,20 +538,23 @@ class DocsCaretView {
 const caretViews = new WeakMap<EditorView, DocsCaretView>();
 
 /** The page has no focus (a dialog, the title field): the selection stays in
-    view, gray, as Google Docs keeps it. */
+    view, gray, as Google Docs keeps it. A blur turns it gray; the gray goes
+    with the next change of the selection or the text, never on the focus
+    itself: a redraw then would put the old selection back over the click
+    that brought the focus. */
 const blurredKey = new PluginKey<boolean>("docsBlurred");
 
 const DocsCaret = Extension.create({
   name: "docsCaret",
   addProseMirrorPlugins() {
-    const blurred = (value: boolean) => (view: EditorView) => {
-      view.dispatch(view.state.tr.setMeta(blurredKey, value));
-      return false;
-    };
     return [
       new Plugin<boolean>({
         key: blurredKey,
-        state: { init: () => false, apply: (tr, value) => (tr.getMeta(blurredKey) as boolean | undefined) ?? value },
+        state: {
+          init: () => false,
+          apply: (tr, blurred) =>
+            (tr.getMeta(blurredKey) as boolean | undefined) ?? (blurred && !tr.selectionSet && !tr.docChanged),
+        },
         props: {
           attributes: { class: "docs-own-caret" },
           decorations: (state) =>
@@ -561,7 +564,12 @@ const DocsCaret = Extension.create({
                   state.selection.ranges.map((r) => Decoration.inline(r.$from.pos, r.$to.pos, { class: "docs-blurred-selection" })),
                 )
               : null,
-          handleDOMEvents: { focus: blurred(false), blur: blurred(true) },
+          handleDOMEvents: {
+            blur: (view) => {
+              view.dispatch(view.state.tr.setMeta(blurredKey, true));
+              return false;
+            },
+          },
         },
         view: (view) => {
           const caret = new DocsCaretView(view);
