@@ -36,6 +36,9 @@ export type SyncOk = {
   /** The history row of each paragraph this save removed, by block id: the
       block routes answer with it, and undo restores through it. */
   removedEdits: Record<string, string>;
+  /** A mark was lost or found again: the page's marks need the stored copy
+      (a mark that only moved, the page moved with the typing). */
+  marksChanged: boolean;
 };
 export type SyncConflict = { ok: false; reason: "rev"; rev: number; richText: RichNode | null };
 export type SyncIdClash = { ok: false; reason: "ids"; ids: string[] };
@@ -403,6 +406,7 @@ export async function syncRichText({
       const affected = [...textChanged.map((k) => k.d.id), ...removed.map((b) => b.id)];
       const returned = [...textChanged.map((k) => k.d.id), ...created.map(({ d }) => d.id)];
       const moves = movesOf(old, derived, newById);
+      let marksChanged = false;
       if (affected.length > 0 || returned.length > 0) {
         const [sources, links] = await Promise.all([
           tx.source.findMany({
@@ -432,6 +436,7 @@ export async function syncRichText({
           };
           const placed = src.orphaned ? refind(anchor, derived) : relocate(anchor, moves);
           if (placed.orphaned && src.orphaned) continue;
+          if (placed.orphaned !== src.orphaned) marksChanged = true;
           await tx.source.update({
             where: { id: src.id },
             data: placed.orphaned
@@ -464,6 +469,7 @@ export async function syncRichText({
               },
               moves,
             );
+            if (placed.orphaned) marksChanged = true;
             await tx.docLink.update({
               where: { id: link.id },
               data: placed.orphaned
@@ -499,6 +505,7 @@ export async function syncRichText({
               },
               moves,
             );
+            if (placed.orphaned) marksChanged = true;
             await tx.docLink.update({
               where: { id: link.id },
               data: placed.orphaned
@@ -639,7 +646,7 @@ export async function syncRichText({
         },
         select: { richTextRev: true },
       });
-      return { ok: true as const, rev: saved.richTextRev, removedEdits };
+      return { ok: true as const, rev: saved.richTextRev, removedEdits, marksChanged };
     },
     { timeout: 30_000, maxWait: 15_000 },
   );

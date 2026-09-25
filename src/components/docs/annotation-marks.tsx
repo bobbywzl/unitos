@@ -95,7 +95,8 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<
   // The page draws its own selection (SPEC.md §29, The caret): only a link
   // waiting for its other end is painted here.
   const selectionClass = covering.some((h) => h.kind === "pending-link") ? " link-pending-mark" : "";
-  const attrs: Record<string, string> = {};
+  // Every Unitos mark says so: print leaves them out (css/page.css).
+  const attrs: Record<string, string> = { "data-unitos-mark": "" };
   // A new mark sweeps in once; the flash plugin's view reports the end.
   const sweep = (h: Highlight | undefined) => {
     if (!h?.fresh || h.leaving) return "";

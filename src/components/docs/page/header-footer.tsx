@@ -251,7 +251,11 @@ export function HeaderFooterLayer({
         ? t("docsPage.firstPageFooter")
         : t(area === "header" ? "docsPage.header" : "docsPage.footer");
 
-  const exit = () => store.set({ editing: null });
+  // Escape leaves: the text takes the keys again, as in Google Docs.
+  const exit = () => {
+    editRef.current?.closest("[data-docs-editor]")?.querySelector<HTMLElement>("[data-docs-body]")?.focus();
+    store.set({ editing: null });
+  };
   // Typing saves after a pause, as the text does.
   const change = (next: RichNode) => store.editSetup({ ...store.get().setup, [slot]: next });
   // An Options item leaves the header or footer; a changed setup saves.

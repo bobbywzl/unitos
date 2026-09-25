@@ -5,6 +5,7 @@ import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
+import { REFRESH_EVENT } from "@/components/collab/use-sync";
 import { annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/docs/annotation-marks";
 import { LinkBubble, LinkDialog } from "@/components/docs/link-dialog";
 import { DOCS_EVENT, docsExtensions } from "@/components/docs/extensions";
@@ -234,6 +235,14 @@ export function DocsEditor({
     [documentId],
   );
 
+  // A document opens with the caret at the page's start, as in Google Docs,
+  // unless something else already has the focus.
+  useEffect(() => {
+    if (editor && canEdit && document.activeElement === document.body) {
+      editor.commands.focus("start", { scrollIntoView: false });
+    }
+  }, [editor, canEdit]);
+
   // The QA scripts drive the editor directly in development.
   useEffect(() => {
     if (process.env.NODE_ENV === "production" || !editor) return;
@@ -267,9 +276,15 @@ export function DocsEditor({
   const marksSignature = useMemo(() => JSON.stringify(highlightsByBlock), [highlightsByBlock]);
   const paintedRef = useRef<{ editor: Editor | null; signature: string }>({ editor: null, signature: "" });
   useEffect(() => {
-    if (!editor || editor.isDestroyed || !matches(rev)) return;
+    if (!editor || editor.isDestroyed) return;
     const painted = paintedRef.current;
     if (painted.editor === editor && painted.signature === marksSignature) return;
+    if (!matches(rev)) {
+      // Saved, but the page's revision is behind (its own saves need no
+      // refresh): ask for the stored copy's highlights.
+      if (saveState === "saved") window.dispatchEvent(new Event(REFRESH_EVENT));
+      return;
+    }
     paintedRef.current = { editor, signature: marksSignature };
     const meta: MarksMeta = { highlights: highlightsByBlock, t };
     editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));

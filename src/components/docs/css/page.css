@@ -1102,4 +1102,15 @@
   .docs-prose ::selection {
     background: transparent;
   }
+  /* The Unitos layer is the reader's, not the document's: no marks, no chips. */
+  .docs-prose [data-unitos-mark] {
+    background: none !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    text-decoration: none !important;
+    color: inherit !important;
+  }
+  .docs-prose button[data-anchor-skip] {
+    display: none !important;
+  }
 }

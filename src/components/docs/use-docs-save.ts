@@ -2,6 +2,7 @@
 
 import type { Editor } from "@tiptap/core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { OWN_SAVE_EVENT } from "@/components/collab/use-sync";
 import { mergeRichText } from "@/lib/docs/merge";
 import { newBlockId, type RichNode } from "@/lib/docs/schema";
 
@@ -104,6 +105,8 @@ export function useDocsSave({
       return;
     }
     setState("saving");
+    // Typing from here on starts its own wait: steady typing saves once per MAX_WAIT_MS.
+    firstDirtyAtRef.current = null;
     const run = (async () => {
       try {
         const res = await fetch(url, {
@@ -144,7 +147,8 @@ export function useDocsSave({
           retryRef.current = Math.min(retryRef.current + 1, 5);
           return;
         }
-        const body = (await res.json()) as { rev: number };
+        const body = (await res.json()) as { rev: number; notebookRevs?: Record<string, number> };
+        window.dispatchEvent(new CustomEvent(OWN_SAVE_EVENT, { detail: body.notebookRevs ?? {} }));
         revRef.current = body.rev;
         baseRef.current = doc;
         retryRef.current = 0;

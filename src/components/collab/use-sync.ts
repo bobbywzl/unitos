@@ -27,6 +27,11 @@ function refreshSafe(): boolean {
   return true;
 }
 
+/** A page's own save moved these corpora's revs ({ [notebookId]: rev }). */
+export const OWN_SAVE_EVENT = "dissect:own-save";
+/** A page needs the stored copy's highlights now (its marks changed). */
+export const REFRESH_EVENT = "dissect:refresh-now";
+
 // Live sync of one open corpus: poll the sync route, stamp presence, and
 // refresh the page when the corpus's rev moves — that is how one reader sees
 // another's changes land. Returns who else has the corpus open.
@@ -58,6 +63,22 @@ export function useNotebookSync({
   useEffect(() => {
     knownRev.current = Math.max(knownRev.current, rev);
   }, [rev]);
+
+  // The page's own save, when it was the only change, needs no refresh:
+  // the page already shows it.
+  useEffect(() => {
+    const onOwn = (e: Event) => {
+      const next = (e as CustomEvent<Record<string, number>>).detail?.[notebookId];
+      if (next === knownRev.current + 1) knownRev.current = next;
+    };
+    const onRefresh = () => router.refresh();
+    window.addEventListener(OWN_SAVE_EVENT, onOwn);
+    window.addEventListener(REFRESH_EVENT, onRefresh);
+    return () => {
+      window.removeEventListener(OWN_SAVE_EVENT, onOwn);
+      window.removeEventListener(REFRESH_EVENT, onRefresh);
+    };
+  }, [notebookId, router]);
 
   useEffect(() => {
     if (!enabled) return;

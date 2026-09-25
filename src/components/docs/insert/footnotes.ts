@@ -14,7 +14,9 @@ const FootnoteReference = Node.create({
   group: "inline",
   inline: true,
   atom: true,
-  selectable: true,
+  // A click beside the number puts the caret there: selected, the number
+  // (and its footnote) would go with the next key typed.
+  selectable: false,
   addAttributes() {
     return {
       footnoteId: { default: null, parseHTML: (el) => el.getAttribute("data-footnote-ref"), rendered: false },

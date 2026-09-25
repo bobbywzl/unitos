@@ -1,4 +1,4 @@
-import type { User } from "@prisma/client";
+import { Prisma, type User } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -141,18 +141,19 @@ export async function bumpNotebook(notebookId: string): Promise<void> {
     .catch(() => {});
 }
 
-export async function bumpDocument(documentId: string): Promise<void> {
+/** Answers each corpus's new rev, so a page that made the change knows it. */
+export async function bumpDocument(documentId: string): Promise<Record<string, number>> {
   const attachments = await db.notebookDocument.findMany({
     where: { documentId },
     select: { notebookId: true },
   });
-  if (attachments.length === 0) return;
-  await db.notebook
-    .updateMany({
-      where: { id: { in: attachments.map((a) => a.notebookId) } },
-      data: { rev: { increment: 1 } },
-    })
-    .catch(() => {});
+  if (attachments.length === 0) return {};
+  const ids = attachments.map((a) => a.notebookId);
+  const rows = await db
+    .$queryRaw<{ id: string; rev: number }[]>`
+      UPDATE "Notebook" SET "rev" = "rev" + 1 WHERE "id" IN (${Prisma.join(ids)}) RETURNING "id", "rev"`
+    .catch(() => []);
+  return Object.fromEntries(rows.map((r) => [r.id, r.rev]));
 }
 
 // ── People ──────────────────────────────────────────────────────────────────

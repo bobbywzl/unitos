@@ -65,11 +65,13 @@ export async function PUT(req: Request, ctx: { params: Promise<{ documentId: str
     }
     return NextResponse.json({ error: t("api.richTextInvalid") }, { status: 400 });
   }
-  await bumpDocument(documentId);
+  const notebookRevs = await bumpDocument(documentId);
   // The skeleton rebuilds after the response once more than a tenth of the
   // document has changed (SPEC.md §22); under that the check is all it does.
   after(() => refreshSkeleton(documentId, access.user.id).catch(() => {}));
-  return NextResponse.json({ rev: result.rev });
+  // The page that saved needs no refresh for its own save unless a mark was
+  // lost or found again (components/collab/use-sync.ts).
+  return NextResponse.json({ rev: result.rev, notebookRevs: result.marksChanged ? {} : notebookRevs });
 }
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
