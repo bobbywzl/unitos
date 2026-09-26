@@ -659,6 +659,20 @@ function stats(values) {
   return `median ${q(0.5)} ms, p90 ${q(0.9)} ms, max ${Math.round(s.at(-1))} ms (n ${s.length})`;
 }
 
+
+/** The block at the reading line (lib/reading-position.ts): 80 px under the
+    top edge of the pane that scrolls the page, and how far its top stands
+    from the line. Runs in the page. */
+function readingLine() {
+  const prose = document.querySelector(".docs-prose");
+  let pane = prose?.parentElement ?? null;
+  while (pane && !(/(auto|scroll)/.test(getComputedStyle(pane).overflowY) && pane.scrollHeight > pane.clientHeight)) pane = pane.parentElement;
+  const top = (pane ? Math.max(0, pane.getBoundingClientRect().top) : 0) + 80;
+  const els = [...document.querySelectorAll(".docs-prose [data-block-id]")];
+  const hit = els.find((e) => e.getBoundingClientRect().bottom > top);
+  return hit ? { id: hit.dataset.blockId, dy: Math.round(hit.getBoundingClientRect().top - top), text: hit.textContent.slice(0, 40), scrollTop: pane?.scrollTop ?? null } : null;
+}
+
 // ── The run's documents ─────────────────────────────────────────────────────
 
 const ctx = { notebookId: null, sectionId: null, docs: {}, bytes: {}, media: null, long: null };
@@ -1028,14 +1042,14 @@ RISKS.R7 = async (theme) => {
   check("R7", await popoverOpen(page), `(${theme}) a selection in Viewing opens the toolbar`, "");
   await tool(page, "comment");
   await page.keyboard.type("A comment made in Viewing.");
+  const posted = Date.now();
   await page.keyboard.press("Enter");
-  await sleep(1500);
-  const card = await page.evaluate(() => {
-    const cards = [...document.querySelectorAll('[data-side-card="comment"], [data-comment-card], .docs-comment-card')];
-    return cards.filter((c) => c.getClientRects().length).map((c) => c.textContent.slice(0, 80));
-  });
+  // The comment's card stands in the margin once the note is stored.
+  await page.waitForFunction(() => [...document.querySelectorAll("[data-comment-card]")].some((c) => c.getClientRects().length && c.textContent.includes("made in Viewing")), null, { timeout: 15_000 }).catch(() => {});
+  const cardMs = Date.now() - posted;
+  const card = await page.evaluate(() => [...document.querySelectorAll("[data-comment-card]")].filter((c) => c.getClientRects().length).map((c) => c.textContent.slice(0, 80)));
   const commentShot = await shot(page, `R7-comment-in-viewing-${theme}`);
-  check("R7", card.some((c) => c.includes("Viewing")), `(${theme}) the comment's card shows in Viewing`, `${card.length} cards ${clip(card.join(" | "), 100)} ${commentShot}`);
+  check("R7", card.some((c) => c.includes("Viewing")), `(${theme}) the comment's card shows in Viewing`, `${card.length} cards after ${cardMs} ms ${clip(card.join(" | "), 100)} ${commentShot}`);
   // Highlight and Explain in Viewing.
   await selectWords(page, "the sediment which once rebuilt them");
   const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
@@ -1298,24 +1312,11 @@ RISKS.R12 = async (theme) => {
   await page.mouse.wheel(0, -60);
   await sleep(2500);
   const saved = await put;
-  const at = await page.evaluate(() => {
-    const line = document.querySelector(".docs-prose")?.getBoundingClientRect();
-    const els = [...document.querySelectorAll(".docs-prose [data-block-id]")];
-    const pane = els[0]?.closest("[data-docs-scroll], .docs-canvas, [data-pane]") ?? document.scrollingElement;
-    const top = (pane.getBoundingClientRect?.().top ?? 0) + 80;
-    const hit = els.find((e) => e.getBoundingClientRect().bottom > top);
-    return hit ? { id: hit.dataset.blockId, dy: Math.round(hit.getBoundingClientRect().top - top), text: hit.textContent.slice(0, 40), line: line?.top } : null;
-  });
+  const at = await page.evaluate(readingLine);
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
   await sleep(4000);
-  const back = await page.evaluate(() => {
-    const els = [...document.querySelectorAll(".docs-prose [data-block-id]")];
-    const pane = els[0]?.closest("[data-docs-scroll], .docs-canvas, [data-pane]") ?? document.scrollingElement;
-    const top = (pane.getBoundingClientRect?.().top ?? 0) + 80;
-    const hit = els.find((e) => e.getBoundingClientRect().bottom > top);
-    return hit ? { id: hit.dataset.blockId, dy: Math.round(hit.getBoundingClientRect().top - top), text: hit.textContent.slice(0, 40) } : null;
-  });
+  const back = await page.evaluate(readingLine);
   const path = await shot(page, `R12-position-after-reload-${theme}`);
   check("R12", Boolean(at && back && at.id === back.id && Math.abs(at.dy - back.dy) < 40), `(${theme}) scrolled to p. ${twelve.page}, reloaded: the same line is at the top`, `position saved ${saved?.status() ?? "no PUT"}; before ${JSON.stringify(at)}, after ${JSON.stringify(back)} ${path}`);
   await context.close();
@@ -1616,7 +1617,7 @@ RISKS.R23 = async (theme) => {
   await sleep(400);
   await page.keyboard.type(phrase, { delay: 20 });
   await sleep(1200);
-  const count = await page.evaluate(() => document.querySelector(".docs-find, [data-docs-find]")?.textContent ?? "");
+  const count = await page.evaluate(() => document.querySelector(".docs-find-counter")?.textContent ?? "");
   const path = await shot(page, `R23-find-across-page-start-${theme}`);
   check("R23", /\b1 of 1\b/.test(count), `(${theme}) Find matches "${phrase}" across p. ${s.page}`, `bar "${clip(count, 60)}" ${path}`);
   await page.keyboard.press("Escape");

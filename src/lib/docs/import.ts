@@ -600,14 +600,17 @@ class Converter {
   private code(block: ParsedBlock, index: number, starts: PageMark[]) {
     const raw = block.text;
     if (!raw.replaceAll(ZWSP, "").trim()) return this.carry(starts);
-    // A code block holds no inline node: it draws the number of a page that
-    // begins at it at its top, and a page that begins inside it begins a new
-    // code block at the line it begins on.
+    // A code block holds no inline node: it draws the number of the first
+    // page that begins at it or inside it at its top. A second page that
+    // begins inside it begins a new code block at the line it begins on, so
+    // no page loses its start.
     const pages = new Map<number, number>();
-    for (const p of starts) {
-      const at = p.offset <= 0 ? 0 : raw.lastIndexOf("\n", p.offset - 1) + 1;
-      pages.set(at, Math.max(p.page, pages.get(at) ?? 0));
-    }
+    [...starts]
+      .sort((a, b) => a.offset - b.offset)
+      .forEach((p, k) => {
+        const at = k === 0 || p.offset <= 0 ? 0 : raw.lastIndexOf("\n", p.offset - 1) + 1;
+        pages.set(at, Math.max(p.page, pages.get(at) ?? 0));
+      });
     const cuts = [...pages.keys()].filter((at) => at > 0).sort((a, b) => a - b);
     const nodes: RichNode[] = [];
     let waiting: number | undefined;
