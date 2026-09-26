@@ -3999,7 +3999,7 @@ export function ReaderInteractions({
     const y = clientY - containerRect.top + container.scrollTop;
     // The page editor (SPEC.md §29): beside the page's right edge, level
     // with the press and under the header, as a selection's toolbar stands;
-    // with no room there, at the press.
+    // with no room there (a split pane), under the press.
     const shift = docsShiftRef.current;
     const page = richTextRef.current ? pageGeometry(container, shift) : null;
     const beside =
@@ -4015,17 +4015,19 @@ export function ReaderInteractions({
       anchor: { blockId, startOffset: 0, endOffset: text.length, quotedText: text, prefix: "", suffix: "" },
       figure: true,
       x: Math.max(120, clientX - containerRect.left),
-      y: y + 8,
+      // Under the press, the bubbles over the toolbox clear it, as under a
+      // selection's words.
+      y: y + 8 + (page && !beside ? 48 : 0),
       yTop: beside ? Math.max(8, pageTop - containerRect.top + container.scrollTop) : Math.max(8, y - 8),
       textLeft: Math.min(clientX - containerRect.left + 130, containerRect.width - 20),
       endLeft: Math.max(8, Math.min(clientX - containerRect.left + 6, containerRect.width - 110)),
       endTop: y,
       truncated: false,
-      side: beside ? "right" : "left",
+      side: beside ? "right" : page ? "below" : "left",
       rightBase: containerRect.width - 130,
       cw: containerRect.width,
       ...(page ? { page: { geo: page } } : {}),
-      ...(beside && headerBottom !== undefined ? { nearTop: lineTop - headerBottom < 96 } : {}),
+      ...(page && headerBottom !== undefined ? { nearTop: !beside || lineTop - headerBottom < 96 } : {}),
     });
   }
   const openFigureToolsRef = useRef(openFigureTools);

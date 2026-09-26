@@ -307,22 +307,30 @@ class Renderer {
 }
 
 /** The HTML page a Markdown file becomes, and its title: the front matter's
-    title, else the file's first heading, else the file name. */
-export function markdownToHtml(markdown: string, filename: string): { html: string; title: string } {
+    title, else the file's first heading, else the file name (titleFromFile:
+    the file's words name nothing, so an import opens with no Title). */
+export function markdownToHtml(
+  markdown: string,
+  filename: string,
+): { html: string; title: string; titleFromFile: boolean } {
   const source = markdown.replace(/^﻿/, "").replace(/\r\n?/g, "\n");
   const { body, title: frontTitle } = splitFrontMatter(source);
   const { text, spans } = setAsideMath(body);
   const tree = unified().use(remarkParse).use(remarkGfm).parse(text) as Root;
   const renderer = new Renderer(spans);
   const article = renderer.render(tree);
-  const title = frontTitle ?? renderer.firstHeading ?? filename.replace(MARKDOWN_EXTENSIONS, "").trim() ?? "Document";
+  const ownTitle = frontTitle ?? renderer.firstHeading;
+  const title = ownTitle ?? filename.replace(MARKDOWN_EXTENSIONS, "").trim() ?? "Document";
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body><article>${article}</article></body></html>`;
-  return { html, title };
+  return { html, title, titleFromFile: ownTitle === null };
 }
 
 /** A Markdown file's blocks: the same walk a web page takes, no model pass. */
-export async function parseMarkdownDocument(markdown: string, filename: string): Promise<ParsedDocument> {
-  const { html, title } = markdownToHtml(markdown, filename);
+export async function parseMarkdownDocument(
+  markdown: string,
+  filename: string,
+): Promise<ParsedDocument & { titleFromFile: boolean }> {
+  const { html, title, titleFromFile } = markdownToHtml(markdown, filename);
   const parsed = await parseHtmlContent(html, MARKDOWN_BASE_URL);
-  return { ...parsed, title, font: undefined, columnWidth: undefined };
+  return { ...parsed, title, titleFromFile, font: undefined, columnWidth: undefined };
 }

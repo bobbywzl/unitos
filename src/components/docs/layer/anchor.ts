@@ -89,6 +89,22 @@ export function findIndexed(doc: PMNode, blockId: string): { node: PMNode; pos: 
 /** A page start (SPEC.md §29): an inline atom where a page of the PDF
     begins. It holds no words: a passage, a mark, and a change pass over it. */
 export const PAGE_START = "pageStart";
+
+/** from..to less the page starts in it: the stretches of words around them.
+    A mark paints them and a change takes them; the page start keeps its
+    place and its own look. */
+export function aroundPageStarts(doc: PMNode, from: number, to: number): [number, number][] {
+  const pieces: [number, number][] = [];
+  let start = from;
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (node.type.name !== PAGE_START || pos < from) return true;
+    if (pos > start) pieces.push([start, pos]);
+    start = pos + node.nodeSize;
+    return false;
+  });
+  if (to > start) pieces.push([start, to]);
+  return pieces;
+}
 /** A figure object: an import's figure, its media and its caption drawn
     whole, on a line of its own. */
 export const FIGURE = "figure";

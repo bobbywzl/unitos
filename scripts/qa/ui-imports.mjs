@@ -905,7 +905,8 @@ RISKS.R5 = async (theme) => {
   check("R5", tools && (await analyze.count()) > 0, `(${theme}) a click on a figure opens its tools with Analyze`, `toolbar ${tools}`);
   if (await analyze.count()) {
     await analyze.click();
-    await sleep(6000);
+    for (let i = 0; i < 60 && !(await sourcesOf(added.id)).some((x) => x.blockId === fig3.blockId); i++) await sleep(500);
+    await sleep(1500);
   }
   let sources = await sourcesOf(added.id);
   const src = sources.find((s) => s.blockId === fig3.blockId);
@@ -1073,7 +1074,7 @@ RISKS.R7 = async (theme) => {
   await sleep(1200);
   await selectWords(page, "the loss is measurable from one flood season to the next");
   await tool(page, "explain");
-  await sleep(4000);
+  await page.waitForFunction(() => (document.querySelector('[data-side-card="explain"]')?.textContent ?? "").includes("Mock"), null, { timeout: 45_000 }).catch(() => {});
   const explain = await page.locator('[data-side-card="explain"]').first().innerText().catch(() => "");
   check("R7", explain.length > 20, `(${theme}) Explain answers in Viewing`, clip(explain, 80));
   const kinds = (await sourcesOf(added.id)).map((s) => s.note.derivationType ?? (s.note.color ? `highlight:${s.note.color}` : "comment"));
@@ -1082,6 +1083,10 @@ RISKS.R7 = async (theme) => {
   await page.keyboard.press("Escape");
   await page.mouse.click(5, 450);
   await sleep(300);
+  const focusBefore = await page.evaluate(() => {
+    const a = document.activeElement;
+    return a ? `${a.tagName}.${String(a.className).slice(0, 40)}${a.closest("[data-comment-card]") ? " (in a comment card)" : ""}` : "none";
+  });
   await page.keyboard.press("k");
   await page.keyboard.press("k");
   await page.keyboard.press("k");
@@ -1092,7 +1097,7 @@ RISKS.R7 = async (theme) => {
   await sleep(1500);
   const statuses = await db.note.findMany({ where: { id: { in: pending } }, select: { status: true } });
   const counts = statuses.reduce((m2, s) => ({ ...m2, [s.status]: (m2[s.status] ?? 0) + 1 }), {});
-  check("R7", (counts.ACCEPTED ?? 0) >= 1 && (counts.REJECTED ?? 0) >= 1, `(${theme}) in Viewing, j k Enter Backspace act on the pending notes`, JSON.stringify(counts));
+  check("R7", (counts.ACCEPTED ?? 0) >= 1 && (counts.REJECTED ?? 0) >= 1, `(${theme}) in Viewing, j k Enter Backspace act on the pending notes`, `${JSON.stringify(counts)}; focus before the keys: ${focusBefore}`);
   // Editing: the same keys type.
   await setMode(page, "editing");
   const at = await find(page, "What comes next");

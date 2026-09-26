@@ -4,7 +4,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import type { Fragment, Node as PMNode } from "@tiptap/pm/model";
 import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { isSuggestionMark, newId, readSuggestions, settle, suggest } from "@/components/docs/ext/suggest";
-import { FIGURE, findBlock, findIndexed, PAGE_START, posInBlock } from "@/components/docs/layer/anchor";
+import { aroundPageStarts, FIGURE, findBlock, findIndexed, PAGE_START, posInBlock } from "@/components/docs/layer/anchor";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { isList, isListItem } from "@/components/docs/typing/lists";
 import { markdownToHtml } from "@/components/docs/typing/markdown";
@@ -228,26 +228,6 @@ function holdsObject(doc: PMNode, from: number, to: number): boolean {
   return found;
 }
 
-/** The page starts from..to holds, by position. */
-function pageStartsIn(doc: PMNode, from: number, to: number): number[] {
-  const at: number[] = [];
-  doc.nodesBetween(from, to, (node, pos) => {
-    if (node.type.name === PAGE_START && pos >= from && pos < to) at.push(pos);
-  });
-  return at;
-}
-
-/** from..to less the page starts in it: the stretches of words around them. */
-function aroundPageStarts(doc: PMNode, from: number, to: number): [number, number][] {
-  const pieces: [number, number][] = [];
-  let start = from;
-  for (const at of pageStartsIn(doc, from, to)) {
-    if (at > start) pieces.push([start, at]);
-    start = at + 1;
-  }
-  if (to > start) pieces.push([start, to]);
-  return pieces;
-}
 
 type Stretch = { start: number; end: number; text: string };
 

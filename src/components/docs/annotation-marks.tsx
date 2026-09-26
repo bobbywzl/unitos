@@ -17,7 +17,7 @@ import {
   anchorClass,
   type Highlight,
 } from "@/components/reader/block-view";
-import { FIGURE, findIndexed, PAGE_START, posInBlock } from "@/components/docs/layer/anchor";
+import { aroundPageStarts, FIGURE, findIndexed, posInBlock } from "@/components/docs/layer/anchor";
 import { PAGE_FLASH_EVENT } from "@/components/docs/layer/events";
 import { annotationKindColor } from "@/lib/annotations/kind";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -163,21 +163,6 @@ function chipsOf(h: Highlight): Chip[] {
   return chips;
 }
 
-/** from..to in a paragraph less its page starts: a mark paints the words on
-    both sides of one, never the page start, which keeps its own look. */
-function aroundPageStarts(block: PMNode, blockPos: number, from: number, to: number): [number, number][] {
-  const pieces: [number, number][] = [];
-  let start = from;
-  block.forEach((child, offset) => {
-    const at = blockPos + 1 + offset;
-    if (child.type.name !== PAGE_START || at < from || at >= to) return;
-    if (at > start) pieces.push([start, at]);
-    start = at + child.nodeSize;
-  });
-  if (to > start) pieces.push([start, to]);
-  return pieces;
-}
-
 /** The objects on a line of their own a mark takes whole: a figure and an
     equation. Their words are not the page's text, so the mark is the
     object's ring and its label chip, as the reader draws them
@@ -292,8 +277,9 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
       const from = posInBlock(node, pos, start);
       const to = posInBlock(node, pos, end, true);
       if (to <= from) continue;
+      // A mark paints the words on both sides of a page start, never the page start.
       const attrs = segmentAttrs(covering, id, t);
-      for (const [a, b] of aroundPageStarts(node, pos, from, to)) {
+      for (const [a, b] of aroundPageStarts(doc, from, to)) {
         decorations.push(Decoration.inline(a, b, attrs, { inclusiveStart: false, inclusiveEnd: false }));
       }
     }
@@ -365,7 +351,9 @@ function flashDecorations(view: EditorView, target: HTMLElement, id: string): De
       // Not in the text (a widget): nothing to flash there.
     }
   }
-  if (to > from) out.push(Decoration.inline(from, to, { class: "anchor-flash" }, spec));
+  if (to > from) {
+    for (const [a, b] of aroundPageStarts(doc, from, to)) out.push(Decoration.inline(a, b, { class: "anchor-flash" }, spec));
+  }
   return out;
 }
 

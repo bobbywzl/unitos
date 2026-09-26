@@ -348,12 +348,10 @@ function dedupeByHash(fileHash: string) {
   return db.document.findFirst({ where: { fileHash, ...UNEDITED }, orderBy: { createdAt: "asc" } });
 }
 
-/** Edited since it was imported: the rich text moved past the revision the
-    import, or its last re-parse, stored. Rich text without an import
-    revision (a blank document's) is the reader's own words. */
+/** An import edited since it was imported: its rich text moved past the
+    revision the import, or its last re-parse, stored. */
 export function importEdited(document: { richText: unknown; richTextRev: number; importRev: number | null }): boolean {
-  if (document.richText === null) return false;
-  return document.importRev === null || document.richTextRev > document.importRev;
+  return document.richText !== null && document.importRev !== null && document.richTextRev > document.importRev;
 }
 
 /** A re-parse would replace an import's edits, and the reader has not said
@@ -617,7 +615,7 @@ export async function ingestMarkdown(
   const blocks = parsed.blocks;
   // A text file is an import while the switch is on: pageless.
   const converted = importPageEditorOn()
-    ? convertImport({ kind: "markdown", title, titleFromOriginal: Boolean(parsed.title), blocks })
+    ? convertImport({ kind: "markdown", title, titleFromOriginal: !parsed.titleFromFile, blocks })
     : null;
   onProgress?.(
     "save",
@@ -1059,7 +1057,8 @@ export async function reparseDocument(
       references = parsed.references;
       mediaCheck = parsed.mediaCheck;
       kind = "markdown";
-      originalTitle = parsed.title;
+      // A title the file's words do not give (the file name) opens no Title.
+      originalTitle = parsed.titleFromFile ? null : parsed.title;
     }
   } else if (document.sourceUrl) {
     const url = document.sourceUrl;
