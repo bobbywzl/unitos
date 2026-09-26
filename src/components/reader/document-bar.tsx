@@ -460,6 +460,8 @@ export function DocumentBar({
       if (err instanceof EditedImportAnswer) {
         if (figures) setFigureCapture(null);
         askEdited(doc, as);
+        // The page's data catches up: the next Re-parse asks at once.
+        router.refresh();
         return;
       }
       const message = err instanceof Error ? err.message : t("panes.reparseFailed");

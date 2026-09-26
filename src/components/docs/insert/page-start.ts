@@ -3,6 +3,7 @@ import { Fragment, Slice, type Node as PMNode, type NodeType } from "@tiptap/pm/
 import { Plugin, PluginKey, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { AttrStep, Mapping, ReplaceAroundStep, ReplaceStep } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { atMenuState } from "@/components/docs/insert/at-plugin";
 import { insertContext } from "@/components/docs/insert/context";
 import { importedOf } from "@/components/docs/insert/figure";
 import { DEFAULT_LANG } from "@/lib/i18n/config";
@@ -262,18 +263,19 @@ export const PageStart = Node.create({
 /** The arrow keys, Backspace, and Delete step over a page start first, so
     no press is spent on it: the caret moves, or the letter beyond it goes.
     A selection is deleted as it is, and the page start goes back
-    (keepPageStarts). Before every other key handler (Google Docs' keys,
-    the typing area's). */
+    (keepPageStarts). Before every other key handler: the typing area's
+    Backspace and Delete (ext/typing.ts, 1001) then act from past it. */
 export const PageStartKeys = Extension.create({
   name: "pageStartKeys",
-  priority: 1000,
+  priority: 1002,
   addProseMirrorPlugins() {
     return [
       new Plugin({
         key: new PluginKey("docsPageStartKeys"),
         props: {
           handleKeyDown(view, event) {
-            if (event.isComposing) return false;
+            // The "@" menu's arrows move in the menu.
+            if (event.isComposing || atMenuState(view.state).active) return false;
             const forward = event.key === "ArrowRight" || event.key === "Delete";
             const backward = event.key === "ArrowLeft" || event.key === "Backspace";
             if (!forward && !backward) return false;

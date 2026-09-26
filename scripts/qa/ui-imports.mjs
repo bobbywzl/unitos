@@ -635,6 +635,22 @@ async function toasts(page) {
   return page.evaluate(() => [...document.querySelectorAll('[role="status"], [data-toast], .docs-toast')].map((e) => e.textContent.trim()).filter(Boolean));
 }
 
+
+/** Run a page editor command by its label through Search the menus (Alt+/),
+    as a person does. False when the field did not open. */
+async function menuCommand(page, label) {
+  await page.evaluate(() => window.__docsEditor.commands.focus());
+  await page.keyboard.press("Alt+/");
+  await sleep(400);
+  const field = page.locator('input[aria-label="Search the menus"], input[placeholder*="Search the menus"]').first();
+  if (!(await field.count())) return false;
+  await field.fill(label);
+  await sleep(500);
+  await page.keyboard.press("Enter");
+  await sleep(500);
+  return true;
+}
+
 /** Key-to-paint latency of the page editor: keydown to the frame after the
     editor's DOM changes. */
 async function installLatency(page) {
@@ -1650,13 +1666,9 @@ RISKS.C2 = async (theme) => {
   const still = (await pageStarts(page)).filter((x) => x.page === s.page);
   check("C2", still.length === 1, `(${theme}) the pending suggestion across p. ${s.page} keeps the page start`, `${still.length}${still[0] ? ` before "${still[0].before.slice(-15)}" after "${still[0].after.slice(0, 15)}"` : ""}`);
   const pendingShot = await shot(page, `C2-pending-across-page-start-${theme}`);
-  // Accept all: the words change, "p. N" stays where the page begins.
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("docs:review-suggestions", { detail: {} })));
-  const accepted = await page.evaluate(() => {
-    const ed = window.__docsEditor;
-    const cmd = ed.commands.acceptAllSuggestions ?? ed.commands.applyAllSuggestions;
-    return cmd ? cmd() : null;
-  });
+  // Accept all suggestions (Search the menus): the words change, "p. N"
+  // stays where the page begins.
+  const accepted = await menuCommand(page, "Accept all suggestions");
   await sleep(800);
   const after = (await pageStarts(page)).filter((x) => x.page === s.page);
   const text = await page.evaluate((p) => window.__docsEditor.state.doc.resolve(p).parent.textContent, after[0]?.pos ?? s.pos);

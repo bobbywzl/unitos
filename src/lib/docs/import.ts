@@ -10,6 +10,7 @@ import {
   type RichNode,
 } from "@/lib/docs/schema";
 import {
+  clip,
   inlineNodes,
   keptHref,
   paragraphNode,
@@ -78,14 +79,9 @@ export type ImportResult = {
   size: { nodes: number; json: number; rows: number };
 };
 
-// The PDF parse marks where each page's words begin (lib/parse/pdf.ts): the
-// page a block starts on, and inside a block joined across a page break the
-// offset of each later page's first word.
-type PageMark = PageStart;
-
 /** Words, the marks over them (offsets into the words), and the page starts
-    inside them. */
-type Source = { text: string; spans: { start: number; end: number; mark: RichMark }[]; starts: PageMark[] };
+    inside them: where each page of the PDF begins (lib/parse/pdf.ts). */
+type Source = { text: string; spans: { start: number; end: number; mark: RichMark }[]; starts: PageStart[] };
 
 /** The space after a paragraph of the body, in points: Google Docs' "Add
     space after paragraph". Normal text has none, and an article without it
@@ -153,7 +149,7 @@ function linesOf(src: Source): Source[] {
     if (at < 0) break;
     from = at + 1;
   }
-  const lines = bounds.map(({ from, to }) => ({ ...sliceSource(src, from, to), starts: [] as PageMark[] }));
+  const lines = bounds.map(({ from, to }) => ({ ...sliceSource(src, from, to), starts: [] as PageStart[] }));
   for (const p of src.starts) {
     let k = bounds.findIndex(({ from, to }) => p.offset >= from && p.offset <= to);
     if (k < 0) k = bounds.length - 1;
@@ -171,7 +167,7 @@ function splitLong(src: Source): Source[] {
     let to = Math.min(src.text.length, from + MAX_TEXT);
     if (to < src.text.length) {
       const space = src.text.lastIndexOf(" ", to - 1);
-      if (space > from) to = space + 1;
+      to = space > from ? space + 1 : clip(src.text.slice(from, to + 1), to - from).length + from;
     }
     parts.push(sliceSource(src, from, to));
     from = to;
@@ -327,7 +323,7 @@ class Converter {
   /** The last page whose start is placed, and page starts a block could not
       hold, for the next block. */
   private page = 0;
-  private carried: PageMark[] = [];
+  private carried: PageStart[] = [];
   /** A link's target: the id of the first paragraph a block became, given
       when the link comes before its target. */
   private readonly targets = new Map<number, string>();
@@ -364,8 +360,8 @@ class Converter {
   /** The page starts of a block, in order: where its first word is on a
       later page than the last start placed, and each later page inside it.
       A page start only rises. */
-  private startsOf(block: ParsedBlock): PageMark[] {
-    const starts: PageMark[] = this.carried.map((p) => ({ offset: 0, page: p.page }));
+  private startsOf(block: ParsedBlock): PageStart[] {
+    const starts: PageStart[] = this.carried.map((p) => ({ offset: 0, page: p.page }));
     this.carried = [];
     if (!this.paged) return starts;
     const add = (offset: number, page: unknown) => {
@@ -379,7 +375,7 @@ class Converter {
   }
 
   /** A block with no words to hold page starts hands them to the next. */
-  private carry(starts: PageMark[]) {
+  private carry(starts: PageStart[]) {
     this.carried.push(...starts);
   }
 
@@ -425,7 +421,7 @@ class Converter {
     return id;
   }
 
-  private sourceOf(block: ParsedBlock, starts: PageMark[]): Source {
+  private sourceOf(block: ParsedBlock, starts: PageStart[]): Source {
     const spans: Source["spans"] = [];
     for (const s of block.styles ?? []) {
       if (["bold", "italic", "underline", "code"].includes(s.style)) spans.push({ start: s.start, end: s.end, mark: { type: s.style } });
@@ -449,7 +445,7 @@ class Converter {
 
   private title(title: string, blocks: ParsedBlock[]) {
     // A PDF's title stands on its first page.
-    const starts: PageMark[] = this.paged && this.page < 1 ? [{ offset: 0, page: 1 }] : [];
+    const starts: PageStart[] = this.paged && this.page < 1 ? [{ offset: 0, page: 1 }] : [];
     if (starts.length > 0) this.page = 1;
     const meta = blocks.slice(0, TITLE_REACH).find((b) => b.type === "PARAGRAPH" && tokensOf(b.html).includes("meta"));
     const heading = blocks.find((b) => b.type === "HEADING");
@@ -485,7 +481,7 @@ class Converter {
     }
   }
 
-  private paragraph(block: ParsedBlock, index: number, starts: PageMark[]) {
+  private paragraph(block: ParsedBlock, index: number, starts: PageStart[]) {
     if (!block.text.trim()) return this.carry(starts);
     const tokens = tokensOf(block.html);
     const role: Role | undefined = ROLES.find((r) => tokens.includes(r));
@@ -500,7 +496,7 @@ class Converter {
     this.place(index, nodes, role === "quote");
   }
 
-  private heading(block: ParsedBlock, index: number, starts: PageMark[], isTitle: boolean) {
+  private heading(block: ParsedBlock, index: number, starts: PageStart[], isTitle: boolean) {
     if (!block.text.trim()) return this.carry(starts);
     const align = alignOf(tokensOf(block.html));
     const content = inline(this.sourceOf(block, starts));
@@ -513,10 +509,10 @@ class Converter {
     this.place(index, [content.length > 0 ? { type: "heading", attrs, content } : { type: "heading", attrs }]);
   }
 
-  private list(block: ParsedBlock, index: number, starts: PageMark[]) {
+  private list(block: ParsedBlock, index: number, starts: PageStart[]) {
     // A line with no words is no line: its page starts go to the next one.
     const lines: ListLine[] = [];
-    let waiting: PageMark[] = [];
+    let waiting: PageStart[] = [];
     for (const line of linesOf(this.sourceOf(block, starts))) {
       if (!line.text.trim()) {
         waiting.push(...line.starts.map((p) => ({ offset: 0, page: p.page })));
@@ -546,7 +542,7 @@ class Converter {
     this.place(index, nodes);
   }
 
-  private table(block: ParsedBlock, index: number, starts: PageMark[]) {
+  private table(block: ParsedBlock, index: number, starts: PageStart[]) {
     const built = (block.html ? tableFromHtml(block.html) : null) ?? tableFromText(block.text);
     if (!built) return this.carry(starts);
     // A page start goes into the first cell of the row the page begins at.
@@ -564,10 +560,9 @@ class Converter {
     this.place(index, nodes);
   }
 
-  private figure(block: ParsedBlock, index: number, starts: PageMark[]) {
+  private figure(block: ParsedBlock, index: number, starts: PageStart[]) {
     const mediaId = newBlockId();
-    // At most MAX_CAPTION_CHARS, never half a character (a surrogate pair).
-    const caption = block.text.slice(0, MAX_CAPTION_CHARS - (/[\uD800-\uDBFF]/.test(block.text[MAX_CAPTION_CHARS - 1] ?? "") ? 1 : 0));
+    const caption = clip(block.text, MAX_CAPTION_CHARS);
     const page = this.input.kind === "pdf" && typeof block.page === "number" ? block.page : null;
     const region = block.region ?? null;
     const pageStart = starts.at(-1)?.page ?? null;
@@ -587,7 +582,7 @@ class Converter {
     ]);
   }
 
-  private equation(block: ParsedBlock, index: number, starts: PageMark[]) {
+  private equation(block: ParsedBlock, index: number, starts: PageStart[]) {
     const latex = block.text.trim();
     if (!latex) return this.carry(starts);
     if (latex.length > MAX_LATEX) return this.code({ ...block, text: latex }, index, starts);
@@ -597,7 +592,7 @@ class Converter {
     this.place(index, [{ type: "blockMath", attrs }]);
   }
 
-  private code(block: ParsedBlock, index: number, starts: PageMark[]) {
+  private code(block: ParsedBlock, index: number, starts: PageStart[]) {
     const raw = block.text;
     if (!raw.replaceAll(ZWSP, "").trim()) return this.carry(starts);
     // A code block holds no inline node: it draws the number of the first
@@ -619,7 +614,7 @@ class Converter {
       let to = Math.min(cut, from + MAX_TEXT);
       if (to < cut) {
         const line = raw.lastIndexOf("\n", to - 1);
-        if (line > from) to = line + 1;
+        to = line > from ? line + 1 : clip(raw.slice(from, to + 1), to - from).length + from;
       }
       // The line break at a cut is the break between the two blocks.
       const text = raw.slice(from, to < raw.length && raw[to - 1] === "\n" ? to - 1 : to).replaceAll(ZWSP, "");

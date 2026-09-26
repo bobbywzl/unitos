@@ -3,7 +3,7 @@
 // dict/common.ts.
 
 const en = {
-  leftOut: "Images and equations in the selection are left out",
+  leftOut: "Images, figures, and equations in the selection are left out",
   selectWordsFirst: "Select the words first",
   // A comment's card, as Google Docs draws it.
   resolveTitle: "Close this comment; it moves under Resolved",
@@ -20,7 +20,7 @@ const en = {
 };
 
 const zh: Record<keyof typeof en, string> = {
-  leftOut: "选中内容中的图片和公式不计入",
+  leftOut: "选中内容中的图片、插图和公式不计入",
   selectWordsFirst: "先选中文字",
   resolveTitle: "关闭此评论；它会移到“已解决”下",
   moreOptions: "更多选项",
