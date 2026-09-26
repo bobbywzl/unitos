@@ -1293,6 +1293,7 @@ export default async function NotebookPage(props: {
   const paneNode = (pane: NonNullable<typeof paneOne>, key: string, role: "one" | "two") => {
     const paneHeader = split ? (
       <PaneDocumentSelect
+        key="pane-header"
         notebookId={notebook.id}
         view={readerView}
         pane={role}
@@ -1404,8 +1405,12 @@ export default async function NotebookPage(props: {
           drive={driveConfig(user)}
         />
       }
+      // The panels are keyed, as the reader below is: each crosses to the
+      // client as a lazy chunk on a large page (an import's rich text), and
+      // React's dev key check would otherwise warn on the tray's row.
       distillPanel={
         <DistillPanel
+          key="distill"
           documentId={paneOne && !paneOne.video ? paneOne.document.id : null}
           distillations={paneOne?.distillations ?? []}
           corpusDistillations={corpusDistillations}
@@ -1414,6 +1419,7 @@ export default async function NotebookPage(props: {
       }
       annotationsPanel={
         <AnnotationsPanel
+          key="annotations"
           notebookId={notebook.id}
           documentId={paneOne?.document.id ?? null}
           annotations={paneOne?.annotations ?? []}
@@ -1424,6 +1430,7 @@ export default async function NotebookPage(props: {
       }
       editsPanel={
         <EditsPanel
+          key="edits"
           edits={edits}
           liveBlockIds={paneOne?.document.blocks.map((b) => b.id) ?? []}
         />

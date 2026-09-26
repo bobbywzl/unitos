@@ -972,9 +972,20 @@ RISKS.R5 = async (theme) => {
   const pick = async (caption) => {
     const f = (await figures(page)).find((x) => (x.caption ?? "").trim() === caption);
     if (!f) return null;
+    const selected = () => page.evaluate((p) => {
+      const sel = window.__docsEditor.state.selection;
+      return sel.constructor.name === "NodeSelection" && sel.from === p;
+    }, f.pos);
     await clickFigure(page, f.pos);
     await page.keyboard.press("Escape");
     await sleep(200);
+    // A press that closed an open card selects nothing: a person presses again.
+    if (!(await selected())) {
+      note("R5", `(${theme}) the first press on "${caption}" did not select it`, "a second press does");
+      await clickFigure(page, f.pos);
+      await page.keyboard.press("Escape");
+      await sleep(200);
+    }
     return f;
   };
   await pick("Figure 3");

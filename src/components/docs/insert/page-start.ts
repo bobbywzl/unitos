@@ -262,9 +262,11 @@ export const PageStart = Node.create({
 
 /** The arrow keys, Backspace, and Delete step over a page start first, so
     no press is spent on it: the caret moves, or the letter beyond it goes.
-    A selection is deleted as it is, and the page start goes back
-    (keepPageStarts). Before every other key handler: the typing area's
-    Backspace and Delete (ext/typing.ts, 1001) then act from past it. */
+    Enter and Shift+Enter right after a page start break the line before it,
+    so the page start stays with the words of its page. A selection is
+    deleted as it is, and the page start goes back (keepPageStarts). Before
+    every other key handler: the typing area's keys (ext/typing.ts, 1001)
+    then act from past it. */
 export const PageStartKeys = Extension.create({
   name: "pageStartKeys",
   priority: 1002,
@@ -277,12 +279,14 @@ export const PageStartKeys = Extension.create({
             // The "@" menu's arrows move in the menu.
             if (event.isComposing || atMenuState(view.state).active) return false;
             const forward = event.key === "ArrowRight" || event.key === "Delete";
-            const backward = event.key === "ArrowLeft" || event.key === "Backspace";
+            const backward = event.key === "ArrowLeft" || event.key === "Backspace" || event.key === "Enter";
             if (!forward && !backward) return false;
             const { selection, doc } = view.state;
             if (!(selection instanceof TextSelection)) return false;
-            const deleting = event.key === "Delete" || event.key === "Backspace";
-            const extending = event.shiftKey && !deleting;
+            // Keys that change the text act from past the page start; Shift
+            // with an arrow grows the selection over it.
+            const edits = event.key === "Delete" || event.key === "Backspace" || event.key === "Enter";
+            const extending = event.shiftKey && !edits;
             if (!selection.empty && !extending) return false;
             const $head = selection.$head;
             let pos = $head.pos;
