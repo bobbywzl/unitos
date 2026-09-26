@@ -2255,13 +2255,6 @@ export function ReaderInteractions({
       // that is text editing, not a new selection.
       if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
-        // A click on a figure object in the page editor comes after this
-        // mouseup and opens the figure's tools (docs:figure-tools): the
-        // press was the figure's.
-        if (suppressNextMouseUp.current) {
-          suppressNextMouseUp.current = false;
-          return;
-        }
         const captured = captureSelection();
         // The VIDEO block (the player's own block) refuses annotation: a
         // selection over it shows the refusal instead of tools. Transcript
@@ -2465,8 +2458,9 @@ export function ReaderInteractions({
       if (text) showToast(text);
     };
     // A click on a figure object opens the figure's tools, as the circle
-    // does. The click comes after its mouseup, whose selection check stands
-    // down (above); a click with no mouseup before it leaves nothing armed.
+    // does. The figure fires at its own mouseup, before the document's, so
+    // the mouseup's selection check stands down; an event with no mouseup
+    // after it leaves nothing armed.
     let disarm = 0;
     const onFigureTools = (e: Event) => {
       const { blockId, x, y } = (e as CustomEvent<{ blockId: string; x: number; y: number }>).detail;
