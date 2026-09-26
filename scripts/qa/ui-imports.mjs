@@ -7,9 +7,14 @@
 // number, a screenshot path. The timings for the size guard (1.8) print as
 // TIME lines.
 //
+// Beyond the risks, four groups: C2 (the assistant's suggestions on an
+// import), EDIT (typing in a highlight, Suggesting, two tabs), AUDIT (the
+// design's section 5 checklist, as a Google Docs reader checks it), and AI
+// (the Unitos tools, annotations, and notes on an import's text).
+//
 // Usage:
-//   node scripts/qa/ui-imports.mjs [R1 R3 …] [--theme light|dark|both] [--keep]
-// With no risk named, every risk runs. Env: BASE (default
+//   node scripts/qa/ui-imports.mjs [R1 R3 … C2 EDIT AUDIT AI] [--theme light|dark|both] [--keep]
+// With nothing named, everything runs. Env: BASE (default
 // http://localhost:3111), SHOT_DIR (screenshots; default <tmp>/ui-imports),
 // CHROME (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3490),
 // DATABASE_URL (read from .env when unset), ATTENTION (the Attention paper's
@@ -49,7 +54,7 @@ const args = process.argv.slice(2);
 const themeArg = args.includes("--theme") ? args[args.indexOf("--theme") + 1] : "both";
 const THEMES = themeArg === "both" ? ["light", "dark"] : [themeArg];
 const KEEP = args.includes("--keep");
-const ONLY = new Set(args.filter((a, i) => /^R\d+$|^C2$|^AUDIT$|^AI$/.test(a) && args[i - 1] !== "--theme"));
+const ONLY = new Set(args.filter((a, i) => /^R\d+$|^C2$|^AUDIT$|^AI$|^EDIT$/.test(a) && args[i - 1] !== "--theme"));
 const STAMP = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
 mkdirSync(SHOT, { recursive: true });
 
@@ -1325,8 +1330,8 @@ RISKS.R9 = async (theme) => {
     const block = await db.block.findFirst({ where: { documentId: added.id, type: "PARAGRAPH" }, select: { id: true, text: true } });
     const patch = await api(`/api/blocks/${block.id}`, "PATCH", { text: `${block.text} (server edit)` });
     check("R9", patch.status === 403, "a server-side edit (the block route) refuses a shared import with 403", `HTTP ${patch.status}`);
-    const suggest = await api(`/api/documents/${added.id}/suggest`, "POST", { command: "shorten", blockIds: [block.id] });
-    check("R9", suggest.status === 403, "the assistant's suggest route refuses a shared import with 403", `HTTP ${suggest.status}`);
+    const suggest = await api(`/api/documents/${added.id}/suggest`, "POST", { notebookId: ctx.notebookId, command: "Shorten this paragraph.", blockIds: [block.id] });
+    check("R9", suggest.status === 403, "the assistant's suggest route refuses a shared import with 403", `HTTP ${suggest.status} ${clip(JSON.stringify(suggest.body), 100)}`);
     // Dedupe: an edited import is never handed to another add.
     const solo = await fresh("pdf", "-r9dedupe");
     const soloRow = await documentRow(solo.id);
@@ -1425,14 +1430,63 @@ RISKS.R11 = async (theme) => {
   const starts = await pageStarts(page);
   check("R11", starts.length >= 12, "after Select all + Delete and Ctrl+Z the page starts are back", `${starts.length} page starts`);
   await context.close();
-  // The long PDF: the size guard keeps it a block document.
-  if (!ctx.long) ctx.long = await longPdf(browser, LONG_PAGES, STAMP);
-  const long = await add(ctx.notebookId, { bytes: ctx.long.bytes, name: `long-${ctx.long.pages}-${STAMP}.pdf`, type: "application/pdf" });
-  const longRow = long.id ? await documentRow(long.id) : null;
-  const longRows = long.id ? await db.block.count({ where: { documentId: long.id } }) : 0;
-  time("R11", `the ${ctx.long.pages}-page PDF's add`, `${long.ms} ms, ${longRows} rows, stages ${long.stages.join(" ")}`);
-  check("R11", Boolean(longRow) && !longRow.richText, `the size guard keeps the ${ctx.long.pages}-page PDF a block document`, `richText ${longRow?.richText ? "set" : "null"}; the add's save detail ${clip(JSON.stringify(long.saveDetail), 160)}`);
-  check("R11", JSON.stringify(long.saveDetail ?? {}).includes("size"), "the add's save stage says the size guard kept a block document", clip(JSON.stringify(long.saveDetail), 160));
+  // Two long PDFs: about 150 pages (near the guard's 1,500 rows) and about
+  // 200 pages (past it). Each add says which form it took; the one in the
+  // page editor is timed as the paper was.
+  for (const target of [LONG_PAGES, Math.round(LONG_PAGES * 1.35)]) {
+    const long = await longPdf(browser, target, `${STAMP}-${target}`);
+    const added = await add(ctx.notebookId, { bytes: long.bytes, name: `long-${long.pages}-${STAMP}.pdf`, type: "application/pdf" });
+    const row = added.id ? await documentRow(added.id) : null;
+    const rows = added.id ? await db.block.count({ where: { documentId: added.id } }) : 0;
+    const json = row?.richText ? JSON.stringify(row.richText).length : 0;
+    time("R11", `the ${long.pages}-page PDF's add`, `${added.ms} ms, ${rows} rows, ${row?.richText ? `rich text ${json} chars` : "a block document"}, stages ${added.stages.join(" ")}, save detail ${clip(JSON.stringify(added.saveDetail), 120)}`);
+    const past = rows > 1500 || json > 1_500_000;
+    if (!row) {
+      fail("R11", `the ${long.pages}-page PDF adds`, added.error ?? "no id");
+      continue;
+    }
+    if (row.richText) {
+      check("R11", !past, `the ${long.pages}-page PDF (${rows} rows) is under the guard and opens in the page editor`, `${rows} rows, ${json} chars`);
+      const { page: longPage, context: longContext } = await newPage(theme);
+      const opens = [];
+      for (let i = 0; i < 2; i++) opens.push(await open(longPage, ctx.notebookId, added.id));
+      await setMode(longPage, "editing");
+      await installLatency(longPage);
+      const mid = await longPage.evaluate(() => {
+        const ed = window.__docsEditor;
+        let pos = null;
+        let n = 0;
+        const half = Math.floor(ed.state.doc.childCount / 2);
+        ed.state.doc.forEach((node, offset) => {
+          if (pos === null && n >= half && node.type.name === "paragraph" && node.textContent.length > 40) pos = offset + 21;
+          n++;
+        });
+        return pos;
+      });
+      await clickPos(longPage, mid);
+      for (let i = 0; i < 24; i++) {
+        await longPage.keyboard.press(i % 4 === 3 ? "Backspace" : "k");
+        await sleep(110);
+      }
+      for (let i = 0; i < 6; i++) {
+        await longPage.keyboard.press("Enter");
+        await sleep(160);
+        await longPage.keyboard.press("Backspace");
+        await sleep(160);
+      }
+      const lat = await longPage.evaluate(() => window.__lat);
+      const saved = longPage.waitForResponse((r) => r.url().includes("/rich-text") && r.request().method() === "PUT", { timeout: 60_000 }).catch(() => null);
+      const t0 = Date.now();
+      await longPage.keyboard.type("z");
+      const resp = await saved;
+      const stored = (await documentRow(added.id)).richText;
+      time("R11", `the ${long.pages}-page import in the page editor`, `open to text/editor ${opens.map((o) => `${o.text}/${o.ready}`).join(", ")} ms; letters ${stats(lat.filter((l) => l.key.length === 1).map((l) => l.ms))}; Enter ${stats(lat.filter((l) => l.key === "Enter").map((l) => l.ms))}; a save answered ${resp?.status() ?? "none"} after ${Date.now() - t0} ms; stored ${JSON.stringify(stored).length} chars after the editor's saves (${json} at import)`);
+      await longContext.close();
+    } else {
+      check("R11", past, `the size guard keeps the ${long.pages}-page PDF (${rows} rows) a block document`, `rows ${rows}`);
+      check("R11", JSON.stringify(added.saveDetail ?? {}).includes("size"), `the add's save stage says the size guard kept the ${long.pages}-page PDF a block document`, clip(JSON.stringify(added.saveDetail), 160));
+    }
+  }
 };
 
 // R12: the reading position of a long import survives a reload.
@@ -1699,7 +1753,22 @@ RISKS.R20 = async (theme) => {
   const pdf = await fresh("pdf", "-r20");
   const { page, errors, context, responses } = await newPage(theme);
   await open(page, ctx.notebookId, pdf.id);
+  // A highlight before the re-parse: an unedited import keeps its ids where
+  // the words match, so the highlight stays exact.
+  const at = await find(page, "Recurrent neural networks");
+  if (at) {
+    await dragSelect(page, at.from, at.to);
+    const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
+    if (await colors.count()) await colors.first().click();
+  }
+  let before = null;
+  for (let i = 0; i < 30 && !before; i++) {
+    before = (await sourcesOf(pdf.id)).find((x) => x.quotedText === "Recurrent neural networks") ?? null;
+    if (!before) await sleep(500);
+  }
   const re = await api(`/api/documents/${pdf.id}/reparse`, "POST", {});
+  const afterSrc = before ? (await sourcesOf(pdf.id)).find((x) => x.id === before.id) : null;
+  check("R20", Boolean(before && afterSrc && !afterSrc.orphaned && afterSrc.blockId === before.blockId && afterSrc.startOffset === before.startOffset), "a re-parse of an unedited import keeps a highlight exact (the same row, the same offsets)", before ? `before ${before.blockId} ${before.startOffset}-${before.endOffset}; after ${afterSrc?.blockId} ${afterSrc?.startOffset}-${afterSrc?.endOffset} orphaned ${afterSrc?.orphaned}` : "no highlight made");
   await sleep(10000);
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
@@ -1839,6 +1908,72 @@ RISKS.C2 = async (theme) => {
   }
   await waitSaved(page).catch(() => {});
   if (errors.length) note("C2", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
+  await context.close();
+};
+
+// EDIT: editing an import where the Unitos layer meets the page editor:
+// typing inside a highlight, a person's suggestion (Suggesting mode) and its
+// Accept, and two tabs on one import (live sync) with page starts.
+RISKS.EDIT = async (theme) => {
+  const pdf = await fresh("pdf", `-edit${theme[0]}`);
+  const { page, errors, context } = await newPage(theme);
+  await open(page, ctx.notebookId, pdf.id);
+  // A highlight, then words typed inside it: the mark grows, the quote stays.
+  const at = await find(page, "Recurrent neural networks, long short-term memory");
+  await dragSelect(page, at.from, at.to);
+  const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
+  if (await colors.count()) await colors.first().click();
+  let hl = null;
+  for (let i = 0; i < 30 && !hl; i++) {
+    hl = (await sourcesOf(pdf.id)).find((x) => x.quotedText.startsWith("Recurrent neural networks")) ?? null;
+    if (!hl) await sleep(500);
+  }
+  await setMode(page, "editing");
+  const inside = await find(page, "neural networks");
+  await clickPos(page, inside.from + 6);
+  await page.keyboard.type("QA ");
+  await waitSaved(page);
+  await sleep(2500);
+  const moved = hl ? (await sourcesOf(pdf.id)).find((x) => x.id === hl.id) : null;
+  const painted = hl ? await page.evaluate((id) => [...document.querySelectorAll(`.docs-prose [data-source-id="${id}"]`)].map((e) => e.textContent).join(""), hl.id) : "";
+  check("EDIT", Boolean(moved && !moved.orphaned && moved.quotedText === hl.quotedText && (moved.anchoredText ?? "").includes("neural QA networks") && painted.includes("neural QA networks")), `(${theme}) words typed inside a highlight: the mark grows over them, the quote stays`, moved ? `quote "${clip(moved.quotedText, 40)}", anchored "${clip(moved.anchoredText, 50)}", painted "${clip(painted, 50)}"` : "no highlight");
+  for (let i = 0; i < 3; i++) await page.keyboard.press("Backspace");
+  await waitSaved(page).catch(() => {});
+  // Suggesting: a person's suggestion across a page start, then Accept.
+  const s = (await pageStarts(page)).find((x) => x.on === "paragraph" && x.before.length >= 20 && x.after.length >= 20);
+  const rowsBefore = await rowsOf(pdf.id);
+  await setMode(page, "suggesting");
+  await dragSelect(page, s.pos - 8, s.pos + 1 + 8);
+  await page.keyboard.type("SUGGESTED");
+  await waitSaved(page).catch(() => {});
+  await sleep(1500);
+  const marks = await page.evaluate(() => [...document.querySelectorAll(".docs-prose [data-suggestion]")].map((e) => e.textContent).join("|"));
+  const starts = (await pageStarts(page)).filter((x) => x.page === s.page);
+  const rowsAfter = await rowsOf(pdf.id);
+  const changedRows = rowsAfter.filter((r) => rowsBefore.find((b) => b.id === r.id)?.hash !== r.hash);
+  const suggestShot = await shot(page, `EDIT-suggestion-across-page-start-${theme}`);
+  check("EDIT", marks.includes("SUGGESTED") && starts.length === 1 && changedRows.length === 1, `(${theme}) a person's suggestion across p. ${s.page}: drawn as a suggestion, the page start kept, one row changed`, `marks "${clip(marks, 80)}"; page starts ${starts.length}; rows changed ${changedRows.length} ${suggestShot}`);
+  await menuCommand(page, "Accept all suggestions");
+  await waitSaved(page).catch(() => {});
+  await sleep(1000);
+  const accepted = await page.evaluate((p) => window.__docsEditor.state.doc.resolve(p).parent.textContent, (await pageStarts(page)).find((x) => x.page === s.page)?.pos ?? s.pos);
+  check("EDIT", accepted.includes("SUGGESTED") && (await pageStarts(page)).filter((x) => x.page === s.page).length === 1, `(${theme}) Accept keeps p. ${s.page} and the suggested words`, clip(accepted, 90));
+  // Two tabs on one import: words typed in one reach the other, and the
+  // other's page starts stay.
+  await setMode(page, "editing");
+  const second = await newPage(theme);
+  await open(second.page, ctx.notebookId, pdf.id);
+  const startsB = (await pageStarts(second.page)).length;
+  const intro = await find(page, "1 Introduction");
+  await clickPos(page, intro.to);
+  await page.keyboard.type(" (live)");
+  await waitSaved(page).catch(() => {});
+  const arrived = await second.page.waitForFunction(() => window.__docsEditor.state.doc.textContent.includes("1 Introduction (live)"), null, { timeout: 30_000 }).then(() => true).catch(() => false);
+  const startsAfter = (await pageStarts(second.page)).length;
+  const liveShot = await shot(second.page, `EDIT-live-second-tab-${theme}`);
+  check("EDIT", arrived && startsAfter === startsB, `(${theme}) words typed in one tab reach the other tab of the import, its page starts kept`, `arrived ${arrived}; page starts ${startsB} → ${startsAfter} ${liveShot}`);
+  await second.context.close();
+  if (errors.length) note("EDIT", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
   await context.close();
 };
 

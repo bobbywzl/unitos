@@ -100,6 +100,9 @@ const MAX_TEXT = 200_000;
 const MAX_LATEX = 2000;
 /** A heading that repeats the title stands within the first blocks. */
 const TITLE_REACH = 12;
+/** The pageless text column at its narrowest, in px (components/docs/page/
+    geometry.ts pagelessWidth): a table fitted to it fits every column. */
+const PAGELESS_COLUMN_PX = 600;
 
 const ROLES = ["kicker", "meta", "label", "display", "quote", "caption"] as const;
 type Role = (typeof ROLES)[number];
@@ -329,9 +332,15 @@ class Converter {
   private readonly targets = new Map<number, string>();
   private readonly firstIds = new Map<number, string>();
   private readonly paged: boolean;
+  private readonly pageSetup: PageSetup;
+  /** The text column's width in px at 100%, the room a table fits in. */
+  private readonly room: number;
 
   constructor(private readonly input: ImportInput) {
     this.paged = input.kind === "pdf" && input.blocks.some((b) => typeof b.page === "number");
+    this.pageSetup = pageSetupFor(input);
+    const { pageless, width, margins } = this.pageSetup;
+    this.room = pageless ? PAGELESS_COLUMN_PX : ((width - margins.left - margins.right) * 96) / 72;
   }
 
   run(): ImportResult {
@@ -543,7 +552,7 @@ class Converter {
   }
 
   private table(block: ParsedBlock, index: number, starts: PageStart[]) {
-    const built = (block.html ? tableFromHtml(block.html) : null) ?? tableFromText(block.text);
+    const built = (block.html ? tableFromHtml(block.html, this.room) : null) ?? tableFromText(block.text, this.room);
     if (!built) return this.carry(starts);
     // A page start goes into the first cell of the row the page begins at.
     for (const p of starts) {
@@ -658,7 +667,7 @@ class Converter {
     return {
       richText,
       figures: this.figures.filter((f) => kept.has(f.mediaId)),
-      pageSetup: pageSetupFor(this.input),
+      pageSetup: this.pageSetup,
       size: { nodes, json: new TextEncoder().encode(JSON.stringify(richText)).length, rows },
     };
   }

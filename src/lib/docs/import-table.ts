@@ -350,12 +350,191 @@ function gridRows(rows: { cells: { node: RichNode; colspan: number; rowspan: num
   return out;
 }
 
-function tableNode(rows: { cells: { node: RichNode; colspan: number; rowspan: number }[]; pinned: boolean }[]): {
+// ── Column widths ───────────────────────────────────────────────────────────
+// The page editor lays a table out at fixed column widths (docs.css), an
+// equal share each when no width is set: a wide label column then breaks its
+// words letter by letter beside narrow number columns. Each column takes a
+// width from its words instead, as a browser sizes a table: its longest word
+// is as narrow as it may get, its longest line as wide as it wants to be.
+
+// Arial's advance widths (thousandths of an em) for the printable ASCII
+// characters, space to tilde: the page's Normal text face.
+const ARIAL = [
+  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556,
+  556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
+  667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556,
+  556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+];
+const PX_PER_PT = 96 / 72;
+const BODY_PT = 11;
+/** The smallest size a table's text takes to fit its longest words. */
+const SMALLEST_PT = 8;
+/** A cell's room past its words: 5 pt of padding a side, the grid line, and
+    a little slack for a measure that is an estimate. */
+const CELL_EXTRA_PX = 10 * PX_PER_PT + 1 + 4;
+/** The narrowest column (the table's cellMinWidth, components/docs/extensions.ts). */
+const MIN_COLUMN_PX = 32;
+/** A list line's indent in a cell (docs.css). */
+const LIST_INDENT_PX = 36 * PX_PER_PT;
+
+/** One character's width in ems: Arial's for ASCII, a full em for a wide
+    (CJK) character, an average letter's for the rest. */
+function charEm(ch: string): number {
+  const c = ch.codePointAt(0) ?? 0;
+  if (c >= 32 && c <= 126) return ARIAL[c - 32] / 1000;
+  if ((c >= 0x1100 && c <= 0x11ff) || (c >= 0x2e80 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7af) || (c >= 0xf900 && c <= 0xfaff) || (c >= 0xfe30 && c <= 0xfe4f) || (c >= 0xff00 && c <= 0xff60)) {
+    return 1;
+  }
+  return 0.556;
+}
+
+/** What a cell's content needs at the body size: its longest word and its
+    longest line, in px of words, and the px of what does not scale with
+    the text (a list's indent, an image). */
+type Need = { word: number; line: number; fixedMin: number; fixedLine: number };
+
+function cellNeed(cell: RichNode): Need {
+  const need: Need = { word: 0, line: 0, fixedMin: 0, fixedLine: 0 };
+  const bold = cell.type === "tableHeader";
+  const block = (node: RichNode, indent: number) => {
+    if (node.type === "image") {
+      const width = typeof node.attrs?.width === "number" ? node.attrs.width : 100;
+      need.fixedLine = Math.max(need.fixedLine, indent + width);
+      return;
+    }
+    if (node.type === "paragraph" || node.type === "codeBlock") {
+      const mono = node.type === "codeBlock";
+      let word = 0;
+      let line = 0;
+      const end = () => {
+        need.word = Math.max(need.word, word);
+        need.line = Math.max(need.line, line);
+        word = 0;
+        line = 0;
+      };
+      for (const child of node.content ?? []) {
+        if (child.type === "hardBreak") {
+          end();
+          continue;
+        }
+        const heavy = bold || (child.marks ?? []).some((m) => m.type === "bold");
+        for (const ch of child.text ?? "") {
+          if (ch === "\n") {
+            end();
+            continue;
+          }
+          const px = (mono ? 0.6 : charEm(ch)) * BODY_PT * PX_PER_PT * (heavy ? 1.1 : 1);
+          line += px;
+          if (/\s/.test(ch)) {
+            need.word = Math.max(need.word, word);
+            word = 0;
+          } else {
+            word += px;
+          }
+        }
+      }
+      end();
+      need.fixedMin = Math.max(need.fixedMin, indent);
+      need.fixedLine = Math.max(need.fixedLine, indent);
+      return;
+    }
+    const nested = node.type === "bulletList" || node.type === "orderedList" || node.type === "taskList";
+    for (const child of node.content ?? []) block(child, nested ? indent + LIST_INDENT_PX : indent);
+  };
+  for (const child of cell.content ?? []) block(child, 0);
+  return need;
+}
+
+/** A column's narrowest and widest width at a text size of `scale` times
+    the body size. */
+function spanWidths(need: Need, scale: number): { min: number; max: number } {
+  return {
+    min: Math.max(MIN_COLUMN_PX, need.word * scale + need.fixedMin + CELL_EXTRA_PX),
+    max: Math.max(MIN_COLUMN_PX, need.line * scale + need.fixedLine + CELL_EXTRA_PX, need.word * scale + need.fixedMin + CELL_EXTRA_PX),
+  };
+}
+
+/** Each column's narrowest and widest width: a cell over one column sets
+    its column's; a merged cell adds what its columns lack, shared evenly. */
+function columnWidths(grid: GridCell[][], width: number, needs: Map<RichNode, Need>, scale: number) {
+  const min = new Array<number>(width).fill(MIN_COLUMN_PX);
+  const max = new Array<number>(width).fill(MIN_COLUMN_PX);
+  const spans = (cell: GridCell) => Number(cell.node.attrs?.colspan ?? 1);
+  const cells = grid.flat();
+  for (const cell of cells.filter((c) => spans(c) === 1)) {
+    const w = spanWidths(needs.get(cell.node) as Need, scale);
+    min[cell.col] = Math.max(min[cell.col], w.min);
+    max[cell.col] = Math.max(max[cell.col], w.max);
+  }
+  for (const cell of cells.filter((c) => spans(c) > 1)) {
+    const w = spanWidths(needs.get(cell.node) as Need, scale);
+    const cols = Array.from({ length: spans(cell) }, (_, k) => cell.col + k).filter((c) => c < width);
+    for (const [list, wanted] of [
+      [min, w.min],
+      [max, w.max],
+    ] as const) {
+      const lack = wanted - cols.reduce((sum, c) => sum + list[c], 0);
+      if (lack > 0) for (const c of cols) list[c] += lack / cols.length;
+    }
+  }
+  for (let c = 0; c < width; c++) max[c] = Math.max(max[c], min[c]);
+  return { min, max };
+}
+
+/** The columns' widths in px for a text column `room` px wide, and the
+    table's text size: the widths the words want when they fit; else each
+    column past its longest word shares the room by how much more it wants;
+    and when even the longest words do not fit, the text smaller, down to
+    SMALLEST_PT, the way a paper sets a table smaller than its body. */
+function layoutColumns(grid: GridCell[][], width: number, room: number): { widths: number[]; pt: number } {
+  const needs = new Map(grid.flat().map((cell) => [cell.node, cellNeed(cell.node)]));
+  const sum = (list: number[]) => list.reduce((a, b) => a + b, 0);
+  let pt = BODY_PT;
+  let { min, max } = columnWidths(grid, width, needs, 1);
+  while (sum(min) > room && pt > SMALLEST_PT) {
+    pt -= 0.5;
+    ({ min, max } = columnWidths(grid, width, needs, pt / BODY_PT));
+  }
+  let widths: number[];
+  if (sum(max) <= room) widths = max;
+  else if (sum(min) >= room) widths = min.map((w) => (w * room) / sum(min));
+  else {
+    const share = (room - sum(min)) / (sum(max) - sum(min));
+    widths = min.map((w, c) => w + (max[c] - w) * share);
+  }
+  return { widths: widths.map((w) => Math.max(MIN_COLUMN_PX, Math.floor(w))), pt };
+}
+
+/** Every text run of a table at a text size. */
+function sized(node: RichNode, size: string): RichNode {
+  if (node.type === "text") {
+    const marks = orderMarks([...(node.marks ?? []).filter((m) => m.type !== "textStyle"), { type: "textStyle", attrs: { fontSize: size } }]);
+    return { ...node, marks };
+  }
+  return node.content ? { ...node, content: node.content.map((child) => sized(child, size)) } : node;
+}
+
+function tableNode(
+  rows: { cells: { node: RichNode; colspan: number; rowspan: number }[]; pinned: boolean }[],
+  room: number,
+): {
   table: RichNode;
   rowStarts: (RichNode | null)[];
 } | null {
-  const grid = gridRows(rows);
-  if (!grid.some((cells) => cells.length > 0)) return null;
+  const laid = gridRows(rows);
+  if (!laid.some((cells) => cells.length > 0)) return null;
+  // Each cell takes its columns' widths (colwidth, one per column it spans):
+  // every cell of a column the same, so the editor's table map finds nothing
+  // to fix.
+  const width = Math.max(...laid.map((cells) => cells.reduce((end, c) => Math.max(end, c.col + Number(c.node.attrs?.colspan ?? 1)), 0)));
+  const { widths, pt } = layoutColumns(laid, width, room);
+  const grid = laid.map((cells) =>
+    cells.map((cell): GridCell => {
+      const span = Number(cell.node.attrs?.colspan ?? 1);
+      const node: RichNode = { ...cell.node, attrs: { ...cell.node.attrs, colwidth: widths.slice(cell.col, cell.col + span) } };
+      return { node: pt < BODY_PT ? sized(node, `${pt}pt`) : node, col: cell.col };
+    }),
+  );
   // Header rows repeat above the rows under them; a table of header rows
   // alone has nothing to repeat above.
   const pinAll = rows.every((row) => row.pinned);
@@ -376,8 +555,9 @@ const spanOf = (el: Element, name: string, max: number) => {
   return Number.isInteger(n) && n >= 1 ? Math.min(n, max) : 1;
 };
 
-/** A TABLE block's html as a page editor table; null when it holds no row. */
-export function tableFromHtml(html: string): ImportTable | null {
+/** A TABLE block's html as a page editor table, its columns fitted to a
+    text column `room` px wide; null when it holds no row. */
+export function tableFromHtml(html: string, room: number): ImportTable | null {
   const host = scratchDocument().createElement("div");
   host.innerHTML = html;
   const table = host.querySelector("table");
@@ -400,7 +580,7 @@ export function tableFromHtml(html: string): ImportTable | null {
     }));
     return { cells, pinned: pinning };
   });
-  const built = tableNode(rows);
+  const built = tableNode(rows, room);
   if (!built) return null;
   const captionEl = [...table.children].find((c) => c.tagName.toLowerCase() === "caption");
   const caption = captionEl ? normalizeText(captionEl.textContent ?? "").replaceAll(ZWSP, "") : "";
@@ -410,7 +590,7 @@ export function tableFromHtml(html: string): ImportTable | null {
 /** A table from the parse's grid text (cells by tab, rows by line): for a
     TABLE block without html, or html that holds no row. Null when the text
     is empty. */
-export function tableFromText(text: string): ImportTable | null {
+export function tableFromText(text: string, room: number): ImportTable | null {
   if (!text.trim()) return null;
   const rows = text.split("\n").map((line) => ({
     cells: line.split("\t").map((cell) => ({
@@ -420,6 +600,6 @@ export function tableFromText(text: string): ImportTable | null {
     })),
     pinned: false,
   }));
-  const built = tableNode(rows);
+  const built = tableNode(rows, room);
   return built ? { caption: null, ...built } : null;
 }
