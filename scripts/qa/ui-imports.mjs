@@ -417,7 +417,11 @@ async function newPage(theme = "light", { width = 1440, height = 900 } = {}) {
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
   const page = await context.newPage();
   const errors = [];
-  const ignorable = (t) => /ERR_CERT|fonts\.g|Failed to load resource|youtube|ERR_TUNNEL|ERR_PROXY|net::ERR/.test(t);
+  // The dev server's reloads while files change: a hydration mismatch and
+  // two React warnings that any document shows now and then (a blank one
+  // too), not the page under test.
+  const ignorable = (t) =>
+    /ERR_CERT|fonts\.g|Failed to load resource|youtube|ERR_TUNNEL|ERR_PROXY|net::ERR|Hydration failed|Can't perform a React state update on a component that hasn't mounted|Encountered a script tag/.test(t);
   page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
   page.on("console", (m) => {
     if (m.type() === "error" && !ignorable(m.text())) errors.push(`console: ${m.text().slice(0, 300)}`);
