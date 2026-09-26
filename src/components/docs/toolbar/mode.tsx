@@ -109,7 +109,7 @@ export function ModeSwitcher({ mode, onMode }: { mode: DocsMode; onMode: (mode: 
             key={m.mode}
             checked={m.mode === mode}
             disabled={lock !== null && m.mode !== "viewing"}
-            label={t(m.label)}
+            label={lock !== null && m.mode !== "viewing" ? `${t(m.label)}: ${t(lock)}` : t(m.label)}
             tip={keys(m.combo)}
             onSelect={() => {
               setOpen(false);

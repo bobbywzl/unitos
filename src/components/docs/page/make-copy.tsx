@@ -13,8 +13,8 @@ import { api } from "@/lib/api";
 // File > Make a copy (SPEC.md §29): Google Docs' Copy document dialog. The
 // copy takes the rich text and the page setup, and the suggestions when
 // asked, never the notes, annotations, or comments, and opens in this tab.
-// An import cannot be copied yet: its figures' media stay with the import,
-// so the copy would lose them. The dialog says so.
+// An import cannot be copied yet: its figures' media and its references stay
+// with the import, so the copy would lose them. The dialog says so.
 
 /** The page editor's document is an import (docs-editor.tsx marks its shell). */
 const isImport = (editor: Editor) => editor.view.dom.closest("[data-docs-editor]")?.hasAttribute("data-import") ?? false;

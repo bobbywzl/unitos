@@ -180,9 +180,11 @@ function ringColor(h: Highlight): string {
 
 /** The label chip of an object's marks: the annotations' labels ("A1 · A2")
     behind the tool's symbol, or a highlight's dot. A press opens the
-    annotation, or the note. It carries no data-source-id: a jump finds the
-    object itself. */
-function labelWidget(anchors: Highlight[], color: string, t: TFunc) {
+    annotation, or the note; a press on a label, its own. The object carries
+    the ring's data-source-id, so a jump to that mark finds the object; each
+    other mark's label carries its own, and a jump to it flashes the object
+    (flashDecorations). */
+function labelWidget(anchors: Highlight[], color: string, ringSource: string | null, t: TFunc) {
   return () => {
     const focusable = anchors.find((h) => h.annotation && h.sourceId);
     const note = anchors.find((h) => !h.annotation && h.noteId);
@@ -205,6 +207,7 @@ function labelWidget(anchors: Highlight[], color: string, t: TFunc) {
       button.dataset.docsOpen = "note";
       button.dataset.noteId = note.noteId;
     }
+    const labeled = anchors.filter((h) => h.figureLabel);
     const root = createRoot(button);
     root.render(
       <>
@@ -213,7 +216,23 @@ function labelWidget(anchors: Highlight[], color: string, t: TFunc) {
         ) : (
           <span aria-hidden className="docs-object-dot" style={{ background: color }} />
         )}
-        {text}
+        {labeled.length === 0
+          ? text
+          : labeled.map((h, i) => (
+              <span key={h.sourceId ?? i}>
+                {i > 0 && " · "}
+                <span
+                  {...(h.sourceId && h.sourceId !== ringSource ? { "data-source-id": h.sourceId } : {})}
+                  {...(h.annotation && h.sourceId
+                    ? { "data-docs-open": "annotation", "data-hover-source": h.sourceId }
+                    : h.noteId
+                      ? { "data-docs-open": "note", "data-note-id": h.noteId }
+                      : {})}
+                >
+                  {h.figureLabel}
+                </span>
+              </span>
+            ))}
       </>,
     );
     (button as HTMLButtonElement & { __root?: Root }).__root = root;
@@ -243,12 +262,12 @@ function objectMarks(node: PMNode, pos: number, highlights: Highlight[], t: TFun
     .join(",");
   return [
     Decoration.node(pos, pos + node.nodeSize, attrs),
-    Decoration.widget(pos, labelWidget(anchors, color, t), {
+    Decoration.widget(pos, labelWidget(anchors, color, sourceId ?? null, t), {
       // After a page's spacer at the same place: the chip stands on the object's page.
       side: 1,
       ignoreSelection: true,
       stopEvent: () => true,
-      key: `object-label:${color}:${key}`,
+      key: `object-label:${color}:${sourceId ?? ""}:${key}`,
       destroy: (dom) => {
         const root = (dom as HTMLElement & { __root?: Root }).__root;
         if (root) queueMicrotask(() => root.unmount());
@@ -339,9 +358,10 @@ function flashDecorations(view: EditorView, target: HTMLElement, id: string): De
   for (const piece of pieces) {
     try {
       const start = view.posAtDOM(piece, 0);
-      // An object a mark takes whole (a figure's ring): the node flashes.
+      // An object a mark takes whole (a figure's ring, or its label chip,
+      // which stands right before it): the node flashes.
       const node = doc.nodeAt(start);
-      if (node && !node.isInline && view.nodeDOM(start) === piece) {
+      if (node && !node.isInline && (view.nodeDOM(start) === piece || piece.closest(".docs-object-label"))) {
         out.push(Decoration.node(start, start + node.nodeSize, { class: "anchor-flash" }, spec));
         continue;
       }

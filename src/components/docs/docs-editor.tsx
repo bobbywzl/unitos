@@ -327,9 +327,9 @@ export function DocsEditor({
 }) {
   const t = useT();
   useDocsFonts();
+  const isImport = imported !== null;
   // An import attached to a project another account owns: an edit would
   // change their import too, so Editing and Suggesting are off.
-  const isImport = imported !== null;
   const locked = imported?.shared === true;
   const writable = canEdit && !locked;
   // A blank document opens in Editing; an import in Viewing, or in the mode

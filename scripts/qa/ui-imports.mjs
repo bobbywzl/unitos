@@ -636,7 +636,7 @@ async function editorJson(page) {
   return page.evaluate(() => window.__docsEditor.getJSON());
 }
 async function toasts(page) {
-  return page.evaluate(() => [...document.querySelectorAll('[role="status"], [data-toast], .docs-toast')].map((e) => e.textContent.trim()).filter(Boolean));
+  return page.evaluate(() => window.__toasts ?? []);
 }
 
 
@@ -653,6 +653,34 @@ async function menuCommand(page, label) {
   await page.keyboard.press("Enter");
   await sleep(500);
   return true;
+}
+
+
+/** Center a figure object and click its media (or its middle), as a person
+    clicks a picture. Returns the point pressed. */
+async function clickFigure(page, pos) {
+  await page.evaluate((p) => window.__docsEditor.view.nodeDOM(p)?.scrollIntoView({ block: "center" }), pos);
+  await sleep(600);
+  const box = await page.evaluate((p) => {
+    const el = window.__docsEditor.view.nodeDOM(p);
+    const media = el?.querySelector("img, svg, video, iframe") ?? el;
+    return media?.getBoundingClientRect().toJSON() ?? null;
+  }, pos);
+  if (!box) return null;
+  const x = box.x + box.width / 2;
+  const y = box.y + Math.min(box.height / 2, 120);
+  await clickAt(page, x, y);
+  await sleep(600);
+  return { x, y };
+}
+
+/** Toasts, as the page announces them (the dissect:toast event). */
+async function listenToasts(page) {
+  await page.evaluate(() => {
+    if (window.__toasts) return;
+    window.__toasts = [];
+    window.addEventListener("dissect:toast", (e) => window.__toasts.push(e.detail?.text ?? JSON.stringify(e.detail)), true);
+  });
 }
 
 /** Key-to-paint latency of the page editor: keydown to the frame after the
@@ -704,6 +732,8 @@ async function prepare() {
   files["/article.html"] = { type: "text/html; charset=utf-8", body: Buffer.from(articleHtml(STAMP)) };
   files["/article-2.html"] = { type: "text/html; charset=utf-8", body: Buffer.from(articleHtml(`${STAMP}-2`)) };
   ctx.server = await serveFixtures(files);
+  mkdirSync(join(SHOT, "fixtures"), { recursive: true });
+  for (const [path, file] of Object.entries(files)) writeFileSync(join(SHOT, "fixtures", path.slice(1)), file.body);
   const nb = await api("/api/notebooks", "POST", { title: `QA imports ${STAMP}` });
   if (nb.status !== 200 && nb.status !== 201) throw new Error(`project: HTTP ${nb.status} ${clip(JSON.stringify(nb.body), 200)}`);
   ctx.notebookId = nb.body.id;
@@ -901,9 +931,7 @@ RISKS.R5 = async (theme) => {
     return;
   }
   // A click on the figure opens its tools; Analyze.
-  const box = await reveal(page, fig3.pos).then(() => page.evaluate((p) => window.__docsEditor.view.nodeDOM(p).getBoundingClientRect().toJSON(), fig3.pos));
-  await clickAt(page, box.x + box.width / 2, box.y + box.height / 3);
-  await sleep(800);
+  await clickFigure(page, fig3.pos);
   const tools = await popoverOpen(page);
   const analyze = page.locator('[data-selection-popover] [data-track="analyze"]');
   check("R5", tools && (await analyze.count()) > 0, `(${theme}) a click on a figure opens its tools with Analyze`, `toolbar ${tools}`);
@@ -1014,6 +1042,7 @@ RISKS.R6 = async (theme) => {
   await page.keyboard.press("Control+c");
   await sleep(300);
   await open(page, ctx.notebookId, target.id);
+  await listenToasts(page);
   await setMode(page, "editing");
   const at = await find(page, "Observations");
   await clickPos(page, at.to);
@@ -1428,10 +1457,21 @@ RISKS.R14 = async (theme) => {
     await page.keyboard.press("Backspace");
   } else fail("R14", `(${theme}) a paragraph after the embed`, `none (caption found ${Boolean(cap)})`);
   // Videos: paused far from the view, playing near it.
-  const far = await page.evaluate(() => [...document.querySelectorAll(".docs-prose video")].map((v) => ({ paused: v.paused, top: Math.round(v.getBoundingClientRect().top) })));
-  await page.evaluate(() => document.querySelector(".docs-prose video")?.scrollIntoView({ block: "center" }));
-  await sleep(2500);
-  const near = await page.evaluate(() => [...document.querySelectorAll(".docs-prose video")].map((v) => ({ paused: v.paused, time: v.currentTime, top: Math.round(v.getBoundingClientRect().top) })));
+  const videoState = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll(".docs-prose .docs-figure")].filter((f) => /Figure 5/.test(f.textContent)).map((f) => {
+        const v = f.querySelector("video");
+        return v
+          ? { paused: v.paused, time: Math.round(v.currentTime * 10) / 10, ready: v.readyState, network: v.networkState, error: v.error?.code ?? null, src: (v.currentSrc || v.getAttribute("src") || "").slice(0, 60), top: Math.round(v.getBoundingClientRect().top), shown: f.textContent.slice(0, 60) }
+          : { video: false, shown: f.textContent.slice(0, 80), top: Math.round(f.getBoundingClientRect().top) };
+      }),
+    );
+  await page.evaluate(() => document.querySelector(".docs-prose")?.closest("[class*=overflow]")?.scrollTo?.(0, 0));
+  const far = await videoState();
+  const fig5 = (await figures(page)).find((f) => /Figure 5/.test(f.caption ?? ""));
+  if (fig5) await page.evaluate((p) => window.__docsEditor.view.nodeDOM(p)?.scrollIntoView({ block: "center" }), fig5.pos);
+  await sleep(3500);
+  const near = await videoState();
   const path = await shot(page, `R14-video-${theme}`);
   check("R14", near.length > 0 && near.some((v) => !v.paused || v.time > 0), `(${theme}) a looping video plays once near the view`, `far ${JSON.stringify(far)}, near ${JSON.stringify(near)} ${path}`);
   if (far.length && far.some((v) => v.top > 1200 && !v.paused)) fail("R14", `(${theme}) a video far below the view waits`, JSON.stringify(far));

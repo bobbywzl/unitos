@@ -50,7 +50,7 @@ const en = {
   copyName: "Name",
   copyOf: "Copy of {title}",
   copySuggestions: "Copy comments and suggestions",
-  copyImportOff: "Make a copy is off for an import for now: its figures can't be copied yet.",
+  copyImportOff: "Make a copy is off for an import for now: its figures and references can't be copied yet.",
   // Page setup
   pagesTab: "Pages",
   pagelessTab: "Pageless",
@@ -156,7 +156,7 @@ const zh: Record<keyof typeof en, string> = {
   copyName: "名称",
   copyOf: "{title} 的副本",
   copySuggestions: "复制评论和建议",
-  copyImportOff: "导入暂时不能创建副本：其插图还无法复制。",
+  copyImportOff: "导入暂时不能创建副本：其插图和参考文献还无法复制。",
   pagesTab: "分页",
   pagelessTab: "无分页",
   orientation: "方向",

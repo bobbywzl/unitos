@@ -5419,9 +5419,9 @@ export function ReaderInteractions({
     run.skipped.push(...warnings);
     // An import another account's project holds too takes no edits: nothing
     // lands, and the row says why.
-    const locked = t("docs.importShared");
+    const shared = t("docs.importShared");
     if (richTextRef.current?.imported?.shared) {
-      if (ops.length > 0 && !run.notes.includes(locked)) run.notes.push(locked);
+      if (ops.length > 0 && !run.notes.includes(shared)) run.notes.push(shared);
     } else if (ops.length > 0) {
       const code = await suggestCode();
       if (editor.isDestroyed) return;
@@ -6836,8 +6836,11 @@ function blockFormatKind(
   // One row of the toolbox. Coarse pointers get 44px-tall rows.
   const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
   // The assistant's bar (SPEC.md §29) takes the selection box's Assistant on
-  // a blank document, for a reader who can edit it, out of Viewing mode.
-  const barOffered = popover !== null && blankDocument && pageEditorIn(containerRef.current)?.isEditable === true;
+  // a blank document or an import, for a reader who can edit it, out of
+  // Viewing mode. A figure has no words to change: its Assistant keeps the
+  // selection chat.
+  const barOffered =
+    popover !== null && !popover.figure && blankDocument && pageEditorIn(containerRef.current)?.isEditable === true;
   // The open popover's content kind and its toolbar (SPEC.md §6).
   const popoverKind: ContentKind = contentKindOf(
     popover ? blocks.find((b) => b.id === popover.anchor.blockId)?.type : undefined,
