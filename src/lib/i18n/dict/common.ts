@@ -70,7 +70,9 @@
 //   release(一次上线的新功能) 版本更新 · New glow(新功能光晕) 新功能光晕 ·
 //   version(空白文档某一时刻的文本) 版本 · version history 版本历史记录 ·
 //   suggestion(建议模式下的一处修改，或助手提出的修改) 建议 · Suggesting(模式) 建议模式 ·
-//   page editor(空白文档的编辑页) 页面编辑器 ·
+//   page editor(空白文档与导入的编辑页) 页面编辑器 ·
+//   import(由 PDF、网页或文本文件生成、在页面编辑器中打开的文档) 导入 ·
+//   page start(导入的 PDF 某页开始处，页边显示页码) 页首 · import line(标题后说明导入来源的一行) 导入行 ·
 //   spelling suggestion(右键菜单给拼错的英文单词的替换词) 拼写建议 ·
 //   reading position 阅读位置 · left-off mark(上次读到的块上方的小书签) 阅读标记
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
