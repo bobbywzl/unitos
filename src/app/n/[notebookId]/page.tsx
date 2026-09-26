@@ -262,8 +262,19 @@ export default async function NotebookPage(props: {
         importRev: document.importRev,
         edited: editedSinceImport(document),
         shared,
+        // A PDF figure is its page's crop: its image address stands in the
+        // page data, so Save for offline finds it (lib/offline/saved.ts).
         figures: Object.fromEntries(
-          media.map((m) => [m.id, { html: m.html, caption: m.caption, page: m.page, region: m.region }]),
+          media.map((m) => [
+            m.id,
+            {
+              html: m.html,
+              caption: m.caption,
+              page: m.page,
+              region: m.region,
+              src: m.html === null && m.page !== null ? `/api/documents/${documentId}/figure/${m.id}` : null,
+            },
+          ]),
         ),
         pageLabels,
       };

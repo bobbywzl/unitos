@@ -16,8 +16,16 @@ import { MediaHtml } from "@/components/reader/figure-media";
 // put markup in the page. A click opens the figure's tools
 // (DOCS_EVENT.figureTools); the caption is the figure's, never typed into.
 
-/** A figure object's media, as the page sends it (FigureMedia). */
-export type FigureMediaView = { html: string | null; caption: string; page: number | null; region: unknown | null };
+/** A figure object's media, as the page sends it (FigureMedia). `src` is a
+    PDF figure's crop (figureImageUrl, the address the finishing step and the
+    offline copy list); null for a web figure, which draws its html. */
+export type FigureMediaView = {
+  html: string | null;
+  caption: string;
+  page: number | null;
+  region: unknown | null;
+  src: string | null;
+};
 
 /** What the page editor knows of an import: its figures' media by mediaId,
     the PDF's page labels, and its page count. */
@@ -74,23 +82,26 @@ function useImported(editor: Editor): ImportedEditor | null {
   return useSyncExternalStore(subscribe, read, read);
 }
 
-/** A figure's image: a PDF figure's crop of its page (the figure route). */
+/** A PDF figure's crop of its page (the figure route), as the finishing
+    step lists it. */
 export function figureImageUrl(documentId: string, mediaId: string): string {
-  return `/api/documents/${encodeURIComponent(documentId)}/figure/${encodeURIComponent(mediaId)}`;
+  return `/api/documents/${documentId}/figure/${mediaId}`;
 }
 
-/** A figure object as the editor holds it, its media read from the page. */
+/** A figure object as the editor holds it, its media read from the page.
+    A figure the page sent no media for (a copy made before a refresh) draws
+    its crop by its own page, or its caption. */
 function figureOf(node: PMNode, imported: ImportedEditor | null, editor: Editor | undefined) {
   const mediaId = typeof node.attrs.mediaId === "string" ? node.attrs.mediaId : "";
   const media = mediaId && imported && Object.hasOwn(imported.figures, mediaId) ? imported.figures[mediaId] : null;
-  const page = media ? media.page : typeof node.attrs.page === "number" ? node.attrs.page : null;
   const documentId = imported?.documentId ?? (editor ? insertContext(editor)?.documentId : undefined) ?? null;
+  const ownPage = typeof node.attrs.page === "number" && documentId && mediaId;
   return {
     mediaId,
     blockId: typeof node.attrs.blockId === "string" ? node.attrs.blockId : "",
     html: media?.html ?? null,
     caption: media ? media.caption : typeof node.attrs.caption === "string" ? node.attrs.caption : "",
-    src: page !== null && documentId && mediaId ? figureImageUrl(documentId, mediaId) : null,
+    src: media ? (media.html ? null : media.src) : ownPage ? figureImageUrl(documentId, mediaId) : null,
   };
 }
 
