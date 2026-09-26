@@ -100,6 +100,25 @@ function jsonb(value: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull {
   return value === null || value === undefined ? Prisma.DbNull : (value as Prisma.InputJsonValue);
 }
 
+/** A row of the paragraph index as a Block's fields: every path that makes
+    rows from the rich text writes the same ones. A figure object's html is
+    its media's, passed in. */
+export function indexRowFields(d: DerivedBlock, html: string | null = d.html) {
+  return {
+    id: d.id,
+    type: d.type,
+    text: d.text,
+    html,
+    styles: d.styles as unknown as Prisma.InputJsonValue,
+    links: d.links as unknown as Prisma.InputJsonValue,
+    citations: d.citations as unknown as Prisma.InputJsonValue,
+    page: d.page,
+    region: jsonb(d.region),
+    mediaId: d.mediaId,
+    cell: jsonb(d.cell),
+  };
+}
+
 function chunks<T>(list: T[], size = ROWS_PER_STATEMENT): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
@@ -704,19 +723,9 @@ export async function syncRichText({
     for (const part of chunks(created)) {
       await tx.block.createMany({
         data: part.map(({ d, order }) => ({
-          id: d.id,
+          ...indexRowFields(d, htmlOf(d)),
           documentId,
           order,
-          type: d.type,
-          text: d.text,
-          html: htmlOf(d),
-          styles: d.styles as unknown as Prisma.InputJsonValue,
-          links: d.links as unknown as Prisma.InputJsonValue,
-          citations: d.citations as unknown as Prisma.InputJsonValue,
-          page: d.page,
-          region: jsonb(d.region),
-          mediaId: d.mediaId,
-          cell: jsonb(d.cell),
           // An import's rows are its parse's; a row typed later is
           // user-authored, like an inserted paragraph.
           originalText: bulk ? null : "",

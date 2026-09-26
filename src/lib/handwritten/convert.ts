@@ -199,9 +199,12 @@ export async function runConversion(
     return { ok: false, status: 409, error: "Conversion is already running" };
   }
 
+  // The run's stamp: its text lands only while the document is still these
+  // pages and this run is still its conversion.
+  const startedAt = new Date();
   await db.document.update({
     where: { id: documentId },
-    data: { conversionStatus: "PENDING", conversionError: null, conversionStartedAt: new Date() },
+    data: { conversionStatus: "PENDING", conversionError: null, conversionStartedAt: startedAt },
   });
   // Every status change bumps: open workspaces see the run start, the text
   // land, or the failure — whoever started it.
@@ -291,7 +294,13 @@ export async function runConversion(
       });
     }
 
-    await db.$transaction(async (tx) => {
+    const written = await db.$transaction(async (tx) => {
+      // A shape switch or a re-parse while the pages converted (SPEC.md §16):
+      // the document is no longer these pages, or another run converts them,
+      // and this text is not written.
+      const [current] = await tx.$queryRaw<{ handwritten: boolean; conversionStartedAt: Date | null }[]>`
+        SELECT "handwritten", "conversionStartedAt" FROM "Document" WHERE "id" = ${documentId} FOR UPDATE`;
+      if (!current?.handwritten || current.conversionStartedAt?.getTime() !== startedAt.getTime()) return false;
       // Convert again redoes the text: previous converted blocks go, the PAGE
       // blocks stay — page anchors never move. Anchors on replaced text blocks
       // re-resolve by quote or orphan visibly (SPEC.md §5).
@@ -310,7 +319,9 @@ export async function runConversion(
         where: { id: documentId },
         data: { conversionStatus: "READY", conversionError: null },
       });
+      return true;
     });
+    if (!written) return { ok: false, status: 409, error: "The document changed while its pages converted" };
     await bumpDocument(documentId);
     console.log(`[convert] ${documentId}: ${rows.length} blocks from ${usePages.length} pages`);
     // The converted text is the document's text: its skeleton builds now
@@ -320,8 +331,9 @@ export async function runConversion(
   } catch (err) {
     const message = err instanceof Error ? err.message : "Conversion failed";
     console.error("[convert] failed:", err);
-    await db.document.update({
-      where: { id: documentId },
+    // Only this run's failure: a document that changed shape since keeps its state.
+    await db.document.updateMany({
+      where: { id: documentId, conversionStartedAt: startedAt },
       data: { conversionStatus: "FAILED", conversionError: message },
     });
     await bumpDocument(documentId);

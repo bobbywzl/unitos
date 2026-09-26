@@ -297,6 +297,11 @@ const en = {
   removeBookmark: "Remove bookmark",
   codeLanguage: "Code block language",
   plainText: "Plain text",
+  // An import's figure objects and page starts
+  figure: "Figure",
+  figureNotPasted: "Figures paste only into the document they came from",
+  pageStart: "p. {page}",
+  pageStartOf: "p. {page} of {total}",
   // The right-click menu
   cut: "Cut",
   copy: "Copy",
@@ -604,6 +609,10 @@ const zh: Record<keyof typeof en, string> = {
   removeBookmark: "移除书签",
   codeLanguage: "代码块语言",
   plainText: "纯文本",
+  figure: "插图",
+  figureNotPasted: "插图只能粘贴回它所在的文档",
+  pageStart: "第 {page} 页",
+  pageStartOf: "第 {page} 页，共 {total} 页",
   cut: "剪切",
   copy: "复制",
   paste: "粘贴",

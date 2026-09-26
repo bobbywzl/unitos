@@ -143,7 +143,7 @@ export async function buildGlossary(
   const definitionLang = lang ?? (await currentLang());
   const document = await db.document.findUnique({
     where: { id: documentId },
-    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true } } },
+    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true } } },
   });
   if (!document || document.blocks.length === 0) return 0;
 

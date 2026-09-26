@@ -184,7 +184,7 @@ async function handle(req: Request, t: TFunc) {
   const document = await db.document.findUnique({
     where: { id: data.documentId },
     include: {
-      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true } },
+      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true } },
     },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });

@@ -516,6 +516,8 @@ async function checkFixture(f: Fixture): Promise<Report> {
   // marker the parse kept as words is the converter reading it as a marker.
   const moved: string[] = [];
   const markerOnly: string[] = [];
+  const markerKept: string[] = [];
+  const split: string[] = [];
   const whitespace: string[] = [];
   const addedLeft = [...added];
   const lostHard: typeof lost = [];
@@ -529,9 +531,25 @@ async function checkFixture(f: Fixture): Promise<Report> {
     const stripped = l.u.text.replace(ANY_MARKER, "");
     const marker = addedLeft.findIndex((a) => norm(a.u.text.replace(ANY_MARKER, "")) === norm(stripped) || norm(a.u.text) === norm(stripped));
     if (l.u.kind === "list" && marker >= 0) {
-      markerOnly.push(`"${clip(l.u.text, 30)}" → "${clip(addedLeft[marker].u.text, 30)}"`);
+      const row = addedLeft[marker].u.text;
+      (ANY_MARKER.test(row) ? markerKept : markerOnly).push(`"${clip(l.u.text, 30)}" → "${clip(row, 30)}"`);
       addedLeft.splice(marker, 1);
       continue;
+    }
+    // A paragraph past the save's 200,000 characters stands as several.
+    const at = addedLeft.findIndex((a) => l.u.key.startsWith(a.u.key) && a.u.key.length > 1000);
+    if (at >= 0) {
+      let joined = addedLeft[at].u.key;
+      let n = 1;
+      while (at + n < addedLeft.length && joined.length < l.u.key.length && l.u.key.startsWith(`${joined} ${addedLeft[at + n].u.key}`)) {
+        joined = `${joined} ${addedLeft[at + n].u.key}`;
+        n++;
+      }
+      if (joined === l.u.key && n > 1) {
+        split.push(`block ${l.u.block}: ${l.u.text.length} characters in ${n} paragraphs`);
+        addedLeft.splice(at, n);
+        continue;
+      }
     }
     const space = addedLeft.findIndex((a) => a.u.key.replace(/\s+/g, "") === l.u.key.replace(/\s+/g, ""));
     if (space >= 0) {
@@ -566,7 +584,9 @@ async function checkFixture(f: Fixture): Promise<Report> {
       (addedLeft.length ? `; ${addedLeft.length} rows the parse lacks: ${describeAdded.join(" | ")}` : ""),
   );
   if (moved.length) note("words moved", `${moved.length}: ${moved.slice(0, 4).join(" | ")}`);
-  if (markerOnly.length) note("a marker the parse kept as words left the line", `${markerOnly.length}: ${markerOnly.slice(0, 4).join(" | ")}`);
+  if (markerOnly.length) note("a marker the parse kept as words is the list's marker now", `${markerOnly.length}: ${markerOnly.slice(0, 4).join(" | ")}`);
+  if (markerKept.length) note("a list the page editor cannot draw stands as paragraphs, markers as words", `${markerKept.length} lines: ${markerKept.slice(0, 4).join(" | ")}`);
+  if (split.length) note("a paragraph past 200,000 characters splits into paragraphs", split.join(" | "));
   if (whitespace.length) note("lines differ only in spaces", `${whitespace.length}: ${whitespace.slice(0, 3).join(" | ")}`);
   const exact = pairs.filter(([i, j]) => want[i].kind !== "table" && want[i].text.replaceAll(ZWSP, "") !== got[j].text).length;
   if (exact) note("words equal only after spaces are collapsed", `${exact} unit(s), e.g. ${(() => { const p = pairs.find(([i, j]) => want[i].kind !== "table" && want[i].text.replaceAll(ZWSP, "") !== got[j].text); return p ? firstDifference(want[p[0]].text, got[p[1]].text) : ""; })()}`);

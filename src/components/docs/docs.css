@@ -5,6 +5,7 @@
 @import "./css/layer.css";
 @import "./css/versions.css";
 @import "./css/suggest.css";
+@import "./css/import.css";
 
 /* The page editor (SPEC.md §29): Google Docs' layout in Unitos's look,
    loaded with the editor (docs-editor.tsx). Every color the shell uses is a

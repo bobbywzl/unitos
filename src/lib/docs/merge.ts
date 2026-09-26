@@ -2,15 +2,16 @@ import { isAssistantSuggestion } from "@/lib/docs/assistant-suggestions";
 import { withoutSuggestions } from "@/lib/docs/blocks";
 import { INDEXED_NODE_TYPES, SUGGESTION_MARK_TYPES, type RichNode } from "@/lib/docs/schema";
 
-// Two copies of one blank document met (SPEC.md §29): the editor's save
-// started from a revision someone else already moved past. The editor's own
-// changes since its last save are laid over the stored copy, so both
+// Two copies of one document with rich text met (SPEC.md §29): the editor's
+// save started from a revision someone else already moved past. The editor's
+// own changes since its last save are laid over the stored copy, so both
 // people's work stands. Nodes pair by the first blockId inside them, at every
-// level: two list items or two table cells are two changes. Two changes to
-// one paragraph both stand when they touch different words; else the editor's
-// copy, the one on screen, wins that paragraph — unless its only change is
-// the assistant's suggestions: a person's words win over those, and each of
-// them goes whole.
+// level: two list items, two table cells, or two figure objects are two
+// changes. Two changes to one paragraph both stand when they touch different
+// words — a page start between them is one unit, kept once, and a citation
+// is a mark on its words; else the editor's copy, the one on screen, wins
+// that paragraph — unless its only change is the assistant's suggestions: a
+// person's words win over those, and each of them goes whole.
 
 type Entry = { key: string; node: RichNode; json: string };
 

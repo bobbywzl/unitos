@@ -338,7 +338,7 @@ async function handle(req: Request, t: TFunc) {
             title: true,
             blocks: {
               orderBy: { order: "asc" },
-              select: { id: true, type: true, text: true, startTime: true, endTime: true },
+              select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true },
             },
           },
         },
@@ -524,7 +524,7 @@ async function handle(req: Request, t: TFunc) {
             title: true,
             blocks: {
               orderBy: { order: "asc" },
-              select: { id: true, type: true, text: true, startTime: true, endTime: true },
+              select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true },
             },
           },
         },
@@ -697,7 +697,7 @@ async function handle(req: Request, t: TFunc) {
   // 1. Load document blocks (the cached prompt prefix), profile, section skeleton.
   const document = await db.document.findUnique({
     where: { id: documentId },
-    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true } } },
+    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true } } },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   const blockById = new Map(document.blocks.map((b) => [b.id, { id: b.id, text: b.text }]));

@@ -62,6 +62,8 @@ function segments(doc: PMNode): Segment[] {
         const text = child.text ?? "";
         seg.runs.push({ offset: seg.text.length, size: text.length, pos: p, kind: "text", nodeSize: child.nodeSize });
         seg.text += text;
+      } else if (child.type.name === "pageStart") {
+        // A page start adds no words: a phrase runs across it.
       } else {
         seg.runs.push({ offset: seg.text.length, size: 1, pos: p, kind: "object", nodeSize: child.nodeSize });
         seg.text += child.type.name === "hardBreak" ? "\v" : OBJECT_CHAR;

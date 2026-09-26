@@ -129,7 +129,7 @@ export async function buildDigest(
             include: {
               blocks: {
                 orderBy: { order: "asc" },
-                select: { id: true, type: true, text: true, startTime: true, endTime: true },
+                select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true },
               },
               video: true,
             },

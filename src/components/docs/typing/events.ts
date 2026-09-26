@@ -5,12 +5,14 @@ import type { Editor } from "@tiptap/core";
 // each other. The areas listen on their editor's text; the reader's pane
 // hears the ones that bubble up to it (Add comment, the Unitos tools).
 
-/** Insert link, Add comment, and a Unitos tool on the selection ({tool}). */
+/** Insert link, Add comment, a Unitos tool on the selection ({tool}), and
+    a click on a figure object ({blockId, x, y}: its tools open there). */
 export const DOCS_EVENT = {
   link: "docs:link",
   comment: "docs:comment",
   tool: "docs:unitos-tool",
   mode: "docs:mode",
+  figureTools: "docs:figure-tools",
 } as const;
 
 /** The typing area's windows (areas/typing.tsx, word-count.tsx). */

@@ -22,7 +22,6 @@
 // the long PDF printed by Chromium. Every document is added fresh (the
 // bytes carry the run's stamp), so dedupe never hands back an older import.
 // --keep keeps the run's project; by default it is deleted at the end.
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -709,7 +708,7 @@ RISKS.SETUP = async () => {
     const row = await documentRow(added.id);
     const versions = await db.documentVersion.findMany({ where: { documentId: added.id }, select: { rev: true, name: true } });
     const figureMedia = await db.figureMedia.count({ where: { documentId: added.id } });
-    check("SETUP", Boolean(row?.richText) && row?.importRev === 0, `a ${kind} add is an import`, `richText ${row?.richText ? "set" : "null"}, richTextRev ${row?.richTextRev}, importRev ${row?.importRev}, add ${added.ms} ms, figure media ${figureMedia}, versions ${JSON.stringify(versions)}`);
+    check("SETUP", Boolean(row?.richText) && typeof row?.importRev === "number" && row.importRev === row.richTextRev, `a ${kind} add is an import`, `richText ${row?.richText ? "set" : "null"}, richTextRev ${row?.richTextRev}, importRev ${row?.importRev}, add ${added.ms} ms, figure media ${figureMedia}, versions ${JSON.stringify(versions)}`);
     check("SETUP", versions.some((v) => v.name === "Imported"), `a ${kind} import keeps the version "Imported"`, JSON.stringify(versions));
   }
 };
@@ -1368,7 +1367,7 @@ RISKS.R14 = async (theme) => {
   const layout = await page.evaluate(() => {
     const prose = document.querySelector(".docs-prose");
     const text = prose.getBoundingClientRect();
-    const figs = [...prose.querySelectorAll("figure, [data-figure], .docs-figure")].map((f) => {
+    const figs = [...prose.querySelectorAll(".docs-figure")].map((f) => {
       const r = f.getBoundingClientRect();
       const svg = f.querySelector("svg");
       return { w: Math.round(r.width), left: Math.round(r.left), right: Math.round(r.right), svg: svg ? Math.round(svg.getBoundingClientRect().width) : null, video: Boolean(f.querySelector("video")), iframe: Boolean(f.querySelector("iframe")) };
@@ -1511,7 +1510,7 @@ RISKS.R17 = async (theme) => {
   const path = await shot(page, `R17-side-by-side-${theme}`);
   check("R17", panes === 2, `(${theme}) Side by Side shows the PDF and the web page in two page editors`, `${panes} page editors ${path}`);
   if (panes === 2) {
-    const starts = await page.evaluate(() => [...document.querySelectorAll(".docs-prose")].map((p) => p.querySelectorAll('[data-page-start], .docs-page-start, [data-type="pageStart"]').length));
+    const starts = await page.evaluate(() => [...document.querySelectorAll(".docs-prose")].map((p) => p.querySelectorAll(".docs-page-start[data-page-start]").length));
     check("R17", starts[0] > 0 || starts[1] > 0, `(${theme}) the PDF's page starts draw in its pane`, JSON.stringify(starts));
   }
   if (errors.length) note("R17", "console", errors.slice(0, 3).join(" | "));
@@ -1686,7 +1685,6 @@ main()
     writeFileSync(join(SHOT, `results-${STAMP}.json`), JSON.stringify(results, null, 1));
     if (!KEEP && ctx.notebookId) {
       try {
-        execFileSync("true");
         await api(`/api/notebooks/${ctx.notebookId}`, "DELETE");
       } catch {
         // The project stays; it is named by the run's stamp.

@@ -58,9 +58,9 @@ type PageBreak = { offset: number; page: number };
 
 // Internal block: ParsedBlock plus what the cross-page passes need.
 type Segment = ParsedBlock & {
-  page: number; // 0-based; the cross-page merge compares it, whatever joins
+  page: number; // 0-based: the page the segment was cut from; a join leaves it, the merge compares it
   firstPage?: number; // 0-based page of the first words, when a join put an earlier page's words first
-  breaks?: PageBreak[]; // each later page's start after joins across page breaks, in order
+  breaks?: PageBreak[]; // each later page's start, after joins across page breaks, in order
   rawSize?: number; // heading candidate size, for level ranking
   runs?: Run[]; // style runs over text; spans emit after all merges
   listItem?: boolean; // lone indented item; may join a LIST across the page break
@@ -2115,27 +2115,29 @@ function mergeAcrossPages(input: Segment[]): Segment[] {
     }
 
     // Table split by the page break: same column count concatenates; a
-    // repeated header row drops.
+    // repeated header row drops. The html takes the rows the text takes: one
+    // <tr> per text row, the header row first. (A cell gap holds "\n", so a
+    // "." pattern over the rows matched nothing and the html kept only the
+    // first page's rows while the text had them all.)
     if (segment.type === "TABLE" && prev.type === "TABLE" && prev.html && segment.html) {
       const cols = (t: string) => t.split("\n")[0]?.split("\t").length ?? 0;
       if (cols(prev.text) === cols(segment.text)) {
         const prevHeader = prev.text.split("\n")[0];
         let rows = segment.text.split("\n");
-        let html = segment.html;
+        let rowsHtml: string[] = segment.html.match(/<tr>[\s\S]*?<\/tr>/g) ?? [];
         if (rows[0] === prevHeader) {
           rows = rows.slice(1);
-          html = html
-            .replace(/<thead>.*?<\/thead>/, "")
-            .replace(/^<table>/, "<table>");
+          rowsHtml = rowsHtml.slice(1);
         }
         if (rows.length > 0) {
           prev.breaks = joinBreaks(prev, segment, prev.text.length + 1);
           prev.text = prev.text + "\n" + rows.join("\n");
-          const prevBody = /<\/tbody><\/table>$/.test(prev.html);
-          const newBody = /<tbody>(.*)<\/tbody><\/table>$/.exec(html);
-          if (prevBody && newBody) {
-            prev.html = prev.html.replace(/<\/tbody><\/table>$/, `${newBody[1]}</tbody></table>`);
-          }
+          // The first page's last row ended the table: it takes the row gap
+          // now, so the table's DOM text stays its text (SPEC.md §5).
+          prev.html = prev.html.replace(
+            /<\/td><\/tr><\/tbody><\/table>$/,
+            () => `<span class="cell-gap">\n</span></td></tr>${rowsHtml.join("")}</tbody></table>`,
+          );
         }
         continue;
       }

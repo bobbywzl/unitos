@@ -14,17 +14,30 @@ import type { PromptCtx, ReaderProfileCtx } from "@/lib/prompts/types";
 // Document.references verbatim; parsing happens here so every caller builds
 // the same prefix.
 type PrefixBlock = Pick<Block, "id" | "type" | "text"> &
-  Partial<Pick<Block, "startTime" | "endTime">>;
+  Partial<Pick<Block, "startTime" | "endTime">> & { cell?: unknown };
+
+/** A table cell's place (Block.cell), or null when the value is not one. */
+function cellPlace(cell: unknown): { table: number; row: number; column: number } | null {
+  if (!cell || typeof cell !== "object") return null;
+  const { table, row, column } = cell as Record<string, unknown>;
+  return [table, row, column].every((n) => typeof n === "number" && Number.isInteger(n) && n >= 1)
+    ? { table: table as number, row: row as number, column: column as number }
+    : null;
+}
 
 // One rendering of blocks for every prompt and for the digest: `[block <id>]
-// (TYPE)` tags, timed blocks tagging their seconds.
+// (TYPE)` tags, timed blocks tagging their seconds, a table cell's paragraph
+// its place: `(PARAGRAPH, table 2, row 3, column 1)`.
 export function renderBlockLines(blocks: PrefixBlock[]): string {
   return blocks
     .map((b) => {
+      const place = cellPlace(b.cell);
       const tag =
         b.startTime != null && b.endTime != null
           ? `(${b.type} ${b.startTime.toFixed(1)}s–${b.endTime.toFixed(1)}s)`
-          : `(${b.type})`;
+          : place
+            ? `(${b.type}, table ${place.table}, row ${place.row}, column ${place.column})`
+            : `(${b.type})`;
       return `[block ${b.id}] ${tag}\n${b.text}`;
     })
     .join("\n\n");

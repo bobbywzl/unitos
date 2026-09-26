@@ -2,7 +2,7 @@ import { Node, mergeAttributes, type Editor } from "@tiptap/core";
 import { Fragment, Slice, type DOMOutputSpec, type Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from "@tiptap/react";
-import { createElement as h, useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { createElement as h, useEffect, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { insertContext, insertT, toast } from "@/components/docs/insert/context";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
@@ -41,45 +41,16 @@ export type ImportedEditor = {
 
 type FigureOptions = { imported: ImportedEditor | null };
 
-type Store = { imported: ImportedEditor | null; listeners: Set<() => void> };
-const stores = new WeakMap<Editor, Store>();
+const importedByEditor = new WeakMap<Editor, ImportedEditor | null>();
 
-function storeOf(editor: Editor): Store {
-  let store = stores.get(editor);
-  if (!store) {
-    const figure = editor.extensionManager.extensions.find((e) => e.name === "figure");
-    store = { imported: (figure?.options as FigureOptions | undefined)?.imported ?? null, listeners: new Set() };
-    stores.set(editor, store);
-  }
-  return store;
-}
-
-/** The import the editor draws, or null (a blank document). */
+/** The import the editor draws (docsExtensions' argument), or null: a blank
+    document. */
 export function importedOf(editor: Editor): ImportedEditor | null {
-  return storeOf(editor).imported;
-}
-
-/** Newer media from the page (a refresh): the figures draw again. */
-export function setImported(editor: Editor, imported: ImportedEditor | null): void {
-  const store = storeOf(editor);
-  if (store.imported === imported) return;
-  store.imported = imported;
-  for (const listener of store.listeners) listener();
-}
-
-function useImported(editor: Editor): ImportedEditor | null {
-  const subscribe = useCallback(
-    (listener: () => void) => {
-      const store = storeOf(editor);
-      store.listeners.add(listener);
-      return () => {
-        store.listeners.delete(listener);
-      };
-    },
-    [editor],
-  );
-  const read = () => importedOf(editor);
-  return useSyncExternalStore(subscribe, read, read);
+  if (!importedByEditor.has(editor)) {
+    const figure = editor.extensionManager.extensions.find((e) => e.name === "figure");
+    importedByEditor.set(editor, (figure?.options as FigureOptions | undefined)?.imported ?? null);
+  }
+  return importedByEditor.get(editor) ?? null;
 }
 
 /** A PDF figure's crop of its page (the figure route), as the finishing
@@ -114,9 +85,8 @@ const CLICK_SLOP = 6;
 /** A click opens the figure's tools where it was clicked; a link in the
     figure opens with Ctrl+click (⌘+click), as a link in the page does. The
     figure object stays in place: no drag starts on it. */
-function useFigureClicks(ref: RefObject<HTMLElement | null>, editor: Editor, blockId: string) {
+function useFigureClicks(el: HTMLElement | null, editor: Editor, blockId: string) {
   useEffect(() => {
-    const el = ref.current;
     if (!el) return;
     let down: { x: number; y: number } | null = null;
     const own = (target: EventTarget | null) => target instanceof Element && target.closest(OWN_PRESS) !== null;
@@ -148,7 +118,7 @@ function useFigureClicks(ref: RefObject<HTMLElement | null>, editor: Editor, blo
       el.removeEventListener("click", onClick);
       el.removeEventListener("dragstart", onDragStart);
     };
-  }, [ref, editor, blockId]);
+  }, [el, editor, blockId]);
 }
 
 /** A PDF figure: its crop over its caption, as the block reader draws it. A
@@ -170,13 +140,12 @@ function CropFigure({ blockId, src, caption }: { blockId: string; src: string | 
 }
 
 function FigureView({ node, editor }: NodeViewProps) {
-  const imported = useImported(editor);
-  const ref = useRef<HTMLDivElement>(null);
-  const figure = figureOf(node, imported, editor);
-  useFigureClicks(ref, editor, figure.blockId);
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  const figure = figureOf(node, importedOf(editor), editor);
+  useFigureClicks(el, editor, figure.blockId);
   return h(
     NodeViewWrapper,
-    { ref, className: "docs-figure-body" },
+    { ref: setEl, className: "docs-figure-body" },
     figure.html
       ? h(MediaHtml, { blockId: figure.blockId, className: "reader-figure", html: figure.html })
       : h(CropFigure, { blockId: figure.blockId, src: figure.src, caption: figure.caption }),

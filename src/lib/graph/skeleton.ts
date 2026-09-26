@@ -199,7 +199,7 @@ export async function buildSkeleton(
       references: true,
       blocks: {
         orderBy: { order: "asc" },
-        select: { id: true, type: true, text: true, order: true, html: true, startTime: true, endTime: true },
+        select: { id: true, type: true, text: true, order: true, html: true, startTime: true, endTime: true, cell: true },
       },
     },
   });

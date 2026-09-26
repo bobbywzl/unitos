@@ -118,7 +118,7 @@ export async function buildConnections(
       select: {
         id: true,
         title: true,
-        blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } },
+        blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, cell: true } },
       },
     }),
     db.notebookDocument.findMany({
@@ -127,7 +127,7 @@ export async function buildConnections(
         document: {
           select: {
             id: true,
-            blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } },
+            blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, cell: true } },
           },
         },
       },

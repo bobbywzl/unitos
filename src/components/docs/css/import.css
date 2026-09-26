@@ -1,0 +1,137 @@
+/* An import in the page editor (SPEC.md §29): its figure objects, page
+   starts, and citations (components/docs/insert/figure.ts, page-start.ts,
+   citation.ts), and the look of what an import holds more of than a blank
+   document — header rows, lines — in Unitos's tokens, light and dark. The
+   docs shell carries data-import on an import (docs-editor.tsx). */
+
+/* ── A figure object: the parse's figure drawn with the block reader's
+   .reader-figure rules (globals.css), fitted to the page ──────────────── */
+.docs-prose .docs-figure {
+  margin: 9pt 0;
+  border-radius: 12px;
+  white-space: normal;
+  line-height: normal;
+  cursor: pointer;
+}
+/* The frame in the Unitos accent: a hairline under the pointer, the clay
+   ring while the figure is selected. */
+.docs-prose .docs-figure:hover {
+  outline: 1px solid color-mix(in srgb, var(--docs-blue) 45%, transparent);
+  outline-offset: 4px;
+}
+.docs-prose .docs-figure.ProseMirror-selectednode {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: 4px;
+}
+/* The caption is the figure's: never typed into, never partly selected. */
+.docs-prose .docs-figure .reader-figure {
+  user-select: none;
+}
+/* The page's own image and paragraph rules (docs.css) stay off the figure's
+   media and captions. */
+.docs-prose .docs-figure img {
+  display: inline;
+  margin: 0;
+}
+.docs-prose .docs-figure :is(p, figcaption) {
+  margin: 0.25rem 0 0;
+  padding: 0;
+  line-height: 1.45;
+  color: var(--docs-gray-2);
+}
+/* No figure runs past the text column: one the page set wider than its text
+   draws at the text's width, in pages and pageless alike. */
+.docs-prose .docs-figure .reader-figure > figure[style*="width:"] {
+  left: 0;
+  transform: none;
+  max-width: 100%;
+}
+.docs-prose .docs-figure iframe {
+  max-width: 100%;
+}
+/* A PDF figure: the crop of its page (a white plate in both themes) over
+   its caption, as the block reader draws it. */
+.docs-prose .docs-figure-crop img {
+  display: block;
+  max-width: 100%;
+  max-height: 28rem;
+  margin: 0 auto;
+  object-fit: contain;
+  border-radius: 10px;
+}
+.docs-prose .docs-figure-crop .docs-figure-caption {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  font-style: italic;
+}
+.docs-prose .docs-figure-crop .docs-figure-empty {
+  padding: 18px 0;
+  border-radius: 10px;
+  background: var(--docs-code-block);
+  color: var(--docs-placeholder);
+  font-style: italic;
+  text-align: center;
+}
+
+/* ── A page start: "p. 7" in the page's left margin, level with the line
+   where the PDF's page begins; in pageless, in the gutter left of the text.
+   Drawn from the node's data-page-label (a pseudo-element: never selected,
+   copied, or counted), and never printed. The label is the page's own
+   muted words on the page's ground, so page starts that stand at one point
+   show the last page's number alone. ─────────────────────────────────── */
+.docs-prose [data-page-label]::before {
+  content: attr(data-page-label);
+  position: absolute;
+  right: calc(100% + 18px);
+  min-width: 3.6em;
+  padding: 1px 0 1px 4px;
+  background: var(--docs-ground);
+  color: var(--docs-placeholder);
+  font: 600 11px/16px var(--docs-ui-font);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  text-align: right;
+  text-decoration: none;
+  text-indent: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+/* A page that begins at a code block, an equation, or a figure: at its top. */
+.docs-prose :is(pre, .docs-math-block, .docs-figure)[data-page-label]::before {
+  margin-top: 1px;
+}
+@media print {
+  .docs-prose [data-page-label]::before {
+    display: none;
+  }
+}
+
+/* ── A citation: a quiet dotted underline; in Viewing mode a click opens its
+   entry in the References section under the page (Ctrl+click in any mode). */
+.docs-prose .docs-citation {
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.docs-shell[data-docs-mode="viewing"] .docs-prose .docs-citation {
+  cursor: pointer;
+}
+.docs-shell[data-docs-mode="viewing"] .docs-prose .docs-citation:hover {
+  text-decoration-color: var(--docs-blue);
+}
+
+/* ── What an import holds more of than a blank document ─────────────────── */
+/* A table's header cells (a web page's th) read as its header: bold on a
+   faint tint of the text's color, so dark mode follows. */
+.docs-shell[data-import] .docs-prose th {
+  font-weight: 700;
+  background-color: color-mix(in srgb, var(--docs-ink) 5%, transparent);
+}
+/* A white page drawn dark (dark mode) draws a line in the warm sand of its
+   other lines; a page with a color keeps the document's gray. */
+.dark .docs-shell[data-import] .docs-page[data-white] .docs-prose hr {
+  border-top-color: var(--sand-500);
+}

@@ -211,7 +211,7 @@ export async function loadDocuments(notebookId: string, documentIds: string[] | 
           },
           blocks: {
             orderBy: { order: "asc" },
-            select: { id: true, type: true, text: true, startTime: true, endTime: true },
+            select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true },
           },
         },
       },

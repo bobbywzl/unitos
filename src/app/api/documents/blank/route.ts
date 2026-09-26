@@ -5,6 +5,7 @@ import { bumpNotebook, documentAccess, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { deriveBlocks, withoutSuggestions } from "@/lib/docs/blocks";
 import { emptyRichText, INDEXED_NODE_TYPES, newBlockId, sanitizeRichText, type RichNode } from "@/lib/docs/schema";
+import { indexRowFields } from "@/lib/docs/sync";
 import { serverT } from "@/lib/i18n/server";
 import { attachDocument } from "@/lib/parse/attach";
 import { PARSER_VERSION } from "@/lib/parse/types";
@@ -88,13 +89,8 @@ export async function POST(req: Request) {
       pageSetup,
       blocks: {
         create: deriveBlocks(richText).map((d, order) => ({
-          id: d.id,
+          ...indexRowFields(d),
           order,
-          type: d.type,
-          text: d.text,
-          html: d.html,
-          styles: d.styles as unknown as Prisma.InputJsonValue,
-          links: d.links as unknown as Prisma.InputJsonValue,
           // User-authored, as every paragraph of a blank document.
           originalText: "",
         })),

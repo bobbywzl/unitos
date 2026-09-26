@@ -7,7 +7,7 @@ import { projectDocHref } from "@/components/docs/insert/actions";
 import { insertContext, toast } from "@/components/docs/insert/context";
 import { flushDocument } from "@/components/docs/layer/flush";
 import { documentTitle } from "@/components/docs/page/download";
-import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { api } from "@/lib/api";
 
 // File > Make a copy (SPEC.md §29): Google Docs' Copy document dialog. The
@@ -32,9 +32,10 @@ export function CopyDialog({ editor, onClose }: { editor: Editor; onClose: () =>
         className="docs-small-dialog"
         closeButton={false}
         actions={
-          <DialogButton primary onClick={onClose}>
+          // OK takes the focus: Enter closes the dialog.
+          <button type="button" data-autofocus onClick={onClose} className="docs-tb-button docs-tb-button-primary">
             {t("docs.ok")}
-          </DialogButton>
+          </button>
         }
       >
         <div className="docs-setup-body">

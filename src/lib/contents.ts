@@ -118,7 +118,7 @@ export async function buildContents(documentId: string, userId: string | null): 
     include: {
       blocks: {
         orderBy: { order: "asc" },
-        select: { id: true, type: true, text: true, order: true, startTime: true, endTime: true },
+        select: { id: true, type: true, text: true, order: true, startTime: true, endTime: true, cell: true },
       },
     },
   });

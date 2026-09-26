@@ -62,7 +62,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
       references: true,
       richText: true,
       format: true,
-      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } },
+      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, cell: true } },
     },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });

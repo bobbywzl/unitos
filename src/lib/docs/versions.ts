@@ -3,7 +3,8 @@ import { db } from "@/lib/db";
 import { deriveBlocks } from "@/lib/docs/blocks";
 import type { RichNode } from "@/lib/docs/schema";
 
-// Version history of a blank document (SPEC.md §29).
+// Version history of a document with rich text, a blank document or an
+// import (SPEC.md §29).
 
 const SITTING_MS = 10 * 60 * 1000;
 const STEADY_MS = 30 * 60 * 1000;

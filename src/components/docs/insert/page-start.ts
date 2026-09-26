@@ -233,7 +233,7 @@ export const PageStart = Node.create({
       {
         class: "docs-page-start",
         "data-page-start": page === null ? "" : String(page),
-        "data-label": page === null ? "" : pageStartLabel(this.editor, page),
+        "data-page-label": page === null ? "" : pageStartLabel(this.editor, page),
         "data-anchor-skip": "",
       },
     ];

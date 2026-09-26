@@ -90,7 +90,7 @@ export async function POST(req: Request) {
   const document = documentId
     ? await db.document.findFirst({
         where: { id: documentId, notebooks: { some: { notebookId: section.notebookId } } },
-        include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } } },
+        include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, cell: true } } },
       })
     : null;
 
