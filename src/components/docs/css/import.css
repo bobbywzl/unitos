@@ -77,8 +77,8 @@
    where the PDF's page begins; in pageless, in the gutter left of the text.
    Drawn from the node's data-page-label (a pseudo-element: never selected,
    copied, or counted), and never printed. The label is the page's own
-   muted words on the page's ground, so page starts that stand at one point
-   show the last page's number alone. ─────────────────────────────────── */
+   muted words on the page's ground, so of two page starts on one line the
+   later page's number shows. ─────────────────────────────────────────── */
 .docs-prose [data-page-label]::before {
   content: attr(data-page-label);
   position: absolute;
@@ -98,14 +98,14 @@
   pointer-events: none;
   user-select: none;
 }
+/* A page that begins at a code block, an equation, or a figure: at its top. */
+.docs-prose :is(pre, .docs-math-block, .docs-figure)[data-page-label]::before {
+  margin-top: 1px;
+}
 /* Version history draws a version without the editor: its text column holds
    the numbers as the page's does. */
 .docs-versions-page .docs-prose {
   position: relative;
-}
-/* A page that begins at a code block, an equation, or a figure: at its top. */
-.docs-prose :is(pre, .docs-math-block, .docs-figure)[data-page-label]::before {
-  margin-top: 1px;
 }
 @media print {
   .docs-prose [data-page-label]::before {

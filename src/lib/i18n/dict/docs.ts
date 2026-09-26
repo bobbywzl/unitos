@@ -241,8 +241,7 @@ const en = {
   modeViewingHint: "Read or print final document",
   hideMenus: "Hide the menus",
   showMenus: "Show the menus",
-  // An import
-  importShared: "This import is also in a project another account owns, so it can't be edited.",
+  // A stored copy a newer build wrote
   newerContent: "This document holds content this version of Unitos can't show. Reload the page to get the newest version.",
 };
 
@@ -473,7 +472,6 @@ const zh: Record<keyof typeof en, string> = {
   modeViewingHint: "阅读或打印最终文档",
   hideMenus: "隐藏菜单",
   showMenus: "显示菜单",
-  importShared: "此导入也在另一个账户的项目中，因此无法编辑。",
   newerContent: "此文档包含当前版本的 Unitos 无法显示的内容。请重新加载页面以获取最新版本。",
 };
 

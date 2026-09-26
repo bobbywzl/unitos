@@ -179,7 +179,8 @@ function figurePaste(editor: Editor): Plugin {
                 dropped = true;
                 return;
               }
-              out.push(node.type.create({ ...node.attrs, caption: media.caption, page: media.page }, null, node.marks));
+              const region = media.region == null ? null : JSON.stringify(media.region);
+              out.push(node.type.create({ ...node.attrs, caption: media.caption, page: media.page, region }, null, node.marks));
               return;
             }
             if (node.isLeaf || node.isTextblock) {

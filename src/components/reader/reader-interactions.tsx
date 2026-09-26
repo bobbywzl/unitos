@@ -5419,7 +5419,7 @@ export function ReaderInteractions({
     run.skipped.push(...warnings);
     // An import another account's project holds too takes no edits: nothing
     // lands, and the row says why.
-    const shared = t("docs.importShared");
+    const shared = t("api.importShared");
     if (richTextRef.current?.imported?.shared) {
       if (ops.length > 0 && !run.notes.includes(shared)) run.notes.push(shared);
     } else if (ops.length > 0) {
@@ -5499,7 +5499,7 @@ export function ReaderInteractions({
     const run = startRun(request.key, `${request.command}\n\n${request.instruction}`, controller);
     // An import another account's project holds too takes no edits.
     if (richTextRef.current?.imported?.shared) {
-      run.notes.push(t("docs.importShared"));
+      run.notes.push(t("api.importShared"));
       run.running = false;
       run.controller = null;
       publishRun(request.key);

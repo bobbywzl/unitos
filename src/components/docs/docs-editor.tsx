@@ -121,8 +121,10 @@ function ImportLine({ imported }: { imported: Imported }) {
   } else if (imported.kind === "markdown" && !imported.origin) {
     parts.push(<span key="file">{t("docsPage.importTextFile")}</span>);
   }
+  // A narrow title row (a phone, a split pane, the tray beside a small
+  // window) keeps its room for the title.
   return (
-    <span className="flex shrink-0 items-center gap-1.5 pl-1 text-[12.5px] whitespace-nowrap text-sand-600">
+    <span className="hidden shrink-0 items-center gap-1.5 pl-1 text-[12.5px] whitespace-nowrap text-sand-600 @min-[560px]:flex">
       {parts.map((part, i) => (
         <Fragment key={i}>
           {i > 0 && <span aria-hidden>·</span>}
@@ -335,7 +337,10 @@ export function DocsEditor({
   // A blank document opens in Editing; an import in Viewing, or in the mode
   // the reader last chose for it here.
   const [openedIn] = useState<DocsMode>(() => (!imported ? "editing" : writable ? storedMode(documentId) : "viewing"));
-  const [mode, setModeState] = useState<DocsMode>(openedIn);
+  const [chosenMode, setModeState] = useState<DocsMode>(openedIn);
+  // An import that another account's project takes in while it is open
+  // leaves Editing and Suggesting at once.
+  const mode: DocsMode = locked ? "viewing" : chosenMode;
   const [zoom, setZoom] = useState<Zoom>(100);
   const [headerHidden, setHeaderHidden] = useState(false);
   // The header or footer being edited: the toolbar formats its text.
@@ -389,7 +394,7 @@ export function DocsEditor({
   const setMode = useCallback(
     (next: DocsMode) => {
       if (locked && next !== "viewing") {
-        if (editor && !editor.isDestroyed) toast(t("docs.importShared"), editor);
+        if (editor && !editor.isDestroyed) toast(t("api.importShared"), editor);
         return;
       }
       setModeState(next);
@@ -538,7 +543,7 @@ export function DocsEditor({
   const chrome = useMemo(
     () =>
       area && (
-        <ModeLock.Provider value={locked ? "docs.importShared" : null}>
+        <ModeLock.Provider value={locked ? "api.importShared" : null}>
           <DocsToolbar
             editor={area.editor}
             header={hfEditor}
@@ -601,7 +606,7 @@ export function DocsEditor({
     <div className="docs-shell" data-docs-editor data-docs-mode={mode} data-import={imported?.kind}>
       <div className="docs-header" data-edit-control data-away={away || undefined}>
         {!headerHidden && (
-          <div className="docs-title-row">
+          <div className="docs-title-row @container">
             <DocIcon size={26} className="docs-title-icon" />
             <TitleField
               documentId={documentId}
