@@ -228,7 +228,6 @@ function holdsObject(doc: PMNode, from: number, to: number): boolean {
   return found;
 }
 
-
 type Stretch = { start: number; end: number; text: string };
 
 /** Where `text` differs from `base`, by word: the stretches of base's words

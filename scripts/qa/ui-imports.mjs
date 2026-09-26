@@ -406,7 +406,10 @@ function serveFixtures(files) {
     res.writeHead(200, { "content-type": file.type, "cache-control": "no-store", "access-control-allow-origin": "*" });
     res.end(file.body);
   });
-  return new Promise((resolve) => server.listen(FIXTURE_PORT, () => resolve(server)));
+  return new Promise((resolve, reject) => {
+    server.once("error", (err) => reject(new Error(`the fixture server cannot listen on ${FIXTURE_PORT} (${err.code}): set FIXTURE_PORT`)));
+    server.listen(FIXTURE_PORT, () => resolve(server));
+  });
 }
 
 // ── The browser ─────────────────────────────────────────────────────────────
@@ -943,32 +946,50 @@ RISKS.R5 = async (theme) => {
   let sources = await sourcesOf(added.id);
   const src = sources.find((s) => s.blockId === fig3.blockId);
   check("R5", Boolean(src), `(${theme}) Analyze anchors to the figure's row`, src ? `quote "${src.quotedText}" ${src.note.derivationType}` : JSON.stringify(sources.map((s) => s.quotedText)));
+  // The ring in the kind color, the label chip, data-source-id: painted once
+  // the stored annotation is on screen, with the figure no longer selected.
+  await page.keyboard.press("Escape");
+  await page.waitForFunction((p) => window.__docsEditor.view.nodeDOM(p)?.hasAttribute("data-source-id"), fig3.pos, { timeout: 20_000 }).catch(() => {});
   const ring = await page.evaluate((p) => {
     const el = window.__docsEditor.view.nodeDOM(p);
     if (!el) return null;
-    const cs = getComputedStyle(el);
-    const inner = el.querySelector("[data-source-id]") ?? (el.hasAttribute("data-source-id") ? el : null);
-    return { outline: cs.outlineColor + " " + cs.outlineStyle, boxShadow: cs.boxShadow.slice(0, 80), sourceId: inner?.getAttribute("data-source-id") ?? el.closest("[data-source-id]")?.getAttribute("data-source-id") ?? null, label: el.parentElement?.querySelector("[data-anchor-skip]")?.textContent ?? null };
+    const f = el.getBoundingClientRect();
+    const label = [...document.querySelectorAll(".docs-object-label")].find((c) => {
+      const r = c.getBoundingClientRect();
+      return Math.abs(r.top - f.top) < 40 && r.width > 0;
+    });
+    return { sourceId: el.getAttribute("data-source-id"), ring: el.getAttribute("style"), shadow: getComputedStyle(el).boxShadow.slice(0, 60), label: label?.textContent ?? null };
   }, fig3.pos);
   const ringShot = await shot(page, `R5-analyze-ring-${theme}`);
-  check("R5", Boolean(ring?.sourceId), `(${theme}) the analyzed figure carries data-source-id and a ring`, `${JSON.stringify(ring)} ${ringShot}`);
+  check("R5", Boolean(ring?.sourceId) && /kind-analyze/.test(ring?.ring ?? "") && Boolean(ring?.label), `(${theme}) the analyzed figure rings in the kind color with its label chip and data-source-id`, `${JSON.stringify(ring)} ${ringShot}`);
   if (!src) {
     await context.close();
     return;
   }
-  // Delete the figure in Editing.
+  // Delete the figure in Editing, as a person: a click on it, Escape for its
+  // tools, Delete.
   await setMode(page, "editing");
-  await page.evaluate((p) => {
-    const ed = window.__docsEditor;
-    ed.chain().setNodeSelection(p).run();
-  }, fig3.pos);
+  const pick = async (caption) => {
+    const f = (await figures(page)).find((x) => (x.caption ?? "").trim() === caption);
+    if (!f) return null;
+    await clickFigure(page, f.pos);
+    await page.keyboard.press("Escape");
+    await sleep(200);
+    return f;
+  };
+  await pick("Figure 3");
+  const beforeDelete = await page.evaluate(() => {
+    const sel = window.__docsEditor.state.selection;
+    return `${sel.constructor.name} ${sel.from}-${sel.to}, focus ${document.activeElement?.className?.slice?.(0, 30) ?? document.activeElement?.tagName}`;
+  });
   await page.keyboard.press("Delete");
   await waitSaved(page);
   await sleep(1500);
   sources = await sourcesOf(added.id);
   const afterDelete = sources.find((s) => s.id === src.id);
   const movedTo = afterDelete && !afterDelete.orphaned ? await rowText(afterDelete.blockId) : null;
-  check("R5", afterDelete?.orphaned === true, `(${theme}) deleting the figure orphans its annotation (never moves it into "As Figure 3 shows")`, afterDelete ? `orphaned ${afterDelete.orphaned}${movedTo ? `, now on ${movedTo.type} "${clip(movedTo.text, 60)}"` : ""}` : "source gone");
+  const gone = !(await figures(page)).some((f) => (f.caption ?? "").trim() === "Figure 3");
+  check("R5", gone && afterDelete?.orphaned === true, `(${theme}) deleting the figure orphans its annotation (never moves it into "As Figure 3 shows")`, afterDelete ? `before Delete: ${beforeDelete}; figure gone ${gone}, orphaned ${afterDelete.orphaned}${movedTo ? `, now on ${movedTo.type} "${clip(movedTo.text, 60)}"` : ""}` : "source gone");
   // Ctrl+Z brings the figure and its annotation back.
   await page.keyboard.press("Control+z");
   await waitSaved(page);
@@ -978,22 +999,29 @@ RISKS.R5 = async (theme) => {
   const figsBack = await figures(page);
   const onFigure = back && figsBack.some((f) => f.blockId === back.blockId);
   check("R5", Boolean(back && !back.orphaned && onFigure), `(${theme}) Ctrl+Z brings the figure back and its annotation with it`, back ? `orphaned ${back.orphaned}, on a figure ${onFigure}` : "source gone");
-  // Cut and paste the figure after the next heading: the annotation follows.
-  const fig = figsBack.find((f) => f.caption?.trim() === "Figure 3");
-  if (fig) {
-    await page.evaluate((p) => window.__docsEditor.chain().setNodeSelection(p).run(), fig.pos);
+  // Cut and paste the figure under the heading "The measurements": it moves,
+  // and the annotation follows it.
+  const index = async () => page.evaluate(() => {
+    const out = [];
+    window.__docsEditor.state.doc.forEach((n) => out.push(n.type.name === "figure" ? `F:${n.attrs.caption.trim()}` : n.textContent.slice(0, 20)));
+    return { figure: out.indexOf("F:Figure 3"), heading: out.indexOf("The measurements") };
+  });
+  const before = await index();
+  if (await pick("Figure 3")) {
     await page.keyboard.press("Control+x");
-    await sleep(400);
+    await sleep(500);
     const target = await find(page, "The measurements");
     await clickPos(page, target.to);
+    const caret = await page.evaluate(() => window.__docsEditor.state.selection.$from.parent.textContent.slice(0, 20));
     await page.keyboard.press("End");
     await page.keyboard.press("Control+v");
     await waitSaved(page);
     await sleep(1500);
+    const after = await index();
     const moved = (await figures(page)).find((f) => f.caption?.trim() === "Figure 3");
     sources = await sourcesOf(added.id);
     const followed = sources.find((s) => s.id === src.id);
-    check("R5", Boolean(moved && followed && !followed.orphaned && followed.blockId === moved.blockId), `(${theme}) cut and paste moves the figure and the annotation follows it`, `figure pasted ${Boolean(moved)} (id ${moved?.blockId}), source on ${followed?.blockId} orphaned ${followed?.orphaned}`);
+    check("R5", Boolean(moved && after.figure > after.heading && followed && !followed.orphaned && followed.blockId === moved.blockId), `(${theme}) cut and paste moves the figure under "The measurements" and the annotation follows it`, `caret in "${caret}"; figure at ${before.figure} → ${after.figure} (heading ${after.heading}); source on ${followed?.blockId === moved?.blockId ? "the moved figure" : followed?.blockId} orphaned ${followed?.orphaned}`);
     await shot(page, `R5-after-cut-paste-${theme}`);
   }
   if (errors.length) note("R5", "console", errors.slice(0, 3).join(" | "));
@@ -1038,9 +1066,20 @@ RISKS.R6 = async (theme) => {
     return;
   }
   await setMode(page, "editing");
-  await page.evaluate((p) => window.__docsEditor.chain().setNodeSelection(p).run(), figs[0].pos);
+  await clickFigure(page, figs[0].pos);
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Control+c");
-  await sleep(300);
+  await sleep(400);
+  const copied = await page.evaluate(async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      const html = items[0]?.types.includes("text/html") ? await (await items[0].getType("text/html")).text() : "";
+      return { html: html.includes("data-docs-figure"), media: /data-media-id="[^"]+"/.exec(html)?.[0] ?? null };
+    } catch (e) {
+      return { error: String(e) };
+    }
+  });
+  note("R6", `(${theme}) the clipboard after Ctrl+C on a figure`, JSON.stringify(copied));
   await open(page, ctx.notebookId, target.id);
   await listenToasts(page);
   await setMode(page, "editing");

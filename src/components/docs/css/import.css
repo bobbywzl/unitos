@@ -98,6 +98,11 @@
   pointer-events: none;
   user-select: none;
 }
+/* Version history draws a version without the editor: its text column holds
+   the numbers as the page's does. */
+.docs-versions-page .docs-prose {
+  position: relative;
+}
 /* A page that begins at a code block, an equation, or a figure: at its top. */
 .docs-prose :is(pre, .docs-math-block, .docs-figure)[data-page-label]::before {
   margin-top: 1px;
