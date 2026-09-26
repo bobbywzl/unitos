@@ -101,18 +101,23 @@ function ImportLine({ imported }: { imported: Imported }) {
   const t = useT();
   const parts: ReactNode[] = [];
   if (imported.origin) {
+    const from = t("docsPage.importedFrom", { site: siteOf(imported.origin) });
     parts.push(
-      <a
-        key="site"
-        href={imported.origin}
-        target="_blank"
-        rel="noopener noreferrer"
-        data-tip={imported.origin}
-        data-track="docs:import-origin"
-        className="rounded-sm underline-offset-2 hover:text-clay-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay"
-      >
-        {t("docsPage.importedFrom", { site: siteOf(imported.origin) })}
-      </a>,
+      /^https?:\/\//i.test(imported.origin) ? (
+        <a
+          key="site"
+          href={imported.origin}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-tip={imported.origin}
+          data-track="docs:import-origin"
+          className="rounded-sm underline-offset-2 hover:text-clay-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay"
+        >
+          {from}
+        </a>
+      ) : (
+        <span key="site">{from}</span>
+      ),
     );
   }
   if (imported.kind === "pdf") {

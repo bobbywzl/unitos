@@ -635,9 +635,6 @@ async function figures(page) {
     return out;
   });
 }
-async function editorJson(page) {
-  return page.evaluate(() => window.__docsEditor.getJSON());
-}
 async function toasts(page) {
   return page.evaluate(() => window.__toasts ?? []);
 }
@@ -770,6 +767,7 @@ const RISKS = {};
 // The switch: each fixture becomes an import (rich text, importRev 0, the
 // "Imported" version) and opens in the page editor.
 RISKS.SETUP = async () => {
+  const { page, context } = await newPage(THEMES[0]);
   for (const kind of ["pdf", "url", "markdown"]) {
     const added = await doc(kind);
     const row = await documentRow(added.id);
@@ -777,7 +775,10 @@ RISKS.SETUP = async () => {
     const figureMedia = await db.figureMedia.count({ where: { documentId: added.id } });
     check("SETUP", Boolean(row?.richText) && typeof row?.importRev === "number" && row.importRev === row.richTextRev, `a ${kind} add is an import`, `richText ${row?.richText ? "set" : "null"}, richTextRev ${row?.richTextRev}, importRev ${row?.importRev}, add ${added.ms} ms, figure media ${figureMedia}, versions ${JSON.stringify(versions)}`);
     check("SETUP", versions.some((v) => v.name === "Imported"), `a ${kind} import keeps the version "Imported"`, JSON.stringify(versions));
+    const times = await open(page, ctx.notebookId, added.id);
+    check("SETUP", await isPageEditor(page), `a ${kind} import opens in the page editor`, `text after ${times.text} ms, the editor after ${times.ready} ms`);
   }
+  await context.close();
 };
 
 // R1: the first save after an import rewrites no row but the one typed in.
@@ -1950,14 +1951,15 @@ RISKS.AUDIT = async (theme) => {
   await sleep(300);
   // Version history, from the clock at the title row's right end.
   await page.locator('[data-track="docs:version-history"]').first().click().catch(() => {});
-  await page.waitForSelector(".docs-versions-list", { timeout: 15_000 }).catch(() => {});
-  await sleep(800);
+  await page.waitForFunction(() => document.querySelectorAll(".docs-versions-list .docs-versions-pick").length > 0, null, { timeout: 30_000 }).catch(() => {});
+  await sleep(500);
   const versions = await page.evaluate(() => [...document.querySelectorAll(".docs-versions-list .docs-versions-pick")].map((b) => b.textContent.trim()));
   const importedPick = page.locator(".docs-versions-list .docs-versions-pick", { hasText: "Imported" }).first();
   let versionView = null;
   if (await importedPick.count()) {
     await importedPick.click();
-    await sleep(2500);
+    await page.waitForFunction(() => document.querySelectorAll(".docs-versions-page .docs-figure").length > 0, null, { timeout: 30_000 }).catch(() => {});
+    await sleep(1500);
     versionView = await page.evaluate(() => {
       const view = document.querySelector(".docs-versions-page");
       return view ? { figures: view.querySelectorAll(".docs-figure").length, images: [...view.querySelectorAll("img")].filter((i) => i.complete && i.naturalWidth > 0).length, pageStarts: view.querySelectorAll("[data-page-start]").length, words: view.textContent.length } : null;
@@ -2123,6 +2125,12 @@ RISKS.AI = async (theme) => {
     if (await tab.count()) {
       await tab.click();
       await sleep(1200);
+      // The analysis's row: its "…" menu holds Jump.
+      const row = page.locator('[data-track="annotation-menu"]').last();
+      if (await row.count()) {
+        await row.click();
+        await sleep(500);
+      }
       const jumpA = page.locator('[data-track="annotation-jump"]').first();
       if (await jumpA.count()) {
         await jumpA.click();
@@ -2141,19 +2149,29 @@ RISKS.AI = async (theme) => {
     return { from: p - 12, to: p + doc.nodeAt(p).nodeSize + 13, before: before?.textContent.slice(-11), after: after?.textContent.slice(0, 12) };
   }, fig.pos);
   await page.keyboard.press("Escape");
-  // The figure is taller than the view: the selection is made in the editor
-  // (as Shift and the arrows make it), then the mouseup the reader opens its
-  // toolbar on.
-  await page.evaluate(({ from, to }) => {
-    const ed = window.__docsEditor;
-    ed.commands.focus();
-    ed.commands.setTextSelection({ from, to });
-    ed.view.dom.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-  }, around);
+  // The figure is taller than the view: a person selects over it with the
+  // keys, in Editing — a click before it, Shift held, down past it; the
+  // toolbar opens when Shift is let go.
+  await setMode(page, "editing");
+  await clickPos(page, around.from);
+  await page.keyboard.down("Shift");
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press("ArrowDown");
+    await sleep(120);
+  }
+  await page.keyboard.up("Shift");
   await sleep(900);
+  const selected = await page.evaluate(() => {
+    const sel = window.__docsEditor.state.selection;
+    let figure = false;
+    window.__docsEditor.state.doc.nodesBetween(sel.from, sel.to, (n) => {
+      if (n.type.name === "figure") figure = true;
+    });
+    return { from: sel.from, to: sel.to, figure };
+  });
   const leftOut = await page.evaluate(() => document.querySelector("[data-selection-popover]")?.textContent.includes("left out") ?? false);
   const shotD = await shot(page, `AI-selection-over-figure-${theme}`);
-  check("AI", leftOut, `(${theme}) a selection over a figure: the toolbar says images, figures, and equations are left out`, `${JSON.stringify(around)} ${shotD}`);
+  check("AI", selected.figure && leftOut, `(${theme}) a selection over a figure: the toolbar says images, figures, and equations are left out`, `selection ${JSON.stringify(selected)} ${shotD}`);
   await page.keyboard.press("Escape");
   // A highlight in a table cell paints in the cell after a reload.
   const cell = await page.evaluate(() => {
