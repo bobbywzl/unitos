@@ -5,6 +5,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
 import { Mapping, StepMap } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
+import { Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { CommentIcon, LinkIcon, UnlinkIcon } from "@/components/icons";
 import {
@@ -216,10 +217,12 @@ function labelWidget(anchors: Highlight[], color: string, ringSource: string | n
         ) : (
           <span aria-hidden className="docs-object-dot" style={{ background: color }} />
         )}
-        {labeled.length === 0
-          ? text
-          : labeled.map((h, i) => (
-              <span key={h.sourceId ?? i}>
+        {labeled.length === 0 ? (
+          text
+        ) : (
+          <span>
+            {labeled.map((h, i) => (
+              <Fragment key={h.sourceId ?? i}>
                 {i > 0 && " · "}
                 <span
                   {...(h.sourceId && h.sourceId !== ringSource ? { "data-source-id": h.sourceId } : {})}
@@ -231,8 +234,10 @@ function labelWidget(anchors: Highlight[], color: string, ringSource: string | n
                 >
                   {h.figureLabel}
                 </span>
-              </span>
+              </Fragment>
             ))}
+          </span>
+        )}
       </>,
     );
     (button as HTMLButtonElement & { __root?: Root }).__root = root;
