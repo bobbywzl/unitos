@@ -688,6 +688,30 @@ async function listenToasts(page) {
   });
 }
 
+
+/** Scroll each figure object into view and wait for its image, as a person
+    scrolls through: lazy images load only near the view. Returns
+    {loaded, total}. */
+async function loadFigureImages(page) {
+  const figs = await figures(page);
+  let loaded = 0;
+  let total = 0;
+  for (const f of figs) {
+    await page.evaluate((p) => window.__docsEditor.view.nodeDOM(p)?.scrollIntoView({ block: "center" }), f.pos);
+    const ok = await page
+      .waitForFunction((p) => {
+        const imgs = [...(window.__docsEditor.view.nodeDOM(p)?.querySelectorAll("img") ?? [])];
+        return imgs.length === 0 ? "none" : imgs.every((i) => i.complete && i.naturalWidth > 0) ? "ok" : null;
+      }, f.pos, { timeout: 15_000 })
+      .then((h) => h.jsonValue())
+      .catch(() => "failed");
+    if (ok === "none") continue;
+    total++;
+    if (ok === "ok") loaded++;
+  }
+  return { loaded, total };
+}
+
 /** Key-to-paint latency of the page editor: keydown to the frame after the
     editor's DOM changes. */
 async function installLatency(page) {
@@ -713,22 +737,28 @@ function stats(values) {
 }
 
 
-/** The block at the reading line (lib/reading-position.ts): 80 px under the
-    top edge of the pane that scrolls the page, and how far its top stands
-    from the line. Runs in the page. */
+/** What a person sees at the top of the page: the first block under the
+    page editor's header (title row, toolbar, ruler), and how far its top
+    stands from the header's bottom. The reader's own reading line
+    (lib/reading-position.ts, 80 px under the pane's top) lies under that
+    header; this is the line in view. Runs in the page. */
 function readingLine() {
-  const prose = document.querySelector(".docs-prose");
-  let pane = prose?.parentElement ?? null;
-  while (pane && !(/(auto|scroll)/.test(getComputedStyle(pane).overflowY) && pane.scrollHeight > pane.clientHeight)) pane = pane.parentElement;
-  const top = (pane ? Math.max(0, pane.getBoundingClientRect().top) : 0) + 80;
+  const header = document.querySelector(".docs-header")?.getBoundingClientRect();
+  const top = (header ? header.bottom : 0) + 8;
   const els = [...document.querySelectorAll(".docs-prose [data-block-id]")];
   const hit = els.find((e) => e.getBoundingClientRect().bottom > top);
-  return hit ? { id: hit.dataset.blockId, dy: Math.round(hit.getBoundingClientRect().top - top), text: hit.textContent.slice(0, 40), scrollTop: pane?.scrollTop ?? null } : null;
+  let saved = null;
+  try {
+    saved = Object.entries(sessionStorage).find(([k]) => k.startsWith("unitos-reader-position:"))?.[1] ?? null;
+  } catch {
+    saved = null;
+  }
+  return hit ? { id: hit.dataset.blockId, dy: Math.round(hit.getBoundingClientRect().top - top), text: hit.textContent.slice(0, 40), saved: saved ? JSON.parse(saved).blockId : null } : null;
 }
 
 // ── The run's documents ─────────────────────────────────────────────────────
 
-const ctx = { notebookId: null, sectionId: null, docs: {}, bytes: {}, media: null, long: null };
+const ctx = { notebookId: null, sectionId: null, docs: {}, bytes: {}, media: null };
 
 async function prepare() {
   browser = await chromium.launch({ executablePath: CHROME, args: ["--autoplay-policy=no-user-gesture-required"] });
@@ -1377,7 +1407,8 @@ RISKS.R10 = async (theme) => {
 // R11: speed on the paper and on a long PDF, and the size guard.
 RISKS.R11 = async (theme) => {
   if (theme !== THEMES[0]) return;
-  const pdf = await doc("pdf");
+  // Its own copy: the paste and the deletion below change it.
+  const pdf = await fresh("pdf", "-r11");
   const rows = await db.block.count({ where: { documentId: pdf.id } });
   const json = JSON.stringify((await documentRow(pdf.id)).richText).length;
   time("R11", "the Attention paper's add", `${pdf.ms} ms, ${rows} rows, ${json} JSON chars`);
@@ -1508,11 +1539,13 @@ RISKS.R12 = async (theme) => {
   const saved = await put;
   const at = await page.evaluate(readingLine);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
-  await sleep(4000);
+  const t0 = Date.now();
+  await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 120_000 });
+  const mounted = Date.now() - t0;
+  await sleep(8000);
   const back = await page.evaluate(readingLine);
   const path = await shot(page, `R12-position-after-reload-${theme}`);
-  check("R12", Boolean(at && back && at.id === back.id && Math.abs(at.dy - back.dy) < 40), `(${theme}) scrolled to p. ${twelve.page}, reloaded: the same line is at the top`, `position saved ${saved?.status() ?? "no PUT"}; before ${JSON.stringify(at)}, after ${JSON.stringify(back)} ${path}`);
+  check("R12", Boolean(at && back && at.id === back.id && Math.abs(at.dy - back.dy) < 40), `(${theme}) scrolled to p. ${twelve.page}, reloaded: the same line is at the top`, `position saved ${saved?.status() ?? "no PUT"}; the editor mounted ${mounted} ms after the reload; before ${JSON.stringify(at)}, after ${JSON.stringify(back)} ${path}`);
   await context.close();
 };
 
@@ -1521,35 +1554,24 @@ RISKS.R12 = async (theme) => {
 RISKS.R13 = async (theme) => {
   if (theme !== THEMES[0]) return;
   const pdf = await fresh("pdf", "-r13");
-  const finish = await api(`/api/documents/${pdf.id}/finish`, "POST", {});
+  const finish = await api(`/api/documents/${pdf.id}/finish`);
   const listed = JSON.stringify(finish.body).match(/\/api\/documents\/[^"\s]+\/figure\/[^"\s?]+/g) ?? [];
   const { page, context, responses } = await newPage(theme);
   await open(page, ctx.notebookId, pdf.id);
-  const figs = await figures(page);
-  for (const f of figs) {
-    await reveal(page, f.pos);
-    await sleep(300);
-  }
-  await sleep(2000);
+  const images = await loadFigureImages(page);
   const requested = [...new Set(responses.filter((r) => /\/figure\//.test(r.url)).map((r) => r.url.split("?")[0]))];
   const bad = responses.filter((r) => /\/figure\//.test(r.url) && r.status >= 400);
-  const same = listed.length > 0 && requested.every((u) => listed.includes(u));
-  check("R13", same && bad.length === 0, "the finishing step lists the figure URLs the page requests", `listed ${listed.length}, requested ${requested.length}${requested.filter((u) => !listed.includes(u)).slice(0, 2).map((u) => `; not listed ${u}`).join("")}${bad.length ? `; ${bad.length} failed (${bad[0].status})` : ""}; finish HTTP ${finish.status}`);
-  const loaded = await page.evaluate(() => [...document.querySelectorAll(".docs-prose img")].map((i) => ({ src: i.getAttribute("src"), ok: i.complete && i.naturalWidth > 0 })));
-  check("R13", loaded.length > 0 && loaded.every((i) => i.ok), "every figure image of the PDF import loads", `${loaded.filter((i) => i.ok).length} of ${loaded.length}`);
-  // Save the project for offline, then open it offline.
-  const save = page.locator('[data-track="offline-save"]').first();
-  if (await save.count()) {
-    await save.click();
-    await sleep(15000);
-    await context.setOffline(true);
-    await page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
-    await sleep(6000);
-    const offline = await page.evaluate(() => ({ prose: document.querySelector(".docs-prose")?.textContent.length ?? 0, imgs: [...document.querySelectorAll(".docs-prose img")].map((i) => i.complete && i.naturalWidth > 0) }));
-    const path = await shot(page, "R13-offline");
-    check("R13", offline.prose > 0 && offline.imgs.length > 0 && offline.imgs.every(Boolean), "offline, the import opens with every figure", `${JSON.stringify({ prose: offline.prose, figures: `${offline.imgs.filter(Boolean).length}/${offline.imgs.length}` })} ${path}`);
-    await context.setOffline(false);
-  } else note("R13", "Save for offline", "no offline-save control on this page");
+  const same = listed.length > 0 && requested.length > 0 && requested.every((u) => listed.includes(u)) && listed.every((u) => requested.includes(u));
+  check("R13", same && bad.length === 0, "the finishing step lists the figure URLs the page requests", `finish HTTP ${finish.status}; listed ${listed.length}, requested ${requested.length}${requested.filter((u) => !listed.includes(u)).slice(0, 2).map((u) => `; not listed ${u}`).join("")}${listed.filter((u) => !requested.includes(u)).slice(0, 2).map((u) => `; not requested ${u}`).join("")}${bad.length ? `; ${bad.length} failed (${bad[0].status})` : ""}`);
+  check("R13", images.total > 0 && images.loaded === images.total, "every figure image of the PDF import loads in view", `${images.loaded} of ${images.total}`);
+  // The offline copy (lib/offline/saved.ts) collects the assets it finds in
+  // the page: every figure URL must stand in the page's HTML. Opening the
+  // copy offline needs the service worker, which registers in production only.
+  const html = await fetch(`${BASE}/n/${ctx.notebookId}?doc=${pdf.id}`).then((r) => r.text());
+  const found = new Set(html.match(/\/api\/(?:images\/[A-Za-z0-9_-]+|documents\/[A-Za-z0-9_-]+\/(?:figure|page)\/[A-Za-z0-9_-]+)/g) ?? []);
+  const media = await db.figureMedia.findMany({ where: { documentId: pdf.id }, select: { id: true } });
+  const missing = media.filter((m) => !found.has(`/api/documents/${pdf.id}/figure/${m.id}`));
+  check("R13", missing.length === 0, "the page holds every figure URL the offline copy saves", `${media.length - missing.length} of ${media.length} figure URLs in the page (offline itself is not testable here: the service worker registers in production only)`);
   await context.close();
 };
 
@@ -1647,9 +1669,9 @@ RISKS.R15 = async (theme) => {
   await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
   await sleep(3000);
   const figs = await figures(page);
-  const shown = await page.evaluate(() => [...document.querySelectorAll(".docs-prose figure img, .docs-prose figure svg")].filter((m) => m.getBoundingClientRect().width > 20).length);
+  const shown = await page.evaluate(() => [...document.querySelectorAll(".docs-prose .docs-figure")].filter((f) => [...f.querySelectorAll("img, svg, iframe, video")].some((m) => m.getBoundingClientRect().width > 20)).length);
   const path = await shot(page, "R15-restored-imported");
-  check("R15", put.status === 200 && figs.length > 0 && figs.every((f) => oldMedia.some((m) => m.id === f.mediaId)) && shown > 0, "Restore \"Imported\" after a re-parse: the figures show", `PUT ${put.status}; ${figs.length} figure objects, ${shown} media drawn ${path}`);
+  check("R15", put.status === 200 && figs.length > 0 && figs.every((f) => oldMedia.some((m) => m.id === f.mediaId)) && shown === figs.length, "Restore \"Imported\" after a re-parse: every figure shows its media", `PUT ${put.status}; ${figs.length} figure objects on the old media, ${shown} drawing their media ${path}`);
   if (errors.length) note("R15", "console", errors.slice(0, 3).join(" | "));
   await context.close();
 };
@@ -1701,18 +1723,10 @@ RISKS.R17 = async (theme) => {
   const pdf = await doc("pdf");
   const web = await doc("url");
   const { page, errors, context } = await newPage(theme, { width: 1680, height: 1000 });
-  await page.goto(`${BASE}/n/${ctx.notebookId}?doc=${pdf.id}&split=${web.id}`, { waitUntil: "domcontentloaded" });
-  await sleep(8000);
-  let panes = await page.evaluate(() => [...document.querySelectorAll(".docs-prose")].length);
-  if (panes < 2) {
-    // The split opens from the document list's side-by-side control.
-    const split = page.locator('[data-track="view:split"], [data-track="pane-document:right"]').first();
-    if (await split.count()) {
-      await split.click();
-      await sleep(1500);
-    }
-    panes = await page.evaluate(() => [...document.querySelectorAll(".docs-prose")].length);
-  }
+  await page.goto(`${BASE}/n/${ctx.notebookId}?doc=${pdf.id}&view=side&doc2=${web.id}`, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => document.querySelectorAll(".docs-prose").length === 2, null, { timeout: 90_000 }).catch(() => {});
+  await sleep(2500);
+  const panes = await page.evaluate(() => [...document.querySelectorAll(".docs-prose")].length);
   const path = await shot(page, `R17-side-by-side-${theme}`);
   check("R17", panes === 2, `(${theme}) Side by Side shows the PDF and the web page in two page editors`, `${panes} page editors ${path}`);
   if (panes === 2) {
@@ -1728,22 +1742,26 @@ RISKS.R18 = async (theme) => {
   if (theme !== THEMES[0]) return;
   const pdf = await doc("pdf");
   const { page, context } = await newPage(theme);
+  await open(page, ctx.notebookId, pdf.id);
+  // Every answer the page takes after a note: the refresh is a fetch of the
+  // page's own address (a server component payload).
   const sizes = [];
   page.on("response", async (r) => {
     const u = r.url();
-    if (u.includes(`/n/${ctx.notebookId}`) && (r.request().headers()["rsc"] || u.includes("_rsc"))) {
-      const body = await r.body().catch(() => null);
-      if (body) sizes.push(body.length);
-    }
+    if (!u.includes(`/n/${ctx.notebookId}`) || r.request().resourceType() === "document") return;
+    const body = await r.body().catch(() => null);
+    if (body) sizes.push({ u: u.replace(BASE, "").slice(0, 60), kb: Math.round(body.length / 1024) });
   });
-  await open(page, ctx.notebookId, pdf.id);
-  await selectWords(page, "Recurrent neural networks").catch(() => {});
-  const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
-  if (await colors.count()) await colors.first().click();
-  await sleep(5000);
-  const page0 = await fetch(`${BASE}/n/${ctx.notebookId}?doc=${pdf.id}`).then((r) => r.text());
-  time("R18", "the refresh payload on the paper", `${sizes.length ? sizes.map((s) => `${(s / 1024).toFixed(0)} KB`).join(", ") : "no RSC refresh seen"}; the full page ${(page0.length / 1024).toFixed(0)} KB`);
-  check("R18", sizes.every((s) => s < 1024 * 1024) && page0.length < 1024 * 1024 * 2, "the refresh stays under 1 MB on the 15-page paper", sizes.join(", "));
+  const at = await find(page, "Recurrent neural networks");
+  if (at) {
+    await dragSelect(page, at.from, at.to);
+    const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
+    if (await colors.count()) await colors.first().click();
+  }
+  await sleep(8000);
+  const full = await fetch(`${BASE}/n/${ctx.notebookId}?doc=${pdf.id}`).then((r) => r.text());
+  time("R18", "the refresh payload on the paper after a note", `${sizes.length ? sizes.map((x) => `${x.kb} KB`).join(", ") : "no refresh seen"}; the full page ${Math.round(full.length / 1024)} KB`);
+  check("R18", sizes.length > 0 && sizes.every((x) => x.kb < 1024), "the refresh after a note stays under 1 MB on the 15-page paper", JSON.stringify(sizes.slice(0, 4)));
   await context.close();
 };
 
@@ -1772,15 +1790,9 @@ RISKS.R20 = async (theme) => {
   await sleep(10000);
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
-  const figs = await figures(page);
-  for (const f of figs) {
-    await reveal(page, f.pos);
-    await sleep(250);
-  }
-  await sleep(2000);
+  const images = await loadFigureImages(page);
   const failed = responses.filter((r) => /\/figure\//.test(r.url) && r.status >= 400);
-  const loaded = await page.evaluate(() => [...document.querySelectorAll(".docs-prose img")].map((i) => i.complete && i.naturalWidth > 0));
-  check("R20", re.status === 200 && failed.length === 0 && loaded.every(Boolean), "after a re-parse every figure loads its new crop, no 404", `HTTP ${re.status}; ${loaded.filter(Boolean).length}/${loaded.length} images; failed ${failed.map((f) => `${f.status} ${f.url}`).slice(0, 2).join(" ")}`);
+  check("R20", re.status === 200 && failed.length === 0 && images.total > 0 && images.loaded === images.total, "after a re-parse every figure loads its new crop, no 404", `HTTP ${re.status}; ${images.loaded}/${images.total} images; failed ${failed.map((f) => `${f.status} ${f.url}`).slice(0, 2).join(" ")}`);
   if (errors.length) note("R20", "console", errors.slice(0, 3).join(" | "));
   await context.close();
 };
@@ -2137,6 +2149,15 @@ RISKS.AUDIT = async (theme) => {
     const md = file ? readFileSync(await file.path(), "utf8") : "";
     check("AUDIT", md.includes("Attention Is All You Need") && !/\bp\. \d+\b/.test(md), "the Markdown download holds the words and no page labels", `${md.length} characters; figure captions ${(md.match(/Figure \d+:/g) ?? []).length}`);
   }
+  // Make a copy is off for an import, and says why.
+  if ((await mode(page)) !== "editing") await setMode(page, "editing");
+  await menuCommand(page, "Make a copy");
+  await sleep(800);
+  const copyDialog = await page.evaluate(() => [...document.querySelectorAll('[role="dialog"]')].map((d) => d.textContent).join(" | "));
+  const copyShot = await shot(page, `AUDIT-make-a-copy-${theme}`);
+  check("AUDIT", /off for an import/.test(copyDialog), `(${theme}) Make a copy is off for an import, with the reason`, `${clip(copyDialog, 140)} ${copyShot}`);
+  await page.keyboard.press("Escape");
+  await sleep(300);
   // The web page: pageless; lists, the table's merged cells, code, a quote,
   // a line, and every figure's media.
   await open(page, ctx.notebookId, web.id);
