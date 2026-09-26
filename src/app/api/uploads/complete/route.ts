@@ -144,7 +144,7 @@ export async function POST(req: Request) {
     // A Markdown file (SPEC.md §2): the URL walk reads it, no judgment.
     return progressResponse(async (onProgress) => {
       try {
-        const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress);
+        const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress, {}, user?.id ?? null);
         await attachDocument(data.notebookId, document.id);
         await bumpNotebook(data.notebookId);
         return { id: document.id, title: document.title, deduped };
