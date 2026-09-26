@@ -376,18 +376,20 @@ export function tableFromHtml(html: string): ImportTable | null {
   if (!table) return null;
   const trs = [...table.querySelectorAll("tr")].filter((tr) => tr.closest("table") === table);
   if (trs.length === 0) return null;
+  const cellsOf = (tr: Element) => [...tr.children].filter((c) => /^(td|th)$/i.test(c.tagName));
+  // A colspan past the most cells a row holds ("99" for a row the width of
+  // the table) spans the table, never columns no row fills.
+  const widest = Math.max(1, ...trs.map((tr) => cellsOf(tr).length));
   // Header rows (<thead>) that open the table repeat on every page the
   // table runs on, as Google Docs' pinned header rows do.
   let pinning = true;
   const rows = trs.map((tr) => {
     pinning = pinning && tr.parentElement?.tagName.toLowerCase() === "thead";
-    const cells = [...tr.children]
-      .filter((c) => /^(td|th)$/i.test(c.tagName))
-      .map((cell) => ({
-        node: { type: cell.tagName.toLowerCase() === "th" ? "tableHeader" : "tableCell", content: cellBlocks(cell) },
-        colspan: spanOf(cell, "colspan", 50),
-        rowspan: spanOf(cell, "rowspan", trs.length),
-      }));
+    const cells = cellsOf(tr).map((cell) => ({
+      node: { type: cell.tagName.toLowerCase() === "th" ? "tableHeader" : "tableCell", content: cellBlocks(cell) },
+      colspan: spanOf(cell, "colspan", widest),
+      rowspan: spanOf(cell, "rowspan", trs.length),
+    }));
     return { cells, pinned: pinning };
   });
   const built = tableNode(rows);

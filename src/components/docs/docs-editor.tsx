@@ -341,10 +341,13 @@ export function DocsEditor({
   // The header or footer being edited: the toolbar formats its text.
   const [hfEditor, setHfEditor] = useState<Editor | null>(null);
 
-  // The figures and page labels of an import reach its figure objects and
-  // page starts through the extensions.
+  // The figures, page labels, and page count of an import reach its figure
+  // objects, its page starts, and the scroll tip through the extensions.
   const extensions = useMemo(
-    () => docsExtensions(imported ? { documentId, figures: imported.figures, pageLabels: imported.pageLabels } : undefined),
+    () =>
+      docsExtensions(
+        imported ? { documentId, figures: imported.figures, pageLabels: imported.pageLabels, pages: imported.pages } : undefined,
+      ),
     // Once per document: the editor is built once per document.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [documentId],
