@@ -1625,38 +1625,73 @@ RISKS.R23 = async (theme) => {
 };
 
 // C2: the assistant's suggestions on an import: a page start passes, a
-// figure is an object, Accept keeps "p. N".
+// figure is an object, the landing switches Viewing to Editing, Accept
+// keeps "p. N". First the landing's own ops (window.__applyAssistantOps),
+// then the assistant's bar with the model mock, as a person uses it.
 RISKS.C2 = async (theme) => {
   const pdf = await fresh("pdf", `-c2${theme[0]}`);
   const { page, errors, context } = await newPage(theme);
   await open(page, ctx.notebookId, pdf.id);
   const s = (await pageStarts(page)).find((x) => x.on === "paragraph" && x.before.length >= 30 && x.after.length >= 30);
-  const blockId = s.blockId;
-  const text = await page.evaluate((p) => window.__docsEditor.state.doc.resolve(p).parent.textContent, s.pos);
+  const base = await page.evaluate((p) => window.__docsEditor.state.doc.resolve(p).parent.textContent, s.pos);
   const fig = (await figures(page))[0];
+  // One word changed on each side of the page start.
+  const changed = base.replace(/\bthe\b/, "one").replace(/\bthe\b(?![\s\S]*\bthe\b)/, "one");
   const ops = [
-    { op: "rewrite_block", blockId, text: text.replace(/\b(the|a)\b/, "one"), why: "QA: one word changed across a page start." },
-    { op: "rewrite_block", blockId: fig.blockId, text: "A new caption", why: "QA: a caption is the figure's." },
+    { i: 0, op: "rewrite_block", blockId: s.blockId, base, text: changed, why: "QA: a word changed on each side of a page start." },
+    { i: 1, op: "rewrite_block", blockId: fig.blockId, base: fig.caption, text: "A new caption", why: "QA: a caption is the figure's." },
   ];
   const landed = await page.evaluate((o) => (window.__applyAssistantOps ? window.__applyAssistantOps(o) : null), ops);
   await sleep(1200);
   const m = await mode(page);
-  const skipped = JSON.stringify(landed ?? {});
-  check("C2", /object/.test(skipped), `(${theme}) an op on a figure is skipped as "object"`, clip(skipped, 160));
+  check("C2", Array.isArray(landed?.ids) && landed.ids.length > 0, `(${theme}) a rewrite across p. ${s.page} lands`, clip(JSON.stringify(landed), 160));
+  check("C2", (landed?.skipped ?? []).some((k) => k.i === 1 && k.reason === "object"), `(${theme}) an op on a figure is skipped as "object"`, clip(JSON.stringify(landed?.skipped), 120));
   check("C2", m === "editing", `(${theme}) suggestions landing on an import in Viewing switch it to Editing`, `mode ${m}`);
-  const still = (await pageStarts(page)).filter((x) => x.page === s.page).length;
-  check("C2", still === 1, `(${theme}) the suggestion across p. ${s.page} keeps the page start`, `${still}`);
-  // Accept all of them.
-  await page.evaluate(() => {
+  const still = (await pageStarts(page)).filter((x) => x.page === s.page);
+  check("C2", still.length === 1, `(${theme}) the pending suggestion across p. ${s.page} keeps the page start`, `${still.length}${still[0] ? ` before "${still[0].before.slice(-15)}" after "${still[0].after.slice(0, 15)}"` : ""}`);
+  const pendingShot = await shot(page, `C2-pending-across-page-start-${theme}`);
+  // Accept all: the words change, "p. N" stays where the page begins.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("docs:review-suggestions", { detail: {} })));
+  const accepted = await page.evaluate(() => {
     const ed = window.__docsEditor;
-    ed.commands.acceptAllSuggestions?.();
+    const cmd = ed.commands.acceptAllSuggestions ?? ed.commands.applyAllSuggestions;
+    return cmd ? cmd() : null;
   });
   await sleep(800);
-  const afterAccept = (await pageStarts(page)).filter((x) => x.page === s.page).length;
-  const path = await shot(page, `C2-suggestion-across-page-start-${theme}`);
-  check("C2", afterAccept === 1, `(${theme}) Accept keeps "p. ${s.page}"`, `${afterAccept} ${path}`);
+  const after = (await pageStarts(page)).filter((x) => x.page === s.page);
+  const text = await page.evaluate((p) => window.__docsEditor.state.doc.resolve(p).parent.textContent, after[0]?.pos ?? s.pos);
+  const acceptShot = await shot(page, `C2-accepted-across-page-start-${theme}`);
+  check("C2", after.length === 1 && text === changed, `(${theme}) Accept keeps "p. ${s.page}" and takes the new words`, `accept ${accepted}; page starts ${after.length}; words ${text === changed ? "the suggestion's" : `"${clip(text, 60)}"`} ${pendingShot} ${acceptShot}`);
   await waitSaved(page).catch(() => {});
-  if (errors.length) note("C2", "console", errors.slice(0, 3).join(" | "));
+  // The bar, as a person uses it: select words across the page start, the
+  // toolbar's Assistant, the Shorten chip; the mock's suggestion lands.
+  const s2 = (await pageStarts(page)).find((x) => x.page !== s.page && x.on === "paragraph" && x.before.length >= 30 && x.after.length >= 30);
+  if (s2) {
+    await dragSelect(page, s2.pos - 25, s2.pos + 1 + 25);
+    const assistant = page.locator('[data-selection-popover] [data-track="assistant"]').first();
+    if (await assistant.count()) {
+      await assistant.click();
+      await sleep(800);
+      const chips = await page.evaluate(() => [...document.querySelectorAll('[data-track^="assistant-command:"]')].map((b) => b.dataset.track));
+      const bar = await page.evaluate(() => Boolean(document.querySelector("[data-assistant-bar]")));
+      check("C2", bar && chips.length >= 7, `(${theme}) on an import the toolbar's Assistant opens the bar with the seven commands`, `bar ${bar}, chips ${chips.length}`);
+      const shorten = page.locator('[data-track="assistant-command:shorten"], [data-track^="assistant-command:"]').first();
+      if (await shorten.count()) {
+        await shorten.click();
+        await page.waitForFunction(() => document.querySelectorAll(".docs-prose [data-suggestion]").length > 0, null, { timeout: 60_000 }).catch(() => {});
+        await sleep(1000);
+        const marks = await page.evaluate(() => [...document.querySelectorAll(".docs-prose [data-suggestion]")].map((e) => e.textContent).join(" | "));
+        const kept = (await pageStarts(page)).filter((x) => x.page === s2.page).length;
+        const barShot = await shot(page, `C2-bar-shorten-${theme}`);
+        check("C2", marks.length > 0 && kept === 1, `(${theme}) Shorten across p. ${s2.page} lands suggestions and keeps the page start`, `suggested "${clip(marks, 80)}", page starts ${kept} ${barShot}`);
+        const reject = page.locator('[data-assistant-bar] button:has-text("Reject")').first();
+        if (await reject.count()) await reject.click();
+        await sleep(600);
+      }
+    } else fail("C2", `(${theme}) the toolbar's Assistant`, "no Assistant in the toolbar");
+  }
+  await waitSaved(page).catch(() => {});
+  if (errors.length) note("C2", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
   await context.close();
 };
 
