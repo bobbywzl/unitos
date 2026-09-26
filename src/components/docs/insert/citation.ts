@@ -19,7 +19,6 @@ export const Citation = Mark.create({
   name: "citation",
   // Typing at a citation's end stays outside it.
   inclusive: false,
-  excludes: "",
 
   addAttributes() {
     return {
