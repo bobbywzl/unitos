@@ -834,14 +834,14 @@ RISKS.R2 = async (theme) => {
   await sleep(9000);
   const state = await page.evaluate(() => ({
     prose: document.querySelector(".docs-prose")?.textContent.length ?? 0,
-    frame: Boolean(document.querySelector(".docs-frame, [data-docs-frame]")),
-    body: document.body.innerText.length,
-    title: document.querySelector(".docs-title, [data-docs-title]")?.textContent ?? null,
+    frame: Boolean(document.querySelector(".docs-shell .docs-title-row")),
+    says: [...document.querySelectorAll(".docs-shell p, .docs-shell div")].map((e) => e.textContent).find((t) => /can.t show/.test(t ?? "")) ?? null,
+    title: document.querySelector(".docs-title-row")?.textContent.slice(0, 60) ?? null,
   }));
   const path = await shot(page, `R2-unknown-node-${theme}`);
   const stored = await documentRow(added.id);
   const kept = JSON.stringify(stored.richText).includes("futureObject");
-  check("R2", loads <= 2 && (state.prose > 0 || state.frame) && kept, `(${theme}) a stored node this build lacks: the frame or the page shows, it reloads at most once, the stored copy keeps the node`, `loads ${loads}, prose ${state.prose} chars, frame ${state.frame}, stored keeps it ${kept}, ${path}`);
+  check("R2", loads <= 2 && (state.prose > 0 || state.frame) && kept, `(${theme}) a stored node this build lacks: the frame or the page shows, it reloads at most once, the stored copy keeps the node`, `loads ${loads}, prose ${state.prose} chars, frame ${state.frame}, says "${clip(state.says, 90)}", stored keeps it ${kept}, ${path}`);
   if (errors.length) note("R2", "console", errors.slice(0, 3).join(" | "));
   await context.close();
   await db.document.update({ where: { id: added.id }, data: { richText: row.richText } });
@@ -880,11 +880,12 @@ RISKS.R3 = async (theme) => {
   // Highlight, reload, and read the mark's words.
   const sourcesBefore = (await sourcesOf(added.id)).length;
   const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
-  if (await colors.count()) {
-    await colors.first().click();
-    await sleep(1500);
+  if (await colors.count()) await colors.first().click();
+  let sources = await sourcesOf(added.id);
+  for (let i = 0; i < 40 && sources.length <= sourcesBefore; i++) {
+    await sleep(500);
+    sources = await sourcesOf(added.id);
   }
-  const sources = await sourcesOf(added.id);
   const made = sources.slice(sourcesBefore);
   check("R3", made.length === 1 && made[0].quotedText === words, `(${theme}) the highlight's quote is the words across the page start`, made.length ? `quote "${clip(made[0].quotedText, 80)}" at ${made[0].startOffset}-${made[0].endOffset} of ${made[0].blockId}` : "no source stored");
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -912,7 +913,7 @@ RISKS.R3 = async (theme) => {
   await sleep(300);
   // A page that begins at a paragraph's start: Backspace joins the paragraph
   // to the one above, and the page start stays where its words begin.
-  const opening = (await pageStarts(page)).find((x) => x.on === "paragraph" && x.before === "" && x.after.length > 10);
+  const opening = (await pageStarts(page)).find((x) => x.page > 1 && x.on === "paragraph" && x.before === "" && x.after.length > 10);
   if (opening) {
     const count = () => page.evaluate(() => {
       let n = 0;
@@ -1253,24 +1254,31 @@ RISKS.R8 = async (theme) => {
   const again = await add(ctx.notebookId, { url: `${FIXTURE}/article.html?run=${STAMP}-r8` });
   const keptAfterAdd = JSON.stringify((await documentRow(added.id)).richText).includes("(edited)");
   check("R8", keptAfterAdd, "a stale address added again never re-parses over an edited import", `the add gave ${again.id === added.id ? "the same document" : `another document (${again.id})`}, edit kept ${keptAfterAdd}`);
-  // The document menu asks first.
+  // The document list asks first: ⋮ on the document's row, Re-parse, and
+  // the question; Keep the edits keeps them.
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
   await sleep(800);
-  const menu = page.locator('[data-track="document-menu"], [data-track="document-actions"], [aria-label="Document actions"]').first();
   let asked = null;
-  if (await menu.count()) {
-    await menu.click();
-    await sleep(300);
-    const reparse = page.locator('[data-track^="document-reparse"]').first();
-    if (await reparse.count()) {
-      await reparse.click();
-      await sleep(800);
-      asked = await page.evaluate(() => [...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].map((d) => d.textContent).join(" | "));
-      await shot(page, "R8-reparse-asks");
-    }
+  await page.locator('[data-track="strip-documents"], [data-track="document-list"]').first().click().catch(() => {});
+  await sleep(700);
+  // The open document's row is the active one; its ⋮ stands beside it.
+  const actions = page.locator('[data-track="document-open"][data-active-row]').first().locator("xpath=..").locator('[data-track="document-actions"]').first();
+  if (await actions.count()) {
+    await actions.click();
+    await sleep(500);
+    await page.locator('[data-track="document-reparse"]').first().click().catch(() => {});
+    await sleep(600);
+    asked = await page.evaluate(() => {
+      const keep = document.querySelector('[data-track="document-reparse-keep"]');
+      return keep ? keep.closest('[role="group"]')?.textContent ?? "" : null;
+    });
+    await shot(page, "R8-reparse-asks");
+    await page.locator('[data-track="document-reparse-keep"]').first().click().catch(() => {});
+    await sleep(1500);
   }
-  check("R8", Boolean(asked && /edit/i.test(asked)), "Re-parse on an edited import asks first", clip(asked ?? "no menu or no dialog found", 160));
+  const keptAfterNo = JSON.stringify((await documentRow(added.id)).richText).includes("(edited)");
+  check("R8", Boolean(asked && /edit/i.test(asked)) && keptAfterNo, "Re-parse on an edited import asks first, and Keep keeps the edit", `${clip(asked ?? "no question found", 160)}; edit kept ${keptAfterNo}`);
   // Yes: replaceEdits; the version "Before re-parse" holds the edit.
   const replaced = await api(`/api/documents/${added.id}/reparse`, "POST", { replaceEdits: true });
   const versions = await db.documentVersion.findMany({ where: { documentId: added.id }, select: { name: true, richText: true } });
