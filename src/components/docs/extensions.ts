@@ -12,6 +12,9 @@ import Image from "@tiptap/extension-image";
 import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import { DocsFontFamily } from "@/components/docs/fonts";
 import { insertExtensions } from "@/components/docs/ext/insert";
+import { Citation } from "@/components/docs/insert/citation";
+import { Figure, type ImportedEditor } from "@/components/docs/insert/figure";
+import { PageStart, PageStartKeys } from "@/components/docs/insert/page-start";
 import { layerExtensions } from "@/components/docs/ext/layer";
 import { pageExtensions } from "@/components/docs/ext/page";
 import { toolbarExtensions } from "@/components/docs/ext/toolbar";
@@ -24,6 +27,8 @@ import { INDEXED_NODE_TYPES, newBlockId } from "@/lib/docs/schema";
 // The page editor's schema and behavior (SPEC.md §29): Google Docs' model on
 // Tiptap. A new node type is added here, in lib/docs/schema.ts
 // (RICH_NODE_TYPES), and in lib/docs/blocks.ts when it carries words.
+
+export type { FigureMediaView, ImportedEditor } from "@/components/docs/insert/figure";
 
 /** The font sizes Google Docs' size list offers, in points. + and − do not
     step through them: they move each run by one point (stepSelectionFontSize). */
@@ -101,8 +106,11 @@ const BlockIds = Extension.create({
           const seen = new Set<string>();
           const tr = state.tr;
           let changed = false;
+          // The blocks alone: no indexed node holds another, and a
+          // paragraph's words are never visited, so a long import's typing
+          // pays for its blocks, not its letters.
           state.doc.descendants((node, pos) => {
-            if (!INDEXED_NODE_TYPES.has(node.type.name)) return true;
+            if (!INDEXED_NODE_TYPES.has(node.type.name)) return !node.isTextblock && !node.isAtom;
             const id = node.attrs.blockId as string | null;
             if (!id || seen.has(id)) {
               const fresh = newBlockId();
@@ -112,7 +120,7 @@ const BlockIds = Extension.create({
             } else {
               seen.add(id);
             }
-            return node.type.name !== "image" && node.type.name !== "horizontalRule";
+            return false;
           });
           if (!changed) return null;
           tr.setMeta("addToHistory", false);
@@ -353,8 +361,9 @@ const DocsKeymap = Extension.create({
   },
 });
 
-/** The page editor's extensions. */
-export function docsExtensions() {
+/** The page editor's extensions. An import (SPEC.md §29) passes its figures'
+    media and page labels; a blank document passes nothing. */
+export function docsExtensions(imported?: ImportedEditor) {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3, 4, 5, 6] },
@@ -395,6 +404,11 @@ export function docsExtensions() {
     BlockIds,
     ParagraphFormat,
     PageBreak,
+    // An import's figure objects, page starts, and citations.
+    Figure.configure({ imported: imported ?? null }),
+    PageStart,
+    PageStartKeys,
+    Citation,
     DocsKeymap,
     ...toolbarExtensions,
     ...pageExtensions,

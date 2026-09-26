@@ -212,7 +212,7 @@ function tableGrid(table: RichNode): { text: string; places: Map<RichNode, { row
       places.set(cell, { row: r + 1, column: c + 1 });
       const paragraphs: string[] = [];
       walk(cell, (n) => {
-        if (n.type === "paragraph" || n.type === "heading" || n.type === "codeBlock") paragraphs.push(norm(inlineText(n)));
+        if (n.type === "paragraph" || n.type === "heading" || n.type === "codeBlock") paragraphs.push(norm(inlineText(n).replaceAll("\n", " ")));
       });
       const text = paragraphs.filter(Boolean).join(" ");
       const colspan = Math.max(1, Number(cell.attrs?.colspan) || 1);
@@ -277,20 +277,34 @@ function blockUnits(b: Block, i: number): Unit[] {
   }
 }
 
-/** The parse's units in the order the converter lays them out: the kicker
-    (the first block, when the parse calls it one) above the Title, the
-    Title, the metadata line under it, then every other block. */
-function expectedUnits(f: Fixture): { units: Unit[]; kicker: number; meta: number } {
-  const kicker = f.blocks.length > 0 && f.blocks[0].type === "PARAGRAPH" && tokensOf(f.blocks[0]).includes("kicker") ? 0 : -1;
-  const meta = f.blocks.findIndex((b) => b.type === "PARAGRAPH" && tokensOf(b).includes("meta"));
+/** Two titles are one when their words match, case and spacing aside. */
+const sameWords = (a: string, b: string) =>
+  a.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim() === b.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+
+/** The parse's units in the order the converter lays them out
+    (lib/docs/import.ts): a heading among the first twelve blocks that
+    repeats the title (on the first page of a PDF) is the Title where it
+    stands; else the Title comes after the leading kicker lines. Every other
+    block keeps its place, the metadata line too (it becomes the Subtitle
+    where it stands). */
+function expectedUnits(f: Fixture): { units: Unit[]; kickers: number; titleAt: number; meta: number } {
+  let kickers = 0;
+  while (kickers < f.blocks.length && f.blocks[kickers].type === "PARAGRAPH" && tokensOf(f.blocks[kickers]).includes("kicker")) kickers++;
+  const meta = f.blocks.slice(0, 12).findIndex((b) => b.type === "PARAGRAPH" && tokensOf(b).includes("meta"));
+  const title = f.titleFromOriginal && f.title ? f.title.replace(/\s+/g, " ").trim() : "";
+  const paged = f.kind === "pdf" && f.blocks.some((b) => typeof b.page === "number");
+  const titleAt = title
+    ? f.blocks.slice(0, 12).findIndex((b) => b.type === "HEADING" && sameWords(b.text, title) && (!paged || (b.page ?? 1) <= 1))
+    : -1;
   const units: Unit[] = [];
-  if (kicker === 0) units.push(...blockUnits(f.blocks[0], 0));
-  if (f.titleFromOriginal && f.title) units.push({ kind: "title", text: f.title, key: keyOf("title", f.title), block: -1, start: 0, offset: 0, row: -1 });
-  if (meta >= 0) units.push(...blockUnits(f.blocks[meta], meta));
+  const titleUnit = (text: string, block: number): Unit => ({ kind: "title", text, key: keyOf("title", text), block, start: 0, offset: 0, row: -1 });
   f.blocks.forEach((b, i) => {
-    if (i !== kicker && i !== meta) units.push(...blockUnits(b, i));
+    if (i === kickers && title && titleAt < 0) units.push(titleUnit(title, -1));
+    if (i === titleAt) units.push(titleUnit(b.text, i));
+    else units.push(...blockUnits(b, i));
   });
-  return { units, kicker, meta };
+  if (f.blocks.length <= kickers && title && titleAt < 0) units.push(titleUnit(title, -1));
+  return { units, kickers, titleAt, meta };
 }
 
 type DocMap = {
@@ -485,7 +499,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
   const map = mapDoc(doc);
 
   // 3. The rows' words equal the parse's words, less list markers and table repeats.
-  const { units: want, kicker, meta } = expectedUnits(f);
+  const { units: want, kickers, titleAt, meta } = expectedUnits(f);
   const got = actualUnits(rows, map);
   const pairs = align(
     want.map((u) => u.key),
@@ -681,13 +695,21 @@ async function checkFixture(f: Fixture): Promise<Report> {
     const titleRow = rows.find((r) => map.nodeById.get(r.id)?.attrs?.docStyle === "title");
     const rowsFall = rows.findIndex((r, k) => k > 0 && typeof r.page === "number" && typeof rows[k - 1].page === "number" && r.page < (rows[k - 1].page as number));
     const wrongPage: string[] = [];
+    const codeInside: string[] = [];
     for (const u of want) {
       if (u.block < 0 || u.row < 0) continue;
       const b = f.blocks[u.block];
       let page = typeof b.page === "number" ? b.page : null;
       for (const s of b.pageStarts ?? []) if (s.offset <= u.offset && page !== null) page = Math.max(page, s.page);
       const row = rows[u.row];
-      if (page !== null && row.page !== page) wrongPage.push(`block ${u.block} ${b.type} "${clip(u.text, 24)}": row p. ${String(row.page)}, parse p. ${page}`);
+      if (page === null || row.page === page) continue;
+      // A code block holds no page start: a page that begins inside it
+      // draws at its top, and its row reads that page (design 1.4).
+      if (b.type === "CODE" && (b.pageStarts ?? []).some((s) => s.page === row.page)) {
+        codeInside.push(`block ${u.block}: row p. ${String(row.page)}, words start on p. ${page}`);
+        continue;
+      }
+      wrongPage.push(`block ${u.block} ${b.type} "${clip(u.text, 24)}": row p. ${String(row.page)}, parse p. ${page}`);
     }
     check(
       pageless.filter((r) => r !== titleRow).length === 0 && rowsFall < 0 && wrongPage.length === 0,
@@ -696,6 +718,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
         (rowsFall >= 0 ? `; row ${rowsFall} p. ${String(rows[rowsFall].page)} after p. ${String(rows[rowsFall - 1].page)}` : "") +
         (wrongPage.length ? `; ${wrongPage.length} wrong: ${wrongPage.slice(0, 3).join(" | ")}` : ""),
     );
+    if (codeInside.length) note("a page that begins inside a code block draws at its top, and the row reads it", codeInside.slice(0, 3).join(" | "));
     if (titleRow && typeof titleRow.page !== "number") note("the Title row has no page", "no page start stands before the Title");
     if (f.pageLabels?.length) note("page labels", `${f.pageLabels.length} labels: ${f.pageLabels.slice(0, 5).join(", ")}…`);
   } else {
@@ -735,25 +758,29 @@ async function checkFixture(f: Fixture): Promise<Report> {
   if (f.titleFromOriginal && f.title) {
     const at = top.findIndex((n) => n.attrs?.docStyle === "title");
     const title = titles[0];
+    const titleWords = titleAt >= 0 ? f.blocks[titleAt].text : f.title;
     check(
-      titles.length === 1 && title !== undefined && norm(inlineText(title)) === norm(f.title) && at === (kicker === 0 ? 1 : 0),
-      "one Title, first on the page (after the kicker)",
-      `${titles.length} Title paragraph(s)${title ? ` "${clip(inlineText(title), 50)}" at ${at}` : ""}`,
+      titles.length === 1 && title !== undefined && norm(inlineText(title)) === norm(titleWords),
+      "one Title",
+      `${titles.length} Title paragraph(s)${title ? ` "${clip(inlineText(title), 50)}" at ${at}${titleAt >= 0 ? ` (the parse's heading ${titleAt}, promoted where it stands)` : ""}` : ""}`,
     );
+    if (at > kickers) note("the Title is not first on the page", `${at} paragraph(s) above it, the first "${clip(inlineText(top[0]), 60)}"`);
     const nextHeading = top.slice(at + 1).find((n) => n.type === "heading" || n.attrs?.docStyle === "title");
     const firstText = top.slice(at + 1).find((n) => norm(inlineText(n)));
     check(
-      !(nextHeading && firstText === nextHeading && norm(inlineText(nextHeading)).toLowerCase() === norm(f.title).toLowerCase()),
+      !(nextHeading && firstText === nextHeading && sameWords(inlineText(nextHeading), inlineText(title ?? { type: "text", text: f.title }))),
       "R10 the title stands once (no first heading repeats it)",
       nextHeading ? `next heading "${clip(inlineText(nextHeading), 50)}"` : "",
     );
-    if (kicker === 0) {
+    if (kickers > 0) {
       const first = top[0];
-      check(first !== undefined && norm(inlineText(first)) === norm(f.blocks[0].text) && first.attrs?.docStyle !== "title", "the kicker stands above the Title", first ? `"${clip(inlineText(first), 40)}"` : "none");
+      check(first !== undefined && norm(inlineText(first)) === norm(f.blocks[0].text) && first.attrs?.docStyle !== "title" && at >= kickers, "the kicker stands above the Title", first ? `"${clip(inlineText(first), 40)}"` : "none");
     }
     if (meta >= 0) {
+      const sub = top.find((n) => n.attrs?.docStyle === "subtitle");
       const under = top[at + 1];
-      check(under !== undefined && under.attrs?.docStyle === "subtitle" && norm(inlineText(under)) === norm(f.blocks[meta].text), "the metadata line is the Subtitle under the Title", under ? `"${clip(inlineText(under), 40)}" (${String(under.attrs?.docStyle ?? under.type)})` : "none");
+      check(sub !== undefined && norm(inlineText(sub)) === norm(f.blocks[meta].text), "the metadata line is the Subtitle", sub ? `"${clip(inlineText(sub), 40)}"` : "none");
+      if (sub && under !== sub) note("the Subtitle does not stand right under the Title", `under the Title: "${clip(inlineText(under ?? { type: "text", text: "" }), 40)}"`);
     }
   } else {
     check(titles.length === 0, "no Title when the title is not the original's", `${titles.length} Title paragraph(s)`);
@@ -857,8 +884,11 @@ async function checkFixture(f: Fixture): Promise<Report> {
     const w = f.pageSize ? clamp(f.pageSize.width, 144, 2000) : null;
     const h = f.pageSize ? clamp(f.pageSize.height, 144, 3000) : null;
     const margins = setup.margins;
+    // 1 in, or a sixth of the side on a page under 6 in.
+    const side = w === null ? 72 : Math.min(72, Math.round(w / 6));
+    const end = h === null ? 72 : Math.min(72, Math.round(h / 6));
     check(
-      parsedSetup.success && !setup.pageless && (w === null || Math.abs(setup.width - w) < 0.51) && (h === null || Math.abs(setup.height - h) < 0.51) && margins.top === 72 && margins.left === 72 && margins.right === 72 && margins.bottom === 72,
+      parsedSetup.success && !setup.pageless && (w === null || Math.abs(setup.width - w) < 0.51) && (h === null || Math.abs(setup.height - h) < 0.51) && margins.top === end && margins.bottom === end && margins.left === side && margins.right === side,
       "a PDF opens in pages at its first page's size, 1 in margins",
       `${setup.pageless ? "pageless" : "pages"} ${setup.width}×${setup.height} pt (first page ${f.pageSize ? `${f.pageSize.width}×${f.pageSize.height}` : "unknown"}), margins ${margins.top}/${margins.right}/${margins.bottom}/${margins.left}`,
     );
