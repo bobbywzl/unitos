@@ -5,7 +5,7 @@ import { diffSegments, remapAnchor, remapRange } from "@/lib/anchors/remap";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { removeBlock, replaceBlockText, setBlockKind } from "@/lib/docs/ops";
-import { editRichText, isRichTextDocument } from "@/lib/docs/server";
+import { editRichText, importSharedResponse, isRichTextDocument } from "@/lib/docs/server";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -60,7 +60,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
       if (next && data.kind !== undefined) next = setBlockKind(next, blockId, data.kind) ?? next;
       return next;
     });
-    if (!result.ok) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
+    if (!result.ok) {
+      return result.reason === "shared" ? importSharedResponse(t) : NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
+    }
     return NextResponse.json(await db.block.findUnique({ where: { id: blockId } }));
   }
 
@@ -245,7 +247,9 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
   // A blank document is edited through its rich text (SPEC.md §29).
   if (await isRichTextDocument(block.documentId)) {
     const result = await editRichText(block.documentId, access.user.id, (doc) => removeBlock(doc, blockId));
-    if (!result.ok) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
+    if (!result.ok) {
+      return result.reason === "shared" ? importSharedResponse(t) : NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
+    }
     return NextResponse.json({ ok: true, editId: result.removedEdits[blockId] ?? null });
   }
 

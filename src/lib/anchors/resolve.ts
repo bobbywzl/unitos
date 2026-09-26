@@ -40,11 +40,13 @@ const CONTEXT = 32; // prefix/suffix length (SPEC.md §5)
 // 1. blockId + offsets still slice the quote → keep.
 // 2. Re-find the quote inside the stored block (an edit moved the words).
 // 3. Re-find the quote across all blocks (a re-parse gave every block a new
-//    id; an open reader still sends the old ones).
+//    id; an open reader still sends the old ones). A quote that is a FIGURE
+//    block's whole caption is a figure's anchor: FIGURE blocks come first,
+//    so it never lands on a paragraph that mentions the caption.
 // 4. Nothing → null. Never a guess.
 // Without a quote, the offsets stand only while they slice non-empty text.
 export function resolveAnchor(
-  blocks: { id: string; text: string }[],
+  blocks: { id: string; text: string; type?: string }[],
   anchor: AnchorInput,
 ): ResolvedAnchor | null {
   const stored = blocks.find((b) => b.id === anchor.blockId);
@@ -61,6 +63,8 @@ export function resolveAnchor(
     const hit = matchInText(stored.text, selector);
     if (hit) return captured(stored, hit.start, hit.end);
   }
+  const figure = blocks.find((b) => b.type === "FIGURE" && b.id !== stored?.id && b.text === quote);
+  if (figure) return captured(figure, 0, quote.length);
   for (const block of blocks) {
     if (stored && block.id === stored.id) continue;
     const hit = matchInText(block.text, selector);
@@ -81,12 +85,18 @@ function captured(block: { id: string; text: string }, start: number, end: numbe
 }
 
 // A document's blocks in reading order, the shape resolveAnchor reads.
-export function documentBlocks(documentId: string): Promise<{ id: string; text: string }[]> {
+export function documentBlocks(documentId: string): Promise<{ id: string; text: string; type: string }[]> {
   return db.block.findMany({
     where: { documentId },
     orderBy: { order: "asc" },
-    select: { id: true, text: true },
+    select: { id: true, text: true, type: true },
   });
+}
+
+/** An anchor that covered its whole block — no words before or after it, as
+    a figure's anchor covers its caption. */
+export function coversWholeBlock(anchor: { startOffset: number; prefix: string; suffix: string }): boolean {
+  return anchor.startOffset === 0 && anchor.prefix === "" && anchor.suffix === "";
 }
 
 // Resolve every source anchored in a document. Ladder per source (SPEC.md §5):
@@ -115,6 +125,22 @@ export async function resolveDocumentSources(
       }),
   ]);
   const blockById = new Map(blocks.map((b) => [b.id, b]));
+  // In a document with rich text the save moves every anchor and knows what
+  // left (lib/docs/sync.ts): an orphan that covered its whole block — a
+  // figure's anchor, a whole paragraph — comes back only on its own block
+  // here, never by its words elsewhere, and the save finds it again when a
+  // block with exactly its words is added. Asked once, only when such an
+  // orphan's block is gone.
+  let richText: boolean | null = null;
+  const leftToSave = async (source: Source): Promise<boolean> => {
+    if (!source.orphaned || blockById.has(source.blockId) || !coversWholeBlock(source)) return false;
+    if (richText === null) {
+      const [row] = await db.$queryRaw<{ rich: boolean }[]>`
+        SELECT ("richText" IS NOT NULL) AS "rich" FROM "Document" WHERE "id" = ${documentId}`;
+      richText = row?.rich ?? false;
+    }
+    return richText;
+  };
 
   const resolved: ResolvedSource[] = [];
   const writes: ReturnType<typeof db.source.update>[] = [];
@@ -160,6 +186,17 @@ export async function resolveDocumentSources(
           db.source.update({ where: { id: source.id }, data: { blockId, orphaned } }),
         );
       }
+      continue;
+    }
+    if (await leftToSave(source)) {
+      resolved.push({
+        id: source.id,
+        noteId: source.noteId,
+        blockId: source.blockId,
+        start: source.startOffset,
+        end: source.endOffset,
+        orphaned: true,
+      });
       continue;
     }
     const r = resolveOne(source, blocks);

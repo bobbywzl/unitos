@@ -5,7 +5,7 @@ import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { hasBlockIds } from "@/lib/docs/blocks";
 import { MAX_RICH_TEXT_CHARS, pageSetupSchema, richDocSchema, sanitizeRichText } from "@/lib/docs/schema";
-import { importShared } from "@/lib/docs/server";
+import { importShared, importSharedResponse } from "@/lib/docs/server";
 import { syncRichText } from "@/lib/docs/sync";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { serverT } from "@/lib/i18n/server";
@@ -42,9 +42,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ documentId: str
   const { documentId } = await ctx.params;
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
-  if (await importShared(documentId)) {
-    return NextResponse.json({ error: t("api.importShared"), reason: "shared" }, { status: 403 });
-  }
+  if (await importShared(documentId)) return importSharedResponse(t);
   const length = Number(req.headers.get("content-length") ?? 0);
   if (length > MAX_RICH_TEXT_CHARS) {
     return NextResponse.json({ error: t("api.richTextTooLarge") }, { status: 413 });
@@ -84,9 +82,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: s
   const { documentId } = await ctx.params;
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
-  if (await importShared(documentId)) {
-    return NextResponse.json({ error: t("api.importShared"), reason: "shared" }, { status: 403 });
-  }
+  if (await importShared(documentId)) return importSharedResponse(t);
   const { data, error } = await parseBody(req, setupSchema);
   if (error) return error;
   const document = await db.document.findUnique({ where: { id: documentId }, select: { richText: true } });

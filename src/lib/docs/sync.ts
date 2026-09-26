@@ -525,7 +525,13 @@ export async function syncRichText({
     const moves = movesOf(old, derived, newById, bulk);
     let marksChanged = false;
     if (affected.length > 0 || returned.length > 0) {
-      const [sources, links] = await Promise.all([
+      // An orphan that covered its whole block (a figure's anchor, a whole
+      // paragraph) comes back when a block with exactly its words is added
+      // or rewritten: a figure cut in one save and pasted in the next.
+      const wholeTexts = bulk
+        ? []
+        : [...new Set(returned.map((id) => newById.get(id)?.text ?? "").filter((text) => text.trim()))].slice(0, 500);
+      const [sources, links, wholeOrphans] = await Promise.all([
         tx.source.findMany({
           where: {
             documentId,
@@ -540,7 +546,43 @@ export async function syncRichText({
         affected.length > 0
           ? tx.docLink.findMany({ where: { OR: [{ fromBlockId: { in: affected } }, { toBlockId: { in: affected } }] } })
           : [],
+        wholeTexts.length > 0
+          ? tx.source.findMany({
+              where: {
+                documentId,
+                layer: null,
+                startTime: null,
+                orphaned: true,
+                startOffset: 0,
+                prefix: "",
+                suffix: "",
+                OR: [{ anchoredText: { in: wholeTexts } }, { anchoredText: null, quotedText: { in: wholeTexts } }],
+              },
+            })
+          : [],
       ]);
+      for (const src of wholeOrphans) {
+        // Only an orphan whose own block is gone: one on a block that stands
+        // stays with it.
+        if (newById.has(src.blockId)) continue;
+        const words = src.anchoredText ?? src.quotedText;
+        const row = returned.map((id) => newById.get(id)).find((d) => d?.text === words);
+        if (!row) continue;
+        const placed = placedAt({ blockId: row.id, start: 0, end: row.text.length }, row.text);
+        marksChanged = true;
+        await tx.source.update({
+          where: { id: src.id },
+          data: {
+            blockId: placed.blockId,
+            startOffset: placed.startOffset,
+            endOffset: placed.endOffset,
+            anchoredText: placed.quotedText === src.quotedText ? null : placed.quotedText,
+            prefix: placed.prefix,
+            suffix: placed.suffix,
+            orphaned: false,
+          },
+        });
+      }
       for (const src of sources) {
         const anchor = {
           blockId: src.blockId,

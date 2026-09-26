@@ -1,8 +1,10 @@
 import {
   DEFAULT_PAGE_SETUP,
   INDEXED_NODE_TYPES,
+  MAX_CAPTION_CHARS,
   newBlockId,
   sanitizeRichText,
+  ZWSP,
   type PageSetup,
   type RichMark,
   type RichNode,
@@ -15,7 +17,7 @@ import {
   tableFromText,
   type Piece,
 } from "@/lib/docs/import-table";
-import type { ParsedBlock } from "@/lib/parse/types";
+import type { PageStart, ParsedBlock } from "@/lib/parse/types";
 import type { Region } from "@/lib/video/types";
 
 // The converter (SPEC.md §29): an import — a PDF, a web page, or a Markdown
@@ -79,8 +81,7 @@ export type ImportResult = {
 // The PDF parse marks where each page's words begin (lib/parse/pdf.ts): the
 // page a block starts on, and inside a block joined across a page break the
 // offset of each later page's first word.
-type PageMark = { offset: number; page: number };
-type PagedBlock = ParsedBlock & { pageStarts?: PageMark[] };
+type PageMark = PageStart;
 
 /** Words, the marks over them (offsets into the words), and the page starts
     inside them. */
@@ -98,10 +99,8 @@ const DISPLAY_SIZE = "21pt";
 const INDENT_PT = 36;
 /** The most words one text node may hold (lib/docs/schema.ts richNodeSchema). */
 const MAX_TEXT = 200_000;
-/** The longest caption a figure object keeps (lib/docs/schema.ts). */
-const MAX_CAPTION = 4000;
-/** The longest equation the rich text keeps as an equation; a longer one is
-    a code block of its TeX. */
+/** The longest equation the rich text keeps as an equation (an attribute's
+    string, lib/docs/schema.ts); a longer one is a code block of its TeX. */
 const MAX_LATEX = 2000;
 /** A heading that repeats the title stands within the first blocks. */
 const TITLE_REACH = 12;
@@ -127,56 +126,54 @@ const sameWords = (a: string, b: string) =>
 
 // ── Words and their marks ───────────────────────────────────────────────────
 
-/** The part of a source between two offsets. A page start at `to` stays
-    out unless the part runs to the source's end. */
-function sliceSource(src: Source, from: number, to: number): Source {
-  const last = to >= src.text.length;
+/** The part of a source between two offsets, with the page starts from
+    `from` up to `to` (up to and at `to` when the part runs to the source's
+    end). `head` also keeps the starts before `from`, at the part's start:
+    a page that begins at a list line's marker begins at its words. */
+function sliceSource(src: Source, from: number, to: number, head = false): Source {
+  const end = to >= src.text.length;
   return {
     text: src.text.slice(from, to),
     spans: src.spans
       .filter((s) => s.end > from && s.start < to)
       .map((s) => ({ start: Math.max(from, s.start) - from, end: Math.min(to, s.end) - from, mark: s.mark })),
     starts: src.starts
-      .filter((p) => p.offset < to || (last && p.offset <= to))
-      .filter((p) => p.offset >= from || from === 0)
+      .filter((p) => (p.offset >= from || head) && (p.offset < to || (end && p.offset <= to)))
       .map((p) => ({ offset: Math.max(0, p.offset - from), page: p.page })),
   };
 }
 
-/** A source's lines ("\n"), each with the page starts from its start to the
-    next line's start. */
+/** A source's lines ("\n"). A page that begins at a line break begins with
+    the next line. */
 function linesOf(src: Source): Source[] {
-  const out: Source[] = [];
-  let from = 0;
-  for (;;) {
+  const bounds: { from: number; to: number }[] = [];
+  for (let from = 0; ; ) {
     const at = src.text.indexOf("\n", from);
-    const to = at < 0 ? src.text.length : at;
-    const line = sliceSource(src, from, to);
-    // A page that begins at the line break begins with the next line.
-    line.starts = src.starts
-      .filter((p) => p.offset >= from && (at < 0 ? p.offset <= to : p.offset <= to))
-      .filter((p) => at < 0 || p.offset < to + 1)
-      .map((p) => ({ offset: Math.min(p.offset - from, line.text.length), page: p.page }));
-    out.push(line);
-    if (at < 0) return out;
+    bounds.push({ from, to: at < 0 ? src.text.length : at });
+    if (at < 0) break;
     from = at + 1;
   }
+  const lines = bounds.map(({ from, to }) => ({ ...sliceSource(src, from, to), starts: [] as PageMark[] }));
+  for (const p of src.starts) {
+    let k = bounds.findIndex(({ from, to }) => p.offset >= from && p.offset <= to);
+    if (k < 0) k = bounds.length - 1;
+    if (p.offset === bounds[k].to && k < bounds.length - 1) k += 1;
+    lines[k].starts.push({ offset: Math.max(0, p.offset - bounds[k].from), page: p.page });
+  }
+  return lines;
 }
 
 /** A long text in parts of at most MAX_TEXT, cut at a space. */
 function splitLong(src: Source): Source[] {
   if (src.text.length <= MAX_TEXT) return [src];
   const parts: Source[] = [];
-  let from = 0;
-  while (from < src.text.length) {
+  for (let from = 0; from < src.text.length; ) {
     let to = Math.min(src.text.length, from + MAX_TEXT);
     if (to < src.text.length) {
       const space = src.text.lastIndexOf(" ", to - 1);
       if (space > from) to = space + 1;
     }
-    const part = sliceSource(src, from, to);
-    if (from > 0) part.starts = part.starts.filter((p) => p.offset > 0 || src.starts.some((q) => q.offset === from));
-    parts.push(part);
+    parts.push(sliceSource(src, from, to));
     from = to;
   }
   return parts;
@@ -232,7 +229,7 @@ type ListLine = {
 function listLine(line: Source): ListLine {
   const indent = /^ */.exec(line.text)?.[0].length ?? 0;
   const depth = Math.floor(indent / 2);
-  const whole = sliceSource(line, indent, line.text.length);
+  const whole = sliceSource(line, indent, line.text.length, true);
   const m = LIST_MARKER.exec(whole.text);
   const out: ListLine = { depth, key: null, value: 1, checked: false, words: whole, whole };
   if (!m) return out;
@@ -255,7 +252,7 @@ function listLine(line: Source): ListLine {
     out.value = m[5].charCodeAt(0) - 96;
     out.key = "ordered:NUMBERED_ALPHA_ROMAN_DECIMAL_TWO_PARENS";
   }
-  out.words = sliceSource(whole, cut, whole.text.length);
+  out.words = sliceSource(whole, cut, whole.text.length, true);
   return out;
 }
 
@@ -355,7 +352,7 @@ class Converter {
     while (lead < blocks.length && blocks[lead].type === "PARAGRAPH" && tokensOf(blocks[lead].html).includes("kicker")) lead++;
     blocks.forEach((block, i) => {
       if (i === lead && title && repeat < 0) this.title(title, blocks);
-      this.block(block as PagedBlock, i, i === repeat);
+      this.block(block, i, i === repeat);
     });
     if (blocks.length <= lead && title && repeat < 0) this.title(title, blocks);
     this.closeQuote();
@@ -367,7 +364,7 @@ class Converter {
   /** The page starts of a block, in order: where its first word is on a
       later page than the last start placed, and each later page inside it.
       A page start only rises. */
-  private startsOf(block: PagedBlock): PageMark[] {
+  private startsOf(block: ParsedBlock): PageMark[] {
     const starts: PageMark[] = this.carried.map((p) => ({ offset: 0, page: p.page }));
     this.carried = [];
     if (!this.paged) return starts;
@@ -428,13 +425,13 @@ class Converter {
     return id;
   }
 
-  private sourceOf(block: PagedBlock, starts: PageMark[]): Source {
+  private sourceOf(block: ParsedBlock, starts: PageMark[]): Source {
     const spans: Source["spans"] = [];
     for (const s of block.styles ?? []) {
       if (["bold", "italic", "underline", "code"].includes(s.style)) spans.push({ start: s.start, end: s.end, mark: { type: s.style } });
     }
     for (const l of block.links ?? []) {
-      const href = l.targetOrder !== undefined ? this.headingHref(l.targetOrder) : keptHref(l.href);
+      const href = (l.targetOrder !== undefined ? this.headingHref(l.targetOrder) : null) ?? keptHref(l.href);
       if (href) spans.push({ start: l.start, end: l.end, mark: { type: "link", attrs: { href } } });
     }
     for (const c of block.citations ?? []) {
@@ -465,7 +462,7 @@ class Converter {
     this.push(paragraphNode(inline({ text: title, spans: [], starts }), attrs));
   }
 
-  private block(block: PagedBlock, index: number, isTitle: boolean) {
+  private block(block: ParsedBlock, index: number, isTitle: boolean) {
     const starts = this.startsOf(block);
     switch (block.type) {
       case "HEADING":
@@ -488,7 +485,7 @@ class Converter {
     }
   }
 
-  private paragraph(block: PagedBlock, index: number, starts: PageMark[]) {
+  private paragraph(block: ParsedBlock, index: number, starts: PageMark[]) {
     if (!block.text.trim()) return this.carry(starts);
     const tokens = tokensOf(block.html);
     const role: Role | undefined = ROLES.find((r) => tokens.includes(r));
@@ -503,7 +500,7 @@ class Converter {
     this.place(index, nodes, role === "quote");
   }
 
-  private heading(block: PagedBlock, index: number, starts: PageMark[], isTitle: boolean) {
+  private heading(block: ParsedBlock, index: number, starts: PageMark[], isTitle: boolean) {
     if (!block.text.trim()) return this.carry(starts);
     const align = alignOf(tokensOf(block.html));
     const content = inline(this.sourceOf(block, starts));
@@ -516,7 +513,7 @@ class Converter {
     this.place(index, [content.length > 0 ? { type: "heading", attrs, content } : { type: "heading", attrs }]);
   }
 
-  private list(block: PagedBlock, index: number, starts: PageMark[]) {
+  private list(block: ParsedBlock, index: number, starts: PageMark[]) {
     // A line with no words is no line: its page starts go to the next one.
     const lines: ListLine[] = [];
     let waiting: PageMark[] = [];
@@ -549,7 +546,7 @@ class Converter {
     this.place(index, nodes);
   }
 
-  private table(block: PagedBlock, index: number, starts: PageMark[]) {
+  private table(block: ParsedBlock, index: number, starts: PageMark[]) {
     const built = (block.html ? tableFromHtml(block.html) : null) ?? tableFromText(block.text);
     if (!built) return this.carry(starts);
     // A page start goes into the first cell of the row the page begins at.
@@ -567,9 +564,10 @@ class Converter {
     this.place(index, nodes);
   }
 
-  private figure(block: PagedBlock, index: number, starts: PageMark[]) {
+  private figure(block: ParsedBlock, index: number, starts: PageMark[]) {
     const mediaId = newBlockId();
-    const caption = block.text.slice(0, MAX_CAPTION);
+    // At most MAX_CAPTION_CHARS, never half a character (a surrogate pair).
+    const caption = block.text.slice(0, MAX_CAPTION_CHARS - (/[\uD800-\uDBFF]/.test(block.text[MAX_CAPTION_CHARS - 1] ?? "") ? 1 : 0));
     const page = this.input.kind === "pdf" && typeof block.page === "number" ? block.page : null;
     const region = block.region ?? null;
     const pageStart = starts.at(-1)?.page ?? null;
@@ -589,7 +587,7 @@ class Converter {
     ]);
   }
 
-  private equation(block: PagedBlock, index: number, starts: PageMark[]) {
+  private equation(block: ParsedBlock, index: number, starts: PageMark[]) {
     const latex = block.text.trim();
     if (!latex) return this.carry(starts);
     if (latex.length > MAX_LATEX) return this.code({ ...block, text: latex }, index, starts);
@@ -599,8 +597,8 @@ class Converter {
     this.place(index, [{ type: "blockMath", attrs }]);
   }
 
-  private code(block: PagedBlock, index: number, starts: PageMark[]) {
-    const text = block.text.replaceAll("​", "");
+  private code(block: ParsedBlock, index: number, starts: PageMark[]) {
+    const text = block.text.replaceAll(ZWSP, "");
     if (!text.trim()) return this.carry(starts);
     // A code block holds no inline node: a page that begins in it draws its
     // number at the block's top.
@@ -641,7 +639,7 @@ class Converter {
     let rows = 0;
     walk(richText, (node) => {
       nodes += 1;
-      if (INDEXED_NODE_TYPES.has(node.type) || node.type === "figure") rows += 1;
+      if (INDEXED_NODE_TYPES.has(node.type)) rows += 1;
     });
     return {
       richText,

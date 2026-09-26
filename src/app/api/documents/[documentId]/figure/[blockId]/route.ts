@@ -15,30 +15,17 @@ const REGION_PAGE_WIDTH = 2000;
 const PAGE_WIDTH = 1200;
 
 // blockId: a FigureMedia id (a figure object of an import, SPEC.md §29) or
-// a FIGURE block's id (a block document). The folder keeps its name.
+// a FIGURE block's id (a block document).
 const paramsSchema = z.object({
   documentId: z.string().min(1),
   blockId: z.string().min(1),
 });
 
-// A stored region: the JSON shape, or the JSON string a figure object's
-// attribute carries.
-function regionOf(value: unknown) {
-  if (typeof value !== "string") return parseRegion(value);
-  try {
-    return parseRegion(JSON.parse(value));
-  } catch {
-    return null;
-  }
-}
-
 // A PDF figure's visual: its page rendered to PNG from the document's stored
 // bytes, cropped to the figure's region when the parse found one (SPEC.md
-// §16). The figure is an import's FigureMedia row or a block document's
-// FIGURE block. A web figure's images load from its own html, never from
-// here, so a FigureMedia row without a page is 404 like a FIGURE block
-// parsed before pages were stored (page null): the reader falls back to
-// the caption.
+// §16). A web figure's images load from its own html, never from here: a
+// FigureMedia row without a page answers 404, like a FIGURE block parsed
+// before pages were stored, and the reader falls back to the caption.
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ documentId: string; blockId: string }> },
@@ -80,7 +67,7 @@ export async function GET(
     return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   }
 
-  const region = regionOf(figure.region);
+  const region = parseRegion(figure.region);
   const page = await renderPdfPage(
     new Uint8Array(document.fileData),
     figure.page,

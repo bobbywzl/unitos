@@ -1,11 +1,12 @@
 import { inlineText } from "@/lib/docs/blocks";
 import { INDEXED_NODE_TYPES, newBlockId, ZWSP, type RichMark, type RichNode } from "@/lib/docs/schema";
 
-// Server-side edits to a blank document's rich text (SPEC.md §29). The block
+// Server-side edits to a document's rich text (SPEC.md §29). The block
 // routes — the assistant's approved plans, the history's restore, an image
-// dropped on a paragraph — act on blocks; for a blank document each one is
-// applied here to the rich text, and the save (lib/docs/sync.ts) brings the
-// Block rows in line. Every function returns a new tree; none mutates.
+// dropped on a paragraph — act on blocks; for a document with rich text each
+// one is applied here to the rich text, and the save (lib/docs/sync.ts)
+// brings the Block rows in line. A figure object's words are its media's: no
+// edit changes them. Every function returns a new tree; none mutates.
 
 type Path = number[];
 
@@ -54,15 +55,57 @@ export function inlineNodes(text: string, marks?: RichMark[]): RichNode[] {
   return out;
 }
 
-/** The node's words replaced by `text`. The marks of the first run carry
-    over, so a bold paragraph rewritten stays bold. */
+/** The marks a rewritten paragraph keeps from its first run: its formatting,
+    never a link, a citation, or a suggestion, which belong to their words. */
+const WORD_MARKS = new Set(["link", "citation", "insertion", "deletion", "modification"]);
+
+/** The page starts of a textblock, each with the words before it. */
+function pageStartsIn(node: RichNode): { at: number; node: RichNode }[] {
+  const starts: { at: number; node: RichNode }[] = [];
+  let at = 0;
+  for (const child of node.content ?? []) {
+    if (child.type === "pageStart") starts.push({ at, node: child });
+    else at += inlineText(child).length;
+  }
+  return starts;
+}
+
+/** Plain text as inline nodes, with page starts put back at word offsets. */
+function inlineWithStarts(text: string, marks: RichMark[] | undefined, starts: { at: number; node: RichNode }[]): RichNode[] {
+  const out: RichNode[] = [];
+  let from = 0;
+  for (const start of [...starts].sort((a, b) => a.at - b.at)) {
+    const at = Math.max(from, Math.min(text.length, start.at));
+    out.push(...inlineNodes(text.slice(from, at), marks), start.node);
+    from = at;
+  }
+  out.push(...inlineNodes(text.slice(from), marks));
+  return out;
+}
+
+/** The node's words replaced by `text`. The formatting of the first run
+    carries over, so a bold paragraph rewritten stays bold. A page start
+    stays: where the words before or after it are kept, beside them; inside
+    the words replaced, where the replacement ends. */
 export function replaceBlockText(doc: RichNode, blockId: string, text: string): RichNode | null {
   const hit = findBlock(doc, blockId);
-  if (!hit || hit.node.type === "image" || hit.node.type === "horizontalRule") return null;
+  if (!hit || hit.node.type === "image" || hit.node.type === "horizontalRule" || hit.node.type === "figure") return null;
   if (hit.node.type === "blockMath") return spliceAt(doc, hit.path, (n) => [{ ...n, attrs: { ...n.attrs, latex: text } }]);
-  const firstMarks = hit.node.content?.find((c) => c.type === "text")?.marks;
+  const firstMarks = hit.node.content?.find((c) => c.type === "text")?.marks?.filter((m) => !WORD_MARKS.has(m.type));
+  const before = inlineText(hit.node);
+  let head = 0;
+  while (head < before.length && head < text.length && before[head] === text[head]) head++;
+  let tail = 0;
+  while (tail < before.length - head && tail < text.length - head && before[before.length - 1 - tail] === text[text.length - 1 - tail]) tail++;
+  const starts = pageStartsIn(hit.node).map((s) => ({
+    at: s.at <= head ? s.at : s.at >= before.length - tail ? text.length - (before.length - s.at) : text.length - tail,
+    node: s.node,
+  }));
   return spliceAt(doc, hit.path, (node) => [
-    { ...node, content: node.type === "codeBlock" ? (text ? [{ type: "text", text }] : []) : inlineNodes(text, firstMarks) },
+    {
+      ...node,
+      content: node.type === "codeBlock" ? (text ? [{ type: "text", text }] : []) : inlineWithStarts(text, firstMarks, starts),
+    },
   ]);
 }
 
@@ -309,11 +352,29 @@ export function insertAtOrder(doc: RichNode, order: number, node: RichNode): Ric
 }
 
 /** The node a stored block becomes when it is put back: a heading keeps its
-    level; any other text block comes back as a paragraph. */
-export function nodeForBlock(block: { id: string; type: string; text: string; html: string | null }): RichNode {
+    level; a figure object comes back from its media (the save sets its
+    caption, page, and region from it), an image from its html; any other
+    text block comes back as a paragraph. */
+export function nodeForBlock(block: {
+  id: string;
+  type: string;
+  text: string;
+  html: string | null;
+  mediaId?: string | null;
+}): RichNode {
   if (block.type === "HEADING") {
     const level = Number(/^<h([1-6])/.exec(block.html ?? "")?.[1] ?? 2);
     return { type: "heading", attrs: { level, blockId: block.id }, content: inlineNodes(block.text) };
+  }
+  if (block.type === "FIGURE" && block.mediaId) {
+    return {
+      type: "figure",
+      attrs: { blockId: block.id, mediaId: block.mediaId, caption: block.text, page: null, region: null, pageStart: null },
+    };
+  }
+  if (block.type === "FIGURE" && block.html) {
+    const image = imageNode(block.html, "", block.id);
+    if (image) return image;
   }
   return paragraphNode(block.text, block.id);
 }

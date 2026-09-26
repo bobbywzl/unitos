@@ -3,7 +3,7 @@ import { z } from "zod";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { insertAtOrder, nodeForBlock } from "@/lib/docs/ops";
-import { editRichText, isRichTextDocument } from "@/lib/docs/server";
+import { editRichText, importSharedResponse, isRichTextDocument } from "@/lib/docs/server";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
@@ -34,17 +34,27 @@ export async function POST(req: Request) {
     type?: string;
     html?: string | null;
     originalText?: string | null;
+    mediaId?: string | null;
   };
   const order = typeof meta.order === "number" ? meta.order : 0;
   const type = meta.type === "HEADING" || meta.type === "LIST" ? meta.type : "PARAGRAPH";
   const text = edit.before;
 
-  // A blank document is edited through its rich text (SPEC.md §29): the
-  // paragraph goes back in its place with its own id, so anchors on it heal.
+  // A document with rich text is edited through it (SPEC.md §29): the
+  // paragraph goes back in its place with its own id, so anchors on it heal;
+  // a figure comes back from its media or its html.
   if (await isRichTextDocument(edit.documentId)) {
-    const node = nodeForBlock({ id: edit.blockId, type, text, html: meta.html ?? null });
+    const node = nodeForBlock({
+      id: edit.blockId,
+      type: meta.type === "FIGURE" ? "FIGURE" : type,
+      text,
+      html: meta.html ?? null,
+      mediaId: meta.mediaId ?? null,
+    });
     const result = await editRichText(edit.documentId, access.user.id, (doc) => insertAtOrder(doc, order, node));
-    if (!result.ok) return NextResponse.json({ error: t("api.editNotRemovedParagraph") }, { status: 400 });
+    if (!result.ok) {
+      return result.reason === "shared" ? importSharedResponse(t) : NextResponse.json({ error: t("api.editNotRemovedParagraph") }, { status: 400 });
+    }
     return NextResponse.json(await db.block.findUnique({ where: { id: edit.blockId } }), { status: 201 });
   }
 

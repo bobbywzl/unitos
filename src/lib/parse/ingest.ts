@@ -3,7 +3,7 @@ import { Prisma, type Document } from "@prisma/client";
 import { carryContents } from "@/lib/contents";
 import { db } from "@/lib/db";
 import { deriveBlocks, ensureBlockIds, hasBlockIds } from "@/lib/docs/blocks";
-import { richTextFromImport } from "@/lib/docs/import";
+import { richTextFromImport, type ImportFigure, type ImportKind } from "@/lib/docs/import";
 import { sanitizeRichText, type PageSetup, type RichNode } from "@/lib/docs/schema";
 import { syncRichText } from "@/lib/docs/sync";
 import { keepNamedVersion } from "@/lib/docs/versions";
@@ -220,7 +220,7 @@ export function importPageEditorOn(): boolean {
 // done line says so. Every save sends the whole rich text and every row, so
 // a document past these is slow to open, type in, and save.
 export const IMPORT_MAX_ROWS = 1_500;
-export const IMPORT_MAX_JSON_CHARS = 1_500_000;
+export const IMPORT_MAX_JSON_BYTES = 1_500_000;
 
 /** Why an import stays a block document: the size guard. */
 type BlockDocumentReason = "size";
@@ -232,11 +232,8 @@ function blockDocumentDetail(reason: BlockDocumentReason | null): string | undef
 }
 
 // An import's writes: the rich text, its figures, and the rows in one
-// transaction. A 1,500-row import writes in well under this.
-const IMPORT_TX_MS = 60_000;
-
-type ImportKind = "pdf" | "url" | "markdown";
-type ImportFigure = ReturnType<typeof richTextFromImport>["figures"][number];
+// transaction, as long as a bulk save may take (lib/docs/sync.ts).
+const IMPORT_TX_MS = 120_000;
 
 /** A parse as an import: the rich text, the figure media, the page setup. */
 type Converted = { richText: RichNode; figures: ImportFigure[]; pageSetup: PageSetup };
@@ -255,7 +252,7 @@ function convertImport(input: {
   // Contents entries point at their headings' orders; the converter links
   // them to the headings' block ids.
   const out = richTextFromImport({ ...input, blocks: resolveContentsLinks(input.blocks) });
-  if (out.size.rows > IMPORT_MAX_ROWS || out.size.json > IMPORT_MAX_JSON_CHARS) return "size";
+  if (out.size.rows > IMPORT_MAX_ROWS || out.size.json > IMPORT_MAX_JSON_BYTES) return "size";
   // Past the node limit the sanitizer refuses the document: the guard holds.
   const clean = sanitizeRichText(out.richText);
   if (!clean) return "size";

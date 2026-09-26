@@ -3,7 +3,7 @@ import { z } from "zod";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { toggleBlockStyle } from "@/lib/docs/ops";
-import { editRichText, isRichTextDocument } from "@/lib/docs/server";
+import { editRichText, importSharedResponse, isRichTextDocument } from "@/lib/docs/server";
 import { serverT } from "@/lib/i18n/server";
 import { isToggleStyle, sameSlot } from "@/lib/text-style";
 import { parseBody } from "@/lib/validate";
@@ -40,7 +40,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
     const result = await editRichText(block.documentId, access.user.id, (doc) =>
       toggleBlockStyle(doc, blockId, data.startOffset, data.endOffset, data.style),
     );
-    if (!result.ok) return NextResponse.json({ error: t("api.styleOffsetsInvalid") }, { status: 400 });
+    if (!result.ok) {
+      return result.reason === "shared" ? importSharedResponse(t) : NextResponse.json({ error: t("api.styleOffsetsInvalid") }, { status: 400 });
+    }
     await db.blockEdit.create({
       data: {
         documentId: block.documentId,

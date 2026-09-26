@@ -197,7 +197,7 @@ function ringColor(h: Highlight): string {
     behind the tool's symbol, or a highlight's dot. A press opens the
     annotation, or the note. It carries no data-source-id: a jump finds the
     object itself. */
-function labelWidget(anchors: Highlight[], t: TFunc) {
+function labelWidget(anchors: Highlight[], color: string, t: TFunc) {
   return () => {
     const focusable = anchors.find((h) => h.annotation && h.sourceId);
     const note = anchors.find((h) => !h.annotation && h.noteId);
@@ -226,7 +226,7 @@ function labelWidget(anchors: Highlight[], t: TFunc) {
         {toolAnchor?.tool ? (
           <ToolSymbol tool={toolAnchor.tool} plus={toolAnchor.plus} size={11} />
         ) : (
-          <span aria-hidden className="docs-object-dot" style={{ background: ringColor(anchors[0]) }} />
+          <span aria-hidden className="docs-object-dot" style={{ background: color }} />
         )}
         {text}
       </>,
@@ -246,23 +246,24 @@ function objectMarks(node: PMNode, pos: number, highlights: Highlight[], t: TFun
   // The card open on it, else an annotation, names the ring's color.
   const lead = anchors.find((h) => h.open) ?? anchors.find((h) => h.annotation && h.sourceId) ?? anchors[0];
   const sourceId = lead.sourceId ?? anchors.find((h) => h.sourceId)?.sourceId;
+  const color = ringColor(lead);
   const attrs: Record<string, string> = {
     class: "docs-object-mark",
-    style: `--docs-object-ring: ${ringColor(lead)}`,
+    style: `--docs-object-ring: ${color}`,
     "data-unitos-mark": "",
   };
   if (sourceId) attrs["data-source-id"] = sourceId;
   const key = anchors
-    .map((h) => [h.sourceId, h.noteId, h.annotation ? 1 : 0, h.figureLabel, h.tool, h.plus ? 1 : 0, h.color].join(":"))
+    .map((h) => [h.sourceId, h.noteId, h.annotation ? 1 : 0, h.figureLabel, h.tool, h.plus ? 1 : 0].join(":"))
     .join(",");
   return [
     Decoration.node(pos, pos + node.nodeSize, attrs),
-    Decoration.widget(pos, labelWidget(anchors, t), {
+    Decoration.widget(pos, labelWidget(anchors, color, t), {
       // After a page's spacer at the same place: the chip stands on the object's page.
       side: 1,
       ignoreSelection: true,
       stopEvent: () => true,
-      key: `object-label:${key}`,
+      key: `object-label:${color}:${key}`,
       destroy: (dom) => {
         const root = (dom as HTMLElement & { __root?: Root }).__root;
         if (root) queueMicrotask(() => root.unmount());

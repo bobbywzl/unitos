@@ -25,7 +25,7 @@
 // is 1 when a check fails; a NOTE never fails the run.
 import "../eval/env";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { getDocumentProxy } from "unpdf";
 import { deriveBlocks, inlineText, type DerivedBlock } from "@/lib/docs/blocks";
@@ -521,12 +521,20 @@ async function checkFixture(f: Fixture): Promise<Report> {
     }
     const space = addedLeft.findIndex((a) => a.u.key.replace(/\s+/g, "") === l.u.key.replace(/\s+/g, ""));
     if (space >= 0) {
-      whitespace.push(`"${clip(l.u.text, 40)}"`);
+      whitespace.push(firstDifference(norm(l.u.text), norm(addedLeft[space].u.text)));
       addedLeft.splice(space, 1);
       continue;
     }
     lostHard.push(l);
   }
+  // A table's <caption> is in the parse's html, not in its text: the
+  // converter keeps it as a paragraph above the table.
+  const captions = new Set(
+    f.blocks.filter((b) => b.type === "TABLE").flatMap((b) => [...(b.html ?? "").matchAll(/<caption[^>]*>([\s\S]*?)<\/caption>/gi)].map((m) => norm(m[1].replace(/<[^>]+>/g, " ")))),
+  );
+  const tableCaptions = addedLeft.filter((a) => captions.has(norm(a.u.text)));
+  for (const c of tableCaptions) addedLeft.splice(addedLeft.indexOf(c), 1);
+  if (tableCaptions.length) note("a table's caption (in the parse's html, not its text) is a paragraph", `${tableCaptions.length}: ${tableCaptions.slice(0, 3).map((c) => `"${clip(c.u.text, 40)}"`).join(" | ")}`);
   const wordsOk = lostHard.length === 0 && addedLeft.length === 0;
   const describeLost = lostHard.slice(0, 6).map(({ u }) => {
     const b = u.block >= 0 ? f.blocks[u.block] : null;
@@ -943,7 +951,7 @@ async function loadSource(source: string): Promise<Fixture> {
     if (fetched.kind === "pdf") return pdfFixture(basename(new URL(source).pathname) || source, fetched.bytes);
     return htmlFixture(source, fetched.html, source, "url");
   }
-  const path = join(ROOT, source);
+  const path = isAbsolute(source) ? source : join(ROOT, source);
   if (/\.pdf$/i.test(source)) return pdfFixture(basename(source), new Uint8Array(readFileSync(path)));
   return markdownFixture(basename(source), readFileSync(path, "utf8"));
 }

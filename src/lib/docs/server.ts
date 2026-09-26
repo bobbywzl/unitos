@@ -1,10 +1,11 @@
 import type { Prisma } from "@prisma/client";
-import { after } from "next/server";
+import { after, NextResponse } from "next/server";
 import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
 import type { RichNode } from "@/lib/docs/schema";
 import { syncRichText, type SyncResult } from "@/lib/docs/sync";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 
 // The block routes' door into a document with rich text (SPEC.md §29), a
 // blank document or an import: it is edited through its rich text, never
@@ -31,6 +32,11 @@ export async function importShared(documentId: string, tx?: Prisma.TransactionCl
 
 /** A server-side edit refused: the import is shared across accounts. */
 export type EditShared = { ok: false; reason: "shared" };
+
+/** How a route refuses an edit of an import shared across accounts. */
+export function importSharedResponse(t: TFunc): NextResponse {
+  return NextResponse.json({ error: t("api.importShared"), reason: "shared" }, { status: 403 });
+}
 
 /** Apply one server-side edit to a document's rich text and save it: the
     Block rows follow, the project's live sync moves, and the skeleton checks
