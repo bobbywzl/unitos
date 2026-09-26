@@ -137,8 +137,12 @@
    in its mark's kind color, and its label chip (A1) stands right of the text
    column, level with the object's top, as the reader draws it. */
 .docs-prose .docs-object-mark {
-  border-radius: 8px;
   box-shadow: 0 0 0 2px var(--docs-object-ring);
+}
+/* A figure keeps its own corners (css/import.css); an equation takes the
+   reader's. */
+.docs-prose .docs-math-block.docs-object-mark {
+  border-radius: 8px;
 }
 .docs-prose button.docs-object-label {
   position: absolute;

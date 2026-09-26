@@ -3003,9 +3003,11 @@ function points(value: number): number {
 // The PDF's page labels (pdf.js getPageLabels: one per page, "" where the
 // PDF names a page with no number), kept only when they name the pages
 // otherwise than 1..n — as pdf.js's own viewer does. A page left unnamed
-// reads as its number.
+// reads as its number. A label is a margin note ("xii", "A-12"): a longer
+// one is cut, so a crafted prefix cannot swell the page data.
+const PAGE_LABEL_MAX = 24;
 function pageLabelsOf(labels: string[] | null, pageCount: number): string[] | undefined {
   if (!labels || labels.length !== pageCount) return undefined;
-  const named = labels.map((label, i) => label.trim() || String(i + 1));
+  const named = labels.map((label, i) => label.trim().slice(0, PAGE_LABEL_MAX) || String(i + 1));
   return named.every((label, i) => label === String(i + 1)) ? undefined : named;
 }

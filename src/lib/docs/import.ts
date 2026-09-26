@@ -598,24 +598,40 @@ class Converter {
   }
 
   private code(block: ParsedBlock, index: number, starts: PageMark[]) {
-    const text = block.text.replaceAll(ZWSP, "");
-    if (!text.trim()) return this.carry(starts);
-    // A code block holds no inline node: a page that begins in it draws its
-    // number at the block's top.
-    const pageStart = starts.at(-1)?.page;
+    const raw = block.text;
+    if (!raw.replaceAll(ZWSP, "").trim()) return this.carry(starts);
+    // A code block holds no inline node: it draws the number of a page that
+    // begins at it at its top, and a page that begins inside it begins a new
+    // code block at the line it begins on.
+    const pages = new Map<number, number>();
+    for (const p of starts) {
+      const at = p.offset <= 0 ? 0 : raw.lastIndexOf("\n", p.offset - 1) + 1;
+      pages.set(at, Math.max(p.page, pages.get(at) ?? 0));
+    }
+    const cuts = [...pages.keys()].filter((at) => at > 0).sort((a, b) => a - b);
     const nodes: RichNode[] = [];
-    let from = 0;
-    while (from < text.length) {
-      let to = Math.min(text.length, from + MAX_TEXT);
-      if (to < text.length) {
-        const line = text.lastIndexOf("\n", to - 1);
+    let waiting: number | undefined;
+    for (let from = 0; from < raw.length; ) {
+      const cut = cuts.find((at) => at > from) ?? raw.length;
+      let to = Math.min(cut, from + MAX_TEXT);
+      if (to < cut) {
+        const line = raw.lastIndexOf("\n", to - 1);
         if (line > from) to = line + 1;
       }
-      const attrs: Record<string, unknown> = { blockId: newBlockId() };
-      if (from === 0 && pageStart !== undefined) attrs.pageStart = pageStart;
-      nodes.push({ type: "codeBlock", attrs, content: [{ type: "text", text: text.slice(from, to) }] });
+      // The line break at a cut is the break between the two blocks.
+      const text = raw.slice(from, to < raw.length && raw[to - 1] === "\n" ? to - 1 : to).replaceAll(ZWSP, "");
+      const page = pages.get(from) ?? waiting;
+      if (text) {
+        const attrs: Record<string, unknown> = { blockId: newBlockId() };
+        if (page !== undefined) attrs.pageStart = page;
+        nodes.push({ type: "codeBlock", attrs, content: [{ type: "text", text }] });
+        waiting = undefined;
+      } else {
+        waiting = page;
+      }
       from = to;
     }
+    if (waiting !== undefined) this.carry([{ offset: 0, page: waiting }]);
     this.place(index, nodes);
   }
 

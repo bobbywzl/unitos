@@ -4,7 +4,14 @@ import { diffSegments, remapAnchor } from "@/lib/anchors/remap";
 import { resolveAnchor } from "@/lib/anchors/resolve";
 import { db } from "@/lib/db";
 import { deriveBlocks, ensureBlockIds, type DerivedBlock } from "@/lib/docs/blocks";
-import { hasFigures, sanitizeRichText, stableJson, withDocumentFigures, type RichNode } from "@/lib/docs/schema";
+import {
+  hasFigures,
+  MAX_CAPTION_CHARS,
+  sanitizeRichText,
+  stableJson,
+  withDocumentFigures,
+  type RichNode,
+} from "@/lib/docs/schema";
 import { keepVersion } from "@/lib/docs/versions";
 
 // One save of a document with rich text, a blank document or an import
@@ -549,7 +556,11 @@ export async function syncRichText({
       // or rewritten: a figure cut in one save and pasted in the next.
       const wholeTexts = bulk
         ? []
-        : [...new Set(returned.map((id) => newById.get(id)?.text ?? "").filter((text) => text.trim()))].slice(0, 500);
+        : [
+            ...new Set(
+              returned.map((id) => newById.get(id)?.text ?? "").filter((text) => text.trim() && text.length <= MAX_CAPTION_CHARS),
+            ),
+          ].slice(0, 500);
       const [sources, links, wholeOrphans] = await Promise.all([
         tx.source.findMany({
           where: {

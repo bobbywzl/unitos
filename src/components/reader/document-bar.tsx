@@ -445,18 +445,14 @@ export function DocumentBar({
     if (figures) setFigureCapture({ documentId: doc.id, status: "running", error: null });
     try {
       const body = { ...(as ? { as } : {}), ...(replaceEdits ? { replaceEdits } : {}) };
-      const res = await fetch(`/api/documents/${doc.id}/reparse`, {
-        method: "POST",
-        ...(as || replaceEdits
-          ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-          : {}),
-      });
-      if (!res.ok) {
-        const detail = await readJson<{ error?: string; reason?: string }>(res);
-        if (detail?.reason === "edited") throw new EditedImportAnswer(detail.error);
-        throw new Error(detail?.error ?? statusMessage(t, res.status));
-      }
-      const result = await runIngest(doc.title, doc.sourceUrl ? "url" : "pdf", async () => res);
+      const result = await runIngest(doc.title, doc.sourceUrl ? "url" : "pdf", () =>
+        fetch(`/api/documents/${doc.id}/reparse`, {
+          method: "POST",
+          ...(as || replaceEdits
+            ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+            : {}),
+        }),
+      );
       router.refresh();
       if (result.blockDocument) showNotice(t("panes.uploadBlockDocument"), 8000);
       if (figures) setFigureCapture(null);
@@ -587,7 +583,8 @@ export function DocumentBar({
       setPhase((p) => (p ? { ...p, steps: advanceIngestSteps(p.steps, stage, detail) } : p));
     const res = await send(emit);
     if (!res.ok) {
-      const detail = await readJson<{ error?: string }>(res);
+      const detail = await readJson<{ error?: string; reason?: string }>(res);
+      if (detail?.reason === "edited") throw new EditedImportAnswer(detail.error);
       throw new Error(detail?.error ?? statusMessage(t, res.status));
     }
     let result: IngestEvent | null = null;
