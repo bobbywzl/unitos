@@ -229,6 +229,10 @@ function isTextEntry(el: HTMLElement): boolean {
 // Without Shift, these keys drop a selection made with the keyboard.
 const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 
+// How long a reading position waits for the page editor's words to come
+// (its code loads on demand; a long import takes a while to stand).
+const PAGE_WAIT_MS = 30_000;
+
 // A jump flashes the mark or the block it lands on; the page editor paints it.
 function flashElement(el: HTMLElement) {
   if (flashInPage(el)) return;
@@ -1108,7 +1112,12 @@ export function ReaderInteractions({
     }
     if (jumpOnOpen.current) return;
     let expected = applyReadingPosition(container, position, resume);
-    if (expected === null) return; // the block is gone (a re-parse): nothing to hold
+    // The page editor's words come after the pane: its code loads on demand,
+    // and the editor stands a moment later. Until then the position waits
+    // for its block (PAGE_WAIT_MS at most), then holds as on any document.
+    let placed = expected !== null;
+    const waits = !placed && richTextRef.current !== null && "blockId" in position;
+    if (!placed && !waits) return; // the block is gone (a re-parse): nothing to hold
     positionHeld.current = true;
     // The browser's own scroll anchoring would keep whichever block it picked
     // at the pane's edge; while the hold runs, the stored block is the anchor.
@@ -1123,6 +1132,7 @@ export function ReaderInteractions({
       positionHeld.current = false;
       container.style.overflowAnchor = overflowAnchor;
       observer.disconnect();
+      pageWatch.disconnect();
       container.removeEventListener("scroll", onScroll);
       container.removeEventListener("wheel", release);
       container.removeEventListener("touchmove", release);
@@ -1138,8 +1148,21 @@ export function ReaderInteractions({
     };
     const hold = () => {
       if (!positionHeld.current) return;
-      expected = applyReadingPosition(container, position, resume);
-      if (expected === null) release();
+      const next = applyReadingPosition(container, position, resume);
+      if (next === null) {
+        // Not on screen: the page editor is still coming, or the block is gone.
+        if (placed || pageEditorIn(container)) release();
+        return;
+      }
+      expected = next;
+      if (placed) return;
+      // The page editor's words are here: the hold runs from now, and its
+      // page's size changes (pagination, figures loading) hold the place.
+      placed = true;
+      clearTimeout(timer);
+      timer = setTimeout(release, POSITION_HOLD_MS);
+      const page = container.querySelector("article");
+      if (page) observer.observe(page);
     };
     const onScroll = () => {
       // The hold's own moves land on expected. Any other scroll is the
@@ -1149,11 +1172,15 @@ export function ReaderInteractions({
     };
     const observer = new ResizeObserver(hold);
     observer.observe(article);
+    // The page editor's words and its page breaks change the pane's content
+    // without resizing a box the observer above watches.
+    const pageWatch = new MutationObserver(hold);
+    if (waits) pageWatch.observe(container, { childList: true, subtree: true });
     container.addEventListener("scroll", onScroll, { passive: true });
     container.addEventListener("wheel", release, { passive: true });
     container.addEventListener("touchmove", release, { passive: true });
     container.addEventListener("pointerdown", release);
-    const timer = setTimeout(release, POSITION_HOLD_MS);
+    let timer = setTimeout(release, placed ? POSITION_HOLD_MS : PAGE_WAIT_MS);
     return cleanup;
   }, [positionStoreKey, embedded, isTranscript, accountAtOpen]);
   useEffect(() => {
