@@ -43,7 +43,7 @@ import { DocumentTitle } from "@/components/reader/document-title";
 import { formatTime, type Speaker, type TranscriptLine } from "@/lib/video/types";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { DocsFrame } from "@/components/docs/frame";
-import type { Imported } from "@/components/docs/docs-editor";
+import type { DocsMedia, Imported } from "@/components/docs/docs-editor";
 
 // The page editor (SPEC.md §29) loads with a blank document or an import
 // only: its editor library stays out of every other document's bundle.
@@ -613,7 +613,8 @@ export function Reader({
   blocks: BlockData[];
   /** A blank document or an import (SPEC.md §29): the page editor takes the
       article's place. canEdit: the reader may type; aiControls: the Unitos
-      tools at the toolbar's right end; imported: an import's page data. */
+      tools at the toolbar's right end; imported: an import's page data;
+      media: the figures' media and page labels of an import or its copy. */
   richText?: {
     doc: RichNode;
     rev: number;
@@ -623,6 +624,7 @@ export function Reader({
     notebookId: string;
     documents: { id: string; title: string }[];
     imported?: Imported | null;
+    media?: DocsMedia | null;
     /** Under the pages: an import's References section. */
     footer?: React.ReactNode;
   } | null;
@@ -1261,6 +1263,7 @@ export function Reader({
           flushRef={flushRef}
           aiControls={richText.aiControls}
           imported={richText.imported ?? null}
+          media={richText.media ?? null}
           footer={richText.footer}
         />
       </DocsFrameContext.Provider>

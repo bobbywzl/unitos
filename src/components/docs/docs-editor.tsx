@@ -51,8 +51,7 @@ const FONTS_LINK_ID = "unitos-docs-fonts";
     the import or its last re-parse stored (a re-parse builds the page
     editor anew); edited: changed since then (richTextRev > importRev);
     shared: attached to a project another account owns, so Editing and
-    Suggesting are off; figures: the media of its figure objects, by id;
-    pageLabels: the PDF's own names for its pages. */
+    Suggesting are off. */
 export type Imported = {
   kind: "pdf" | "url" | "markdown";
   origin: string;
@@ -60,6 +59,13 @@ export type Imported = {
   importRev: number;
   edited: boolean;
   shared: boolean;
+};
+
+/** What the page sends for a document whose rich text holds figure objects
+    or page labels: an import, or a copy of one (File > Make a copy).
+    figures: the media of its figure objects, by id; pageLabels: the PDF's
+    own names for its pages. */
+export type DocsMedia = {
   figures: Record<string, FigureMediaView>;
   pageLabels: string[] | null;
 };
@@ -311,6 +317,7 @@ export function DocsEditor({
   flushRef,
   aiControls,
   imported = null,
+  media = null,
   footer,
 }: {
   documentId: string;
@@ -329,6 +336,9 @@ export function DocsEditor({
   aiControls?: ReactNode;
   /** An import; null for a blank document. */
   imported?: Imported | null;
+  /** The media of its figure objects and its page labels: an import's, or
+      a copy's; null when it has neither. */
+  media?: DocsMedia | null;
   /** Under the pages, under the header: an import's References section. */
   footer?: ReactNode;
 }) {
@@ -351,12 +361,15 @@ export function DocsEditor({
   // The header or footer being edited: the toolbar formats its text.
   const [hfEditor, setHfEditor] = useState<Editor | null>(null);
 
-  // The figures, page labels, and page count of an import reach its figure
-  // objects, its page starts, and the scroll tip through the extensions.
+  // The figures and page labels of an import or its copy, and an import's
+  // page count, reach its figure objects, its page starts, and the scroll
+  // tip through the extensions.
   const extensions = useMemo(
     () =>
       docsExtensions(
-        imported ? { documentId, figures: imported.figures, pageLabels: imported.pageLabels, pages: imported.pages } : undefined,
+        imported || media
+          ? { documentId, figures: media?.figures ?? {}, pageLabels: media?.pageLabels ?? null, pages: imported?.pages }
+          : undefined,
       ),
     // Once per document: the editor is built once per document.
     // eslint-disable-next-line react-hooks/exhaustive-deps

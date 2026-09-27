@@ -142,7 +142,7 @@ import {
 import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
-import type { Imported } from "@/components/docs/docs-editor";
+import type { DocsMedia, Imported } from "@/components/docs/docs-editor";
 import { pageCellSelection, pageEditorIn, pageSelectionOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
 import { CardColumn, CommentCard } from "@/components/docs/layer/comment-card";
 import { setCommentResolved } from "@/lib/annotations/resolve";
@@ -961,10 +961,11 @@ export function ReaderInteractions({
   captionGaps: { id: string; label: string }[];
   figureRender: FigureRenderInfo;
   /** A blank document or an import (SPEC.md §29): its rich text, revision,
-      and page setup, and an import's page data. The page editor takes the
-      article's place; there is no reading mode and no block edit mode, and
-      every tool of this layer works on its text. */
-  richText?: { doc: RichNode; rev: number; pageSetup: PageSetup; imported?: Imported | null } | null;
+      and page setup, an import's page data, and the figures' media and page
+      labels of an import or its copy. The page editor takes the article's
+      place; there is no reading mode and no block edit mode, and every tool
+      of this layer works on its text. */
+  richText?: { doc: RichNode; rev: number; pageSetup: PageSetup; imported?: Imported | null; media?: DocsMedia | null } | null;
 }) {
   // The whole text's anchors and the collapsed view's, one map: a core's
   // anchors under its core key, so marks, local marks, and cards find them
