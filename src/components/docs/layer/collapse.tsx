@@ -91,7 +91,8 @@ function pagesIn(doc: PMNode, from: number, to: number): number[] {
 
 /** The units of the page's text that have a core, in reading order. */
 function unitsInPage(doc: PMNode, cores: Record<string, string>, on: boolean, flipped: ReadonlySet<string>): Shown[] {
-  const units = collapseUnits(deriveBlocks(doc.toJSON() as RichNode), true).filter((u) => cores[u.id] !== undefined);
+  const json = doc.toJSON() as RichNode;
+  const units = collapseUnits(deriveBlocks(json), json).filter((u) => cores[u.id] !== undefined);
   if (units.length === 0) return [];
   const at = new Map<string, number>();
   doc.descendants((node, pos) => {

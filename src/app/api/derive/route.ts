@@ -717,7 +717,7 @@ async function handle(req: Request, t: TFunc) {
   // is the cores around it: the tool reads the collapsed view the reader
   // selected in. The cached prefix stays the whole document.
   const layer = data.anchor?.layer ?? null;
-  const anchorBlocks = layer === "core" ? coreBlocks(document.collapse, document.blocks) : document.blocks;
+  const anchorBlocks = layer === "core" ? coreBlocks(document.collapse, document.blocks, document.richText) : document.blocks;
   const passage = data.anchor ? resolvePassage(anchorBlocks, data.anchor, data.segments) : [];
   const anchor = passage[0] ?? null;
   let anchored: ReturnType<typeof passageContext> = null;

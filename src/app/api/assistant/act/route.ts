@@ -259,7 +259,7 @@ async function handle(req: Request, t: TFunc) {
   // A core anchor (SPEC.md §28) resolves against the cores, its context the
   // cores around it.
   const layer = (toolNote ? toolNote.sources[0]?.layer : data.anchor?.layer) === "core" ? ("core" as const) : null;
-  const anchorBlocks = layer === "core" ? coreBlocks(document.collapse, document.blocks) : document.blocks;
+  const anchorBlocks = layer === "core" ? coreBlocks(document.collapse, document.blocks, document.richText) : document.blocks;
   const passage = anchorInput ? resolvePassage(anchorBlocks, anchorInput, segmentsInput) : [];
   const anchor = passage[0] ?? null;
   const anchored = anchor ? passageContext(anchorBlocks, passage) : null;

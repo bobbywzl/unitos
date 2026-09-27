@@ -18,11 +18,12 @@ async function stored(documentId: string) {
     where: { id: documentId },
     select: {
       collapse: true,
+      richText: true,
       blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, cell: true } },
     },
   });
   if (!document) return null;
-  const { cores, missing } = currentCores(readCollapse(document.collapse), document.blocks);
+  const { cores, missing } = currentCores(readCollapse(document.collapse), document.blocks, document.richText);
   return { cores, complete: missing.length === 0 };
 }
 

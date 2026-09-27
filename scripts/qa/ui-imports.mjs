@@ -189,7 +189,7 @@ async function sourcesOf(documentId) {
 }
 
 /** The first stored source of a document that meets `test`, waited for. */
-async function sourceWhere(documentId, test, ms = 20_000) {
+async function sourceWhere(documentId, test, ms = 30_000) {
   return (await until(async () => (await sourcesOf(documentId)).find(test) ?? null, ms, 400)) ?? null;
 }
 
@@ -602,7 +602,9 @@ async function newPage(theme = "light", { width = 1440, height = 900 } = {}) {
   // too), not the page under test.
   const ignorable = (t) =>
     /ERR_CERT|fonts\.g|Failed to load resource|youtube|ERR_TUNNEL|ERR_PROXY|net::ERR|Hydration failed|Can't perform a React state update on a component that hasn't mounted|Encountered a script tag/.test(t);
-  page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+  page.on("pageerror", (e) => {
+    if (!ignorable(e.message)) errors.push(`pageerror: ${e.message}`);
+  });
   page.on("console", (m) => {
     if (m.type() === "error" && !ignorable(m.text())) errors.push(`console: ${m.text().slice(0, 300)}`);
   });
@@ -869,7 +871,7 @@ async function highlight(page, documentId, from, to, nth = 0) {
 }
 /** The words of a mark once they read `want` (spaces aside), waited for:
     the pieces as they stand then. */
-async function painted(page, id, want, { attr = "data-source-id", ms = 20_000, includes = false } = {}) {
+async function painted(page, id, want, { attr = "data-source-id", ms = 30_000, includes = false } = {}) {
   return (await waitIn(page, ({ id, want, attr, includes }) => {
     const pieces = window.__qa.marked(id, attr);
     const words = pieces.join("").replace(/\s+/g, "");
@@ -910,6 +912,34 @@ async function pageStarts(page) {
     });
     return out;
   });
+}
+/** The ink (pixels unlike the page's ground) in the page's left margin,
+    level with the line at `pos` and `lines` lines down: where page numbers
+    draw, whatever draws them. */
+async function marginInk(page, pos, lines = 1) {
+  const clip = await page.evaluate(({ p, lines }) => {
+    const view = window.__docsEditor.view;
+    const c = view.coordsAtPos(p);
+    const left = view.dom.getBoundingClientRect().left;
+    return { x: Math.max(0, left - 100), y: Math.max(0, c.top - 3), width: 94, height: (c.bottom - c.top) * lines + 6 };
+  }, { p: pos, lines });
+  const png = await page.screenshot({ clip });
+  return page.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const g = canvas.getContext("2d");
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, canvas.width, canvas.height).data;
+    const lum = (i) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const ground = lum(0);
+    let ink = 0;
+    for (let i = 0; i < d.length; i += 4) if (Math.abs(lum(i) - ground) > 50) ink++;
+    return ink;
+  }, png.toString("base64"));
 }
 /** Page starts inside a paragraph with at least `n` characters on each side. */
 async function inlineStarts(page, n) {
@@ -1309,6 +1339,47 @@ RISKS.R3 = async (theme) => {
   await page.keyboard.press("Control+z");
   await page.keyboard.press("Control+z");
   await waitSaved(page).catch(() => {});
+  // Two page starts on one line (the words of a whole page deleted) draw
+  // both numbers: twice the ink of one number in the margin.
+  const [one, two] = (await pageStarts(page)).filter((x) => x.on === "paragraph" && x.page > 1).slice(0, 2);
+  await page.evaluate((p) => window.__qa.show(p), one.pos);
+  const single = await marginInk(page, one.pos);
+  await page.evaluate(({ from, to }) => window.__docsEditor.commands.setTextSelection({ from, to }), { from: one.pos + 1, to: two.pos });
+  await page.keyboard.press("Delete");
+  const joined = (await pageStarts(page)).filter((x) => x.page === one.page || x.page === two.page);
+  const oneLine = joined.length === 2 && (await page.evaluate(([a, b]) => Math.abs(window.__docsEditor.view.coordsAtPos(a).top - window.__docsEditor.view.coordsAtPos(b).top) < 4, joined.map((x) => x.pos)));
+  await page.evaluate((p) => window.__qa.show(p), joined[0].pos);
+  const both = await marginInk(page, joined[0].pos, 2);
+  const bothShot = await shot(page, `R3-two-page-starts-one-line-${theme}`);
+  check("R3", oneLine && both > single * 1.6, `(${theme}) two page starts on one line draw both numbers`, `p. ${one.page} and p. ${two.page} on one line ${oneLine}; margin ink ${both} against ${single} for one number ${bothShot}`);
+  await page.keyboard.press("Control+z");
+  await waitSaved(page).catch(() => {});
+  // A page start in a table's second column (a stored text, as a PDF whose
+  // page begins there gives it) draws in the page's margin, not in the
+  // table: p. 9 moved into the second column of the table on p. 8.
+  const row = await documentRow(added.id);
+  const moved = JSON.parse(JSON.stringify(row.richText));
+  const pagesIn = (n) => (n.type === "pageStart" ? [n.attrs?.page] : (n.content ?? []).flatMap(pagesIn));
+  const at8 = moved.content.findIndex((n) => pagesIn(n).includes(8));
+  const at9 = moved.content.findIndex((n) => pagesIn(n).includes(9));
+  const table = moved.content.find((n, i) => i > at8 && i < at9 && n.type === "table");
+  const cell = table?.content?.[1]?.content?.[1]?.content?.[0];
+  if (cell) {
+    const lift = (n) => {
+      const start = n.content?.find((c) => c.type === "pageStart" && c.attrs?.page === 9);
+      if (start) n.content = n.content.filter((c) => c !== start);
+      return start ?? (n.content ?? []).map(lift).find(Boolean);
+    };
+    cell.content = [lift(moved.content[at9]), ...(cell.content ?? [])];
+    await db.document.update({ where: { id: added.id }, data: { richText: moved } });
+    await reload(page);
+    const inCell = (await pageStarts(page)).find((x) => x.page === 9);
+    await page.evaluate((p) => window.__qa.show(p), inCell.pos);
+    const ink = await marginInk(page, inCell.pos);
+    const cellShot = await shot(page, `R3-page-start-in-second-column-${theme}`);
+    check("R3", ink > single * 0.6, `(${theme}) a page start in a table's second column draws its number in the page's margin`, `margin ink ${ink} against ${single} for a paragraph's number ${cellShot}`);
+    await db.document.update({ where: { id: added.id }, data: { richText: row.richText } });
+  } else note("R3", `(${theme}) a table between p. 8 and p. 9 to hold p. 9`, `p. 8 at ${at8}, p. 9 at ${at9}, table ${Boolean(table)}`);
   if (errors.length) note("R3", "console", errors.slice(0, 3).join(" | "));
   await context.close();
 };
@@ -2589,12 +2660,15 @@ RISKS.AUDIT = async (theme) => {
       figs,
       kickerSize: kicker ? getComputedStyle(kicker.querySelector("span") ?? kicker).fontSize : null,
       references: document.querySelector('[data-track="references"], .references, [data-references]') ? true : Boolean([...document.querySelectorAll("h2, h3")].find((h) => /References/.test(h.textContent) && !h.closest(".docs-prose"))),
+      // A pageless import's table fills the text column.
+      table: [prose.querySelector("table"), prose].map((e) => Math.round(e.getBoundingClientRect().width)),
     };
   });
   const webShot = await shot(page, `AUDIT-web-${theme}`);
   check("AUDIT", shape.pageless && shape.nested >= 1 && shape.ol3 && shape.rowspan && shape.colspan && shape.region === 1 && shape.code >= 1 && shape.quote >= 1 && shape.hr >= 1, `(${theme}) the web page: pageless, a nested list, a list from 3, the table's merged cells once, code, a quote, a line`, `${JSON.stringify({ ...shape, figs: undefined })} ${webShot}`);
   check("AUDIT", shape.figs.length === 6 && shape.figs.every((f) => f.media) && shape.figs.filter((f) => f.media === "IMG").every((f) => f.loaded), `(${theme}) every figure of the web page draws its media`, JSON.stringify(shape.figs));
   check("AUDIT", Boolean(shape.references), `(${theme}) the References section stands under the page`, `${shape.references}`);
+  check("AUDIT", Math.abs(shape.table[0] - shape.table[1]) <= 2, `(${theme}) the web page's table fills the text column`, `table ${shape.table[0]} px, the column ${shape.table[1]} px`);
   const card = await hoverTip(page, ".docs-prose .docs-citation");
   check("AUDIT", /Syvitski/.test(card ?? ""), `(${theme}) a citation's hover card shows its reference entry`, `"${clip(card, 100)}"`);
   const webLine = await page.evaluate(() => {

@@ -298,7 +298,7 @@ export default async function NotebookPage(props: {
     // reader sees now, and paint on the cores alone.
     const resolvedCore = await resolveDocumentSources(
       document.id,
-      coreBlocks(document.collapse, document.blocks),
+      coreBlocks(document.collapse, document.blocks, document.richText),
       "core",
     );
 
