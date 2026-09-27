@@ -49,19 +49,10 @@ import { parseHtmlContent, resolveContentsLinks } from "@/lib/parse/url";
 // ── Types ───────────────────────────────────────────────────────────────────
 
 type ImportKind = "pdf" | "url" | "markdown";
-type PageStartIn = { offset: number; page: number };
-/** A parse block as the PDF parse writes it this round (A3a): a page on
-    every block, and the page starts inside a block joined across a break. */
-type Block = ParsedBlock & { pageStarts?: PageStartIn[] };
+type Block = ParsedBlock;
+type Row = DerivedBlock;
+/** A cell paragraph's place, as this script works it out from the table. */
 type Cell = { table: number; row: number; column: number };
-/** A paragraph index row with this round's fields (A1). */
-type Row = DerivedBlock & {
-  page?: number | null;
-  region?: unknown;
-  mediaId?: string | null;
-  citations?: { start: number; end: number; refId: string; quotedText: string }[];
-  cell?: Cell | null;
-};
 type Fixture = {
   name: string;
   kind: ImportKind;
@@ -71,7 +62,7 @@ type Fixture = {
   pageSize?: { width: number; height: number };
   pageLabels?: string[];
   references: DocumentReference[];
-  // A PDF's own words per page (1-based index 0 = page 1), read with pdf.js.
+  // A PDF's own words, one entry per page (index 0 is page 1), read with pdf.js.
   pdfPages?: string[];
   parseMs: number;
 };
@@ -123,14 +114,14 @@ function defaultSources(): string[] {
 
 // ── Text helpers ────────────────────────────────────────────────────────────
 
-const ZWSP = "​";
+const ZWSP = "\u200B";
 /** Words as compared: no zero-width spaces, one space for any run of
     spaces, each line trimmed. */
 function norm(s: string): string {
   return s
     .replaceAll(ZWSP, "")
     .split("\n")
-    .map((l) => l.replace(/[\s ]+/g, " ").trim())
+    .map((l) => l.replace(/\s+/g, " ").trim())
     .join("\n")
     .trim();
 }
@@ -229,7 +220,7 @@ function tableGrid(table: RichNode): { text: string; places: Map<RichNode, { row
 function normTable(text: string): string {
   return text
     .split("\n")
-    .map((row) => row.split("\t").map((c) => c.replace(/[\s ]+/g, " ").trim()).join("\t"))
+    .map((row) => row.split("\t").map((c) => c.replace(/\s+/g, " ").trim()).join("\t"))
     .join("\n");
 }
 
@@ -493,7 +484,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
 
   // The paragraph index.
   t0 = performance.now();
-  const rows = deriveBlocks(doc) as Row[];
+  const rows: Row[] = deriveBlocks(doc);
   report.ms.derive = Math.round(performance.now() - t0);
   report.rows = rows.length;
   const map = mapDoc(doc);

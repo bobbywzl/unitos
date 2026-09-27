@@ -691,25 +691,31 @@ async function listenToasts(page) {
 
 /** Scroll each figure object into view and wait for its image, as a person
     scrolls through: lazy images load only near the view. Returns
-    {loaded, total}. */
-async function loadFigureImages(page) {
+    {loaded, total, ms (each image's wait), failed (captions)}. */
+async function loadFigureImages(page, timeout = 30_000) {
   const figs = await figures(page);
   let loaded = 0;
   let total = 0;
+  const ms = [];
+  const failed = [];
   for (const f of figs) {
     await page.evaluate((p) => window.__docsEditor.view.nodeDOM(p)?.scrollIntoView({ block: "center" }), f.pos);
+    const t0 = Date.now();
     const ok = await page
       .waitForFunction((p) => {
         const imgs = [...(window.__docsEditor.view.nodeDOM(p)?.querySelectorAll("img") ?? [])];
         return imgs.length === 0 ? "none" : imgs.every((i) => i.complete && i.naturalWidth > 0) ? "ok" : null;
-      }, f.pos, { timeout: 15_000 })
+      }, f.pos, { timeout })
       .then((h) => h.jsonValue())
       .catch(() => "failed");
     if (ok === "none") continue;
     total++;
-    if (ok === "ok") loaded++;
+    if (ok === "ok") {
+      loaded++;
+      ms.push(Date.now() - t0);
+    } else failed.push(clip(f.caption, 24));
   }
-  return { loaded, total };
+  return { loaded, total, ms, failed };
 }
 
 /** Key-to-paint latency of the page editor: keydown to the frame after the
@@ -912,8 +918,13 @@ RISKS.R3 = async (theme) => {
   await sleep(300);
   const copied = await page.evaluate(() => navigator.clipboard.readText()).catch((e) => `(${e.message})`);
   check("R3", copied.replace(/\s+/g, " ").trim() === words.replace(/\s+/g, " ").trim() && !/p\.\s*\d/.test(copied), `(${theme}) Ctrl+C across p. ${s.page} copies the words alone`, `copied "${clip(copied, 80)}", words "${clip(words, 80)}"`);
-  // Highlight, reload, and read the mark's words.
+  // Highlight, reload, and read the mark's words. The toolbar stays open
+  // after Ctrl+C; when it does not, the words are selected again.
   const sourcesBefore = (await sourcesOf(added.id)).length;
+  if (!(await popoverOpen(page))) {
+    note("R3", `(${theme}) the toolbar closed after Ctrl+C`, "the words are selected again");
+    await dragSelect(page, from, to);
+  }
   const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
   if (await colors.count()) await colors.first().click();
   let sources = await sourcesOf(added.id);
@@ -1563,7 +1574,8 @@ RISKS.R13 = async (theme) => {
   const bad = responses.filter((r) => /\/figure\//.test(r.url) && r.status >= 400);
   const same = listed.length > 0 && requested.length > 0 && requested.every((u) => listed.includes(u)) && listed.every((u) => requested.includes(u));
   check("R13", same && bad.length === 0, "the finishing step lists the figure URLs the page requests", `finish HTTP ${finish.status}; listed ${listed.length}, requested ${requested.length}${requested.filter((u) => !listed.includes(u)).slice(0, 2).map((u) => `; not listed ${u}`).join("")}${listed.filter((u) => !requested.includes(u)).slice(0, 2).map((u) => `; not requested ${u}`).join("")}${bad.length ? `; ${bad.length} failed (${bad[0].status})` : ""}`);
-  check("R13", images.total > 0 && images.loaded === images.total, "every figure image of the PDF import loads in view", `${images.loaded} of ${images.total}`);
+  check("R13", images.total > 0 && images.loaded === images.total, "every figure image of the PDF import loads in view", `${images.loaded} of ${images.total}${images.failed.length ? `; not in 30 s: ${images.failed.join(", ")}` : ""}`);
+  time("R13", "a PDF figure's crop, from scrolled into view to drawn", stats(images.ms));
   // The offline copy (lib/offline/saved.ts) collects the assets it finds in
   // the page: every figure URL must stand in the page's HTML. Opening the
   // copy offline needs the service worker, which registers in production only.
@@ -1669,9 +1681,16 @@ RISKS.R15 = async (theme) => {
   await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
   await sleep(3000);
   const figs = await figures(page);
-  const shown = await page.evaluate(() => [...document.querySelectorAll(".docs-prose .docs-figure")].filter((f) => [...f.querySelectorAll("img, svg, iframe, video")].some((m) => m.getBoundingClientRect().width > 20)).length);
+  const drawing = await page.evaluate(() =>
+    [...document.querySelectorAll(".docs-prose .docs-figure")].map((f) => ({
+      caption: f.textContent.trim().slice(-24),
+      drawn: [...f.querySelectorAll("img, svg, iframe, video")].some((m) => m.getBoundingClientRect().width > 20 && !(m.tagName === "VIDEO" && m.readyState === 0 && m.closest("[hidden]"))),
+      says: f.textContent.includes("not loading") ? "not loading" : null,
+    })),
+  );
+  const shown = drawing.filter((d) => d.drawn && !d.says).length;
   const path = await shot(page, "R15-restored-imported");
-  check("R15", put.status === 200 && figs.length > 0 && figs.every((f) => oldMedia.some((m) => m.id === f.mediaId)) && shown === figs.length, "Restore \"Imported\" after a re-parse: every figure shows its media", `PUT ${put.status}; ${figs.length} figure objects on the old media, ${shown} drawing their media ${path}`);
+  check("R15", put.status === 200 && figs.length > 0 && figs.every((f) => oldMedia.some((m) => m.id === f.mediaId)) && shown === figs.length, "Restore \"Imported\" after a re-parse: every figure shows its media", `PUT ${put.status}; ${figs.length} figure objects on the old media, ${shown} drawing their media${drawing.filter((d) => !d.drawn || d.says).map((d) => `; not drawn "${d.caption}"${d.says ? ` (${d.says})` : ""}`).join("")} ${path}`);
   if (errors.length) note("R15", "console", errors.slice(0, 3).join(" | "));
   await context.close();
 };
@@ -1792,7 +1811,7 @@ RISKS.R20 = async (theme) => {
   await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
   const images = await loadFigureImages(page);
   const failed = responses.filter((r) => /\/figure\//.test(r.url) && r.status >= 400);
-  check("R20", re.status === 200 && failed.length === 0 && images.total > 0 && images.loaded === images.total, "after a re-parse every figure loads its new crop, no 404", `HTTP ${re.status}; ${images.loaded}/${images.total} images; failed ${failed.map((f) => `${f.status} ${f.url}`).slice(0, 2).join(" ")}`);
+  check("R20", re.status === 200 && failed.length === 0 && images.total > 0 && images.loaded === images.total, "after a re-parse every figure loads its new crop, no 404", `HTTP ${re.status}; ${images.loaded}/${images.total} images (${stats(images.ms)})${images.failed.length ? `; not in 30 s: ${images.failed.join(", ")}` : ""}; HTTP errors ${failed.map((f) => `${f.status} ${f.url}`).slice(0, 2).join(" ") || "none"}`);
   if (errors.length) note("R20", "console", errors.slice(0, 3).join(" | "));
   await context.close();
 };
@@ -2188,6 +2207,112 @@ RISKS.AUDIT = async (theme) => {
   check("AUDIT", shape.pageless && shape.nested >= 1 && shape.ol3 && shape.rowspan && shape.colspan && shape.region === 1 && shape.code >= 1 && shape.quote >= 1 && shape.hr >= 1, `(${theme}) the web page: pageless, a nested list, a list from 3, the table's merged cells once, code, a quote, a line`, `${JSON.stringify({ ...shape, figs: undefined })} ${webShot}`);
   check("AUDIT", shape.figs.length === 5 && shape.figs.every((f) => f.media) && shape.figs.filter((f) => f.media === "IMG").every((f) => f.loaded), `(${theme}) every figure of the web page draws its media`, JSON.stringify(shape.figs));
   check("AUDIT", Boolean(shape.references), `(${theme}) the References section stands under the page`, `${shape.references}`);
+  const webLine = await page.evaluate(() => {
+    const row = document.querySelector(".docs-title-row");
+    return { text: (row?.textContent ?? "").replace(/\s+/g, " ").slice(0, 160), link: [...(row?.querySelectorAll("a[href]") ?? [])].map((a) => a.getAttribute("href")).find((h) => /^https?:/.test(h ?? "")) ?? null };
+  });
+  check("AUDIT", /Imported from/.test(webLine.text) && (webLine.link ?? "").startsWith(FIXTURE), `(${theme}) the web page's import line links to the page`, JSON.stringify(webLine));
+  // The Markdown file: pageless; its equation, table, code, quote, line,
+  // lists; its import line.
+  const md = await doc("markdown");
+  await open(page, ctx.notebookId, md.id);
+  const mdShape = await page.evaluate(() => {
+    const prose = document.querySelector(".docs-prose");
+    return {
+      pageless: Boolean(document.querySelector('.docs-canvas[data-pageless="true"]')),
+      math: prose.querySelectorAll(".katex").length,
+      table: prose.querySelectorAll("table").length,
+      code: prose.querySelectorAll("pre").length,
+      quote: prose.querySelectorAll("blockquote").length,
+      hr: prose.querySelectorAll("hr").length,
+      ol3: Boolean(prose.querySelector('ol[start="3"]')),
+      nested: prose.querySelectorAll("ul ul").length,
+      h2: [...prose.querySelectorAll("h2")].map((h) => h.textContent),
+      line: (document.querySelector(".docs-title-row")?.textContent ?? "").replace(/\s+/g, " ").slice(0, 120),
+    };
+  });
+  const mdShot = await shot(page, `AUDIT-markdown-${theme}`);
+  check("AUDIT", mdShape.pageless && mdShape.math >= 1 && mdShape.table === 1 && mdShape.code >= 1 && mdShape.quote >= 1 && mdShape.hr >= 1 && mdShape.ol3 && mdShape.nested >= 1 && mdShape.h2.includes("Observations"), `(${theme}) the Markdown file: pageless, its equation drawn, a table, code, a quote, a line, a list from 3, a nested list`, `${JSON.stringify({ ...mdShape, line: undefined })} ${mdShot}`);
+  check("AUDIT", /Text file/.test(mdShape.line), `(${theme}) the Markdown file's import line says "Text file"`, mdShape.line);
+  if (theme === THEMES[0]) {
+    // A journal's own page names: page starts and the scroll tip draw them.
+    const labeled = await fresh("pdf", "-audit");
+    const names = ["i", "ii", ...Array.from({ length: 13 }, (_, i) => String(i + 1))];
+    await db.document.update({ where: { id: labeled.id }, data: { pageLabels: names } });
+    await open(page, ctx.notebookId, labeled.id);
+    const inlineStarts = (await pageStarts(page)).filter((x) => x.page >= 2 && x.on === "paragraph" && x.after.length > 0);
+    const drawnNames = [];
+    for (const st of inlineStarts.slice(0, 3)) {
+      const label = await page.evaluate((p) => window.__docsEditor.view.nodeDOM(p)?.getAttribute?.("data-page-label") ?? null, st.pos);
+      drawnNames.push({ page: st.page, label, want: `p. ${names[st.page - 1]}` });
+    }
+    const seventh = (await pageStarts(page)).find((x) => x.page === 7);
+    let namedTip = null;
+    if (seventh) {
+      await page.evaluate((p) => window.__docsEditor.view.domAtPos(p).node.parentElement?.scrollIntoView({ block: "center" }), seventh.pos);
+      await sleep(500);
+      const edge = await page.evaluate(() => {
+        let pane = document.querySelector(".docs-prose").parentElement;
+        while (pane && !(/(auto|scroll)/.test(getComputedStyle(pane).overflowY) && pane.scrollHeight > pane.clientHeight)) pane = pane.parentElement;
+        const r = pane.getBoundingClientRect();
+        return { x: r.right - 6, y: r.top + r.height / 2 };
+      });
+      await page.mouse.move(edge.x - 40, edge.y);
+      await page.mouse.move(edge.x, edge.y, { steps: 5 });
+      await sleep(600);
+      namedTip = await page.evaluate(() => document.querySelector(".docs-page-indicator")?.textContent ?? null);
+      await page.mouse.move(edge.x - 300, edge.y);
+    }
+    const labelShot = await shot(page, "AUDIT-journal-page-names");
+    check("AUDIT", drawnNames.length > 0 && drawnNames.every((d) => d.label === d.want) && /^p\. 5 of 15$/.test(namedTip ?? ""), "a PDF's own page names: the page starts and the scroll tip draw them", `${JSON.stringify(drawnNames)}; tip at p. 7 "${namedTip}" ${labelShot}`);
+    // Version history: Show changes draws an edit since "Imported"; Restore
+    // brings the original's words back with its figures and page starts.
+    await setMode(page, "editing");
+    const intro = await find(page, "1 Introduction");
+    await clickPos(page, intro.to);
+    await page.keyboard.type(" (audit edit)");
+    await waitSaved(page).catch(() => {});
+    await sleep(800);
+    await page.locator('[data-track="docs:version-history"]').first().click().catch(() => {});
+    await page.waitForFunction(() => document.querySelectorAll(".docs-versions-list .docs-versions-pick").length > 0, null, { timeout: 30_000 }).catch(() => {});
+    await page.waitForFunction(() => [...document.querySelectorAll(".docs-versions-page u")].some((u) => u.textContent.includes("audit edit")), null, { timeout: 20_000 }).catch(() => {});
+    const changes = await page.evaluate(() => ({
+      heading: document.querySelector(".docs-versions-heading-title")?.textContent ?? null,
+      underlined: [...document.querySelectorAll(".docs-versions-page u")].map((u) => u.textContent).join("|").slice(0, 80),
+      struck: document.querySelectorAll(".docs-versions-page s").length,
+    }));
+    const changesShot = await shot(page, "AUDIT-version-show-changes");
+    check("AUDIT", changes.underlined.includes("audit edit"), "Version history: Show changes draws the edit made since \"Imported\"", `${JSON.stringify(changes)} ${changesShot}`);
+    await page.locator(".docs-versions-list .docs-versions-pick", { hasText: "Imported" }).first().click().catch(() => {});
+    await sleep(1500);
+    await page.locator(".docs-versions-bar button", { hasText: "Restore this version" }).first().click().catch(() => {});
+    await sleep(500);
+    await page.getByRole("dialog").getByRole("button", { name: "Restore", exact: true }).click().catch(() => {});
+    await sleep(1500);
+    await waitSaved(page).catch(() => {});
+    await sleep(1000);
+    const restored = await page.evaluate(() => ({ edit: window.__docsEditor.state.doc.textContent.includes("(audit edit)"), open: Boolean(document.querySelector(".docs-versions")) }));
+    const restoredStarts = (await pageStarts(page)).length;
+    const restoredFigures = (await figures(page)).length;
+    const storedAfter = JSON.stringify((await documentRow(labeled.id)).richText).includes("(audit edit)");
+    const kept = await db.documentVersion.findMany({ where: { documentId: labeled.id }, select: { name: true, richText: true } });
+    const keptEdit = kept.some((v) => JSON.stringify(v.richText).includes("(audit edit)"));
+    const restoreShot = await shot(page, "AUDIT-version-restored");
+    check("AUDIT", !restored.edit && !restored.open && !storedAfter && restoredStarts === 15 && restoredFigures === 12 && keptEdit, "Restore \"Imported\" brings the original's words back, with its page starts and figures, and a version keeps the edit", `edit in the page ${restored.edit}, stored ${storedAfter}; page starts ${restoredStarts}, figures ${restoredFigures}; a version holds the edit ${keptEdit} (${kept.length} versions) ${restoreShot}`);
+    // Downloads made in the browser: the web page and plain text.
+    await open(page, ctx.notebookId, pdf.id);
+    await setMode(page, "editing");
+    for (const [label, ext] of [["Download: Web Page (.html)", "html"], ["Download: Plain Text (.txt)", "txt"]]) {
+      const download = page.waitForEvent("download", { timeout: 20_000 }).catch(() => null);
+      await menuCommand(page, label);
+      const file = await download;
+      const body = file ? readFileSync(await file.path(), "utf8") : "";
+      const words = ext === "html" ? body.replace(/<[^>]+>/g, " ") : body;
+      const relative = ext === "html" ? (body.match(/<img[^>]+src="\/api\/documents\/[^"]+\/figure\/[^"]+"/g) ?? []).length : 0;
+      check("AUDIT", /Attention Is All You Need/.test(words) && /Scaled Dot-Product Attention/.test(words) && !/\bp\. \d+\b/.test(words), `the ${ext === "html" ? "web page" : "plain text"} download holds the words and no page labels`, `${body.length} characters${ext === "html" ? `; ${relative} figure images with a relative /api/ address` : ""}`);
+      if (relative > 0) note("AUDIT", "figures in the web page download", `${relative} figure images point at /api/documents/…/figure/…: they draw only beside a signed-in Unitos (figures in downloads: round 2)`);
+    }
+  }
   if (errors.length) note("AUDIT", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
   await context.close();
 };
@@ -2342,14 +2467,17 @@ RISKS.AI = async (theme) => {
     let hit = null;
     window.__docsEditor.state.doc.descendants((n, p) => {
       if (hit) return false;
-      if ((n.type.name === "tableCell" || n.type.name === "tableHeader") && /Self-Attention/.test(n.textContent)) hit = { from: p + 2, text: n.textContent };
+      if ((n.type.name === "tableCell" || n.type.name === "tableHeader") && n.textContent.trim() === "Self-Attention") {
+        // The cell's first paragraph: its words start one position in.
+        hit = { from: p + 2, to: p + 2 + "Self-Attention".length, text: n.textContent };
+      }
       return !hit;
     });
     return hit;
   });
   if (cell) {
-    const at = await find(page, "Self-Attention");
-    await dragSelect(page, at.from, at.to);
+    await page.keyboard.press("Escape");
+    await dragSelect(page, cell.from, cell.to);
     const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
     if (await colors.count()) await colors.nth(1).click();
     let hl = null;
@@ -2361,7 +2489,9 @@ RISKS.AI = async (theme) => {
     await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
     await sleep(3000);
     const inCell = hl ? await page.evaluate((id) => [...document.querySelectorAll(`.docs-prose [data-source-id="${id}"]`)].map((e) => ({ text: e.textContent, inCell: Boolean(e.closest("td, th")) })), hl.id) : [];
-    check("AI", inCell.length > 0 && inCell.every((m) => m.inCell) && inCell.map((m) => m.text).join("") === "Self-Attention", `(${theme}) a highlight in a table cell paints in the cell after a reload`, JSON.stringify(inCell));
+    const stored = hl ? await db.block.findUnique({ where: { id: hl.blockId }, select: { type: true, text: true, cell: true } }) : null;
+    const cellShot = await shot(page, `AI-table-cell-highlight-${theme}`);
+    check("AI", inCell.length > 0 && inCell.every((m) => m.inCell) && inCell.map((m) => m.text).join("") === "Self-Attention", `(${theme}) a highlight in a table cell paints in the cell after a reload`, `${hl ? `stored on ${stored?.type} "${clip(stored?.text, 30)}" cell ${JSON.stringify(stored?.cell)} at ${hl.startOffset}-${hl.endOffset}, orphaned ${hl.orphaned}` : "no highlight stored"}; painted ${JSON.stringify(inCell)} ${cellShot}`);
   }
   // Define one word.
   const word = await find(page, "transduction");
@@ -2376,6 +2506,132 @@ RISKS.AI = async (theme) => {
       }, null, { timeout: 30_000 }).then((h) => h.jsonValue()).catch(() => null);
       check("AI", Boolean(text), `(${theme}) Define answers on an import`, clip(text, 80));
     } else fail("AI", `(${theme}) Define is the first row for one word`, "no define");
+  }
+  // Simplify, Visualize, and Read aloud in Viewing, as the other tools.
+  await page.keyboard.press("Escape");
+  if ((await mode(page)) !== "viewing") await setMode(page, "viewing");
+  const simple = await find(page, "The Transformer allows for significantly more parallelization");
+  if (simple) {
+    await dragSelect(page, simple.from, simple.to);
+    await tool(page, "simplify");
+    const card = await page.waitForFunction(() => {
+      const t = document.querySelector('[data-side-card="simplify"]')?.textContent ?? "";
+      return t.includes("Mock") ? t : null;
+    }, null, { timeout: 45_000 }).then((h) => h.jsonValue()).catch(() => null);
+    let simplified = null;
+    for (let i = 0; i < 20 && !simplified; i++) {
+      simplified = (await sourcesOf(pdf.id)).find((x) => x.note.derivationType === "SIMPLIFY") ?? null;
+      if (!simplified) await sleep(500);
+    }
+    const simplifyShot = await shot(page, `AI-simplify-${theme}`);
+    check("AI", Boolean(card) && simplified?.quotedText === "The Transformer allows for significantly more parallelization", `(${theme}) Simplify answers in Viewing and keeps its quote`, `card "${clip(card, 60)}"; quote "${clip(simplified?.quotedText, 60)}" ${simplifyShot}`);
+    await page.keyboard.press("Escape");
+  } else fail("AI", `(${theme}) Simplify's words`, "not in the page");
+  const picture = await find(page, "An attention function can be described as mapping a query");
+  if (picture) {
+    await dragSelect(page, picture.from, picture.to);
+    await tool(page, "visualize");
+    const drawnSvg = await page.waitForFunction(() => Boolean(document.querySelector('[data-side-card="explain"] svg')), null, { timeout: 60_000 }).then(() => true).catch(() => false);
+    let pictured = null;
+    for (let i = 0; i < 20 && !pictured; i++) {
+      pictured = (await sourcesOf(pdf.id)).find((x) => x.note.derivationType === "VISUALIZE") ?? null;
+      if (!pictured) await sleep(500);
+    }
+    const visualizeShot = await shot(page, `AI-visualize-${theme}`);
+    check("AI", drawnSvg && Boolean(pictured), `(${theme}) Visualize draws its picture in Viewing and stores the visualization`, `picture ${drawnSvg}; quote "${clip(pictured?.quotedText, 60)}" ${visualizeShot}`);
+    await page.keyboard.press("Escape");
+  } else fail("AI", `(${theme}) Visualize's words`, "not in the page");
+  const aloud = await find(page, "Recurrent neural networks, long short-term memory");
+  if (aloud) {
+    await dragSelect(page, aloud.from, aloud.to);
+    const readAloud = page.locator('[data-selection-popover] [data-track="read-aloud"]').first();
+    check("AI", (await readAloud.count()) > 0, `(${theme}) Read aloud stands in the toolbar on an import`, `${await readAloud.count()} buttons`);
+    await page.keyboard.press("Escape");
+  }
+  // A link across texts: from the paper's words to the Markdown import's,
+  // both ends painted as a link.
+  const md = await doc("markdown");
+  await page.keyboard.press("Escape");
+  const from = await find(page, "sequence transduction models");
+  if (from) {
+    await dragSelect(page, from.from, from.to);
+    const link = page.locator('[data-selection-popover] [data-track="link"]').first();
+    if (await link.count()) {
+      await link.click();
+      await sleep(800);
+      await open(page, ctx.notebookId, md.id);
+      const to = await find(page, "The marsh rises with the tide it traps");
+      await dragSelect(page, to.from, to.to);
+      const close = page.locator('[data-track="close-link"]').first();
+      await close.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
+      if (await close.count()) {
+        await close.click();
+        await sleep(800);
+        await page.locator('[data-track="link-card-save"], [data-track="link-card-skip"]').first().click().catch(() => {});
+      }
+      let row = null;
+      for (let i = 0; i < 30 && !row; i++) {
+        row = await db.docLink.findFirst({ where: { fromDocumentId: pdf.id, toDocumentId: md.id }, select: { id: true, quotedText: true, toQuotedText: true } }).catch(() => null);
+        if (!row) await sleep(500);
+      }
+      await page.waitForFunction((id) => document.querySelectorAll(`.docs-prose [data-link-id="${id}"]`).length > 0, row?.id ?? "none", { timeout: 20_000 }).catch(() => {});
+      const here = row ? await page.evaluate((id) => [...document.querySelectorAll(`.docs-prose [data-link-id="${id}"]`)].map((e) => e.textContent).join(""), row.id) : "";
+      const linkShot = await shot(page, `AI-link-across-texts-${theme}`);
+      check("AI", Boolean(row) && here.includes("The marsh rises"), `(${theme}) a link across texts from the paper to the Markdown import paints at its end`, row ? `link ${row.id}: "${clip(row.quotedText, 40)}" → painted "${clip(here, 40)}" ${linkShot}` : "no link stored");
+      if (row) {
+        await open(page, ctx.notebookId, pdf.id);
+        await page.waitForFunction((id) => document.querySelectorAll(`.docs-prose [data-link-id="${id}"]`).length > 0, row.id, { timeout: 20_000 }).catch(() => {});
+        const back = await page.evaluate((id) => [...document.querySelectorAll(`.docs-prose [data-link-id="${id}"]`)].map((e) => e.textContent).join(""), row.id);
+        check("AI", back.includes("sequence transduction models"), `(${theme}) the link paints at its start in the paper too`, `painted "${clip(back, 40)}"`);
+      }
+    }
+  }
+  // The web page: a selection across two table cells, highlighted; and
+  // Analyze on the SVG chart.
+  const web = await doc("url");
+  await open(page, ctx.notebookId, web.id);
+  const nile = await find(page, "Nile");
+  const mekong = await find(page, "Mekong");
+  if (nile && mekong) {
+    const sourcesBefore = (await sourcesOf(web.id)).length;
+    await dragSelect(page, nile.from, mekong.to);
+    const selection = await page.evaluate(() => ({ kind: window.__docsEditor.state.selection.constructor.name, text: window.getSelection().toString().replace(/\s+/g, " ").trim() }));
+    const toolbar = await popoverOpen(page);
+    const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
+    if (toolbar && (await colors.count())) await colors.nth(2).click();
+    let made = [];
+    for (let i = 0; i < 20 && made.length === 0; i++) {
+      made = (await sourcesOf(web.id)).slice(sourcesBefore);
+      if (!made.length) await sleep(500);
+    }
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
+    await sleep(3000);
+    const painted = made.length ? await page.evaluate((ids) => [...document.querySelectorAll(".docs-prose [data-source-id]")].filter((e) => ids.includes(e.getAttribute("data-source-id"))).map((e) => ({ text: e.textContent, cell: e.closest("td, th")?.textContent.trim().slice(0, 12) ?? null })), made.map((m) => m.id)) : [];
+    const cellsShot = await shot(page, `AI-highlight-across-cells-${theme}`);
+    const cells = new Set(painted.map((p) => p.cell).filter(Boolean));
+    check("AI", toolbar && made.length > 0 && cells.size >= 2, `(${theme}) a highlight across two table cells: its quote, and its marks in both cells after a reload`, `selection ${selection.kind} "${clip(selection.text, 40)}"; toolbar ${toolbar}; stored ${made.map((m) => `"${clip(m.quotedText, 40)}"`).join(", ") || "none"}; painted in ${[...cells].join(", ") || "no cell"} ${cellsShot}`);
+  }
+  const chart = (await figures(page)).find((f) => /Figure 1/.test(f.caption ?? ""));
+  if (chart) {
+    const analyzedBefore = (await sourcesOf(web.id)).filter((x) => x.note.derivationType === "ANALYZE").length;
+    await clickFigure(page, chart.pos);
+    if (!(await popoverOpen(page))) await clickFigure(page, chart.pos);
+    const analyzeChart = page.locator('[data-selection-popover] [data-track="analyze"]').first();
+    if (await analyzeChart.count()) {
+      const sent = page.waitForRequest((r) => r.url().endsWith("/api/derive") && r.method() === "POST", { timeout: 15_000 }).catch(() => null);
+      await analyzeChart.click();
+      const request = await sent;
+      let analyzed = [];
+      for (let i = 0; i < 60 && analyzed.length <= analyzedBefore; i++) {
+        analyzed = (await sourcesOf(web.id)).filter((x) => x.note.derivationType === "ANALYZE");
+        if (analyzed.length <= analyzedBefore) await sleep(500);
+      }
+      const body = request ? JSON.parse(request.postData() ?? "{}") : {};
+      const image = JSON.stringify(body).match(/data:image\/[a-z+]+/)?.[0] ?? null;
+      const chartShot = await shot(page, `AI-analyze-chart-${theme}`);
+      check("AI", analyzed.length > analyzedBefore && analyzed.at(-1).blockId === chart.blockId, `(${theme}) Analyze on the web page's SVG chart anchors to the chart`, `request image ${image ?? "none"}; ${analyzed.length - analyzedBefore} new analyses ${chartShot}`);
+    } else fail("AI", `(${theme}) a click on the SVG chart opens Analyze`, "no Analyze");
   }
   if (errors.length) note("AI", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
   await context.close();
