@@ -129,6 +129,9 @@ import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 import { openVisualization } from "@/components/reader/visualization-viewer";
 import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { blockIdOfKey, coreKey, isCoreKey } from "@/lib/anchors/core-key";
+import { collapseUnits } from "@/lib/collapse-units";
+import { deriveBlocks } from "@/lib/docs/blocks";
+import { coreHiding } from "@/components/docs/layer/core-slot";
 import { announceCollapseView } from "@/components/panels/layer-switch";
 import { startCardDrag } from "@/lib/card-drag";
 import { pointsAtText, skipsDrag, watchHold } from "@/lib/hold-drag";
@@ -238,6 +241,45 @@ function flashElement(el: HTMLElement) {
   if (flashInPage(el)) return;
   el.classList.add("anchor-flash");
   setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+}
+
+// A jump to words in a collapsed unit (SPEC.md §28) reads the unit whole
+// first, as the unit's own button does; the rest of the article stays as it
+// is. True while the words of any of the blocks are hidden: the jump looks
+// again once they are drawn.
+function wordsHidden(pane: Element, blockIds: string[], readWhole: (unitId: string) => void): boolean {
+  let hidden = false;
+  for (const blockId of blockIds) {
+    const unitId = coreHiding(pane, blockId)?.dataset.blockId;
+    if (!unitId) continue;
+    readWhole(unitId);
+    hidden = true;
+  }
+  return hidden;
+}
+
+// A block's words in the pane, never the core drawn in their place.
+function wordsOf(pane: Element, blockId: string): HTMLElement | null {
+  const id = CSS.escape(blockId);
+  return pane.querySelector<HTMLElement>(`[data-block-id="${id}"]:not([data-collapsed]), [data-edit-block="${id}"]`);
+}
+
+// The rows of a unit (lib/collapse-units.ts): a block document's unit is its
+// block; the page's is read from its text, null until the page stands.
+function unitRows(pane: Element | null, unitId: string, richText: boolean): string[] | null {
+  if (!richText) return [unitId];
+  const doc = pageEditorIn(pane)?.state.doc.toJSON() as RichNode | undefined;
+  if (!doc) return null;
+  return collapseUnits(deriveBlocks(doc), doc).find((u) => u.id === unitId)?.rows ?? [unitId];
+}
+
+// Collapse is remembered per document in this browser (SPEC.md §28).
+function collapseRemembered(storeKey: string): boolean {
+  try {
+    return localStorage.getItem(storeKey) === "on";
+  } catch {
+    return false;
+  }
 }
 
 // The layer the reader's tools sit on, over the article: the toolbar a
@@ -2950,23 +2992,53 @@ export function ReaderInteractions({
   // The mark may not be painted yet — the document is still rendering, the
   // page editor's code is still loading, or the reader arrived here from a
   // note in another document — so the look-up retries for PAGE_WAIT_MS at
-  // most, reading the container fresh each time.
+  // most, reading the container fresh each time. A core anchor paints only
+  // while its unit shows its core (SPEC.md §28): the jump shows the core,
+  // or, where no core can be drawn (Editing, or no cores in hand), lands on
+  // the unit's words and flashes the unit. A mark in the words of a
+  // collapsed unit reads the unit whole first.
   const flashSource = useCallback((sourceId: string) => {
     let attempts = 0;
-    // A core anchor paints only while its block shows its core (SPEC.md §28).
-    for (const [key, list] of Object.entries(anchorHighlightsRef.current)) {
-      if (isCoreKey(key) && list.some((h) => h.sourceId === sourceId)) showCoreRef.current(blockIdOfKey(key));
-    }
+    let rows: string[] | null = null;
     const tryScroll = () => {
-      const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        flashElement(el);
+      const pane = containerRef.current;
+      const keys = Object.entries(anchorHighlightsRef.current).flatMap(([key, list]) =>
+        list.some((h) => h.sourceId === sourceId) ? [key] : [],
+      );
+      let unit: string | null = null;
+      for (const key of keys) if (isCoreKey(key) && !showCoreRef.current(blockIdOfKey(key))) unit = blockIdOfKey(key);
+      if (unit) rows ??= unitRows(pane, unit, richTextRef.current !== null);
+      let found: HTMLElement[] = [];
+      if (pane && unit) found = (rows ?? []).flatMap((row) => wordsOf(pane, row) ?? []);
+      else if (pane && !wordsHidden(pane, keys.filter((key) => !isCoreKey(key)), readWholeRef.current)) {
+        const el = pane.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+        if (el) found = [el];
+      }
+      if (found.length > 0) {
+        found[0].scrollIntoView({ behavior: "smooth", block: "center" });
+        for (const el of found) flashElement(el);
       } else if (attempts++ < PAGE_WAIT_MS / 200) {
         setTimeout(tryScroll, 200);
       }
     };
     tryScroll();
+  }, []);
+
+  // Scroll to a block's words and flash them: a search result, a ¶ chip, a
+  // distilled quote. Words in a collapsed unit are read whole first; the
+  // look retries every 200 ms, `tries` times, until they are drawn.
+  const jumpToWords = useCallback((blockId: string, tries: number) => {
+    const look = (left: number) => {
+      const pane = containerRef.current;
+      const el = pane && !wordsHidden(pane, [blockId], readWholeRef.current) ? wordsOf(pane, blockId) : null;
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        flashElement(el);
+      } else if (left > 0) {
+        setTimeout(() => look(left - 1), 200);
+      }
+    };
+    look(tries);
   }, []);
 
   // Source chip navigation: ?src=<sourceId> scrolls to the anchor and flashes it.
@@ -2990,7 +3062,8 @@ export function ReaderInteractions({
     let timer: ReturnType<typeof setTimeout> | null = null;
     const tryOpen = () => {
       const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${src}"]`);
-      if (el) {
+      // Drawn: a mark in a collapsed unit waits for the unit read whole.
+      if (el && el.getClientRects().length > 0) {
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: src } }));
       } else if (attempts++ < PAGE_WAIT_MS / 200) {
         timer = setTimeout(tryOpen, 200);
@@ -3002,15 +3075,22 @@ export function ReaderInteractions({
     };
   }, [src, annotationParam, flashSource]);
 
-  // Arriving through a link's other end: ?link=<id> flashes the mark here.
+  // Arriving through a link's other end: ?link=<id> flashes the mark here;
+  // a mark in a collapsed unit reads the unit whole first.
   const linkParam = searchParams.get("link");
+  const linksRef = useRef(linksByBlock);
+  linksRef.current = linksByBlock;
   useEffect(() => {
     if (!linkParam) return;
     const container = containerRef.current;
     if (!container) return;
     let attempts = 0;
     const tryScroll = () => {
-      const el = container.querySelector<HTMLElement>(`[data-link-id="${linkParam}"]`);
+      const blocks = Object.entries(linksRef.current).flatMap(([blockId, list]) =>
+        list.some((l) => l.linkId === linkParam) ? [blockId] : [],
+      );
+      const hidden = wordsHidden(container, blocks, readWholeRef.current);
+      const el = hidden ? null : container.querySelector<HTMLElement>(`[data-link-id="${linkParam}"]`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         flashElement(el);
@@ -3024,23 +3104,8 @@ export function ReaderInteractions({
   // Search result navigation: ?block=<blockId> scrolls to the block and flashes it.
   const blockParam = searchParams.get("block");
   useEffect(() => {
-    if (!blockParam) return;
-    const container = containerRef.current;
-    if (!container) return;
-    let attempts = 0;
-    const tryScroll = () => {
-      const el = container.querySelector<HTMLElement>(
-        `[data-block-id="${blockParam}"], [data-edit-block="${blockParam}"]`,
-      );
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        flashElement(el);
-      } else if (attempts++ < 10) {
-        setTimeout(tryScroll, 200);
-      }
-    };
-    tryScroll();
-  }, [blockParam]);
+    if (blockParam) jumpToWords(blockParam, 10);
+  }, [blockParam, jumpToWords]);
 
   // Jump from the Annotations panel: works even when ?src is already this anchor.
   useEffect(() => {
@@ -3638,14 +3703,7 @@ export function ReaderInteractions({
   const [flippedBlocks, setFlippedBlocks] = useState<ReadonlySet<string>>(() => new Set());
   const collapseStoreKey = `unitos-collapse-${documentId}`;
   useEffect(() => {
-    if (embedded || transcript) return;
-    let on = false;
-    try {
-      on = localStorage.getItem(collapseStoreKey) === "on";
-    } catch {
-      on = false;
-    }
-    if (!on) return;
+    if (embedded || transcript || !collapseRemembered(collapseStoreKey)) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -3716,14 +3774,33 @@ export function ReaderInteractions({
     if (embedded || transcript) return;
     announceCollapseView(documentId, collapseOn);
   }, [documentId, collapseOn, embedded, transcript]);
-  // A jump to a core annotation shows that block's core when it is hidden.
-  const showCoreRef = useRef<(blockId: string) => void>(() => {});
+  // A jump shows the unit it lands in the way it needs, and no other unit
+  // changes: a jump to a core annotation shows the unit's core — false when
+  // no core can be drawn, in Editing or with no cores in hand or on their
+  // way — and a jump to words reads the unit whole (wordsHidden).
+  const showCoreRef = useRef<(unitId: string) => boolean>(() => false);
+  const readWholeRef = useRef<(unitId: string) => void>(() => {});
   useEffect(() => {
-    showCoreRef.current = (blockId: string) => {
-      if (!cores?.[blockId]) return;
-      if (collapseOn === flippedBlocks.has(blockId)) flipBlock(blockId);
+    showCoreRef.current = (unitId: string) => {
+      if (editMode || pageEditorIn(containerRef.current)?.isEditable) return false;
+      if (!cores) return !embedded && !transcript && collapseRemembered(collapseStoreKey);
+      if (!cores[unitId]) return false;
+      showUnit(unitId, true);
+      return true;
     };
+    readWholeRef.current = (unitId: string) => showUnit(unitId, false);
   });
+  // Flipped: shown the other way from the article.
+  function showUnit(unitId: string, core: boolean) {
+    setFlippedBlocks((prev) => {
+      const flipped = core !== collapseOn;
+      if (prev.has(unitId) === flipped) return prev;
+      const next = new Set(prev);
+      if (flipped) next.add(unitId);
+      else next.delete(unitId);
+      return next;
+    });
+  }
   function flipBlock(blockId: string) {
     setFlippedBlocks((prev) => {
       const next = new Set(prev);
@@ -3932,10 +4009,12 @@ export function ReaderInteractions({
     return () => window.removeEventListener("mousedown", onMouseDown);
   }, [extractCard]);
 
-  // ¶ chips in AI text (Markdown) jump to the block they cite.
+  // ¶ chips in AI text (Markdown) jump to the block they cite. A part of the
+  // contents lands on the core of a collapsed block (SPEC.md §28); every
+  // other jump lands on the block's words.
   useEffect(() => {
     const onFlashBlock = (e: Event) => {
-      const { blockId } = (e as CustomEvent<{ blockId: string }>).detail;
+      const { blockId, part } = (e as CustomEvent<{ blockId: string; part?: boolean }>).detail;
       const container = containerRef.current;
       const el = container?.querySelector<HTMLElement>(
         `[data-block-id="${blockId}"], [data-edit-block="${blockId}"]`,
@@ -3950,12 +4029,16 @@ export function ReaderInteractions({
         showToast(t("reader.blockNotOpen"));
         return;
       }
+      if (!part) {
+        jumpToWords(blockId, 10);
+        return;
+      }
       el.scrollIntoView({ behavior: "smooth", block: "center" });
       flashElement(el);
     };
     window.addEventListener("dissect:flash-block", onFlashBlock);
     return () => window.removeEventListener("dissect:flash-block", onFlashBlock);
-  }, [t]);
+  }, [t, jumpToWords]);
 
   // Every toast fades after 5 seconds, action or not; the Undo toast after
   // the plan's actions stays UNDO_MS.
@@ -4843,14 +4926,7 @@ export function ReaderInteractions({
     setSpanFlash({ blockId, start, end });
     if (spanFlashTimer.current) clearTimeout(spanFlashTimer.current);
     spanFlashTimer.current = setTimeout(() => setSpanFlash(null), 2600);
-    requestAnimationFrame(() => {
-      const el = containerRef.current?.querySelector<HTMLElement>(
-        `[data-block-id="${blockId}"], [data-edit-block="${blockId}"]`,
-      );
-      if (!el) return;
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      flashElement(el);
-    });
+    requestAnimationFrame(() => jumpToWords(blockId, 10));
   }
 
   // Jump from the match card: close the card, then land on the span.

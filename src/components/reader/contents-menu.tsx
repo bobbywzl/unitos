@@ -124,9 +124,10 @@ export function ContentsMenu({
     };
   }, [open, onOpenChange]);
 
+  // A part lands on the core of a collapsed block (SPEC.md §28).
   function jump(blockId: string) {
     onOpenChange(false);
-    window.dispatchEvent(new CustomEvent("dissect:flash-block", { detail: { blockId } }));
+    window.dispatchEvent(new CustomEvent("dissect:flash-block", { detail: { blockId, part: true } }));
   }
 
   const note = "px-4 text-[12px] leading-snug text-sand-600";
