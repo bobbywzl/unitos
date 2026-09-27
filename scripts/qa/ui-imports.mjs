@@ -917,6 +917,8 @@ async function pageStarts(page) {
     level with the line at `pos` and `lines` lines down: where page numbers
     draw, whatever draws them. */
 async function marginInk(page, pos, lines = 1) {
+  // The labels are placed a frame after a change: the layout holds first.
+  await page.evaluate(() => window.__qa.settle());
   const clip = await page.evaluate(({ p, lines }) => {
     const view = window.__docsEditor.view;
     const c = view.coordsAtPos(p);
