@@ -54,6 +54,8 @@
 .docs-prose .docs-figure-crop img {
   display: block;
   max-width: 100%;
+  /* The width and height it carries hold its place before it loads. */
+  height: auto;
   max-height: 28rem;
   margin: 0 auto;
   object-fit: contain;

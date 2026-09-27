@@ -533,10 +533,15 @@ async function reveal(page, pos) {
   let c = await coords(page, pos);
   const vh = await page.evaluate(() => innerHeight);
   if (c.y < 200 || c.y > vh - 100) {
+    // The position itself to the middle: a paragraph that runs across a
+    // page break is taller than the screen, so centering its element could
+    // leave the position off the screen.
     await page.evaluate((p) => {
-      const dom = window.__docsEditor.view.domAtPos(p);
-      const el = dom.node.nodeType === 1 ? dom.node : dom.node.parentElement;
-      el.scrollIntoView({ block: "center" });
+      const view = window.__docsEditor.view;
+      let pane = view.dom.parentElement;
+      while (pane && !(/(auto|scroll)/.test(getComputedStyle(pane).overflowY) && pane.scrollHeight > pane.clientHeight)) pane = pane.parentElement;
+      const { top } = view.coordsAtPos(p);
+      pane?.scrollBy(0, top - innerHeight / 2);
     }, pos);
     await sleep(500);
     c = await coords(page, pos);
@@ -582,7 +587,10 @@ async function popoverOpen(page) {
 }
 async function tool(page, track) {
   const el = page.locator(`[data-selection-popover] [data-track="${track}"]`).first();
-  await el.waitFor({ state: "visible", timeout: 8000 });
+  await el.waitFor({ state: "visible", timeout: 8000 }).catch(async (e) => {
+    await shot(page, `no-tool-${track}`);
+    throw e;
+  });
   await el.click();
   await sleep(500);
 }
@@ -1525,7 +1533,10 @@ RISKS.R11 = async (theme) => {
       time("R11", `the ${long.pages}-page import in the page editor`, `open to text/editor ${opens.map((o) => `${o.text}/${o.ready}`).join(", ")} ms; letters ${stats(lat.filter((l) => l.key.length === 1).map((l) => l.ms))}; Enter ${stats(lat.filter((l) => l.key === "Enter").map((l) => l.ms))}; a save answered ${resp?.status() ?? "none"} after ${Date.now() - t0} ms; stored ${JSON.stringify(stored).length} chars after the editor's saves (${json} at import)`);
       await longContext.close();
     } else {
-      check("R11", past, `the size guard keeps the ${long.pages}-page PDF (${rows} rows) a block document`, `rows ${rows}`);
+      // A block document stores no rich text: the guard's measure (the
+      // converter's rows and bytes) is not in the database, so the add's
+      // own detail says why.
+      check("R11", !row?.richText && rows > 0, `the size guard keeps the ${long.pages}-page PDF (${rows} rows) a block document`, `rows ${rows}`);
       check("R11", JSON.stringify(added.saveDetail ?? {}).includes("size"), `the add's save stage says the size guard kept the ${long.pages}-page PDF a block document`, clip(JSON.stringify(added.saveDetail), 160));
     }
   }
@@ -1960,8 +1971,9 @@ RISKS.EDIT = async (theme) => {
     if (!hl) await sleep(500);
   }
   await setMode(page, "editing");
-  const inside = await find(page, "neural networks");
-  await clickPos(page, inside.from + 6);
+  // Inside the highlight: after "Recurrent neural " (the abstract says
+  // "neural networks" first, so the words are found from the highlight).
+  await clickPos(page, at.from + "Recurrent neural ".length);
   await page.keyboard.type("QA ");
   await waitSaved(page);
   await sleep(2500);
@@ -2227,7 +2239,9 @@ RISKS.AUDIT = async (theme) => {
       hr: prose.querySelectorAll("hr").length,
       ol3: Boolean(prose.querySelector('ol[start="3"]')),
       nested: prose.querySelectorAll("ul ul").length,
-      h2: [...prose.querySelectorAll("h2")].map((h) => h.textContent),
+      // A section's heading: the parse makes the top section level Heading 1
+      // under the Title, so "## Observations" is a heading of any level here.
+      h2: [...prose.querySelectorAll("h1, h2, h3")].map((h) => h.textContent),
       line: (document.querySelector(".docs-title-row")?.textContent ?? "").replace(/\s+/g, " ").slice(0, 120),
     };
   });
@@ -2357,6 +2371,7 @@ RISKS.AI = async (theme) => {
     check("AI", painted.join("").replace(/\s+/g, "") === wordsA.replace(/\s+/g, "") && painted.length >= 2, `(${theme}) Explain's mark paints on both sides of p. ${a.page}`, `${painted.length} pieces "${clip(painted.join("|"), 80)}" ${shotA}`);
   } else fail("AI", `(${theme}) Explain stores its annotation`, JSON.stringify(sources.map((x) => x.note.derivationType)));
   await page.keyboard.press("Escape");
+  await sleep(500);
   // Add to notes across another page start; the note's jump flashes the words.
   const b = inline[1] ?? inline[0];
   await dragSelect(page, b.pos - 25, b.pos + 1 + 25);

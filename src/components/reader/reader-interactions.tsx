@@ -143,7 +143,7 @@ import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import type { Imported } from "@/components/docs/docs-editor";
-import { pageEditorIn, pageSelectionOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
+import { pageCellSelection, pageEditorIn, pageSelectionOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
 import { CardColumn, CommentCard } from "@/components/docs/layer/comment-card";
 import { setCommentResolved } from "@/lib/annotations/resolve";
 import { COMMENTS_EVENT, flashInPage, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
@@ -2050,14 +2050,17 @@ export function ReaderInteractions({
   // Edit mode marks blocks with data-edit-block instead; both carry the block id.
   const captureSelection = useCallback((): Popover | null => {
     const container = containerRef.current;
-    const selection = window.getSelection();
-    if (!container || !selection || selection.isCollapsed || selection.rangeCount === 0) return null;
-    const range = selection.getRangeAt(0);
-    if (!container.contains(range.commonAncestorContainer)) return null;
-    // A blank document's passage is read from the page editor's document
-    // (SPEC.md §29).
+    if (!container) return null;
+    // A page editor's passage is read from its document (SPEC.md §29); a
+    // drag across table cells selects the cells, and their words are the
+    // passage.
     const pageEditor = richTextRef.current ? pageEditorIn(container) : null;
-    const pageSelection = pageEditor ? pageSelectionOfRange(pageEditor, range) : null;
+    const cells = pageEditor ? pageCellSelection(pageEditor) : null;
+    const selection = window.getSelection();
+    const range =
+      cells?.range ?? (selection && !selection.isCollapsed && selection.rangeCount > 0 ? selection.getRangeAt(0) : null);
+    if (!range || !container.contains(range.commonAncestorContainer)) return null;
+    const pageSelection = cells ?? (pageEditor ? pageSelectionOfRange(pageEditor, range) : null);
     const pageSegments = pageSelection?.segments ?? null;
 
     const blockOf = (node: Node): HTMLElement | null => {

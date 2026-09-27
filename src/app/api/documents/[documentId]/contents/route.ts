@@ -33,6 +33,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   const document = await db.document.findUnique({
     where: { id: documentId },
     select: {
+      title: true,
       contents: true,
       video: { select: { id: true } },
       blocks: {
@@ -44,7 +45,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   const stored = contentsEntries(document.contents);
   if (stored.length > 0) return NextResponse.json({ ok: true, parts: stored, fallback: false });
-  const headings = headingContents(document.blocks);
+  const headings = headingContents(document.blocks, document.title);
   if (!data.generate || access.role === "viewer") {
     return NextResponse.json({ ok: true, parts: headings, fallback: true });
   }

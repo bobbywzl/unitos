@@ -1,5 +1,6 @@
 import "@/lib/pdf-runtime";
-import { regionBounds, type Region } from "@/lib/video/types";
+import type { Region } from "@/lib/video/types";
+import { cropBox } from "@/lib/figure-crop";
 
 // Handwritten documents (SPEC.md §16): page rendering from the stored PDF
 // bytes. One place renders pages for the page image route, the classifier,
@@ -134,19 +135,13 @@ export async function cropPageRegion(
   try {
     const { createCanvas, loadImage } = await import("@napi-rs/canvas");
     const img = await loadImage(Buffer.from(pageImage));
-    const b = regionBounds(region);
-    const pad = opts.pad ?? 2.5; // percent of the page
-    const x1 = (Math.max(0, b.x1 - pad) / 100) * img.width;
-    const y1 = (Math.max(0, b.y1 - pad) / 100) * img.height;
-    const x2 = (Math.min(100, b.x2 + pad) / 100) * img.width;
-    const y2 = (Math.min(100, b.y2 + pad) / 100) * img.height;
-    const sw = x2 - x1;
-    const sh = y2 - y1;
+    // pad: percent of the page.
+    const { x, y, width: sw, height: sh } = cropBox(region, img.width, img.height, opts.pad ?? 2.5);
     if (sw < 8 || sh < 8) return null;
     const scale = opts.scaleUp === false ? 1 : Math.max(1, Math.min(4, 700 / Math.max(sw, sh)));
     const canvas = createCanvas(Math.round(sw * scale), Math.round(sh * scale));
     const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, x1, y1, sw, sh, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, x, y, sw, sh, 0, 0, canvas.width, canvas.height);
     return new Uint8Array(canvas.toBuffer("image/png"));
   } catch (err) {
     console.warn("[handwritten] page crop failed:", err);

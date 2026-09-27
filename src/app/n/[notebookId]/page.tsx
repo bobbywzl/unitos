@@ -49,6 +49,7 @@ import { GlossaryLanguage } from "@/components/reader/glossary-language";
 import type { PageMark } from "@/components/reader/page-block";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { ensureBlockIds, isOlderBlankDocument, richTextFromBlocks } from "@/lib/docs/blocks";
+import { figureCropSize } from "@/lib/figure-crop";
 import { readPageSetup, type RichNode } from "@/lib/docs/schema";
 import { importShared } from "@/lib/docs/server";
 import { syncRichText } from "@/lib/docs/sync";
@@ -263,18 +264,23 @@ export default async function NotebookPage(props: {
         edited: editedSinceImport(document),
         shared,
         // A PDF figure is its page's crop: its image address stands in the
-        // page data, so Save for offline finds it (lib/offline/saved.ts).
+        // page data, so Save for offline finds it (lib/offline/saved.ts),
+        // and so does its size, so its place holds before it loads.
         figures: Object.fromEntries(
-          media.map((m) => [
-            m.id,
-            {
-              html: m.html,
-              caption: m.caption,
-              page: m.page,
-              region: m.region,
-              src: m.html === null && m.page !== null ? `/api/documents/${documentId}/figure/${m.id}` : null,
-            },
-          ]),
+          media.map((m) => {
+            const crop = m.html === null && m.page !== null;
+            return [
+              m.id,
+              {
+                html: m.html,
+                caption: m.caption,
+                page: m.page,
+                region: m.region,
+                src: crop ? `/api/documents/${documentId}/figure/${m.id}` : null,
+                size: crop ? figureCropSize(parseRegion(m.region), readPageSetup(document.pageSetup)) : null,
+              },
+            ];
+          }),
         ),
         pageLabels,
       };

@@ -46,9 +46,14 @@ function reachable(video: HTMLVideoElement): boolean {
   return video.readyState >= HTMLMediaElement.HAVE_METADATA;
 }
 
-/** The video has told us the file is not reachable. */
+/** The video has told us the file is not reachable. A video just put in the
+    page reads NETWORK_NO_SOURCE until the browser picks its source (the page
+    editor draws its figures in the browser), so that state counts only for a
+    video that lists no source at all. */
 function unreachable(video: HTMLVideoElement): boolean {
-  return video.error !== null || video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE;
+  if (video.error !== null) return true;
+  const listed = video.hasAttribute("src") || video.querySelector("source") !== null;
+  return !listed && video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE;
 }
 
 function stateOf(video: HTMLVideoElement): PlaceState {

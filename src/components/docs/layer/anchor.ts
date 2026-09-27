@@ -163,6 +163,37 @@ export function pageSelectionOfRange(editor: Editor, range: Range) {
   return segmentsBetween(state.doc, Math.min(from, to), Math.max(from, to));
 }
 
+/** A cell selection (prosemirror-tables' CellSelection), told by its shape:
+    this file keeps to type imports. */
+type Cells = { forEachCell: (f: (cell: PMNode, pos: number) => void) => void };
+const isCells = (selection: unknown): selection is Cells =>
+  typeof (selection as Partial<Cells> | null)?.forEachCell === "function";
+
+/** A drag across table cells selects the cells, as in Google Docs: the
+    passage is their words, cell by cell in reading order, and a range over
+    the cells places the toolbar. Null for any other selection. */
+export function pageCellSelection(editor: Editor) {
+  const { selection, doc } = editor.state;
+  if (!isCells(selection)) return null;
+  const cells: { pos: number; end: number }[] = [];
+  selection.forEachCell((cell, pos) => cells.push({ pos, end: pos + cell.nodeSize }));
+  cells.sort((a, b) => a.pos - b.pos);
+  const segments: PageSegment[] = [];
+  let truncated = false;
+  for (const cell of cells) {
+    const part = segmentsBetween(doc, cell.pos + 1, cell.end - 1);
+    segments.push(...part.segments);
+    truncated ||= part.truncated;
+  }
+  const first = cells.length > 0 ? editor.view.nodeDOM(cells[0].pos) : null;
+  const last = cells.length > 0 ? editor.view.nodeDOM(cells[cells.length - 1].pos) : null;
+  if (!first || !last) return null;
+  const range = document.createRange();
+  range.setStart(first, 0);
+  range.setEnd(last, last.childNodes.length);
+  return { segments, truncated, range };
+}
+
 /** The word the caret stands in or touches (Add comment with no selection, as
     in Google Docs); the language's own word breaks, for Chinese too. */
 export function wordAtCaret(editor: Editor): { from: number; to: number } | null {

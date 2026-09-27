@@ -25,6 +25,8 @@ export type FigureMediaView = {
   page: number | null;
   region: unknown | null;
   src: string | null;
+  /** A PDF crop's size in px (lib/figure-crop.ts): its place holds before it loads. */
+  size: { width: number; height: number } | null;
 };
 
 /** What the page editor knows of an import: its figures' media by mediaId,
@@ -73,6 +75,7 @@ function figureOf(node: PMNode, imported: ImportedEditor | null, editor: Editor 
     html: media?.html ?? null,
     caption: media ? media.caption : typeof node.attrs.caption === "string" ? node.attrs.caption : "",
     src: media ? (media.html ? null : media.src) : ownPage ? figureImageUrl(documentId, mediaId) : null,
+    size: media?.size ?? null,
   };
 }
 
@@ -123,7 +126,17 @@ function useFigureClicks(el: HTMLElement | null, editor: Editor, blockId: string
 
 /** A PDF figure: its crop over its caption, as the block reader draws it. A
     crop that does not load leaves the caption. */
-function CropFigure({ blockId, src, caption }: { blockId: string; src: string | null; caption: string }) {
+function CropFigure({
+  blockId,
+  src,
+  size,
+  caption,
+}: {
+  blockId: string;
+  src: string | null;
+  size: { width: number; height: number } | null;
+  caption: string;
+}) {
   const t = useT();
   const [failed, setFailed] = useState<string | null>(null);
   const shown = src && failed !== src ? src : null;
@@ -131,7 +144,17 @@ function CropFigure({ blockId, src, caption }: { blockId: string; src: string | 
     "div",
     { className: "reader-figure docs-figure-crop", "data-block-id": blockId || undefined },
     shown
-      ? h("img", { key: shown, src: shown, alt: "", loading: "lazy", decoding: "async", draggable: false, onError: () => setFailed(shown) })
+      ? h("img", {
+          key: shown,
+          src: shown,
+          alt: "",
+          width: size?.width,
+          height: size?.height,
+          loading: "lazy",
+          decoding: "async",
+          draggable: false,
+          onError: () => setFailed(shown),
+        })
       : null,
     caption ? h("p", { className: "docs-figure-caption" }, caption) : null,
     // Nothing to draw: the object still shows where it stands.
@@ -148,7 +171,7 @@ function FigureView({ node, editor }: NodeViewProps) {
     { ref: setEl, className: "docs-figure-body" },
     figure.html
       ? h(MediaHtml, { blockId: figure.blockId, className: "reader-figure", html: figure.html })
-      : h(CropFigure, { blockId: figure.blockId, src: figure.src, caption: figure.caption }),
+      : h(CropFigure, { blockId: figure.blockId, src: figure.src, size: figure.size, caption: figure.caption }),
   );
 }
 

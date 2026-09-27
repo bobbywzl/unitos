@@ -2,17 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { CROP_PAD, CROP_PAGE_WIDTH, WHOLE_PAGE_WIDTH } from "@/lib/figure-crop";
 import { cropPageRegion, renderPdfPage } from "@/lib/handwritten/pages";
 import { serverT } from "@/lib/i18n/server";
 import { parseRegion } from "@/lib/video/types";
 
 // Rendering a PDF page can outlive the default timeout.
 export const maxDuration = 60;
-
-// The page renders at this width when the figure is a region of it, so the
-// crop keeps the render's own pixels at reading size.
-const REGION_PAGE_WIDTH = 2000;
-const PAGE_WIDTH = 1200;
 
 // blockId: a FigureMedia id (a figure object of an import, SPEC.md §29) or
 // a FIGURE block's id (a block document).
@@ -71,9 +67,11 @@ export async function GET(
   const page = await renderPdfPage(
     new Uint8Array(document.fileData),
     figure.page,
-    region ? REGION_PAGE_WIDTH : PAGE_WIDTH,
+    // A region's page renders wide, so the crop keeps the render's own
+    // pixels at reading size (lib/figure-crop.ts).
+    region ? CROP_PAGE_WIDTH : WHOLE_PAGE_WIDTH,
   );
-  const png = region ? ((await cropPageRegion(page, region, { pad: 0.15, scaleUp: false })) ?? page) : page;
+  const png = region ? ((await cropPageRegion(page, region, { pad: CROP_PAD, scaleUp: false })) ?? page) : page;
   // Response wants an ArrayBuffer-backed array; the crop comes off a canvas buffer.
   const body = new Uint8Array(png.byteLength);
   body.set(png);

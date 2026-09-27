@@ -52,11 +52,21 @@ export function contentsEntries(value: unknown): ContentsEntry[] {
   return entries;
 }
 
+/** The title block: the first block when it is a heading, else the first
+    heading when it repeats the document's title (an import's Title stands
+    under its kicker, a PDF's under its permission line). */
+function titleBlockId(blocks: { id: string; type: string; text: string }[], title?: string): string | undefined {
+  if (blocks[0]?.type === "HEADING") return blocks[0].id;
+  const heading = blocks.find((b) => b.type === "HEADING");
+  const key = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  return heading && title !== undefined && key(heading.text) === key(title) ? heading.id : undefined;
+}
+
 // The blocks a part can start at: content, never the title block, a page
 // marker, or the video block.
-function startable(block: ContentsBlock, first: ContentsBlock | undefined): boolean {
+function startable(block: ContentsBlock, titleId: string | undefined): boolean {
   if (block.type === "PAGE" || block.type === "VIDEO") return false;
-  if (first && block.id === first.id && block.type === "HEADING") return false;
+  if (block.id === titleId) return false;
   return block.text.trim().length > 0;
 }
 
@@ -67,9 +77,10 @@ function startable(block: ContentsBlock, first: ContentsBlock | undefined): bool
 function resolveParts(
   parts: { title: string; blockId: string; level: number }[],
   blocks: ContentsBlock[],
+  title: string,
 ): ContentsEntry[] {
   const orderOf = new Map(blocks.map((b) => [b.id, b.order]));
-  const first = blocks[0];
+  const titleId = titleBlockId(blocks, title);
   const byId = new Map(blocks.map((b) => [b.id, b]));
   const out: ContentsEntry[] = [];
   let last = -1;
@@ -77,7 +88,7 @@ function resolveParts(
   for (const part of parts) {
     const block = byId.get(part.blockId);
     const order = orderOf.get(part.blockId);
-    if (!block || order === undefined || order <= last || !startable(block, first)) continue;
+    if (!block || order === undefined || order <= last || !startable(block, titleId)) continue;
     const level: 1 | 2 = part.level === 2 && hasTop ? 2 : 1;
     if (level === 1) hasTop = true;
     out.push({ title: part.title.trim(), blockId: part.blockId, level });
@@ -93,12 +104,13 @@ function resolveParts(
     the document has no headings past its title. */
 export function headingContents(
   blocks: (ContentsBlock & { html: string | null })[],
+  title?: string,
 ): ContentsEntry[] {
-  const first = blocks[0];
+  const titleId = titleBlockId(blocks, title);
   const out: ContentsEntry[] = [];
   let hasTop = false;
   for (const block of blocks) {
-    if (block.type !== "HEADING" || !startable(block, first)) continue;
+    if (block.type !== "HEADING" || !startable(block, titleId)) continue;
     const depth = Number(/<h([1-6])/i.exec(block.html ?? "")?.[1] ?? 2);
     const level: 1 | 2 = depth >= 3 && hasTop ? 2 : 1;
     if (level === 1) hasTop = true;
@@ -142,7 +154,7 @@ export async function buildContents(documentId: string, userId: string | null): 
   });
   if (!result.ok) throw new Error(result.error);
 
-  const entries = resolveParts(result.data.parts, document.blocks);
+  const entries = resolveParts(result.data.parts, document.blocks, document.title);
   await db.document.update({ where: { id: documentId }, data: { contents: entries } });
   await bumpDocument(documentId);
   return entries;
