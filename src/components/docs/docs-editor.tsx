@@ -4,7 +4,7 @@ import "./docs.css";
 import type { JSONContent } from "@tiptap/core";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
 import { REFRESH_EVENT } from "@/components/collab/use-sync";
 import { annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/docs/annotation-marks";
@@ -363,13 +363,17 @@ export function DocsEditor({
 
   // The figures and page labels of an import or its copy, and an import's
   // page count, reach its figure objects, its page starts, and the scroll
-  // tip through the extensions.
+  // tip through the extensions. The figures' map is the editor's own: the
+  // media each later page brings joins it before a newer stored copy is
+  // drawn (a restored version can name media the first page did not send).
+  const [figures] = useState<Record<string, FigureMediaView>>(() => ({ ...media?.figures }));
+  useLayoutEffect(() => {
+    if (media) Object.assign(figures, media.figures);
+  }, [figures, media]);
   const extensions = useMemo(
     () =>
       docsExtensions(
-        imported || media
-          ? { documentId, figures: media?.figures ?? {}, pageLabels: media?.pageLabels ?? null, pages: imported?.pages }
-          : undefined,
+        imported || media ? { documentId, figures, pageLabels: media?.pageLabels ?? null, pages: imported?.pages } : undefined,
       ),
     // Once per document: the editor is built once per document.
     // eslint-disable-next-line react-hooks/exhaustive-deps
