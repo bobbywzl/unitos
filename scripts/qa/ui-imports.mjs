@@ -2125,11 +2125,19 @@ RISKS.R15 = async (theme) => {
   check("R15", named.size > 0 && sent.length === named.size && sent.every((id) => named.has(id)), "after a re-parse the page sends only the media its text names", `${sent.length} of ${media.length} media rows in the page (${Math.round(html.length / 1024)} KB); the text names ${named.size}`);
   await openVersions(page);
   await page.locator(".docs-versions-list .docs-versions-pick", { hasText: "Imported" }).last().click().catch(() => {});
-  const drawnOld = (await waitIn(page, () => {
+  await waitIn(page, () => document.querySelector(".docs-versions-page .docs-figure"), null, 30_000);
+  // As a person scrolls through: a lazy image loads near the view.
+  const drawnOld = await page.evaluate(async () => {
     const figs = [...document.querySelectorAll(".docs-versions-page .docs-figure")];
-    const drawn = figs.filter((f) => [...f.querySelectorAll("img, svg, video, iframe")].some((m) => m.tagName !== "IMG" || (m.complete && m.naturalWidth > 0)));
-    return figs.length > 0 && drawn.length === figs.length ? { figures: figs.length, drawn: drawn.length } : null;
-  }, null, 30_000)) ?? (await page.evaluate(() => ({ figures: document.querySelectorAll(".docs-versions-page .docs-figure").length, drawn: null })));
+    let drawn = 0;
+    for (const f of figs) {
+      f.scrollIntoView({ block: "center" });
+      const media = [...f.querySelectorAll("img, svg, video, iframe")];
+      await Promise.race([Promise.all(media.filter((m) => m.tagName === "IMG").map((m) => m.decode().catch(() => {}))), new Promise((r) => setTimeout(r, 10_000))]);
+      if (media.some((m) => m.tagName !== "IMG" || (m.complete && m.naturalWidth > 0))) drawn++;
+    }
+    return { figures: figs.length, drawn };
+  });
   const versionShot = await shot(page, "R15-version-imported-media");
   check("R15", drawnOld.figures === oldMedia.length && drawnOld.drawn === oldMedia.length, "Version history shows \"Imported\" with the media it names", `${JSON.stringify(drawnOld)} of ${oldMedia.length} ${versionShot}`);
   await closeVersions(page);
