@@ -86,12 +86,13 @@
    where the PDF's page begins; in pageless, in the gutter left of the text.
    Drawn from the node's data-page-label (a pseudo-element: never selected,
    copied, or counted), and never printed. The label is the page's own
-   muted words on the page's ground, so of two page starts on one line the
-   later page's number shows. ─────────────────────────────────────────── */
+   muted words on the page's ground. ──────────────────────────────────── */
 .docs-prose [data-page-label]::before {
   content: attr(data-page-label);
   position: absolute;
-  right: calc(100% + 18px);
+  /* A page start in a table's cell moves out of the cell by the cell's
+     distance from the text's left edge (insert/page-start.ts). */
+  right: calc(100% + 18px + var(--docs-page-shift, 0px));
   min-width: 3.6em;
   padding: 1px 0 1px 4px;
   background: var(--docs-ground);
@@ -110,6 +111,17 @@
 /* A page that begins at a code block, an equation, or a figure: at its top. */
 .docs-prose :is(pre, .docs-math-block, .docs-figure)[data-page-label]::before {
   margin-top: 1px;
+}
+/* Page starts on one line draw one label for them all: "p. 7 · p. 8". */
+.docs-prose [data-page-labels]::before {
+  content: attr(data-page-labels);
+}
+.docs-prose [data-page-joined]::before {
+  content: none;
+}
+/* A table holding a page start lets its label out into the margin. */
+.docs-prose .tableWrapper:has([data-page-cell]) {
+  overflow-x: visible;
 }
 /* Version history draws a version without the editor: its text column holds
    the numbers as the page's does. */
