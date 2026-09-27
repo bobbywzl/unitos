@@ -207,7 +207,9 @@ export function setBlockKind(doc: RichNode, blockId: string, kind: BlockKind): R
     if (before.length > 0) out.push({ ...list, content: before });
     out.push(target, ...rest);
     if (after.length > 0) {
-      const start = typeof list.attrs?.start === "number" ? list.attrs.start + before.length + 1 : undefined;
+      // An ordered list without a start counts from 1, the schema's default.
+      const first = typeof list.attrs?.start === "number" ? list.attrs.start : list.type === "orderedList" ? 1 : undefined;
+      const start = first !== undefined ? first + before.length + 1 : undefined;
       out.push({ ...list, ...(start !== undefined ? { attrs: { ...list.attrs, start } } : {}), content: after });
     }
     return out;

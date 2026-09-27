@@ -729,12 +729,19 @@ async function coords(page, pos) {
     return { x: c.left, y: (c.top + c.bottom) / 2, top: c.top, bottom: c.bottom };
   }, pos);
 }
-/** A position in the band, scrolled to its middle only when it is not. */
+/** A position in the band, scrolled to its middle only when it is not,
+    and the page's text under it (a layout that moved is read again). */
 async function reveal(page, pos) {
-  const c = await coords(page, pos);
-  const b = await page.evaluate(() => window.__qa.band());
-  if (c.top >= b.top + 30 && c.bottom <= b.bottom - 60) return c;
-  return page.evaluate((p) => window.__qa.show(p), pos);
+  let c = null;
+  for (let i = 0; i < 4; i++) {
+    c = await coords(page, pos);
+    const b = await page.evaluate(() => window.__qa.band());
+    if (!(c.top >= b.top + 30 && c.bottom <= b.bottom - 60)) c = await page.evaluate((p) => window.__qa.show(p), pos);
+    const ours = await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest(".ProseMirror")), { x: c.x + 0.5, y: c.y });
+    if (ours) return c;
+    await page.evaluate(() => window.__qa.settle());
+  }
+  return c;
 }
 async function clickAt(page, x, y) {
   await page.mouse.move(x - 20, y - 8);
@@ -1197,7 +1204,7 @@ RISKS.SETUP = async () => {
 RISKS.R1 = async (theme) => {
   for (const kind of ["pdf", "url", "markdown"]) {
     const added = await fresh(kind, `-r1${theme[0]}`);
-    const { page, context, close } = await newPage(theme, { risk: "R1" });
+    const { page, close } = await newPage(theme, { risk: "R1" });
     await open(page, ctx.notebookId, added.id);
     // The editor's own copy against the stored rows: what a save would derive.
     const before = await rowsOf(added.id);
@@ -1246,7 +1253,7 @@ RISKS.R2 = async (theme) => {
   const alien = { type: "futureObject", attrs: { blockId: `qa${tagged("alien")}` }, content: [{ type: "text", text: "Words of a node from a newer build." }] };
   const rich = { ...row.richText, content: [...row.richText.content, alien] };
   await db.document.update({ where: { id: added.id }, data: { richText: rich } });
-  const { page, context, close } = await newPage(theme, { risk: "R2" });
+  const { page, close } = await newPage(theme, { risk: "R2" });
   let loads = 0;
   page.on("load", () => loads++);
   await open(page, ctx.notebookId, added.id, { wait: false });
@@ -1269,14 +1276,14 @@ RISKS.R2 = async (theme) => {
 // reload; a copy holds the words only; Backspace at a page start keeps it.
 RISKS.R3 = async (theme) => {
   const added = await fresh("pdf", `-r3${theme[0]}`);
-  const { page, context, close } = await newPage(theme, { risk: "R3" });
+  const { page, close } = await newPage(theme, { risk: "R3" });
   await open(page, ctx.notebookId, added.id);
   const starts = await pageStarts(page);
   const inline = await inlineStarts(page, 20);
   check("R3", starts.length > 0, `(${theme}) the PDF import shows page starts`, `${starts.length}: ${starts.slice(0, 16).map((s) => `p. ${s.page}${s.on === "paragraph" || s.on === "heading" ? "" : `[${s.on}]`}`).join(" ")}`);
   if (!inline.length) {
     fail("R3", "a page start inside a paragraph", "none found");
-    await context.close();
+    await close();
     return;
   }
   const s = inline[0];
@@ -1396,13 +1403,13 @@ RISKS.R3 = async (theme) => {
 // carries it.
 RISKS.R5 = async (theme) => {
   const added = await fresh("url", `-r5${theme[0]}`);
-  const { page, context, close } = await newPage(theme, { risk: "R5" });
+  const { page, close } = await newPage(theme, { risk: "R5" });
   await open(page, ctx.notebookId, added.id);
   const figs = await figures(page);
   const fig3 = figs.find((f) => (f.caption ?? "").trim() === "Figure 3");
   check("R5", Boolean(fig3), `(${theme}) the web page's figure captioned "Figure 3" is a figure object`, figs.map((f) => `"${clip(f.caption, 20)}"`).join(", "));
   if (!fig3) {
-    await context.close();
+    await close();
     return;
   }
   // A click on the figure opens its tools; Analyze.
@@ -1430,7 +1437,7 @@ RISKS.R5 = async (theme) => {
   const ringShot = await shot(page, `R5-analyze-ring-${theme}`);
   check("R5", Boolean(ring?.sourceId) && /kind-analyze/.test(ring?.ring ?? "") && Boolean(ring?.label), `(${theme}) the analyzed figure rings in the kind color with its label chip and data-source-id`, `${JSON.stringify(ring)} ${ringShot}`);
   if (!src) {
-    await context.close();
+    await close();
     return;
   }
   // A second annotation (Explain, from the figure's tools): a jump to it,
@@ -1588,12 +1595,12 @@ RISKS.R6 = async (theme) => {
   }
   // Paste a figure into another import.
   const target = await fresh("markdown", `-r6${theme[0]}`);
-  const { page, context, close } = await newPage(theme, { risk: "R6" });
+  const { page, close } = await newPage(theme, { risk: "R6" });
   await open(page, ctx.notebookId, web.id);
   const figs = await figures(page);
   if (!figs.length) {
     fail("R6", `(${theme}) a figure to copy`, "none");
-    await context.close();
+    await close();
     return;
   }
   await setMode(page, "editing");
@@ -1653,7 +1660,7 @@ RISKS.R7 = async (theme) => {
     pending.push(n.id);
   }
   const statusCount = async () => (await db.note.findMany({ where: { id: { in: pending } }, select: { status: true } })).reduce((m, s) => ({ ...m, [s.status]: (m[s.status] ?? 0) + 1 }), {});
-  const { page, context, close } = await newPage(theme, { risk: "R7" });
+  const { page, close } = await newPage(theme, { risk: "R7" });
   await open(page, ctx.notebookId, added.id);
   const m = await mode(page);
   const focusInPage = await page.evaluate(() => Boolean(document.activeElement?.closest(".ProseMirror")));
@@ -1722,7 +1729,7 @@ RISKS.R7 = async (theme) => {
 RISKS.R8 = async (theme) => {
   if (theme !== THEMES[0]) return;
   const added = await fresh("url", "-r8");
-  const { page, context, close } = await newPage(theme, { risk: "R8" });
+  const { page, close } = await newPage(theme, { risk: "R8" });
   await open(page, ctx.notebookId, added.id);
   await setMode(page, "editing");
   const at = await find(page, "What comes next");
@@ -1785,7 +1792,7 @@ RISKS.R9 = async (theme) => {
   const added = await fresh("pdf", `-r9${theme[0]}`);
   const other = await db.notebook.create({ data: { title: `QA other account ${tagged()}`, userId: "qa-other-account", sections: { create: { title: "Notes", order: 0 } } } });
   await db.notebookDocument.create({ data: { notebookId: other.id, documentId: added.id } });
-  const { page, context, close } = await newPage(theme, { risk: "R9" });
+  const { page, close } = await newPage(theme, { risk: "R9" });
   await open(page, ctx.notebookId, added.id);
   await page.click('[data-track="docs:mode"]');
   await waitIn(page, () => document.querySelectorAll('[data-track^="docs:mode:"]').length > 0, null, 10_000);
@@ -2062,7 +2069,7 @@ RISKS.R13 = async (theme) => {
 // embed types in the page; videos play near the view only.
 RISKS.R14 = async (theme) => {
   const web = await fresh("url", `-r14${theme[0]}`);
-  const { page, context, close } = await newPage(theme, { risk: "R14" });
+  const { page, close } = await newPage(theme, { risk: "R14" });
   await open(page, ctx.notebookId, web.id);
   // Videos: paused far from the view, playing near it.
   const videoState = () =>
@@ -2132,7 +2139,7 @@ RISKS.R15 = async (theme) => {
   const media = await db.figureMedia.findMany({ where: { documentId: web.id }, select: { id: true } });
   const kept = oldMedia.every((m) => media.some((x) => x.id === m.id));
   check("R15", re.status === 200 && kept, "a re-parse keeps the figure media the version \"Imported\" points at", `HTTP ${re.status}; media ${oldMedia.length} → ${media.length}, old kept ${kept}`);
-  const { page, context, close } = await newPage(theme, { risk: "R15" });
+  const { page, close } = await newPage(theme, { risk: "R15" });
   await open(page, ctx.notebookId, web.id);
   // The page sends the media its text names, never an older parse's;
   // Version history fetches the media a version names when it shows it.
@@ -2164,7 +2171,7 @@ RISKS.R15 = async (theme) => {
   const imported = listed.filter((v) => v.name === "Imported").at(-1);
   if (!imported) {
     fail("R15", "the version \"Imported\" is listed", clip(JSON.stringify(versions.body), 200));
-    await context.close();
+    await close();
     return;
   }
   const v = await api(`/api/documents/${web.id}/versions/${imported.id}`);
@@ -2263,7 +2270,7 @@ RISKS.R16 = async (theme) => {
 RISKS.R17 = async (theme) => {
   const pdf = await doc("pdf");
   const web = await doc("url");
-  const { page, context, close } = await newPage(theme, {  width: 1680, height: 1000, risk: "R17" });
+  const { page, close } = await newPage(theme, {  width: 1680, height: 1000, risk: "R17" });
   await page.goto(`${BASE}/n/${ctx.notebookId}?doc=${pdf.id}&view=side&doc2=${web.id}`, { waitUntil: "domcontentloaded" });
   await waitIn(page, () => document.querySelectorAll(".docs-prose").length === 2, null, 90_000);
   const starts = (await waitIn(page, () => {
@@ -2310,7 +2317,7 @@ RISKS.R18 = async (theme) => {
 RISKS.R20 = async (theme) => {
   if (theme !== THEMES[0]) return;
   const pdf = await fresh("pdf", "-r20");
-  const { page, context, responses, close } = await newPage(theme, { risk: "R20" });
+  const { page, responses, close } = await newPage(theme, { risk: "R20" });
   await open(page, ctx.notebookId, pdf.id);
   // A highlight before the re-parse: an unedited import keeps its ids where
   // the words match, so the highlight stays exact.
@@ -2390,7 +2397,7 @@ RISKS.R23 = async (theme) => {
 // then the assistant's bar with the model mock, as a person uses it.
 RISKS.C2 = async (theme) => {
   const pdf = await fresh("pdf", `-c2${theme[0]}`);
-  const { page, context, close } = await newPage(theme, { risk: "C2" });
+  const { page, close } = await newPage(theme, { risk: "C2" });
   await open(page, ctx.notebookId, pdf.id);
   const s = (await inlineStarts(page, 30))[0];
   const base = await page.evaluate((p) => window.__qa.blockText(p), s.pos);
@@ -2457,7 +2464,7 @@ RISKS.C2 = async (theme) => {
 // Accept, and two tabs on one import (live sync) with page starts.
 RISKS.EDIT = async (theme) => {
   const pdf = await fresh("pdf", `-edit${theme[0]}`);
-  const { page, context, close } = await newPage(theme, { risk: "EDIT" });
+  const { page, close } = await newPage(theme, { risk: "EDIT" });
   await open(page, ctx.notebookId, pdf.id);
   // A highlight, then words typed inside it: the mark grows, the quote stays.
   const at = await find(page, "Recurrent neural networks, long short-term memory");
@@ -2517,7 +2524,7 @@ RISKS.EDIT = async (theme) => {
   const startsAfter = (await pageStarts(second.page)).length;
   const liveShot = await shot(second.page, `EDIT-live-second-tab-${theme}`);
   check("EDIT", arrived && startsAfter === startsB, `(${theme}) words typed in one tab reach the other tab of the import, its page starts kept`, `arrived ${arrived}; page starts ${startsB} → ${startsAfter} ${liveShot}`);
-  await second.context.close();
+  await second.close();
   await close();
 };
 
@@ -2529,7 +2536,7 @@ RISKS.EDIT = async (theme) => {
 RISKS.AUDIT = async (theme) => {
   const pdf = await doc("pdf");
   const web = await doc("url");
-  const { page, context, close } = await newPage(theme, { risk: "AUDIT" });
+  const { page, close } = await newPage(theme, { risk: "AUDIT" });
   await open(page, ctx.notebookId, pdf.id);
   const chrome = await page.evaluate(() => {
     const sheet = document.querySelector("[data-docs-page-sheet]");
@@ -2787,7 +2794,7 @@ RISKS.AUDIT = async (theme) => {
 // a selection over a figure, a highlight in a table cell, Define.
 RISKS.AI = async (theme) => {
   const pdf = await fresh("pdf", `-ai${theme[0]}`);
-  const { page, context, close } = await newPage(theme, { risk: "AI" });
+  const { page, close } = await newPage(theme, { risk: "AI" });
   const derives = [];
   page.on("request", (r) => {
     if (r.url().endsWith("/api/derive") && r.method() === "POST") {
@@ -3098,14 +3105,14 @@ function collapsedView() {
 RISKS.COLLAPSE = async (theme) => {
   for (const kind of ["pdf", "url"]) {
     const added = await fresh(kind, `-collapse${theme[0]}`);
-    const { page, context, close } = await newPage(theme, { risk: "COLLAPSE" });
+    const { page, close } = await newPage(theme, { risk: "COLLAPSE" });
     await open(page, ctx.notebookId, added.id);
     const words = await page.evaluate(() => window.__docsEditor.state.doc.textContent);
     const rev = (await documentRow(added.id)).richTextRev;
     const button = page.locator('[data-track="collapse"]').first();
     if (!(await button.waitFor({ state: "visible", timeout: 10_000 }).then(() => true).catch(() => false))) {
       fail("COLLAPSE", `${kind} (${theme}): the Collapse button stands beside Extract`, "none");
-      await context.close();
+      await close();
       continue;
     }
     await button.click();

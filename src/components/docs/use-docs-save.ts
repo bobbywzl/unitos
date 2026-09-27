@@ -6,7 +6,7 @@ import type { Transaction } from "@tiptap/pm/state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OWN_SAVE_EVENT, REFRESH_EVENT } from "@/components/collab/use-sync";
 import { mergeRichText } from "@/lib/docs/merge";
-import { compactRichText, newBlockId, type AttrDefaults, type RichNode } from "@/lib/docs/schema";
+import { compactRichText, newBlockId, type NullDefaults, type RichNode } from "@/lib/docs/schema";
 
 // Saving a blank document (SPEC.md §29), the way Google Docs saves: no Save
 // button. Typing marks the document unsaved; a pause of SAVE_DELAY_MS, or
@@ -58,25 +58,25 @@ export function unknownTypes(json: RichNode, schema: Schema): string[] {
   return [...unknown];
 }
 
-const defaultsBySchema = new WeakMap<Schema, AttrDefaults>();
+const nullDefaultsBySchema = new WeakMap<Schema, NullDefaults>();
 
 /** The editor's text as a save sends it: compact, without the attributes
-    that hold their default (lib/docs/schema.ts compactRichText). */
+    that hold their default, null (lib/docs/schema.ts compactRichText). */
 function savedCopy(editor: Editor): RichNode {
-  let defaults = defaultsBySchema.get(editor.schema);
-  if (!defaults) {
+  let nulls = nullDefaultsBySchema.get(editor.schema);
+  if (!nulls) {
     type Types = Record<string, { spec: { attrs?: Record<string, { default?: unknown }> } }>;
     const of = (types: Types) =>
       Object.fromEntries(
         Object.entries(types).map(([name, type]) => [
           name,
-          Object.fromEntries(Object.entries(type.spec.attrs ?? {}).flatMap(([attr, spec]) => (Object.hasOwn(spec, "default") ? [[attr, spec.default]] : []))),
+          new Set(Object.entries(type.spec.attrs ?? {}).flatMap(([attr, spec]) => (Object.hasOwn(spec, "default") && spec.default === null ? [attr] : []))),
         ]),
       );
-    defaults = { nodes: of(editor.schema.nodes), marks: of(editor.schema.marks) };
-    defaultsBySchema.set(editor.schema, defaults);
+    nulls = { nodes: of(editor.schema.nodes), marks: of(editor.schema.marks) };
+    nullDefaultsBySchema.set(editor.schema, nulls);
   }
-  return compactRichText(editor.getJSON() as RichNode, defaults);
+  return compactRichText(editor.getJSON() as RichNode, nulls);
 }
 
 // A stored copy holds a type this build does not know: the page reloads

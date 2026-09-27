@@ -744,7 +744,8 @@ async function checkFixture(f: Fixture): Promise<Report> {
       const tag = renderBlockLines([r], pageName).split("\n")[0];
       if (tag !== `[block ${r.id}] (${r.type}${place}${page})`) tagOff.push(tag);
       else if (r.cell && page && !example) example = tag;
-      if (renderBlockLines([r], null).split("\n")[0] !== `[block ${r.id}] (${r.type}${place})`) tagOff.push(`without pages: ${renderBlockLines([r], null).split("\n")[0]}`);
+      const bare = renderBlockLines([r], null).split("\n")[0];
+      if (bare !== `[block ${r.id}] (${r.type}${place})`) tagOff.push(`without pages: ${bare}`);
     }
     check(
       pageName !== null && pageNames({ importRev: null, pageLabels: null }) === null && tagOff.length === 0,
