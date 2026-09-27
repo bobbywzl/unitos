@@ -53,7 +53,7 @@ import { figureCropSize } from "@/lib/figure-crop";
 import { readPageSetup, type RichNode } from "@/lib/docs/schema";
 import { importShared } from "@/lib/docs/server";
 import { syncRichText } from "@/lib/docs/sync";
-import type { Imported } from "@/components/docs/docs-editor";
+import type { DocsMedia, Imported } from "@/components/docs/docs-editor";
 import { PaneDocumentSelect, ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
 import { Workspace } from "@/components/reader/workspace";
 import { VideoPane } from "@/components/video/video-pane";
@@ -237,53 +237,60 @@ export default async function NotebookPage(props: {
       });
       if (!document) return null;
     }
-    // An import (SPEC.md §29): rich text made from a PDF, a web page, or a
-    // Markdown or text file. The page editor draws its import line, its
-    // figure objects from their media, and its page starts by the PDF's own
-    // page labels; Editing is off while a project another account owns
-    // holds it too.
+    // A document with rich text sends the media of its figure objects and
+    // its PDF's page labels (an import, or a copy of one: SPEC.md §30). A
+    // PDF figure is its page's crop: its image address stands in the page
+    // data, so Save for offline finds it (lib/offline/saved.ts), and so does
+    // its size, so its place holds before it loads.
+    let media: DocsMedia | null = null;
+    // An import (SPEC.md §30): rich text made from a PDF, a web page, or a
+    // Markdown or text file. The page editor draws its import line; Editing
+    // is off while a project another account owns holds it too.
     let imported: Imported | null = null;
-    if (document.richText !== null && document.importRev !== null) {
-      const [media, shared] = await Promise.all([
+    if (document.richText !== null) {
+      const [rows, shared] = await Promise.all([
         db.figureMedia.findMany({
           where: { documentId },
           select: { id: true, html: true, caption: true, page: true, region: true },
         }),
-        importShared(documentId),
+        document.importRev !== null ? importShared(documentId) : false,
       ]);
-      const pdf = pdfIds.has(documentId);
       const labels = document.pageLabels;
       const pageLabels =
         Array.isArray(labels) && labels.every((label) => typeof label === "string") ? (labels as string[]) : null;
-      const lastPage = document.blocks.reduce((n, b) => Math.max(n, b.page ?? 0), 0);
-      imported = {
-        kind: pdf ? "pdf" : document.fileHash !== null ? "markdown" : "url",
-        origin: document.sourceUrl?.replace(SPLIT_PART, "") ?? "",
-        pages: pdf ? (pageLabels?.length ?? (lastPage || null)) : null,
-        importRev: document.importRev,
-        edited: editedSinceImport(document),
-        shared,
-        // A PDF figure is its page's crop: its image address stands in the
-        // page data, so Save for offline finds it (lib/offline/saved.ts),
-        // and so does its size, so its place holds before it loads.
-        figures: Object.fromEntries(
-          media.map((m) => {
-            const crop = m.html === null && m.page !== null;
-            return [
-              m.id,
-              {
-                html: m.html,
-                caption: m.caption,
-                page: m.page,
-                region: m.region,
-                src: crop ? `/api/documents/${documentId}/figure/${m.id}` : null,
-                size: crop ? figureCropSize(parseRegion(m.region), readPageSetup(document.pageSetup)) : null,
-              },
-            ];
-          }),
-        ),
-        pageLabels,
-      };
+      if (rows.length > 0 || pageLabels) {
+        media = {
+          figures: Object.fromEntries(
+            rows.map((m) => {
+              const crop = m.html === null && m.page !== null;
+              return [
+                m.id,
+                {
+                  html: m.html,
+                  caption: m.caption,
+                  page: m.page,
+                  region: m.region,
+                  src: crop ? `/api/documents/${documentId}/figure/${m.id}` : null,
+                  size: crop ? figureCropSize(parseRegion(m.region), readPageSetup(document.pageSetup)) : null,
+                },
+              ];
+            }),
+          ),
+          pageLabels,
+        };
+      }
+      if (document.importRev !== null) {
+        const pdf = pdfIds.has(documentId);
+        const lastPage = document.blocks.reduce((n, b) => Math.max(n, b.page ?? 0), 0);
+        imported = {
+          kind: pdf ? "pdf" : document.fileHash !== null ? "markdown" : "url",
+          origin: document.sourceUrl?.replace(SPLIT_PART, "") ?? "",
+          pages: pdf ? (pageLabels?.length ?? (lastPage || null)) : null,
+          importRev: document.importRev,
+          edited: editedSinceImport(document),
+          shared,
+        };
+      }
     }
     const blockById = new Map(document.blocks.map((b) => [b.id, b]));
     // Video anchors are time ranges, not text spans: they skip the text
@@ -958,6 +965,7 @@ export default async function NotebookPage(props: {
     return {
       document,
       imported,
+      media,
       summaries,
       distillations,
       extractions,
@@ -1352,6 +1360,7 @@ export default async function NotebookPage(props: {
                   rev: pane.document.richTextRev,
                   pageSetup: readPageSetup(pane.document.pageSetup),
                   imported: pane.imported,
+                  media: pane.media,
                 }
               : null
           }
