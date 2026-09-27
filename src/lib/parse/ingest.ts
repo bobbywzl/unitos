@@ -1359,7 +1359,7 @@ async function reparseImport(
         if (synced.reason === "rev") throw new ImportEditedError();
         throw new Error(`The re-parse could not be saved (${synced.reason})`);
       }
-      await keepNamedVersion(tx, documentId, data.t("api.importVersionName"));
+      await keepNamedVersion(tx, documentId, data.t("api.reparsedVersionName"));
       const newRows = await tx.block.findMany({
         where: { documentId },
         orderBy: { order: "asc" },

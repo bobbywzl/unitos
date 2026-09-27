@@ -757,8 +757,11 @@ function stats(values) {
     (lib/reading-position.ts, 80 px under the pane's top) lies under that
     header; this is the line in view. Runs in the page. */
 function readingLine() {
-  const header = document.querySelector(".docs-header")?.getBoundingClientRect();
-  const top = (header ? header.bottom : 0) + 8;
+  // The app's reading line (lib/reading-position.ts): 80 px under the pane's
+  // top edge. The header fades in and out over the pane, so it is no measure.
+  let pane = document.querySelector(".docs-prose");
+  while (pane && !(/(auto|scroll)/.test(getComputedStyle(pane).overflowY) && pane.scrollHeight > pane.clientHeight)) pane = pane.parentElement;
+  const top = (pane ? pane.getBoundingClientRect().top : 0) + 80;
   const els = [...document.querySelectorAll(".docs-prose [data-block-id]")];
   const hit = els.find((e) => e.getBoundingClientRect().bottom > top);
   let saved = null;
@@ -1604,6 +1607,18 @@ RISKS.R14 = async (theme) => {
   const web = await fresh("url", `-r14${theme[0]}`);
   const { page, errors, context } = await newPage(theme);
   await open(page, ctx.notebookId, web.id);
+  // Videos: paused far from the view, playing near it.
+  const videoState = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll(".docs-prose .docs-figure")].filter((f) => /Figure 5/.test(f.textContent)).map((f) => {
+        const v = f.querySelector("video");
+        return v
+          ? { paused: v.paused, time: Math.round(v.currentTime * 10) / 10, ready: v.readyState, network: v.networkState, error: v.error?.code ?? null, src: (v.currentSrc || v.getAttribute("src") || "").slice(0, 60), top: Math.round(v.getBoundingClientRect().top), shown: f.textContent.slice(0, 60) }
+          : { video: false, shown: f.textContent.slice(0, 80), top: Math.round(f.getBoundingClientRect().top) };
+      }),
+    );
+  // Before anything scrolls near the video.
+  const far = await videoState();
   const layout = await page.evaluate(() => {
     const prose = document.querySelector(".docs-prose");
     const text = prose.getBoundingClientRect();
@@ -1641,18 +1656,6 @@ RISKS.R14 = async (theme) => {
     await page.keyboard.press("Backspace");
     await page.keyboard.press("Backspace");
   } else fail("R14", `(${theme}) a paragraph after the embed`, `none (caption found ${Boolean(cap)})`);
-  // Videos: paused far from the view, playing near it.
-  const videoState = () =>
-    page.evaluate(() =>
-      [...document.querySelectorAll(".docs-prose .docs-figure")].filter((f) => /Figure 5/.test(f.textContent)).map((f) => {
-        const v = f.querySelector("video");
-        return v
-          ? { paused: v.paused, time: Math.round(v.currentTime * 10) / 10, ready: v.readyState, network: v.networkState, error: v.error?.code ?? null, src: (v.currentSrc || v.getAttribute("src") || "").slice(0, 60), top: Math.round(v.getBoundingClientRect().top), shown: f.textContent.slice(0, 60) }
-          : { video: false, shown: f.textContent.slice(0, 80), top: Math.round(f.getBoundingClientRect().top) };
-      }),
-    );
-  await page.evaluate(() => document.querySelector(".docs-prose")?.closest("[class*=overflow]")?.scrollTo?.(0, 0));
-  const far = await videoState();
   const fig5 = (await figures(page)).find((f) => /Figure 5/.test(f.caption ?? ""));
   if (fig5) await page.evaluate((p) => window.__docsEditor.view.nodeDOM(p)?.scrollIntoView({ block: "center" }), fig5.pos);
   await sleep(3500);
@@ -1678,7 +1681,9 @@ RISKS.R15 = async (theme) => {
   const { page, errors, context } = await newPage(theme);
   await open(page, ctx.notebookId, web.id);
   const versions = await api(`/api/documents/${web.id}/versions`);
-  const imported = Array.isArray(versions.body) ? versions.body.find((v) => v.name === "Imported") : (versions.body.versions ?? []).find((v) => v.name === "Imported");
+  // Newest first: the original import's version is the last "Imported".
+  const listed = Array.isArray(versions.body) ? versions.body : (versions.body.versions ?? []);
+  const imported = listed.filter((v) => v.name === "Imported").at(-1);
   if (!imported) {
     fail("R15", "the version \"Imported\" is listed", clip(JSON.stringify(versions.body), 200));
     await context.close();

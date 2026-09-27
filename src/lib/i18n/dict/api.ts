@@ -64,6 +64,7 @@ const en = {
   // text a re-parse replaces.
   importVersionName: "Imported",
   reparseVersionName: "Before re-parse",
+  reparsedVersionName: "Re-parsed",
   onlyTextBlocksRemoved: "Only text blocks can be removed",
   onlyTextBlocksStyled: "Only text blocks can be styled",
   editNotRemovedParagraph: "Edit is not a removed paragraph",
@@ -381,6 +382,7 @@ const zh: Record<keyof typeof en, string> = {
   versionEmpty: "空文档不会保存为版本",
   importVersionName: "已导入",
   reparseVersionName: "重新解析之前",
+  reparsedVersionName: "重新解析之后",
   onlyTextBlocksRemoved: "只有文本块可以移除",
   onlyTextBlocksStyled: "只有文本块可以设置样式",
   editNotRemovedParagraph: "此编辑不是被移除的段落",
