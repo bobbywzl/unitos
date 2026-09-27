@@ -112,7 +112,7 @@ export async function POST(req: Request) {
       select: { id: true, html: true, caption: true, page: true, region: true },
     });
     // A figure without media stays out, as the save leaves it out.
-    richText = withDocumentFigures(copied, new Map(media.map((m) => [mediaIds.get(m.id) ?? "", m])));
+    richText = withDocumentFigures(copied, new Map(media.map((m) => [mediaIds.get(m.id)!, m])));
     const json = (value: Prisma.JsonValue) => (value === null ? undefined : (value as Prisma.InputJsonValue));
     kept = { pageSetup: json(original.pageSetup), pageLabels: json(original.pageLabels), references: json(original.references) };
     // The copy sits beside the original, as in Google Docs.
@@ -141,7 +141,7 @@ export async function POST(req: Request) {
         }
       }
       const rows = media.map((m) => ({
-        id: mediaIds.get(m.id) ?? newBlockId(),
+        id: mediaIds.get(m.id)!,
         documentId: created.id,
         html: m.html?.replace(OWN_IMAGE, (whole, path: string, id: string) => (imageIds.has(id) ? `${path}${imageIds.get(id)}` : whole)) ?? null,
         caption: m.caption,

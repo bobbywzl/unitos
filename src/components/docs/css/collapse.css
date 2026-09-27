@@ -28,3 +28,12 @@
   display: block;
   height: 0;
 }
+/* A drag that starts in a core selects in that core alone. */
+.docs-prose:has(.docs-core-slot[data-selecting]) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.docs-prose .docs-core-slot[data-selecting] {
+  -webkit-user-select: text;
+  user-select: text;
+}

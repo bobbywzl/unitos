@@ -145,20 +145,7 @@ function collapsePlugin(): Plugin<Layer> {
       },
     },
     props: { decorations: (state) => collapseKey.getState(state)?.set },
-    // A selection in a core is the reader's, not the page's: one that runs
-    // from a core into the text or into another core stays as the browser
-    // drew it, and the page keeps its own selection.
-    filterTransaction: (tr) => {
-      if (!tr.selectionSet || tr.docChanged) return true;
-      const selection = document.getSelection();
-      return !inCore(selection?.anchorNode) && !inCore(selection?.focusNode);
-    },
   });
-}
-
-/** Whether a node of the page is in a core's place. */
-function inCore(node: Node | null | undefined): boolean {
-  return Boolean((node instanceof Element ? node : node?.parentElement)?.closest(".docs-core-slot"));
 }
 
 const slotKey = (unit: Shown) => `${unit.id}:${unit.core ? "core" : "words"}`;
@@ -199,6 +186,27 @@ export function CollapsedView({
     return () => {
       editor.unregisterPlugin(collapseKey);
     };
+  }, [editor]);
+
+  // A drag that starts in a core selects in that core alone
+  // (css/collapse.css): ProseMirror holds no selection that runs from a
+  // core into another or into the text, and would draw its own instead.
+  useEffect(() => {
+    const dom = editor.view.dom;
+    const onDown = (e: PointerEvent) => {
+      const slot = e.target instanceof Element ? e.target.closest<HTMLElement>('.docs-core-slot[data-docs-core="core"]') : null;
+      if (e.button !== 0 || !slot || (e.target as Element).closest("button")) return;
+      slot.dataset.selecting = "";
+      const up = () => {
+        delete slot.dataset.selecting;
+        document.removeEventListener("pointerup", up, true);
+        document.removeEventListener("pointercancel", up, true);
+      };
+      document.addEventListener("pointerup", up, true);
+      document.addEventListener("pointercancel", up, true);
+    };
+    dom.addEventListener("pointerdown", onDown, true);
+    return () => dom.removeEventListener("pointerdown", onDown, true);
   }, [editor]);
 
   // Editing, Suggesting, and Find turn Collapse off: they need the words.
