@@ -120,7 +120,7 @@
   content: none;
 }
 /* A table holding a page start lets its label out into the margin. */
-.docs-prose .tableWrapper:has([data-page-cell]) {
+.docs-shell .docs-prose .tableWrapper:has([data-page-cell]) {
   overflow-x: visible;
 }
 /* Version history draws a version without the editor: its text column holds
