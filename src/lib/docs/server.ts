@@ -1,11 +1,14 @@
 import type { Prisma } from "@prisma/client";
 import { after, NextResponse } from "next/server";
+import type { FigureMediaView } from "@/components/docs/insert/figure";
 import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
-import type { RichNode } from "@/lib/docs/schema";
+import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { syncRichText, type SyncResult } from "@/lib/docs/sync";
+import { figureCropSize } from "@/lib/figure-crop";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import type { TFunc } from "@/lib/i18n/dictionaries";
+import { parseRegion } from "@/lib/video/types";
 
 // The block routes' door into a document with rich text (SPEC.md §29), a
 // blank document or an import: it is edited through its rich text, never
@@ -28,6 +31,51 @@ export async function importShared(documentId: string, tx?: Prisma.TransactionCl
   });
   if (!document || document.importRev === null) return false;
   return new Set(document.notebooks.map((n) => n.notebook.userId)).size >= 2;
+}
+
+/** The media ids of a rich text's figure objects, once each. */
+function figureMediaIds(doc: RichNode): string[] {
+  const ids = new Set<string>();
+  const walk = (node: RichNode) => {
+    if (node.type === "figure" && typeof node.attrs?.mediaId === "string") ids.add(node.attrs.mediaId);
+    else node.content?.forEach(walk);
+  };
+  walk(doc);
+  return [...ids];
+}
+
+/** The media of the figure objects a rich text holds (SPEC.md §30), by
+    media id, as the page editor draws them; null when it holds none. Only
+    the media it names: an earlier re-parse's media stay for the versions
+    that name them, and Version history reads a version's own. A PDF figure
+    is its page's crop: its address stands in the page data, so Save for
+    offline finds it (lib/offline/saved.ts), and so does its size, so its
+    place holds before it loads. */
+export async function figureMedia(
+  documentId: string,
+  doc: RichNode,
+  pageSetup: PageSetup,
+): Promise<Record<string, FigureMediaView> | null> {
+  const ids = figureMediaIds(doc);
+  if (ids.length === 0) return null;
+  const rows = await db.figureMedia.findMany({
+    where: { documentId, id: { in: ids } },
+    select: { id: true, html: true, caption: true, page: true, region: true },
+  });
+  return Object.fromEntries(
+    rows.map((m) => {
+      const crop = m.html === null && m.page !== null;
+      const view: FigureMediaView = {
+        html: m.html,
+        caption: m.caption,
+        page: m.page,
+        region: m.region,
+        src: crop ? `/api/documents/${documentId}/figure/${m.id}` : null,
+        size: crop ? figureCropSize(parseRegion(m.region), pageSetup) : null,
+      };
+      return [m.id, view];
+    }),
+  );
 }
 
 /** A server-side edit refused: the import is shared across accounts. */

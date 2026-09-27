@@ -49,9 +49,8 @@ import { GlossaryLanguage } from "@/components/reader/glossary-language";
 import type { PageMark } from "@/components/reader/page-block";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { ensureBlockIds, isOlderBlankDocument, richTextFromBlocks } from "@/lib/docs/blocks";
-import { figureCropSize } from "@/lib/figure-crop";
 import { readPageSetup, type RichNode } from "@/lib/docs/schema";
-import { importShared } from "@/lib/docs/server";
+import { figureMedia, importShared } from "@/lib/docs/server";
 import { syncRichText } from "@/lib/docs/sync";
 import type { DocsMedia, Imported } from "@/components/docs/docs-editor";
 import { PaneDocumentSelect, ReaderPanes, type ReaderViewKind } from "@/components/reader/reader-panes";
@@ -238,47 +237,22 @@ export default async function NotebookPage(props: {
       if (!document) return null;
     }
     // A document with rich text sends the media of its figure objects and
-    // its PDF's page labels (an import, or a copy of one: SPEC.md §30). A
-    // PDF figure is its page's crop: its image address stands in the page
-    // data, so Save for offline finds it (lib/offline/saved.ts), and so does
-    // its size, so its place holds before it loads.
+    // its PDF's page labels (an import, or a copy of one: SPEC.md §30): only
+    // the media its rich text names (figureMedia).
     let media: DocsMedia | null = null;
     // An import (SPEC.md §30): rich text made from a PDF, a web page, or a
     // Markdown or text file. The page editor draws its import line; Editing
     // is off while a project another account owns holds it too.
     let imported: Imported | null = null;
     if (document.richText !== null) {
-      const [rows, shared] = await Promise.all([
-        db.figureMedia.findMany({
-          where: { documentId },
-          select: { id: true, html: true, caption: true, page: true, region: true },
-        }),
+      const [figures, shared] = await Promise.all([
+        figureMedia(documentId, document.richText as unknown as RichNode, readPageSetup(document.pageSetup)),
         document.importRev !== null ? importShared(documentId) : false,
       ]);
       const labels = document.pageLabels;
       const pageLabels =
         Array.isArray(labels) && labels.every((label) => typeof label === "string") ? (labels as string[]) : null;
-      if (rows.length > 0 || pageLabels) {
-        media = {
-          figures: Object.fromEntries(
-            rows.map((m) => {
-              const crop = m.html === null && m.page !== null;
-              return [
-                m.id,
-                {
-                  html: m.html,
-                  caption: m.caption,
-                  page: m.page,
-                  region: m.region,
-                  src: crop ? `/api/documents/${documentId}/figure/${m.id}` : null,
-                  size: crop ? figureCropSize(parseRegion(m.region), readPageSetup(document.pageSetup)) : null,
-                },
-              ];
-            }),
-          ),
-          pageLabels,
-        };
-      }
+      if (figures || pageLabels) media = { figures: figures ?? {}, pageLabels };
       if (document.importRev !== null) {
         const pdf = pdfIds.has(documentId);
         const lastPage = document.blocks.reduce((n, b) => Math.max(n, b.page ?? 0), 0);

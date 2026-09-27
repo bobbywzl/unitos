@@ -7,6 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useAuthor } from "@/components/collab/collab-context";
 import { useLang, useT } from "@/components/lang-provider";
 import { MoreVertIcon } from "@/components/docs/icons";
+import { importedOf, type FigureMediaView } from "@/components/docs/insert/figure";
 import { ArrowBackIcon } from "@/components/docs/insert/icons";
 import { flushDocument } from "@/components/docs/layer/flush";
 import { DropdownPanel, MenuItem } from "@/components/docs/menu";
@@ -143,12 +144,21 @@ export function VersionView({
     for (const id of wantedKey.split(" ").filter(Boolean)) {
       if (fetching.current.has(id)) continue;
       fetching.current.add(id);
-      read<{ richText: RichNode }>(`/api/documents/${documentId}/versions/${id}`).then(
-        (body) => setTexts((all) => ({ ...all, [id]: body.richText })),
+      read<{ richText: RichNode; figures?: Record<string, FigureMediaView> }>(`/api/documents/${documentId}/versions/${id}`).then(
+        (body) => {
+          // The page holds the media of the text as it stands (SPEC.md
+          // §30); a version's figure objects bring their own, which stay
+          // for Restore.
+          const figures = importedOf(editor)?.figures;
+          for (const [mediaId, view] of Object.entries(body.figures ?? {})) {
+            if (figures && !Object.hasOwn(figures, mediaId)) figures[mediaId] = view;
+          }
+          setTexts((all) => ({ ...all, [id]: body.richText }));
+        },
         fail,
       );
     }
-  }, [wantedKey, documentId, read, fail]);
+  }, [wantedKey, documentId, read, fail, editor]);
 
   const person = (userId: string | null) => (userId ? (history?.people[userId] ?? authorOf(userId)) : undefined);
   const colorOf = (e: Entry) => person(e.userId)?.color ?? personColor(e.userId ?? "");
