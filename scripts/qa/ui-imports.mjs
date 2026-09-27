@@ -590,7 +590,7 @@ let browser;
 async function launch() {
   browser = await chromium.launch({ executablePath: CHROME, args: ["--autoplay-policy=no-user-gesture-required"] });
 }
-async function newPage(theme = "light", { width = 1440, height = 900 } = {}) {
+async function newPage(theme = "light", { width = 1440, height = 900, risk = null } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, colorScheme: theme, acceptDownloads: true });
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
   await context.addInitScript(qaHelpers);
@@ -615,7 +615,12 @@ async function newPage(theme = "light", { width = 1440, height = 900 } = {}) {
     const u = r.url();
     if (u.startsWith(BASE)) responses.push({ url: u.replace(BASE, ""), status: r.status(), method: r.request().method() });
   });
-  return { context, page, errors, responses };
+  /** The page's console errors as a NOTE of `risk`, then the context closed. */
+  const close = async () => {
+    if (risk && errors.length) note(risk, "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
+    await context.close();
+  };
+  return { context, page, errors, responses, close };
 }
 
 async function shot(page, name) {
@@ -1192,12 +1197,12 @@ RISKS.SETUP = async () => {
 RISKS.R1 = async (theme) => {
   for (const kind of ["pdf", "url", "markdown"]) {
     const added = await fresh(kind, `-r1${theme[0]}`);
-    const { page, errors, context } = await newPage(theme);
+    const { page, context, close } = await newPage(theme, { risk: "R1" });
     await open(page, ctx.notebookId, added.id);
     // The editor's own copy against the stored rows: what a save would derive.
     const before = await rowsOf(added.id);
-    const stored = async () => JSON.stringify((await documentRow(added.id)).richText).length;
-    const size = await stored();
+    const stored = async () => JSON.stringify((await documentRow(added.id)).richText);
+    const size = (await stored()).length;
     const since = new Date();
     const target = before.find((r) => r.type === "PARAGRAPH" && r.text.length > 60 && !r.cell) ?? before.find((r) => r.type === "PARAGRAPH");
     await setMode(page, "editing");
@@ -1216,9 +1221,10 @@ RISKS.R1 = async (theme) => {
     const ok = changed.length === 1 && changed[0].id === target.id && gone.length === 0 && after.length === before.length && kinds.length === 1 && kinds[0] === "TEXT_EDIT";
     const detail = `${before.length} rows; changed ${changed.length} (${changed.slice(0, 3).map((r) => `${r.type} "${clip(r.text, 30)}"`).join(", ")}), removed ${gone.length}, added ${after.length - before.length + gone.length}; history ${JSON.stringify(kinds.slice(0, 6))}`;
     check("R1", ok, `${kind} (${theme}): one letter typed changes one row and writes one TEXT_EDIT`, detail);
-    // The save keeps the stored copy compact: attributes at their default stay out.
+    // The save keeps the stored copy compact: an attribute at its default,
+    // null, stays out (it grew an import by half, 672 K → 1.1 M characters).
     const saved = await stored();
-    check("R1", saved <= size * 1.01 + 100, `${kind} (${theme}): the first save keeps the stored rich text compact`, `${size} → ${saved} characters`);
+    check("R1", saved.length <= size * 1.1, `${kind} (${theme}): the first save keeps the stored rich text compact`, `${size} → ${saved.length} characters; ${(saved.match(/":null[,}]/g) ?? []).length} attributes null`);
     if (!ok && changed.length > 1) {
       // Why the other rows moved: the first field that differs.
       const r = changed.find((c) => c.id !== target.id);
@@ -1228,8 +1234,7 @@ RISKS.R1 = async (theme) => {
         note("R1", `${kind}: first other row that changed`, `${r.type} ${field}: ${clip(JSON.stringify(b[field]), 80)} → ${clip(JSON.stringify(r[field]), 80)}`);
       }
     }
-    if (errors.length) note("R1", `${kind}: console`, errors.slice(0, 2).join(" | "));
-    await context.close();
+    await close();
   }
 };
 
@@ -1241,7 +1246,7 @@ RISKS.R2 = async (theme) => {
   const alien = { type: "futureObject", attrs: { blockId: `qa${tagged("alien")}` }, content: [{ type: "text", text: "Words of a node from a newer build." }] };
   const rich = { ...row.richText, content: [...row.richText.content, alien] };
   await db.document.update({ where: { id: added.id }, data: { richText: rich } });
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "R2" });
   let loads = 0;
   page.on("load", () => loads++);
   await open(page, ctx.notebookId, added.id, { wait: false });
@@ -1256,8 +1261,7 @@ RISKS.R2 = async (theme) => {
   const stored = await documentRow(added.id);
   const kept = JSON.stringify(stored.richText).includes("futureObject");
   check("R2", loads <= 2 && (state.prose > 0 || (state.frame && /can.t show/.test(state.says ?? ""))) && kept, `(${theme}) a stored node this build lacks: the frame or the page shows, it reloads at most once, the stored copy keeps the node`, `loads ${loads}, prose ${state.prose} chars, frame ${state.frame}, says "${clip(state.says, 90)}", stored keeps it ${kept}, ${path}`);
-  if (errors.length) note("R2", "console", errors.slice(0, 3).join(" | "));
-  await context.close();
+  await close();
   await db.document.update({ where: { id: added.id }, data: { richText: row.richText } });
 };
 
@@ -1265,7 +1269,7 @@ RISKS.R2 = async (theme) => {
 // reload; a copy holds the words only; Backspace at a page start keeps it.
 RISKS.R3 = async (theme) => {
   const added = await fresh("pdf", `-r3${theme[0]}`);
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "R3" });
   await open(page, ctx.notebookId, added.id);
   const starts = await pageStarts(page);
   const inline = await inlineStarts(page, 20);
@@ -1384,8 +1388,7 @@ RISKS.R3 = async (theme) => {
     check("R3", ink > single * 0.6, `(${theme}) a page start in a table's second column draws its number in the page's margin`, `margin ink ${ink} against ${single} for a paragraph's number ${cellShot}`);
     await db.document.update({ where: { id: added.id }, data: { richText: row.richText } });
   } else note("R3", `(${theme}) a table between p. 8 and p. 9 to hold p. 9`, `p. 8 at ${at8}, p. 9 at ${at9}, table ${Boolean(table)}`);
-  if (errors.length) note("R3", "console", errors.slice(0, 3).join(" | "));
-  await context.close();
+  await close();
 };
 
 // R5: a figure's annotation orphans when its figure goes, never moves into
@@ -1393,7 +1396,7 @@ RISKS.R3 = async (theme) => {
 // carries it.
 RISKS.R5 = async (theme) => {
   const added = await fresh("url", `-r5${theme[0]}`);
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "R5" });
   await open(page, ctx.notebookId, added.id);
   const figs = await figures(page);
   const fig3 = figs.find((f) => (f.caption ?? "").trim() === "Figure 3");
@@ -1553,8 +1556,7 @@ RISKS.R5 = async (theme) => {
     check("R5", Boolean(moved && after.figure > after.heading && followed), `(${theme}) cut and paste moves the figure under "The measurements" and the annotation follows it`, `caret in "${caret}"; figure at ${before.figure} → ${after.figure} (heading ${after.heading}); source on ${now?.blockId === moved?.blockId ? "the moved figure" : now?.blockId} orphaned ${now?.orphaned}`);
     await shot(page, `R5-after-cut-paste-${theme}`);
   }
-  if (errors.length) note("R5", "console", errors.slice(0, 3).join(" | "));
-  await context.close();
+  await close();
 };
 
 // R6: figure html from the client: a save with another document's mediaId,
@@ -1586,7 +1588,7 @@ RISKS.R6 = async (theme) => {
   }
   // Paste a figure into another import.
   const target = await fresh("markdown", `-r6${theme[0]}`);
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "R6" });
   await open(page, ctx.notebookId, web.id);
   const figs = await figures(page);
   if (!figs.length) {
@@ -1625,8 +1627,7 @@ RISKS.R6 = async (theme) => {
   const path = await shot(page, `R6-paste-figure-${theme}`);
   check("R6", after === before, `(${theme}) a figure from another document does not paste`, `figures ${before} → ${after}, ${path}`);
   check("R6", said.length > 0, `(${theme}) a toast says why`, said.join(" | ") || "no toast");
-  if (errors.length) note("R6", "console", errors.slice(0, 3).join(" | "));
-  await context.close();
+  await close();
 };
 
 // R7: Viewing on open shows comments, opens the toolbar, and leaves the
@@ -1652,7 +1653,7 @@ RISKS.R7 = async (theme) => {
     pending.push(n.id);
   }
   const statusCount = async () => (await db.note.findMany({ where: { id: { in: pending } }, select: { status: true } })).reduce((m, s) => ({ ...m, [s.status]: (m[s.status] ?? 0) + 1 }), {});
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "R7" });
   await open(page, ctx.notebookId, added.id);
   const m = await mode(page);
   const focusInPage = await page.evaluate(() => Boolean(document.activeElement?.closest(".ProseMirror")));
@@ -1713,8 +1714,7 @@ RISKS.R7 = async (theme) => {
   await reload(page);
   const remembered = await until(async () => (await mode(page)) === "editing", 5000);
   check("R7", remembered, `(${theme}) Editing is remembered on a reload`, `mode ${await mode(page)}`);
-  if (errors.length) note("R7", "console", errors.slice(0, 3).join(" | "));
-  await context.close();
+  await close();
 };
 
 // R8: no re-parse loses edits: the manual one asks, the silent ones skip an
@@ -1722,7 +1722,7 @@ RISKS.R7 = async (theme) => {
 RISKS.R8 = async (theme) => {
   if (theme !== THEMES[0]) return;
   const added = await fresh("url", "-r8");
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "R8" });
   await open(page, ctx.notebookId, added.id);
   await setMode(page, "editing");
   const at = await find(page, "What comes next");
@@ -1776,8 +1776,7 @@ RISKS.R8 = async (theme) => {
   }, null, 60_000)) ?? (await page.evaluate(() => ({ docs: Boolean(document.querySelector(".docs-prose")), pages: 0 })));
   await shot(page, "R8-shape-switch-pages");
   check("R8", !view.docs && view.pages > 0, "after the switch the reader shows pages, not the page editor", JSON.stringify(view));
-  if (errors.length) note("R8", "console", errors.slice(0, 3).join(" | "));
-  await context.close();
+  await close();
 };
 
 // R9: an import another account's project holds is not editable here, the
@@ -1786,7 +1785,7 @@ RISKS.R9 = async (theme) => {
   const added = await fresh("pdf", `-r9${theme[0]}`);
   const other = await db.notebook.create({ data: { title: `QA other account ${tagged()}`, userId: "qa-other-account", sections: { create: { title: "Notes", order: 0 } } } });
   await db.notebookDocument.create({ data: { notebookId: other.id, documentId: added.id } });
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "R9" });
   await open(page, ctx.notebookId, added.id);
   await page.click('[data-track="docs:mode"]');
   await waitIn(page, () => document.querySelectorAll('[data-track^="docs:mode:"]').length > 0, null, 10_000);
@@ -1799,11 +1798,15 @@ RISKS.R9 = async (theme) => {
   await page.keyboard.press("Escape");
   const editingOff = menu.items.filter((i) => i.track !== "docs:mode:viewing").every((i) => i.disabled);
   check("R9", editingOff && menu.reason.length > 10, `(${theme}) on a shared import Editing and Suggesting are off, with the reason`, `${JSON.stringify(menu.items)} "${clip(menu.reason, 100)}" ${path}`);
-  // Search the menus says the same.
-  const rows = ((await searchMenus(page, "mode")) ?? []).filter((r) => /^(Editing|Suggesting) mode$/.test(r.label));
-  const searchShot = await shot(page, `R9-shared-search-menus-${theme}`);
-  await page.keyboard.press("Escape");
-  check("R9", rows.length === 2 && rows.every((r) => r.off && r.note.length > 10), `(${theme}) on a shared import Search the menus shows Editing mode and Suggesting mode off, with the reason`, `${JSON.stringify(rows.map((r) => ({ label: r.label, off: r.off, note: clip(r.note, 50) })))} ${searchShot}`);
+  // Search the menus says the same, for Rename too.
+  const rows = [];
+  let searchShot = "";
+  for (const query of ["mode", "Rename"]) {
+    rows.push(...((await searchMenus(page, query)) ?? []).filter((r) => /^(Editing mode|Suggesting mode|Rename)$/.test(r.label)));
+    searchShot ||= await shot(page, `R9-shared-search-menus-${theme}`);
+    await page.keyboard.press("Escape");
+  }
+  check("R9", rows.length === 3 && rows.every((r) => r.off && r.note.length > 10), `(${theme}) on a shared import Search the menus shows Editing mode, Suggesting mode, and Rename off, with the reason`, `${JSON.stringify(rows.map((r) => ({ label: r.label, off: r.off, note: clip(r.note, 40) })))} ${searchShot}`);
   if (theme === THEMES[0]) {
     const row = await documentRow(added.id);
     const put = await api(`/api/documents/${added.id}/rich-text`, "PUT", { richText: row.richText, rev: row.richTextRev });
@@ -1842,8 +1845,20 @@ RISKS.R9 = async (theme) => {
     const landed = await page.evaluate(() => document.querySelectorAll(".docs-prose [data-suggestion]").length);
     check("R9", chips === 0 && res?.status() === 200 && edits.length === 0 && landed === 0, `(${theme}) the assistant offers no edit on a shared import: no command chips, and a typed change plans no edit`, `${chips} command chips; answer HTTP ${res?.status() ?? "none"}; edit actions ${JSON.stringify(edits)}; suggestions in the page ${landed}`);
   }
-  if (errors.length) note("R9", "console", errors.slice(0, 3).join(" | "));
-  await context.close();
+  // Make a copy is on for a shared import: the copy is the reader's own to edit.
+  await calm(page);
+  if (await menuCommand(page, "Make a copy")) await page.locator('.docs-tb-dialog-actions button[type="submit"]').first().click({ timeout: 10_000 }).catch(() => {});
+  const copyId = await waitIn(page, (from) => {
+    const id = new URLSearchParams(location.search).get("doc");
+    return id && id !== from ? id : null;
+  }, added.id, 60_000);
+  let editable = false;
+  if (copyId) {
+    await ready(page);
+    editable = await setMode(page, "editing");
+  }
+  check("R9", Boolean(copyId) && editable, `(${theme}) Make a copy of a shared import gives a copy the reader can edit`, `copy ${copyId ?? "none"}; Editing ${editable}`);
+  await close();
   await db.notebookDocument.deleteMany({ where: { notebookId: other.id } });
   await db.notebook.delete({ where: { id: other.id } });
 };
@@ -2047,7 +2062,7 @@ RISKS.R13 = async (theme) => {
 // embed types in the page; videos play near the view only.
 RISKS.R14 = async (theme) => {
   const web = await fresh("url", `-r14${theme[0]}`);
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "R14" });
   await open(page, ctx.notebookId, web.id);
   // Videos: paused far from the view, playing near it.
   const videoState = () =>
@@ -2104,8 +2119,7 @@ RISKS.R14 = async (theme) => {
   check("R14", near.length > 0 && near.some((v) => !v.paused || v.time > 0), `(${theme}) a looping video plays once near the view`, `far ${JSON.stringify(far)}, near ${JSON.stringify(near)} ${path}`);
   if (far.length && far.some((v) => v.top > 1200 && !v.paused)) fail("R14", `(${theme}) a video far below the view waits`, JSON.stringify(far));
   await waitSaved(page).catch(() => {});
-  if (errors.length) note("R14", "console", errors.slice(0, 3).join(" | "));
-  await context.close();
+  await close();
 };
 
 // R15: a re-parse keeps the old figure media while a version holds them:
@@ -2118,7 +2132,7 @@ RISKS.R15 = async (theme) => {
   const media = await db.figureMedia.findMany({ where: { documentId: web.id }, select: { id: true } });
   const kept = oldMedia.every((m) => media.some((x) => x.id === m.id));
   check("R15", re.status === 200 && kept, "a re-parse keeps the figure media the version \"Imported\" points at", `HTTP ${re.status}; media ${oldMedia.length} → ${media.length}, old kept ${kept}`);
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "R15" });
   await open(page, ctx.notebookId, web.id);
   // The page sends the media its text names, never an older parse's;
   // Version history fetches the media a version names when it shows it.
@@ -2177,8 +2191,7 @@ RISKS.R15 = async (theme) => {
   const shown = drawing.filter((d) => d.drawn && !d.says).length;
   const path = await shot(page, "R15-restored-imported");
   check("R15", put.status === 200 && figs.length > 0 && figs.every((f) => oldMedia.some((m) => m.id === f.mediaId)) && shown === figs.length, "Restore \"Imported\" after a re-parse: every figure shows its media", `PUT ${put.status}; ${figs.length} figure objects on the old media, ${shown} drawing their media${drawing.filter((d) => !d.drawn || d.says).map((d) => `; not drawn "${d.caption}"${d.says ? ` (${d.says})` : ""}`).join("")} ${path}`);
-  if (errors.length) note("R15", "console", errors.slice(0, 3).join(" | "));
-  await context.close();
+  await close();
 };
 
 // R16: dark mode: each chart on its plate.
@@ -2250,7 +2263,7 @@ RISKS.R16 = async (theme) => {
 RISKS.R17 = async (theme) => {
   const pdf = await doc("pdf");
   const web = await doc("url");
-  const { page, errors, context } = await newPage(theme, { width: 1680, height: 1000 });
+  const { page, context, close } = await newPage(theme, {  width: 1680, height: 1000, risk: "R17" });
   await page.goto(`${BASE}/n/${ctx.notebookId}?doc=${pdf.id}&view=side&doc2=${web.id}`, { waitUntil: "domcontentloaded" });
   await waitIn(page, () => document.querySelectorAll(".docs-prose").length === 2, null, 90_000);
   const starts = (await waitIn(page, () => {
@@ -2261,8 +2274,7 @@ RISKS.R17 = async (theme) => {
   const path = await shot(page, `R17-side-by-side-${theme}`);
   check("R17", panes === 2, `(${theme}) Side by Side shows the PDF and the web page in two page editors`, `${panes} page editors ${path}`);
   if (panes === 2) check("R17", starts[0] > 0 || starts[1] > 0, `(${theme}) the PDF's page starts draw in its pane`, JSON.stringify(starts));
-  if (errors.length) note("R17", "console", errors.slice(0, 3).join(" | "));
-  await context.close();
+  await close();
 };
 
 // R18: the refresh after a note: its payload on the paper.
@@ -2298,7 +2310,7 @@ RISKS.R18 = async (theme) => {
 RISKS.R20 = async (theme) => {
   if (theme !== THEMES[0]) return;
   const pdf = await fresh("pdf", "-r20");
-  const { page, errors, context, responses } = await newPage(theme);
+  const { page, context, responses, close } = await newPage(theme, { risk: "R20" });
   await open(page, ctx.notebookId, pdf.id);
   // A highlight before the re-parse: an unedited import keeps its ids where
   // the words match, so the highlight stays exact.
@@ -2311,8 +2323,7 @@ RISKS.R20 = async (theme) => {
   const images = await loadFigureImages(page);
   const failed = responses.filter((r) => /\/figure\//.test(r.url) && r.status >= 400);
   check("R20", re.status === 200 && failed.length === 0 && images.total > 0 && images.loaded === images.total, "after a re-parse every figure loads its new crop, no 404", `HTTP ${re.status}; ${images.loaded}/${images.total} images (${stats(images.ms)})${images.failed.length ? `; not in 30 s: ${images.failed.join(", ")}` : ""}; HTTP errors ${failed.map((f) => `${f.status} ${f.url}`).slice(0, 2).join(" ") || "none"}`);
-  if (errors.length) note("R20", "console", errors.slice(0, 3).join(" | "));
-  await context.close();
+  await close();
 };
 
 // R21: a kicker above the Title: the stored contents never make the Title a part.
@@ -2379,7 +2390,7 @@ RISKS.R23 = async (theme) => {
 // then the assistant's bar with the model mock, as a person uses it.
 RISKS.C2 = async (theme) => {
   const pdf = await fresh("pdf", `-c2${theme[0]}`);
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "C2" });
   await open(page, ctx.notebookId, pdf.id);
   const s = (await inlineStarts(page, 30))[0];
   const base = await page.evaluate((p) => window.__qa.blockText(p), s.pos);
@@ -2438,8 +2449,7 @@ RISKS.C2 = async (theme) => {
     } else fail("C2", `(${theme}) the toolbar's Assistant`, "no Assistant in the toolbar");
   }
   await waitSaved(page).catch(() => {});
-  if (errors.length) note("C2", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
-  await context.close();
+  await close();
 };
 
 // EDIT: editing an import where the Unitos layer meets the page editor:
@@ -2447,7 +2457,7 @@ RISKS.C2 = async (theme) => {
 // Accept, and two tabs on one import (live sync) with page starts.
 RISKS.EDIT = async (theme) => {
   const pdf = await fresh("pdf", `-edit${theme[0]}`);
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "EDIT" });
   await open(page, ctx.notebookId, pdf.id);
   // A highlight, then words typed inside it: the mark grows, the quote stays.
   const at = await find(page, "Recurrent neural networks, long short-term memory");
@@ -2508,8 +2518,7 @@ RISKS.EDIT = async (theme) => {
   const liveShot = await shot(second.page, `EDIT-live-second-tab-${theme}`);
   check("EDIT", arrived && startsAfter === startsB, `(${theme}) words typed in one tab reach the other tab of the import, its page starts kept`, `arrived ${arrived}; page starts ${startsB} → ${startsAfter} ${liveShot}`);
   await second.context.close();
-  if (errors.length) note("EDIT", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
-  await context.close();
+  await close();
 };
 
 // AUDIT: the audit checklist (design section 5), as a Google Docs reader
@@ -2520,7 +2529,7 @@ RISKS.EDIT = async (theme) => {
 RISKS.AUDIT = async (theme) => {
   const pdf = await doc("pdf");
   const web = await doc("url");
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "AUDIT" });
   await open(page, ctx.notebookId, pdf.id);
   const chrome = await page.evaluate(() => {
     const sheet = document.querySelector("[data-docs-page-sheet]");
@@ -2769,8 +2778,7 @@ RISKS.AUDIT = async (theme) => {
     const restoreShot = await shot(page, "AUDIT-version-restored");
     check("AUDIT", !restored.edit && !restored.open && !storedAfter && restoredStarts === 15 && restoredFigures === 12 && keptEdit, "Restore \"Imported\" brings the original's words back, with its page starts and figures, and a version keeps the edit", `edit in the page ${restored.edit}, stored ${storedAfter}; page starts ${restoredStarts}, figures ${restoredFigures}; a version holds the edit ${keptEdit} (${kept.length} versions) ${restoreShot}`);
   }
-  if (errors.length) note("AUDIT", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
-  await context.close();
+  await close();
 };
 
 // AI: the AI tools, annotations, and notes on an import's text, as a Unitos
@@ -2779,7 +2787,7 @@ RISKS.AUDIT = async (theme) => {
 // a selection over a figure, a highlight in a table cell, Define.
 RISKS.AI = async (theme) => {
   const pdf = await fresh("pdf", `-ai${theme[0]}`);
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "AI" });
   const derives = [];
   page.on("request", (r) => {
     if (r.url().endsWith("/api/derive") && r.method() === "POST") {
@@ -3052,8 +3060,7 @@ RISKS.AI = async (theme) => {
       check("AI", analyzed.length > analyzedBefore && analyzed.at(-1).blockId === chart.blockId, `(${theme}) Analyze on the web page's SVG chart anchors to the chart`, `request image ${image ?? "none"}; ${analyzed.length - analyzedBefore} new analyses ${chartShot}`);
     } else fail("AI", `(${theme}) a click on the SVG chart opens Analyze`, "no Analyze");
   }
-  if (errors.length) note("AI", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
-  await context.close();
+  await close();
 };
 
 // COLLAPSE: Collapse (SPEC.md §28) in the page editor: the paper and the web
@@ -3091,7 +3098,7 @@ function collapsedView() {
 RISKS.COLLAPSE = async (theme) => {
   for (const kind of ["pdf", "url"]) {
     const added = await fresh(kind, `-collapse${theme[0]}`);
-    const { page, errors, context } = await newPage(theme);
+    const { page, context, close } = await newPage(theme, { risk: "COLLAPSE" });
     await open(page, ctx.notebookId, added.id);
     const words = await page.evaluate(() => window.__docsEditor.state.doc.textContent);
     const rev = (await documentRow(added.id)).richTextRev;
@@ -3152,8 +3159,7 @@ RISKS.COLLAPSE = async (theme) => {
     // Whole: no core drawn; each unit keeps its own button (SPEC.md §28).
     const whole = Boolean(await waitIn(page, () => !document.querySelector('.docs-prose .docs-core-slot[data-docs-core="core"], .docs-prose .docs-core-hidden'), null, 10_000));
     check("COLLAPSE", off && back && whole, `${kind} (${theme}): Editing turns Collapse off; Collapse pressed in Editing turns to Viewing; pressed again, the text reads whole`, `off in Editing ${off}, Viewing and collapsed ${back}, whole again ${whole}`);
-    if (errors.length) note("COLLAPSE", `${kind}: console`, errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
-    await context.close();
+    await close();
   }
 };
 
@@ -3170,7 +3176,7 @@ RISKS.TRANSLATE = async (theme) => {
   const termRows = (await rowsOf(pdf.id)).filter((r) => r.type === "PARAGRAPH" && r.text.toLowerCase().includes(term)).slice(0, 3);
   const definitions = { en: "QA: a model that turns one sequence into another.", zh: "QA：把一个序列变成另一个序列的模型。" };
   await db.document.update({ where: { id: pdf.id }, data: { glossary: [{ term, definition: definitions.en, blockIds: termRows.map((r) => r.id), lang: "en", definitions }] } });
-  const { page, errors, context } = await newPage(theme);
+  const { page, context, close } = await newPage(theme, { risk: "TRANSLATE" });
   await context.addCookies([{ name: "dissect-lang", value: "zh", url: BASE }]);
   await open(page, ctx.notebookId, pdf.id);
   const words = await page.evaluate(() => window.__docsEditor.state.doc.textContent);
@@ -3255,8 +3261,7 @@ RISKS.TRANSLATE = async (theme) => {
   }
   const termShot = await shot(page, `TRANSLATE-key-term-${theme}`);
   check("TRANSLATE", Boolean(underlined) && (tip ?? "").includes(definitions.zh) && (pressed ?? "").includes(definitions.zh), `(${theme}) the key term is underlined; its definition on hover and on a press (Define)`, `${JSON.stringify(underlined)}; hover "${clip(tip, 60)}"; press "${clip(pressed, 60)}" ${termShot}`);
-  if (errors.length) note("TRANSLATE", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
-  await context.close();
+  await close();
 };
 
 // COPY: File > Download and File > Make a copy of an import (SPEC.md §29,
@@ -3264,11 +3269,16 @@ RISKS.TRANSLATE = async (theme) => {
 // text files hold the words, no page labels, and every figure (a PDF
 // figure's crop, a web figure's images); the web page file opens in a
 // browser with its figures drawn, in the light theme's colors. A copy of
-// the paper keeps its figures (media of its own), its page setup, and its
-// page numbers, and opens in Editing like any blank document.
+// the paper, made in Viewing as the import opens, keeps its figures (media
+// of its own), its page setup, and its page numbers, and opens in Editing
+// like any blank document.
 RISKS.COPY = async (theme) => {
-  const kinds = { pdf: { words: ["Attention Is All You Need", "Scaled Dot-Product Attention"], figures: 12, pictures: 12 }, url: { words: ["The Quiet Engine of River Deltas", "Where the sediment goes"], figures: 6, pictures: 5 } };
-  const { page, errors, context } = await newPage(theme);
+  // Each kind's words, a figure's caption among them, and its figures.
+  const kinds = {
+    pdf: { words: ["Attention Is All You Need", "Scaled Dot-Product Attention", "Figure 1: The Transformer"], figures: 12, pictures: 12 },
+    url: { words: ["The Quiet Engine of River Deltas", "Where the sediment goes", "Figure 4. The same reach"], figures: 6, pictures: 5 },
+  };
+  const { page, context, close } = await newPage(theme, { risk: "COPY" });
   for (const [kind, want] of Object.entries(kinds)) {
     const added = await doc(kind);
     const noLabels = (text) => !/\bp\. \d+\b/.test(text);
@@ -3288,7 +3298,7 @@ RISKS.COPY = async (theme) => {
       }
       const text = xml.replace(/<[^>]+>/g, " ");
       const pictures = (xml.match(/<pic:pic\b/g) ?? []).length;
-      check("COPY", res.status === 200 && want.words.every((w) => text.includes(w)) && noLabels(text) && pictures >= want.pictures, `${kind}: the Word file holds the words, no page labels, and the figures' pictures`, `HTTP ${res.status}, ${bytes.length} bytes, ${pictures} pictures (${media} media files) for ${want.figures} figure objects`);
+      check("COPY", res.status === 200 && want.words.every((w) => text.includes(w)) && noLabels(text) && pictures >= want.pictures, `${kind}: the Word file holds the words, the captions, no page labels, and the figures' pictures`, `HTTP ${res.status}, ${bytes.length} bytes, ${pictures} pictures (${media} media files) for ${want.figures} figure objects`);
     }
     // The web page, Markdown, and plain text files, made in the browser.
     await open(page, ctx.notebookId, added.id);
@@ -3300,7 +3310,7 @@ RISKS.COPY = async (theme) => {
     const htmlWords = html.replace(/<[^>]+>/g, " ");
     const images = (html.match(/<img\b[^>]*\bsrc="(?:data:|https?:)/g) ?? []).length + (html.match(/<svg\b/g) ?? []).length;
     const relative = (html.match(/\bsrc="\/api\//g) ?? []).length;
-    check("COPY", want.words.every((w) => htmlWords.includes(w)) && noLabels(htmlWords) && images >= want.pictures && relative === 0, `${kind} (${theme}): the web page file holds the words, no page labels, and the figures' pictures inside`, `${html.length} characters; ${images} pictures; ${relative} app addresses left`);
+    check("COPY", want.words.every((w) => htmlWords.includes(w)) && noLabels(htmlWords) && images >= want.pictures && relative === 0, `${kind} (${theme}): the web page file holds the words, the captions, no page labels, and the figures' pictures inside`, `${html.length} characters; ${images} pictures; ${relative} app addresses left`);
     // Opened as a file: its figures draw, in the light theme's words.
     const view = await context.newPage();
     await view.setContent(html, { waitUntil: "load", timeout: 60_000 }).catch(() => {});
@@ -3324,15 +3334,13 @@ RISKS.COPY = async (theme) => {
     const md = files.md;
     // An image inline, or by reference with its data at the end.
     const mdImages = (md.match(/!\[[^\]]*\][([]/g) ?? []).length;
-    check("COPY", want.words.every((w) => md.includes(w)) && noLabels(md) && mdImages >= want.pictures, `${kind} (${theme}): the Markdown file holds the words, no page labels, and the figures' pictures`, `${md.length} characters; ${mdImages} images`);
-    check("COPY", want.words.every((w) => files.txt.includes(w)) && noLabels(files.txt), `${kind} (${theme}): the plain text file holds the words and no page labels`, `${files.txt.length} characters`);
+    check("COPY", want.words.every((w) => md.includes(w)) && noLabels(md) && mdImages >= want.pictures, `${kind} (${theme}): the Markdown file holds the words, the captions, no page labels, and the figures' pictures`, `${md.length} characters; ${mdImages} images`);
+    check("COPY", want.words.every((w) => files.txt.includes(w)) && noLabels(files.txt), `${kind} (${theme}): the plain text file holds the words, the captions, and no page labels`, `${files.txt.length} characters`);
   }
   // Make a copy of the paper, as a person makes it: Search the menus, the
   // dialog's name, OK; the copy opens in this tab.
   const pdf = await doc("pdf");
   await open(page, ctx.notebookId, pdf.id);
-  // Make a copy is off in Viewing (SPEC.md §29): Editing first.
-  await setMode(page, "editing");
   await menuCommand(page, "Make a copy");
   const dialog = page.locator(".docs-tb-dialog").first();
   const named = await dialog.waitFor({ state: "visible", timeout: 10_000 }).then(() => dialog.locator("input.docs-field").inputValue()).catch(() => null);
@@ -3363,8 +3371,7 @@ RISKS.COPY = async (theme) => {
     check("COPY", named === "Copy of Attention Is All You Need" && copy?.importRev === null && Boolean(copy?.richText) && own && JSON.stringify(copy.pageSetup) === JSON.stringify(original.pageSetup) && JSON.stringify(copy.pageLabels) === JSON.stringify(original.pageLabels) && rowsCopy === rowsOriginal && sources === 0, `(${theme}) Make a copy of the paper: a blank document with media of its own, the page setup, the page labels, every row, no annotations`, `name "${named}"; importRev ${copy?.importRev}; media ${mediaCopy.length} (own ${own}); page setup kept ${JSON.stringify(copy?.pageSetup) === JSON.stringify(original.pageSetup)}; rows ${rowsCopy}/${rowsOriginal}; sources ${sources}`);
     check("COPY", images.total >= 12 && images.loaded === images.total && starts.length === 15 && labels.includes("p. 7") && m === "editing", `(${theme}) the copy opens in Editing with its figures drawn and its page numbers`, `figures ${images.loaded}/${images.total}${images.failed.length ? ` (not drawn: ${images.failed.join(", ")})` : ""}; page starts ${starts.length}; labels ${labels.slice(0, 3).join(", ")}…; mode ${m} ${copyShot}`);
   }
-  if (errors.length) note("COPY", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
-  await context.close();
+  await close();
 };
 
 // ── Main ────────────────────────────────────────────────────────────────────
