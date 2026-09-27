@@ -944,6 +944,11 @@ async function marginInk(page, pos, lines = 1) {
     const left = view.dom.getBoundingClientRect().left;
     return { x: Math.max(0, left - 100), y: Math.max(0, c.top - 3), width: 94, height: (c.bottom - c.top) * lines + 6 };
   }, { p: pos, lines });
+  const l = await luma(page, clip);
+  return l.filter((v) => Math.abs(v - l[0]) > 50).length;
+}
+/** The luminance of each pixel of a part of the screen, as drawn. */
+async function luma(page, clip) {
   const png = await page.screenshot({ clip });
   return page.evaluate(async (b64) => {
     const img = new Image();
@@ -955,11 +960,9 @@ async function marginInk(page, pos, lines = 1) {
     const g = canvas.getContext("2d");
     g.drawImage(img, 0, 0);
     const d = g.getImageData(0, 0, canvas.width, canvas.height).data;
-    const lum = (i) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    const ground = lum(0);
-    let ink = 0;
-    for (let i = 0; i < d.length; i += 4) if (Math.abs(lum(i) - ground) > 50) ink++;
-    return ink;
+    const out = [];
+    for (let i = 0; i < d.length; i += 4) out.push(Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]));
+    return out;
   }, png.toString("base64"));
 }
 /** Page starts inside a paragraph with at least `n` characters on each side. */
@@ -1359,21 +1362,31 @@ RISKS.R3 = async (theme) => {
   await page.keyboard.press("Control+z");
   await page.keyboard.press("Control+z");
   await waitSaved(page).catch(() => {});
-  // Two page starts on one line (the words of a whole page deleted) draw
-  // both numbers: twice the ink of one number in the margin.
-  const [one, two] = (await pageStarts(page)).filter((x) => x.on === "paragraph" && x.page > 1).slice(0, 2);
-  await page.evaluate((p) => window.__qa.show(p), one.pos);
-  const single = await marginInk(page, one.pos);
-  await page.evaluate(({ from, to }) => window.__docsEditor.chain().focus().setTextSelection({ from, to }).run(), { from: one.pos + 1, to: two.pos });
-  await page.keyboard.press("Delete");
-  const joined = (await pageStarts(page)).filter((x) => x.page === one.page || x.page === two.page);
-  const oneLine = joined.length === 2 && (await page.evaluate(([a, b]) => Math.abs(window.__docsEditor.view.coordsAtPos(a).top - window.__docsEditor.view.coordsAtPos(b).top) < 4, joined.map((x) => x.pos)));
-  await page.evaluate((p) => window.__qa.show(p), joined[0].pos);
-  const both = await marginInk(page, joined[0].pos, 2);
-  const bothShot = await shot(page, `R3-two-page-starts-one-line-${theme}`);
-  check("R3", oneLine && both > single * 1.6, `(${theme}) two page starts on one line draw both numbers`, `p. ${one.page} and p. ${two.page} on one line ${oneLine}; margin ink ${both} against ${single} for one number ${bothShot}`);
-  await page.keyboard.press("Control+z");
-  await waitSaved(page).catch(() => {});
+  // Page starts on one line (the words of whole pages deleted) draw one
+  // label: "p. 7 · p. 8" for two, "p. 7–9" for three in a row, in the
+  // margin (more ink than one number).
+  const all = (await pageStarts(page)).filter((x) => x.page > 1);
+  const k = all.findIndex((x, i) => [0, 1, 2].every((d) => all[i + d]?.on === "paragraph" && all[i + d].page === x.page + d));
+  const run = k >= 0 ? all.slice(k, k + 3) : all.filter((x) => x.on === "paragraph").slice(0, 1);
+  await page.evaluate((p) => window.__qa.show(p), run[0].pos);
+  const single = await marginInk(page, run[0].pos);
+  if (run.length < 3) note("R3", `(${theme}) three page starts in a row, each in a paragraph`, all.map((x) => `p. ${x.page}[${x.on}]`).join(" "));
+  for (const n of run.length === 3 ? [2, 3] : []) {
+    const pages = run.slice(0, n).map((x) => x.page);
+    await page.evaluate(({ from, to }) => window.__docsEditor.chain().focus().setTextSelection({ from, to }).run(), { from: run[0].pos + 1, to: run[n - 1].pos });
+    await page.keyboard.press("Delete");
+    const joined = (await pageStarts(page)).filter((x) => pages.includes(x.page)).map((x) => x.pos);
+    const oneLine = joined.length === n && (await page.evaluate((ps) => ps.every((p) => Math.abs(window.__docsEditor.view.coordsAtPos(p).top - window.__docsEditor.view.coordsAtPos(ps[0]).top) < 4), joined));
+    const want = n === 2 ? `p. ${pages[0]} · p. ${pages[1]}` : `p. ${pages[0]}–${pages[n - 1]}`;
+    const labelAt = (p) => window.__docsEditor.view.nodeDOM(p)?.getAttribute?.("data-page-labels") ?? null;
+    const label = (await waitIn(page, ({ p, want }) => (window.__docsEditor.view.nodeDOM(p)?.getAttribute?.("data-page-labels") === want ? want : null), { p: joined[0], want }, 5000)) ?? (await page.evaluate(labelAt, joined[0]));
+    await page.evaluate((p) => window.__qa.show(p), joined[0]);
+    const ink = await marginInk(page, joined[0], 2);
+    const joinedShot = await shot(page, `R3-${n}-page-starts-one-line-${theme}`);
+    check("R3", oneLine && label === want && ink > single * (n === 2 ? 1.6 : 1.2), `(${theme}) ${n} page starts on one line draw one label, "${want}"`, `on one line ${oneLine}; label "${label}"; margin ink ${ink} against ${single} for one number ${joinedShot}`);
+    await page.keyboard.press("Control+z");
+    await waitSaved(page).catch(() => {});
+  }
   // A page start in a table's second column (a stored text, as a PDF whose
   // page begins there gives it) draws in the page's margin, not in the
   // table: p. 9 moved into the second column of the table on p. 8.
@@ -2703,13 +2716,28 @@ RISKS.AUDIT = async (theme) => {
       references: document.querySelector('[data-track="references"], .references, [data-references]') ? true : Boolean([...document.querySelectorAll("h2, h3")].find((h) => /References/.test(h.textContent) && !h.closest(".docs-prose"))),
       // A pageless import's table fills the text column.
       table: [prose.querySelector("table"), prose].map((e) => Math.round(e.getBoundingClientRect().width)),
+      headWeight: Number(getComputedStyle(th[0].querySelector("p") ?? th[0]).fontWeight),
     };
   });
+  // Its header cells are bold on a tint: the ground drawn in a header cell
+  // (the median of its pixels) against a cell's.
+  const cellBoxes = await page.evaluate(async () => {
+    await window.__qa.showEl(document.querySelector(".docs-prose th"));
+    return ["th", "td"].map((s) => {
+      const r = document.querySelector(`.docs-prose ${s}`).getBoundingClientRect();
+      return { x: r.x + 2, y: r.y + 2, width: r.width - 4, height: r.height - 4 };
+    });
+  });
+  const grounds = [];
+  for (const box of cellBoxes) {
+    const l = (await luma(page, box)).sort((a, b) => a - b);
+    grounds.push(l[l.length >> 1]);
+  }
   const webShot = await shot(page, `AUDIT-web-${theme}`);
   check("AUDIT", shape.pageless && shape.nested >= 1 && shape.ol3 && shape.rowspan && shape.colspan && shape.region === 1 && shape.code >= 1 && shape.quote >= 1 && shape.hr >= 1, `(${theme}) the web page: pageless, a nested list, a list from 3, the table's merged cells once, code, a quote, a line`, `${JSON.stringify({ ...shape, figs: undefined })} ${webShot}`);
   check("AUDIT", shape.figs.length === 6 && shape.figs.every((f) => f.media) && shape.figs.filter((f) => f.media === "IMG").every((f) => f.loaded), `(${theme}) every figure of the web page draws its media`, JSON.stringify(shape.figs));
   check("AUDIT", Boolean(shape.references), `(${theme}) the References section stands under the page`, `${shape.references}`);
-  check("AUDIT", Math.abs(shape.table[0] - shape.table[1]) <= 2, `(${theme}) the web page's table fills the text column`, `table ${shape.table[0]} px, the column ${shape.table[1]} px`);
+  check("AUDIT", Math.abs(shape.table[0] - shape.table[1]) <= 2 && shape.headWeight >= 600 && Math.abs(grounds[0] - grounds[1]) >= 4, `(${theme}) the web page's table fills the text column; its header cells are bold on a tint`, `table ${shape.table[0]} px, the column ${shape.table[1]} px; header weight ${shape.headWeight}; ground luminance ${grounds[0]} in a header cell, ${grounds[1]} in a cell`);
   const card = await hoverTip(page, ".docs-prose .docs-citation");
   check("AUDIT", /Syvitski/.test(card ?? ""), `(${theme}) a citation's hover card shows its reference entry`, `"${clip(card, 100)}"`);
   const webLine = await page.evaluate(() => {
@@ -3079,7 +3107,10 @@ RISKS.AI = async (theme) => {
 // page collapsed and read whole again; each unit one core in its place (a
 // list's lines one, a table one), headings and figures as they are, the
 // rich text unchanged; a unit read whole and folded again by its button; a
-// highlight on a core after a reload; Editing turns Collapse off.
+// highlight on a core after a reload; the jumps into a collapsed unit (a
+// part lands on the core, a jump to words reads the unit whole, in Editing
+// a jump to a core's highlight flashes the unit's lines); Editing turns
+// Collapse off.
 function collapsedView() {
   const prose = document.querySelector(".docs-prose");
   const shown = (el) => el.getClientRects().length > 0;
@@ -3114,6 +3145,17 @@ RISKS.COLLAPSE = async (theme) => {
     await open(page, ctx.notebookId, added.id);
     const words = await page.evaluate(() => window.__docsEditor.state.doc.textContent);
     const rev = (await documentRow(added.id)).richTextRev;
+    // For the jumps below (the PDF): a highlight in a paragraph's words, and
+    // a part of the contents that starts there, stored as Generate contents
+    // stores it (the mock's parts start at headings, which never collapse).
+    const opening = kind === "pdf" ? (await rowsOf(added.id)).find((r) => r.type === "PARAGRAPH" && r.text.startsWith("Recurrent neural networks")) : null;
+    let inWords = null;
+    if (opening) {
+      await db.document.update({ where: { id: added.id }, data: { contents: [{ title: "Recurrent models", blockId: opening.id, level: 1 }] } });
+      const r = await find(page, "Recurrent neural networks");
+      inWords = r ? ((await highlight(page, added.id, r.from, r.to))[0] ?? null) : null;
+      await calm(page);
+    }
     const button = page.locator('[data-track="collapse"]').first();
     if (!(await button.waitFor({ state: "visible", timeout: 10_000 }).then(() => true).catch(() => false))) {
       fail("COLLAPSE", `${kind} (${theme}): the Collapse button stands beside Extract`, "none");
@@ -3126,6 +3168,16 @@ RISKS.COLLAPSE = async (theme) => {
     const unchanged = (await page.evaluate(() => window.__docsEditor.state.doc.textContent)) === words && (await documentRow(added.id)).richTextRev === rev;
     check("COLLAPSE", view.cores > 5 && view.oneEach && view.hiddenHeadings === 0 && view.hiddenFigures === 0 && unchanged, `${kind} (${theme}): Collapse draws each unit's core in its place, headings and figures as they are, the rich text unchanged`, `${JSON.stringify({ ...view, lists: undefined, tables: undefined })}; rich text unchanged ${unchanged} ${collapsedShot}`);
     if (kind === "url") check("COLLAPSE", view.lists?.length >= 2 && view.tables?.length >= 1 && view.oneEach, `(${theme}) the web page: a list's lines take one core, a table one core`, JSON.stringify({ lists: view.lists, tables: view.tables }));
+    // For the jump in Editing below (the web page): a highlight on a list's core.
+    const list = kind === "url" ? await page.evaluate(() => {
+      const hidden = [...document.querySelectorAll(".docs-prose .docs-core-hidden")].find((e) => /^(UL|OL)$/.test(e.tagName) && e.querySelectorAll("li").length > 2);
+      let slot = null;
+      for (let w = hidden?.previousElementSibling; w?.classList.contains("ProseMirror-widget"); w = w.previousElementSibling) if (w.dataset.docsCore === "core") slot = w;
+      const core = slot?.querySelector("[data-collapsed][data-block-id]");
+      return core ? { id: core.dataset.blockId, lines: hidden.querySelectorAll("li").length, words: core.textContent.replace(/^Mock core:\s*/, "").split(/\s+/).slice(1, 4).join(" ").replace(/[,.;:!?]+$/, "") } : null;
+    }) : null;
+    if (list && (await dragWords(page, `.docs-prose [data-collapsed][data-block-id="${list.id}"]`, list.words))) list.source = (await pressHighlight(page, added.id))[0] ?? null;
+    await calm(page);
     if (kind === "pdf") check("COLLAPSE", view.pages?.length > 0, `(${theme}) a core carries the page numbers of the PDF pages that begin in its unit`, JSON.stringify(view.pages));
     // A unit read whole by its button, then folded again.
     const unit = await page.evaluate(() => document.querySelectorAll('.docs-prose .docs-core-slot[data-docs-core="core"] [data-collapsed][data-block-id]')[2]?.dataset.blockId ?? null);
@@ -3161,10 +3213,73 @@ RISKS.COLLAPSE = async (theme) => {
         check("COLLAPSE", made.length === 1 && made[0].layer === "core" && made[0].quotedText === core.words && (marks ?? "").replace(/\s+/g, " ").trim() === core.words, `(${theme}) a highlight on a core's words is the core's, and paints on the core after a reload`, `toolbar ${opened}; stored ${made.map((m) => `"${m.quotedText}" layer ${m.layer}`).join(", ") || "none"}; painted "${marks}" ${coreShot}`);
       }
     }
+    // Jumps into a collapsed unit: a part of the contents that starts in it
+    // lands on its core; a jump to a highlight in its words reads it whole
+    // first, and the rest stays collapsed. Each waited for in the band.
+    if (opening) {
+      await waitIn(page, collapsedView, null, 30_000);
+      await page.locator('[data-track="docs:outline-open"]').first().click();
+      const item = page.locator(".docs-outline-item", { hasText: "Recurrent models" }).first();
+      await item.waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
+      await page.evaluate(() => {
+        window.__qa.pane().scrollTop = 0;
+      });
+      await item.click().catch(() => {});
+      const onCore = await waitIn(page, () => {
+        const core = [...document.querySelectorAll(".docs-prose [data-collapsed].anchor-flash")].find((e) => e.textContent.includes("Recurrent neural"));
+        const r = core?.getBoundingClientRect();
+        const b = window.__qa.band();
+        return r && r.top >= b.top - 20 && r.top < b.bottom - 40 ? { top: Math.round(r.top - b.top) } : null;
+      }, null, 10_000);
+      const partShot = await shot(page, `COLLAPSE-part-lands-on-core-${theme}`);
+      check("COLLAPSE", Boolean(onCore), `(${theme}) a part of the contents that starts in a collapsed unit lands on its core and flashes it`, `${JSON.stringify(onCore)} ${partShot}`);
+      await page.locator('[data-track="docs:outline-close"]').first().click().catch(() => {});
+      await waitIn(page, () => !document.querySelector(".docs-outline-list"), null, 5000);
+    }
+    if (inWords) {
+      const cores = () => document.querySelectorAll('.docs-prose .docs-core-slot[data-docs-core="core"]').length;
+      const before = await page.evaluate(cores);
+      await page.evaluate(() => {
+        window.__qa.pane().scrollTop = 0;
+      });
+      await page.evaluate((id) => window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId: id } })), inWords.id);
+      const landed = await waitIn(page, ({ id, words }) => {
+        const flashed = [...document.querySelectorAll(".docs-prose .anchor-flash")].map((e) => e.textContent).join("").replace(/\s+/g, "");
+        const r = document.querySelector(`.docs-prose [data-source-id="${id}"]`)?.getBoundingClientRect();
+        const b = window.__qa.band();
+        if (!r?.height || !flashed.includes(words) || r.top < b.top || r.bottom > b.bottom) return null;
+        return { top: Math.round(r.top - b.top), cores: document.querySelectorAll('.docs-prose .docs-core-slot[data-docs-core="core"]').length };
+      }, { id: inWords.id, words: squash(inWords.quotedText) }, 15_000);
+      const jumpShot = await shot(page, `COLLAPSE-jump-reads-unit-whole-${theme}`);
+      check("COLLAPSE", Boolean(landed) && landed.cores === before - 1, `(${theme}) a jump to a highlight in a collapsed unit reads that unit whole and flashes the highlight; the rest stays collapsed`, `${JSON.stringify(landed)}; cores before the jump ${before} ${jumpShot}`);
+    }
     // Editing needs the words: Collapse off. Collapse in Editing goes to
     // Viewing; pressed again, the text reads whole.
     await setMode(page, "editing");
     const off = Boolean(await waitIn(page, () => !document.querySelector(".docs-prose .docs-core-slot, .docs-prose .docs-core-hidden") && document.querySelector('[data-track="collapse"]'), null, 10_000));
+    // No core can be drawn in Editing: a jump to a highlight on a list's
+    // core lands on the list's words and flashes every line.
+    if (list?.source) {
+      await page.evaluate(() => {
+        window.__qa.pane().scrollTop = 0;
+      });
+      await page.evaluate((id) => window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId: id } })), list.source.id);
+      // The flashed lines, once the first stands in the band.
+      const rows = await waitIn(page, (n) => {
+        const flashed = [...document.querySelectorAll(".docs-prose .anchor-flash")];
+        const outer = (e) => {
+          let l = e.closest("ul, ol");
+          while (l?.parentElement?.closest("ul, ol")) l = l.parentElement.closest("ul, ol");
+          return l;
+        };
+        const lists = new Set(flashed.map(outer));
+        const r = flashed[0]?.getBoundingClientRect();
+        const b = window.__qa.band();
+        return flashed.length >= n && r.top >= b.top && r.bottom <= b.bottom ? { rows: flashed.length, lists: lists.size, inList: !lists.has(null), top: Math.round(r.top - b.top) } : null;
+      }, list.lines, 10_000);
+      const rowsShot = await shot(page, `COLLAPSE-editing-jump-to-list-core-${theme}`);
+      check("COLLAPSE", rows?.rows === list.lines && rows.lists === 1 && rows.inList, `(${theme}) in Editing, a jump to a highlight on a list's core lands on the list's words and flashes every line`, `${JSON.stringify(rows)}; the list has ${list.lines} lines ${rowsShot}`);
+    } else if (kind === "url") fail("COLLAPSE", `(${theme}) a highlight on a list's core, for the jump in Editing`, JSON.stringify(list));
     await page.locator('[data-track="collapse"]').first().click();
     const back = Boolean(await waitIn(page, () => document.querySelector('[data-track="docs:mode"]')?.getAttribute("data-mode") === "viewing" && document.querySelector('.docs-prose .docs-core-slot[data-docs-core="core"]'), null, 30_000));
     await page.locator('[data-track="collapse-off"]').first().click();
