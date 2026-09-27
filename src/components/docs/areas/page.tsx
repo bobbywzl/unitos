@@ -505,6 +505,7 @@ export function PageCanvas({
           if (barRef.current) barRef.current.scrollLeft = e.currentTarget.scrollLeft;
         }}
       >
+        <Banner width={pageVisual} />
         <article
           ref={pageRef}
           className={`docs-page${compact ? " docs-page-compact" : ""}`}

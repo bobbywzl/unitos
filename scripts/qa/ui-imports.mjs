@@ -1309,7 +1309,7 @@ RISKS.R5 = async (theme) => {
     const took = await press(f);
     if (first) {
       first = false;
-      check("R5", took.opened && took.selected, `(${theme}) in Editing the first press on "${caption}" opens its tools and selects it`, `tools ${took.opened}, selected ${took.selected}; pressed ${JSON.stringify(took.at)}`);
+      check("R5", took.opened && took.selected, `(${theme}) in Editing a press on "${caption}" opens its tools, and Escape keeps it selected`, `tools ${took.opened}, selected ${took.selected}; pressed ${JSON.stringify(took.at)}`);
     }
     // A person presses again when the first press took nothing.
     if (!took.selected) await press(f);

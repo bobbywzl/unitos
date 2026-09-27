@@ -29,3 +29,12 @@
 .docs-prose :is(h1, h2, h3, h4, h5, h6, p[data-doc-style])[data-translation]::after {
   font-size: 10.5pt;
 }
+
+/* The Translate bar stands over the first page, as wide as the page, the
+   pages' gap under it (areas/page.tsx Banner). */
+.docs-banner {
+  margin: 0 auto;
+}
+.docs-banner [data-translation-bar] {
+  margin-bottom: 10px;
+}
