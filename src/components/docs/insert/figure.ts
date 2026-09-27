@@ -150,6 +150,10 @@ function CropFigure({
           alt: "",
           width: size?.width,
           height: size?.height,
+          // The reader's figure rule sets width: auto, which would leave the
+          // box empty until the image arrives; its own width holds the place
+          // (max-width keeps it inside the column).
+          style: size ? { width: size.width } : undefined,
           loading: "lazy",
           decoding: "async",
           draggable: false,

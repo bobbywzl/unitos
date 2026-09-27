@@ -2263,8 +2263,10 @@ export function ReaderInteractions({
     // ends a selection: the mouseup listens on the document, and a press
     // that started outside the pane never opens or closes the toolbar.
     let pressStartedInside = false;
+    let pressTarget: Element | null = null;
     const onDocumentMouseDown = (event: MouseEvent) => {
       pressStartedInside = event.target instanceof Node && container.contains(event.target);
+      pressTarget = event.target instanceof Element ? event.target : null;
     };
     const onMouseUp = (event: MouseEvent) => {
       if (!canEditRef.current) return;
@@ -2276,11 +2278,11 @@ export function ReaderInteractions({
         return;
       }
       // A press on the page editor's toolbar is a command, not a selection.
-      if (
-        event.target instanceof Element &&
-        event.target.closest("[data-selection-popover], [data-docs-editor] [data-edit-control]")
-      )
-        return;
+      // Where the press began decides: a drag can end over a control that
+      // came up under it (a table's border button at a cell's corner).
+      const pressed = pressTarget ?? (event.target instanceof Element ? event.target : null);
+      pressTarget = null;
+      if (pressed?.closest("[data-selection-popover], [data-docs-editor] [data-edit-control]")) return;
       // A drag that started inside the comment box can end over the article —
       // that is text editing, not a new selection.
       if (document.activeElement?.closest("[data-selection-popover]")) return;
