@@ -158,6 +158,11 @@
   font-weight: 700;
   background-color: color-mix(in srgb, var(--docs-ink) 5%, transparent);
 }
+/* A pinned header row stands over the rows it scrolls past: its tint lies
+   on the page's ground (insert.css), so nothing shows through. */
+.docs-shell .docs-prose tr[data-pinned="true"] > th {
+  background-image: linear-gradient(color-mix(in srgb, var(--docs-ink) 5%, transparent) 0 0);
+}
 /* A pageless table fills the text column: column widths (an import's,
    lib/docs/import-table.ts) are shares of the width, as a fixed layout
    spreads a table wider than its columns. */
