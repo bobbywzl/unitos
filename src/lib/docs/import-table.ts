@@ -356,6 +356,8 @@ function gridRows(rows: { cells: { node: RichNode; colspan: number; rowspan: num
 // words letter by letter beside narrow number columns. Each column takes a
 // width from its words instead, as a browser sizes a table: its longest word
 // is as narrow as it may get, its longest line as wide as it wants to be.
+// Pageless, the widths are shares: the table fills the text column
+// (css/import.css), which is never narrower than the room they fit.
 
 // Arial's advance widths (thousandths of an em) for the printable ASCII
 // characters, space to tilde: the page's Normal text face.

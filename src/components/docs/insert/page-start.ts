@@ -16,6 +16,8 @@ import { translatorFor, type TFunc } from "@/lib/i18n/dictionaries";
 // selected, copied, counted, or printed. Where no inline atom fits (a page
 // that begins at a figure, an equation, or inside a code block) the block
 // carries the page as its pageStart attribute and draws it at its top.
+// Page starts on one line draw one label ("p. 7 · p. 8"), and one in a
+// table's cell draws in the margin too (placedPageLabels).
 //
 // A page start is kept: a change that takes one (a deletion, an accepted
 // suggestion, Undo, a stored copy) puts it back where the deletion closed,
@@ -248,9 +250,11 @@ function placedPageLabels(editor: Editor): Plugin<DecorationSet> {
     },
     view(view) {
       let frame = 0;
-      let width = -1;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const place = () => {
-        frame = 0;
+        // Not laid out yet (the resize to come measures it), or mid-IME (its
+        // end changes the text and measures).
+        if (!view.dom.isConnected || view.dom.offsetWidth === 0 || view.composing) return;
         const { doc } = view.state;
         const lines: (Placed & { top: number; shift: number })[][] = [];
         for (const start of placedStarts(doc)) {
@@ -286,18 +290,19 @@ function placedPageLabels(editor: Editor): Plugin<DecorationSet> {
           decorations.every((d) => drawn.some((e) => e.from === d.from && e.to === d.to && e.spec.attrs === d.spec.attrs));
         if (!same) view.dispatch(view.state.tr.setMeta(key, DecorationSet.create(doc, decorations)).setMeta("addToHistory", false));
       };
+      // Read after the frame is drawn, when the layout is clean and cheap.
       const schedule = () => {
-        if (!frame) frame = requestAnimationFrame(place);
+        if (frame || timer !== undefined) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          timer = setTimeout(() => {
+            timer = undefined;
+            place();
+          }, 0);
+        });
       };
-      // A new width wraps the lines anew.
-      const resize =
-        typeof ResizeObserver === "undefined"
-          ? null
-          : new ResizeObserver(([entry]) => {
-              if (entry.contentRect.width === width) return;
-              width = entry.contentRect.width;
-              schedule();
-            });
+      // A new width wraps the lines anew; so do the page's faces loading.
+      const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
       resize?.observe(view.dom);
       schedule();
       return {
@@ -306,6 +311,7 @@ function placedPageLabels(editor: Editor): Plugin<DecorationSet> {
         },
         destroy() {
           cancelAnimationFrame(frame);
+          clearTimeout(timer);
           resize?.disconnect();
         },
       };

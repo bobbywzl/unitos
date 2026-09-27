@@ -2975,8 +2975,15 @@ export function ReaderInteractions({
   // painted: the bubble, the on-mark card, or the card in the Annotations tab.
   const src = searchParams.get("src");
   const annotationParam = searchParams.get(ANNOTATION_PARAM);
+  // A jump in this pane flashes its mark at once (dissect:flash-source) and
+  // puts ?src= in the address too: when the address lands, the pane moves
+  // no more (a press made meanwhile would scroll away). A page opened with
+  // ?src= flashes it.
+  const jumpedRef = useRef(new Set<string>());
+  const srcRef = useRef(src);
+  srcRef.current = src;
   useEffect(() => {
-    if (!src) return;
+    if (!src || jumpedRef.current.delete(src)) return;
     flashSource(src);
     if (!annotationParam) return;
     let attempts = 0;
@@ -3039,7 +3046,9 @@ export function ReaderInteractions({
   useEffect(() => {
     const onFlash = (e: Event) => {
       const { sourceId } = (e as CustomEvent<{ sourceId: string | null }>).detail;
-      if (sourceId) flashSource(sourceId);
+      if (!sourceId) return;
+      if (sourceId !== srcRef.current) jumpedRef.current.add(sourceId);
+      flashSource(sourceId);
     };
     window.addEventListener("dissect:flash-source", onFlash);
     return () => window.removeEventListener("dissect:flash-source", onFlash);

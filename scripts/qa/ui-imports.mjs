@@ -9,8 +9,10 @@
 //
 // Beyond the risks: C2 (the assistant's suggestions on an import), EDIT
 // (typing in a highlight, Suggesting, two tabs), AUDIT (the design's
-// section 5 checklist, as a Google Docs reader checks it), and AI (the
-// Unitos tools, annotations, and notes on an import's text).
+// section 5 checklist, as a Google Docs reader checks it), AI (the Unitos
+// tools, annotations, and notes on an import's text), and round 11's
+// COLLAPSE (Collapse in the page editor), TRANSLATE (translations and key
+// terms), and COPY (downloads and Make a copy).
 //
 // A check waits for the state it checks (a mark, a toolbar, a saved copy, a
 // scroll position), never a fixed time, and a scroll puts a position exactly
@@ -20,7 +22,7 @@
 // evidences.
 //
 // Usage:
-//   node scripts/qa/ui-imports.mjs [R1 R3 … C2 EDIT AUDIT AI] [--theme light|dark|both] [--keep] [--once]
+//   node scripts/qa/ui-imports.mjs [R1 R3 … C2 EDIT AUDIT AI COLLAPSE TRANSLATE COPY] [--theme light|dark|both] [--keep] [--once]
 // With nothing named, everything runs. --once skips the run alone. Env: BASE
 // (default http://localhost:3111), SHOT_DIR (screenshots; default
 // <tmp>/ui-imports), CHROME (default /opt/pw-browsers/chromium),

@@ -145,7 +145,20 @@ function collapsePlugin(): Plugin<Layer> {
       },
     },
     props: { decorations: (state) => collapseKey.getState(state)?.set },
+    // A selection in a core is the reader's, not the page's: one that runs
+    // from a core into the text or into another core stays as the browser
+    // drew it, and the page keeps its own selection.
+    filterTransaction: (tr) => {
+      if (!tr.selectionSet || tr.docChanged) return true;
+      const selection = document.getSelection();
+      return !inCore(selection?.anchorNode) && !inCore(selection?.focusNode);
+    },
   });
+}
+
+/** Whether a node of the page is in a core's place. */
+function inCore(node: Node | null | undefined): boolean {
+  return Boolean((node instanceof Element ? node : node?.parentElement)?.closest(".docs-core-slot"));
 }
 
 const slotKey = (unit: Shown) => `${unit.id}:${unit.core ? "core" : "words"}`;
