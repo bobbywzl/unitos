@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { ADMIN_COOKIE, verifyAdminCookie } from "@/lib/admin-cookie";
 import { ACCOUNT_COOKIE, ACCOUNT_HEADER, SESSION_COOKIE, VISITOR_COOKIE } from "@/lib/constants";
 import { isLang, LANG_COOKIE, type Lang } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
@@ -13,6 +14,8 @@ function requestLang(request: NextRequest): Lang {
 // Edge gate, two doors (Scalae pattern):
 // 1. /admin has its own password cookie gate (lib/admin-auth), deliberately
 //    decoupled from reader sign-in — an admin need not be a signed-in reader.
+//    The cookie is signed; this checks the signature (lib/admin-cookie.ts),
+//    and every admin page and route checks it again.
 // 2. Everything else requires a session cookie when Google sign-in is
 //    configured. A fast presence check only — real validation happens in
 //    lib/auth (currentUser); this shapes the redirect UX. With sign-in off
@@ -38,19 +41,18 @@ function withVisitor(request: NextRequest, response: NextResponse): NextResponse
   return response;
 }
 
-export function middleware(request: NextRequest) {
-  return withVisitor(request, gate(request));
+export async function middleware(request: NextRequest) {
+  return withVisitor(request, await gate(request));
 }
 
-function gate(request: NextRequest): NextResponse {
+async function gate(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
     if (pathname === "/admin/login" || pathname.startsWith("/api/admin/auth")) {
       return NextResponse.next();
     }
-    const adminAuth = request.cookies.get("admin-auth")?.value;
-    if (adminAuth !== "true") {
+    if (!(await verifyAdminCookie(request.cookies.get(ADMIN_COOKIE)?.value))) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json(
           { error: translate(requestLang(request), "common.unauthorized") },
