@@ -22,8 +22,9 @@ import { WordCountDialog } from "@/components/docs/word-count";
 import { insertImageFrom } from "@/components/docs/insert/image";
 import { InsertLayer } from "@/components/docs/areas/insert";
 import { UnitosLayer } from "@/components/docs/areas/layer";
+import { showTranslations } from "@/components/docs/layer/reading";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
-import { PageCanvas, PageRuler } from "@/components/docs/areas/page";
+import { PageBanner, PageCanvas, PageRuler } from "@/components/docs/areas/page";
 import { StatusPopup } from "@/components/docs/page/status-popup";
 import { useSaveState } from "@/components/docs/page/store";
 import { TypingLayer } from "@/components/docs/areas/typing";
@@ -319,6 +320,8 @@ export function DocsEditor({
   imported = null,
   media = null,
   footer,
+  banner,
+  translations = null,
 }: {
   documentId: string;
   notebookId: string;
@@ -341,6 +344,10 @@ export function DocsEditor({
   media?: DocsMedia | null;
   /** Under the pages, under the header: an import's References section. */
   footer?: ReactNode;
+  /** Over the first page: the Translate bar (SPEC.md §19). */
+  banner?: ReactNode;
+  /** Translation text per block id, each read under its paragraph. */
+  translations?: Record<string, string> | null;
 }) {
   const t = useT();
   useDocsFonts();
@@ -447,6 +454,12 @@ export function DocsEditor({
       if (flushRef.current === flush) flushRef.current = null;
     };
   }, [flush, flushRef]);
+
+  // The document's translations, each under its paragraph while the page is
+  // read (layer/reading.ts).
+  useEffect(() => {
+    if (editor) showTranslations(editor, translations);
+  }, [editor, translations]);
 
   // The Unitos marks: repainted when the reader's highlights change — by
   // content, not by object — and when a new stored revision is on screen
@@ -647,7 +660,7 @@ export function DocsEditor({
         )}
         {chrome}
       </div>
-      {pages}
+      <PageBanner.Provider value={banner}>{pages}</PageBanner.Provider>
       {footer}
     </div>
   );

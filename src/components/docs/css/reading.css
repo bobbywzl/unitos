@@ -1,0 +1,31 @@
+/* The page editor: the reading layer (layer/reading.ts; SPEC.md §19). A
+   paragraph's translation reads under it, quieter, marked by a rule, as the
+   block reader's does (globals.css .translation-line): drawn from the
+   paragraph's data-translation, a pseudo-element, so it is never selected,
+   copied, or counted, and it moves to the next page with the paragraph's
+   last line. It prints, as the block reader's does. The key terms' dotted
+   underline is the block reader's (block-view.tsx TERM_MARK). */
+.docs-prose [data-translation]::after {
+  content: attr(data-translation);
+  display: block;
+  margin-top: 3pt;
+  padding-left: 9pt;
+  border-left: 2px solid var(--clay-200);
+  color: var(--docs-gray-2);
+  font-size: 0.94em;
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-align: start;
+  text-decoration: none;
+  text-indent: 0;
+  text-transform: none;
+  white-space: pre-line;
+  user-select: none;
+}
+/* Under a heading, the Title, or the Subtitle, a translation reads at the
+   size of the text. */
+.docs-prose :is(h1, h2, h3, h4, h5, h6, p[data-doc-style])[data-translation]::after {
+  font-size: 10.5pt;
+}

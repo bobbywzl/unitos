@@ -2,6 +2,7 @@ import { Mark, mergeAttributes, type Editor } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { insertContext } from "@/components/docs/insert/context";
 import { importedOf } from "@/components/docs/insert/figure";
+import { referenceCardOf } from "@/components/reader/bibliography";
 
 // An in-text citation (SPEC.md §29): the words of a web page or a Markdown
 // file that point at an entry of its references (Document.references),
@@ -15,14 +16,6 @@ import { importedOf } from "@/components/docs/insert/figure";
 function documentIdOf(editor: Editor | undefined): string | null {
   if (!editor) return null;
   return importedOf(editor)?.documentId ?? insertContext(editor)?.documentId ?? null;
-}
-
-// Each document's cards by reference id (bibliography.tsx referenceTip), set
-// by the reader from the page data (reader-interactions.tsx).
-const cardsByDocument = new Map<string, ReadonlyMap<string, string>>();
-
-export function setCitationCards(documentId: string, cards: ReadonlyMap<string, string>): void {
-  cardsByDocument.set(documentId, cards);
 }
 
 export const Citation = Mark.create({
@@ -60,10 +53,10 @@ export const Citation = Mark.create({
     return ["span", mergeAttributes(HTMLAttributes, { "data-citation": documentIdOf(this.editor) ?? "", class: "docs-citation" }), 0];
   },
 
-  // On screen, renderHTML's span, whose card the pointer reads from the page
-  // data when it comes over the words (data-tip, the app's tooltip). The
-  // card and the tooltip's aria-describedby change no words, so the editor
-  // does not read the span again for them.
+  // On screen, the span renderHTML writes. When the pointer comes over it,
+  // it takes its card from the reader (data-tip: the app's tooltip shows
+  // it). The card and the tooltip's aria-describedby change no words, so
+  // the editor does not read the span again for them.
   addMarkView() {
     return ({ mark, editor, HTMLAttributes }) => {
       const dom = document.createElement("span");
@@ -71,7 +64,7 @@ export const Citation = Mark.create({
       for (const [name, value] of Object.entries(attrs)) dom.setAttribute(name, String(value));
       dom.addEventListener("pointerover", () => {
         const documentId = documentIdOf(editor);
-        const card = documentId ? cardsByDocument.get(documentId)?.get(String(mark.attrs.refId)) : undefined;
+        const card = documentId ? referenceCardOf(documentId, String(mark.attrs.refId)) : undefined;
         if (card && dom.getAttribute("data-tip") !== card) dom.setAttribute("data-tip", card);
       });
       return {

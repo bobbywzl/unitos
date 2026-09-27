@@ -1142,17 +1142,16 @@ RISKS.R2 = async (theme) => {
   page.on("load", () => loads++);
   await open(page, ctx.notebookId, added.id, { wait: false });
   // The one reload, then the frame with the reason: no reload after it.
-  await waitIn(page, () => [...document.querySelectorAll(".docs-shell p, .docs-shell div")].some((e) => /can.t show/.test(e.textContent ?? "")), null, 30_000);
+  await waitIn(page, () => /can.t show/.test(document.querySelector('[role="alert"]')?.textContent ?? ""), null, 30_000);
   const state = await page.evaluate(() => ({
     prose: document.querySelector(".docs-prose")?.textContent.length ?? 0,
-    frame: Boolean(document.querySelector(".docs-shell .docs-title-row")),
-    says: [...document.querySelectorAll(".docs-shell p, .docs-shell div")].map((e) => e.textContent).find((t) => /can.t show/.test(t ?? "")) ?? null,
-    title: document.querySelector(".docs-title-row")?.textContent.slice(0, 60) ?? null,
+    frame: Boolean(document.querySelector(".docs-title-row")),
+    says: document.querySelector('[role="alert"]')?.textContent ?? null,
   }));
   const path = await shot(page, `R2-unknown-node-${theme}`);
   const stored = await documentRow(added.id);
   const kept = JSON.stringify(stored.richText).includes("futureObject");
-  check("R2", loads <= 2 && (state.prose > 0 || state.frame) && kept, `(${theme}) a stored node this build lacks: the frame or the page shows, it reloads at most once, the stored copy keeps the node`, `loads ${loads}, prose ${state.prose} chars, frame ${state.frame}, says "${clip(state.says, 90)}", stored keeps it ${kept}, ${path}`);
+  check("R2", loads <= 2 && (state.prose > 0 || (state.frame && /can.t show/.test(state.says ?? ""))) && kept, `(${theme}) a stored node this build lacks: the frame or the page shows, it reloads at most once, the stored copy keeps the node`, `loads ${loads}, prose ${state.prose} chars, frame ${state.frame}, says "${clip(state.says, 90)}", stored keeps it ${kept}, ${path}`);
   if (errors.length) note("R2", "console", errors.slice(0, 3).join(" | "));
   await context.close();
   await db.document.update({ where: { id: added.id }, data: { richText: row.richText } });
@@ -1293,25 +1292,27 @@ RISKS.R5 = async (theme) => {
     const sel = window.__docsEditor.state.selection;
     return sel.constructor.name === "NodeSelection" && sel.from === q;
   }, p);
+  // A press: its tools open; Escape closes them and keeps the figure selected.
+  const press = async (f) => {
+    await calm(page);
+    const at = await clickFigure(page, f.pos);
+    const opened = await toolbar(page);
+    await page.keyboard.press("Escape");
+    await waitIn(page, () => !document.querySelector("[data-layer-toolbar]"), null, 3000);
+    const selected = Boolean(await until(() => selectedAt(f.pos), 2000, 100));
+    return { opened, selected, at };
+  };
   let first = true;
   const pick = async (caption) => {
     const f = await figureBy(page, (c) => c.trim() === caption);
     if (!f) return null;
-    await calm(page);
-    await clickFigure(page, f.pos);
-    const opened = await toolbar(page);
-    await page.keyboard.press("Escape");
-    const selected = Boolean(await until(() => selectedAt(f.pos), 2000, 100));
+    const took = await press(f);
     if (first) {
       first = false;
-      check("R5", opened && selected, `(${theme}) in Editing the first press on "${caption}" opens its tools and selects it`, `tools ${opened}, selected ${selected}`);
+      check("R5", took.opened && took.selected, `(${theme}) in Editing the first press on "${caption}" opens its tools and selects it`, `tools ${took.opened}, selected ${took.selected}; pressed ${JSON.stringify(took.at)}`);
     }
     // A person presses again when the first press took nothing.
-    if (!selected) {
-      await clickFigure(page, f.pos);
-      await page.keyboard.press("Escape");
-      await until(() => selectedAt(f.pos), 2000, 100);
-    }
+    if (!took.selected) await press(f);
     return f;
   };
   await pick("Figure 3");

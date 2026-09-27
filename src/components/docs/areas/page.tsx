@@ -2,7 +2,7 @@
 
 import type { Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useLang } from "@/components/lang-provider";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
@@ -39,6 +39,20 @@ const PAGELESS_RUNOUT = 300;
 const FIT_GUTTER = 24;
 /** The canvas's padding above the first page. */
 const CANVAS_TOP = 11;
+
+/** What stands over the first page, as wide as the page: the Translate bar
+    (SPEC.md §19). A context, so a new bar redraws the bar alone, never the
+    canvas and the pages. */
+export const PageBanner = createContext<ReactNode>(null);
+
+function Banner({ width }: { width: number }) {
+  const banner = useContext(PageBanner);
+  return banner ? (
+    <div className="docs-banner" style={{ width }}>
+      {banner}
+    </div>
+  ) : null;
+}
 
 /** The ruler row under the toolbar. */
 export function PageRuler({ editor, documentId, pageSetup, editing }: DocsAreaProps) {

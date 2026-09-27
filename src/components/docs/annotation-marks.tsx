@@ -20,7 +20,7 @@ import {
 } from "@/components/reader/block-view";
 import { aroundPageStarts, FIGURE, findIndexed, posInBlock } from "@/components/docs/layer/anchor";
 import { PAGE_FLASH_EVENT } from "@/components/docs/layer/events";
-import { annotationKindColor } from "@/lib/annotations/kind";
+import { annotationKindColor, LINK_KIND_VAR } from "@/lib/annotations/kind";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 

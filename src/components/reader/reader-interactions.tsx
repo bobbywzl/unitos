@@ -111,7 +111,7 @@ import { Collapse, Presence } from "@/components/presence";
 import { ThinkingIndicator } from "@/components/thinking";
 import { type BlockData, type Highlight, ToolSymbol } from "@/components/reader/block-view";
 import { ArticleErrors } from "@/components/reader/article-errors";
-import { Bibliography } from "@/components/reader/bibliography";
+import { Bibliography, referenceCard, setReferenceCards } from "@/components/reader/bibliography";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY } from "@/components/reader/hues";
 import type { PageMark } from "@/components/reader/page-block";
@@ -6606,21 +6606,31 @@ function blockFormatKind(
       },
     ];
   }
+  // A citation's card on hover (bibliography.tsx referenceCard): the block
+  // reader's citation carries it in its highlight; the page editor's reads
+  // it from the cards set here.
   const referenceById = new Map(references.map((r) => [r.id, r]));
   for (const [blockId, list] of Object.entries(citationsByBlock)) {
     const existing = highlightsByBlock[blockId] ?? [];
     highlightsByBlock[blockId] = [
       ...existing,
-      ...list.map((c) => ({
-        sourceId: null,
-        start: c.start,
-        end: c.end,
-        kind: "citation" as const,
-        referenceId: c.referenceId,
-        referenceText: referenceById.get(c.referenceId)?.text,
-      })),
+      ...list.map((c) => {
+        const reference = referenceById.get(c.referenceId);
+        return {
+          sourceId: null,
+          start: c.start,
+          end: c.end,
+          kind: "citation" as const,
+          referenceId: c.referenceId,
+          referenceText: reference ? referenceCard(reference) : undefined,
+        };
+      }),
     ];
   }
+  const citationsInPage = richText !== null;
+  useEffect(() => {
+    if (citationsInPage) setReferenceCards(documentId, references);
+  }, [citationsInPage, documentId, references]);
   for (const [blockId, list] of Object.entries(contentsLinksByBlock)) {
     const existing = highlightsByBlock[blockId] ?? [];
     highlightsByBlock[blockId] = [

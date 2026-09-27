@@ -33,17 +33,11 @@ const loaded = new Map<string, Loaded>();
 type Answer = { parts: ContentsEntry[]; fallback: boolean };
 const toLoaded = (answer: Answer): Loaded => ({ parts: answer.parts, generated: !answer.fallback });
 
-export function ContentsMenu({
-  documentId,
-  open,
-  onOpenChange,
-}: {
-  documentId: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
+/** A document's contents for this tab, read when `open` turns on, and
+    Generate contents: the Contents menu's, and the page editor's tabs &
+    outlines panel's (docs/page/outline.tsx). */
+export function useContents(documentId: string, open: boolean) {
   const t = useT();
-  const { canEdit } = useCollab();
   // What this tab has for the document: the stored answer, or the answer
   // of the read or the generation in hand. reading is derived: open with
   // nothing to show and no failure means the read is running.
@@ -77,6 +71,39 @@ export function ContentsMenu({
     };
   }, [open, documentId, readError, t]);
 
+  // The second click: the one model call that writes and stores the parts.
+  async function generate() {
+    if (generating) return;
+    setGenerating(true);
+    setGenerateError(null);
+    try {
+      const answer = await api<Answer>(`/api/documents/${documentId}/contents`, "POST", { generate: true });
+      const next = toLoaded(answer);
+      loaded.set(documentId, next);
+      setFetched({ id: documentId, data: next });
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return { state, reading, readError, generating, generateError, generate };
+}
+
+export function ContentsMenu({
+  documentId,
+  open,
+  onOpenChange,
+}: {
+  documentId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const t = useT();
+  const { canEdit } = useCollab();
+  const { state, reading, readError, generating, generateError, generate } = useContents(documentId, open);
+
   // A click outside the list and the button (both carry data-contents)
   // closes the list.
   useEffect(() => {
@@ -96,23 +123,6 @@ export function ContentsMenu({
       window.removeEventListener("keydown", onKey);
     };
   }, [open, onOpenChange]);
-
-  // The second click: the one model call that writes and stores the parts.
-  async function generate() {
-    if (generating) return;
-    setGenerating(true);
-    setGenerateError(null);
-    try {
-      const answer = await api<Answer>(`/api/documents/${documentId}/contents`, "POST", { generate: true });
-      const next = toLoaded(answer);
-      loaded.set(documentId, next);
-      setFetched({ id: documentId, data: next });
-    } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : t("common.requestFailed"));
-    } finally {
-      setGenerating(false);
-    }
-  }
 
   function jump(blockId: string) {
     onOpenChange(false);

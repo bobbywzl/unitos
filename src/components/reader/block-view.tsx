@@ -35,6 +35,15 @@ export const MARK_CHIP =
 // The extraction's label at the end of its quote; a click opens its card.
 export const EXTRACT_CHIP =
   "mx-0.5 inline-flex h-4 items-center rounded-full bg-clay-100 px-1.5 align-text-top text-[9.5px] font-bold text-clay-700 hover:bg-clay-200 hover:text-clay-800";
+// A glossary key term (SPEC.md §8 Phase 7): a dotted underline. The pointer
+// on it shows its definition; a press opens the selection toolbar on it.
+export const TERM_MARK = "glossary-term cursor-pointer border-b-2 border-dotted border-clay-400 hover:border-clay-600";
+
+/** A key term's hover: its definition in the reader's language, when the
+    glossary has one, then how to open its tools. */
+export function termTip(definition: string | undefined, t: TFunc): string {
+  return definition ? `${definition}\n\n${t("panes.clickForTools")}` : t("panes.clickForTools");
+}
 
 export type BlockData = {
   id: string;
@@ -584,11 +593,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
       parts.push(
         <span
           key={from}
-          data-tip={
-            term.definition
-              ? `${term.definition}\n\n${t("panes.clickForTools")}`
-              : t("panes.clickForTools")
-          }
+          data-tip={termTip(term.definition, t)}
           onMouseDown={(e) => {
             if (e.button !== 0) return;
             e.stopPropagation();
@@ -598,7 +603,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
               }),
             );
           }}
-          className={`glossary-term cursor-pointer border-b-2 border-dotted border-clay-400 hover:border-clay-600${editedClass}`}
+          className={`${TERM_MARK}${editedClass}`}
         >
           {inner}
         </span>,

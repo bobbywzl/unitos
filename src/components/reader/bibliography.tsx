@@ -13,12 +13,25 @@ function referenceHost(url: string): string {
   }
 }
 
-/** What a citation shows on hover, in the block reader and in the page
+/** A citation's card, shown on hover in the block reader and in the page
     editor: its reference entry and, on a line of its own, the site its link
     goes to, as the References section writes them. */
-export function referenceTip(reference: DocumentReference): string {
+export function referenceCard(reference: DocumentReference): string {
   const host = reference.url ? referenceHost(reference.url) : "";
   return host && !reference.text.includes(host) ? `${reference.text}\n${host}` : reference.text;
+}
+
+// Each document's citation cards by reference id, for the page editor's
+// citations (docs/insert/citation.ts), which read them on hover; the reader
+// sets them from the page data.
+const cardsByDocument = new Map<string, ReadonlyMap<string, string>>();
+
+export function setReferenceCards(documentId: string, references: DocumentReference[]): void {
+  cardsByDocument.set(documentId, new Map(references.map((r) => [r.id, referenceCard(r)])));
+}
+
+export function referenceCardOf(documentId: string, referenceId: string): string | undefined {
+  return cardsByDocument.get(documentId)?.get(referenceId);
 }
 
 // The References section: every reference of the open document, at the bottom
