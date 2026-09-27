@@ -3,7 +3,7 @@ import type { ModelMessage } from "ai";
 import type { Thinking } from "@/lib/assistant/thinking";
 import type { ChatTurn } from "@/lib/conversation";
 import { SUGGEST_EFFORT, SUGGEST_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
-import { documentPrefix } from "@/lib/derive/context";
+import { documentPrefix, pageNames, type PageName } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { SuggestResult } from "@/lib/docs/assistant-suggestions";
 import type { RichNode } from "@/lib/docs/schema";
@@ -46,6 +46,8 @@ const SKIPPED: Record<ServerSkip, TKey> = {
 export type SuggestDocument = {
   title: string;
   references: unknown;
+  /** An import's rows name their pages in the prefix. */
+  pageName: PageName | null;
   rows: Pick<Block, "id" | "type" | "text">[];
   places: Map<string, BlockPlace>;
   richText: RichNode;
@@ -54,11 +56,20 @@ export type SuggestDocument = {
 export function suggestDocument(document: {
   title: string;
   references: unknown;
+  importRev: number | null;
+  pageLabels: unknown;
   richText: unknown;
   blocks: Pick<Block, "id" | "type" | "text">[];
 }): SuggestDocument {
   const richText = document.richText as RichNode;
-  return { title: document.title, references: document.references, rows: document.blocks, places: blockPlaces(richText), richText };
+  return {
+    title: document.title,
+    references: document.references,
+    pageName: pageNames(document),
+    rows: document.blocks,
+    places: blockPlaces(richText),
+    richText,
+  };
 }
 
 export type SuggestRun = {
@@ -124,7 +135,7 @@ export async function runSuggest(run: SuggestRun): Promise<SuggestResult> {
   const messages: ModelMessage[] = [
     {
       role: "system",
-      content: documentPrefix(document.title, document.rows, document.references),
+      content: documentPrefix(document.title, document.rows, document.references, document.pageName),
       providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
     },
     { role: "user", content: prompt },

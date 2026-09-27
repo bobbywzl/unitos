@@ -3,7 +3,8 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
 // Bump when the digest format changes: every stored row goes stale at once.
-export const DIGEST_VERSION = "v1";
+// v2: an import's block lines name their pages.
+export const DIGEST_VERSION = "v2";
 
 // Cheap grouped aggregates over every table that feeds the digest — never the
 // block text itself. Any content change moves at least one aggregate, so equal

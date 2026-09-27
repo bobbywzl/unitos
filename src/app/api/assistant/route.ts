@@ -24,6 +24,7 @@ import {
   enrichActions,
   parseActionsFence,
   splitActionsFence,
+  type DocumentEdits,
 } from "@/lib/assistant/plan";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { importShared } from "@/lib/docs/server";
@@ -176,8 +177,9 @@ async function handle(req: Request, t: TFunc) {
             db.document.findUnique({ where: { id: data.documentId! }, select: { richText: true, format: true } }),
           ]);
           // An import another account's project holds takes no edits.
-          const richText = open ? takesSuggestions(open) && !(await importShared(data.documentId!)) : false;
-          return { sections, attachedDocs: attached.map((nd) => nd.document), richText };
+          const edits: DocumentEdits =
+            !open || !takesSuggestions(open) ? "blocks" : (await importShared(data.documentId!)) ? "none" : "suggestions";
+          return { sections, attachedDocs: attached.map((nd) => nd.document), edits };
         })()
       : null;
   const messages: ModelMessage[] = [{ role: "system", content: system }];
@@ -240,7 +242,7 @@ async function handle(req: Request, t: TFunc) {
         ? {
             sections: act.sections,
             otherDocuments: act.attachedDocs.filter((d) => d.id !== data.documentId),
-            richText: act.richText,
+            edits: act.edits,
             caretBlockId: data.caretBlockId,
           }
         : undefined,
@@ -334,7 +336,7 @@ async function handle(req: Request, t: TFunc) {
       });
       return enrichActions(raw, {
         documentId: data.documentId!,
-        richText: act!.richText,
+        edits: act!.edits,
         blocks,
         attachedIds: new Set(act!.attachedDocs.map((d) => d.id)),
         sectionIds: new Set(act!.sections.map((s) => s.id)),

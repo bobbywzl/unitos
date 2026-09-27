@@ -14,7 +14,24 @@ import type { PromptCtx, ReaderProfileCtx } from "@/lib/prompts/types";
 // Document.references verbatim; parsing happens here so every caller builds
 // the same prefix.
 type PrefixBlock = Pick<Block, "id" | "type" | "text"> &
-  Partial<Pick<Block, "startTime" | "endTime">> & { cell?: unknown };
+  Partial<Pick<Block, "startTime" | "endTime" | "page">> & { cell?: unknown };
+
+/** How a document's prefix names a row's page (SPEC.md §30). */
+export type PageName = (page: number) => string;
+
+/** An import's rows carry the page of the PDF their first word stands on,
+    named as the page's margin names it: the PDF's own label
+    (Document.pageLabels), else the number. Null for every other document:
+    its pages are not shown to the reader. Every caller of one document
+    passes the same, so the prefix stays byte-identical. */
+export function pageNames(document: { importRev: number | null; pageLabels: unknown }): PageName | null {
+  if (document.importRev === null) return null;
+  const labels: unknown[] = Array.isArray(document.pageLabels) ? document.pageLabels : [];
+  return (page) => {
+    const label = labels[page - 1];
+    return typeof label === "string" && label ? label : String(page);
+  };
+}
 
 /** A table cell's place (Block.cell), or null when the value is not one. */
 function cellPlace(cell: unknown): { table: number; row: number; column: number } | null {
@@ -25,20 +42,23 @@ function cellPlace(cell: unknown): { table: number; row: number; column: number 
     : null;
 }
 
-// One rendering of blocks for every prompt and for the digest: `[block <id>]
-// (TYPE)` tags, timed blocks tagging their seconds, a table cell's paragraph
-// its place: `(PARAGRAPH, table 2, row 3, column 1)`.
-export function renderBlockLines(blocks: PrefixBlock[]): string {
+// One rendering of blocks for every prompt, the digest, and Stitch: `[block
+// <id>] (TYPE)` tags, timed blocks tagging their seconds, a table cell's
+// paragraph its place, an import's row its page: `(PARAGRAPH, table 2, row 3,
+// column 1, p. 7)`.
+export function renderBlockLines(blocks: PrefixBlock[], pageName: PageName | null): string {
   return blocks
     .map((b) => {
+      if (b.startTime != null && b.endTime != null) {
+        return `[block ${b.id}] (${b.type} ${b.startTime.toFixed(1)}s–${b.endTime.toFixed(1)}s)\n${b.text}`;
+      }
       const place = cellPlace(b.cell);
-      const tag =
-        b.startTime != null && b.endTime != null
-          ? `(${b.type} ${b.startTime.toFixed(1)}s–${b.endTime.toFixed(1)}s)`
-          : place
-            ? `(${b.type}, table ${place.table}, row ${place.row}, column ${place.column})`
-            : `(${b.type})`;
-      return `[block ${b.id}] ${tag}\n${b.text}`;
+      const tag = [
+        b.type,
+        ...(place ? [`table ${place.table}, row ${place.row}, column ${place.column}`] : []),
+        ...(pageName && b.page != null ? [`p. ${pageName(b.page)}`] : []),
+      ].join(", ");
+      return `[block ${b.id}] (${tag})\n${b.text}`;
     })
     .join("\n\n");
 }
@@ -74,7 +94,8 @@ export function renderReferenceLines(references: unknown): string[] {
 export function documentPrefix(
   title: string,
   blocks: PrefixBlock[],
-  references?: unknown,
+  references: unknown,
+  pageName: PageName | null,
 ): string {
   const referenceLines = renderReferenceLines(references);
   return [
@@ -84,7 +105,7 @@ export function documentPrefix(
     "",
     `Document title: ${title}`,
     "",
-    renderBlockLines(blocks),
+    renderBlockLines(blocks, pageName),
     ...(referenceLines.length > 0 ? ["", ...referenceLines] : []),
   ].join("\n");
 }

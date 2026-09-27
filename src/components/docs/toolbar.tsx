@@ -2,7 +2,7 @@
 
 import { redoDepth, undoDepth } from "@tiptap/pm/history";
 import { useEditorState, type Editor } from "@tiptap/react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { docsCommands, type DocsMenu } from "@/components/docs/commands";
@@ -52,7 +52,7 @@ import { ImageMenu, type ImageSource } from "@/components/docs/toolbar/image-men
 import { IndentDialog } from "@/components/docs/toolbar/indent-dialog";
 import { ChecklistPalette, PresetGrid, RestartNumberingDialog } from "@/components/docs/toolbar/list-menus";
 import { BULLET_PRESETS, continueNumbering, currentListStyle, NUMBER_PRESETS, numberedLine } from "@/components/docs/toolbar/lists";
-import { ModeSwitcher, type DocsMode } from "@/components/docs/toolbar/mode";
+import { ModeLock, ModeSwitcher, type DocsMode } from "@/components/docs/toolbar/mode";
 import { ToolbarRow, type ToolbarGroup } from "@/components/docs/toolbar/overflow";
 import { usePaintFormat } from "@/components/docs/toolbar/paint-format";
 import { SEARCH_MENUS_EVENT, SearchMenus, type SearchAction } from "@/components/docs/toolbar/search-menus";
@@ -82,9 +82,10 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The page editor's toolbar (SPEC.md §29): Google Docs' controls in Google's
 // order, then the Unitos tools, the mode switcher, and Hide the menus. In
-// Viewing mode, and for a reader who may not edit, the left side is Print,
-// Add comment, and Zoom. While a header or footer is edited, the controls
-// format its text, and those a header cannot hold are off.
+// Viewing mode, and for a reader who may not edit, the left side is Search
+// the menus, Print, Add comment, and Zoom. While a header or footer is
+// edited, the controls format its text, and those a header cannot hold are
+// off.
 
 const MENU_NAMES: Record<DocsMenu, TKey> = {
   file: "docs.menuFile",
@@ -226,6 +227,8 @@ export function DocsToolbar({
   const [customFor, setCustomFor] = useState<"text" | "highlight" | null>(null);
   const [dialog, setDialog] = useState<"indent" | "numbering" | "spacing" | null>(null);
   const off = mode === "viewing" || !canEdit;
+  // Why the text cannot be edited here at all (a shared import), or null.
+  const lock = useContext(ModeLock);
   // A header or footer holds text formatting and alignment only
   // (page/header-footer.tsx).
   const inHeader = header !== null;
@@ -383,7 +386,8 @@ export function DocsToolbar({
   );
 
   // Search the menus: the toolbar's actions, then the areas' commands (an
-  // area's own command wins over a toolbar action of the same name).
+  // area's own command wins over a toolbar action of the same name). In
+  // Viewing, Insert and Format are off, as the toolbar's own are.
   const actions = (): SearchAction[] => {
     const registered: SearchAction[] = docsCommands().map((c) => {
       // Format acts on the editor the controls format.
@@ -394,7 +398,7 @@ export function DocsToolbar({
         where: t(MENU_NAMES[c.menu]),
         keywords: c.keywords,
         shortcut: c.shortcut ? keys(c.shortcut) : undefined,
-        enabled: c.enabled ? c.enabled(on) : true,
+        enabled: !(off && (c.menu === "insert" || c.menu === "format")) && (c.enabled ? c.enabled(on) : true),
         run: () => c.run(on),
       };
     });
@@ -414,8 +418,10 @@ export function DocsToolbar({
       enabled: a.on !== false,
       run: a.run,
     }));
-    const add = (id: string, label: string, where: DocsMenu, runIt: () => void, o: { enabled?: boolean; shortcut?: string; words?: string[] } = {}) =>
-      list.push({ id, label, where: t(MENU_NAMES[where]), run: runIt, enabled: o.enabled ?? bodyOn, shortcut: o.shortcut && keys(o.shortcut), keywords: o.words });
+    const add = (id: string, label: string, where: DocsMenu, runIt: () => void, o: { enabled?: boolean; shortcut?: string; words?: string[]; note?: string } = {}) =>
+      list.push({ id, label, where: t(MENU_NAMES[where]), run: runIt, enabled: o.enabled ?? bodyOn, shortcut: o.shortcut && keys(o.shortcut), keywords: o.words, note: o.note });
+    // What the lock turns off says why, as the mode menu does.
+    const unlocked = lock ? { enabled: false, note: t(lock) } : { enabled: true };
     add("zoom-fit", `${t("docs.zoom")}: ${t("docs.zoomFit")}`, "view", () => onZoom("fit"), { enabled: true });
     for (const z of ZOOMS) add(`zoom-${z}`, t("docs.zoomValue", { n: z }), "view", () => onZoom(z), { enabled: true });
     for (const style of menuStyles(6)) {
@@ -447,15 +453,15 @@ export function DocsToolbar({
       enabled: bodyOn && continueNumbering(editor.state),
       words: ["maintain numbering", "join list", "continue preceding list", "continue previous list", "combine list", ...listWords],
     });
-    add("rename", t("docs.renameTitle"), "file", rename, { enabled: canEdit, words: ["title", "save as"] });
+    add("rename", t("docs.renameTitle"), "file", rename, { ...(canEdit ? unlocked : { enabled: false }), words: ["title", "save as"] });
     if (canEdit) {
       add("mode-editing", t("docs.editingMode"), "view", () => onMode("editing"), {
-        enabled: true,
+        ...unlocked,
         shortcut: "Mod+Alt+Shift+Z",
         words: ["switch to editing", "return to editing"],
       });
       add("mode-suggesting", t("docsSuggest.suggestingMode"), "view", () => onMode("suggesting"), {
-        enabled: true,
+        ...unlocked,
         shortcut: "Mod+Alt+Shift+X",
         words: ["switch to suggesting", "suggest edits", "track changes", "建议"],
       });
@@ -499,6 +505,7 @@ export function DocsToolbar({
   };
 
   const zoomBox = <ZoomBox zoom={zoom} onZoom={onZoom} onDone={focusPage} />;
+  const searchMenus = <SearchMenus actions={actions} valueActions={valueActions} onDone={focusPage} />;
   const textBar = s.color ?? (s.styleColor !== "#000000" ? s.styleColor : "var(--docs-ink)");
   const colorButton = (kind: "text" | "highlight") => {
     const text = kind === "text";
@@ -551,6 +558,7 @@ export function DocsToolbar({
           sep: false,
           content: (
             <>
+              {searchMenus}
               {button(A.print)}
               {canEdit && button(A.comment)}
               <Sep />
@@ -565,7 +573,7 @@ export function DocsToolbar({
           sep: false,
           content: (
             <>
-              <SearchMenus actions={actions} valueActions={valueActions} onDone={focusPage} />
+              {searchMenus}
               {button(A.undo)}
               {button(A.redo)}
               {button(A.print)}

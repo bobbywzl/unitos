@@ -1,25 +1,33 @@
 // UI walk of the imports' risks (the imports design 1.11 and section 5; the
-// round 10 plan): a PDF, a web page, and a Markdown file added to a local
-// Unitos with the switch on (IMPORT_PAGE_EDITOR=on) open in the page editor,
-// and every risk is walked in headless Chromium at a person's pace, in the
-// light and the dark theme. R4 and R19 are out (C1: a table is a row per
-// cell paragraph). Each check prints PASS or FAIL with its evidence: a
-// number, a screenshot path. The timings for the size guard (1.8) print as
-// TIME lines.
+// round 10 and round 11 plans): a PDF, a web page, and a Markdown file added
+// to a local Unitos with the switch on (IMPORT_PAGE_EDITOR=on) open in the
+// page editor, and every risk is walked in headless Chromium at a person's
+// pace, in the light and the dark theme. R4 and R19 are out (C1: a table is
+// a row per cell paragraph). Each check prints PASS or FAIL with its
+// evidence: a number, a screenshot path. The timings for the size guard
+// (1.8) print as TIME lines.
 //
-// Beyond the risks, four groups: C2 (the assistant's suggestions on an
-// import), EDIT (typing in a highlight, Suggesting, two tabs), AUDIT (the
-// design's section 5 checklist, as a Google Docs reader checks it), and AI
-// (the Unitos tools, annotations, and notes on an import's text).
+// Beyond the risks: C2 (the assistant's suggestions on an import), EDIT
+// (typing in a highlight, Suggesting, two tabs), AUDIT (the design's
+// section 5 checklist, as a Google Docs reader checks it), and AI (the
+// Unitos tools, annotations, and notes on an import's text).
+//
+// A check waits for the state it checks (a mark, a toolbar, a saved copy, a
+// scroll position), never a fixed time, and a scroll puts a position exactly
+// where the check reads it. A group with a failure runs once more at the
+// end, alone (fresh documents, a fresh browser): a failure counts only when
+// it fails again there; one that passes alone prints as FLAKY with both
+// evidences.
 //
 // Usage:
-//   node scripts/qa/ui-imports.mjs [R1 R3 … C2 EDIT AUDIT AI] [--theme light|dark|both] [--keep]
-// With nothing named, everything runs. Env: BASE (default
-// http://localhost:3111), SHOT_DIR (screenshots; default <tmp>/ui-imports),
-// CHROME (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3490),
-// DATABASE_URL (read from .env when unset), ATTENTION (the Attention paper's
-// PDF: a path or a URL; default https://arxiv.org/pdf/1706.03762),
-// LONG_PAGES (the long PDF's page count; default 150).
+//   node scripts/qa/ui-imports.mjs [R1 R3 … C2 EDIT AUDIT AI] [--theme light|dark|both] [--keep] [--once]
+// With nothing named, everything runs. --once skips the run alone. Env: BASE
+// (default http://localhost:3111), SHOT_DIR (screenshots; default
+// <tmp>/ui-imports), CHROME (default /opt/pw-browsers/chromium),
+// FIXTURE_PORT (default 3490), DATABASE_URL (read from .env when unset),
+// ATTENTION (the Attention paper's PDF: a path or a URL; default
+// https://arxiv.org/pdf/1706.03762), LONG_PAGES (the long PDF's page count;
+// default 150).
 // Expects the dev server with IMPORT_PAGE_EDITOR=on, sign-in off, and the
 // model mock (scripts/qa/mock-kimi.mjs on :3399). The fixtures are made
 // here: a web page, its chart, its images, and a looping video served on
@@ -54,7 +62,8 @@ const args = process.argv.slice(2);
 const themeArg = args.includes("--theme") ? args[args.indexOf("--theme") + 1] : "both";
 const THEMES = themeArg === "both" ? ["light", "dark"] : [themeArg];
 const KEEP = args.includes("--keep");
-const ONLY = new Set(args.filter((a, i) => /^R\d+$|^C2$|^AUDIT$|^AI$|^EDIT$/.test(a) && args[i - 1] !== "--theme"));
+const ONCE = args.includes("--once");
+const ONLY = new Set(args.filter((a, i) => /^[A-Z][A-Z0-9]*$/.test(a) && args[i - 1] !== "--theme"));
 const STAMP = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
 mkdirSync(SHOT, { recursive: true });
 
@@ -62,19 +71,41 @@ const db = new PrismaClient();
 const results = [];
 function record(level, risk, name, detail = "") {
   const line = `${level} ${risk} ${name}${detail ? ` — ${detail}` : ""}`;
-  results.push({ level, risk, name, detail, line });
-  console.log(line);
+  results.push({ level, risk, name, detail, line, alone: ctx.alone });
+  console.log(ctx.alone ? `  alone: ${line}` : line);
 }
 const pass = (risk, name, detail) => record("PASS", risk, name, detail);
 const fail = (risk, name, detail) => record("FAIL", risk, name, detail);
 const note = (risk, name, detail) => record("NOTE", risk, name, detail);
 const time = (risk, name, detail) => record("TIME", risk, name, detail);
 const check = (risk, ok, name, detail) => (ok ? pass : fail)(risk, name, detail);
+/** A person's pace between two keys or two moves; never a wait for a state. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clip = (s, n = 80) => {
   const t = String(s ?? "").replace(/\s+/g, " ").trim();
   return t.length > n ? `${t.slice(0, n)}…` : t;
 };
+const squash = (s) => String(s ?? "").replace(/\s+/g, "");
+
+// ── Waiting ─────────────────────────────────────────────────────────────────
+
+/** Poll `fn` until it gives a truthy value or `ms` pass: its last value
+    either way, so a failure prints what was there. */
+async function until(fn, ms = 20_000, every = 250) {
+  const end = Date.now() + ms;
+  for (;;) {
+    const value = await fn();
+    if (value || Date.now() >= end) return value;
+    await sleep(every);
+  }
+}
+/** Wait in the page for `fn(arg)` to be truthy: its value, or null after `ms`. */
+function waitIn(page, fn, arg, ms = 20_000) {
+  return page
+    .waitForFunction(fn, arg, { timeout: ms, polling: 100 })
+    .then((h) => h.jsonValue())
+    .catch(() => null);
+}
 
 // ── The app's API and database ──────────────────────────────────────────────
 
@@ -157,7 +188,12 @@ async function sourcesOf(documentId) {
   });
 }
 
-/** The words of a stored row between two offsets. */
+/** The first stored source of a document that meets `test`, waited for. */
+async function sourceWhere(documentId, test, ms = 20_000) {
+  return (await until(async () => (await sourcesOf(documentId)).find(test) ?? null, ms, 400)) ?? null;
+}
+
+/** The words of a stored row. */
 async function rowText(blockId) {
   return (await db.block.findUnique({ where: { id: blockId }, select: { text: true, type: true } })) ?? { text: "", type: "" };
 }
@@ -419,10 +455,132 @@ function serveFixtures(files) {
 
 // ── The browser ─────────────────────────────────────────────────────────────
 
+/** What every page of the walk has before its own scripts run
+    (window.__qa): the page editor's pane, the band of it a person sees
+    under the header, exact scrolling, and the layout holding still. */
+function qaHelpers() {
+  const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const qa = {
+    /** The scrolling pane around an element, the page editor's by default. */
+    pane(el) {
+      let p = (el ?? document.querySelector(".docs-prose"))?.parentElement ?? null;
+      while (p && !(/(auto|scroll)/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight)) p = p.parentElement;
+      return p;
+    },
+    /** The part of the pane a person sees and presses: under the page
+        editor's header (title row, toolbar, ruler), above the pane's foot. */
+    band(el) {
+      const view = el ?? window.__docsEditor.view.dom;
+      const r = qa.pane(view).getBoundingClientRect();
+      const header = view.closest("[data-docs-editor]")?.querySelector(".docs-header")?.getBoundingClientRect().bottom ?? r.top;
+      return { top: Math.max(r.top, header) + 8, bottom: r.bottom - 8 };
+    },
+    /** Until the pane's height, the page's, and the sheets hold still for 300 ms. */
+    async settle(ms = 15_000) {
+      const prose = document.querySelector(".docs-prose");
+      const measure = () => `${qa.pane(prose)?.scrollHeight}:${Math.round(prose?.getBoundingClientRect().height ?? 0)}:${document.querySelectorAll("[data-docs-page-sheet]").length}`;
+      const end = performance.now() + ms;
+      let last = measure();
+      let since = performance.now();
+      while (performance.now() < end) {
+        await frame();
+        const now = measure();
+        if (now !== last) {
+          last = now;
+          since = performance.now();
+        } else if (performance.now() - since >= 300) return true;
+      }
+      return false;
+    },
+    /** Scroll the pane until `y()` (client px) reads `at`, frame by frame:
+        a layout that moves under the scroll is followed. */
+    async place(y, at, el) {
+      const pane = qa.pane(el);
+      for (let i = 0; i < 12; i++) {
+        const d = y() - at;
+        if (Math.abs(d) < 1.5) break;
+        const before = pane.scrollTop;
+        pane.scrollTop = before + d;
+        await frame();
+        await frame();
+        if (pane.scrollTop === before) break; // the pane's end
+      }
+    },
+    /** Position `pos` at `at` (client px; the band's middle by default):
+        its coords. A paragraph across a page break is taller than the
+        screen, so the position itself is placed, never its element. */
+    async show(pos, at) {
+      const view = window.__docsEditor.view;
+      const b = qa.band(view.dom);
+      const mid = () => {
+        const c = view.coordsAtPos(pos);
+        return (c.top + c.bottom) / 2;
+      };
+      await qa.place(mid, at ?? (b.top + b.bottom) / 2, view.dom);
+      const c = view.coordsAtPos(pos);
+      return { x: c.left, y: (c.top + c.bottom) / 2, top: c.top, bottom: c.bottom };
+    },
+    /** A node's box in the band: centered when it fits, else its top at the band's top. */
+    async showNode(pos) {
+      const view = window.__docsEditor.view;
+      const el = view.nodeDOM(pos);
+      if (!el || el.nodeType !== 1) return null;
+      const b = qa.band(view.dom);
+      const box = () => el.getBoundingClientRect();
+      const fits = box().height <= b.bottom - b.top - 40;
+      await qa.place(() => (fits ? box().top + box().height / 2 : box().top), fits ? (b.top + b.bottom) / 2 : b.top + 24, view.dom);
+      return box().toJSON();
+    },
+    /** Where a person presses a figure: the middle of its media's part in
+        the band, and whether that point is the figure's. */
+    figurePoint(pos) {
+      const view = window.__docsEditor.view;
+      const el = view.nodeDOM(pos);
+      const media = el?.querySelector("img, svg, video, iframe") ?? el;
+      if (!media) return null;
+      const b = qa.band(view.dom);
+      const r = media.getBoundingClientRect();
+      const top = Math.max(r.top, b.top);
+      const bottom = Math.min(r.bottom, b.bottom, top + 240);
+      const x = r.left + r.width / 2;
+      const y = (top + bottom) / 2;
+      const hit = document.elementFromPoint(x, y);
+      return { x, y, ours: Boolean(hit && el.contains(hit)), hit: hit ? `${hit.tagName}.${String(hit.className).slice(0, 40)}` : null };
+    },
+    /** The words of the text block around position `pos`. */
+    blockText(pos) {
+      return window.__docsEditor.state.doc.resolve(pos).parent.textContent;
+    },
+    /** The pieces of the page's marks whose `attr` is `id`. */
+    marked(id, attr = "data-source-id") {
+      return [...document.querySelectorAll(`.docs-prose [${attr}="${CSS.escape(id)}"]`)].map((e) => e.textContent);
+    },
+    /** The app's reading line (lib/reading-position.ts): 80 px under the
+        pane's top edge. The block on it, how far its top stands from it,
+        and the tab's saved copy. */
+    readingLine() {
+      const top = qa.pane().getBoundingClientRect().top + 80;
+      const hit = [...document.querySelectorAll(".docs-prose [data-block-id]")].find((e) => e.getBoundingClientRect().bottom > top);
+      let saved = null;
+      try {
+        saved = Object.entries(sessionStorage).find(([k]) => k.startsWith("unitos-reader-position:"))?.[1] ?? null;
+      } catch {
+        saved = null;
+      }
+      return hit ? { id: hit.dataset.blockId, dy: Math.round(hit.getBoundingClientRect().top - top), text: hit.textContent.slice(0, 40), saved: saved ? JSON.parse(saved).blockId : null } : null;
+    },
+  };
+  window.__qa = qa;
+}
+
 let browser;
+async function launch() {
+  browser = await chromium.launch({ executablePath: CHROME, args: ["--autoplay-policy=no-user-gesture-required"] });
+}
 async function newPage(theme = "light", { width = 1440, height = 900 } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, colorScheme: theme, acceptDownloads: true });
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
+  await context.addInitScript(qaHelpers);
   const page = await context.newPage();
   const errors = [];
   // The dev server's reloads while files change: a hydration mismatch and
@@ -448,21 +606,25 @@ async function shot(page, name) {
   return path;
 }
 
-/** Open a document in the reader; the page editor stands when its editor
-    is on window (development builds). Times from the start of the
-    navigation to the first words, and to the editor. */
+/** Open a document in the reader and wait for the page editor (its editor
+    is on window in development builds) and a layout that holds still.
+    Times from the navigation to the first words, and to the editor. */
 async function open(page, notebookId, documentId, { wait = true } = {}) {
   const t0 = Date.now();
   await page.goto(`${BASE}/n/${notebookId}?doc=${documentId}`, { waitUntil: "domcontentloaded" });
-  if (!wait) return {};
-  await page.waitForFunction(() => {
-    const prose = document.querySelector(".docs-prose");
-    return prose && prose.textContent.trim().length > 0;
-  }, null, { timeout: 120_000 });
+  return wait ? ready(page, t0) : {};
+}
+async function ready(page, t0 = Date.now()) {
+  await page.waitForFunction(() => document.querySelector(".docs-prose")?.textContent.trim().length > 0, null, { timeout: 120_000 });
   const text = Date.now() - t0;
-  await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
-  await sleep(700);
-  return { text, ready: Date.now() - t0 };
+  await page.waitForFunction(() => Boolean(window.__docsEditor) && !window.__docsEditor.isDestroyed, null, { timeout: 60_000 });
+  const times = { text, ready: Date.now() - t0 };
+  await page.evaluate(() => window.__qa.settle());
+  return times;
+}
+async function reload(page) {
+  await page.reload({ waitUntil: "domcontentloaded" });
+  return ready(page);
 }
 
 async function isPageEditor(page) {
@@ -472,26 +634,41 @@ async function isPageEditor(page) {
 async function mode(page) {
   return page.evaluate(() => document.querySelector('[data-track="docs:mode"]')?.getAttribute("data-mode") ?? null);
 }
+/** The mode menu's item, as a person picks it; false when it is off. */
 async function setMode(page, to) {
   await page.click('[data-track="docs:mode"]');
-  await sleep(250);
   const item = page.locator(`[data-track="docs:mode:${to}"]`);
+  await item.waitFor({ state: "visible", timeout: 10_000 });
   const disabled = await item.evaluate((el) => el.getAttribute("aria-disabled") === "true" || el.hasAttribute("disabled")).catch(() => null);
   if (disabled) {
     await page.keyboard.press("Escape");
     return false;
   }
   await item.click();
-  await sleep(400);
+  await waitIn(page, (m) => document.querySelector('[data-track="docs:mode"]')?.getAttribute("data-mode") === m, to, 10_000);
   return true;
 }
 
-async function waitSaved(page, timeout = 30_000) {
-  await sleep(300);
-  await page.waitForFunction(() => {
-    const el = document.querySelector(".docs-status");
-    return el && el.classList.contains("docs-status-saved");
-  }, null, { timeout });
+/** The save caught up: the status says saved and the stored copy is the
+    one on screen (in the editor's form). */
+async function waitSaved(page, ms = 30_000) {
+  const ok = await until(
+    () =>
+      page
+        .evaluate(async () => {
+          if (!document.querySelector(".docs-status-saved")) return false;
+          const id = new URLSearchParams(location.search).get("doc");
+          const res = await fetch(`/api/documents/${id}/rich-text`, { cache: "no-store" });
+          if (!res.ok) return false;
+          const { richText } = await res.json();
+          const ed = window.__docsEditor;
+          return JSON.stringify(ed.schema.nodeFromJSON(richText).toJSON()) === JSON.stringify(ed.getJSON());
+        })
+        .catch(() => false),
+    ms,
+    300,
+  );
+  if (!ok) throw new Error(`not saved in ${ms / 1000} s`);
 }
 
 /** Every text position of a needle in the editor's document. */
@@ -529,24 +706,12 @@ async function coords(page, pos) {
     return { x: c.left, y: (c.top + c.bottom) / 2, top: c.top, bottom: c.bottom };
   }, pos);
 }
+/** A position in the band, scrolled to its middle only when it is not. */
 async function reveal(page, pos) {
-  let c = await coords(page, pos);
-  const vh = await page.evaluate(() => innerHeight);
-  if (c.y < 200 || c.y > vh - 100) {
-    // The position itself to the middle: a paragraph that runs across a
-    // page break is taller than the screen, so centering its element could
-    // leave the position off the screen.
-    await page.evaluate((p) => {
-      const view = window.__docsEditor.view;
-      let pane = view.dom.parentElement;
-      while (pane && !(/(auto|scroll)/.test(getComputedStyle(pane).overflowY) && pane.scrollHeight > pane.clientHeight)) pane = pane.parentElement;
-      const { top } = view.coordsAtPos(p);
-      pane?.scrollBy(0, top - innerHeight / 2);
-    }, pos);
-    await sleep(500);
-    c = await coords(page, pos);
-  }
-  return c;
+  const c = await coords(page, pos);
+  const b = await page.evaluate(() => window.__qa.band());
+  if (c.top >= b.top + 30 && c.bottom <= b.bottom - 60) return c;
+  return page.evaluate((p) => window.__qa.show(p), pos);
 }
 async function clickAt(page, x, y) {
   await page.mouse.move(x - 20, y - 8);
@@ -555,13 +720,23 @@ async function clickAt(page, x, y) {
   await page.mouse.down();
   await sleep(60);
   await page.mouse.up();
-  await sleep(250);
 }
+/** A click at a text position; in an editable page, the caret lands there
+    (a person clicks again when the first click did not take). */
 async function clickPos(page, pos) {
-  const c = await reveal(page, pos);
-  await clickAt(page, c.x + 0.5, c.y);
+  const caretAt = () => page.evaluate((p) => {
+    const ed = window.__docsEditor;
+    return !ed.isEditable || Math.abs(ed.state.selection.head - p) <= 1;
+  }, pos);
+  for (let i = 0; i < 2; i++) {
+    const c = await reveal(page, pos);
+    await clickAt(page, c.x + 0.5, c.y);
+    if (await until(caretAt, 3000, 100)) return true;
+  }
+  return false;
 }
-/** Select with the mouse, like a person: press at `from`, drag to `to`. */
+/** Select with the mouse, like a person: press at `from`, drag to `to`;
+    then wait for the selection, and for the toolbar (true when it opened). */
 async function dragSelect(page, from, to) {
   const a = await reveal(page, from);
   const b = await coords(page, to);
@@ -574,7 +749,8 @@ async function dragSelect(page, from, to) {
   await page.mouse.move(b.x - 0.5, b.y, { steps: 8 });
   await sleep(80);
   await page.mouse.up();
-  await sleep(600);
+  await waitIn(page, () => window.getSelection().toString().length > 0 || !window.__docsEditor.state.selection.empty, null, 5000);
+  return toolbar(page);
 }
 async function selectWords(page, needle, nth = 0) {
   const r = await find(page, needle, nth);
@@ -582,9 +758,17 @@ async function selectWords(page, needle, nth = 0) {
   await dragSelect(page, r.from, r.to);
   return r;
 }
-async function popoverOpen(page) {
-  return page.locator("[data-selection-popover]").first().isVisible().catch(() => false);
+/** The text toolbar (or a figure's tools) is open: waited for, `ms` at most. */
+async function toolbar(page, ms = 6000) {
+  return Boolean(await waitIn(page, () => {
+    const bar = document.querySelector("[data-layer-toolbar]");
+    return Boolean(bar && bar.getClientRects().length && bar.querySelector("[data-track]"));
+  }, null, ms));
 }
+async function popoverOpen(page) {
+  return page.locator("[data-layer-toolbar]").first().isVisible().catch(() => false);
+}
+/** A tool of the open toolbar, pressed. */
 async function tool(page, track) {
   const el = page.locator(`[data-selection-popover] [data-track="${track}"]`).first();
   await el.waitFor({ state: "visible", timeout: 8000 }).catch(async (e) => {
@@ -592,7 +776,47 @@ async function tool(page, track) {
     throw e;
   });
   await el.click();
-  await sleep(500);
+}
+/** Escape until no toolbar and no card stands over the page. */
+async function calm(page) {
+  for (let i = 0; i < 3; i++) {
+    const open = await page.evaluate(() => [...document.querySelectorAll("[data-selection-popover]")].some((e) => e.getClientRects().length));
+    if (!open) return;
+    await page.keyboard.press("Escape");
+    await waitIn(page, () => ![...document.querySelectorAll("[data-selection-popover]")].some((e) => e.getClientRects().length), null, 1500);
+  }
+}
+/** The toolbar's `nth` highlight color on the selection: the sources it
+    stored, waited for. */
+async function pressHighlight(page, documentId, nth = 0) {
+  const before = new Set((await sourcesOf(documentId)).map((s) => s.id));
+  const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
+  if (!(await colors.count())) return [];
+  await colors.nth(nth).click();
+  return (await until(async () => {
+    const made = (await sourcesOf(documentId)).filter((s) => !before.has(s.id));
+    return made.length ? made : null;
+  }, 20_000, 400)) ?? [];
+}
+async function highlight(page, documentId, from, to, nth = 0) {
+  await dragSelect(page, from, to);
+  return pressHighlight(page, documentId, nth);
+}
+/** The words of a mark once they read `want` (spaces aside), waited for:
+    the pieces as they stand then. */
+async function painted(page, id, want, { attr = "data-source-id", ms = 20_000, includes = false } = {}) {
+  return (await waitIn(page, ({ id, want, attr, includes }) => {
+    const pieces = window.__qa.marked(id, attr);
+    const words = pieces.join("").replace(/\s+/g, "");
+    return (includes ? words.includes(want) : words === want) ? pieces : null;
+  }, { id, want: squash(want), attr, includes }, ms)) ?? (await page.evaluate(({ id, attr }) => window.__qa.marked(id, attr), { id, attr }));
+}
+/** A side card's words once the model's answer is in. */
+async function sideCard(page, kind, ms = 45_000) {
+  return waitIn(page, (k) => {
+    const t = document.querySelector(`[data-side-card="${k}"]`)?.textContent ?? "";
+    return t.includes("Mock") ? t : null;
+  }, kind, ms);
 }
 
 /** The editor's page starts, in order: an inline atom or a block's attribute. */
@@ -622,17 +846,9 @@ async function pageStarts(page) {
     return out;
   });
 }
-/** The drawn label of a page start ("p. 7"), from its element's ::before or text. */
-async function pageStartLabel(page, pos) {
-  return page.evaluate((p) => {
-    const ed = window.__docsEditor;
-    const dom = ed.view.nodeDOM(p);
-    if (!dom || dom.nodeType !== 1) return null;
-    const before = getComputedStyle(dom, "::before").content;
-    const after = getComputedStyle(dom, "::after").content;
-    const r = dom.getBoundingClientRect();
-    return { before, after, text: dom.textContent, attrs: [...dom.attributes].map((a) => `${a.name}=${a.value}`).join(" "), x: r.left, y: r.top, display: getComputedStyle(dom, "::before").display };
-  }, pos);
+/** Page starts inside a paragraph with at least `n` characters on each side. */
+async function inlineStarts(page, n) {
+  return (await pageStarts(page)).filter((s) => s.on === "paragraph" && s.before.length >= n && s.after.length >= n);
 }
 async function figures(page) {
   return page.evaluate(() => {
@@ -648,43 +864,9 @@ async function figures(page) {
     return out;
   });
 }
-async function toasts(page) {
-  return page.evaluate(() => window.__toasts ?? []);
-}
-
-
-/** Run a page editor command by its label through Search the menus (Alt+/),
-    as a person does. False when the field did not open. */
-async function menuCommand(page, label) {
-  await page.evaluate(() => window.__docsEditor.commands.focus());
-  await page.keyboard.press("Alt+/");
-  await sleep(400);
-  const field = page.locator('input[aria-label="Search the menus"], input[placeholder*="Search the menus"]').first();
-  if (!(await field.count())) return false;
-  await field.fill(label);
-  await sleep(500);
-  await page.keyboard.press("Enter");
-  await sleep(500);
-  return true;
-}
-
-
-/** Center a figure object and click its media (or its middle), as a person
-    clicks a picture. Returns the point pressed. */
-async function clickFigure(page, pos) {
-  await page.evaluate((p) => window.__docsEditor.view.nodeDOM(p)?.scrollIntoView({ block: "center" }), pos);
-  await sleep(600);
-  const box = await page.evaluate((p) => {
-    const el = window.__docsEditor.view.nodeDOM(p);
-    const media = el?.querySelector("img, svg, video, iframe") ?? el;
-    return media?.getBoundingClientRect().toJSON() ?? null;
-  }, pos);
-  if (!box) return null;
-  const x = box.x + box.width / 2;
-  const y = box.y + Math.min(box.height / 2, 120);
-  await clickAt(page, x, y);
-  await sleep(600);
-  return { x, y };
+async function figureBy(page, test) {
+  const figs = await figures(page);
+  return figs.find((f) => test(f.caption ?? "")) ?? null;
 }
 
 /** Toasts, as the page announces them (the dissect:toast event). */
@@ -695,7 +877,64 @@ async function listenToasts(page) {
     window.addEventListener("dissect:toast", (e) => window.__toasts.push(e.detail?.text ?? JSON.stringify(e.detail)), true);
   });
 }
+async function toasts(page) {
+  return page.evaluate(() => window.__toasts ?? []);
+}
 
+/** Search the menus (Alt+/) with `query` typed: its rows, or null when the
+    field did not open. */
+async function searchMenus(page, query) {
+  await page.evaluate(() => window.__docsEditor.commands.focus());
+  await page.keyboard.press("Alt+/");
+  const field = page.locator(".docs-search-open input").first();
+  if (!(await field.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false))) return null;
+  await field.fill(query);
+  await waitIn(page, () => document.querySelector(".docs-search-row, .docs-search-empty"), null, 5000);
+  return page.evaluate(() =>
+    [...document.querySelectorAll(".docs-search-row")].map((r) => ({
+      label: r.querySelector(".docs-search-label")?.textContent ?? "",
+      where: r.querySelector(".docs-search-where")?.textContent ?? "",
+      off: r.getAttribute("aria-disabled") === "true",
+      text: r.textContent,
+    })),
+  );
+}
+/** Run a page editor command by its label through Search the menus, as a
+    person does. False when the field did not open or the command is off. */
+async function menuCommand(page, label) {
+  const rows = await searchMenus(page, label);
+  if (!rows) return false;
+  const i = Math.max(0, rows.findIndex((r) => r.label === label));
+  if (!rows[i] || rows[i].off) {
+    await page.keyboard.press("Escape");
+    return false;
+  }
+  await page.locator(".docs-search-row").nth(i).click();
+  await waitIn(page, () => !document.querySelector(".docs-search-open"), null, 5000);
+  return true;
+}
+/** A File > Download command's file: its name and bytes, or null. */
+async function download(page, label) {
+  const file = page.waitForEvent("download", { timeout: 30_000 }).catch(() => null);
+  const ran = await menuCommand(page, label);
+  const d = ran ? await file : null;
+  return d ? { name: d.suggestedFilename(), bytes: readFileSync(await d.path()) } : null;
+}
+/** The clipboard's plain text once it holds some. */
+async function clipboardText(page) {
+  return until(() => page.evaluate(() => navigator.clipboard.readText()).catch((e) => `(${e.message})`), 3000, 150);
+}
+
+/** Center a figure object in the band and press its media (the part in
+    view), as a person clicks a picture: the point, and whether the point
+    was the figure's. */
+async function clickFigure(page, pos) {
+  await page.evaluate((p) => window.__qa.showNode(p), pos);
+  const at = await page.evaluate((p) => window.__qa.figurePoint(p), pos);
+  if (!at) return null;
+  await clickAt(page, at.x, at.y);
+  return at;
+}
 
 /** Scroll each figure object into view and wait for its image, as a person
     scrolls through: lazy images load only near the view. Returns
@@ -707,7 +946,7 @@ async function loadFigureImages(page, timeout = 30_000) {
   const ms = [];
   const failed = [];
   for (const f of figs) {
-    await page.evaluate((p) => window.__docsEditor.view.nodeDOM(p)?.scrollIntoView({ block: "center" }), f.pos);
+    await page.evaluate((p) => window.__qa.showNode(p), f.pos);
     const t0 = Date.now();
     const ok = await page
       .waitForFunction((p) => {
@@ -724,6 +963,43 @@ async function loadFigureImages(page, timeout = 30_000) {
     } else failed.push(clip(f.caption, 24));
   }
   return { loaded, total, ms, failed };
+}
+
+/** The scroll tip, as a person reads it: the pointer at the pane's right
+    edge. Null when none shows. */
+async function scrollTip(page) {
+  const edge = await page.evaluate(() => {
+    const r = window.__qa.pane().getBoundingClientRect();
+    return { x: r.right - 6, y: r.top + r.height / 2 };
+  });
+  await page.mouse.move(edge.x - 40, edge.y);
+  await page.mouse.move(edge.x, edge.y, { steps: 5 });
+  const tip = await waitIn(page, () => document.querySelector(".docs-page-indicator")?.textContent || null, null, 5000);
+  await page.mouse.move(edge.x - 300, edge.y);
+  return tip;
+}
+/** Place a page start `dy` px above the pane's middle, where the tip reads. */
+async function placeAboveMiddle(page, pos, dy = 60) {
+  await page.evaluate(async ({ p, dy }) => {
+    const view = window.__docsEditor.view;
+    const r = window.__qa.pane(view.dom).getBoundingClientRect();
+    const middle = r.top + window.__qa.pane(view.dom).clientHeight / 2;
+    const el = view.nodeDOM(p);
+    const top = () => (el?.nodeType === 1 ? el.getBoundingClientRect().top : view.coordsAtPos(p).top);
+    await window.__qa.place(top, middle - dy, view.dom);
+  }, { p: pos, dy });
+}
+
+/** Version history from the clock at the title row's right end: the listed versions. */
+async function openVersions(page) {
+  await page.locator('[data-track="docs:version-history"]').first().click().catch(() => {});
+  await waitIn(page, () => document.querySelectorAll(".docs-versions-list .docs-versions-pick").length > 0, null, 30_000);
+  return page.evaluate(() => [...document.querySelectorAll(".docs-versions-list .docs-versions-pick")].map((b) => b.textContent.trim()));
+}
+async function closeVersions(page) {
+  await page.keyboard.press("Escape");
+  await page.locator(".docs-versions-bar button").first().click().catch(() => {});
+  await waitIn(page, () => !document.querySelector(".docs-versions"), null, 10_000);
 }
 
 /** Key-to-paint latency of the page editor: keydown to the frame after the
@@ -750,35 +1026,15 @@ function stats(values) {
   return `median ${q(0.5)} ms, p90 ${q(0.9)} ms, max ${Math.round(s.at(-1))} ms (n ${s.length})`;
 }
 
-
-/** What a person sees at the top of the page: the first block under the
-    page editor's header (title row, toolbar, ruler), and how far its top
-    stands from the header's bottom. The reader's own reading line
-    (lib/reading-position.ts, 80 px under the pane's top) lies under that
-    header; this is the line in view. Runs in the page. */
-function readingLine() {
-  // The app's reading line (lib/reading-position.ts): 80 px under the pane's
-  // top edge. The header fades in and out over the pane, so it is no measure.
-  let pane = document.querySelector(".docs-prose");
-  while (pane && !(/(auto|scroll)/.test(getComputedStyle(pane).overflowY) && pane.scrollHeight > pane.clientHeight)) pane = pane.parentElement;
-  const top = (pane ? pane.getBoundingClientRect().top : 0) + 80;
-  const els = [...document.querySelectorAll(".docs-prose [data-block-id]")];
-  const hit = els.find((e) => e.getBoundingClientRect().bottom > top);
-  let saved = null;
-  try {
-    saved = Object.entries(sessionStorage).find(([k]) => k.startsWith("unitos-reader-position:"))?.[1] ?? null;
-  } catch {
-    saved = null;
-  }
-  return hit ? { id: hit.dataset.blockId, dy: Math.round(hit.getBoundingClientRect().top - top), text: hit.textContent.slice(0, 40), saved: saved ? JSON.parse(saved).blockId : null } : null;
-}
-
 // ── The run's documents ─────────────────────────────────────────────────────
 
-const ctx = { notebookId: null, sectionId: null, docs: {}, bytes: {}, media: null };
+// `alone` is the run alone's mark ("" on the first run): every fixture's
+// bytes and address carry it, so the run alone adds its documents fresh.
+const ctx = { notebookId: null, sectionId: null, docs: {}, bytes: {}, media: null, alone: "" };
+const tagged = (tag = "") => `${STAMP}${ctx.alone}${tag}`;
 
 async function prepare() {
-  browser = await chromium.launch({ executablePath: CHROME, args: ["--autoplay-policy=no-user-gesture-required"] });
+  await launch();
   ctx.media = await drawMedia(browser);
   const files = { ...ctx.media };
   files["/article.html"] = { type: "text/html; charset=utf-8", body: Buffer.from(articleHtml(STAMP)) };
@@ -797,7 +1053,7 @@ async function prepare() {
 
 /** A fresh import of one of the fixtures; `tag` makes its bytes or address new. */
 async function fresh(kind, tag = "") {
-  const t = `${STAMP}${tag}`;
+  const t = tagged(tag);
   let added;
   if (kind === "pdf") added = await add(ctx.notebookId, { bytes: stamped(ctx.bytes.attention, t), name: `attention-${t}.pdf`, type: "application/pdf" });
   else if (kind === "url") added = await add(ctx.notebookId, { url: `${FIXTURE}/article.html?run=${t}` });
@@ -848,9 +1104,11 @@ RISKS.R1 = async (theme) => {
     await clickPos(page, at.to);
     await page.keyboard.type("x");
     await waitSaved(page);
-    await sleep(800);
     const after = await rowsOf(added.id);
-    const edits = await editsSince(added.id, since);
+    const edits = (await until(async () => {
+      const e = await editsSince(added.id, since);
+      return e.length ? e : null;
+    }, 5000)) ?? [];
     const changed = after.filter((r) => before.find((b) => b.id === r.id)?.hash !== r.hash);
     const gone = before.filter((b) => !after.some((r) => r.id === b.id));
     const kinds = edits.map((e) => e.kind);
@@ -876,14 +1134,15 @@ RISKS.R1 = async (theme) => {
 RISKS.R2 = async (theme) => {
   const added = await fresh("markdown", `-r2${theme[0]}`);
   const row = await documentRow(added.id);
-  const alien = { type: "futureObject", attrs: { blockId: `qa${STAMP}alien` }, content: [{ type: "text", text: "Words of a node from a newer build." }] };
+  const alien = { type: "futureObject", attrs: { blockId: `qa${tagged("alien")}` }, content: [{ type: "text", text: "Words of a node from a newer build." }] };
   const rich = { ...row.richText, content: [...row.richText.content, alien] };
   await db.document.update({ where: { id: added.id }, data: { richText: rich } });
   const { page, errors, context } = await newPage(theme);
   let loads = 0;
   page.on("load", () => loads++);
   await open(page, ctx.notebookId, added.id, { wait: false });
-  await sleep(9000);
+  // The one reload, then the frame with the reason: no reload after it.
+  await waitIn(page, () => [...document.querySelectorAll(".docs-shell p, .docs-shell div")].some((e) => /can.t show/.test(e.textContent ?? "")), null, 30_000);
   const state = await page.evaluate(() => ({
     prose: document.querySelector(".docs-prose")?.textContent.length ?? 0,
     frame: Boolean(document.querySelector(".docs-shell .docs-title-row")),
@@ -906,7 +1165,7 @@ RISKS.R3 = async (theme) => {
   const { page, errors, context } = await newPage(theme);
   await open(page, ctx.notebookId, added.id);
   const starts = await pageStarts(page);
-  const inline = starts.filter((s) => s.on === "paragraph" && s.before.length >= 20 && s.after.length >= 20);
+  const inline = await inlineStarts(page, 20);
   check("R3", starts.length > 0, `(${theme}) the PDF import shows page starts`, `${starts.length}: ${starts.slice(0, 16).map((s) => `p. ${s.page}${s.on === "paragraph" || s.on === "heading" ? "" : `[${s.on}]`}`).join(" ")}`);
   if (!inline.length) {
     fail("R3", "a page start inside a paragraph", "none found");
@@ -914,60 +1173,43 @@ RISKS.R3 = async (theme) => {
     return;
   }
   const s = inline[0];
-  const label = await pageStartLabel(page, s.pos);
-  note("R3", `the page start p. ${s.page} draws`, JSON.stringify(label));
   // Select from 20 characters before the page start to 20 after.
   const from = s.pos - 20;
   const to = s.pos + 1 + 20;
-  await dragSelect(page, from, to);
+  const opened = await dragSelect(page, from, to);
   const selected = await page.evaluate(() => window.getSelection().toString());
   const words = `${s.before.slice(-20)}${s.after.slice(0, 20)}`;
-  const toolbar = await popoverOpen(page);
-  check("R3", toolbar, `(${theme}) a selection across p. ${s.page} opens the toolbar in Viewing`, `selection "${clip(selected, 60)}"`);
+  check("R3", opened, `(${theme}) a selection across p. ${s.page} opens the toolbar in Viewing`, `selection "${clip(selected, 60)}"`);
   // The clipboard: the words only.
   await page.keyboard.press("Control+c");
-  await sleep(300);
-  const copied = await page.evaluate(() => navigator.clipboard.readText()).catch((e) => `(${e.message})`);
-  check("R3", copied.replace(/\s+/g, " ").trim() === words.replace(/\s+/g, " ").trim() && !/p\.\s*\d/.test(copied), `(${theme}) Ctrl+C across p. ${s.page} copies the words alone`, `copied "${clip(copied, 80)}", words "${clip(words, 80)}"`);
+  const copied = await clipboardText(page);
+  check("R3", squash(copied) === squash(words) && !/p\.\s*\d/.test(copied), `(${theme}) Ctrl+C across p. ${s.page} copies the words alone`, `copied "${clip(copied, 80)}", words "${clip(words, 80)}"`);
   // Highlight, reload, and read the mark's words. The toolbar stays open
   // after Ctrl+C; when it does not, the words are selected again.
-  const sourcesBefore = (await sourcesOf(added.id)).length;
   if (!(await popoverOpen(page))) {
     note("R3", `(${theme}) the toolbar closed after Ctrl+C`, "the words are selected again");
     await dragSelect(page, from, to);
   }
-  const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
-  if (await colors.count()) await colors.first().click();
-  let sources = await sourcesOf(added.id);
-  for (let i = 0; i < 40 && sources.length <= sourcesBefore; i++) {
-    await sleep(500);
-    sources = await sourcesOf(added.id);
-  }
-  const made = sources.slice(sourcesBefore);
+  const made = await pressHighlight(page, added.id);
   check("R3", made.length === 1 && made[0].quotedText === words, `(${theme}) the highlight's quote is the words across the page start`, made.length ? `quote "${clip(made[0].quotedText, 80)}" at ${made[0].startOffset}-${made[0].endOffset} of ${made[0].blockId}` : "no source stored");
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
-  await sleep(2500);
-  const painted = made.length
-    ? await page.evaluate((id) => [...document.querySelectorAll(`[data-source-id="${id}"]`)].map((e) => e.textContent).join(""), made[0].id)
-    : "";
+  await reload(page);
+  const marks = made.length ? await painted(page, made[0].id, words) : [];
   const path = await shot(page, `R3-mark-across-page-start-${theme}`);
-  check("R3", made.length > 0 && painted.replace(/\s+/g, "") === words.replace(/\s+/g, ""), `(${theme}) after a reload the mark covers the same words`, `painted "${clip(painted, 80)}", ${path}`);
+  check("R3", made.length > 0 && squash(marks.join("")) === squash(words), `(${theme}) after a reload the mark covers the same words`, `painted "${clip(marks.join(""), 80)}", ${path}`);
   // Backspace at the page start, in Editing, as a person holds it: each press
   // takes the letter before the page start, and the page start stays.
   await setMode(page, "editing");
   const again = (await pageStarts(page)).find((x) => x.page === s.page);
   await clickPos(page, again.pos + 1);
-  const textBefore = await page.evaluate((p) => window.__docsEditor.state.doc.resolve(p).parent.textContent, again.pos);
+  const textBefore = await page.evaluate((p) => window.__qa.blockText(p), again.pos);
   for (let i = 0; i < 3; i++) {
     await page.keyboard.press("Backspace");
-    await sleep(200);
+    await sleep(150);
   }
   const afterBackspace = (await pageStarts(page)).filter((x) => x.page === s.page);
-  const textAfter = afterBackspace.length ? await page.evaluate((p) => window.__docsEditor.state.doc.resolve(p).parent.textContent, afterBackspace[0].pos) : "";
+  const textAfter = afterBackspace.length ? await page.evaluate((p) => window.__qa.blockText(p), afterBackspace[0].pos) : "";
   check("R3", afterBackspace.length === 1 && textAfter.length === textBefore.length - 3, `(${theme}) three Backspaces at p. ${s.page} take three letters before it and keep the page start`, `page starts for p. ${s.page}: ${afterBackspace.length}; words ${textBefore.length} → ${textAfter.length}; before it now "${afterBackspace[0]?.before.slice(-12) ?? ""}"`);
   await page.keyboard.press("Control+z");
-  await sleep(300);
   // A page that begins at a paragraph's start: Backspace joins the paragraph
   // to the one above, and the page start stays where its words begin.
   const opening = (await pageStarts(page)).find((x) => x.page > 1 && x.on === "paragraph" && x.before === "" && x.after.length > 10);
@@ -983,18 +1225,15 @@ RISKS.R3 = async (theme) => {
     const paragraphs = await count();
     await clickPos(page, opening.pos + 1);
     await page.keyboard.press("Backspace");
-    await sleep(300);
     const joined = (await pageStarts(page)).filter((x) => x.page === opening.page);
     const paragraphsAfter = await count();
     check("R3", joined.length === 1 && paragraphsAfter === paragraphs - 1 && joined[0].before.length > 0, `(${theme}) Backspace at a paragraph that opens with p. ${opening.page} joins it to the one above, the page start kept`, `paragraphs ${paragraphs} → ${paragraphsAfter}; p. ${opening.page} now after "${joined[0]?.before.slice(-15) ?? ""}"`);
     await page.keyboard.press("Control+z");
-    await sleep(300);
   }
   // A deletion that takes the page start with words on both sides.
   const cur = (await pageStarts(page)).find((x) => x.page === s.page) ?? again;
   await dragSelect(page, cur.pos - 6, cur.pos + 7);
   await page.keyboard.press("Delete");
-  await sleep(500);
   const afterDelete = (await pageStarts(page)).filter((x) => x.page === s.page);
   check("R3", afterDelete.length === 1, `(${theme}) a deletion across p. ${s.page} puts the page start back where it closed`, `page starts for p. ${s.page}: ${afterDelete.length}${afterDelete[0] ? `, before "${afterDelete[0].before.slice(-12)}" after "${afterDelete[0].after.slice(0, 12)}"` : ""}`);
   // Undo both, and wait for the save.
@@ -1020,22 +1259,17 @@ RISKS.R5 = async (theme) => {
     return;
   }
   // A click on the figure opens its tools; Analyze.
-  await clickFigure(page, fig3.pos);
-  const tools = await popoverOpen(page);
+  const pressed = await clickFigure(page, fig3.pos);
+  const tools = await toolbar(page);
   const analyze = page.locator('[data-selection-popover] [data-track="analyze"]');
-  check("R5", tools && (await analyze.count()) > 0, `(${theme}) a click on a figure opens its tools with Analyze`, `toolbar ${tools}`);
-  if (await analyze.count()) {
-    await analyze.click();
-    for (let i = 0; i < 60 && !(await sourcesOf(added.id)).some((x) => x.blockId === fig3.blockId); i++) await sleep(500);
-    await sleep(1500);
-  }
-  let sources = await sourcesOf(added.id);
-  const src = sources.find((s) => s.blockId === fig3.blockId);
-  check("R5", Boolean(src), `(${theme}) Analyze anchors to the figure's row`, src ? `quote "${src.quotedText}" ${src.note.derivationType}` : JSON.stringify(sources.map((s) => s.quotedText)));
+  check("R5", tools && (await analyze.count()) > 0, `(${theme}) a click on a figure opens its tools with Analyze`, `toolbar ${tools}; pressed ${JSON.stringify(pressed)}`);
+  if (await analyze.count()) await analyze.first().click();
+  const src = await sourceWhere(added.id, (x) => x.blockId === fig3.blockId, 30_000);
+  check("R5", Boolean(src), `(${theme}) Analyze anchors to the figure's row`, src ? `quote "${src.quotedText}" ${src.note.derivationType}` : JSON.stringify((await sourcesOf(added.id)).map((s) => s.quotedText)));
   // The ring in the kind color, the label chip, data-source-id: painted once
   // the stored annotation is on screen, with the figure no longer selected.
-  await page.keyboard.press("Escape");
-  await page.waitForFunction((p) => window.__docsEditor.view.nodeDOM(p)?.hasAttribute("data-source-id"), fig3.pos, { timeout: 20_000 }).catch(() => {});
+  await calm(page);
+  await waitIn(page, (p) => window.__docsEditor.view.nodeDOM(p)?.hasAttribute("data-source-id"), fig3.pos);
   const ring = await page.evaluate((p) => {
     const el = window.__docsEditor.view.nodeDOM(p);
     if (!el) return null;
@@ -1055,22 +1289,28 @@ RISKS.R5 = async (theme) => {
   // Delete the figure in Editing, as a person: a click on it, Escape for its
   // tools, Delete.
   await setMode(page, "editing");
+  const selectedAt = (p) => page.evaluate((q) => {
+    const sel = window.__docsEditor.state.selection;
+    return sel.constructor.name === "NodeSelection" && sel.from === q;
+  }, p);
+  let first = true;
   const pick = async (caption) => {
-    const f = (await figures(page)).find((x) => (x.caption ?? "").trim() === caption);
+    const f = await figureBy(page, (c) => c.trim() === caption);
     if (!f) return null;
-    const selected = () => page.evaluate((p) => {
-      const sel = window.__docsEditor.state.selection;
-      return sel.constructor.name === "NodeSelection" && sel.from === p;
-    }, f.pos);
+    await calm(page);
     await clickFigure(page, f.pos);
+    const opened = await toolbar(page);
     await page.keyboard.press("Escape");
-    await sleep(200);
-    // A press that closed an open card selects nothing: a person presses again.
-    if (!(await selected())) {
-      note("R5", `(${theme}) the first press on "${caption}" did not select it`, "a second press does");
+    const selected = Boolean(await until(() => selectedAt(f.pos), 2000, 100));
+    if (first) {
+      first = false;
+      check("R5", opened && selected, `(${theme}) in Editing the first press on "${caption}" opens its tools and selects it`, `tools ${opened}, selected ${selected}`);
+    }
+    // A person presses again when the first press took nothing.
+    if (!selected) {
       await clickFigure(page, f.pos);
       await page.keyboard.press("Escape");
-      await sleep(200);
+      await until(() => selectedAt(f.pos), 2000, 100);
     }
     return f;
   };
@@ -1081,21 +1321,16 @@ RISKS.R5 = async (theme) => {
   });
   await page.keyboard.press("Delete");
   await waitSaved(page);
-  await sleep(1500);
-  sources = await sourcesOf(added.id);
-  const afterDelete = sources.find((s) => s.id === src.id);
+  const afterDelete = await sourceWhere(added.id, (s) => s.id === src.id && s.orphaned, 10_000) ?? (await sourcesOf(added.id)).find((s) => s.id === src.id);
   const movedTo = afterDelete && !afterDelete.orphaned ? await rowText(afterDelete.blockId) : null;
   const gone = !(await figures(page)).some((f) => (f.caption ?? "").trim() === "Figure 3");
   check("R5", gone && afterDelete?.orphaned === true, `(${theme}) deleting the figure orphans its annotation (never moves it into "As Figure 3 shows")`, afterDelete ? `before Delete: ${beforeDelete}; figure gone ${gone}, orphaned ${afterDelete.orphaned}${movedTo ? `, now on ${movedTo.type} "${clip(movedTo.text, 60)}"` : ""}` : "source gone");
   // Ctrl+Z brings the figure and its annotation back.
   await page.keyboard.press("Control+z");
   await waitSaved(page);
-  await sleep(1500);
-  sources = await sourcesOf(added.id);
-  const back = sources.find((s) => s.id === src.id);
   const figsBack = await figures(page);
-  const onFigure = back && figsBack.some((f) => f.blockId === back.blockId);
-  check("R5", Boolean(back && !back.orphaned && onFigure), `(${theme}) Ctrl+Z brings the figure back and its annotation with it`, back ? `orphaned ${back.orphaned}, on a figure ${onFigure}` : "source gone");
+  const back = await sourceWhere(added.id, (s) => s.id === src.id && !s.orphaned && figsBack.some((f) => f.blockId === s.blockId), 10_000);
+  check("R5", Boolean(back), `(${theme}) Ctrl+Z brings the figure back and its annotation with it`, back ? `on ${back.blockId}` : JSON.stringify((await sourcesOf(added.id)).filter((s) => s.id === src.id).map((s) => ({ orphaned: s.orphaned, blockId: s.blockId }))));
   // Cut and paste the figure under the heading "The measurements": it moves,
   // and the annotation follows it.
   const index = async () => page.evaluate(() => {
@@ -1104,21 +1339,28 @@ RISKS.R5 = async (theme) => {
     return { figure: out.indexOf("F:Figure 3"), heading: out.indexOf("The measurements") };
   });
   const before = await index();
-  if (await pick("Figure 3")) {
+  const cut = await pick("Figure 3");
+  if (cut) {
     await page.keyboard.press("Control+x");
-    await sleep(500);
+    await waitIn(page, (id) => {
+      let found = false;
+      window.__docsEditor.state.doc.descendants((n) => {
+        if (n.attrs?.blockId === id) found = true;
+        return !found;
+      });
+      return !found;
+    }, cut.blockId, 5000);
     const target = await find(page, "The measurements");
     await clickPos(page, target.to);
     const caret = await page.evaluate(() => window.__docsEditor.state.selection.$from.parent.textContent.slice(0, 20));
     await page.keyboard.press("End");
     await page.keyboard.press("Control+v");
     await waitSaved(page);
-    await sleep(1500);
     const after = await index();
-    const moved = (await figures(page)).find((f) => f.caption?.trim() === "Figure 3");
-    sources = await sourcesOf(added.id);
-    const followed = sources.find((s) => s.id === src.id);
-    check("R5", Boolean(moved && after.figure > after.heading && followed && !followed.orphaned && followed.blockId === moved.blockId), `(${theme}) cut and paste moves the figure under "The measurements" and the annotation follows it`, `caret in "${caret}"; figure at ${before.figure} → ${after.figure} (heading ${after.heading}); source on ${followed?.blockId === moved?.blockId ? "the moved figure" : followed?.blockId} orphaned ${followed?.orphaned}`);
+    const moved = await figureBy(page, (c) => c.trim() === "Figure 3");
+    const followed = moved ? await sourceWhere(added.id, (s) => s.id === src.id && !s.orphaned && s.blockId === moved.blockId, 10_000) : null;
+    const now = (await sourcesOf(added.id)).find((s) => s.id === src.id);
+    check("R5", Boolean(moved && after.figure > after.heading && followed), `(${theme}) cut and paste moves the figure under "The measurements" and the annotation follows it`, `caret in "${caret}"; figure at ${before.figure} → ${after.figure} (heading ${after.heading}); source on ${now?.blockId === moved?.blockId ? "the moved figure" : now?.blockId} orphaned ${now?.orphaned}`);
     await shot(page, `R5-after-cut-paste-${theme}`);
   }
   if (errors.length) note("R5", "console", errors.slice(0, 3).join(" | "));
@@ -1139,15 +1381,15 @@ RISKS.R6 = async (theme) => {
       ...stored.richText,
       content: [
         ...stored.richText.content,
-        { type: "figure", attrs: { blockId: `qa${STAMP}f1`, mediaId: foreign.id, caption: "Foreign figure", page: null, region: null } },
-        { type: "figure", attrs: { blockId: `qa${STAMP}f2`, mediaId: own.id, caption: "Own figure", html: '<img src="x" onerror="alert(1)">', page: null, region: null } },
+        { type: "figure", attrs: { blockId: `qa${tagged("f1")}`, mediaId: foreign.id, caption: "Foreign figure", page: null, region: null } },
+        { type: "figure", attrs: { blockId: `qa${tagged("f2")}`, mediaId: own.id, caption: "Own figure", html: '<img src="x" onerror="alert(1)">', page: null, region: null } },
       ],
     };
     const put = await api(`/api/documents/${web.id}/rich-text`, "PUT", { richText: crafted, rev: stored.richTextRev });
     const after = await documentRow(web.id);
     const json = JSON.stringify(after.richText);
-    check("R6", !json.includes(foreign.id), "a save with another document's mediaId drops that figure", `PUT ${put.status}; stored holds the foreign mediaId: ${json.includes(foreign.id)}`);
-    check("R6", !json.includes("onerror"), "a save with an html attribute on a figure keeps no html", `stored holds the html: ${json.includes("onerror")}`);
+    check("R6", put.status === 200 && !json.includes(foreign.id), "a save with another document's mediaId drops that figure", `PUT ${put.status}; stored holds the foreign mediaId: ${json.includes(foreign.id)}`);
+    check("R6", put.status === 200 && !json.includes("onerror"), "a save with an html attribute on a figure keeps no html", `stored holds the html: ${json.includes("onerror")}`);
     // Put the stored copy back as it was.
     const fresh2 = await documentRow(web.id);
     await api(`/api/documents/${web.id}/rich-text`, "PUT", { richText: stored.richText, rev: fresh2.richTextRev });
@@ -1166,16 +1408,15 @@ RISKS.R6 = async (theme) => {
   await clickFigure(page, figs[0].pos);
   await page.keyboard.press("Escape");
   await page.keyboard.press("Control+c");
-  await sleep(400);
-  const copied = await page.evaluate(async () => {
+  const copied = await until(() => page.evaluate(async () => {
     try {
       const items = await navigator.clipboard.read();
       const html = items[0]?.types.includes("text/html") ? await (await items[0].getType("text/html")).text() : "";
-      return { html: html.includes("data-docs-figure"), media: /data-media-id="[^"]+"/.exec(html)?.[0] ?? null };
+      return html ? { html: html.includes("data-docs-figure"), media: /data-media-id="[^"]+"/.exec(html)?.[0] ?? null } : null;
     } catch (e) {
       return { error: String(e) };
     }
-  });
+  }), 3000, 150);
   note("R6", `(${theme}) the clipboard after Ctrl+C on a figure`, JSON.stringify(copied));
   await open(page, ctx.notebookId, target.id);
   await listenToasts(page);
@@ -1186,9 +1427,11 @@ RISKS.R6 = async (theme) => {
   await page.keyboard.press("End");
   await page.keyboard.press("Enter");
   await page.keyboard.press("Control+v");
-  await sleep(1200);
+  const said = (await until(async () => {
+    const t = await toasts(page);
+    return t.length ? t : null;
+  }, 5000, 150)) ?? [];
   const after = (await figures(page)).length;
-  const said = await toasts(page);
   const path = await shot(page, `R6-paste-figure-${theme}`);
   check("R6", after === before, `(${theme}) a figure from another document does not paste`, `figures ${before} → ${after}, ${path}`);
   check("R6", said.length > 0, `(${theme}) a toast says why`, said.join(" | ") || "no toast");
@@ -1200,7 +1443,7 @@ RISKS.R6 = async (theme) => {
 // queue's keys to the notes tray; Editing types them.
 RISKS.R7 = async (theme) => {
   const added = await fresh("url", `-r7${theme[0]}`);
-  // Two pending notes on the import, for the queue's keys.
+  // Three pending notes on the import, for the queue's keys.
   const rows = await rowsOf(added.id);
   const para = rows.find((r) => r.type === "PARAGRAPH" && r.text.length > 80);
   const pending = [];
@@ -1218,6 +1461,7 @@ RISKS.R7 = async (theme) => {
     });
     pending.push(n.id);
   }
+  const statusCount = async () => (await db.note.findMany({ where: { id: { in: pending } }, select: { status: true } })).reduce((m, s) => ({ ...m, [s.status]: (m[s.status] ?? 0) + 1 }), {});
   const { page, errors, context } = await newPage(theme);
   await open(page, ctx.notebookId, added.id);
   const m = await mode(page);
@@ -1231,60 +1475,54 @@ RISKS.R7 = async (theme) => {
   const posted = Date.now();
   await page.keyboard.press("Enter");
   // The comment's card stands in the margin once the note is stored.
-  await page.waitForFunction(() => [...document.querySelectorAll("[data-comment-card]")].some((c) => c.getClientRects().length && c.textContent.includes("made in Viewing")), null, { timeout: 15_000 }).catch(() => {});
+  await waitIn(page, () => [...document.querySelectorAll("[data-comment-card]")].some((c) => c.getClientRects().length && c.textContent.includes("made in Viewing")), null, 15_000);
   const cardMs = Date.now() - posted;
   const card = await page.evaluate(() => [...document.querySelectorAll("[data-comment-card]")].filter((c) => c.getClientRects().length).map((c) => c.textContent.slice(0, 80)));
   const commentShot = await shot(page, `R7-comment-in-viewing-${theme}`);
   check("R7", card.some((c) => c.includes("Viewing")), `(${theme}) the comment's card shows in Viewing`, `${card.length} cards after ${cardMs} ms ${clip(card.join(" | "), 100)} ${commentShot}`);
   // Highlight and Explain in Viewing.
-  await selectWords(page, "the sediment which once rebuilt them");
-  const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
-  if (await colors.count()) await colors.first().click();
-  await sleep(1200);
+  const hl = await find(page, "the sediment which once rebuilt them");
+  await highlight(page, added.id, hl.from, hl.to);
   await selectWords(page, "the loss is measurable from one flood season to the next");
   await tool(page, "explain");
-  await page.waitForFunction(() => (document.querySelector('[data-side-card="explain"]')?.textContent ?? "").includes("Mock"), null, { timeout: 45_000 }).catch(() => {});
-  const explain = await page.locator('[data-side-card="explain"]').first().innerText().catch(() => "");
+  const explain = (await sideCard(page, "explain")) ?? (await page.locator('[data-side-card="explain"]').first().innerText().catch(() => ""));
   check("R7", explain.length > 20, `(${theme}) Explain answers in Viewing`, clip(explain, 80));
   const kinds = (await sourcesOf(added.id)).map((s) => s.note.derivationType ?? (s.note.color ? `highlight:${s.note.color}` : "comment"));
   note("R7", `(${theme}) annotations made in Viewing`, kinds.join(", "));
   // The queue's keys reach the notes tray.
-  await page.keyboard.press("Escape");
+  await calm(page);
   await page.mouse.click(5, 450);
-  await sleep(300);
   const focusBefore = await page.evaluate(() => {
     const a = document.activeElement;
     return a ? `${a.tagName}.${String(a.className).slice(0, 40)}${a.closest("[data-comment-card]") ? " (in a comment card)" : ""}` : "none";
   });
-  await page.keyboard.press("k");
-  await page.keyboard.press("k");
-  await page.keyboard.press("k");
-  await page.keyboard.press("Enter");
-  await sleep(1200);
+  for (const key of ["k", "k", "k", "Enter"]) {
+    await page.keyboard.press(key);
+    await sleep(120);
+  }
+  await until(async () => (await statusCount()).ACCEPTED >= 1, 10_000);
   await page.keyboard.press("j");
+  await sleep(120);
   await page.keyboard.press("Backspace");
-  await sleep(1500);
-  const statuses = await db.note.findMany({ where: { id: { in: pending } }, select: { status: true } });
-  const counts = statuses.reduce((m2, s) => ({ ...m2, [s.status]: (m2[s.status] ?? 0) + 1 }), {});
+  const counts = (await until(async () => {
+    const c = await statusCount();
+    return c.REJECTED >= 1 ? c : null;
+  }, 10_000)) ?? (await statusCount());
   check("R7", (counts.ACCEPTED ?? 0) >= 1 && (counts.REJECTED ?? 0) >= 1, `(${theme}) in Viewing, j k Enter Backspace act on the pending notes`, `${JSON.stringify(counts)}; focus before the keys: ${focusBefore}`);
   // Editing: the same keys type.
   await setMode(page, "editing");
   const at = await find(page, "What comes next");
   await clickPos(page, at.to);
   await page.keyboard.type(" jk");
-  await sleep(300);
   const typed = await page.evaluate(() => window.__docsEditor.state.doc.textContent.includes("What comes next jk"));
-  const statusesAfter = await db.note.findMany({ where: { id: { in: pending } }, select: { status: true } });
-  check("R7", typed && JSON.stringify(statusesAfter) === JSON.stringify(statuses), `(${theme}) in Editing the same keys type in the page`, `typed ${typed}`);
-  await page.keyboard.press("Backspace");
-  await page.keyboard.press("Backspace");
-  await page.keyboard.press("Backspace");
+  const countsAfter = await statusCount();
+  check("R7", typed && JSON.stringify(countsAfter) === JSON.stringify(counts), `(${theme}) in Editing the same keys type in the page`, `typed ${typed}; notes ${JSON.stringify(countsAfter)}`);
+  for (let i = 0; i < 3; i++) await page.keyboard.press("Backspace");
   await waitSaved(page).catch(() => {});
   // Editing is remembered on a reload.
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
-  await sleep(800);
-  check("R7", (await mode(page)) === "editing", `(${theme}) Editing is remembered on a reload`, `mode ${await mode(page)}`);
+  await reload(page);
+  const remembered = await until(async () => (await mode(page)) === "editing", 5000);
+  check("R7", remembered, `(${theme}) Editing is remembered on a reload`, `mode ${await mode(page)}`);
   if (errors.length) note("R7", "console", errors.slice(0, 3).join(" | "));
   await context.close();
 };
@@ -1301,40 +1539,33 @@ RISKS.R8 = async (theme) => {
   await clickPos(page, at.to);
   await page.keyboard.type(" (edited)");
   await waitSaved(page);
-  await sleep(500);
+  const edited = async () => JSON.stringify((await documentRow(added.id)).richText).includes("(edited)");
   // The route: 409 without replaceEdits.
   const refused = await api(`/api/documents/${added.id}/reparse`, "POST", {});
-  const stillEdited = JSON.stringify((await documentRow(added.id)).richText).includes("(edited)");
+  const stillEdited = await edited();
   check("R8", refused.status === 409 && stillEdited, "a re-parse of an edited import answers 409 and keeps the edit", `HTTP ${refused.status} ${clip(JSON.stringify(refused.body), 100)}; edit kept ${stillEdited}`);
   // A stale address added again: the edited import is not re-parsed over.
   await db.document.update({ where: { id: added.id }, data: { parserVersion: 1 } });
-  const again = await add(ctx.notebookId, { url: `${FIXTURE}/article.html?run=${STAMP}-r8` });
-  const keptAfterAdd = JSON.stringify((await documentRow(added.id)).richText).includes("(edited)");
+  const again = await add(ctx.notebookId, { url: `${FIXTURE}/article.html?run=${tagged("-r8")}` });
+  const keptAfterAdd = await edited();
   check("R8", keptAfterAdd, "a stale address added again never re-parses over an edited import", `the add gave ${again.id === added.id ? "the same document" : `another document (${again.id})`}, edit kept ${keptAfterAdd}`);
   // The document list asks first: ⋮ on the document's row, Re-parse, and
   // the question; Keep the edits keeps them.
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
-  await sleep(800);
+  await reload(page);
   let asked = null;
   await page.locator('[data-track="strip-documents"], [data-track="document-list"]').first().click().catch(() => {});
-  await sleep(700);
   // The open document's row is the active one; its ⋮ stands beside it.
   const actions = page.locator('[data-track="document-open"][data-active-row]').first().locator("xpath=..").locator('[data-track="document-actions"]').first();
+  await actions.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
   if (await actions.count()) {
     await actions.click();
-    await sleep(500);
-    await page.locator('[data-track="document-reparse"]').first().click().catch(() => {});
-    await sleep(600);
-    asked = await page.evaluate(() => {
-      const keep = document.querySelector('[data-track="document-reparse-keep"]');
-      return keep ? keep.closest('[role="group"]')?.textContent ?? "" : null;
-    });
+    await page.locator('[data-track="document-reparse"]').first().click({ timeout: 5000 }).catch(() => {});
+    asked = await waitIn(page, () => document.querySelector('[data-track="document-reparse-keep"]')?.closest('[role="group"]')?.textContent || null, null, 10_000);
     await shot(page, "R8-reparse-asks");
     await page.locator('[data-track="document-reparse-keep"]').first().click().catch(() => {});
-    await sleep(1500);
+    await waitIn(page, () => !document.querySelector('[data-track="document-reparse-keep"]'), null, 5000);
   }
-  const keptAfterNo = JSON.stringify((await documentRow(added.id)).richText).includes("(edited)");
+  const keptAfterNo = await edited();
   check("R8", Boolean(asked && /edit/i.test(asked)) && keptAfterNo, "Re-parse on an edited import asks first, and Keep keeps the edit", `${clip(asked ?? "no question found", 160)}; edit kept ${keptAfterNo}`);
   // Yes: replaceEdits; the version "Before re-parse" holds the edit.
   const replaced = await api(`/api/documents/${added.id}/reparse`, "POST", { replaceEdits: true });
@@ -1348,10 +1579,13 @@ RISKS.R8 = async (theme) => {
   const pageRows = await db.block.count({ where: { documentId: pdf.id, type: "PAGE" } });
   check("R8", !pdfRow.richText && pdfRow.handwritten && pageRows > 0 && pdfRow.importRev === null, "a shape switch to pages clears the rich text and builds PAGE rows", `HTTP ${shape.status}; richText ${pdfRow.richText ? "kept" : "cleared"}, handwritten ${pdfRow.handwritten}, PAGE rows ${pageRows}, importRev ${pdfRow.importRev}`);
   await open(page, ctx.notebookId, pdf.id, { wait: false });
-  await sleep(6000);
-  const view = await page.evaluate(() => ({ docs: Boolean(document.querySelector(".docs-prose")), pages: document.querySelectorAll('[data-page-block], .page-block, img[src*="/page/"]').length }));
+  // The reader's pages: its page blocks draw.
+  const view = (await waitIn(page, () => {
+    const pages = document.querySelectorAll('article [data-block-id], [data-page-block], img[src*="/page/"]').length;
+    return pages > 0 ? { docs: Boolean(document.querySelector(".docs-prose")), pages } : null;
+  }, null, 60_000)) ?? (await page.evaluate(() => ({ docs: Boolean(document.querySelector(".docs-prose")), pages: 0 })));
   await shot(page, "R8-shape-switch-pages");
-  check("R8", !view.docs, "after the switch the reader shows pages, not the page editor", JSON.stringify(view));
+  check("R8", !view.docs && view.pages > 0, "after the switch the reader shows pages, not the page editor", JSON.stringify(view));
   if (errors.length) note("R8", "console", errors.slice(0, 3).join(" | "));
   await context.close();
 };
@@ -1360,12 +1594,12 @@ RISKS.R8 = async (theme) => {
 // server refuses the save, and dedupe never hands out an edited import.
 RISKS.R9 = async (theme) => {
   const added = await fresh("pdf", `-r9${theme[0]}`);
-  const other = await db.notebook.create({ data: { title: `QA other account ${STAMP}`, userId: "qa-other-account", sections: { create: { title: "Notes", order: 0 } } } });
+  const other = await db.notebook.create({ data: { title: `QA other account ${tagged()}`, userId: "qa-other-account", sections: { create: { title: "Notes", order: 0 } } } });
   await db.notebookDocument.create({ data: { notebookId: other.id, documentId: added.id } });
   const { page, errors, context } = await newPage(theme);
   await open(page, ctx.notebookId, added.id);
   await page.click('[data-track="docs:mode"]');
-  await sleep(400);
+  await waitIn(page, () => document.querySelectorAll('[data-track^="docs:mode:"]').length > 0, null, 10_000);
   const menu = await page.evaluate(() => {
     const items = [...document.querySelectorAll('[data-track^="docs:mode:"]')].map((el) => ({ track: el.dataset.track, disabled: el.getAttribute("aria-disabled") === "true" || el.hasAttribute("disabled") }));
     const reason = [...document.querySelectorAll(".docs-menu-modes p")].map((p) => p.textContent).join(" ");
@@ -1387,19 +1621,20 @@ RISKS.R9 = async (theme) => {
     // Dedupe: an edited import is never handed to another add.
     const solo = await fresh("pdf", "-r9dedupe");
     const soloRow = await documentRow(solo.id);
-    await api(`/api/documents/${solo.id}/rich-text`, "PUT", { richText: { ...soloRow.richText, content: [...soloRow.richText.content, { type: "paragraph", attrs: { blockId: `qa${STAMP}edit` }, content: [{ type: "text", text: "An edit by another reader." }] }] }, rev: soloRow.richTextRev });
-    const second = await add(ctx.notebookId, { bytes: stamped(ctx.bytes.attention, `${STAMP}-r9dedupe`), name: "attention-again.pdf", type: "application/pdf" });
+    await api(`/api/documents/${solo.id}/rich-text`, "PUT", { richText: { ...soloRow.richText, content: [...soloRow.richText.content, { type: "paragraph", attrs: { blockId: `qa${tagged("edit")}` }, content: [{ type: "text", text: "An edit by another reader." }] }] }, rev: soloRow.richTextRev });
+    const second = await add(ctx.notebookId, { bytes: stamped(ctx.bytes.attention, tagged("-r9dedupe")), name: "attention-again.pdf", type: "application/pdf" });
     const secondRow = second.id ? await documentRow(second.id) : null;
     check("R9", second.id && second.id !== solo.id && secondRow?.importRev === secondRow?.richTextRev, "the same PDF added after an edit gives an unedited import", `first ${solo.id}, second ${second.id} (deduped ${second.deduped}), second rev ${secondRow?.richTextRev}/${secondRow?.importRev}`);
-    const unedited = await add(ctx.notebookId, { bytes: stamped(ctx.bytes.attention, `${STAMP}-r9dedupe`), name: "attention-third.pdf", type: "application/pdf" });
+    const unedited = await add(ctx.notebookId, { bytes: stamped(ctx.bytes.attention, tagged("-r9dedupe")), name: "attention-third.pdf", type: "application/pdf" });
     check("R9", unedited.id === second.id && unedited.deduped === true, "an unedited import is handed out again", `third ${unedited.id} deduped ${unedited.deduped}`);
   }
-  // The assistant's bar offers no edit commands on the shared import (C2).
+  // The assistant offers no edit commands on the shared import (C2).
   await selectWords(page, "attention").catch(() => {});
   const assistant = page.locator('[data-selection-popover] [data-track="assistant"]').first();
   if (await assistant.count()) {
     await assistant.click();
-    await sleep(600);
+    // Its own box (Viewing only): the field stands; no command chip in it.
+    await waitIn(page, () => document.querySelector("[data-assistant-bar], [data-side-card], [data-selection-popover] textarea, [data-selection-popover] input"), null, 10_000);
     const chips = await page.locator('[data-track^="assistant-command:"]').count();
     check("R9", chips === 0, `(${theme}) the assistant offers no edit commands on a shared import`, `${chips} command chips`);
   }
@@ -1461,14 +1696,13 @@ RISKS.R11 = async (theme) => {
     const item = new ClipboardItem({ "text/html": new Blob([h], { type: "text/html" }), "text/plain": new Blob([h.replace(/<[^>]+>/g, "\n")], { type: "text/plain" }) });
     await navigator.clipboard.write([item]);
   }, html);
+  const saveReq = page.waitForResponse((r) => r.url().includes("/rich-text") && r.request().method() === "PUT", { timeout: 120_000 }).catch(() => null);
   const t0 = Date.now();
   await page.keyboard.press("Control+v");
   await page.waitForFunction(() => window.__docsEditor.state.doc.textContent.includes("Pasted paragraph 400"), null, { timeout: 60_000 });
   const pasted = Date.now() - t0;
-  const saveReq = page.waitForResponse((r) => r.url().includes("/rich-text") && r.request().method() === "PUT", { timeout: 120_000 }).catch(() => null);
   const resp = await saveReq;
-  const saved = Date.now() - t0;
-  time("R11", "a 400-paragraph paste into the paper", `in the page after ${pasted} ms; the save answered ${resp?.status() ?? "none"} after ${saved} ms`);
+  time("R11", "a 400-paragraph paste into the paper", `in the page after ${pasted} ms; the save answered ${resp?.status() ?? "none"} after ${Date.now() - t0} ms`);
   await waitSaved(page, 120_000).catch(() => {});
   // Select all and Delete, then undo.
   await page.keyboard.press("Control+a");
@@ -1487,8 +1721,8 @@ RISKS.R11 = async (theme) => {
   // 200 pages (past it). Each add says which form it took; the one in the
   // page editor is timed as the paper was.
   for (const target of [LONG_PAGES, Math.round(LONG_PAGES * 1.35)]) {
-    const long = await longPdf(browser, target, `${STAMP}-${target}`);
-    const added = await add(ctx.notebookId, { bytes: long.bytes, name: `long-${long.pages}-${STAMP}.pdf`, type: "application/pdf" });
+    const long = await longPdf(browser, target, tagged(`-${target}`));
+    const added = await add(ctx.notebookId, { bytes: long.bytes, name: `long-${long.pages}-${tagged()}.pdf`, type: "application/pdf" });
     const row = added.id ? await documentRow(added.id) : null;
     const rows = added.id ? await db.block.count({ where: { documentId: added.id } }) : 0;
     const json = row?.richText ? JSON.stringify(row.richText).length : 0;
@@ -1532,6 +1766,7 @@ RISKS.R11 = async (theme) => {
       const t0 = Date.now();
       await longPage.keyboard.type("z");
       const resp = await saved;
+      await waitSaved(longPage, 60_000).catch(() => {});
       const stored = (await documentRow(added.id)).richText;
       time("R11", `the ${long.pages}-page import in the page editor`, `open to text/editor ${opens.map((o) => `${o.text}/${o.ready}`).join(", ")} ms; letters ${stats(lat.filter((l) => l.key.length === 1).map((l) => l.ms))}; Enter ${stats(lat.filter((l) => l.key === "Enter").map((l) => l.ms))}; a save answered ${resp?.status() ?? "none"} after ${Date.now() - t0} ms; stored ${JSON.stringify(stored).length} chars after the editor's saves (${json} at import)`);
       await longContext.close();
@@ -1553,22 +1788,25 @@ RISKS.R12 = async (theme) => {
   const starts = await pageStarts(page);
   const twelve = starts.find((s) => s.page === 12) ?? starts.at(-3);
   const put = page.waitForResponse((r) => r.url().includes("/position") && r.request().method() === "PUT", { timeout: 20_000 }).catch(() => null);
-  await page.evaluate((p) => {
-    const ed = window.__docsEditor;
-    const dom = ed.view.domAtPos(p);
-    const el = dom.node.nodeType === 1 ? dom.node : dom.node.parentElement;
-    el.scrollIntoView({ block: "start" });
-  }, twelve.pos);
+  // A person's scroll to p. 12: the wheel, so the reader saves the place.
+  await page.evaluate((p) => window.__qa.show(p, window.__qa.band().top + 40), twelve.pos);
+  await page.mouse.move(700, 500);
   await page.mouse.wheel(0, -60);
-  await sleep(2500);
   const saved = await put;
-  const at = await page.evaluate(readingLine);
+  // The tab's copy names the block on the reading line.
+  const at = await waitIn(page, () => {
+    const line = window.__qa.readingLine();
+    return line && line.saved === line.id ? line : null;
+  }, null, 10_000) ?? (await page.evaluate(() => window.__qa.readingLine()));
   await page.reload({ waitUntil: "domcontentloaded" });
   const t0 = Date.now();
   await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 120_000 });
   const mounted = Date.now() - t0;
-  await sleep(8000);
-  const back = await page.evaluate(readingLine);
+  // The reader restores the place and holds it while the layout settles.
+  const back = (await waitIn(page, (want) => {
+    const line = window.__qa.readingLine();
+    return line && line.id === want.id && Math.abs(line.dy - want.dy) < 40 ? line : null;
+  }, at, 30_000)) ?? (await page.evaluate(() => window.__qa.readingLine()));
   const path = await shot(page, `R12-position-after-reload-${theme}`);
   check("R12", Boolean(at && back && at.id === back.id && Math.abs(at.dy - back.dy) < 40), `(${theme}) scrolled to p. ${twelve.page}, reloaded: the same line is at the top`, `position saved ${saved?.status() ?? "no PUT"}; the editor mounted ${mounted} ms after the reload; before ${JSON.stringify(at)}, after ${JSON.stringify(back)} ${path}`);
   await context.close();
@@ -1633,7 +1871,6 @@ RISKS.R14 = async (theme) => {
   check("R14", Boolean(chart) && chart.right <= layout.text.right + 2 && chart.left >= layout.text.left - 2, `(${theme}) the 1400 px chart stays inside the text width`, `text ${layout.text.left}–${layout.text.right}; chart ${chart ? `${chart.left}–${chart.right} (svg ${chart.svg})` : "none"}`);
   // Typing beside the embed.
   await setMode(page, "editing");
-  const cap = await find(page, "Video 1").catch(() => null);
   const para = await page.evaluate(() => {
     const ed = window.__docsEditor;
     let pos = null;
@@ -1650,15 +1887,14 @@ RISKS.R14 = async (theme) => {
     await clickPos(page, para);
     await page.keyboard.press("Home");
     await page.keyboard.type("QQ");
-    await sleep(300);
     const where = await page.evaluate(() => ({ active: document.activeElement?.tagName, inPage: Boolean(document.activeElement?.closest(".ProseMirror")), typed: window.__docsEditor.state.doc.textContent.includes("QQ") }));
     check("R14", where.inPage && where.typed, `(${theme}) typing beside the embed types in the page`, JSON.stringify(where));
     await page.keyboard.press("Backspace");
     await page.keyboard.press("Backspace");
-  } else fail("R14", `(${theme}) a paragraph after the embed`, `none (caption found ${Boolean(cap)})`);
-  const fig5 = (await figures(page)).find((f) => /Figure 5/.test(f.caption ?? ""));
-  if (fig5) await page.evaluate((p) => window.__docsEditor.view.nodeDOM(p)?.scrollIntoView({ block: "center" }), fig5.pos);
-  await sleep(3500);
+  } else fail("R14", `(${theme}) a paragraph after the embed`, "none");
+  const fig5 = await figureBy(page, (c) => /Figure 5/.test(c));
+  if (fig5) await page.evaluate((p) => window.__qa.showNode(p), fig5.pos);
+  await waitIn(page, () => [...document.querySelectorAll(".docs-prose .docs-figure video")].some((v) => !v.paused || v.currentTime > 0), null, 20_000);
   const near = await videoState();
   const path = await shot(page, `R14-video-${theme}`);
   check("R14", near.length > 0 && near.some((v) => !v.paused || v.time > 0), `(${theme}) a looping video plays once near the view`, `far ${JSON.stringify(far)}, near ${JSON.stringify(near)} ${path}`);
@@ -1693,10 +1929,16 @@ RISKS.R15 = async (theme) => {
   const restored = v.body.richText ?? v.body.version?.richText;
   const row = await documentRow(web.id);
   const put = await api(`/api/documents/${web.id}/rich-text`, "PUT", { richText: restored, rev: row.richTextRev });
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
-  await sleep(3000);
+  await reload(page);
   const figs = await figures(page);
+  // Each figure draws its media once it loads: waited for, figure by figure.
+  for (const f of figs) {
+    await page.evaluate((p) => window.__qa.showNode(p), f.pos);
+    await waitIn(page, (p) => {
+      const el = window.__docsEditor.view.nodeDOM(p);
+      return [...(el?.querySelectorAll("img, svg, iframe, video") ?? [])].some((m) => m.getBoundingClientRect().width > 20 && (m.tagName !== "IMG" || (m.complete && m.naturalWidth > 0)));
+    }, f.pos, 15_000);
+  }
   const drawing = await page.evaluate(() =>
     [...document.querySelectorAll(".docs-prose .docs-figure")].map((f) => ({
       caption: f.textContent.trim().slice(-24),
@@ -1722,9 +1964,8 @@ RISKS.R16 = async (theme) => {
     const figs = await figures(page);
     const plates = [];
     for (const f of figs.slice(0, 4)) {
-      await reveal(page, f.pos);
-      await sleep(600);
-      plates.push(await page.evaluate((p) => {
+      await page.evaluate((p) => window.__qa.showNode(p), f.pos);
+      plates.push(await waitIn(page, (p) => {
         const el = window.__docsEditor.view.nodeDOM(p);
         const media = el?.querySelector("svg, img");
         if (!media) return null;
@@ -1740,7 +1981,7 @@ RISKS.R16 = async (theme) => {
           node = node.parentElement;
         }
         return { tag: media.tagName, bg };
-      }, f.pos));
+      }, f.pos, 10_000));
       await shot(page, `R16-dark-${d === web ? "web" : "pdf"}-figure-${plates.length}`);
     }
     const light = (c) => {
@@ -1759,15 +2000,15 @@ RISKS.R17 = async (theme) => {
   const web = await doc("url");
   const { page, errors, context } = await newPage(theme, { width: 1680, height: 1000 });
   await page.goto(`${BASE}/n/${ctx.notebookId}?doc=${pdf.id}&view=side&doc2=${web.id}`, { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => document.querySelectorAll(".docs-prose").length === 2, null, { timeout: 90_000 }).catch(() => {});
-  await sleep(2500);
-  const panes = await page.evaluate(() => [...document.querySelectorAll(".docs-prose")].length);
+  await waitIn(page, () => document.querySelectorAll(".docs-prose").length === 2, null, 90_000);
+  const starts = (await waitIn(page, () => {
+    const n = [...document.querySelectorAll(".docs-prose")].map((p) => p.querySelectorAll(".docs-page-start[data-page-start]").length);
+    return n.length === 2 && (n[0] > 0 || n[1] > 0) ? n : null;
+  }, null, 20_000)) ?? (await page.evaluate(() => [...document.querySelectorAll(".docs-prose")].map((p) => p.querySelectorAll(".docs-page-start[data-page-start]").length)));
+  const panes = starts.length;
   const path = await shot(page, `R17-side-by-side-${theme}`);
   check("R17", panes === 2, `(${theme}) Side by Side shows the PDF and the web page in two page editors`, `${panes} page editors ${path}`);
-  if (panes === 2) {
-    const starts = await page.evaluate(() => [...document.querySelectorAll(".docs-prose")].map((p) => p.querySelectorAll(".docs-page-start[data-page-start]").length));
-    check("R17", starts[0] > 0 || starts[1] > 0, `(${theme}) the PDF's page starts draw in its pane`, JSON.stringify(starts));
-  }
+  if (panes === 2) check("R17", starts[0] > 0 || starts[1] > 0, `(${theme}) the PDF's page starts draw in its pane`, JSON.stringify(starts));
   if (errors.length) note("R17", "console", errors.slice(0, 3).join(" | "));
   await context.close();
 };
@@ -1781,19 +2022,20 @@ RISKS.R18 = async (theme) => {
   // Every answer the page takes after a note: the refresh is a fetch of the
   // page's own address (a server component payload).
   const sizes = [];
+  let last = 0;
   page.on("response", async (r) => {
     const u = r.url();
     if (!u.includes(`/n/${ctx.notebookId}`) || r.request().resourceType() === "document") return;
     const body = await r.body().catch(() => null);
-    if (body) sizes.push({ u: u.replace(BASE, "").slice(0, 60), kb: Math.round(body.length / 1024) });
+    if (body) {
+      sizes.push({ u: u.replace(BASE, "").slice(0, 60), kb: Math.round(body.length / 1024) });
+      last = Date.now();
+    }
   });
   const at = await find(page, "Recurrent neural networks");
-  if (at) {
-    await dragSelect(page, at.from, at.to);
-    const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
-    if (await colors.count()) await colors.first().click();
-  }
-  await sleep(8000);
+  if (at) await highlight(page, pdf.id, at.from, at.to);
+  // The refresh, then a quiet second: no further payload on its way.
+  await until(() => sizes.length > 0 && Date.now() - last > 1500, 30_000);
   const full = await fetch(`${BASE}/n/${ctx.notebookId}?doc=${pdf.id}`).then((r) => r.text());
   time("R18", "the refresh payload on the paper after a note", `${sizes.length ? sizes.map((x) => `${x.kb} KB`).join(", ") : "no refresh seen"}; the full page ${Math.round(full.length / 1024)} KB`);
   check("R18", sizes.length > 0 && sizes.every((x) => x.kb < 1024), "the refresh after a note stays under 1 MB on the 15-page paper", JSON.stringify(sizes.slice(0, 4)));
@@ -1809,22 +2051,11 @@ RISKS.R20 = async (theme) => {
   // A highlight before the re-parse: an unedited import keeps its ids where
   // the words match, so the highlight stays exact.
   const at = await find(page, "Recurrent neural networks");
-  if (at) {
-    await dragSelect(page, at.from, at.to);
-    const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
-    if (await colors.count()) await colors.first().click();
-  }
-  let before = null;
-  for (let i = 0; i < 30 && !before; i++) {
-    before = (await sourcesOf(pdf.id)).find((x) => x.quotedText === "Recurrent neural networks") ?? null;
-    if (!before) await sleep(500);
-  }
+  const before = at ? (await highlight(page, pdf.id, at.from, at.to)).find((x) => x.quotedText === "Recurrent neural networks") ?? null : null;
   const re = await api(`/api/documents/${pdf.id}/reparse`, "POST", {});
   const afterSrc = before ? (await sourcesOf(pdf.id)).find((x) => x.id === before.id) : null;
   check("R20", Boolean(before && afterSrc && !afterSrc.orphaned && afterSrc.blockId === before.blockId && afterSrc.startOffset === before.startOffset), "a re-parse of an unedited import keeps a highlight exact (the same row, the same offsets)", before ? `before ${before.blockId} ${before.startOffset}-${before.endOffset}; after ${afterSrc?.blockId} ${afterSrc?.startOffset}-${afterSrc?.endOffset} orphaned ${afterSrc?.orphaned}` : "no highlight made");
-  await sleep(10000);
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
+  await reload(page);
   const images = await loadFigureImages(page);
   const failed = responses.filter((r) => /\/figure\//.test(r.url) && r.status >= 400);
   check("R20", re.status === 200 && failed.length === 0 && images.total > 0 && images.loaded === images.total, "after a re-parse every figure loads its new crop, no 404", `HTTP ${re.status}; ${images.loaded}/${images.total} images (${stats(images.ms)})${images.failed.length ? `; not in 30 s: ${images.failed.join(", ")}` : ""}; HTTP errors ${failed.map((f) => `${f.status} ${f.url}`).slice(0, 2).join(" ") || "none"}`);
@@ -1836,12 +2067,10 @@ RISKS.R20 = async (theme) => {
 RISKS.R21 = async (theme) => {
   if (theme !== THEMES[0]) return;
   const web = await doc("url");
-  for (let i = 0; i < 20; i++) {
-    const row = await documentRow(web.id);
-    if (Array.isArray(row.contents) && row.contents.length) break;
-    await sleep(1500);
-  }
-  const row = await documentRow(web.id);
+  const row = await until(async () => {
+    const r = await documentRow(web.id);
+    return Array.isArray(r.contents) && r.contents.length ? r : null;
+  }, 30_000, 1000) ?? (await documentRow(web.id));
   const titleRow = (await rowsOf(web.id)).find((r) => r.type === "HEADING" && r.text === "The Quiet Engine of River Deltas");
   const parts = Array.isArray(row.contents) ? row.contents : [];
   const titlePart = parts.find((p) => p.blockId === titleRow?.id);
@@ -1855,17 +2084,16 @@ RISKS.R22 = async (theme) => {
   const { page, context } = await newPage(theme);
   await open(page, ctx.notebookId, web.id);
   await setMode(page, "editing");
-  const figs = await figures(page);
-  const f = figs.find((x) => /Figure 4/.test(x.caption ?? "")) ?? figs[0];
+  const f = (await figureBy(page, (c) => /Figure 4/.test(c))) ?? (await figures(page))[0];
   const order = async () => (await figures(page)).map((x) => x.caption);
   const before = await order();
-  await reveal(page, f.pos);
-  const box = await page.evaluate((p) => window.__docsEditor.view.nodeDOM(p).getBoundingClientRect().toJSON(), f.pos);
+  const box = await page.evaluate((p) => window.__qa.showNode(p), f.pos);
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height + 300, { steps: 20 });
   await page.mouse.up();
-  await sleep(800);
+  // A drop would change the document: the layout holds still, and then the order is read.
+  await page.evaluate(() => window.__qa.settle());
   const after = await order();
   const text = await page.evaluate(() => window.__docsEditor.state.doc.textContent.length);
   check("R22", JSON.stringify(before) === JSON.stringify(after), `(${theme}) a drag on a figure object in Editing leaves it in place`, `order kept ${JSON.stringify(before) === JSON.stringify(after)}; words ${text}`);
@@ -1877,14 +2105,16 @@ RISKS.R23 = async (theme) => {
   const pdf = await doc("pdf");
   const { page, context } = await newPage(theme);
   await open(page, ctx.notebookId, pdf.id);
-  const s = (await pageStarts(page)).find((x) => x.on === "paragraph" && x.before.length >= 12 && x.after.length >= 12);
+  const s = (await inlineStarts(page, 12))[0];
   const phrase = `${s.before.slice(-12)}${s.after.slice(0, 12)}`.trim();
   await page.click(".docs-prose");
   await page.keyboard.press("Control+f");
-  await sleep(400);
+  await page.locator(".docs-findbar input").first().waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
   await page.keyboard.type(phrase, { delay: 20 });
-  await sleep(1200);
-  const count = await page.evaluate(() => document.querySelector(".docs-find-counter")?.textContent ?? "");
+  const count = (await waitIn(page, () => {
+    const t = document.querySelector(".docs-find-counter")?.textContent ?? "";
+    return /\b1 of 1\b/.test(t) ? t : null;
+  }, null, 10_000)) ?? (await page.evaluate(() => document.querySelector(".docs-find-counter")?.textContent ?? ""));
   const path = await shot(page, `R23-find-across-page-start-${theme}`);
   check("R23", /\b1 of 1\b/.test(count), `(${theme}) Find matches "${phrase}" across p. ${s.page}`, `bar "${clip(count, 60)}" ${path}`);
   await page.keyboard.press("Escape");
@@ -1899,8 +2129,8 @@ RISKS.C2 = async (theme) => {
   const pdf = await fresh("pdf", `-c2${theme[0]}`);
   const { page, errors, context } = await newPage(theme);
   await open(page, ctx.notebookId, pdf.id);
-  const s = (await pageStarts(page)).find((x) => x.on === "paragraph" && x.before.length >= 30 && x.after.length >= 30);
-  const base = await page.evaluate((p) => window.__docsEditor.state.doc.resolve(p).parent.textContent, s.pos);
+  const s = (await inlineStarts(page, 30))[0];
+  const base = await page.evaluate((p) => window.__qa.blockText(p), s.pos);
   const fig = (await figures(page))[0];
   // One word changed on each side of the page start.
   const changed = base.replace(/\bthe\b/, "one").replace(/\bthe\b(?![\s\S]*\bthe\b)/, "one");
@@ -1909,47 +2139,49 @@ RISKS.C2 = async (theme) => {
     { i: 1, op: "rewrite_block", blockId: fig.blockId, base: fig.caption, text: "A new caption", why: "QA: a caption is the figure's." },
   ];
   const landed = await page.evaluate((o) => (window.__applyAssistantOps ? window.__applyAssistantOps(o) : null), ops);
-  await sleep(1200);
-  const m = await mode(page);
+  const switched = await until(async () => (await mode(page)) === "editing", 10_000);
   check("C2", Array.isArray(landed?.ids) && landed.ids.length > 0, `(${theme}) a rewrite across p. ${s.page} lands`, clip(JSON.stringify(landed), 160));
   check("C2", (landed?.skipped ?? []).some((k) => k.i === 1 && k.reason === "object"), `(${theme}) an op on a figure is skipped as "object"`, clip(JSON.stringify(landed?.skipped), 120));
-  check("C2", m === "editing", `(${theme}) suggestions landing on an import in Viewing switch it to Editing`, `mode ${m}`);
+  check("C2", switched, `(${theme}) suggestions landing on an import in Viewing switch it to Editing`, `mode ${await mode(page)}`);
   const still = (await pageStarts(page)).filter((x) => x.page === s.page);
   check("C2", still.length === 1, `(${theme}) the pending suggestion across p. ${s.page} keeps the page start`, `${still.length}${still[0] ? ` before "${still[0].before.slice(-15)}" after "${still[0].after.slice(0, 15)}"` : ""}`);
   const pendingShot = await shot(page, `C2-pending-across-page-start-${theme}`);
   // Accept all suggestions (Search the menus): the words change, "p. N"
   // stays where the page begins.
   const accepted = await menuCommand(page, "Accept all suggestions");
-  await sleep(800);
+  await waitIn(page, () => !document.querySelector(".docs-prose [data-suggestion]"), null, 10_000);
   const after = (await pageStarts(page)).filter((x) => x.page === s.page);
-  const text = await page.evaluate((p) => window.__docsEditor.state.doc.resolve(p).parent.textContent, after[0]?.pos ?? s.pos);
+  const text = await page.evaluate((p) => window.__qa.blockText(p), after[0]?.pos ?? s.pos);
   const acceptShot = await shot(page, `C2-accepted-across-page-start-${theme}`);
   check("C2", after.length === 1 && text === changed, `(${theme}) Accept keeps "p. ${s.page}" and takes the new words`, `accept ${accepted}; page starts ${after.length}; words ${text === changed ? "the suggestion's" : `"${clip(text, 60)}"`} ${pendingShot} ${acceptShot}`);
   await waitSaved(page).catch(() => {});
   // The bar, as a person uses it: select words across the page start, the
   // toolbar's Assistant, the Shorten chip; the mock's suggestion lands.
-  const s2 = (await pageStarts(page)).find((x) => x.page !== s.page && x.on === "paragraph" && x.before.length >= 30 && x.after.length >= 30);
+  const s2 = (await inlineStarts(page, 30)).find((x) => x.page !== s.page);
   if (s2) {
     await dragSelect(page, s2.pos - 25, s2.pos + 1 + 25);
     const assistant = page.locator('[data-selection-popover] [data-track="assistant"]').first();
     if (await assistant.count()) {
       await assistant.click();
-      await sleep(800);
-      const chips = await page.evaluate(() => [...document.querySelectorAll('[data-track^="assistant-command:"]')].map((b) => b.dataset.track));
+      const chips = (await waitIn(page, () => {
+        const c = [...document.querySelectorAll('[data-track^="assistant-command:"]')].map((b) => b.dataset.track);
+        return document.querySelector("[data-assistant-bar]") && c.length >= 7 ? c : null;
+      }, null, 10_000)) ?? [];
       const bar = await page.evaluate(() => Boolean(document.querySelector("[data-assistant-bar]")));
       check("C2", bar && chips.length >= 7, `(${theme}) on an import the toolbar's Assistant opens the bar with the seven commands`, `bar ${bar}, chips ${chips.length}`);
       const shorten = page.locator('[data-track="assistant-command:shorten"], [data-track^="assistant-command:"]').first();
       if (await shorten.count()) {
         await shorten.click();
-        await page.waitForFunction(() => document.querySelectorAll(".docs-prose [data-suggestion]").length > 0, null, { timeout: 60_000 }).catch(() => {});
-        await sleep(1000);
-        const marks = await page.evaluate(() => [...document.querySelectorAll(".docs-prose [data-suggestion]")].map((e) => e.textContent).join(" | "));
+        const marks = (await waitIn(page, () => {
+          const m = [...document.querySelectorAll(".docs-prose [data-suggestion]")].map((e) => e.textContent).join(" | ");
+          return m || null;
+        }, null, 60_000)) ?? "";
         const kept = (await pageStarts(page)).filter((x) => x.page === s2.page).length;
         const barShot = await shot(page, `C2-bar-shorten-${theme}`);
         check("C2", marks.length > 0 && kept === 1, `(${theme}) Shorten across p. ${s2.page} lands suggestions and keeps the page start`, `suggested "${clip(marks, 80)}", page starts ${kept} ${barShot}`);
         const reject = page.locator('[data-assistant-bar] button:has-text("Reject")').first();
         if (await reject.count()) await reject.click();
-        await sleep(600);
+        await waitIn(page, () => !document.querySelector(".docs-prose [data-suggestion]"), null, 10_000);
       }
     } else fail("C2", `(${theme}) the toolbar's Assistant`, "no Assistant in the toolbar");
   }
@@ -1967,53 +2199,40 @@ RISKS.EDIT = async (theme) => {
   await open(page, ctx.notebookId, pdf.id);
   // A highlight, then words typed inside it: the mark grows, the quote stays.
   const at = await find(page, "Recurrent neural networks, long short-term memory");
-  await dragSelect(page, at.from, at.to);
-  const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
-  if (await colors.count()) await colors.first().click();
-  let hl = null;
-  for (let i = 0; i < 30 && !hl; i++) {
-    hl = (await sourcesOf(pdf.id)).find((x) => x.quotedText.startsWith("Recurrent neural networks")) ?? null;
-    if (!hl) await sleep(500);
-  }
+  const hl = (await highlight(page, pdf.id, at.from, at.to)).find((x) => x.quotedText.startsWith("Recurrent neural networks")) ?? null;
   await setMode(page, "editing");
   // Inside the highlight: after "Recurrent neural " (the abstract says
   // "neural networks" first, so the words are found from the highlight).
   await clickPos(page, at.from + "Recurrent neural ".length);
   await page.keyboard.type("QA ");
   await waitSaved(page);
-  await sleep(2500);
-  const moved = hl ? (await sourcesOf(pdf.id)).find((x) => x.id === hl.id) : null;
-  // The mark settles once the page has the save's anchors: a slow server
-  // shows the old mark a moment first (noted, not failed).
-  const paintedNow = () => (hl ? page.evaluate((id) => [...document.querySelectorAll(`.docs-prose [data-source-id="${id}"]`)].map((e) => e.textContent).join(""), hl.id) : "");
-  let painted = await paintedNow();
-  const first = painted;
-  for (let i = 0; i < 20 && !painted.includes("neural QA networks"); i++) {
-    await sleep(500);
-    painted = await paintedNow();
-  }
-  if (first !== painted) note("EDIT", `(${theme}) the mark over the typed words settled late`, `first "${clip(first, 40)}", then "${clip(painted, 40)}"`);
-  check("EDIT", Boolean(moved && !moved.orphaned && moved.quotedText === hl.quotedText && (moved.anchoredText ?? "").includes("neural QA networks") && painted.includes("neural QA networks")), `(${theme}) words typed inside a highlight: the mark grows over them, the quote stays`, moved ? `quote "${clip(moved.quotedText, 40)}", anchored "${clip(moved.anchoredText, 50)}", painted "${clip(painted, 50)}"` : "no highlight");
+  // The stored anchor grows over the typed words; the page repaints it once
+  // it has the save's anchors (a slow server shows the old mark a moment).
+  const moved = hl ? await sourceWhere(pdf.id, (x) => x.id === hl.id && (x.anchoredText ?? "").includes("neural QA networks"), 15_000) ?? (await sourcesOf(pdf.id)).find((x) => x.id === hl.id) : null;
+  const marks = hl ? await painted(page, hl.id, "neural QA networks", { includes: true }) : [];
+  check("EDIT", Boolean(moved && !moved.orphaned && moved.quotedText === hl.quotedText && (moved.anchoredText ?? "").includes("neural QA networks") && marks.join("").includes("neural QA networks")), `(${theme}) words typed inside a highlight: the mark grows over them, the quote stays`, moved ? `quote "${clip(moved.quotedText, 40)}", anchored "${clip(moved.anchoredText, 50)}", painted "${clip(marks.join(""), 50)}"` : "no highlight");
   for (let i = 0; i < 3; i++) await page.keyboard.press("Backspace");
   await waitSaved(page).catch(() => {});
   // Suggesting: a person's suggestion across a page start, then Accept.
-  const s = (await pageStarts(page)).find((x) => x.on === "paragraph" && x.before.length >= 20 && x.after.length >= 20);
+  const s = (await inlineStarts(page, 20))[0];
   const rowsBefore = await rowsOf(pdf.id);
   await setMode(page, "suggesting");
   await dragSelect(page, s.pos - 8, s.pos + 1 + 8);
   await page.keyboard.type("SUGGESTED");
   await waitSaved(page).catch(() => {});
-  await sleep(1500);
-  const marks = await page.evaluate(() => [...document.querySelectorAll(".docs-prose [data-suggestion]")].map((e) => e.textContent).join("|"));
+  const suggested = (await waitIn(page, () => {
+    const m = [...document.querySelectorAll(".docs-prose [data-suggestion]")].map((e) => e.textContent).join("|");
+    return m.includes("SUGGESTED") ? m : null;
+  }, null, 10_000)) ?? "";
   const starts = (await pageStarts(page)).filter((x) => x.page === s.page);
   const rowsAfter = await rowsOf(pdf.id);
   const changedRows = rowsAfter.filter((r) => rowsBefore.find((b) => b.id === r.id)?.hash !== r.hash);
   const suggestShot = await shot(page, `EDIT-suggestion-across-page-start-${theme}`);
-  check("EDIT", marks.includes("SUGGESTED") && starts.length === 1 && changedRows.length === 1, `(${theme}) a person's suggestion across p. ${s.page}: drawn as a suggestion, the page start kept, one row changed`, `marks "${clip(marks, 80)}"; page starts ${starts.length}; rows changed ${changedRows.length} ${suggestShot}`);
+  check("EDIT", suggested.includes("SUGGESTED") && starts.length === 1 && changedRows.length === 1, `(${theme}) a person's suggestion across p. ${s.page}: drawn as a suggestion, the page start kept, one row changed`, `marks "${clip(suggested, 80)}"; page starts ${starts.length}; rows changed ${changedRows.length} ${suggestShot}`);
   await menuCommand(page, "Accept all suggestions");
+  await waitIn(page, () => !document.querySelector(".docs-prose [data-suggestion]"), null, 10_000);
   await waitSaved(page).catch(() => {});
-  await sleep(1000);
-  const accepted = await page.evaluate((p) => window.__docsEditor.state.doc.resolve(p).parent.textContent, (await pageStarts(page)).find((x) => x.page === s.page)?.pos ?? s.pos);
+  const accepted = await page.evaluate((p) => window.__qa.blockText(p), (await pageStarts(page)).find((x) => x.page === s.page)?.pos ?? s.pos);
   check("EDIT", accepted.includes("SUGGESTED") && (await pageStarts(page)).filter((x) => x.page === s.page).length === 1, `(${theme}) Accept keeps p. ${s.page} and the suggested words`, clip(accepted, 90));
   // Two tabs on one import: words typed in one reach the other, and the
   // other's page starts stay.
@@ -2025,7 +2244,7 @@ RISKS.EDIT = async (theme) => {
   await clickPos(page, intro.to);
   await page.keyboard.type(" (live)");
   await waitSaved(page).catch(() => {});
-  const arrived = await second.page.waitForFunction(() => window.__docsEditor.state.doc.textContent.includes("1 Introduction (live)"), null, { timeout: 30_000 }).then(() => true).catch(() => false);
+  const arrived = Boolean(await waitIn(second.page, () => window.__docsEditor.state.doc.textContent.includes("1 Introduction (live)"), null, 30_000));
   const startsAfter = (await pageStarts(second.page)).length;
   const liveShot = await shot(second.page, `EDIT-live-second-tab-${theme}`);
   check("EDIT", arrived && startsAfter === startsB, `(${theme}) words typed in one tab reach the other tab of the import, its page starts kept`, `arrived ${arrived}; page starts ${startsB} → ${startsAfter} ${liveShot}`);
@@ -2064,54 +2283,40 @@ RISKS.AUDIT = async (theme) => {
   const openOutline = page.locator('[data-track="docs:outline-open"]').first();
   if (await openOutline.count()) {
     await openOutline.click();
-    await sleep(700);
-    const items = await page.evaluate(() => [...document.querySelectorAll(".docs-outline-list [aria-label]")].map((e) => e.getAttribute("aria-label")));
+    const items = (await waitIn(page, () => {
+      const i = [...document.querySelectorAll(".docs-outline-list [aria-label]")].map((e) => e.getAttribute("aria-label"));
+      return i.length ? i : null;
+    }, null, 10_000)) ?? [];
     const outlineShot = await shot(page, `AUDIT-outline-${theme}`);
     check("AUDIT", items.some((i) => /Attention Is All You Need/.test(i)) && items.some((i) => /Introduction/.test(i)), `(${theme}) the outline lists the Title and the headings`, `${items.length}: ${items.slice(0, 5).join(" | ")} ${outlineShot}`);
     await page.locator('[data-track="docs:outline-close"]').first().click().catch(() => {});
-    await sleep(400);
+    await waitIn(page, () => !document.querySelector(".docs-outline-list"), null, 5000);
   }
   // Page numbers at the first, a middle, and the last page, in the margin.
   const starts = await pageStarts(page);
   const picks = [starts[0], starts[Math.floor(starts.length / 2)], starts.at(-1)].filter(Boolean);
   const drawn = [];
   for (const st of picks) {
-    await page.evaluate((p) => {
-      const el = window.__docsEditor.view.nodeDOM(p) ?? window.__docsEditor.view.domAtPos(p).node;
-      (el.nodeType === 1 ? el : el.parentElement).scrollIntoView({ block: "center" });
-    }, st.pos);
-    await sleep(500);
+    await page.evaluate((p) => window.__qa.show(p), st.pos);
     const label = await page.evaluate((p) => {
-      const view = window.__docsEditor.view;
-      const node = view.state.doc.nodeAt(p);
-      const el = node?.type.name === "pageStart" ? view.nodeDOM(p) : view.nodeDOM(p);
+      const el = window.__docsEditor.view.nodeDOM(p);
       const text = document.querySelector(".docs-prose").getBoundingClientRect();
       const r = el.getBoundingClientRect();
-      const before = getComputedStyle(el, "::before");
-      return { content: before.content, left: Math.round(r.left), textLeft: Math.round(text.left), top: Math.round(r.top), label: el.getAttribute("data-page-label") };
+      return { content: getComputedStyle(el, "::before").content, left: Math.round(r.left), textLeft: Math.round(text.left), top: Math.round(r.top), label: el.getAttribute("data-page-label") };
     }, st.pos);
-    const crop = await page.screenshot({ path: join(SHOT, `AUDIT-page-start-p${st.page}-${theme}.png`), clip: { x: Math.max(0, label.textLeft - 140), y: Math.max(0, label.top - 60), width: 700, height: 140 } }).then(() => join(SHOT, `AUDIT-page-start-p${st.page}-${theme}.png`));
+    const crop = join(SHOT, `AUDIT-page-start-p${st.page}-${theme}.png`);
+    await page.screenshot({ path: crop, clip: { x: Math.max(0, label.textLeft - 140), y: Math.max(0, label.top - 60), width: 700, height: 140 } });
     drawn.push({ page: st.page, on: st.on, ...label, crop });
   }
   check("AUDIT", drawn.every((d) => d.label === `p. ${d.page}` && (d.content.includes(`p. ${d.page}`) || d.on !== "paragraph")), `(${theme}) "p. N" stands at the first, a middle, and the last page`, drawn.map((d) => `p. ${d.page} [${d.on}] label "${d.label}" ::before ${d.content} ${d.crop}`).join(" | "));
-  // The scroll tip reads the PDF's page in view.
+  // The scroll tip reads the PDF's page in view: p. 7 placed just above
+  // the pane's middle, where the tip reads.
   const seven = starts.find((x) => x.page === 7);
   if (seven) {
-    await page.evaluate((p) => window.__docsEditor.view.domAtPos(p).node.parentElement?.scrollIntoView({ block: "center" }), seven.pos);
-    await sleep(500);
-    const edge = await page.evaluate(() => {
-      const prose = document.querySelector(".docs-prose");
-      let pane = prose.parentElement;
-      while (pane && !(/(auto|scroll)/.test(getComputedStyle(pane).overflowY) && pane.scrollHeight > pane.clientHeight)) pane = pane.parentElement;
-      const r = pane.getBoundingClientRect();
-      return { x: r.right - 6, y: r.top + r.height / 2 };
-    });
-    await page.mouse.move(edge.x - 40, edge.y);
-    await page.mouse.move(edge.x, edge.y, { steps: 5 });
-    await sleep(600);
-    const tip = await page.evaluate(() => document.querySelector(".docs-page-indicator")?.textContent ?? null);
+    await placeAboveMiddle(page, seven.pos);
+    const tip = await scrollTip(page);
     const tipShot = await shot(page, `AUDIT-scroll-tip-${theme}`);
-    check("AUDIT", /^p\. \d+ of 15$/.test(tip ?? ""), `(${theme}) the scroll tip reads the PDF's page in view`, `"${tip}" ${tipShot}`);
+    check("AUDIT", tip === "p. 7 of 15", `(${theme}) the scroll tip reads the PDF's page in view`, `"${tip}" ${tipShot}`);
   }
   // Print: page starts and marks do not print.
   await page.emulateMedia({ media: "print" });
@@ -2126,8 +2331,10 @@ RISKS.AUDIT = async (theme) => {
   const wordCount = async () => {
     await page.evaluate(() => window.__docsEditor.commands.focus());
     await page.keyboard.press("Control+Shift+c");
-    await sleep(800);
-    return page.evaluate(() => [...document.querySelectorAll(".docs-wc-table tr")].map((r) => r.textContent.trim()));
+    return (await waitIn(page, () => {
+      const rows = [...document.querySelectorAll(".docs-wc-table tr")].map((r) => r.textContent.trim());
+      return rows.length ? rows : null;
+    }, null, 5000)) ?? [];
   };
   let wc = await wordCount();
   if (wc.length === 0) {
@@ -2148,28 +2355,22 @@ RISKS.AUDIT = async (theme) => {
   const counted = Number((wc.find((r) => /^Words/.test(r)) ?? "").replace(/\D+/g, ""));
   check("AUDIT", counted > 0 && Math.abs(counted - own) / own < 0.05, `(${theme}) the word count counts the words, not the page starts`, `dialog ${JSON.stringify(wc)}; the text's words ${own} ${wcShot}`);
   await page.keyboard.press("Escape");
-  await sleep(300);
+  await waitIn(page, () => !document.querySelector(".docs-wc-table"), null, 5000);
   // Version history, from the clock at the title row's right end.
-  await page.locator('[data-track="docs:version-history"]').first().click().catch(() => {});
-  await page.waitForFunction(() => document.querySelectorAll(".docs-versions-list .docs-versions-pick").length > 0, null, { timeout: 30_000 }).catch(() => {});
-  await sleep(500);
-  const versions = await page.evaluate(() => [...document.querySelectorAll(".docs-versions-list .docs-versions-pick")].map((b) => b.textContent.trim()));
+  const versions = await openVersions(page);
   const importedPick = page.locator(".docs-versions-list .docs-versions-pick", { hasText: "Imported" }).first();
   let versionView = null;
   if (await importedPick.count()) {
     await importedPick.click();
-    await page.waitForFunction(() => document.querySelectorAll(".docs-versions-page .docs-figure").length > 0, null, { timeout: 30_000 }).catch(() => {});
-    await sleep(1500);
-    versionView = await page.evaluate(() => {
+    versionView = await waitIn(page, () => {
       const view = document.querySelector(".docs-versions-page");
-      return view ? { figures: view.querySelectorAll(".docs-figure").length, images: [...view.querySelectorAll("img")].filter((i) => i.complete && i.naturalWidth > 0).length, pageStarts: view.querySelectorAll("[data-page-start]").length, words: view.textContent.length } : null;
-    });
+      const images = view ? [...view.querySelectorAll("img")].filter((i) => i.complete && i.naturalWidth > 0).length : 0;
+      return view && images > 0 ? { figures: view.querySelectorAll(".docs-figure").length, images, pageStarts: view.querySelectorAll("[data-page-start]").length, words: view.textContent.length } : null;
+    }, null, 30_000);
   }
   const versionShot = await shot(page, `AUDIT-version-imported-${theme}`);
   check("AUDIT", versions.some((v) => /Imported/.test(v)) && (versionView?.figures ?? 0) >= 12 && (versionView?.images ?? 0) > 0, `(${theme}) Version history lists "Imported" and its view draws the figures`, `${JSON.stringify(versions.slice(0, 4))}; view ${JSON.stringify(versionView)} ${versionShot}`);
-  await page.keyboard.press("Escape");
-  await page.locator(".docs-versions-bar button").first().click().catch(() => {});
-  await sleep(800);
+  await closeVersions(page);
   // Downloads: Word from the server, Markdown in the browser.
   if (theme === THEMES[0]) {
     const docx = await fetch(`${BASE}/api/documents/${pdf.id}/export?format=docx`);
@@ -2184,28 +2385,27 @@ RISKS.AUDIT = async (theme) => {
     const docText = xml.replace(/<[^>]+>/g, " ");
     check("AUDIT", docx.status === 200 && /Attention Is All You Need/.test(docText) && /Scaled Dot-Product Attention/.test(docText) && !/\bp\. 4\b/.test(docText), "the Word download holds the paper's words and no page labels", `HTTP ${docx.status}, ${bytes.length} bytes, pictures ${(xml.match(/<pic:pic/g) ?? []).length}`);
     note("AUDIT", "figures in the Word download", `${(xml.match(/<pic:pic/g) ?? []).length} pictures for 12 figure objects (design: round 2)`);
-    const download = page.waitForEvent("download", { timeout: 20_000 }).catch(() => null);
-    if (!(await menuCommand(page, "Download: Markdown (.md)"))) {
+    let file = await download(page, "Download: Markdown (.md)");
+    if (!file) {
       note("AUDIT", "Search the menus (and with it File > Download) is not on the toolbar in Viewing", "Editing tried next");
       await setMode(page, "editing");
-      await menuCommand(page, "Download: Markdown (.md)");
+      file = await download(page, "Download: Markdown (.md)");
     }
-    const file = await download;
-    const md = file ? readFileSync(await file.path(), "utf8") : "";
+    const md = file ? file.bytes.toString("utf8") : "";
     check("AUDIT", md.includes("Attention Is All You Need") && !/\bp\. \d+\b/.test(md), "the Markdown download holds the words and no page labels", `${md.length} characters; figure captions ${(md.match(/Figure \d+:/g) ?? []).length}`);
   }
   // Make a copy is off for an import, and says why.
   if ((await mode(page)) !== "editing") await setMode(page, "editing");
   await menuCommand(page, "Make a copy");
-  await sleep(800);
-  const copyDialog = await page.evaluate(() => [...document.querySelectorAll('[role="dialog"]')].map((d) => d.textContent).join(" | "));
+  const copyDialog = (await waitIn(page, () => [...document.querySelectorAll('[role="dialog"]')].map((d) => d.textContent).join(" | ") || null, null, 5000)) ?? "";
   const copyShot = await shot(page, `AUDIT-make-a-copy-${theme}`);
   check("AUDIT", /off for an import/.test(copyDialog), `(${theme}) Make a copy is off for an import, with the reason`, `${clip(copyDialog, 140)} ${copyShot}`);
   await page.keyboard.press("Escape");
-  await sleep(300);
+  await waitIn(page, () => !document.querySelector('[role="dialog"]'), null, 5000);
   // The web page: pageless; lists, the table's merged cells, code, a quote,
   // a line, and every figure's media.
   await open(page, ctx.notebookId, web.id);
+  await loadFigureImages(page, 15_000);
   const shape = await page.evaluate(() => {
     const prose = document.querySelector(".docs-prose");
     const th = [...prose.querySelectorAll("th")];
@@ -2268,37 +2468,19 @@ RISKS.AUDIT = async (theme) => {
     const names = ["i", "ii", ...Array.from({ length: 13 }, (_, i) => String(i + 1))];
     await db.document.update({ where: { id: labeled.id }, data: { pageLabels: names } });
     await open(page, ctx.notebookId, labeled.id);
-    const inlineStarts = (await pageStarts(page)).filter((x) => x.page >= 2 && x.on === "paragraph" && x.after.length > 0);
     const drawnNames = [];
-    for (const st of inlineStarts.slice(0, 3)) {
+    for (const st of (await pageStarts(page)).filter((x) => x.page >= 2 && x.on === "paragraph" && x.after.length > 0).slice(0, 3)) {
       const label = await page.evaluate((p) => window.__docsEditor.view.nodeDOM(p)?.getAttribute?.("data-page-label") ?? null, st.pos);
       drawnNames.push({ page: st.page, label, want: `p. ${names[st.page - 1]}` });
     }
     const seventh = (await pageStarts(page)).find((x) => x.page === 7);
     let namedTip = null;
     if (seventh) {
-      // The page start 60 px above the view's middle, where the tip reads.
-      await page.evaluate((p) => {
-        let pane = document.querySelector(".docs-prose").parentElement;
-        while (pane && !(/(auto|scroll)/.test(getComputedStyle(pane).overflowY) && pane.scrollHeight > pane.clientHeight)) pane = pane.parentElement;
-        const r = pane.getBoundingClientRect();
-        pane.scrollBy(0, window.__docsEditor.view.coordsAtPos(p).top - (r.top + pane.clientHeight / 2) + 60);
-      }, seventh.pos);
-      await sleep(500);
-      const edge = await page.evaluate(() => {
-        let pane = document.querySelector(".docs-prose").parentElement;
-        while (pane && !(/(auto|scroll)/.test(getComputedStyle(pane).overflowY) && pane.scrollHeight > pane.clientHeight)) pane = pane.parentElement;
-        const r = pane.getBoundingClientRect();
-        return { x: r.right - 6, y: r.top + r.height / 2 };
-      });
-      await page.mouse.move(edge.x - 40, edge.y);
-      await page.mouse.move(edge.x, edge.y, { steps: 5 });
-      await sleep(600);
-      namedTip = await page.evaluate(() => document.querySelector(".docs-page-indicator")?.textContent ?? null);
-      await page.mouse.move(edge.x - 300, edge.y);
+      await placeAboveMiddle(page, seventh.pos);
+      namedTip = await scrollTip(page);
     }
     const labelShot = await shot(page, "AUDIT-journal-page-names");
-    check("AUDIT", drawnNames.length > 0 && drawnNames.every((d) => d.label === d.want) && /^p\. 5 of 15$/.test(namedTip ?? ""), "a PDF's own page names: the page starts and the scroll tip draw them", `${JSON.stringify(drawnNames)}; tip at p. 7 "${namedTip}" ${labelShot}`);
+    check("AUDIT", drawnNames.length > 0 && drawnNames.every((d) => d.label === d.want) && namedTip === "p. 5 of 15", "a PDF's own page names: the page starts and the scroll tip draw them", `${JSON.stringify(drawnNames)}; tip at p. 7 "${namedTip}" ${labelShot}`);
     // Version history: Show changes draws an edit since "Imported"; Restore
     // brings the original's words back with its figures and page starts.
     await setMode(page, "editing");
@@ -2306,10 +2488,8 @@ RISKS.AUDIT = async (theme) => {
     await clickPos(page, intro.to);
     await page.keyboard.type(" (audit edit)");
     await waitSaved(page).catch(() => {});
-    await sleep(800);
-    await page.locator('[data-track="docs:version-history"]').first().click().catch(() => {});
-    await page.waitForFunction(() => document.querySelectorAll(".docs-versions-list .docs-versions-pick").length > 0, null, { timeout: 30_000 }).catch(() => {});
-    await page.waitForFunction(() => [...document.querySelectorAll(".docs-versions-page u")].some((u) => u.textContent.includes("audit edit")), null, { timeout: 20_000 }).catch(() => {});
+    await openVersions(page);
+    await waitIn(page, () => [...document.querySelectorAll(".docs-versions-page u")].some((u) => u.textContent.includes("audit edit")), null, 20_000);
     const changes = await page.evaluate(() => ({
       heading: document.querySelector(".docs-versions-heading-title")?.textContent ?? null,
       underlined: [...document.querySelectorAll(".docs-versions-page u")].map((u) => u.textContent).join("|").slice(0, 80),
@@ -2318,13 +2498,10 @@ RISKS.AUDIT = async (theme) => {
     const changesShot = await shot(page, "AUDIT-version-show-changes");
     check("AUDIT", changes.underlined.includes("audit edit"), "Version history: Show changes draws the edit made since \"Imported\"", `${JSON.stringify(changes)} ${changesShot}`);
     await page.locator(".docs-versions-list .docs-versions-pick", { hasText: "Imported" }).first().click().catch(() => {});
-    await sleep(1500);
-    await page.locator(".docs-versions-bar button", { hasText: "Restore this version" }).first().click().catch(() => {});
-    await sleep(500);
-    await page.getByRole("dialog").getByRole("button", { name: "Restore", exact: true }).click().catch(() => {});
-    await sleep(1500);
+    await page.locator(".docs-versions-bar button", { hasText: "Restore this version" }).first().click({ timeout: 10_000 }).catch(() => {});
+    await page.getByRole("dialog").getByRole("button", { name: "Restore", exact: true }).click({ timeout: 10_000 }).catch(() => {});
+    await waitIn(page, () => !document.querySelector(".docs-versions") && !window.__docsEditor.state.doc.textContent.includes("(audit edit)"), null, 20_000);
     await waitSaved(page).catch(() => {});
-    await sleep(1000);
     const restored = await page.evaluate(() => ({ edit: window.__docsEditor.state.doc.textContent.includes("(audit edit)"), open: Boolean(document.querySelector(".docs-versions")) }));
     const restoredStarts = (await pageStarts(page)).length;
     const restoredFigures = (await figures(page)).length;
@@ -2337,10 +2514,8 @@ RISKS.AUDIT = async (theme) => {
     await open(page, ctx.notebookId, pdf.id);
     await setMode(page, "editing");
     for (const [label, ext] of [["Download: Web Page (.html)", "html"], ["Download: Plain Text (.txt)", "txt"]]) {
-      const download = page.waitForEvent("download", { timeout: 20_000 }).catch(() => null);
-      await menuCommand(page, label);
-      const file = await download;
-      const body = file ? readFileSync(await file.path(), "utf8") : "";
+      const file = await download(page, label);
+      const body = file ? file.bytes.toString("utf8") : "";
       const words = ext === "html" ? body.replace(/<[^>]+>/g, " ") : body;
       const relative = ext === "html" ? (body.match(/<img[^>]+src="\/api\/documents\/[^"]+\/figure\/[^"]+"/g) ?? []).length : 0;
       check("AUDIT", /Attention Is All You Need/.test(words) && /Scaled Dot-Product Attention/.test(words) && !/\bp\. \d+\b/.test(words), `the ${ext === "html" ? "web page" : "plain text"} download holds the words and no page labels`, `${body.length} characters${ext === "html" ? `; ${relative} figure images with a relative /api/ address` : ""}`);
@@ -2369,96 +2544,78 @@ RISKS.AI = async (theme) => {
     }
   });
   await open(page, ctx.notebookId, pdf.id);
-  const inline = (await pageStarts(page)).filter((x) => x.on === "paragraph" && x.before.length >= 30 && x.after.length >= 30);
+  const inline = await inlineStarts(page, 30);
   // Explain across a page start.
   const a = inline[0];
   await dragSelect(page, a.pos - 30, a.pos + 1 + 30);
   const wordsA = `${a.before.slice(-30)}${a.after.slice(0, 30)}`;
   await tool(page, "explain");
-  await page.waitForFunction(() => (document.querySelector('[data-side-card="explain"]')?.textContent ?? "").includes("Mock"), null, { timeout: 45_000 }).catch(() => {});
+  await sideCard(page, "explain");
   const explain = derives.find((d) => d.type === "EXPLAIN");
   check("AI", explain?.anchor?.quotedText === wordsA, `(${theme}) Explain across p. ${a.page} sends the words alone`, `quote "${clip(explain?.anchor?.quotedText, 70)}"`);
-  let sources = await sourcesOf(pdf.id);
-  for (let i = 0; i < 40 && !sources.some((x) => x.note.derivationType === "EXPLAIN"); i++) {
-    await sleep(500);
-    sources = await sourcesOf(pdf.id);
-  }
-  const ex = sources.find((x) => x.note.derivationType === "EXPLAIN");
+  const ex = await sourceWhere(pdf.id, (x) => x.note.derivationType === "EXPLAIN");
   if (ex) {
-    await page.waitForFunction((id) => document.querySelectorAll(`.docs-prose [data-source-id="${id}"]`).length > 0, ex.id, { timeout: 20_000 }).catch(() => {});
-    const painted = await page.evaluate((id) => [...document.querySelectorAll(`.docs-prose [data-source-id="${id}"]`)].map((e) => e.textContent), ex.id);
+    const marks = await painted(page, ex.id, wordsA);
     const shotA = await shot(page, `AI-explain-mark-across-page-start-${theme}`);
-    check("AI", painted.join("").replace(/\s+/g, "") === wordsA.replace(/\s+/g, "") && painted.length >= 2, `(${theme}) Explain's mark paints on both sides of p. ${a.page}`, `${painted.length} pieces "${clip(painted.join("|"), 80)}" ${shotA}`);
-  } else fail("AI", `(${theme}) Explain stores its annotation`, JSON.stringify(sources.map((x) => x.note.derivationType)));
-  await page.keyboard.press("Escape");
-  await sleep(500);
+    check("AI", squash(marks.join("")) === squash(wordsA) && marks.length >= 2, `(${theme}) Explain's mark paints on both sides of p. ${a.page}`, `${marks.length} pieces "${clip(marks.join("|"), 80)}" ${shotA}`);
+  } else fail("AI", `(${theme}) Explain stores its annotation`, JSON.stringify((await sourcesOf(pdf.id)).map((x) => x.note.derivationType)));
+  await calm(page);
   // Add to notes across another page start; the note's jump flashes the words.
   const b = inline[1] ?? inline[0];
   await dragSelect(page, b.pos - 25, b.pos + 1 + 25);
   const wordsB = `${b.before.slice(-25)}${b.after.slice(0, 25)}`;
   await tool(page, "add-to-notes");
   const section = page.locator('[data-track="add-to-notes-section"]').first();
+  await section.waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
   if (await section.count()) await section.click();
-  let noteSrc = null;
-  for (let i = 0; i < 40 && !noteSrc; i++) {
-    noteSrc = (await sourcesOf(pdf.id)).find((x) => x.quotedText === wordsB && x.note.sectionId === ctx.sectionId) ?? null;
-    if (!noteSrc) await sleep(500);
-  }
+  const noteSrc = await sourceWhere(pdf.id, (x) => x.quotedText === wordsB && x.note.sectionId === ctx.sectionId);
   check("AI", Boolean(noteSrc), `(${theme}) Add to notes across p. ${b.page} quotes the words alone`, noteSrc ? `quote "${clip(noteSrc.quotedText, 60)}"` : "no note");
   if (noteSrc) {
-    await page.evaluate(() => document.querySelector(".docs-prose")?.closest("[class*=overflow]")?.scrollTo?.(0, 0));
     await page.evaluate(() => {
-      const prose = document.querySelector(".docs-prose");
-      let pane = prose.parentElement;
-      while (pane && !(/(auto|scroll)/.test(getComputedStyle(pane).overflowY) && pane.scrollHeight > pane.clientHeight)) pane = pane.parentElement;
-      pane?.scrollTo(0, 0);
+      window.__qa.pane().scrollTop = 0;
     });
-    await sleep(600);
     const jump = page.locator(`[data-note-id="${noteSrc.note.id}"] [data-track="note-jump"]`).first();
     await jump.waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
     if (await jump.count()) {
       await jump.click();
-      const flashed = await page.waitForFunction(() => {
+      const flashed = await waitIn(page, () => {
         const els = [...document.querySelectorAll(".docs-prose .anchor-flash")];
         return els.length ? els.map((e) => e.textContent).join("") : null;
-      }, null, { timeout: 15_000 }).then((h) => h.jsonValue()).catch(() => null);
+      }, null, 15_000);
       const shotB = await shot(page, `AI-note-jump-flash-${theme}`);
-      check("AI", Boolean(flashed) && flashed.replace(/\s+/g, "").includes(wordsB.replace(/\s+/g, "").slice(5, 30)), `(${theme}) the note's jump flashes its words across p. ${b.page}`, `flashed "${clip(flashed, 70)}" ${shotB}`);
+      check("AI", Boolean(flashed) && squash(flashed).includes(squash(wordsB).slice(5, 30)), `(${theme}) the note's jump flashes its words across p. ${b.page}`, `flashed "${clip(flashed, 70)}" ${shotB}`);
     } else fail("AI", `(${theme}) the note's jump`, "no note-jump control on the note");
   }
   // Analyze a PDF figure: its crop; the ring; the Annotations tab's Jump.
-  const fig = (await figures(page)).find((f) => /Figure 1/.test(f.caption ?? "")) ?? (await figures(page))[0];
-  await clickFigure(page, fig.pos);
-  if (!(await popoverOpen(page))) {
-    note("AI", `(${theme}) the first press on the PDF figure opened nothing`, "a second press opens its tools");
+  await calm(page);
+  const fig = (await figureBy(page, (c) => /Figure 1/.test(c))) ?? (await figures(page))[0];
+  const pressed = await clickFigure(page, fig.pos);
+  const firstPress = await toolbar(page);
+  if (!firstPress) {
+    note("AI", `(${theme}) the first press on the PDF figure opened nothing`, `a second press opens its tools; pressed ${JSON.stringify(pressed)}`);
     await clickFigure(page, fig.pos);
+    await toolbar(page);
   }
   const analyze = page.locator('[data-selection-popover] [data-track="analyze"]').first();
   if (await analyze.count()) {
     await analyze.click();
-    let an = null;
-    for (let i = 0; i < 60 && !an; i++) {
-      an = (await sourcesOf(pdf.id)).find((x) => x.note.derivationType === "ANALYZE") ?? null;
-      if (!an) await sleep(500);
-    }
+    const an = await sourceWhere(pdf.id, (x) => x.note.derivationType === "ANALYZE", 30_000);
     const req = derives.find((d) => d.type === "ANALYZE");
     check("AI", Boolean(an) && an.blockId === fig.blockId, `(${theme}) Analyze on a PDF figure anchors to the figure`, `request ${clip(JSON.stringify(req?.anchor ?? req ?? null), 100)}`);
-    await page.keyboard.press("Escape");
-    await page.waitForFunction((p) => window.__docsEditor.view.nodeDOM(p)?.hasAttribute("data-source-id"), fig.pos, { timeout: 20_000 }).catch(() => {});
+    await calm(page);
+    await waitIn(page, (p) => window.__docsEditor.view.nodeDOM(p)?.hasAttribute("data-source-id"), fig.pos);
     const tab = page.locator('[data-track="annotations"]').first();
     if (await tab.count()) {
       await tab.click();
-      await sleep(1200);
       // The analysis's row: its "…" menu holds Jump.
       const row = page.locator('[data-track="annotation-menu"]').last();
-      if (await row.count()) {
-        await row.click();
-        await sleep(500);
-      }
+      await row.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
+      if (await row.count()) await row.click();
       const jumpA = page.locator('[data-track="annotation-jump"]').first();
+      await jumpA.waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
       if (await jumpA.count()) {
         await jumpA.click();
-        const flashedFig = await page.waitForFunction((p) => window.__docsEditor.view.nodeDOM(p)?.classList.contains("anchor-flash"), fig.pos, { timeout: 10_000 }).then(() => true).catch(() => false);
+        const flashedFig = Boolean(await waitIn(page, (p) => window.__docsEditor.view.nodeDOM(p)?.classList.contains("anchor-flash"), fig.pos, 10_000));
         const shotC = await shot(page, `AI-annotations-jump-figure-${theme}`);
         check("AI", flashedFig, `(${theme}) the Annotations tab's Jump flashes the analyzed figure`, shotC);
       } else fail("AI", `(${theme}) the Annotations tab lists the analysis with Jump`, "no annotation-jump");
@@ -2467,12 +2624,9 @@ RISKS.AI = async (theme) => {
   // A selection over a figure leaves the figure out, and the toolbar says so.
   const around = await page.evaluate((p) => {
     const doc = window.__docsEditor.state.doc;
-    const $p = doc.resolve(p);
-    const before = $p.nodeBefore;
-    const after = doc.nodeAt(p + doc.nodeAt(p).nodeSize);
-    return { from: p - 12, to: p + doc.nodeAt(p).nodeSize + 13, before: before?.textContent.slice(-11), after: after?.textContent.slice(0, 12) };
+    return { from: p - 12, to: p + doc.nodeAt(p).nodeSize + 13 };
   }, fig.pos);
-  await page.keyboard.press("Escape");
+  await calm(page);
   // The figure is taller than the view: a person selects over it with the
   // keys, in Editing — a click before it, Shift held, down past it; the
   // toolbar opens when Shift is let go.
@@ -2484,7 +2638,7 @@ RISKS.AI = async (theme) => {
     await sleep(120);
   }
   await page.keyboard.up("Shift");
-  await sleep(900);
+  const leftOut = Boolean(await waitIn(page, () => document.querySelector("[data-layer-toolbar]")?.textContent.includes("left out"), null, 6000));
   const selected = await page.evaluate(() => {
     const sel = window.__docsEditor.state.selection;
     let figure = false;
@@ -2493,10 +2647,9 @@ RISKS.AI = async (theme) => {
     });
     return { from: sel.from, to: sel.to, figure };
   });
-  const leftOut = await page.evaluate(() => document.querySelector("[data-selection-popover]")?.textContent.includes("left out") ?? false);
   const shotD = await shot(page, `AI-selection-over-figure-${theme}`);
   check("AI", selected.figure && leftOut, `(${theme}) a selection over a figure: the toolbar says images, figures, and equations are left out`, `selection ${JSON.stringify(selected)} ${shotD}`);
-  await page.keyboard.press("Escape");
+  await calm(page);
   // A highlight in a table cell paints in the cell after a reload.
   const cell = await page.evaluate(() => {
     let hit = null;
@@ -2511,18 +2664,9 @@ RISKS.AI = async (theme) => {
     return hit;
   });
   if (cell) {
-    await page.keyboard.press("Escape");
-    await dragSelect(page, cell.from, cell.to);
-    const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
-    if (await colors.count()) await colors.nth(1).click();
-    let hl = null;
-    for (let i = 0; i < 30 && !hl; i++) {
-      hl = (await sourcesOf(pdf.id)).find((x) => x.quotedText === "Self-Attention") ?? null;
-      if (!hl) await sleep(500);
-    }
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
-    await sleep(3000);
+    const hl = (await highlight(page, pdf.id, cell.from, cell.to, 1)).find((x) => x.quotedText === "Self-Attention") ?? null;
+    await reload(page);
+    if (hl) await painted(page, hl.id, "Self-Attention");
     const inCell = hl ? await page.evaluate((id) => [...document.querySelectorAll(`.docs-prose [data-source-id="${id}"]`)].map((e) => ({ text: e.textContent, inCell: Boolean(e.closest("td, th")) })), hl.id) : [];
     const stored = hl ? await db.block.findUnique({ where: { id: hl.blockId }, select: { type: true, text: true, cell: true } }) : null;
     const cellShot = await shot(page, `AI-table-cell-highlight-${theme}`);
@@ -2535,65 +2679,60 @@ RISKS.AI = async (theme) => {
     const define = page.locator('[data-selection-popover] [data-track="define"]').first();
     if (await define.count()) {
       await define.click();
-      const text = await page.waitForFunction(() => {
+      const text = await waitIn(page, () => {
         const t = document.querySelector("[data-definition]")?.textContent ?? "";
         return t.length > 30 && !document.querySelector('[data-definition] [role="status"]') ? t : null;
-      }, null, { timeout: 30_000 }).then((h) => h.jsonValue()).catch(() => null);
+      }, null, 30_000);
       check("AI", Boolean(text), `(${theme}) Define answers on an import`, clip(text, 80));
     } else fail("AI", `(${theme}) Define is the first row for one word`, "no define");
   }
   // Simplify, Visualize, and Read aloud in Viewing, as the other tools.
-  await page.keyboard.press("Escape");
+  await calm(page);
   if ((await mode(page)) !== "viewing") await setMode(page, "viewing");
   const simple = await find(page, "The Transformer allows for significantly more parallelization");
   if (simple) {
     await dragSelect(page, simple.from, simple.to);
     await tool(page, "simplify");
-    const card = await page.waitForFunction(() => {
-      const t = document.querySelector('[data-side-card="simplify"]')?.textContent ?? "";
-      return t.includes("Mock") ? t : null;
-    }, null, { timeout: 45_000 }).then((h) => h.jsonValue()).catch(() => null);
-    let simplified = null;
-    for (let i = 0; i < 20 && !simplified; i++) {
-      simplified = (await sourcesOf(pdf.id)).find((x) => x.note.derivationType === "SIMPLIFY") ?? null;
-      if (!simplified) await sleep(500);
-    }
+    const card = await sideCard(page, "simplify");
+    const simplified = await sourceWhere(pdf.id, (x) => x.note.derivationType === "SIMPLIFY", 10_000);
     const simplifyShot = await shot(page, `AI-simplify-${theme}`);
     check("AI", Boolean(card) && simplified?.quotedText === "The Transformer allows for significantly more parallelization", `(${theme}) Simplify answers in Viewing and keeps its quote`, `card "${clip(card, 60)}"; quote "${clip(simplified?.quotedText, 60)}" ${simplifyShot}`);
-    await page.keyboard.press("Escape");
+    await calm(page);
   } else fail("AI", `(${theme}) Simplify's words`, "not in the page");
   const picture = await find(page, "An attention function can be described as mapping a query");
   if (picture) {
     await dragSelect(page, picture.from, picture.to);
     await tool(page, "visualize");
-    const drawnSvg = await page.waitForFunction(() => Boolean(document.querySelector('[data-side-card="explain"] svg')), null, { timeout: 60_000 }).then(() => true).catch(() => false);
-    let pictured = null;
-    for (let i = 0; i < 20 && !pictured; i++) {
-      pictured = (await sourcesOf(pdf.id)).find((x) => x.note.derivationType === "VISUALIZE") ?? null;
-      if (!pictured) await sleep(500);
-    }
+    const drawnSvg = Boolean(await waitIn(page, () => Boolean(document.querySelector('[data-side-card="explain"] svg')), null, 60_000));
+    const pictured = await sourceWhere(pdf.id, (x) => x.note.derivationType === "VISUALIZE", 10_000);
     const visualizeShot = await shot(page, `AI-visualize-${theme}`);
     check("AI", drawnSvg && Boolean(pictured), `(${theme}) Visualize draws its picture in Viewing and stores the visualization`, `picture ${drawnSvg}; quote "${clip(pictured?.quotedText, 60)}" ${visualizeShot}`);
-    await page.keyboard.press("Escape");
+    await calm(page);
   } else fail("AI", `(${theme}) Visualize's words`, "not in the page");
   const aloud = await find(page, "Recurrent neural networks, long short-term memory");
   if (aloud) {
     await dragSelect(page, aloud.from, aloud.to);
     const readAloud = page.locator('[data-selection-popover] [data-track="read-aloud"]').first();
     check("AI", (await readAloud.count()) > 0, `(${theme}) Read aloud stands in the toolbar on an import`, `${await readAloud.count()} buttons`);
-    await page.keyboard.press("Escape");
+    await calm(page);
   }
   // A link across texts: from the paper's words to the Markdown import's,
   // both ends painted as a link.
   const md = await doc("markdown");
-  await page.keyboard.press("Escape");
   const from = await find(page, "sequence transduction models");
   if (from) {
     await dragSelect(page, from.from, from.to);
     const link = page.locator('[data-selection-popover] [data-track="link"]').first();
     if (await link.count()) {
       await link.click();
-      await sleep(800);
+      // The pending link waits in the tab's storage for its end.
+      await waitIn(page, () => {
+        try {
+          return Boolean(sessionStorage.getItem("unitos-pending-link"));
+        } catch {
+          return false;
+        }
+      }, null, 5000);
       await open(page, ctx.notebookId, md.id);
       const to = await find(page, "The marsh rises with the tide it traps");
       await dragSelect(page, to.from, to.to);
@@ -2601,22 +2740,17 @@ RISKS.AI = async (theme) => {
       await close.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
       if (await close.count()) {
         await close.click();
-        await sleep(800);
-        await page.locator('[data-track="link-card-save"], [data-track="link-card-skip"]').first().click().catch(() => {});
+        const save = page.locator('[data-track="link-card-save"], [data-track="link-card-skip"]').first();
+        await save.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
+        await save.click().catch(() => {});
       }
-      let row = null;
-      for (let i = 0; i < 30 && !row; i++) {
-        row = await db.docLink.findFirst({ where: { fromDocumentId: pdf.id, toDocumentId: md.id }, select: { id: true, quotedText: true, toQuotedText: true } }).catch(() => null);
-        if (!row) await sleep(500);
-      }
-      await page.waitForFunction((id) => document.querySelectorAll(`.docs-prose [data-link-id="${id}"]`).length > 0, row?.id ?? "none", { timeout: 20_000 }).catch(() => {});
-      const here = row ? await page.evaluate((id) => [...document.querySelectorAll(`.docs-prose [data-link-id="${id}"]`)].map((e) => e.textContent).join(""), row.id) : "";
+      const row = await until(() => db.docLink.findFirst({ where: { fromDocumentId: pdf.id, toDocumentId: md.id }, select: { id: true, quotedText: true, toQuotedText: true } }).catch(() => null), 15_000, 500);
+      const here = row ? (await painted(page, row.id, "The marsh rises", { attr: "data-link-id", includes: true })).join("") : "";
       const linkShot = await shot(page, `AI-link-across-texts-${theme}`);
       check("AI", Boolean(row) && here.includes("The marsh rises"), `(${theme}) a link across texts from the paper to the Markdown import paints at its end`, row ? `link ${row.id}: "${clip(row.quotedText, 40)}" → painted "${clip(here, 40)}" ${linkShot}` : "no link stored");
       if (row) {
         await open(page, ctx.notebookId, pdf.id);
-        await page.waitForFunction((id) => document.querySelectorAll(`.docs-prose [data-link-id="${id}"]`).length > 0, row.id, { timeout: 20_000 }).catch(() => {});
-        const back = await page.evaluate((id) => [...document.querySelectorAll(`.docs-prose [data-link-id="${id}"]`)].map((e) => e.textContent).join(""), row.id);
+        const back = (await painted(page, row.id, "sequence transduction models", { attr: "data-link-id" })).join("");
         check("AI", back.includes("sequence transduction models"), `(${theme}) the link paints at its start in the paper too`, `painted "${clip(back, 40)}"`);
       }
     }
@@ -2628,40 +2762,35 @@ RISKS.AI = async (theme) => {
   const nile = await find(page, "Nile");
   const mekong = await find(page, "Mekong");
   if (nile && mekong) {
-    const sourcesBefore = (await sourcesOf(web.id)).length;
     await dragSelect(page, nile.from, mekong.to);
     const selection = await page.evaluate(() => ({ kind: window.__docsEditor.state.selection.constructor.name, text: window.getSelection().toString().replace(/\s+/g, " ").trim() }));
-    const toolbar = await popoverOpen(page);
-    const colors = page.locator('[data-selection-popover] [data-track^="highlight:"]');
-    if (toolbar && (await colors.count())) await colors.nth(2).click();
-    let made = [];
-    for (let i = 0; i < 20 && made.length === 0; i++) {
-      made = (await sourcesOf(web.id)).slice(sourcesBefore);
-      if (!made.length) await sleep(500);
-    }
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => Boolean(window.__docsEditor), null, { timeout: 60_000 });
-    await sleep(3000);
-    const painted = made.length ? await page.evaluate((ids) => [...document.querySelectorAll(".docs-prose [data-source-id]")].filter((e) => ids.includes(e.getAttribute("data-source-id"))).map((e) => ({ text: e.textContent, cell: e.closest("td, th")?.textContent.trim().slice(0, 12) ?? null })), made.map((m) => m.id)) : [];
+    const opened = await popoverOpen(page);
+    const made = opened ? await pressHighlight(page, web.id, 2) : [];
+    await reload(page);
+    if (made.length) await waitIn(page, (ids) => new Set([...document.querySelectorAll(".docs-prose [data-source-id]")].filter((e) => ids.includes(e.getAttribute("data-source-id"))).map((e) => e.closest("td, th")?.textContent.trim()).filter(Boolean)).size >= 2, made.map((m) => m.id), 20_000);
+    const marks = made.length ? await page.evaluate((ids) => [...document.querySelectorAll(".docs-prose [data-source-id]")].filter((e) => ids.includes(e.getAttribute("data-source-id"))).map((e) => ({ text: e.textContent, cell: e.closest("td, th")?.textContent.trim().slice(0, 12) ?? null })), made.map((m) => m.id)) : [];
     const cellsShot = await shot(page, `AI-highlight-across-cells-${theme}`);
-    const cells = new Set(painted.map((p) => p.cell).filter(Boolean));
-    check("AI", toolbar && made.length > 0 && cells.size >= 2, `(${theme}) a highlight across two table cells: its quote, and its marks in both cells after a reload`, `selection ${selection.kind} "${clip(selection.text, 40)}"; toolbar ${toolbar}; stored ${made.map((m) => `"${clip(m.quotedText, 40)}"`).join(", ") || "none"}; painted in ${[...cells].join(", ") || "no cell"} ${cellsShot}`);
+    const cells = new Set(marks.map((p) => p.cell).filter(Boolean));
+    check("AI", opened && made.length > 0 && cells.size >= 2, `(${theme}) a highlight across two table cells: its quote, and its marks in both cells after a reload`, `selection ${selection.kind} "${clip(selection.text, 40)}"; toolbar ${opened}; stored ${made.map((m) => `"${clip(m.quotedText, 40)}"`).join(", ") || "none"}; painted in ${[...cells].join(", ") || "no cell"} ${cellsShot}`);
   }
-  const chart = (await figures(page)).find((f) => /Figure 1/.test(f.caption ?? ""));
+  const chart = await figureBy(page, (c) => /Figure 1/.test(c));
   if (chart) {
     const analyzedBefore = (await sourcesOf(web.id)).filter((x) => x.note.derivationType === "ANALYZE").length;
+    await calm(page);
     await clickFigure(page, chart.pos);
-    if (!(await popoverOpen(page))) await clickFigure(page, chart.pos);
+    if (!(await toolbar(page))) {
+      await clickFigure(page, chart.pos);
+      await toolbar(page);
+    }
     const analyzeChart = page.locator('[data-selection-popover] [data-track="analyze"]').first();
     if (await analyzeChart.count()) {
       const sent = page.waitForRequest((r) => r.url().endsWith("/api/derive") && r.method() === "POST", { timeout: 15_000 }).catch(() => null);
       await analyzeChart.click();
       const request = await sent;
-      let analyzed = [];
-      for (let i = 0; i < 60 && analyzed.length <= analyzedBefore; i++) {
-        analyzed = (await sourcesOf(web.id)).filter((x) => x.note.derivationType === "ANALYZE");
-        if (analyzed.length <= analyzedBefore) await sleep(500);
-      }
+      const analyzed = (await until(async () => {
+        const all = (await sourcesOf(web.id)).filter((x) => x.note.derivationType === "ANALYZE");
+        return all.length > analyzedBefore ? all : null;
+      }, 30_000)) ?? [];
       const body = request ? JSON.parse(request.postData() ?? "{}") : {};
       const image = JSON.stringify(body).match(/data:image\/[a-z+]+/)?.[0] ?? null;
       const chartShot = await shot(page, `AI-analyze-chart-${theme}`);
@@ -2674,27 +2803,66 @@ RISKS.AI = async (theme) => {
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
+/** One group in one theme: its records. A crash is a failure of its own. */
+async function runGroup(name, theme) {
+  const start = results.length;
+  try {
+    await RISKS[name](theme);
+  } catch (err) {
+    record("FAIL", name, `(${theme}) crashed`, String(err?.stack ?? err).split("\n").slice(0, 3).join(" | "));
+  }
+  return results.slice(start);
+}
+
+/** Each group with a failure runs again, alone: a fresh browser, fresh
+    documents, nothing else running. A failure that passes there is FLAKY;
+    one that fails again, or that the run alone never reaches, stays. */
+async function alone(failed) {
+  console.log(`\nAlone: ${failed.map((f) => `${f.name} (${f.theme})`).join(", ")}`);
+  for (const [i, f] of failed.entries()) {
+    await browser.close().catch(() => {});
+    await launch();
+    ctx.docs = {};
+    ctx.alone = `-a${i}`;
+    const again = await runGroup(f.name, f.theme);
+    for (const r of f.out.filter((x) => x.level === "FAIL")) {
+      const twin = again.find((a) => a.name === r.name);
+      const crashFree = r.name.endsWith("crashed") && !again.some((a) => a.name.endsWith("crashed"));
+      if (twin?.level === "PASS" || crashFree) {
+        r.level = "FLAKY";
+        r.line = `FLAKY ${r.risk} ${r.name} — failed in the run: ${r.detail}; passed alone${twin ? `: ${twin.detail}` : ""}`;
+        console.log(r.line);
+      }
+    }
+    // What the run never reached (it crashed first) counts as the run alone found it.
+    for (const a of again) if (!f.out.some((r) => r.name === a.name)) a.counts = true;
+  }
+  ctx.alone = "";
+}
+
 async function main() {
   await prepare();
   const names = Object.keys(RISKS).filter((n) => n === "SETUP" || ONLY.size === 0 || ONLY.has(n));
+  const failed = [];
   for (const theme of THEMES) {
     for (const name of names) {
       if (name === "SETUP" && theme !== THEMES[0]) continue;
-      try {
-        await RISKS[name](theme);
-      } catch (err) {
-        record("FAIL", name, `(${theme}) crashed`, String(err?.stack ?? err).split("\n").slice(0, 3).join(" | "));
-      }
+      const out = await runGroup(name, theme);
+      if (name !== "SETUP" && out.some((r) => r.level === "FAIL")) failed.push({ name, theme, out });
     }
   }
+  if (failed.length && !ONCE) await alone(failed);
 }
 
 main()
   .catch((err) => record("FAIL", "RUN", "crashed", String(err?.stack ?? err).split("\n").slice(0, 4).join(" | ")))
   .finally(async () => {
-    const failed = results.filter((r) => r.level === "FAIL").length;
-    const passed = results.filter((r) => r.level === "PASS").length;
-    console.log(`\n${passed} passed, ${failed} failed, ${results.filter((r) => r.level === "TIME").length} timings`);
+    const counted = results.filter((r) => !r.alone || r.counts);
+    const n = (level) => counted.filter((r) => r.level === level).length;
+    const flaky = counted.filter((r) => r.level === "FLAKY");
+    const failures = counted.filter((r) => r.level === "FAIL");
+    if (flaky.length || failures.length) console.log(`\n${[...failures, ...flaky].map((r) => r.line).join("\n")}`);
+    console.log(`\n${n("PASS")} passed, ${n("FAIL")} failed, ${n("FLAKY")} flaky (failed in the run, passed alone), ${n("TIME")} timings`);
     writeFileSync(join(SHOT, `results-${STAMP}.json`), JSON.stringify(results, null, 1));
     if (!KEEP && ctx.notebookId) {
       try {
@@ -2706,5 +2874,5 @@ main()
     await browser?.close().catch(() => {});
     ctx.server?.close();
     await db.$disconnect();
-    process.exit(failed > 0 ? 1 : 0);
+    process.exit(n("FAIL") > 0 ? 1 : 0);
   });

@@ -7,7 +7,7 @@ import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { MAX_OUTPUT_TOKENS, VOICE_EFFORT } from "@/lib/derive/config";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
-import { documentPrefix, loadProfile, sectionSkeleton } from "@/lib/derive/context";
+import { documentPrefix, loadProfile, pageNames, sectionSkeleton } from "@/lib/derive/context";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
   const document = documentId
     ? await db.document.findFirst({
         where: { id: documentId, notebooks: { some: { notebookId: section.notebookId } } },
-        include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, cell: true } } },
+        include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, cell: true, page: true } } },
       })
     : null;
 
@@ -141,7 +141,7 @@ export async function POST(req: Request) {
             ? [
                 {
                   role: "system" as const,
-                  content: documentPrefix(document.title, document.blocks, document.references),
+                  content: documentPrefix(document.title, document.blocks, document.references, pageNames(document)),
                   providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
                 },
               ]

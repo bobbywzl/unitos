@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { COLLAPSE_EFFORT, COLLAPSE_MAX_OUTPUT_TOKENS, COLLAPSE_WINDOW_CHARS } from "@/lib/derive/config";
-import { documentPrefix } from "@/lib/derive/context";
+import { documentPrefix, pageNames } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { blockHash } from "@/lib/graph/skeleton";
@@ -135,9 +135,11 @@ export async function buildCollapse(
       title: true,
       collapse: true,
       references: true,
+      importRev: true,
+      pageLabels: true,
       blocks: {
         orderBy: { order: "asc" },
-        select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true },
+        select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true },
       },
     },
   });
@@ -163,7 +165,7 @@ export async function buildCollapse(
   }
   if (current.length > 0) windows.push(current);
 
-  const prefix = documentPrefix(document.title, document.blocks, document.references);
+  const prefix = documentPrefix(document.title, document.blocks, document.references, pageNames(document));
   const collapseCall = await featureCall("collapse", COLLAPSE_EFFORT);
   const usage = { userId, feature: "collapse", model: collapseCall.modelId } satisfies UsageMeta;
   const ceilingOf = new Map(missing.map((b) => [b.id, coreCeiling(wordCount(b.text))]));

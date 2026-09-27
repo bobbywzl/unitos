@@ -43,26 +43,44 @@ import {
 } from "docx";
 import type { DocStyle } from "@/components/docs/extensions";
 import { firstFamily } from "@/components/docs/fonts";
+import type { FigureMediaView } from "@/components/docs/insert/figure";
 import { DEFAULT_HF_MARGIN_PT, PX_PER_PT } from "@/components/docs/page/geometry";
 import { listPreset } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, styleFont, type NamedStyle } from "@/components/docs/toolbar/styles";
 import { authEnabled } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { fetchFigureImage } from "@/lib/derive/figure";
 import { isAssistantAuthor } from "@/lib/docs/assistant-suggestions";
 import { hex6, inlineText } from "@/lib/docs/blocks";
 import { suggestionAuthor, suggestionTime, ZWSP, type PageSetup, type RichMark, type RichNode } from "@/lib/docs/schema";
+import { CROP_PAD, CROP_PAGE_WIDTH, WHOLE_PAGE_WIDTH } from "@/lib/figure-crop";
+import { cropPageRegion, renderPdfPage } from "@/lib/handwritten/pages";
 import { serverT } from "@/lib/i18n/server";
 import { MAX_IMAGE_BYTES, sniffImage } from "@/lib/images";
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { parseRegion, type Region } from "@/lib/video/types";
 
 // File > Download > Microsoft Word (.docx) (SPEC.md §29): one walk of the
 // stored rich text. The named styles become Word's styles, marks become run
 // properties, lists become Word numbering, a suggestion becomes a tracked
 // change, a comment a Word comment, and the page setup becomes the section.
-// What Word has no place for (a chip, an equation) goes in as its words.
+// An import's figure object is its picture over its caption (§30); a page
+// start adds nothing. What Word has no place for (a chip, an equation) goes
+// in as its words.
 
 type Block = Paragraph | Table;
 type Picture = { data: Uint8Array; type: "png" | "jpg" | "gif" | "bmp"; width: number; height: number };
+/** A figure object's pictures, and whether they are a PDF figure's crop. */
+type FigurePictures = { pictures: Picture[]; crop: boolean };
+
+/** The figure objects' media (FigureMedia, by media id), the PDF a figure's
+    crop is cut from, and the address a web figure's relative images
+    resolve against. */
+export type DocxFigures = {
+  media: Record<string, FigureMediaView>;
+  pdf: Uint8Array | null;
+  pageUrl: string | null;
+};
 /** A comment on the text: its anchors (one per paragraph of its words), its author's account, time, and words. */
 type DocxComment = {
   sources: { blockId: string; startOffset: number; endOffset: number }[];
@@ -79,6 +97,7 @@ type Ctx = {
   /** The text column's width in CSS px, as the page draws it. */
   textWidth: number;
   pictures: Map<RichNode, Picture | null>;
+  figures: Map<RichNode, FigurePictures>;
   /** Each footnote's number, in the order the text cites them. */
   footnotes: Map<string, number>;
   numbering: { reference: string; levels: ILevelsOptions[] }[];
@@ -455,6 +474,52 @@ function imageRun(node: RichNode, ctx: Ctx): ImageRun | null {
   });
 }
 
+/** A figure's picture takes at most the text column's width and 28rem of
+    height, as the page draws a PDF figure (css/import.css). A row of
+    pictures shares the width, FIGURE_GAP px apart. */
+const FIGURE_MAX_HEIGHT = 448;
+const FIGURE_GAP = 12;
+
+/** A figure object (SPEC.md §30), as the page draws it: its pictures
+    centered on one line, kept with its caption under them (9 pt, gray; a
+    PDF figure's in italics). A figure with no picture (a video, an embed, a
+    crop that did not render) is its caption. */
+function figure(node: RichNode, ctx: Ctx): Paragraph[] {
+  const { pictures, crop } = ctx.figures.get(node) ?? { pictures: [], crop: false };
+  const caption = typeof node.attrs?.caption === "string" ? node.attrs.caption.trim() : "";
+  const change = changeOf(node);
+  const out: Paragraph[] = [];
+  if (pictures.length > 0) {
+    const room = (ctx.textWidth - FIGURE_GAP * (pictures.length - 1)) / pictures.length;
+    const children = pictures.flatMap((picture, i) => {
+      // A crop fills the column, as the page draws it; any other picture
+      // keeps its own size when it fits.
+      const scale = Math.min(room / picture.width, FIGURE_MAX_HEIGHT / picture.height, crop ? Infinity : 1);
+      const run = new ImageRun({
+        type: picture.type,
+        data: picture.data,
+        transformation: { width: Math.round(picture.width * scale), height: Math.round(picture.height * scale) },
+        insertion: change?.type === "insertion" ? revision(ctx, change) : undefined,
+        deletion: change?.type === "deletion" ? revision(ctx, change) : undefined,
+      });
+      return i > 0 ? [new TextRun({ text: " ", size: Math.round(FIGURE_GAP * 1.5) }), run] : [run];
+    });
+    out.push(
+      para(ctx, {
+        alignment: AlignmentType.CENTER,
+        spacing: { before: tw(9), after: caption ? tw(3) : tw(9) },
+        keepNext: caption ? true : undefined,
+        children,
+      }),
+    );
+  }
+  if (caption) {
+    const run = runOf({ type: "text", text: caption, marks: node.marks }, ctx, { italics: crop || undefined, size: 18, color: "666666" });
+    out.push(para(ctx, { spacing: { before: pictures.length > 0 ? 0 : tw(9), after: tw(9) }, children: run ? [run] : [] }));
+  }
+  return out;
+}
+
 /** The document's headings, for its tables of contents. */
 function headingsOf(nodes: RichNode[] = []): { level: number; text: string; id: string }[] {
   return nodes.flatMap((node) => {
@@ -506,6 +571,9 @@ function blocks(nodes: RichNode[] = [], ctx: Ctx): Block[] {
       }
       case "blockMath":
         out.push(para(ctx, { alignment: AlignmentType.CENTER, children: [new TextRun(String(a.latex ?? ""))] }));
+        break;
+      case "figure":
+        out.push(...figure(node, ctx));
         break;
       case "tableOfContents": {
         const levels = Array.isArray(a.levels) ? a.levels : [1, 2, 3];
@@ -560,17 +628,14 @@ async function imageBytes(src: string): Promise<Uint8Array | null> {
   }
 }
 
-/** An image as Word takes it: cropped as the page shows it, and a format
-    Word reads (anything else is redrawn as a PNG). */
-async function pictureOf(node: RichNode): Promise<Picture | null> {
-  const bytes = await imageBytes(String(node.attrs?.src ?? ""));
-  if (!bytes) return null;
+/** Image bytes as Word takes them: cut by `crop` (the part of each side, top
+    right bottom left), and a format Word reads (anything else, an svg too,
+    is redrawn as a PNG). */
+async function picture(bytes: Uint8Array, crop: number[] = [0, 0, 0, 0]): Promise<Picture | null> {
   const { createCanvas, loadImage } = await import("@napi-rs/canvas");
   const image = await loadImage(Buffer.from(bytes)).catch(() => null);
   if (!image || !(image.width > 0 && image.height > 0)) return null;
-  const [top, right, bottom, left] = ["cropTop", "cropRight", "cropBottom", "cropLeft"].map((key) =>
-    Math.min(0.95, Math.max(0, num(node.attrs?.[key]) ?? 0)),
-  );
+  const [top, right, bottom, left] = crop;
   const type = WORD_TYPES[sniffImage(bytes) ?? ""];
   if (type && top + right + bottom + left === 0) return { data: bytes, type, width: image.width, height: image.height };
   const width = Math.max(1, Math.round(image.width * (1 - left - right)));
@@ -580,9 +645,79 @@ async function pictureOf(node: RichNode): Promise<Picture | null> {
   return { data: canvas.toBuffer("image/png"), type: "png", width, height };
 }
 
+/** An image as Word takes it: cropped as the page shows it. */
+async function pictureOf(node: RichNode): Promise<Picture | null> {
+  const bytes = await imageBytes(String(node.attrs?.src ?? ""));
+  if (!bytes) return null;
+  const crop = ["cropTop", "cropRight", "cropBottom", "cropLeft"].map((key) => Math.min(0.95, Math.max(0, num(node.attrs?.[key]) ?? 0)));
+  return picture(bytes, crop);
+}
+
 function imageNodes(node: RichNode | null | undefined): RichNode[] {
   if (!node) return [];
   return node.type === "image" ? [node] : (node.content ?? []).flatMap(imageNodes);
+}
+
+function figureNodes(node: RichNode): RichNode[] {
+  return node.type === "figure" ? [node] : (node.content ?? []).flatMap(figureNodes);
+}
+
+/** A figure's pictures take this long at most: the route's time (60 s)
+    keeps room for the rest of the file. A crop not started by then leaves
+    its figure's caption. */
+const FIGURE_RENDER_MS = 40_000;
+
+/** A PDF figure's crop of its page, as the figure route cuts it: each page
+    rendered once, one render at a time. */
+function pdfCrops(pdf: Uint8Array, deadline: number) {
+  const renders = new Map<string, Promise<Uint8Array | null>>();
+  let queue: Promise<unknown> = Promise.resolve();
+  return async (page: number, region: Region | null): Promise<Uint8Array | null> => {
+    const width = region ? CROP_PAGE_WIDTH : WHOLE_PAGE_WIDTH;
+    const key = `${page}:${width}`;
+    let render = renders.get(key);
+    if (!render) {
+      render = queue.then(() => (Date.now() < deadline ? renderPdfPage(pdf, page, width) : null)).catch(() => null);
+      queue = render;
+      renders.set(key, render);
+    }
+    const image = await render;
+    if (!image || !region) return image;
+    return (await cropPageRegion(image, region, { pad: CROP_PAD, scaleUp: false })) ?? image;
+  };
+}
+
+/** A figure's pictures (SPEC.md §30): a PDF figure's crop of its page; a web
+    figure's images, else its charts' svg. None for a video or an embed. */
+async function figurePictures(
+  node: RichNode,
+  figures: DocxFigures,
+  crop: ((page: number, region: Region | null) => Promise<Uint8Array | null>) | null,
+): Promise<FigurePictures> {
+  const mediaId = String(node.attrs?.mediaId ?? "");
+  const media = Object.hasOwn(figures.media, mediaId) ? figures.media[mediaId] : null;
+  if (!media) return { pictures: [], crop: false };
+  if (media.html === null) {
+    const bytes = media.page !== null && crop ? await crop(media.page, parseRegion(media.region)) : null;
+    const shown = bytes ? await picture(bytes) : null;
+    return { pictures: shown ? [shown] : [], crop: true };
+  }
+  const srcs = [...media.html.matchAll(/<img\b[^>]*?\ssrc="([^"]+)"/gi)].map((m) => m[1].replaceAll("&amp;", "&"));
+  // An svg in a page needs no namespace; a file of its own does.
+  const svgs =
+    srcs.length > 0
+      ? []
+      : [...media.html.matchAll(/<svg\b[\s\S]*?<\/svg>/gi)].map((m) =>
+          /^<svg\b[^>]*\sxmlns=/.test(m[0]) ? m[0] : m[0].replace(/^<svg\b/, '<svg xmlns="http://www.w3.org/2000/svg"'),
+        );
+  const pictures = await Promise.all([
+    ...srcs.map(async (src) => {
+      const image = await fetchFigureImage(src, figures.pageUrl);
+      return image ? picture(image.bytes) : null;
+    }),
+    ...svgs.map((svg) => picture(new TextEncoder().encode(svg))),
+  ]);
+  return { pictures: pictures.filter((p) => p !== null), crop: false };
 }
 
 // ── The file ────────────────────────────────────────────────────────────────
@@ -646,19 +781,33 @@ export async function docxComments(documentId: string, user: User): Promise<Docx
   return notes.map((n) => ({ sources: n.sources, authorId: n.createdById, date: n.createdAt, text: n.content }));
 }
 
-/** The .docx of a blank document, with its comments. `origin` makes the
-    app's own links whole. */
-export async function richTextDocx(title: string, stored: RichNode, setup: PageSetup, origin: string, comments: DocxComment[] = []): Promise<Buffer> {
+/** The .docx of a document with rich text (a blank document or an
+    import), with its comments and its figures. `origin` makes the app's
+    own links whole. */
+export async function richTextDocx(
+  title: string,
+  stored: RichNode,
+  setup: PageSetup,
+  origin: string,
+  comments: DocxComment[] = [],
+  figures: DocxFigures = { media: {}, pdf: null, pageUrl: null },
+): Promise<Buffer> {
   const doc = tracked(stored);
   const styles = readStyles({ attrs: doc.attrs ?? {} });
   const shown = (hf: RichNode | null | undefined) => (setup.pageless ? null : hf);
   const parts = [doc, shown(setup.header), shown(setup.footer), shown(setup.firstHeader), shown(setup.firstFooter)];
   const images = parts.flatMap(imageNodes);
+  const crop = figures.pdf ? pdfCrops(figures.pdf, Date.now() + FIGURE_RENDER_MS) : null;
+  const [imageRows, figureRows] = await Promise.all([
+    Promise.all(images.map(async (node) => [node, await pictureOf(node)] as const)),
+    Promise.all(figureNodes(doc).map(async (node) => [node, await figurePictures(node, figures, crop)] as const)),
+  ]);
   const ctx: Ctx = {
     doc,
     origin,
     textWidth: (setup.width - setup.margins.left - setup.margins.right) * PX_PER_PT,
-    pictures: new Map(await Promise.all(images.map(async (node) => [node, await pictureOf(node)] as const))),
+    pictures: new Map(imageRows),
+    figures: new Map(figureRows),
     footnotes: new Map(),
     numbering: [
       { reference: "unticked", levels: bulletLevels("☐") },

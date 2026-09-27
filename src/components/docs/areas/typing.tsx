@@ -90,6 +90,7 @@ registerDocsCommands([
     keywords: ["voice", "dictation", "speech", "speak", "start voice typing", "语音"],
     shortcut: "Mod+Shift+S",
     run: (editor) => fireDocs(editor, TYPING_EVENT.voice),
+    enabled: editable,
   },
   {
     id: "typing:paste-markdown",

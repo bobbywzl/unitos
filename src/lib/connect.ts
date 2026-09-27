@@ -5,7 +5,7 @@ import { bumpNotebook } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { CONNECT_EFFORT } from "@/lib/derive/config";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
-import { loadProfile, renderBlockLines } from "@/lib/derive/context";
+import { loadProfile, pageNames, renderBlockLines } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { Lang } from "@/lib/i18n/config";
 import { currentLang } from "@/lib/i18n/server";
@@ -66,7 +66,10 @@ type WholeBlock = Parameters<typeof renderBlockLines>[0][number];
 
 // A document rendered whole up to the budget: whole blocks only, and a
 // declared cut past it, so the model knows what it did not read.
-function renderWhole(blocks: WholeBlock[], budget: number): string {
+function renderWhole(
+  { blocks, ...document }: { blocks: WholeBlock[]; importRev: number | null; pageLabels: unknown },
+  budget: number,
+): string {
   const kept: WholeBlock[] = [];
   let used = 0;
   for (const block of blocks) {
@@ -76,7 +79,7 @@ function renderWhole(blocks: WholeBlock[], budget: number): string {
     kept.push(block);
   }
   const cut = blocks.length - kept.length;
-  const lines = renderBlockLines(kept);
+  const lines = renderBlockLines(kept, pageNames(document));
   return cut > 0 ? `${lines}\n\n[cut: ${cut} more block${cut === 1 ? "" : "s"} of this document not shown]` : lines;
 }
 
@@ -118,7 +121,9 @@ export async function buildConnections(
       select: {
         id: true,
         title: true,
-        blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, cell: true } },
+        importRev: true,
+        pageLabels: true,
+        blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, cell: true, page: true } },
       },
     }),
     db.notebookDocument.findMany({
@@ -127,7 +132,9 @@ export async function buildConnections(
         document: {
           select: {
             id: true,
-            blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, cell: true } },
+            importRev: true,
+            pageLabels: true,
+            blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, cell: true, page: true } },
           },
         },
       },
@@ -163,7 +170,7 @@ export async function buildConnections(
   let othersLeftOut = 0;
   for (const { document: other } of attachments) {
     if (other.blocks.every((b) => !b.text.trim())) continue;
-    const rendered = `[document ${other.id}]\n${renderWhole(other.blocks, DOCUMENT_BUDGET)}`;
+    const rendered = `[document ${other.id}]\n${renderWhole(other, DOCUMENT_BUDGET)}`;
     if (othersUsed + rendered.length > OTHERS_BUDGET) {
       othersLeftOut++;
       continue;
@@ -178,7 +185,7 @@ export async function buildConnections(
     );
   }
 
-  const documentBlocks = renderWhole(document.blocks, DOCUMENT_BUDGET);
+  const documentBlocks = renderWhole(document, DOCUMENT_BUDGET);
   const messages: ModelMessage[] = [
     {
       role: "user",
@@ -260,7 +267,7 @@ export async function buildConnections(
             profile,
             documentBlocks,
             otherId,
-            otherBlocks: renderWhole(other.blocks, DOCUMENT_BUDGET),
+            otherBlocks: renderWhole(other, DOCUMENT_BUDGET),
             notes,
             candidates: group.map((c) => ({
               index: c.index,

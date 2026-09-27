@@ -102,16 +102,23 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
     "- suggest {instruction, blockIds?, description} — change the document's words or styles. The changes land in the document as suggestions the reader accepts or rejects. instruction: the change to make, in full. blockIds: the blocks to change, only when the change concerns some blocks and not the selection or the whole document; a heading stands for its section.",
 };
 
+/** How the assistant changes the open document: with the block actions (an
+    article), with the assistant's suggestions (a document with rich text,
+    SPEC.md §29), or not at all (an import a project of another account
+    holds too, SPEC.md §30). */
+export type DocumentEdits = "blocks" | "suggestions" | "none";
+
 // The block actions change an article's blocks outright. In a document with
-// rich text the assistant's changes are suggestions instead (SPEC.md §29).
+// rich text the assistant's changes are suggestions instead.
 const BLOCK_ACTIONS: ReadonlySet<RawAction["type"]> = new Set(["edit_block", "insert_paragraph", "remove_block", "format_block", "style"]);
-const fitsDocument = (type: RawAction["type"], richText: boolean): boolean =>
-  type === "suggest" ? richText : !(richText && BLOCK_ACTIONS.has(type));
+const fitsDocument = (type: RawAction["type"], edits: DocumentEdits): boolean =>
+  type === "suggest" ? edits === "suggestions" : !BLOCK_ACTIONS.has(type) || edits === "blocks";
 
 /** The action types as the prompts list them, one line per type: on a
-    document with rich text, suggest in place of the block actions. */
-export function actionLines(richText: boolean): string[] {
-  return (Object.keys(ACTION_LINES) as RawAction["type"][]).filter((type) => fitsDocument(type, richText)).map((type) => ACTION_LINES[type]);
+    document with rich text, suggest in place of the block actions; on a
+    document that takes no edits, neither. */
+export function actionLines(edits: DocumentEdits): string[] {
+  return (Object.keys(ACTION_LINES) as RawAction["type"][]).filter((type) => fitsDocument(type, edits)).map((type) => ACTION_LINES[type]);
 }
 
 export const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
@@ -132,8 +139,7 @@ export function buildAnchor(blockText: string, quoteText: string, blockId: strin
 
 export type PlanContext = {
   documentId: string;
-  // The document has rich text: its changes are the assistant's suggestions.
-  richText: boolean;
+  edits: DocumentEdits;
   blocks: { id: string; type: string; text: string }[];
   // Every document attached to the project, the open one included.
   attachedIds: Set<string>;
@@ -153,7 +159,7 @@ export function enrichActions(
   const warnings: string[] = [];
 
   for (const action of raw) {
-    if (!fitsDocument(action.type, ctx.richText)) {
+    if (!fitsDocument(action.type, ctx.edits)) {
       warnings.push(t("api.warnActionNotForDocument", { description: action.description }));
       continue;
     }

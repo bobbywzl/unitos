@@ -11,7 +11,7 @@ import {
   SKELETON_STALE_MS,
   SKELETON_WINDOW_CHARS,
 } from "@/lib/derive/config";
-import { documentPrefix } from "@/lib/derive/context";
+import { documentPrefix, pageNames } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { skeletonPrompt } from "@/lib/prompts/skeleton";
@@ -197,9 +197,11 @@ export async function buildSkeleton(
       title: true,
       contents: true,
       references: true,
+      importRev: true,
+      pageLabels: true,
       blocks: {
         orderBy: { order: "asc" },
-        select: { id: true, type: true, text: true, order: true, html: true, startTime: true, endTime: true, cell: true },
+        select: { id: true, type: true, text: true, order: true, html: true, startTime: true, endTime: true, cell: true, page: true },
       },
     },
   });
@@ -232,7 +234,7 @@ export async function buildSkeleton(
     windows.map(async (blocks, i) => {
       const windowParts = blocks.filter((b) => partAt.has(b.id)).map((b) => partAt.get(b.id)!);
       const messages: ModelMessage[] = [
-        { role: "system", content: documentPrefix(document.title, blocks, i === 0 ? document.references : undefined) },
+        { role: "system", content: documentPrefix(document.title, blocks, i === 0 ? document.references : undefined, pageNames(document)) },
         {
           role: "user",
           content: skeletonPrompt({

@@ -13,6 +13,14 @@ function referenceHost(url: string): string {
   }
 }
 
+/** What a citation shows on hover, in the block reader and in the page
+    editor: its reference entry and, on a line of its own, the site its link
+    goes to, as the References section writes them. */
+export function referenceTip(reference: DocumentReference): string {
+  const host = reference.url ? referenceHost(reference.url) : "";
+  return host && !reference.text.includes(host) ? `${reference.text}\n${host}` : reference.text;
+}
+
 // The References section: every reference of the open document, at the bottom
 // of the content body, collapsed by default. Clicking a citation mark in the
 // text expands the section, scrolls to the entry, and flashes it. Entries with

@@ -13,7 +13,7 @@ import {
   STITCH_SKELETON_BUDGET,
   STITCH_WHOLE_THRESHOLD,
 } from "@/lib/derive/config";
-import { loadProfile, renderBlockLines } from "@/lib/derive/context";
+import { loadProfile, pageNames, renderBlockLines } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { Lang } from "@/lib/i18n/config";
 import { featureCall } from "@/lib/feature-models";
@@ -199,6 +199,8 @@ export async function loadDocuments(notebookId: string, documentIds: string[] | 
           title: true,
           skeleton: true,
           handwritten: true,
+          importRev: true,
+          pageLabels: true,
           conversionStatus: true,
           conversionError: true,
           video: {
@@ -211,7 +213,7 @@ export async function loadDocuments(notebookId: string, documentIds: string[] | 
           },
           blocks: {
             orderBy: { order: "asc" },
-            select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true },
+            select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true },
           },
         },
       },
@@ -339,13 +341,14 @@ function emptySection(letter: string, doc: Doc, reason: StitchDocument["reason"]
 
 /** One document's readable blocks as the model reads them: the stored block
     lines under their aliases. */
-function aliasedLines(blocks: DocBlock[], source: Doc["blocks"]): string {
-  const stored = new Map(source.map((b) => [b.id, b]));
+function aliasedLines(blocks: DocBlock[], doc: Doc): string {
+  const stored = new Map(doc.blocks.map((b) => [b.id, b]));
   return renderBlockLines(
     blocks.flatMap((b) => {
       const row = stored.get(b.id);
       return row ? [{ ...row, id: b.alias }] : [];
     }),
+    pageNames(doc),
   );
 }
 
@@ -383,7 +386,7 @@ function renderDocument(doc: Doc, index: number): Rendered {
     doc,
     blocks,
     coverage: { ...base, status: "read", blocks: blocks.length, reason: null, detail: null },
-    section: `[document ${letter}] "${doc.title}"\n${aliasedLines(blocks, doc.blocks)}`,
+    section: `[document ${letter}] "${doc.title}"\n${aliasedLines(blocks, doc)}`,
   };
 }
 
@@ -421,7 +424,7 @@ export function selectedSystem(rendered: Rendered[], selected: Set<string>): str
     for (const block of shown) {
       const at = r.blocks.indexOf(block);
       if (last !== -1 && at - last > 1) lines.push(`(${at - last - 1} blocks not shown)`);
-      lines.push(aliasedLines([block], r.doc.blocks));
+      lines.push(aliasedLines([block], r.doc));
       last = at;
     }
     sections.push(`${header}\n${lines.join("\n\n")}`);

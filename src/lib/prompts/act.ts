@@ -1,4 +1,4 @@
-import { actionLines } from "@/lib/assistant/plan";
+import { actionLines, type DocumentEdits } from "@/lib/assistant/plan";
 import type { ChatTurn } from "@/lib/conversation";
 import type { Lang } from "@/lib/i18n/config";
 import { languageName, profileLines, STYLE_RULE, WEB_LINES, type ReaderProfileCtx } from "@/lib/prompts/types";
@@ -34,9 +34,10 @@ export type ActCtx = {
   command: string;
   // The reader's Web toggle is on: the model can search (SPEC.md §7).
   web?: boolean;
-  // The document has rich text: a change to it is one suggest action
-  // (SPEC.md §29), in place of the block actions.
-  richText?: boolean;
+  // How the document changes: the block actions (absent), one suggest action
+  // on a document with rich text (SPEC.md §29), or no change at all on an
+  // import a project of another account holds too (SPEC.md §30).
+  edits?: DocumentEdits;
 };
 
 /** The selection block for a text selection: what the route puts in the
@@ -69,7 +70,7 @@ export function actPrompt(ctx: ActCtx): string {
     }`,
     "",
     "Action types:",
-    ...actionLines(ctx.richText ?? false),
+    ...actionLines(ctx.edits ?? "blocks"),
     "",
     "Rules:",
     "1. Use block ids exactly as given. Every quote must be an exact substring of the named block's text.",
@@ -92,11 +93,15 @@ export function actPrompt(ctx: ActCtx): string {
             : "   e. This is the first message of the conversation: always return matches.",
         ]
       : ["9. matches: return an empty list. The reader has no selection."]),
-    ...(ctx.richText
+    ...(ctx.edits === "suggestions"
       ? [
           "10. A command that asks to change the document's words or styles: one suggest action, reply null, and matches an empty list. The suggestions carry the change: never write the changed text in reply.",
         ]
-      : []),
+      : ctx.edits === "none"
+        ? [
+            "10. The document's words and styles cannot be changed: a project of another account holds the document too. A command that asks to change them: say so in reply, in one sentence, and return no action for the change.",
+          ]
+        : []),
     "",
     ...(ctx.history.length > 0
       ? [

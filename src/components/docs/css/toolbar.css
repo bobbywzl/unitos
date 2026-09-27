@@ -439,8 +439,9 @@
 .docs-search-row {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 2px 12px;
   width: 100%;
   padding: 10px 15px 10px 35px;
   text-align: left;
@@ -464,6 +465,12 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+/* Why an action is off: a line of its own under the row's. */
+.docs-search-note {
+  flex-basis: 100%;
+  font-size: 12px;
+  line-height: 16px;
 }
 .docs-search-where,
 .docs-search-keys {

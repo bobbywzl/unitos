@@ -23,6 +23,8 @@ export type SearchAction = {
   icon?: ReactNode;
   run: () => void;
   enabled?: boolean;
+  /** Why the action is off, under its label. */
+  note?: string;
 };
 
 /** Raised on the editor's text, opens Search the menus (Alt+/). */
@@ -264,6 +266,7 @@ export function SearchMenus({
                     <span className="docs-search-label">{a.label}</span>
                     <span className="docs-search-where">{a.where}</span>
                     {a.shortcut && <span className="docs-search-keys">{a.shortcut}</span>}
+                    {a.note && <span className="docs-search-note">{a.note}</span>}
                   </button>
                 ))}
               </div>

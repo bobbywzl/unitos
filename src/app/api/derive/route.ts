@@ -21,6 +21,7 @@ import {
   corpusSection,
   documentPrefix,
   loadProfile,
+  pageNames,
   passageContext,
   renderBlockLines,
   sectionSkeleton,
@@ -336,9 +337,11 @@ async function handle(req: Request, t: TFunc) {
           select: {
             id: true,
             title: true,
+            importRev: true,
+            pageLabels: true,
             blocks: {
               orderBy: { order: "asc" },
-              select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true },
+              select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true },
             },
           },
         },
@@ -360,7 +363,7 @@ async function handle(req: Request, t: TFunc) {
     const skipped: string[] = [];
     let used = 0;
     for (const doc of corpusDocs) {
-      const lines = renderBlockLines(doc.blocks);
+      const lines = renderBlockLines(doc.blocks, pageNames(doc));
       const rendered = `[document ${doc.id}] "${doc.title}"` + "\n" +
         (lines.length > PER_DOCUMENT ? lines.slice(0, PER_DOCUMENT) : lines);
       if (used + rendered.length > TOTAL) {
@@ -522,9 +525,11 @@ async function handle(req: Request, t: TFunc) {
           select: {
             id: true,
             title: true,
+            importRev: true,
+            pageLabels: true,
             blocks: {
               orderBy: { order: "asc" },
-              select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true },
+              select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true },
             },
           },
         },
@@ -541,7 +546,7 @@ async function handle(req: Request, t: TFunc) {
     const profile = await loadProfile(data.notebookId);
     const PER_DOCUMENT = 220_000;
     const renderDoc = (doc: typeof first) => {
-      const lines = renderBlockLines(doc.blocks);
+      const lines = renderBlockLines(doc.blocks, pageNames(doc));
       return (
         `[document ${doc.id}] "${doc.title}"` +
         "\n" +
@@ -697,7 +702,7 @@ async function handle(req: Request, t: TFunc) {
   // 1. Load document blocks (the cached prompt prefix), profile, section skeleton.
   const document = await db.document.findUnique({
     where: { id: documentId },
-    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true } } },
+    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true } } },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   const blockById = new Map(document.blocks.map((b) => [b.id, { id: b.id, text: b.text }]));
@@ -960,7 +965,7 @@ async function handle(req: Request, t: TFunc) {
   const messages: ModelMessage[] = [
     {
       role: "system",
-      content: documentPrefix(document.title, document.blocks, document.references),
+      content: documentPrefix(document.title, document.blocks, document.references, pageNames(document)),
     },
     ...(corpus
       ? [

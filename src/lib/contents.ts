@@ -4,7 +4,7 @@ import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { CONTENTS_EFFORT, CONTENTS_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
-import { documentPrefix } from "@/lib/derive/context";
+import { documentPrefix, pageNames } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { contentsPrompt } from "@/lib/prompts/contents";
 import type { UsageMeta } from "@/lib/usage";
@@ -130,7 +130,7 @@ export async function buildContents(documentId: string, userId: string | null): 
     include: {
       blocks: {
         orderBy: { order: "asc" },
-        select: { id: true, type: true, text: true, order: true, startTime: true, endTime: true, cell: true },
+        select: { id: true, type: true, text: true, order: true, startTime: true, endTime: true, cell: true, page: true },
       },
     },
   });
@@ -139,7 +139,7 @@ export async function buildContents(documentId: string, userId: string | null): 
   if (readable.length < MIN_BLOCKS) return [];
 
   const messages: ModelMessage[] = [
-    { role: "system", content: documentPrefix(document.title, document.blocks, document.references) },
+    { role: "system", content: documentPrefix(document.title, document.blocks, document.references, pageNames(document)) },
     { role: "user", content: contentsPrompt({ blockCount: readable.length, maxParts: MAX_PARTS }) },
   ];
   const contentsCall = await featureCall("contents", CONTENTS_EFFORT);

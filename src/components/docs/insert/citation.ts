@@ -9,10 +9,20 @@ import { importedOf } from "@/components/docs/insert/figure";
 // words, and the paragraph index reads it into Block.citations. A click on
 // it in Viewing mode, or a Ctrl+click (⌘+click) in any mode, opens its
 // entry in the References section under the page, as in the block reader.
+// On hover it shows the block reader's card: its reference entry and the
+// site its link goes to, in the app's tooltip.
 
 function documentIdOf(editor: Editor | undefined): string | null {
   if (!editor) return null;
   return importedOf(editor)?.documentId ?? insertContext(editor)?.documentId ?? null;
+}
+
+// Each document's cards by reference id (bibliography.tsx referenceTip), set
+// by the reader from the page data (reader-interactions.tsx).
+const cardsByDocument = new Map<string, ReadonlyMap<string, string>>();
+
+export function setCitationCards(documentId: string, cards: ReadonlyMap<string, string>): void {
+  cardsByDocument.set(documentId, cards);
 }
 
 export const Citation = Mark.create({
@@ -48,6 +58,29 @@ export const Citation = Mark.create({
 
   renderHTML({ HTMLAttributes }) {
     return ["span", mergeAttributes(HTMLAttributes, { "data-citation": documentIdOf(this.editor) ?? "", class: "docs-citation" }), 0];
+  },
+
+  // On screen, renderHTML's span, whose card the pointer reads from the page
+  // data when it comes over the words (data-tip, the app's tooltip). The
+  // card and the tooltip's aria-describedby change no words, so the editor
+  // does not read the span again for them.
+  addMarkView() {
+    return ({ mark, editor, HTMLAttributes }) => {
+      const dom = document.createElement("span");
+      const attrs = mergeAttributes(HTMLAttributes, { "data-citation": documentIdOf(editor) ?? "", class: "docs-citation" });
+      for (const [name, value] of Object.entries(attrs)) dom.setAttribute(name, String(value));
+      dom.addEventListener("pointerover", () => {
+        const documentId = documentIdOf(editor);
+        const card = documentId ? cardsByDocument.get(documentId)?.get(String(mark.attrs.refId)) : undefined;
+        if (card && dom.getAttribute("data-tip") !== card) dom.setAttribute("data-tip", card);
+      });
+      return {
+        dom,
+        contentDOM: dom,
+        ignoreMutation: (mutation) =>
+          mutation.type === "attributes" && (mutation.attributeName === "data-tip" || mutation.attributeName === "aria-describedby"),
+      };
+    };
   },
 
   addProseMirrorPlugins() {

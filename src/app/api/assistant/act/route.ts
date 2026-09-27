@@ -27,6 +27,7 @@ import {
   annotationsSection,
   documentPrefix,
   loadProfile,
+  pageNames,
   passageContext,
   sectionSkeleton,
 } from "@/lib/derive/context";
@@ -35,7 +36,7 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { actionsSchema, enrichActions, type RawAction } from "@/lib/assistant/plan";
+import { actionsSchema, enrichActions, type DocumentEdits, type RawAction } from "@/lib/assistant/plan";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { SUGGEST_COMMANDS, type SuggestCommand } from "@/lib/prompts/suggest";
 import { parseBody } from "@/lib/validate";
@@ -184,7 +185,7 @@ async function handle(req: Request, t: TFunc) {
   const document = await db.document.findUnique({
     where: { id: data.documentId },
     include: {
-      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true } },
+      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true } },
     },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
@@ -269,9 +270,9 @@ async function handle(req: Request, t: TFunc) {
   // text; a chip changes the selected words. An import another account's
   // project holds takes no edits.
   const shared = takesSuggestions(document) && (await importShared(document.id));
-  const richText = takesSuggestions(document) && !shared;
+  const edits: DocumentEdits = shared ? "none" : takesSuggestions(document) ? "suggestions" : "blocks";
   if (chip && shared) return importSharedResponse(t);
-  if (chip && !richText) return NextResponse.json({ error: t("api.suggestNeedsRichText") }, { status: 400 });
+  if (chip && edits !== "suggestions") return NextResponse.json({ error: t("api.suggestNeedsRichText") }, { status: 400 });
   if (chip && passage.length === 0) return NextResponse.json({ error: t("api.anchorMissing") }, { status: 400 });
   if (anchor && anchored && layer === "core") {
     selectionBlock = textSelectionBlock(anchor.blockId, anchored.anchoredText, true);
@@ -376,13 +377,13 @@ async function handle(req: Request, t: TFunc) {
       .map((n) => ({ sectionTitle: n.section.title, content: n.content })),
     history,
     command: data.command,
-    richText,
+    edits,
   });
 
   const messages: ModelMessage[] = [
     {
       role: "system",
-      content: documentPrefix(document.title, document.blocks, document.references),
+      content: documentPrefix(document.title, document.blocks, document.references, pageNames(document)),
     },
     attachedImage
       ? {
@@ -430,7 +431,7 @@ async function handle(req: Request, t: TFunc) {
   // (lib/assistant/plan.ts): the sidebar assistant's plan takes the same path.
   const { actions, warnings } = enrichActions(result.data.actions, {
     documentId: data.documentId,
-    richText,
+    edits,
     blocks: document.blocks,
     attachedIds: new Set(attachedDocs.map((nd) => nd.documentId)),
     sectionIds: new Set(sections.map((s) => s.id)),

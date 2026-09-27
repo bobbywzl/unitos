@@ -234,8 +234,9 @@ function buildResponse(all) {
     });
   }
 
-  // Assistant act: plan JSON with real quotes.
-  if (all.includes('"actions"') && (all.includes("format_block") || all.includes("- suggest {"))) {
+  // Assistant act: plan JSON with real quotes (lib/prompts/act.ts is the one
+  // prompt with an "actions" key; a shared import's lists no edit actions).
+  if (all.includes('"actions"')) {
     const p = paragraphs[0];
     if (!p) return JSON.stringify({ reply: "No paragraphs found.", actions: [] });
     const quote = p.text.slice(0, Math.min(48, p.text.length)).trim();

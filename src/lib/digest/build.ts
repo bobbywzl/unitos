@@ -1,7 +1,7 @@
 import type { DerivationType } from "@prisma/client";
 import { conversationTurns, renderTranscript } from "@/lib/conversation";
 import { db } from "@/lib/db";
-import { renderBlockLines, renderReferenceLines } from "@/lib/derive/context";
+import { pageNames, renderBlockLines, renderReferenceLines } from "@/lib/derive/context";
 import {
   distillationList,
   extractionList,
@@ -129,7 +129,7 @@ export async function buildDigest(
             include: {
               blocks: {
                 orderBy: { order: "asc" },
-                select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true },
+                select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true },
               },
               video: true,
             },
@@ -215,7 +215,7 @@ export async function buildDigest(
     blockCount += d.blocks.length;
     const blockText = new Map(d.blocks.map((b) => [b.id, b.text]));
     const referenceLines = renderReferenceLines(d.references);
-    const text = [renderBlockLines(d.blocks), ...(referenceLines.length > 0 ? ["", ...referenceLines] : [])]
+    const text = [renderBlockLines(d.blocks, pageNames(d)), ...(referenceLines.length > 0 ? ["", ...referenceLines] : [])]
       .join("\n")
       .trim();
 

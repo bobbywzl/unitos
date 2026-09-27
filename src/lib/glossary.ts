@@ -4,7 +4,7 @@ import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { DEFAULT_EFFORT } from "@/lib/derive/config";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
-import { documentPrefix } from "@/lib/derive/context";
+import { documentPrefix, pageNames } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { isLang, type Lang } from "@/lib/i18n/config";
 import { currentLang } from "@/lib/i18n/server";
@@ -143,14 +143,14 @@ export async function buildGlossary(
   const definitionLang = lang ?? (await currentLang());
   const document = await db.document.findUnique({
     where: { id: documentId },
-    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true } } },
+    include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true } } },
   });
   if (!document || document.blocks.length === 0) return 0;
 
   const messages: ModelMessage[] = [
     {
       role: "system",
-      content: documentPrefix(document.title, document.blocks, document.references),
+      content: documentPrefix(document.title, document.blocks, document.references, pageNames(document)),
     },
     { role: "user", content: glossaryPrompt(definitionLang) },
   ];
