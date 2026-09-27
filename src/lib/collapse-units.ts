@@ -22,7 +22,7 @@ export function collapseUnits(rows: UnitRow[], richText: boolean): CollapseUnit[
   const units: CollapseUnit[] = [];
   // The unit the next row joins when it is a line of the same list or a
   // cell of the same table.
-  let open: { unit: CollapseUnit; key: string } | null = null;
+  let open = null as { unit: CollapseUnit; key: string } | null;
   for (const row of rows) {
     const table = richText ? tableOf(row.cell) : null;
     const key = table !== null ? `table ${table}` : richText && row.type === "LIST" ? "list" : null;

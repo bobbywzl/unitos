@@ -14,12 +14,13 @@
   cursor: pointer;
 }
 /* The frame in the Unitos accent: a hairline under the pointer, the clay
-   ring while the figure is selected. */
+   ring while the figure is selected in a page that takes edits. In Viewing a
+   click opens the figure's tools and draws no frame. */
 .docs-prose .docs-figure:hover {
   outline: 1px solid color-mix(in srgb, var(--docs-blue) 45%, transparent);
   outline-offset: 4px;
 }
-.docs-prose .docs-figure.ProseMirror-selectednode {
+.docs-prose[contenteditable="true"] .docs-figure.ProseMirror-selectednode {
   outline: 2px solid var(--docs-blue);
   outline-offset: 4px;
 }
@@ -38,6 +39,12 @@
   padding: 0;
   line-height: 1.45;
   color: var(--docs-gray-2);
+}
+/* A box the page painted under a web figure keeps the light theme's words
+   in dark mode, as in the block reader (globals.css .reader-figure). */
+.dark .docs-prose .docs-figure :is(figure, div)[style*="background"] {
+  --docs-gray-2: #666666;
+  --docs-link: #1155cc;
 }
 /* No figure runs past the text column: one the page set wider than its text
    draws at the text's width, in pages and pageless alike. */
@@ -136,6 +143,12 @@
 .docs-shell[data-import] .docs-prose th {
   font-weight: 700;
   background-color: color-mix(in srgb, var(--docs-ink) 5%, transparent);
+}
+/* A pageless import's table fills the text column: its column widths
+   (lib/docs/import-table.ts) are shares of the width, as a fixed layout
+   spreads a table wider than its columns. */
+.docs-shell[data-import] .docs-page[data-pageless] .docs-prose table {
+  min-width: 100%;
 }
 /* A white page drawn dark (dark mode) draws a line in the warm sand of its
    other lines; a page with a color keeps the document's gray. */

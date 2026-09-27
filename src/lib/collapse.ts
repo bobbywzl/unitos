@@ -7,6 +7,7 @@ import { documentPrefix, pageNames } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { blockHash } from "@/lib/graph/skeleton";
+import { collapseUnits, type CollapseUnit } from "@/lib/collapse-units";
 import { collapsePrompt, type CollapseBlockCtx } from "@/lib/prompts/collapse";
 import type { UsageMeta } from "@/lib/usage";
 
@@ -19,7 +20,9 @@ import type { UsageMeta } from "@/lib/usage";
 // changed shows as it is until the next Collapse writes its core again, and
 // a re-parse's new block with the same text keeps its core by the hash.
 // Built one call per window of COLLAPSE_WINDOW_CHARS of block text, the
-// windows at once, each under the cached prefix of the whole document.
+// windows at once, each under the cached prefix of the whole document. In a
+// document with rich text a core stands for a unit of the paragraph index
+// (lib/collapse-units.ts): a paragraph, a list's lines, a table's cells.
 
 export const COLLAPSE_VERSION = 1;
 const CORE_MAX = 2000;
@@ -27,10 +30,19 @@ const CORE_MAX = 2000;
 const TABLE_MAX_CHARS = 5_000;
 
 export type Core = { blockId: string; hash: string; text: string };
-export type Collapse = { v: number; cores: Core[] };
+/** richText: the cores were written by the units of a document with rich
+    text, and are read by them. */
+export type Collapse = { v: number; cores: Core[]; richText?: true };
 
 /** The document as Collapse reads it: the block rows the route loads. */
-export type CollapseBlock = { id: string; type: string; text: string; startTime?: number | null; endTime?: number | null };
+export type CollapseBlock = {
+  id: string;
+  type: string;
+  text: string;
+  startTime?: number | null;
+  endTime?: number | null;
+  cell?: unknown;
+};
 
 const windowSchema = z.object({
   cores: z.array(z.object({ blockId: z.string().min(1), text: z.string().trim().min(1).max(CORE_MAX) })).max(2000),
@@ -61,7 +73,14 @@ export function readCollapse(value: unknown): Collapse | null {
       cores.push({ blockId: c.blockId, hash: c.hash, text: c.text });
     }
   }
-  return { v: COLLAPSE_VERSION, cores };
+  return row.richText === true ? { v: COLLAPSE_VERSION, cores, richText: true } : { v: COLLAPSE_VERSION, cores };
+}
+
+/** Whether the document has rich text (SPEC.md §29): its rows are the paragraph index. */
+async function hasRichText(documentId: string): Promise<boolean> {
+  const [row] = await db.$queryRaw<{ rich: boolean }[]>`
+    SELECT ("richText" IS NOT NULL) AS "rich" FROM "Document" WHERE "id" = ${documentId}`;
+  return row?.rich ?? false;
 }
 
 /** The words of a text: Latin words, and CJK characters at two per word. */
@@ -96,20 +115,23 @@ function fitCore(text: string, ceiling: number): string {
   return `${cut.replace(/[\s,;:—–-]+$/, "")}…`;
 }
 
-/** The cores the reader shows now: one per collapsible block whose stored
-    core was written from the block's current text — by the block's id, else
-    by the hash alone (a re-parse's new block with the same text) — and the
-    blocks with no current core, which the next Collapse writes. */
+/** The cores the reader shows now: one per collapsible block (a unit, in a
+    document with rich text) whose stored core was written from the block's
+    current text — by the block's id, else by the hash alone (a re-parse's
+    new block with the same text) — and the blocks with no current core,
+    which the next Collapse writes. The units are the stored cores' unless
+    the caller knows the document. */
 export function currentCores(
   collapse: Collapse | null,
   blocks: CollapseBlock[],
-): { cores: Record<string, string>; missing: CollapseBlock[] } {
-  const wanted = blocks.filter(collapsible);
+  richText = collapse?.richText === true,
+): { cores: Record<string, string>; missing: CollapseUnit[] } {
+  const wanted = collapseUnits(blocks, richText).filter(collapsible);
   const byId = new Map(collapse?.cores.map((c) => [c.blockId, c]) ?? []);
   const byHash = new Map<string, Core>();
   for (const c of collapse?.cores ?? []) if (!byHash.has(c.hash)) byHash.set(c.hash, c);
   const cores: Record<string, string> = {};
-  const missing: CollapseBlock[] = [];
+  const missing: CollapseUnit[] = [];
   for (const block of wanted) {
     const hash = blockHash(block.text);
     const stored = byId.get(block.id);
@@ -145,14 +167,15 @@ export async function buildCollapse(
   });
   if (!document) return {};
   const stored = readCollapse(document.collapse);
-  const { cores, missing } = currentCores(stored, document.blocks);
+  const richText = await hasRichText(documentId);
+  const { cores, missing } = currentCores(stored, document.blocks, richText);
   if (missing.length === 0) return cores;
   if (!(await featureConfigured("collapse"))) throw new Error("No model is configured for Collapse");
 
   // Windows: the missing blocks in order, cut at a block boundary past the
   // window's chars.
-  const windows: CollapseBlock[][] = [];
-  let current: CollapseBlock[] = [];
+  const windows: CollapseUnit[][] = [];
+  let current: CollapseUnit[] = [];
   let used = 0;
   for (const block of missing) {
     if (current.length > 0 && used + block.text.length > COLLAPSE_WINDOW_CHARS) {
@@ -174,6 +197,7 @@ export async function buildCollapse(
       const listed: CollapseBlockCtx[] = blocks.map((b) => ({
         blockId: b.id,
         type: b.type,
+        lastBlockId: b.rows.length > 1 ? b.rows[b.rows.length - 1] : undefined,
         words: wordCount(b.text),
         maxWords: ceilingOf.get(b.id) ?? 8,
       }));
@@ -212,9 +236,13 @@ export async function buildCollapse(
   // The stored cores that still stand — by id and hash, or by hash alone —
   // plus the new ones; the rest is dropped, so the row never grows past
   // the document.
-  const hashes = new Set(document.blocks.map((b) => blockHash(b.text)));
+  const hashes = new Set(collapseUnits(document.blocks, richText).map((b) => blockHash(b.text)));
   const kept = (stored?.cores ?? []).filter((c) => hashes.has(c.hash) && !written.has(c.blockId));
-  const next: Collapse = { v: COLLAPSE_VERSION, cores: [...kept, ...written.values()] };
+  const next: Collapse = {
+    v: COLLAPSE_VERSION,
+    cores: [...kept, ...written.values()],
+    ...(richText ? { richText: true as const } : {}),
+  };
   await db.document.update({
     where: { id: documentId },
     data: { collapse: next as unknown as Prisma.InputJsonValue },

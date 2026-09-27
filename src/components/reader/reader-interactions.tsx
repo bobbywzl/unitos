@@ -148,7 +148,7 @@ import { CardColumn, CommentCard } from "@/components/docs/layer/comment-card";
 import { setCommentResolved } from "@/lib/annotations/resolve";
 import { COMMENTS_EVENT, flashInPage, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
-import { DOCS_EVENT } from "@/components/docs/typing/events";
+import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { matchesCombo } from "@/components/docs/keys";
 import {
   assistantAuthor,
@@ -2056,12 +2056,17 @@ export function ReaderInteractions({
     // drag across table cells selects the cells, and their words are the
     // passage.
     const pageEditor = richTextRef.current ? pageEditorIn(container) : null;
-    const cells = pageEditor ? pageCellSelection(pageEditor) : null;
     const selection = window.getSelection();
-    const range =
-      cells?.range ?? (selection && !selection.isCollapsed && selection.rangeCount > 0 ? selection.getRangeAt(0) : null);
+    const selected = selection && !selection.isCollapsed && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    // A selection that starts in a core (SPEC.md §28) is the collapsed view's
+    // words, drawn over the page's text: it is read as the block reader
+    // reads it.
+    const start = selected?.startContainer;
+    const inCore = Boolean((start instanceof Element ? start : start?.parentElement)?.closest("[data-collapsed]"));
+    const cells = pageEditor && !inCore ? pageCellSelection(pageEditor) : null;
+    const range = cells?.range ?? selected;
     if (!range || !container.contains(range.commonAncestorContainer)) return null;
-    const pageSelection = cells ?? (pageEditor ? pageSelectionOfRange(pageEditor, range) : null);
+    const pageSelection = cells ?? (pageEditor && !inCore ? pageSelectionOfRange(pageEditor, range) : null);
     const pageSegments = pageSelection?.segments ?? null;
 
     const blockOf = (node: Node): HTMLElement | null => {
@@ -3715,6 +3720,11 @@ export function ReaderInteractions({
       return next;
     });
   }
+  // The page editor's Editing and Suggesting need the words: they turn
+  // Collapse off (components/docs/layer/collapse.tsx).
+  function collapseOff() {
+    if (collapseOn) void toggleCollapse();
+  }
 
   // The lead tool (SPEC.md §6): when the popover opens on a selection, Jev
   // predicts which tool the reader reaches for, from the selection and the
@@ -4025,7 +4035,9 @@ export function ReaderInteractions({
     const lineTop = clientY - 20;
     const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
     suppressNextMouseUp.current = true;
-    window.getSelection()?.removeAllRanges();
+    // The page editor keeps its own selection, the figure it selected: an
+    // emptied one would put the caret at the text's start on the next key.
+    if (!richTextRef.current) window.getSelection()?.removeAllRanges();
     setSubmenu(null);
     setCommentDraft("");
     setPopover({
@@ -6784,8 +6796,11 @@ function blockFormatKind(
   // moment the pointer lifts. The Close link chip's highlight keeps it the
   // same way. The page editor keeps its own selection drawn, blue or gray
   // (SPEC.md §29): no tint, so opening the toolbar never repaints the page,
-  // and a repaint cannot put back a selection the keys have just moved.
-  const underToolbar = richText ? null : (popover?.anchor ?? closeLink?.anchor ?? null);
+  // and a repaint cannot put back a selection the keys have just moved. A
+  // core's words (SPEC.md §28) are drawn over the page, not its text: they
+  // keep the tint.
+  const toolbarAnchor = popover?.anchor ?? closeLink?.anchor ?? null;
+  const underToolbar = richText && !(toolbarAnchor && isCoreKey(toolbarAnchor.blockId)) ? null : toolbarAnchor;
   if (underToolbar) {
     for (const s of segmentsOf(underToolbar)) {
       const existing = highlightsByBlock[s.blockId] ?? [];
@@ -7219,6 +7234,9 @@ function blockFormatKind(
     <button
       onClick={() => {
         collapseNew.seen();
+        // A page editor collapses in Viewing: Editing needs the words.
+        const page = richText && !collapseOn ? pageEditorIn(containerRef.current) : null;
+        if (page?.isEditable) fireDocs(page, DOCS_EVENT.mode, "viewing");
         void toggleCollapse();
       }}
       data-track={collapseOn ? "collapse-off" : "collapse"}
@@ -7299,11 +7317,11 @@ function blockFormatKind(
       {split && (
         <div className={PANE_HEADER}>
           {paneHeader}
-          {/* A blank document has no Contents and no Collapse. */}
+          {/* A blank document has no Contents. */}
           {!transcript && !richText && articleMenu}
           {!transcript && (
             <div className="relative ml-auto flex shrink-0 items-center gap-2">
-              {!richText && collapseButton}
+              {collapseButton}
               {distillButton}
               {/* The article's errors: under the buttons, over the text. */}
               <div className="absolute top-full right-0 mt-2">
@@ -7461,7 +7479,13 @@ function blockFormatKind(
             ? {
                 ...richText,
                 canEdit,
-                aiControls: !split && !embedded ? distillButton : null,
+                aiControls:
+                  !split && !embedded ? (
+                    <div className="flex items-center gap-2">
+                      {collapseButton}
+                      {distillButton}
+                    </div>
+                  ) : null,
                 notebookId,
                 documents: attachedDocuments,
                 // An import's References section stands under its pages,
@@ -7481,7 +7505,7 @@ function blockFormatKind(
           />
         }
         translations={translations}
-        collapse={cores ? { cores, on: collapseOn, flipped: flippedBlocks, flip: flipBlock } : null}
+        collapse={cores ? { cores, on: collapseOn, flipped: flippedBlocks, flip: flipBlock, off: collapseOff } : null}
         leftOffBlockId={leftOffBlockId}
         accountPositionAtOpen={accountAtOpen !== null}
       />

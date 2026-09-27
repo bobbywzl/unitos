@@ -22,6 +22,7 @@ import { WordCountDialog } from "@/components/docs/word-count";
 import { insertImageFrom } from "@/components/docs/insert/image";
 import { InsertLayer } from "@/components/docs/areas/insert";
 import { UnitosLayer } from "@/components/docs/areas/layer";
+import { CollapsedView, type PageCollapse } from "@/components/docs/layer/collapse";
 import { showTranslations } from "@/components/docs/layer/reading";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageBanner, PageCanvas, PageRuler } from "@/components/docs/areas/page";
@@ -322,6 +323,7 @@ export function DocsEditor({
   footer,
   banner,
   translations = null,
+  collapse = null,
 }: {
   documentId: string;
   notebookId: string;
@@ -348,6 +350,9 @@ export function DocsEditor({
   banner?: ReactNode;
   /** Translation text per block id, each read under its paragraph. */
   translations?: Record<string, string> | null;
+  /** Collapse (SPEC.md §28): the cores, in Viewing (layer/collapse.tsx);
+      null while the document has none. */
+  collapse?: PageCollapse | null;
 }) {
   const t = useT();
   useDocsFonts();
@@ -661,6 +666,7 @@ export function DocsEditor({
         {chrome}
       </div>
       <PageBanner.Provider value={banner}>{pages}</PageBanner.Provider>
+      <CollapsedView editor={editor} collapse={collapse} highlightsByBlock={highlightsByBlock} editing={editing} />
       {footer}
     </div>
   );

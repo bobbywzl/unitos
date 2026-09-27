@@ -1,0 +1,30 @@
+/* Collapse (SPEC.md §28) in the page editor (layer/collapse.tsx). A unit of
+   the paragraph index shown as its core is not drawn; its core stands in its
+   place, a widget, with the block reader's look (globals.css .reader-core):
+   the page's words, a sage rule at the left, the space after a paragraph.
+   The rich text never changes. */
+.docs-prose .docs-core-hidden {
+  display: none !important;
+}
+.docs-prose .docs-core-slot {
+  position: relative;
+  padding-bottom: 10pt;
+}
+.docs-prose .docs-core-slot > .reader-core {
+  margin: 0;
+}
+/* A unit read whole keeps only its button, at its top right; the button
+   shows while the pointer is on the unit. */
+.docs-prose .docs-core-slot[data-docs-core="words"] {
+  height: 0;
+  padding: 0;
+}
+.docs-prose .docs-core-slot[data-docs-core="words"]:has(+ .docs-core-whole:hover) > button {
+  opacity: 1;
+}
+/* The PDF pages that begin in a unit: their numbers in the left margin,
+   level with the core's first line, as a page start draws its own. */
+.docs-prose .docs-core-pages {
+  display: block;
+  height: 0;
+}

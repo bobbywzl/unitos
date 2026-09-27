@@ -1061,6 +1061,13 @@ ellipse.anchor-flash {
   color: var(--sand-600);
   margin-top: 0.25rem;
 }
+/* A box the page painted under a figure (an inline background on the figure
+   or its one div, lib/parse/figure-style.ts) was painted for dark words: in
+   dark mode its captions and links keep the light theme's colors. */
+.dark .reader-figure :is(figure, div)[style*="background"] {
+  --sand-600: #82796a;
+  --weblink: #1d4ed8;
+}
 .reader-figure .center {
   text-align: center;
 }

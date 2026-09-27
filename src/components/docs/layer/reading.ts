@@ -90,11 +90,13 @@ function termDecorations(doc: PMNode, highlights: Record<string, Highlight[]>, t
   return DecorationSet.create(doc, decorations);
 }
 
-/** A press on a key term selects its words and opens the selection toolbar
+/** A click on a key term selects its words and opens the selection toolbar
     on them, marked as a key term (reader-interactions.tsx, dissect:term-tools),
-    as a press on a term does in the block reader. */
-function pressTerm(view: EditorView, event: MouseEvent): boolean {
+    as a press on a term does in the block reader. A drag that starts on a
+    term selects as any drag does. */
+function clickTerm(view: EditorView, event: MouseEvent): boolean {
   if (!reading(view) || event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return false;
+  if (!(window.getSelection()?.isCollapsed ?? true)) return false;
   const el = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-term]") : null;
   const blockId = el?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
   const block = el && blockId ? findBlock(view.state.doc, blockId) : null;
@@ -103,10 +105,6 @@ function pressTerm(view: EditorView, event: MouseEvent): boolean {
   const from = posInBlock(block.node, block.pos, start);
   const to = posInBlock(block.node, block.pos, end, true);
   if (!(to > from)) return false;
-  // No caret and no drag: the press is the term's alone, and the pane's own
-  // press handlers would close the toolbar it opens.
-  event.preventDefault();
-  event.stopPropagation();
   view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to)));
   const a = view.domAtPos(from, 1);
   const b = view.domAtPos(to, -1);
@@ -145,7 +143,9 @@ function keyTermsPlugin(): Plugin<DecorationSet> {
     },
     props: {
       decorations: (state) => (reading(view) ? termsKey.getState(state) : null),
-      handleDOMEvents: { mousedown: pressTerm },
+      // Before the reader's own mouseup (on the document), which the toolbar
+      // this opens tells to stand aside.
+      handleDOMEvents: { mouseup: clickTerm },
     },
   });
 }
@@ -184,9 +184,11 @@ function eachIndexed(doc: PMNode, from: number, to: number, fn: (node: PMNode, p
     css/reading.css, never words of the page. */
 function line(node: PMNode, pos: number, id: string, lines: Omit<Lines, "set">): Decoration | null {
   const text = lines.translations?.[id];
+  const words = lines.sources.get(id);
   // A paragraph whose words changed since shows its words alone until its
-  // translation is written again (the next Translate).
-  if (!text || lines.sources.get(id) !== wordsOf(node)) return null;
+  // translation is written again (the next Translate). A translation that
+  // reads as its words (a number, a name, an address) adds nothing.
+  if (!text || words === undefined || words !== wordsOf(node) || text.trim() === words.trim()) return null;
   return Decoration.node(pos, pos + node.nodeSize, { "data-translation": text }, { translation: true });
 }
 

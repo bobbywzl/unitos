@@ -19,10 +19,12 @@ export type ToolbarGroup = {
   menus?: string[];
 };
 
-/** The mode's name box, open and folded, and Extract folded (css/toolbar.css). */
+/** The mode's name box, open and folded, and a Unitos tool folded to its
+    symbol (Collapse, Extract; 8 px apart) (css/toolbar.css). */
 const CAPTION_OPEN = 122;
 const CAPTION_FOLDED = 26;
 const UNITOS_FOLDED = 30;
+const UNITOS_GAP = 8;
 /** More (⋮) with its margins. */
 const MORE = 32;
 
@@ -78,8 +80,10 @@ export function ToolbarRow({
     if (unitos && !rightEl.hasAttribute("data-folded")) unitosOpen.current = unitos.offsetWidth;
     const base = rightEl.offsetWidth + 4 - (caption?.offsetWidth ?? 0) - (unitos?.offsetWidth ?? 0);
     const rightOpen = base + (caption ? CAPTION_OPEN : 0) + (unitos ? unitosOpen.current : 0);
-    const rightExtract = base + (caption ? CAPTION_OPEN : 0) + (unitos ? UNITOS_FOLDED : 0);
-    const rightFolded = base + (caption ? CAPTION_FOLDED : 0) + (unitos ? UNITOS_FOLDED : 0);
+    const tools = unitos?.querySelectorAll("button").length ?? 0;
+    const unitosFolded = tools * UNITOS_FOLDED + Math.max(0, tools - 1) * UNITOS_GAP;
+    const rightExtract = base + (caption ? CAPTION_OPEN : 0) + unitosFolded;
+    const rightFolded = base + (caption ? CAPTION_FOLDED : 0) + unitosFolded;
     const list = groups.map((g) => widths.current.get(g.key) ?? 0);
     const total = list.reduce((a, b) => a + b, 0);
     const nextFolded = total <= inner - rightOpen ? null : total <= inner - rightExtract ? "extract" : "mode";

@@ -18,7 +18,7 @@ async function stored(documentId: string) {
     where: { id: documentId },
     select: {
       collapse: true,
-      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } },
+      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, cell: true } },
     },
   });
   if (!document) return null;

@@ -13,6 +13,7 @@ import type { EditorView } from "@tiptap/pm/view";
 // - a table row, an image, and a line move whole ("row" and "block"
 //   spacers); a table's pinned header rows stay with the row after them and
 //   start every page the table continues on;
+// - a core the collapsed view draws in a node's place moves whole;
 // - a page break sends what follows to the next page;
 // - a footnote sits at the foot of the page that holds its number: the
 //   line with the number moves on when the two do not fit.
@@ -101,6 +102,17 @@ function textFlags(node: PMNode) {
   };
 }
 
+/** The core the collapsed view draws in a node's place (SPEC.md §28,
+    docs/layer/collapse.tsx): the node is not drawn, and the core, a widget
+    right before it, takes its room as one piece. */
+function coreInPlaceOf(el: HTMLElement | null): HTMLElement | null {
+  if (!el?.classList.contains("docs-core-hidden")) return null;
+  for (let before = el.previousElementSibling; before?.classList.contains("ProseMirror-widget"); before = before.previousElementSibling) {
+    if (before instanceof HTMLElement && before.dataset.docsCore === "core") return before;
+  }
+  return null;
+}
+
 /** The layout units in document order — every textblock, table row, atom,
     and page break, each with its DOM — and the footnotes by id. */
 function collectUnits(view: EditorView): { units: Unit[]; footnotes: Map<string, { pos: number; dom: HTMLElement }> } {
@@ -121,6 +133,11 @@ function collectUnits(view: EditorView): { units: Unit[]; footnotes: Map<string,
   };
   const whole = { together: true, widow: false, breakBefore: false };
   const visit = (node: PMNode, pos: number, spacerPos: number, spacerKind: "block" | "row") => {
+    const core = coreInPlaceOf(dom(pos));
+    if (core) {
+      units.push({ type: "atom", pos, node, dom: core, spacerPos, spacerKind, refs: [], header: null, keepNext: false, ...whole });
+      return;
+    }
     const name = node.type.name;
     if (name === "table") {
       const header: Header = { table: pos, rows: [] };
@@ -376,7 +393,8 @@ export function paginate(view: EditorView, config: PaginationConfig): PaginateRe
   const blockSpacer = (pos: number, kind: "block" | "row", to: number, next: number, header: Header | null = null) => {
     const target = areaOf(to).top + headerHeight(header);
     out.push(header ? { kind, pos, target, header: header.table } : { kind, pos, target });
-    const after = view.nodeDOM(pos);
+    const at = view.nodeDOM(pos);
+    const after = at instanceof HTMLElement ? (coreInPlaceOf(at) ?? at) : at;
     if (after instanceof HTMLElement && !after.hasAttribute("data-docs-spacer")) {
       offset = target + (kind === "row" ? 0 : m.marginTop(after)) - m.box(after).top;
     } else if (next < units.length) {

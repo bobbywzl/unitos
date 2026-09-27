@@ -189,10 +189,10 @@ function ringColor(h: Highlight): string {
 type ObjectMarks = { anchors: Highlight[]; links: Highlight[]; extracts: Highlight[] };
 
 /** The label chip of an object's marks: the annotations' labels ("A1 · A2")
-    behind the tool's symbol, or a highlight's dot; then each link's chain
-    and each extraction's label ("M1"). A press on the chip opens the
-    annotation, or the note; a press on a part, what that part's chip opens
-    in the text. The object carries the ring's data-source-id and
+    behind the tool's symbol, or a highlight's dot; under them each link's
+    chain; under those each extraction's label ("M1"). A press on the chip
+    opens the annotation, or the note; a press on a part, what that part's
+    chip opens in the text. The object carries the ring's data-source-id and
     data-link-id, so a jump to that mark finds the object; every other
     mark's part carries its own, and a jump to it flashes the object and
     brings it to the middle of the view (flashPlugin). */
@@ -229,64 +229,72 @@ function labelWidget(
     const labeled = anchors.filter((h) => h.figureLabel);
     const linkTip = (h: Highlight) =>
       [h.linkTitle ? t("panes.linkedTo", { title: h.linkTitle }) : t("panes.linked"), h.linkReason].filter(Boolean).join("\n");
+    // One row per kind of mark, so the chip grows down along the object,
+    // never past the pane's edge.
     const root = createRoot(button);
     root.render(
       <>
-        {anchors.length > 0 &&
-          (toolAnchor?.tool ? (
-            <ToolSymbol tool={toolAnchor.tool} plus={toolAnchor.plus} size={11} />
-          ) : (
-            <span aria-hidden className="docs-object-dot" style={{ background: color }} />
-          ))}
-        {anchors.length > 0 &&
-          (labeled.length === 0 ? (
-            text
-          ) : (
-            <span>
-              {labeled.map((h, i) => (
-                <Fragment key={h.sourceId ?? i}>
-                  {i > 0 && " · "}
-                  <span
-                    {...(h.sourceId && h.sourceId !== ring.sourceId ? { "data-source-id": h.sourceId } : {})}
-                    {...(h.annotation && h.sourceId
-                      ? { "data-docs-open": "annotation", "data-hover-source": h.sourceId }
-                      : h.noteId
-                        ? { "data-docs-open": "note", "data-note-id": h.noteId }
-                        : {})}
-                  >
-                    {h.figureLabel}
-                  </span>
-                </Fragment>
-              ))}
-            </span>
-          ))}
-        {links.map((h, i) => (
-          <Fragment key={h.linkId ?? i}>
-            {(anchors.length > 0 || i > 0) && <span aria-hidden>·</span>}
-            <span
-              data-docs-open="link"
-              data-href={h.href}
-              aria-label={linkTip(h)}
-              data-tip={linkTip(h)}
-              {...(h.linkId && h.linkId !== ring.linkId ? { "data-link-id": h.linkId } : {})}
-            >
-              <LinkIcon size={11} />
-            </span>
-          </Fragment>
-        ))}
-        {extracts.map((h, i) => (
-          <Fragment key={h.extractId ?? i}>
-            {(anchors.length > 0 || links.length > 0 || i > 0) && <span aria-hidden>·</span>}
-            <span
-              data-docs-open="extract"
-              data-extract-id={h.extractId}
-              data-track="extract-chip"
-              data-tip={t("panes.extractOpenCard", { label: h.extractLabel ?? "" })}
-            >
-              {h.extractLabel}
-            </span>
-          </Fragment>
-        ))}
+        {anchors.length > 0 && (
+          <span className="docs-object-row">
+            {toolAnchor?.tool ? (
+              <ToolSymbol tool={toolAnchor.tool} plus={toolAnchor.plus} size={11} />
+            ) : (
+              <span aria-hidden className="docs-object-dot" style={{ background: color }} />
+            )}
+            {labeled.length === 0 ? (
+              text
+            ) : (
+              <span>
+                {labeled.map((h, i) => (
+                  <Fragment key={h.sourceId ?? i}>
+                    {i > 0 && " · "}
+                    <span
+                      {...(h.sourceId && h.sourceId !== ring.sourceId ? { "data-source-id": h.sourceId } : {})}
+                      {...(h.annotation && h.sourceId
+                        ? { "data-docs-open": "annotation", "data-hover-source": h.sourceId }
+                        : h.noteId
+                          ? { "data-docs-open": "note", "data-note-id": h.noteId }
+                          : {})}
+                    >
+                      {h.figureLabel}
+                    </span>
+                  </Fragment>
+                ))}
+              </span>
+            )}
+          </span>
+        )}
+        {links.length > 0 && (
+          <span className="docs-object-row">
+            {links.map((h, i) => (
+              <span
+                key={h.linkId ?? i}
+                data-docs-open="link"
+                data-href={h.href}
+                aria-label={linkTip(h)}
+                data-tip={linkTip(h)}
+                {...(h.linkId && h.linkId !== ring.linkId ? { "data-link-id": h.linkId } : {})}
+              >
+                <LinkIcon size={11} />
+              </span>
+            ))}
+          </span>
+        )}
+        {extracts.length > 0 && (
+          <span className="docs-object-row">
+            {extracts.map((h, i) => (
+              <span
+                key={h.extractId ?? i}
+                data-docs-open="extract"
+                data-extract-id={h.extractId}
+                data-track="extract-chip"
+                data-tip={t("panes.extractOpenCard", { label: h.extractLabel ?? "" })}
+              >
+                {h.extractLabel}
+              </span>
+            ))}
+          </span>
+        )}
       </>,
     );
     (button as HTMLButtonElement & { __root?: Root }).__root = root;

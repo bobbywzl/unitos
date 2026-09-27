@@ -10,6 +10,9 @@
 export type CollapseBlockCtx = {
   blockId: string;
   type: string;
+  // A list or a table of a document with rich text is one block over
+  // several: its lines, or its cells. The id of its last one.
+  lastBlockId?: string;
   // The block's length in words, and the ceiling the core must stay under.
   words: number;
   maxWords: number;
@@ -24,7 +27,10 @@ export type CollapseCtx = {
 
 export function collapsePrompt(ctx: CollapseCtx): string {
   const list = ctx.blocks
-    .map((b) => `[block ${b.blockId}] (${b.type}, ${b.words} words → at most ${b.maxWords} words)`)
+    .map(
+      (b) =>
+        `[block ${b.blockId}] (${b.type}${b.lastBlockId ? `, blocks ${b.blockId} to ${b.lastBlockId}` : ""}, ${b.words} words → at most ${b.maxWords} words)`,
+    )
     .join("\n");
   return [
     "Above is the whole document. Collapse the blocks listed below to their cores: what each block really says, in plain words, as short as it can be without losing the point. The reader will read the cores in place of the blocks, in order, as the article.",
@@ -40,6 +46,9 @@ export function collapsePrompt(ctx: CollapseCtx): string {
     "6. Write in the document's language. Copy nothing from the block except the terms and numbers the point rests on.",
     "The blocks:",
     list,
+    ...(ctx.blocks.some((b) => b.lastBlockId)
+      ? ['A block listed with "blocks <first id> to <last id>" is the lines of one list or the cells of one table: one core for the whole range, under its first id.']
+      : []),
     "blockId: copied exactly from the block's [block <id>] marker. One core per listed block, every listed block, no other block.",
     'Return ONLY JSON: {"cores": [{"blockId": "<id>", "text": "…"}]}',
   ].join("\n");

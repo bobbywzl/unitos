@@ -649,6 +649,8 @@ export function Reader({
     on: boolean;
     flipped: ReadonlySet<string>;
     flip: (blockId: string) => void;
+    /** Collapse off: the page editor's Editing needs the words. */
+    off?: () => void;
   } | null;
   highlightsByBlock: Record<string, Highlight[]>;
   mode: "read" | "edit";
@@ -1267,6 +1269,7 @@ export function Reader({
           footer={richText.footer}
           banner={banner}
           translations={translations ?? null}
+          collapse={collapse ?? null}
         />
       </DocsFrameContext.Provider>
     );
