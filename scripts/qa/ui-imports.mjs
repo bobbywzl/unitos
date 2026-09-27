@@ -624,7 +624,7 @@ async function newPage(theme = "light", { width = 1440, height = 900, risk = nul
 }
 
 async function shot(page, name) {
-  const path = join(SHOT, `${name}.png`);
+  const path = join(SHOT, `${ctx.alone ? `alone${ctx.alone}-` : ""}${name}.png`);
   await page.screenshot({ path });
   return path;
 }
@@ -730,15 +730,20 @@ async function coords(page, pos) {
   }, pos);
 }
 /** A position in the band, scrolled to its middle only when it is not,
-    and the page's text under it (a layout that moved is read again). */
+    and the point a press there lands on is that position (a layout that
+    moved is read again). */
 async function reveal(page, pos) {
   let c = null;
   for (let i = 0; i < 4; i++) {
     c = await coords(page, pos);
     const b = await page.evaluate(() => window.__qa.band());
     if (!(c.top >= b.top + 30 && c.bottom <= b.bottom - 60)) c = await page.evaluate((p) => window.__qa.show(p), pos);
-    const ours = await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest(".ProseMirror")), { x: c.x + 0.5, y: c.y });
-    if (ours) return c;
+    const lands = await page.evaluate(({ x, y, pos }) => {
+      if (!document.elementFromPoint(x, y)?.closest(".ProseMirror")) return false;
+      const at = window.__docsEditor.view.posAtCoords({ left: x, top: y });
+      return Boolean(at) && Math.abs(at.pos - pos) <= 2;
+    }, { x: c.x + 0.5, y: c.y, pos });
+    if (lands) return c;
     await page.evaluate(() => window.__qa.settle());
   }
   return c;
@@ -1359,7 +1364,7 @@ RISKS.R3 = async (theme) => {
   const [one, two] = (await pageStarts(page)).filter((x) => x.on === "paragraph" && x.page > 1).slice(0, 2);
   await page.evaluate((p) => window.__qa.show(p), one.pos);
   const single = await marginInk(page, one.pos);
-  await page.evaluate(({ from, to }) => window.__docsEditor.commands.setTextSelection({ from, to }), { from: one.pos + 1, to: two.pos });
+  await page.evaluate(({ from, to }) => window.__docsEditor.chain().focus().setTextSelection({ from, to }).run(), { from: one.pos + 1, to: two.pos });
   await page.keyboard.press("Delete");
   const joined = (await pageStarts(page)).filter((x) => x.page === one.page || x.page === two.page);
   const oneLine = joined.length === 2 && (await page.evaluate(([a, b]) => Math.abs(window.__docsEditor.view.coordsAtPos(a).top - window.__docsEditor.view.coordsAtPos(b).top) < 4, joined.map((x) => x.pos)));
