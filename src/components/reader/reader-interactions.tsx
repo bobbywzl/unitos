@@ -2098,7 +2098,9 @@ export function ReaderInteractions({
     const firstCore = startBlock?.hasAttribute("data-collapsed") ?? false;
     for (const el of pageSegments ? [] : blockEls) {
       const blockId = el.dataset.blockId ?? el.dataset.editBlock;
-      if (!blockId) continue;
+      // A block the page editor's collapsed view does not draw is no part
+      // of what the reader sees between two cores.
+      if (!blockId || el.getClientRects().length === 0) continue;
       const core = el.hasAttribute("data-collapsed");
       if (core !== firstCore) {
         truncated = true;

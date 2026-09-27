@@ -9,6 +9,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { repaginate } from "@/components/docs/ext/page";
 import { pageStartLabel } from "@/components/docs/insert/page-start";
+import { findState } from "@/components/docs/typing/find";
 import type { Highlight } from "@/components/reader/block-view";
 import { CoreBlock, CoreToggle } from "@/components/reader/core-block";
 import { coreKey } from "@/lib/anchors/core-key";
@@ -25,8 +26,8 @@ import type { RichNode } from "@/lib/docs/schema";
 // own core (core-block.tsx), so its marks, its selection, and its anchors are
 // the collapsed view's, as in the block reader. Each unit has the block
 // reader's button at its right: it reads the unit whole, or folds it again.
-// Viewing only: Editing and Suggesting need the words, so they turn Collapse
-// off. The pages lay a core out as one piece (page/paginate.ts).
+// Viewing only: Editing, Suggesting, and Find need the words, so they turn
+// Collapse off. The pages lay a core out as one piece (page/paginate.ts).
 
 /** What the reader hands the page: the cores by unit id, whether the article
     is collapsed, the units shown the other way by their own button, and
@@ -187,7 +188,7 @@ export function CollapsedView({
     };
   }, [editor]);
 
-  // Editing and Suggesting turn Collapse off.
+  // Editing, Suggesting, and Find turn Collapse off: they need the words.
   const on = collapse?.on ?? false;
   const actions = useRef({ off: collapse?.off, flip: collapse?.flip });
   useEffect(() => {
@@ -196,6 +197,19 @@ export function CollapsedView({
   useEffect(() => {
     if (editing && on) actions.current.off?.();
   }, [editing, on]);
+  useEffect(() => {
+    if (!on) return;
+    let finding = findState(editor.state).open;
+    const onTransaction = () => {
+      const opened = findState(editor.state).open && !finding;
+      finding = findState(editor.state).open;
+      if (opened) actions.current.off?.();
+    };
+    editor.on("transaction", onTransaction);
+    return () => {
+      editor.off("transaction", onTransaction);
+    };
+  }, [editor, on]);
 
   // The units are read again when the text changes while the view shows (a
   // collaborator's words, a re-parse's).

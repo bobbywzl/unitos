@@ -8,7 +8,7 @@
 .docs-prose [data-translation]::after {
   content: attr(data-translation);
   display: block;
-  margin-top: 3pt;
+  margin: 3pt 0;
   padding-left: 9pt;
   border-left: 2px solid var(--clay-200);
   color: var(--docs-gray-2);

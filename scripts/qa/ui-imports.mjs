@@ -3282,8 +3282,13 @@ RISKS.COPY = async (theme) => {
     // Opened as a file: its figures draw, in the light theme's words.
     const view = await context.newPage();
     await view.setContent(html, { waitUntil: "load", timeout: 60_000 }).catch(() => {});
-    const opened = await view.evaluate(() => {
+    const opened = await view.evaluate(async () => {
+      // A lazy image loads near the view: each one scrolled to, then waited for.
       const imgs = [...document.images];
+      for (const img of imgs) {
+        img.scrollIntoView({ block: "center" });
+        await Promise.race([img.decode().catch(() => {}), new Promise((r) => setTimeout(r, 10_000))]);
+      }
       const p = [...document.querySelectorAll("p")].find((e) => e.textContent.trim().length > 60);
       const lum = (c) => {
         const m = /rgba?\((\d+), (\d+), (\d+)/.exec(c ?? "");
@@ -3295,7 +3300,8 @@ RISKS.COPY = async (theme) => {
     await view.close();
     check("COPY", opened.drawn + opened.svgs >= want.pictures && opened.drawn === opened.images && opened.words !== null && opened.words < 110, `${kind} (${theme}): the web page file opens with its figures drawn, dark words on a light page`, `${JSON.stringify(opened)} ${fileShot}`);
     const md = files.md;
-    const mdImages = (md.match(/!\[[^\]]*\]\([^)]+\)/g) ?? []).length;
+    // An image inline, or by reference with its data at the end.
+    const mdImages = (md.match(/!\[[^\]]*\][([]/g) ?? []).length;
     check("COPY", want.words.every((w) => md.includes(w)) && noLabels(md) && mdImages >= want.pictures, `${kind} (${theme}): the Markdown file holds the words, no page labels, and the figures' pictures`, `${md.length} characters; ${mdImages} images`);
     check("COPY", want.words.every((w) => files.txt.includes(w)) && noLabels(files.txt), `${kind} (${theme}): the plain text file holds the words and no page labels`, `${files.txt.length} characters`);
   }
@@ -3303,6 +3309,8 @@ RISKS.COPY = async (theme) => {
   // dialog's name, OK; the copy opens in this tab.
   const pdf = await doc("pdf");
   await open(page, ctx.notebookId, pdf.id);
+  // Make a copy is off in Viewing (SPEC.md §29): Editing first.
+  await setMode(page, "editing");
   await menuCommand(page, "Make a copy");
   const dialog = page.locator(".docs-tb-dialog").first();
   const named = await dialog.waitFor({ state: "visible", timeout: 10_000 }).then(() => dialog.locator("input.docs-field").inputValue()).catch(() => null);

@@ -187,9 +187,10 @@ async function handle(req: Request, t: TFunc) {
     include: {
       blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true } },
     },
-    // An import's rich text runs to megabytes: only a core anchor and the
-    // assistant's suggestions read it (storedRichText).
-    omit: { richText: true },
+    // An import's rich text runs to megabytes, and so does a PDF's file:
+    // only a core anchor and the assistant's suggestions read the rich text
+    // (storedRichText); a figure's picture reads the file itself.
+    omit: { richText: true, fileData: true },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   const [presence] = await db.$queryRaw<{ rich: boolean }[]>`

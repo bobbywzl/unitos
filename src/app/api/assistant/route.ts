@@ -168,13 +168,16 @@ async function handle(req: Request, t: TFunc) {
   const act =
     data.task === "ask" && data.scope === "document"
       ? await (async () => {
-          const [sections, attached, open] = await Promise.all([
+          // Whether the document has rich text, never the rich text itself:
+          // an import's runs to megabytes.
+          const [sections, attached, [open]] = await Promise.all([
             sectionSkeleton(data.notebookId),
             db.notebookDocument.findMany({
               where: { notebookId: data.notebookId },
               include: { document: { select: { id: true, title: true } } },
             }),
-            db.document.findUnique({ where: { id: data.documentId! }, select: { richText: true, format: true } }),
+            db.$queryRaw<{ richText: boolean; format: string | null }[]>`
+              SELECT ("richText" IS NOT NULL) AS "richText", "format" FROM "Document" WHERE "id" = ${data.documentId!}`,
           ]);
           // An import another account's project holds takes no edits.
           const edits: DocumentEdits =
