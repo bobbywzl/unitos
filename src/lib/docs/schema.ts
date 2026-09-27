@@ -403,9 +403,9 @@ export type NullDefaults = {
     text: the editor fills the null back in, and the others read a missing
     attribute as null. The editor's own JSON writes every attribute out,
     which grew an import's rich text by half on its first save. A default
-    other than null stays written: some readers take it only as written (a
-    numbered list's start in lib/docs/ops.ts, an image's alignment in the
-    Word export). A suggestion's marks keep all of theirs. */
+    other than null stays written: a reader may take it only as written (an
+    image's alignment in the Word export). A suggestion's marks keep all of
+    theirs. */
 export function compactRichText(node: RichNode, nullDefaults: NullDefaults): RichNode {
   const kept = (attrs: Record<string, unknown> | undefined, nulls: ReadonlySet<string> | undefined) => {
     const out: Record<string, unknown> = {};

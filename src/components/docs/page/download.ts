@@ -181,7 +181,7 @@ img { max-width: 100%; height: auto; }
 img[data-align="center"] { display: block; margin: 0 auto; }
 img[data-align="right"] { display: block; margin-left: auto; }
 table { border-collapse: collapse; }
-td, th { border: 1pt solid #000; padding: 5pt; vertical-align: top; text-align: left; font-weight: inherit; }
+td, th { border: 1pt solid #000; padding: 5pt; vertical-align: top; text-align: left; }
 [data-valign="middle"] { vertical-align: middle; }
 [data-valign="bottom"] { vertical-align: bottom; }
 ol ol { list-style-type: lower-alpha; }

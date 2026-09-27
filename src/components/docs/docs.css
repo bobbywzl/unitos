@@ -235,7 +235,6 @@
   box-sizing: border-box;
 }
 .docs-prose th {
-  font-weight: inherit;
   text-align: left;
 }
 .docs-prose .selectedCell::after {

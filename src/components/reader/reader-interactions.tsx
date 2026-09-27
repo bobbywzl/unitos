@@ -2994,25 +2994,29 @@ export function ReaderInteractions({
   // note in another document — so the look-up retries for PAGE_WAIT_MS at
   // most, reading the container fresh each time. A core anchor paints only
   // while its unit shows its core (SPEC.md §28): the jump shows the core,
-  // or, where no core can be drawn (Editing, or no cores in hand), lands on
-  // the unit's words and flashes the unit. A mark in the words of a
-  // collapsed unit reads the unit whole first.
+  // or, where no core can be drawn (Editing, edit mode, or no cores in
+  // hand), lands on the unit's words and flashes the unit. A mark in the
+  // words of a collapsed unit reads the unit whole first. While the cores
+  // the article opens with are on their way, the jump waits for them.
   const flashSource = useCallback((sourceId: string) => {
     let attempts = 0;
     let rows: string[] | null = null;
     const tryScroll = () => {
       const pane = containerRef.current;
-      const keys = Object.entries(anchorHighlightsRef.current).flatMap(([key, list]) =>
-        list.some((h) => h.sourceId === sourceId) ? [key] : [],
-      );
-      let unit: string | null = null;
-      for (const key of keys) if (isCoreKey(key) && !showCoreRef.current(blockIdOfKey(key))) unit = blockIdOfKey(key);
-      if (unit) rows ??= unitRows(pane, unit, richTextRef.current !== null);
       let found: HTMLElement[] = [];
-      if (pane && unit) found = (rows ?? []).flatMap((row) => wordsOf(pane, row) ?? []);
-      else if (pane && !wordsHidden(pane, keys.filter((key) => !isCoreKey(key)), readWholeRef.current)) {
-        const el = pane.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
-        if (el) found = [el];
+      if (pane && !coresComingRef.current()) {
+        const keys = Object.entries(anchorHighlightsRef.current).flatMap(([key, list]) =>
+          list.some((h) => h.sourceId === sourceId) ? [key] : [],
+        );
+        let unit: string | null = null;
+        for (const key of keys) if (isCoreKey(key) && !showCoreRef.current(blockIdOfKey(key))) unit = blockIdOfKey(key);
+        if (unit) {
+          rows ??= unitRows(pane, unit, richTextRef.current !== null);
+          found = (rows ?? []).flatMap((row) => wordsOf(pane, row) ?? []);
+        } else if (!wordsHidden(pane, keys.filter((key) => !isCoreKey(key)), readWholeRef.current)) {
+          const el = pane.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+          if (el) found = [el];
+        }
       }
       if (found.length > 0) {
         found[0].scrollIntoView({ behavior: "smooth", block: "center" });
@@ -3024,13 +3028,15 @@ export function ReaderInteractions({
     tryScroll();
   }, []);
 
-  // Scroll to a block's words and flash them: a search result, a ¶ chip, a
-  // distilled quote. Words in a collapsed unit are read whole first; the
-  // look retries every 200 ms, `tries` times, until they are drawn.
+  // Scroll to a block's words and flash them: a search result, a ¶ chip, an
+  // extraction's quote, a match. Words in a collapsed unit are read whole
+  // first; the look retries every 200 ms, `tries` times, until they are
+  // drawn, and waits for the cores the article opens with.
   const jumpToWords = useCallback((blockId: string, tries: number) => {
     const look = (left: number) => {
       const pane = containerRef.current;
-      const el = pane && !wordsHidden(pane, [blockId], readWholeRef.current) ? wordsOf(pane, blockId) : null;
+      const ready = pane && !coresComingRef.current() && !wordsHidden(pane, [blockId], readWholeRef.current);
+      const el = ready ? wordsOf(pane, blockId) : null;
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         flashElement(el);
@@ -3089,7 +3095,7 @@ export function ReaderInteractions({
       const blocks = Object.entries(linksRef.current).flatMap(([blockId, list]) =>
         list.some((l) => l.linkId === linkParam) ? [blockId] : [],
       );
-      const hidden = wordsHidden(container, blocks, readWholeRef.current);
+      const hidden = coresComingRef.current() || wordsHidden(container, blocks, readWholeRef.current);
       const el = hidden ? null : container.querySelector<HTMLElement>(`[data-link-id="${linkParam}"]`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -3104,7 +3110,7 @@ export function ReaderInteractions({
   // Search result navigation: ?block=<blockId> scrolls to the block and flashes it.
   const blockParam = searchParams.get("block");
   useEffect(() => {
-    if (blockParam) jumpToWords(blockParam, 10);
+    if (blockParam) jumpToWords(blockParam, PAGE_WAIT_MS / 200);
   }, [blockParam, jumpToWords]);
 
   // Jump from the Annotations panel: works even when ?src is already this anchor.
@@ -3702,7 +3708,11 @@ export function ReaderInteractions({
   const collapseNew = useNewFeature("collapse");
   const [flippedBlocks, setFlippedBlocks] = useState<ReadonlySet<string>>(() => new Set());
   const collapseStoreKey = `unitos-collapse-${documentId}`;
+  // Whether the cores the article opens with have been read (a jump waits
+  // for them: coresComingRef).
+  const coresReadRef = useRef(false);
   useEffect(() => {
+    coresReadRef.current = false;
     if (embedded || transcript || !collapseRemembered(collapseStoreKey)) return;
     let cancelled = false;
     void (async () => {
@@ -3714,6 +3724,8 @@ export function ReaderInteractions({
         setCollapseOn(true);
       } catch {
         // The article shows whole; the button collapses it again.
+      } finally {
+        if (!cancelled) coresReadRef.current = true;
       }
     })();
     return () => {
@@ -3776,15 +3788,18 @@ export function ReaderInteractions({
   }, [documentId, collapseOn, embedded, transcript]);
   // A jump shows the unit it lands in the way it needs, and no other unit
   // changes: a jump to a core annotation shows the unit's core — false when
-  // no core can be drawn, in Editing or with no cores in hand or on their
-  // way — and a jump to words reads the unit whole (wordsHidden).
+  // no core can be drawn, in Editing, in edit mode, or with no cores in
+  // hand — and a jump to words reads the unit whole (wordsHidden). A jump
+  // waits while the cores the article opens with are on their way, and
+  // until the first render's effects have set these.
+  const coresComingRef = useRef<() => boolean>(() => true);
   const showCoreRef = useRef<(unitId: string) => boolean>(() => false);
   const readWholeRef = useRef<(unitId: string) => void>(() => {});
   useEffect(() => {
+    coresComingRef.current = () =>
+      !cores && !embedded && !transcript && !coresReadRef.current && collapseRemembered(collapseStoreKey);
     showCoreRef.current = (unitId: string) => {
-      if (editMode || pageEditorIn(containerRef.current)?.isEditable) return false;
-      if (!cores) return !embedded && !transcript && collapseRemembered(collapseStoreKey);
-      if (!cores[unitId]) return false;
+      if (editMode || pageEditorIn(containerRef.current)?.isEditable || !cores?.[unitId]) return false;
       showUnit(unitId, true);
       return true;
     };
