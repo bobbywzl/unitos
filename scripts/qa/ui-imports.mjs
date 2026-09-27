@@ -799,11 +799,11 @@ async function dragWords(page, selector, needle) {
     };
     const range = document.createRange();
     range.setStart(...point(i));
-    range.setEnd(...point(i + needle.length - 1));
+    range.setEnd(...point(i + needle.length));
     const rects = [...range.getClientRects()].filter((r) => r.width > 0);
     const first = rects[0];
     const last = rects.at(-1);
-    return { a: { x: first.left + 1, y: first.top + first.height / 2 }, b: { x: last.right + 2, y: last.top + last.height / 2 } };
+    return { a: { x: first.left + 1, y: first.top + first.height / 2 }, b: { x: last.right - 1, y: last.top + last.height / 2 } };
   }, { selector, needle });
   if (!at) return false;
   await page.mouse.move(at.a.x - 20, at.a.y - 10);
@@ -2461,7 +2461,14 @@ RISKS.EDIT = async (theme) => {
   // it has the save's anchors (a slow server shows the old mark a moment).
   const moved = hl ? await sourceWhere(pdf.id, (x) => x.id === hl.id && (x.anchoredText ?? "").includes("neural QA networks"), 15_000) ?? (await sourcesOf(pdf.id)).find((x) => x.id === hl.id) : null;
   const marks = hl ? await painted(page, hl.id, "neural QA networks", { includes: true }) : [];
-  check("EDIT", Boolean(moved && !moved.orphaned && moved.quotedText === hl.quotedText && (moved.anchoredText ?? "").includes("neural QA networks") && marks.join("").includes("neural QA networks")), `(${theme}) words typed inside a highlight: the mark grows over them, the quote stays`, moved ? `quote "${clip(moved.quotedText, 40)}", anchored "${clip(moved.anchoredText, 50)}", painted "${clip(marks.join(""), 50)}"` : "no highlight");
+  const grew = marks.join("").includes("neural QA networks");
+  // When the mark did not grow: every mark piece of the paragraph, for the evidence.
+  const pieces = grew || !hl ? "" : await page.evaluate((id) => {
+    const para = document.querySelector(`.docs-prose [data-block-id="${id}"]`);
+    return [...(para?.querySelectorAll("[data-unitos-mark], [data-source-id]") ?? [])].map((e) => `${e.getAttribute("data-source-id")?.slice(-6) ?? "-"}:"${e.textContent.slice(0, 24)}"`).join(" ");
+  }, hl.blockId);
+  const editShot = grew ? "" : await shot(page, `EDIT-typed-in-highlight-${theme}`);
+  check("EDIT", Boolean(moved && !moved.orphaned && moved.quotedText === hl.quotedText && (moved.anchoredText ?? "").includes("neural QA networks") && grew), `(${theme}) words typed inside a highlight: the mark grows over them, the quote stays`, moved ? `quote "${clip(moved.quotedText, 40)}", anchored "${clip(moved.anchoredText, 50)}", painted "${clip(marks.join(""), 50)}"${pieces ? `; the paragraph's marks ${clip(pieces, 200)} ${editShot}` : ""}` : "no highlight");
   for (let i = 0; i < 3; i++) await page.keyboard.press("Backspace");
   await waitSaved(page).catch(() => {});
   // Suggesting: a person's suggestion across a page start, then Accept.
@@ -2830,7 +2837,9 @@ RISKS.AI = async (theme) => {
   const fig = (await figureBy(page, (c) => /Figure 1/.test(c))) ?? (await figures(page))[0];
   const pressed = await clickFigure(page, fig.pos);
   const firstPress = await toolbar(page);
-  // In Viewing the press draws no selection frame (css/import.css).
+  // In Viewing the press draws no selection frame (css/import.css), read
+  // with the pointer off the figure (its hairline shows under the pointer).
+  await page.mouse.move(5, 450);
   const frame = await page.evaluate((p) => {
     const el = window.__docsEditor.view.nodeDOM(p);
     return { selected: el.classList.contains("ProseMirror-selectednode"), outline: getComputedStyle(el).outlineStyle };

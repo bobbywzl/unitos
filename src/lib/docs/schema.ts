@@ -390,40 +390,37 @@ export function stableJson(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
-/** Each node and mark type's attribute defaults, by type name, as the
+/** The attributes whose default is null, by node and mark type, as the
     editor's schema declares them. */
-export type AttrDefaults = {
-  nodes: Record<string, Record<string, unknown>>;
-  marks: Record<string, Record<string, unknown>>;
+export type NullDefaults = {
+  nodes: Record<string, ReadonlySet<string>>;
+  marks: Record<string, ReadonlySet<string>>;
 };
 
-/** The rich text without the attributes that hold their default, the form
-    the converter writes an import in (lib/docs/import.ts) and a save sends
-    (components/docs/use-docs-save.ts). Every reader sees the same text: the
-    editor fills a default back in, and the others read a missing attribute
-    as its default. The editor's own JSON writes every attribute out, which
-    grew an import's rich text by half on its first save. A suggestion's
-    marks keep all of theirs. */
-export function compactRichText(node: RichNode, defaults: AttrDefaults): RichNode {
-  const same = (a: unknown, b: unknown) =>
-    a === b || (typeof a === "object" && a !== null && typeof b === "object" && b !== null && stableJson(a) === stableJson(b));
-  const kept = (attrs: Record<string, unknown> | undefined, own: Record<string, unknown> | undefined) => {
+/** The rich text without the attributes that hold their default, null: the
+    form the converter writes an import in (lib/docs/import.ts) and a save
+    sends (components/docs/use-docs-save.ts). Every reader sees the same
+    text: the editor fills the null back in, and the others read a missing
+    attribute as null. The editor's own JSON writes every attribute out,
+    which grew an import's rich text by half on its first save. A
+    suggestion's marks keep all of theirs. */
+export function compactRichText(node: RichNode, nullDefaults: NullDefaults): RichNode {
+  const kept = (attrs: Record<string, unknown> | undefined, nulls: ReadonlySet<string> | undefined) => {
     const out: Record<string, unknown> = {};
     for (const [name, value] of Object.entries(attrs ?? {})) {
-      const isDefault = own !== undefined && Object.hasOwn(own, name) && same(value, own[name]);
-      if (value !== undefined && !isDefault) out[name] = value;
+      if (value !== undefined && !(value === null && nulls?.has(name))) out[name] = value;
     }
     return Object.keys(out).length > 0 ? out : null;
   };
   const walk = (n: RichNode): RichNode => {
     const out: RichNode = { type: n.type };
-    const attrs = kept(n.attrs, defaults.nodes[n.type]);
+    const attrs = kept(n.attrs, nullDefaults.nodes[n.type]);
     if (attrs) out.attrs = attrs;
     if (n.content) out.content = n.content.map(walk);
     if (n.marks) {
       out.marks = n.marks.map((mark) => {
         if (SUGGESTION_MARK_TYPES.has(mark.type)) return mark;
-        const markAttrs = kept(mark.attrs, defaults.marks[mark.type]);
+        const markAttrs = kept(mark.attrs, nullDefaults.marks[mark.type]);
         return markAttrs ? { type: mark.type, attrs: markAttrs } : { type: mark.type };
       });
     }

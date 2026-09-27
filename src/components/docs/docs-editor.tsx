@@ -571,8 +571,8 @@ export function DocsEditor({
   // suggestions to settle, no version to restore.
   const editing = writable && mode !== "viewing";
   const area = useMemo<DocsAreaProps | null>(
-    () => (editor ? { editor, documentId, notebookId, canEdit: writable, editing, pageSetup, documents } : null),
-    [editor, documentId, notebookId, writable, editing, pageSetup, documents],
+    () => (editor ? { editor, documentId, notebookId, canEdit: writable, projectEditor: canEdit, editing, pageSetup, documents } : null),
+    [editor, documentId, notebookId, writable, canEdit, editing, pageSetup, documents],
   );
 
   // Every save changes the save state, which redraws the title row alone:

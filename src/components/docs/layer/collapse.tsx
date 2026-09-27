@@ -150,6 +150,11 @@ function collapsePlugin(): Plugin<Layer> {
 
 const slotKey = (unit: Shown) => `${unit.id}:${unit.core ? "core" : "words"}`;
 
+/** The core a node of the page stands in, or null. */
+function coreOf(node: Node | null | undefined): Element | null {
+  return (node instanceof Element ? node : node?.parentElement)?.closest('.docs-core-slot[data-docs-core="core"]') ?? null;
+}
+
 /** Each unit's place in a page, by editor and slot key: an element the core
     renders into before the page shows it, so the pages measure it whole. */
 const slotsOf = new WeakMap<Editor, Map<string, HTMLElement>>();
@@ -186,27 +191,6 @@ export function CollapsedView({
     return () => {
       editor.unregisterPlugin(collapseKey);
     };
-  }, [editor]);
-
-  // A drag that starts in a core selects in that core alone
-  // (css/collapse.css): ProseMirror holds no selection that runs from a
-  // core into another or into the text, and would draw its own instead.
-  useEffect(() => {
-    const dom = editor.view.dom;
-    const onDown = (e: PointerEvent) => {
-      const slot = e.target instanceof Element ? e.target.closest<HTMLElement>('.docs-core-slot[data-docs-core="core"]') : null;
-      if (e.button !== 0 || !slot || (e.target as Element).closest("button")) return;
-      slot.dataset.selecting = "";
-      const up = () => {
-        delete slot.dataset.selecting;
-        document.removeEventListener("pointerup", up, true);
-        document.removeEventListener("pointercancel", up, true);
-      };
-      document.addEventListener("pointerup", up, true);
-      document.addEventListener("pointercancel", up, true);
-    };
-    dom.addEventListener("pointerdown", onDown, true);
-    return () => dom.removeEventListener("pointerdown", onDown, true);
   }, [editor]);
 
   // Editing, Suggesting, and Find turn Collapse off: they need the words.
@@ -246,6 +230,22 @@ export function CollapsedView({
       editor.off("transaction", onTransaction);
     };
   }, [editor, active]);
+  // A selection that runs out of a core, into another core or into the
+  // text, is the collapsed view's: the reader reads it as the block reader
+  // does. ProseMirror holds no such selection and would draw its own over
+  // it, so the page does not hear it (a selection in one core it leaves
+  // alone by itself).
+  useEffect(() => {
+    if (!active) return;
+    const onSelectionChange = (e: Event) => {
+      const selection = document.getSelection();
+      const anchor = coreOf(selection?.anchorNode);
+      const focus = coreOf(selection?.focusNode);
+      if ((anchor || focus) && anchor !== focus) e.stopImmediatePropagation();
+    };
+    window.addEventListener("selectionchange", onSelectionChange, true);
+    return () => window.removeEventListener("selectionchange", onSelectionChange, true);
+  }, [active]);
   const cores = collapse?.cores ?? null;
   const flipped = collapse?.flipped ?? null;
   const { doc, shown } = useMemo(() => {
@@ -261,8 +261,9 @@ export function CollapsedView({
     if (collapseKey.getState(editor.state)?.signature === signature) return;
     const drawn: Drawn[] = shown.map((u) => ({ key: slotKey(u), from: u.from, to: u.to, core: u.core, dom: slotFor(editor, u) }));
     editor.view.dispatch(editor.state.tr.setMeta(collapseKey, { drawn, signature }).setMeta("addToHistory", false));
+    const keys = new Set(drawn.map((d) => d.key));
     const slots = slotsOf.get(editor);
-    for (const key of [...(slots?.keys() ?? [])]) if (!drawn.some((d) => d.key === key)) slots?.delete(key);
+    for (const key of [...(slots?.keys() ?? [])]) if (!keys.has(key)) slots?.delete(key);
     repaginate(editor);
     // The signature holds the units' places and looks.
     // eslint-disable-next-line react-hooks/exhaustive-deps

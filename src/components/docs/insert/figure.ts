@@ -106,6 +106,11 @@ function useFigureClicks(el: HTMLElement | null, editor: Editor, blockId: string
       // At the release, before the reader's own mouseup: the tools it opens
       // stay open.
       fireDocs(editor, DOCS_EVENT.figureTools, { blockId, x: e.clientX, y: e.clientY });
+      // A press that brought the focus to the page left the browser's caret
+      // at the text's start, and a figure selected already (in Viewing) is
+      // not selected again: the page's own selection goes back into the
+      // page first, so the next key never finds the caret there.
+      if (editor.isEditable) editor.view.focus();
     };
     const onClick = (e: MouseEvent) => {
       if (link(e.target) && !(e.ctrlKey || e.metaKey)) e.preventDefault();

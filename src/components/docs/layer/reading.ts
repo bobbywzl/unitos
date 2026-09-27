@@ -2,7 +2,7 @@ import { Extension, type Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey, TextSelection, type StateField, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorProps, type EditorView } from "@tiptap/pm/view";
-import { annotationMarksKey, type MarksMeta } from "@/components/docs/annotation-marks";
+import { PAINTED, annotationMarksKey, type MarksMeta } from "@/components/docs/annotation-marks";
 import { FIGURE, aroundPageStarts, findBlock, posInBlock } from "@/components/docs/layer/anchor";
 import { TERM_MARK, termTip, type Highlight } from "@/components/reader/block-view";
 import { inlineText } from "@/lib/docs/blocks";
@@ -51,10 +51,6 @@ function readingPlugin<T>(
 
 const termsKey = new PluginKey<DecorationSet>("docsKeyTerms");
 
-/** The kinds the marks layer paints (annotation-marks.tsx): words under one
-    of them show that mark, not the term, as block-view.tsx draws them. */
-const MARKED = new Set<Highlight["kind"]>(["anchor", "pending-link", "salience", "simplify", "extract", "link"]);
-
 /** A term's words that no mark covers, as offsets. */
 function unmarked(term: Highlight, marks: Highlight[]): [number, number][] {
   let pieces: [number, number][] = [[term.start, term.end]];
@@ -94,8 +90,9 @@ function termDecorations(doc: PMNode, highlights: Record<string, Highlight[]>, t
     if (!node.isTextblock) return true;
     const id = node.attrs.blockId as string | null;
     const list = id ? (highlights[id] ?? []) : [];
-    // Where two terms meet, the first one listed draws, as in the block reader.
-    const covered = list.filter((h) => MARKED.has(h.kind) && h.end > h.start);
+    // Words under a painted mark show the mark, not the term, as block-view.tsx
+    // draws them; where two terms meet, the first one listed draws.
+    const covered = list.filter((h) => PAINTED.has(h.kind) && h.end > h.start);
     for (const term of list) {
       if (term.kind !== "term" || term.end <= term.start) continue;
       const attrs = {

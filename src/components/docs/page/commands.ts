@@ -1,5 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { registerDocsCommands } from "@/components/docs/commands";
+import { insertContext } from "@/components/docs/insert/context";
 import { addPageNumbers } from "@/components/docs/page/header-footer";
 import { downloadDocument, type DownloadFormat } from "@/components/docs/page/download";
 import { PAGE_EVENT, findPageStore as store, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
@@ -197,6 +198,8 @@ registerDocsCommands([
     menu: "file",
     keywords: ["copy", "duplicate"],
     run: (editor) => store(editor)?.set({ dialog: "copy" }),
-    enabled: (editor) => editor.isEditable,
+    // In any mode, and on an import that may not be edited: the copy is the
+    // reader's own document (SPEC.md §29).
+    enabled: (editor) => insertContext(editor)?.projectEditor === true,
   },
 ]);

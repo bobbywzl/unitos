@@ -16,6 +16,8 @@ export type InsertContext = {
   t: TFunc;
   /** The page takes typing now. */
   editing: boolean;
+  /** The reader may add a document to the project (Make a copy). */
+  projectEditor: boolean;
   /** Open an address of the app in this tab (a project document). */
   navigate: (href: string) => void;
 };

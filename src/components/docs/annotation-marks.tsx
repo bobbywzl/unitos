@@ -84,7 +84,7 @@ function chipWidget({ kind, highlight: h }: Chip, t: TFunc) {
 }
 
 /** The kinds the layer paints; formatting, terms, and web links are the editor's. */
-const PAINTED = new Set<Highlight["kind"]>(["anchor", "pending-link", "salience", "simplify", "extract", "link"]);
+export const PAINTED = new Set<Highlight["kind"]>(["anchor", "pending-link", "salience", "simplify", "extract", "link"]);
 
 /** One stretch of words under the same highlights, drawn as block-view.tsx
     markedText draws it: a link wins, else the smallest anchor names the mark. */

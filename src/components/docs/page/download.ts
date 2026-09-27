@@ -140,8 +140,9 @@ function imageSrcs(doc: PMNode): string[] {
   return srcs;
 }
 
-/** Plain text: one line per paragraph of the paragraph index, a footnote's
-    number as [n], and each footnote at the end after its number. */
+/** Plain text: one line per paragraph of the paragraph index (a figure's
+    line is its caption), a footnote's number as [n], and each footnote at
+    the end after its number. */
 function plainText(doc: PMNode): string {
   const numbers = new Map<string, number>();
   const cite = (id: unknown) => `[${numbers.get(String(id)) ?? numbers.set(String(id), numbers.size + 1).size}]`;
@@ -155,7 +156,7 @@ function plainText(doc: PMNode): string {
     return { ...node, content };
   };
   return deriveBlocks(walk(doc.toJSON() as RichNode))
-    .filter((b) => b.type !== "FIGURE")
+    .filter((b) => b.type !== "FIGURE" || b.text.trim() !== "")
     .map((b) => b.text)
     .join("\n");
 }

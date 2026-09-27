@@ -235,7 +235,12 @@ function blockMd(node: PMNode, indent = ""): string {
       const rows: string[] = [];
       node.forEach((row, _o, r) => {
         const cells: string[] = [];
-        row.forEach((cell) => cells.push(cell.textContent.replace(/\|/g, "\\|").replace(/\n/g, " ")));
+        row.forEach((cell) => {
+          // A cell's paragraphs and line breaks as <br>: a table row is one line.
+          const lines: string[] = [];
+          cell.forEach((child) => lines.push(blockMd(child).replace(/ {2}\n/g, "<br>").replace(/\n/g, " ")));
+          cells.push(lines.filter(Boolean).join("<br>").replace(/\|/g, "\\|"));
+        });
         rows.push(`| ${cells.join(" | ")} |`);
         if (r === 0) rows.push(`| ${cells.map(() => "---").join(" | ")} |`);
       });

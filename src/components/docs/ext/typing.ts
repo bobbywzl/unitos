@@ -119,9 +119,10 @@ const DocsTyping = Extension.create({
       "Mod-Shift-p": () => e.commands.toggleInvisibleCharacters(),
       "Mod-Alt-c": () => copyFormatting(e),
       "Mod-Alt-v": () => pasteFormatting(e),
-      // Voice typing; Tiptap's strikethrough takes these keys otherwise.
+      // Voice typing, on a page that takes typing; Tiptap's strikethrough
+      // takes these keys otherwise.
       "Mod-Shift-s": () => {
-        fireDocs(e, TYPING_EVENT.voice);
+        if (e.isEditable) fireDocs(e, TYPING_EVENT.voice);
         return true;
       },
       // Keys Tiptap binds and Docs does not: inline code, a quote.

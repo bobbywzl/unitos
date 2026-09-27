@@ -19,7 +19,7 @@ import { translatorFor } from "@/lib/i18n/dictionaries";
 // The insert area (SPEC.md §29): the "@" menu, the right-click menus, and
 // the controls of what the text holds — tables, images, chips, equations,
 // the table of contents — with the windows they open.
-export function InsertLayer({ editor, documentId, notebookId, documents, pageSetup, editing }: DocsAreaProps) {
+export function InsertLayer({ editor, documentId, notebookId, documents, pageSetup, editing, projectEditor }: DocsAreaProps) {
   const lang = useLang();
   const router = useRouter();
   const ctx = useMemo<InsertContext>(
@@ -31,9 +31,10 @@ export function InsertLayer({ editor, documentId, notebookId, documents, pageSet
       lang,
       t: translatorFor(lang),
       editing,
+      projectEditor,
       navigate: (href) => router.push(href),
     }),
-    [documentId, notebookId, documents, pageSetup, lang, editing, router],
+    [documentId, notebookId, documents, pageSetup, lang, editing, projectEditor, router],
   );
 
   // The plugins and node views read the same facts.
