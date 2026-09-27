@@ -830,19 +830,23 @@ async function dragWords(page, selector, needle) {
   await page.mouse.up();
   return toolbar(page);
 }
-/** Point at the first element `selector` finds, placed in the band: the
-    app's tooltip then, or null. */
-async function hoverTip(page, selector) {
-  const box = await page.evaluate((sel) => {
-    const el = document.querySelector(sel);
-    return el ? window.__qa.showEl(el) : null;
-  }, selector);
-  if (!box) return null;
-  await page.mouse.move(box.x + box.width / 2 - 30, box.y + box.height / 2);
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
-  const tip = await waitIn(page, () => document.querySelector("#app-tip")?.textContent || null, null, 5000);
-  await page.mouse.move(5, 450);
-  return tip;
+/** Point at the first element `selector` finds whose words hold `text`,
+    placed in the band: the app's tooltip then, or null. A scroll hides the
+    tip, so a person whose tip did not show points again. */
+async function hoverTip(page, selector, text = "") {
+  for (let i = 0; i < 2; i++) {
+    const box = await page.evaluate(({ selector, text }) => {
+      const el = [...document.querySelectorAll(selector)].find((e) => e.textContent.includes(text));
+      return el ? window.__qa.showEl(el) : null;
+    }, { selector, text });
+    if (!box) return null;
+    await page.mouse.move(box.x + box.width / 2 - 30, box.y + box.height / 2);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
+    const tip = await waitIn(page, () => document.querySelector("#app-tip")?.textContent || null, null, 5000);
+    await page.mouse.move(5, 450);
+    if (tip) return tip;
+  }
+  return null;
 }
 /** The text toolbar (or a figure's tools) is open: waited for, `ms` at most. */
 async function toolbar(page, ms = 6000) {
@@ -3068,7 +3072,9 @@ RISKS.AI = async (theme) => {
     await dragSelect(page, nile.from, mekong.to);
     const selection = await page.evaluate(() => ({ kind: window.__docsEditor.state.selection.constructor.name, text: window.getSelection().toString().replace(/\s+/g, " ").trim() }));
     const opened = await popoverOpen(page);
-    const made = opened ? await pressHighlight(page, web.id, 2) : [];
+    // A color of each theme's own: the same highlight twice is one (the
+    // web page is the run's, and the light theme's highlight is on it).
+    const made = opened ? await pressHighlight(page, web.id, theme === "dark" ? 3 : 2) : [];
     await reload(page);
     if (made.length) await waitIn(page, (ids) => new Set([...document.querySelectorAll(".docs-prose [data-source-id]")].filter((e) => ids.includes(e.getAttribute("data-source-id"))).map((e) => e.closest("td, th")?.textContent.trim()).filter(Boolean)).size >= 2, made.map((m) => m.id), 20_000);
     const marks = made.length ? await page.evaluate((ids) => [...document.querySelectorAll(".docs-prose [data-source-id]")].filter((e) => ids.includes(e.getAttribute("data-source-id"))).map((e) => ({ text: e.textContent, cell: e.closest("td, th")?.textContent.trim().slice(0, 12) ?? null })), made.map((m) => m.id)) : [];
@@ -3298,11 +3304,15 @@ RISKS.COLLAPSE = async (theme) => {
 // terms underlined, with the definition on hover and on a press.
 RISKS.TRANSLATE = async (theme) => {
   const pdf = await fresh("pdf", `-translate${theme[0]}`);
-  // A key term in the abstract's rows, defined in both languages.
-  const term = "sequence transduction";
-  const termRows = (await rowsOf(pdf.id)).filter((r) => r.type === "PARAGRAPH" && r.text.toLowerCase().includes(term)).slice(0, 3);
-  const definitions = { en: "QA: a model that turns one sequence into another.", zh: "QA：把一个序列变成另一个序列的模型。" };
-  await db.document.update({ where: { id: pdf.id }, data: { glossary: [{ term, definition: definitions.en, blockIds: termRows.map((r) => r.id), lang: "en", definitions }] } });
+  // Two key terms in the abstract's rows, a phrase and a word, each defined
+  // in both languages.
+  const rows = await rowsOf(pdf.id);
+  const terms = [
+    { term: "sequence transduction", definitions: { en: "QA: a model that turns one sequence into another.", zh: "QA：把一个序列变成另一个序列的模型。" } },
+    { term: "Transformer", definitions: { en: "QA: a model built on attention alone.", zh: "QA：只用注意力的模型。" } },
+  ];
+  const glossary = terms.map(({ term, definitions }) => ({ term, definition: definitions.en, blockIds: rows.filter((r) => r.type === "PARAGRAPH" && r.text.includes(term)).slice(0, 3).map((r) => r.id), lang: "en", definitions }));
+  await db.document.update({ where: { id: pdf.id }, data: { glossary } });
   const { page, context, close } = await newPage(theme, { risk: "TRANSLATE" });
   await context.addCookies([{ name: "dissect-lang", value: "zh", url: BASE }]);
   await open(page, ctx.notebookId, pdf.id);
@@ -3370,24 +3380,35 @@ RISKS.TRANSLATE = async (theme) => {
     }, sample.id, 15_000);
     check("TRANSLATE", inEditing === 0 && after?.edited === false, `(${theme}) Editing shows no translations; back in Viewing, the paragraph edited since reads its words alone`, `in Editing ${inEditing}; after ${JSON.stringify(after)}`);
   }
-  // The key term: underlined in the page; its definition on hover and on a press.
-  const underlined = await waitIn(page, (t) => {
-    const el = [...document.querySelectorAll(".docs-prose .glossary-term")].find((e) => e.textContent.toLowerCase().includes(t.split(" ")[0]));
-    return el ? { words: el.textContent, count: document.querySelectorAll(".docs-prose .glossary-term").length } : null;
-  }, term, 20_000);
-  let tip = null;
-  let pressed = null;
-  if (underlined) {
-    tip = await hoverTip(page, ".docs-prose .glossary-term");
-    await page.locator(".docs-prose .glossary-term").first().click();
-    const define = page.locator('[data-layer-toolbar] [data-track="define"]').first();
-    if (await define.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false)) {
-      await define.click();
-      pressed = await waitIn(page, () => document.querySelector("[data-definition]")?.textContent || null, null, 10_000);
+  // The key terms: underlined in the page, each with its definition on
+  // hover; a press selects the term and opens the toolbar marked Key term,
+  // where Define (a word, not a phrase) shows the glossary's definition.
+  const underlined = await waitIn(page, (words) => {
+    const drawn = [...document.querySelectorAll(".docs-prose .glossary-term")].map((e) => e.textContent);
+    return words.every((w) => drawn.some((d) => d.includes(w))) ? drawn.length : null;
+  }, terms.map((t) => t.term.split(" ")[0]), 20_000);
+  const tips = [];
+  for (const { term } of underlined ? terms : []) tips.push(await hoverTip(page, ".docs-prose .glossary-term", term.split(" ")[0]));
+  const seen = [];
+  for (const [i, { term, definitions }] of (underlined ? terms : []).entries()) {
+    const tip = tips[i];
+    await calm(page);
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.locator(".docs-prose .glossary-term", { hasText: term.split(" ")[0] }).first().click();
+    const bar = await waitIn(page, () => {
+      const el = document.querySelector("[data-layer-toolbar]");
+      return el?.textContent.includes("关键术语") ? { define: Boolean(el.querySelector('[data-track="define"]')) } : null;
+    }, null, 8000);
+    let defined = null;
+    if (bar?.define) {
+      await page.locator('[data-layer-toolbar] [data-track="define"]').first().click();
+      defined = await waitIn(page, () => document.querySelector("[data-definition]")?.textContent || null, null, 10_000);
     }
+    const word = !term.includes(" ");
+    seen.push({ term, ok: (tip ?? "").includes(definitions.zh) && Boolean(bar) && bar.define === word && (!word || (defined ?? "").includes(definitions.zh)), tip: clip(tip, 40), bar, defined: clip(defined, 40) });
   }
   const termShot = await shot(page, `TRANSLATE-key-term-${theme}`);
-  check("TRANSLATE", Boolean(underlined) && (tip ?? "").includes(definitions.zh) && (pressed ?? "").includes(definitions.zh), `(${theme}) the key term is underlined; its definition on hover and on a press (Define)`, `${JSON.stringify(underlined)}; hover "${clip(tip, 60)}"; press "${clip(pressed, 60)}" ${termShot}`);
+  check("TRANSLATE", seen.length === 2 && seen.every((s) => s.ok), `(${theme}) the key terms are underlined, each with its definition on hover; a press opens the toolbar marked Key term, and a word's Define shows its definition`, `${underlined} underlined; ${JSON.stringify(seen)} ${termShot}`);
   await close();
 };
 
