@@ -30,9 +30,7 @@ const CORE_MAX = 2000;
 const TABLE_MAX_CHARS = 5_000;
 
 export type Core = { blockId: string; hash: string; text: string };
-/** richText: the cores were written by the units of a document with rich
-    text, and are read by them. */
-export type Collapse = { v: number; cores: Core[]; richText?: true };
+export type Collapse = { v: number; cores: Core[] };
 
 /** The document as Collapse reads it: the block rows the route loads. */
 export type CollapseBlock = {
@@ -73,14 +71,7 @@ export function readCollapse(value: unknown): Collapse | null {
       cores.push({ blockId: c.blockId, hash: c.hash, text: c.text });
     }
   }
-  return row.richText === true ? { v: COLLAPSE_VERSION, cores, richText: true } : { v: COLLAPSE_VERSION, cores };
-}
-
-/** Whether the document has rich text (SPEC.md §29): its rows are the paragraph index. */
-async function hasRichText(documentId: string): Promise<boolean> {
-  const [row] = await db.$queryRaw<{ rich: boolean }[]>`
-    SELECT ("richText" IS NOT NULL) AS "rich" FROM "Document" WHERE "id" = ${documentId}`;
-  return row?.rich ?? false;
+  return { v: COLLAPSE_VERSION, cores };
 }
 
 /** The words of a text: Latin words, and CJK characters at two per word. */
@@ -115,16 +106,15 @@ function fitCore(text: string, ceiling: number): string {
   return `${cut.replace(/[\s,;:—–-]+$/, "")}…`;
 }
 
-/** The cores the reader shows now: one per collapsible block (a unit, in a
-    document with rich text) whose stored core was written from the block's
-    current text — by the block's id, else by the hash alone (a re-parse's
-    new block with the same text) — and the blocks with no current core,
-    which the next Collapse writes. The units are the stored cores' unless
-    the caller knows the document. */
+/** The cores the reader shows now: one per collapsible block (a unit of the
+    paragraph index, when richText is the document's rich text) whose stored
+    core was written from the block's current text — by the block's id,
+    else by the hash alone (a re-parse's new block with the same text) — and
+    the blocks with no current core, which the next Collapse writes. */
 export function currentCores(
   collapse: Collapse | null,
   blocks: CollapseBlock[],
-  richText = collapse?.richText === true,
+  richText: unknown,
 ): { cores: Record<string, string>; missing: CollapseUnit[] } {
   const wanted = collapseUnits(blocks, richText).filter(collapsible);
   const byId = new Map(collapse?.cores.map((c) => [c.blockId, c]) ?? []);
@@ -159,6 +149,7 @@ export async function buildCollapse(
       references: true,
       importRev: true,
       pageLabels: true,
+      richText: true,
       blocks: {
         orderBy: { order: "asc" },
         select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true },
@@ -167,8 +158,7 @@ export async function buildCollapse(
   });
   if (!document) return {};
   const stored = readCollapse(document.collapse);
-  const richText = await hasRichText(documentId);
-  const { cores, missing } = currentCores(stored, document.blocks, richText);
+  const { cores, missing } = currentCores(stored, document.blocks, document.richText);
   if (missing.length === 0) return cores;
   if (!(await featureConfigured("collapse"))) throw new Error("No model is configured for Collapse");
 
@@ -236,13 +226,9 @@ export async function buildCollapse(
   // The stored cores that still stand — by id and hash, or by hash alone —
   // plus the new ones; the rest is dropped, so the row never grows past
   // the document.
-  const hashes = new Set(collapseUnits(document.blocks, richText).map((b) => blockHash(b.text)));
+  const hashes = new Set(collapseUnits(document.blocks, document.richText).map((b) => blockHash(b.text)));
   const kept = (stored?.cores ?? []).filter((c) => hashes.has(c.hash) && !written.has(c.blockId));
-  const next: Collapse = {
-    v: COLLAPSE_VERSION,
-    cores: [...kept, ...written.values()],
-    ...(richText ? { richText: true as const } : {}),
-  };
+  const next: Collapse = { v: COLLAPSE_VERSION, cores: [...kept, ...written.values()] };
   await db.document.update({
     where: { id: documentId },
     data: { collapse: next as unknown as Prisma.InputJsonValue },

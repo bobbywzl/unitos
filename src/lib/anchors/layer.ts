@@ -25,17 +25,20 @@ export async function layerBlocks(
     select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true },
   });
   if (layer !== "core") return blocks.map(({ id, type, text }) => ({ id, type, text }));
-  const document = await db.document.findUnique({ where: { id: documentId }, select: { collapse: true } });
-  return coreBlocks(document?.collapse ?? null, blocks);
+  const document = await db.document.findUnique({ where: { id: documentId }, select: { collapse: true, richText: true } });
+  return coreBlocks(document?.collapse ?? null, blocks, document?.richText ?? null);
 }
 
-/** Every block that has a core now, with the core as its text: a unit of
-    the paragraph index (lib/collapse-units.ts) when the cores were written
-    by units, under its first row's id. */
-export function coreBlocks(collapse: unknown, blocks: CollapseBlock[]): { id: string; type: string; text: string }[] {
-  const stored = readCollapse(collapse);
-  const { cores } = currentCores(stored, blocks);
-  return collapseUnits(blocks, stored?.richText === true)
+/** Every block that has a core now, with the core as its text: in a
+    document with rich text (richText), a unit of the paragraph index
+    (lib/collapse-units.ts) under its first row's id. */
+export function coreBlocks(
+  collapse: unknown,
+  blocks: CollapseBlock[],
+  richText: unknown,
+): { id: string; type: string; text: string }[] {
+  const { cores } = currentCores(readCollapse(collapse), blocks, richText);
+  return collapseUnits(blocks, richText)
     .filter((u) => cores[u.id] !== undefined)
     .map((u) => ({ id: u.id, type: u.type, text: cores[u.id] }));
 }
