@@ -3,10 +3,12 @@ import { isAdmin } from "@/lib/admin-auth";
 import { authEnabled } from "@/lib/auth";
 import { gatewayAdminKey, gatewayConfigured, providerKey } from "@/lib/gateway";
 import { db } from "@/lib/db";
+import { importPageEditorOn } from "@/lib/docs/import-switch";
 import { serverT } from "@/lib/i18n/server";
 import { recipientAccounts } from "@/lib/notifications";
 import { FeedbackInbox } from "@/components/admin/feedback-inbox";
 import { ModelCheck } from "@/components/admin/model-check";
+import { SettingSwitch } from "@/components/admin/setting-switch";
 import { MODEL_ROLES, ROLE_ORDER } from "@/lib/models";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +20,7 @@ export default async function AdminPage() {
   if (!(await isAdmin())) redirect("/admin/login");
   const t = await serverT();
 
-  const [feedback, accounts, modelRows] = await Promise.all([
+  const [feedback, accounts, modelRows, imports] = await Promise.all([
     db.feedback.findMany({
       orderBy: { createdAt: "desc" },
       take: 300,
@@ -36,6 +38,7 @@ export default async function AdminPage() {
     }),
     recipientAccounts(),
     db.modelChoice.findMany(),
+    importPageEditorOn(),
   ]);
   // The model per role (lib/models.ts): the constant, the id called now,
   // and what the last model update found.
@@ -86,6 +89,15 @@ export default async function AdminPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
+      <section id="imports" className="mb-8">
+        <h2 className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
+          {t("admin.imports")}
+        </h2>
+        <div className="space-y-3 rounded-2xl bg-card px-4 py-3 shadow-soft">
+          <p className="text-xs text-sand-600">{t("admin.importsDesc")}</p>
+          <SettingSwitch endpoint="/api/admin/imports" on={imports} />
+        </div>
+      </section>
       <section id="services" className="mb-8">
         <h2 className="mb-2 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
           {t("admin.services")}

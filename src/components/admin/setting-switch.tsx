@@ -4,11 +4,22 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useT } from "@/components/lang-provider";
 
-// The billing switch (SPEC.md §24): Turn on / Turn off posts to
-// /api/admin/billing; the page refreshes so the state shows the result. The
-// route refuses On with the reason when Stripe is not ready; ready says
+// An operator switch on the admin pages (lib/settings.ts): billing's
+// (SPEC.md §24) and the import switch (§30). Turn on / Turn off posts {on}
+// to its route; the page refreshes so the state shows the result. A route
+// may refuse On with the reason (billing without Stripe); ready says
 // whether it would, so the button reads disabled with the reason beside it.
-export function BillingSwitch({ on, ready, reason }: { on: boolean; ready: boolean; reason: string }) {
+export function SettingSwitch({
+  endpoint,
+  on,
+  ready = true,
+  reason = "",
+}: {
+  endpoint: string;
+  on: boolean;
+  ready?: boolean;
+  reason?: string;
+}) {
   const router = useRouter();
   const t = useT();
   const [busy, setBusy] = useState(false);
@@ -19,19 +30,19 @@ export function BillingSwitch({ on, ready, reason }: { on: boolean; ready: boole
     setBusy(true);
     setStatus(null);
     try {
-      const res = await fetch("/api/admin/billing", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ on: !on }),
       });
       const json = (await res.json().catch(() => null)) as { error?: string } | null;
       if (!res.ok) {
-        throw new Error(json?.error ?? t("admin.billingSaveFailedStatus", { status: res.status }));
+        throw new Error(json?.error ?? t("admin.switchSaveFailedStatus", { status: res.status }));
       }
-      setStatus({ kind: "done", text: t("admin.billingSaved") });
+      setStatus({ kind: "done", text: t("admin.switchSaved") });
       router.refresh();
     } catch (err) {
-      setStatus({ kind: "error", text: err instanceof Error ? err.message : t("admin.billingSaveFailed") });
+      setStatus({ kind: "error", text: err instanceof Error ? err.message : t("admin.switchSaveFailed") });
     } finally {
       setBusy(false);
     }
@@ -44,7 +55,7 @@ export function BillingSwitch({ on, ready, reason }: { on: boolean; ready: boole
           on ? "bg-sage-200 text-sage-800" : "bg-sand-200 text-sand-600"
         }`}
       >
-        {on ? t("admin.billingOn") : t("admin.billingOff")}
+        {on ? t("admin.switchOn") : t("admin.switchOff")}
       </span>
       <button
         type="button"
@@ -52,7 +63,7 @@ export function BillingSwitch({ on, ready, reason }: { on: boolean; ready: boole
         disabled={busy || (!on && !ready)}
         className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
       >
-        {busy ? t("common.saving") : on ? t("admin.billingTurnOff") : t("admin.billingTurnOn")}
+        {busy ? t("common.saving") : on ? t("admin.switchTurnOff") : t("admin.switchTurnOn")}
       </button>
       {!on && !ready && <span className="text-xs text-sand-600">{reason}</span>}
       {status && (

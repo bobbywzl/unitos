@@ -184,6 +184,10 @@ const en = {
   agoMinutes: "{n} min ago",
   agoHours: "{n} h ago",
   agoDays: "{n} d ago",
+  // The import switch (lib/docs/import-switch.ts)
+  imports: "Imports",
+  importsDesc:
+    "On: a PDF judged an article, a web page, or a Markdown or text file that is added becomes an import and opens in the page editor. Off: it opens in the reader as blocks. Documents added before keep the form they were made in.",
   // Services (env status; moved here from Settings — operator concern, not reader)
   services: "Services",
   svcGlm: "GLM 5.3: the reader's tools, the assistant, Stitch, Merge with AI. GLM 5.3 Flash: the readings. Through the gateway alone; Kimi stands in without it",
@@ -405,13 +409,13 @@ const en = {
   billingDesc:
     "The payment pipeline: the plan page, Stripe Checkout, the confirmation page, and the receipts, all under /billing. Off, the pages answer 404 and the app shows no link to them; you see them as a preview. On, every account sees the links and can pay.",
   billingSwitch: "Billing",
-  billingOn: "On",
-  billingOff: "Off",
-  billingTurnOn: "Turn on",
-  billingTurnOff: "Turn off",
-  billingSaved: "Saved",
-  billingSaveFailed: "Save failed",
-  billingSaveFailedStatus: "Save failed ({status})",
+  switchOn: "On",
+  switchOff: "Off",
+  switchTurnOn: "Turn on",
+  switchTurnOff: "Turn off",
+  switchSaved: "Saved",
+  switchSaveFailed: "Save failed",
+  switchSaveFailedStatus: "Save failed ({status})",
   billingNeedsSignIn: "Sign-in is off. Billing needs accounts.",
   billingNeedsEnv:
     "Set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_PREMIUM_MONTHLY, STRIPE_PRICE_PREMIUM_YEARLY, STRIPE_PRICE_ULTRA_MONTHLY, and STRIPE_PRICE_ULTRA_YEARLY first.",
@@ -600,6 +604,9 @@ const zh: Record<keyof typeof en, string> = {
   agoMinutes: "{n} 分钟前",
   agoHours: "{n} 小时前",
   agoDays: "{n} 天前",
+  imports: "导入",
+  importsDesc:
+    "开启：新加入的判定为文章的 PDF、网页，或 Markdown 与文本文件成为导入，在页面编辑器中打开。关闭：它在阅读器中以块打开。之前加入的文档保持生成时的形式。",
   services: "服务",
   svcGlm: "GLM 5.3：阅读器工具、助手、Stitch、AI 合并。GLM 5.3 Flash：各项读取。只经过网关；没有网关时由 Kimi 代替",
   svcKimi: "Kimi K3：提取、带图片的调用，以及没有网关时的所有 GLM 调用",
@@ -805,13 +812,13 @@ const zh: Record<keyof typeof en, string> = {
   billingDesc:
     "付款流程：方案页、Stripe 结账、确认页和收据，全部在 /billing 下。关闭时，这些页面返回 404，应用中不显示指向它们的链接；你以预览方式查看。开启后，每个账户都能看到链接并付款。",
   billingSwitch: "付费",
-  billingOn: "已开启",
-  billingOff: "已关闭",
-  billingTurnOn: "开启",
-  billingTurnOff: "关闭",
-  billingSaved: "已保存",
-  billingSaveFailed: "保存失败",
-  billingSaveFailedStatus: "保存失败（{status}）",
+  switchOn: "已开启",
+  switchOff: "已关闭",
+  switchTurnOn: "开启",
+  switchTurnOff: "关闭",
+  switchSaved: "已保存",
+  switchSaveFailed: "保存失败",
+  switchSaveFailedStatus: "保存失败（{status}）",
   billingNeedsSignIn: "登录已关闭。付费需要账户。",
   billingNeedsEnv:
     "请先设置 STRIPE_SECRET_KEY、STRIPE_WEBHOOK_SECRET、STRIPE_PRICE_PREMIUM_MONTHLY、STRIPE_PRICE_PREMIUM_YEARLY、STRIPE_PRICE_ULTRA_MONTHLY 和 STRIPE_PRICE_ULTRA_YEARLY。",

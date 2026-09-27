@@ -4,6 +4,7 @@ import { carryContents } from "@/lib/contents";
 import { db } from "@/lib/db";
 import { deriveBlocks, ensureBlockIds, hasBlockIds } from "@/lib/docs/blocks";
 import { richTextFromImport, type ImportFigure, type ImportKind } from "@/lib/docs/import";
+import { importPageEditorOn } from "@/lib/docs/import-switch";
 import { sanitizeRichText, type PageSetup, type RichNode } from "@/lib/docs/schema";
 import { syncRichText } from "@/lib/docs/sync";
 import { keepNamedVersion } from "@/lib/docs/versions";
@@ -207,14 +208,6 @@ async function saveDetail(
 // (lib/docs/import.ts) turns the parse's blocks into the rich text; the Block
 // rows are derived from it in the same transaction (lib/docs/sync.ts, bulk),
 // so the first save changes only the paragraph typed in.
-
-/** The switch: IMPORT_PAGE_EDITOR=on makes new imports rich text; unset, a
-    new import is a block document, as before. Read at import only: a
-    document made while it was on keeps its rich text, and re-parses as rich
-    text. */
-export function importPageEditorOn(): boolean {
-  return process.env.IMPORT_PAGE_EDITOR === "on";
-}
 
 // The size guard: past either, an import stays a block document and the
 // done line says so. Every save sends the whole rich text and every row, so
@@ -558,7 +551,7 @@ export async function ingestPdf(
   const blocks = parsed.blocks;
   // An article is an import while the switch is on: pages at the PDF's
   // size, its page numbers at the lines where its pages begin.
-  const converted = importPageEditorOn()
+  const converted = (await importPageEditorOn())
     ? convertImport({
         kind: "pdf",
         title,
@@ -614,7 +607,7 @@ export async function ingestMarkdown(
   const title = parsed.title ?? filename;
   const blocks = parsed.blocks;
   // A text file is an import while the switch is on: pageless.
-  const converted = importPageEditorOn()
+  const converted = (await importPageEditorOn())
     ? convertImport({ kind: "markdown", title, titleFromOriginal: !parsed.titleFromFile, blocks })
     : null;
   onProgress?.(
@@ -840,6 +833,8 @@ export async function ingestUrl(
       title,
       blockDocument,
     });
+  // A web page is an import while the switch is on: pageless, no page numbers.
+  const imports = await importPageEditorOn();
 
   if (opts.split) {
     const chars = blocks.reduce((n, b) => n + b.text.length, 0);
@@ -848,7 +843,7 @@ export async function ingestUrl(
       // Each part is an import of its own, pageless; the part's title names
       // it, so no Title opens its text.
       const converted = parts.map((part) =>
-        importPageEditorOn()
+        imports
           ? convertImport({ kind: "url", title: part.title, titleFromOriginal: false, blocks: part.blocks })
           : null,
       );
@@ -874,8 +869,7 @@ export async function ingestUrl(
     }
   }
 
-  // A web page is an import while the switch is on: pageless, no page numbers.
-  const converted = importPageEditorOn()
+  const converted = imports
     ? convertImport({ kind: "url", title, titleFromOriginal: Boolean(parsed.title), blocks })
     : null;
   onProgress?.("save", await detail(converted === "size" ? "size" : null));
@@ -1092,7 +1086,7 @@ export async function reparseDocument(
   // text become one while the switch is on. Past the size guard, a block
   // document.
   const converted =
-    wasImport || (document.handwritten && importPageEditorOn())
+    wasImport || (document.handwritten && (await importPageEditorOn()))
       ? convertImport({
           kind,
           title: originalTitle ?? document.title,

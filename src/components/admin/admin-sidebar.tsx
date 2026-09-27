@@ -20,6 +20,7 @@ const PAGES: Page[] = [
     href: "/admin",
     label: "admin.feedback",
     sections: [
+      { id: "imports", label: "admin.imports" },
       { id: "services", label: "admin.services" },
       { id: "models", label: "admin.models" },
       { id: "inbox", label: "admin.feedback" },

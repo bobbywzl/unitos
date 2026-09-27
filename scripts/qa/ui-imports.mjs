@@ -1,7 +1,7 @@
 // UI walk of the imports' risks (the imports design 1.11 and section 5; the
 // round 10 and round 11 plans): a PDF, a web page, and a Markdown file added
-// to a local Unitos with the switch on (IMPORT_PAGE_EDITOR=on) open in the
-// page editor, and every risk is walked in headless Chromium at a person's
+// to a local Unitos with the import switch on (the admin dashboard's
+// Imports; the walk turns it on for the run) open in the page editor, and every risk is walked in headless Chromium at a person's
 // pace, in the light and the dark theme. R4 and R19 are out (C1: a table is
 // a row per cell paragraph). Each check prints PASS or FAIL with its
 // evidence: a number, a screenshot path. The timings for the size guard
@@ -30,9 +30,9 @@
 // ATTENTION (the Attention paper's PDF: a path or a URL; default
 // https://arxiv.org/pdf/1706.03762), LONG_PAGES (the long PDF's page count;
 // default 150).
-// Expects the dev server with IMPORT_PAGE_EDITOR=on, sign-in off, and the
-// model mock (scripts/qa/mock-kimi.mjs on :3399). The fixtures are made
-// here: a web page, its chart, its images, and a looping video served on
+// Expects the dev server with sign-in off and the model mock
+// (scripts/qa/mock-kimi.mjs on :3399). The fixtures are made here: a web
+// page, its chart, its images, and a looping video served on
 // FIXTURE_PORT (the server fetches localhost directly), a Markdown file, and
 // the long PDF printed by Chromium. Every document is added fresh (the
 // bytes carry the run's stamp), so dedupe never hands back an older import.
@@ -1157,6 +1157,11 @@ const ctx = { notebookId: null, sectionId: null, docs: {}, bytes: {}, media: nul
 const tagged = (tag = "") => `${STAMP}${ctx.alone}${tag}`;
 
 async function prepare() {
+  // The import switch (lib/docs/import-switch.ts) is on for the run and put
+  // back after.
+  const was = await db.appSetting.findUnique({ where: { key: "imports" } });
+  ctx.importsWas = was?.value ?? null;
+  await db.appSetting.upsert({ where: { key: "imports" }, create: { key: "imports", value: "on" }, update: { value: "on" } });
   await launch();
   ctx.media = await drawMedia(browser);
   const files = { ...ctx.media };
@@ -3594,6 +3599,8 @@ main()
     }
     await browser?.close().catch(() => {});
     ctx.server?.close();
+    if (ctx.importsWas === null) await db.appSetting.deleteMany({ where: { key: "imports" } }).catch(() => {});
+    else if (ctx.importsWas !== undefined) await db.appSetting.update({ where: { key: "imports" }, data: { value: ctx.importsWas } }).catch(() => {});
     await db.$disconnect();
     process.exit(n("FAIL") > 0 ? 1 : 0);
   });

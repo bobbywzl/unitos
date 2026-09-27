@@ -20,7 +20,7 @@ import { db } from "@/lib/db";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { betaOn } from "@/lib/tiers";
 import type { TKey } from "@/lib/i18n/dictionaries";
-import { BillingSwitch } from "@/components/admin/billing-switch";
+import { SettingSwitch } from "@/components/admin/setting-switch";
 import { TierChip } from "@/components/tier-mark";
 
 export const dynamic = "force-dynamic";
@@ -89,7 +89,7 @@ export default async function AdminBillingPage() {
       <section id="switch" className="mb-8">
         <h2 className={heading}>{t("admin.billingSwitch")}</h2>
         <div className="space-y-3 rounded-2xl bg-card px-4 py-3 shadow-soft">
-          <BillingSwitch on={on} ready={ready} reason={reason} />
+          <SettingSwitch endpoint="/api/admin/billing" on={on} ready={ready} reason={reason} />
           <div className="flex flex-wrap items-center gap-3 border-t border-line pt-3 text-xs">
             <Link href="/billing" target="_blank" className="text-sand-600 underline hover:text-clay-700">
               {t("admin.billingPreview")}
