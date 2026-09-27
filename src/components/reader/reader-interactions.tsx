@@ -1355,9 +1355,11 @@ export function ReaderInteractions({
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceRunRef = useRef(0);
   // Optimistic highlight marks: painted the instant a color dot is clicked,
-  // cleared when the server's anchors arrive with the refresh.
+  // cleared when the server's anchors arrive with the refresh. sourceId: the
+  // stored source, once the save answers, so a mark whose words were typed
+  // into meanwhile still finds its stored copy.
   const [localAnchors, setLocalAnchors] = useState<
-    Record<string, { start: number; end: number; color: string | null; comment?: boolean }[]>
+    Record<string, { start: number; end: number; color: string | null; comment?: boolean; sourceId?: string }[]>
   >({});
   // Spans made in this session: their marks sweep in left to right the first
   // time they paint (block-view.tsx mark-sweep). Keyed `${blockId}:${start}:${end}`,
@@ -1471,7 +1473,7 @@ export function ReaderInteractions({
       for (const [blockId, list] of Object.entries(prev)) {
         const confirmed = anchorHighlights[blockId] ?? [];
         const keep = list.filter(
-          (h) => !confirmed.some((c) => c.start === h.start && c.end === h.end),
+          (h) => !confirmed.some((c) => c.sourceId === h.sourceId || (c.start === h.start && c.end === h.end)),
         );
         if (keep.length > 0) next[blockId] = keep;
       }
@@ -5173,6 +5175,27 @@ export function ReaderInteractions({
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(detail?.error ?? t("reader.annotationFailedStatus", { status: res.status }));
       }
+      // Each mark learns its stored source (one per segment, in the passage's
+      // order), and one whose stored copy is already in goes.
+      const note = (await res.json().catch(() => null)) as { sources?: { id: string; blockId: string }[] } | null;
+      const sources = [...(note?.sources ?? [])];
+      const ids = new Map<object, string | undefined>(
+        optimistic.map(({ blockId, mark }) => {
+          const i = sources.findIndex((src) => src.blockId === blockIdOfKey(blockId));
+          return [mark, i >= 0 ? sources.splice(i, 1)[0].id : undefined] as const;
+        }),
+      );
+      setLocalAnchors((prev) => {
+        const next: typeof prev = {};
+        for (const [blockId, list] of Object.entries(prev)) {
+          const stored = anchorHighlightsRef.current[blockId] ?? [];
+          const kept = list
+            .map((h) => (ids.get(h) ? { ...h, sourceId: ids.get(h) } : h))
+            .filter((h) => !h.sourceId || !stored.some((c) => c.sourceId === h.sourceId));
+          if (kept.length > 0) next[blockId] = kept;
+        }
+        return next;
+      });
       router.refresh();
     } catch (err) {
       // Offline (SPEC.md §17, Unitos Premium): a highlight or comment is a

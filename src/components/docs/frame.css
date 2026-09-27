@@ -4,12 +4,12 @@
    editor's look, loads with the editor (docs-editor.tsx). */
 
 /* Unitos's variables (globals.css), which flip under .dark by themselves:
-   the paper ground, a card page, the chrome's words and symbols, the page's
-   hairline, the toolbar's card pill, Figtree for the chrome, and Caprasimo
-   for titles. */
+   the paper ground and a page of the same paper, the chrome's words and
+   symbols, the page's hairline, the toolbar's card pill, Figtree for the
+   chrome, and Caprasimo for titles. */
 :root {
   --docs-canvas: var(--paper);
-  --docs-page: var(--card);
+  --docs-page: var(--paper);
   --docs-icon: var(--sand-700);
   --docs-text: var(--ink);
   --docs-page-border: var(--line);
@@ -123,10 +123,10 @@
 }
 
 /* The page stack: one sheet per page behind one flow of text. A sheet is
-   paper: square corners, a hairline, and Unitos's soft shadow. The ground
-   under the text (--docs-ground, which a pinned table row paints too) is
-   the page's color, the card color for a white page in dark mode, and the
-   canvas when pageless. */
+   Unitos's paper: square corners, a hairline, and Unitos's soft shadow. The
+   ground under the text (--docs-ground, which a pinned table row paints
+   too) is the page's color, Unitos's paper for a white page (it prints
+   white, css/page.css), and the canvas when pageless. */
 .docs-page {
   --docs-ground: var(--docs-sheet-color, var(--docs-page));
   position: relative;
@@ -135,7 +135,7 @@
   isolation: isolate;
   cursor: text;
 }
-.dark .docs-page[data-white]:not([data-pageless]) {
+.docs-page[data-white]:not([data-pageless]) {
   --docs-ground: var(--docs-page);
 }
 .docs-page[data-pageless] {
