@@ -13,37 +13,14 @@ import { api } from "@/lib/api";
 // File > Make a copy (SPEC.md §29): Google Docs' Copy document dialog. The
 // copy takes the rich text and the page setup, and the suggestions when
 // asked, never the notes, annotations, or comments, and opens in this tab.
-// An import cannot be copied yet: its figures' media and its references stay
-// with the import, so the copy would lose them. The dialog says so.
-
-/** The page editor's document is an import (docs-editor.tsx marks its shell). */
-const isImport = (editor: Editor) => editor.view.dom.closest("[data-docs-editor]")?.hasAttribute("data-import") ?? false;
+// A copy of an import is a blank document that keeps its figures, its page
+// numbers, and its references (§30; the server copies what they draw from).
 
 export function CopyDialog({ editor, onClose }: { editor: Editor; onClose: () => void }) {
   const t = useT();
   const [name, setName] = useState(() => t("docsPage.copyOf", { title: documentTitle(editor) }));
   const [suggestions, setSuggestions] = useState(false);
   const [busy, setBusy] = useState(false);
-  if (isImport(editor)) {
-    return (
-      <ToolbarDialog
-        title={t("docsPage.copyDocument")}
-        onClose={onClose}
-        className="docs-small-dialog"
-        closeButton={false}
-        actions={
-          // OK takes the focus: Enter closes the dialog.
-          <button type="button" data-autofocus onClick={onClose} className="docs-tb-button docs-tb-button-primary">
-            {t("docs.ok")}
-          </button>
-        }
-      >
-        <div className="docs-setup-body">
-          <p>{t("docsPage.copyImportOff")}</p>
-        </div>
-      </ToolbarDialog>
-    );
-  }
   const submit = async () => {
     const ctx = insertContext(editor);
     const title = name.trim().slice(0, 200);

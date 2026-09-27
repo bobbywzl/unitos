@@ -65,13 +65,15 @@
 .docs-status-error,
 .docs-status-offline,
 .docs-setup-error,
-.docs-versions-error {
+.docs-versions-error,
+.docs-outline-error {
   color: #dc2626;
 }
 .dark .docs-status-error,
 .dark .docs-status-offline,
 .dark .docs-setup-error,
-.dark .docs-versions-error {
+.dark .docs-versions-error,
+.dark .docs-outline-error {
   color: #f87171;
 }
 
@@ -612,6 +614,22 @@ body:has(> [data-docs-menu]) .docs-prose {
 }
 .docs-outline-list {
   margin-top: 4px;
+}
+/* An import's contents under the headings (SPEC.md §26): a note, and
+   Generate contents. */
+.docs-outline-note {
+  padding: 0 16px 8px 24px;
+  color: var(--docs-muted);
+  font: 400 13px/16px var(--docs-ui-font);
+  letter-spacing: 0.00625rem;
+}
+.docs-outline-action {
+  padding: 0 16px 8px 24px;
+}
+.docs-outline-action .docs-button-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .docs-outline-item {
   position: relative;

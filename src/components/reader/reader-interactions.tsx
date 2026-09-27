@@ -3780,6 +3780,17 @@ export function ReaderInteractions({
       ).detail;
       const container = containerRef.current;
       if (!container || !origin || !container.contains(origin)) return;
+      // The page editor selected the term's words (layer/reading.ts): the
+      // toolbar opens on them as on any selection in the page (SPEC.md §29).
+      if (richTextRef.current) {
+        const captured = captureSelectionRef.current();
+        if (!captured) return;
+        suppressNextMouseUp.current = true;
+        setSubmenu(null);
+        setCommentDraft("");
+        setPopover({ ...captured, term: true });
+        return;
+      }
       const blockId = origin.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
       if (!blockId) return;
       const block = blocksRef.current.find((b) => b.id === blockId);

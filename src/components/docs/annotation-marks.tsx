@@ -170,6 +170,11 @@ function chipsOf(h: Highlight): Chip[] {
     (block-view.tsx HighlightLabel). */
 const WHOLE = new Set([FIGURE, "blockMath"]);
 
+/** A ring in the Match-it layer's gold (globals.css .extract-mark), and in
+    the sage of a link waiting for its other end (.link-pending-mark). */
+const EXTRACT_RING = "#d9a54a";
+const PENDING_RING = "var(--sage-600)";
+
 /** The color a mark on an object rings in: its tool's kind color, a
     highlight's hue, the comment color, else a note's clay (SPEC.md §6). */
 function ringColor(h: Highlight): string {
@@ -179,13 +184,24 @@ function ringColor(h: Highlight): string {
   return "var(--clay-400)";
 }
 
+/** What marks an object: the anchors of notes and annotations on it, the
+    ends of links across texts, and the Match-it spans (one per extraction). */
+type ObjectMarks = { anchors: Highlight[]; links: Highlight[]; extracts: Highlight[] };
+
 /** The label chip of an object's marks: the annotations' labels ("A1 · A2")
-    behind the tool's symbol, or a highlight's dot. A press opens the
-    annotation, or the note; a press on a label, its own. The object carries
-    the ring's data-source-id, so a jump to that mark finds the object; each
-    other mark's label carries its own, and a jump to it flashes the object
-    (flashDecorations). */
-function labelWidget(anchors: Highlight[], color: string, ringSource: string | null, t: TFunc) {
+    behind the tool's symbol, or a highlight's dot; then each link's chain
+    and each extraction's label ("M1"). A press on the chip opens the
+    annotation, or the note; a press on a part, what that part's chip opens
+    in the text. The object carries the ring's data-source-id and
+    data-link-id, so a jump to that mark finds the object; every other
+    mark's part carries its own, and a jump to it flashes the object and
+    brings it to the middle of the view (flashPlugin). */
+function labelWidget(
+  { anchors, links, extracts }: ObjectMarks,
+  color: string,
+  ring: { sourceId: string | null; linkId: string | null },
+  t: TFunc,
+) {
   return () => {
     const focusable = anchors.find((h) => h.annotation && h.sourceId);
     const note = anchors.find((h) => !h.annotation && h.noteId);
@@ -198,9 +214,11 @@ function labelWidget(anchors: Highlight[], color: string, ringSource: string | n
     button.className = "docs-object-label";
     button.setAttribute("data-anchor-skip", "");
     button.setAttribute("data-track", "figure-label");
-    const tip = focusable ? t("panes.figureAnnotatedTitle", { text }) : t("panes.figureHighlightedTitle", { text });
-    button.setAttribute("aria-label", tip);
-    button.setAttribute("data-tip", tip);
+    if (anchors.length > 0) {
+      const tip = focusable ? t("panes.figureAnnotatedTitle", { text }) : t("panes.figureHighlightedTitle", { text });
+      button.setAttribute("aria-label", tip);
+      button.setAttribute("data-tip", tip);
+    }
     if (focusable?.sourceId) {
       button.dataset.docsOpen = "annotation";
       button.dataset.hoverSource = focusable.sourceId;
@@ -209,35 +227,66 @@ function labelWidget(anchors: Highlight[], color: string, ringSource: string | n
       button.dataset.noteId = note.noteId;
     }
     const labeled = anchors.filter((h) => h.figureLabel);
+    const linkTip = (h: Highlight) =>
+      [h.linkTitle ? t("panes.linkedTo", { title: h.linkTitle }) : t("panes.linked"), h.linkReason].filter(Boolean).join("\n");
     const root = createRoot(button);
     root.render(
       <>
-        {toolAnchor?.tool ? (
-          <ToolSymbol tool={toolAnchor.tool} plus={toolAnchor.plus} size={11} />
-        ) : (
-          <span aria-hidden className="docs-object-dot" style={{ background: color }} />
-        )}
-        {labeled.length === 0 ? (
-          text
-        ) : (
-          <span>
-            {labeled.map((h, i) => (
-              <Fragment key={h.sourceId ?? i}>
-                {i > 0 && " · "}
-                <span
-                  {...(h.sourceId && h.sourceId !== ringSource ? { "data-source-id": h.sourceId } : {})}
-                  {...(h.annotation && h.sourceId
-                    ? { "data-docs-open": "annotation", "data-hover-source": h.sourceId }
-                    : h.noteId
-                      ? { "data-docs-open": "note", "data-note-id": h.noteId }
-                      : {})}
-                >
-                  {h.figureLabel}
-                </span>
-              </Fragment>
-            ))}
-          </span>
-        )}
+        {anchors.length > 0 &&
+          (toolAnchor?.tool ? (
+            <ToolSymbol tool={toolAnchor.tool} plus={toolAnchor.plus} size={11} />
+          ) : (
+            <span aria-hidden className="docs-object-dot" style={{ background: color }} />
+          ))}
+        {anchors.length > 0 &&
+          (labeled.length === 0 ? (
+            text
+          ) : (
+            <span>
+              {labeled.map((h, i) => (
+                <Fragment key={h.sourceId ?? i}>
+                  {i > 0 && " · "}
+                  <span
+                    {...(h.sourceId && h.sourceId !== ring.sourceId ? { "data-source-id": h.sourceId } : {})}
+                    {...(h.annotation && h.sourceId
+                      ? { "data-docs-open": "annotation", "data-hover-source": h.sourceId }
+                      : h.noteId
+                        ? { "data-docs-open": "note", "data-note-id": h.noteId }
+                        : {})}
+                  >
+                    {h.figureLabel}
+                  </span>
+                </Fragment>
+              ))}
+            </span>
+          ))}
+        {links.map((h, i) => (
+          <Fragment key={h.linkId ?? i}>
+            {(anchors.length > 0 || i > 0) && <span aria-hidden>·</span>}
+            <span
+              data-docs-open="link"
+              data-href={h.href}
+              aria-label={linkTip(h)}
+              data-tip={linkTip(h)}
+              {...(h.linkId && h.linkId !== ring.linkId ? { "data-link-id": h.linkId } : {})}
+            >
+              <LinkIcon size={11} />
+            </span>
+          </Fragment>
+        ))}
+        {extracts.map((h, i) => (
+          <Fragment key={h.extractId ?? i}>
+            {(anchors.length > 0 || links.length > 0 || i > 0) && <span aria-hidden>·</span>}
+            <span
+              data-docs-open="extract"
+              data-extract-id={h.extractId}
+              data-track="extract-chip"
+              data-tip={t("panes.extractOpenCard", { label: h.extractLabel ?? "" })}
+            >
+              {h.extractLabel}
+            </span>
+          </Fragment>
+        ))}
       </>,
     );
     (button as HTMLButtonElement & { __root?: Root }).__root = root;
@@ -245,40 +294,57 @@ function labelWidget(anchors: Highlight[], color: string, ringSource: string | n
   };
 }
 
-/** A mark on a figure or an equation: the object rings in the kind color
-    (a node decoration, with data-source-id for jumps and flashes), and its
-    label chip stands before it, right of the text column, level with its
-    top. */
+/** The marks on a figure or an equation: the object rings (a node
+    decoration, with data-source-id and data-link-id for jumps and flashes)
+    in the color of its lead mark — a link waiting for its other end, else
+    the card open on it, an annotation, a note, then a link, then a Match-it
+    span — and its label chip stands before it, right of the text column,
+    level with its top. */
 function objectMarks(node: PMNode, pos: number, highlights: Highlight[], t: TFunc): Decoration[] {
-  const anchors = highlights.filter((h) => h.kind === "anchor" && !h.leaving);
-  if (anchors.length === 0) return [];
-  // The card open on it, else an annotation, names the ring's color.
+  const marks: ObjectMarks = {
+    anchors: highlights.filter((h) => h.kind === "anchor" && !h.leaving),
+    links: highlights.filter((h) => h.kind === "link" && h.href),
+    // An extraction's origin and one of its passages on one object: one label.
+    extracts: highlights.filter(
+      (h, i) => h.kind === "extract" && h.extractLabel && highlights.findIndex((x) => x.kind === "extract" && x.extractId === h.extractId) === i,
+    ),
+  };
+  const { anchors, links, extracts } = marks;
+  const pending = highlights.some((h) => h.kind === "pending-link");
+  if (anchors.length === 0 && links.length === 0 && extracts.length === 0 && !pending) return [];
   const lead = anchors.find((h) => h.open) ?? anchors.find((h) => h.annotation && h.sourceId) ?? anchors[0];
-  const sourceId = lead.sourceId ?? anchors.find((h) => h.sourceId)?.sourceId;
-  const color = ringColor(lead);
+  const sourceId = lead?.sourceId ?? anchors.find((h) => h.sourceId)?.sourceId ?? null;
+  const linkId = links.find((h) => h.linkId)?.linkId ?? null;
+  const color = pending ? PENDING_RING : lead ? ringColor(lead) : links.length > 0 ? LINK_KIND_VAR : EXTRACT_RING;
   const attrs: Record<string, string> = {
     class: "docs-object-mark",
     style: `--docs-object-ring: ${color}`,
     "data-unitos-mark": "",
   };
   if (sourceId) attrs["data-source-id"] = sourceId;
-  const key = anchors
-    .map((h) => [h.sourceId, h.noteId, h.annotation ? 1 : 0, h.figureLabel, h.tool, h.plus ? 1 : 0].join(":"))
-    .join(",");
-  return [
-    Decoration.node(pos, pos + node.nodeSize, attrs),
-    Decoration.widget(pos, labelWidget(anchors, color, sourceId ?? null, t), {
+  if (linkId) attrs["data-link-id"] = linkId;
+  const decorations = [Decoration.node(pos, pos + node.nodeSize, attrs)];
+  // A link's first end alone rings, with no label.
+  if (anchors.length === 0 && links.length === 0 && extracts.length === 0) return decorations;
+  const key = [
+    ...anchors.map((h) => [h.sourceId, h.noteId, h.annotation ? 1 : 0, h.figureLabel, h.tool, h.plus ? 1 : 0].join(":")),
+    ...links.map((h) => ["link", h.linkId, h.href, h.linkTitle, h.linkReason].join(":")),
+    ...extracts.map((h) => ["extract", h.extractId, h.extractLabel].join(":")),
+  ].join(",");
+  decorations.push(
+    Decoration.widget(pos, labelWidget(marks, color, { sourceId, linkId }, t), {
       // After a page's spacer at the same place: the chip stands on the object's page.
       side: 1,
       ignoreSelection: true,
       stopEvent: () => true,
-      key: `object-label:${color}:${sourceId ?? ""}:${key}`,
+      key: `object-label:${color}:${sourceId ?? ""}:${linkId ?? ""}:${key}`,
       destroy: (dom) => {
         const root = (dom as HTMLElement & { __root?: Root }).__root;
         if (root) queueMicrotask(() => root.unmount());
       },
     }),
-  ];
+  );
+  return decorations;
 }
 
 function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): DecorationSet {
@@ -408,7 +474,12 @@ function flashPlugin() {
         const id = `flash-${++flashCount}`;
         const add = flashDecorations(view, e.target, id);
         if (add.length === 0) return;
+        // A jump to a part of an object's label lands on the object: the
+        // object, not its label, stands in the middle of the view.
+        const label = e.target.closest(".docs-object-label");
+        const object = label ? view.nodeDOM(view.posAtDOM(label, 0)) : null;
         view.dispatch(view.state.tr.setMeta(flashKey, { add }).setMeta("addToHistory", false));
+        if (object instanceof HTMLElement) object.scrollIntoView({ behavior: "smooth", block: "center" });
         window.setTimeout(() => {
           if (view.isDestroyed) return;
           view.dispatch(view.state.tr.setMeta(flashKey, { remove: id }).setMeta("addToHistory", false));
