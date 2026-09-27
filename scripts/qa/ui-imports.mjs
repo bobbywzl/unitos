@@ -1983,7 +1983,16 @@ RISKS.EDIT = async (theme) => {
   await waitSaved(page);
   await sleep(2500);
   const moved = hl ? (await sourcesOf(pdf.id)).find((x) => x.id === hl.id) : null;
-  const painted = hl ? await page.evaluate((id) => [...document.querySelectorAll(`.docs-prose [data-source-id="${id}"]`)].map((e) => e.textContent).join(""), hl.id) : "";
+  // The mark settles once the page has the save's anchors: a slow server
+  // shows the old mark a moment first (noted, not failed).
+  const paintedNow = () => (hl ? page.evaluate((id) => [...document.querySelectorAll(`.docs-prose [data-source-id="${id}"]`)].map((e) => e.textContent).join(""), hl.id) : "");
+  let painted = await paintedNow();
+  const first = painted;
+  for (let i = 0; i < 20 && !painted.includes("neural QA networks"); i++) {
+    await sleep(500);
+    painted = await paintedNow();
+  }
+  if (first !== painted) note("EDIT", `(${theme}) the mark over the typed words settled late`, `first "${clip(first, 40)}", then "${clip(painted, 40)}"`);
   check("EDIT", Boolean(moved && !moved.orphaned && moved.quotedText === hl.quotedText && (moved.anchoredText ?? "").includes("neural QA networks") && painted.includes("neural QA networks")), `(${theme}) words typed inside a highlight: the mark grows over them, the quote stays`, moved ? `quote "${clip(moved.quotedText, 40)}", anchored "${clip(moved.anchoredText, 50)}", painted "${clip(painted, 50)}"` : "no highlight");
   for (let i = 0; i < 3; i++) await page.keyboard.press("Backspace");
   await waitSaved(page).catch(() => {});
@@ -2268,7 +2277,13 @@ RISKS.AUDIT = async (theme) => {
     const seventh = (await pageStarts(page)).find((x) => x.page === 7);
     let namedTip = null;
     if (seventh) {
-      await page.evaluate((p) => window.__docsEditor.view.domAtPos(p).node.parentElement?.scrollIntoView({ block: "center" }), seventh.pos);
+      // The page start 60 px above the view's middle, where the tip reads.
+      await page.evaluate((p) => {
+        let pane = document.querySelector(".docs-prose").parentElement;
+        while (pane && !(/(auto|scroll)/.test(getComputedStyle(pane).overflowY) && pane.scrollHeight > pane.clientHeight)) pane = pane.parentElement;
+        const r = pane.getBoundingClientRect();
+        pane.scrollBy(0, window.__docsEditor.view.coordsAtPos(p).top - (r.top + pane.clientHeight / 2) + 60);
+      }, seventh.pos);
       await sleep(500);
       const edge = await page.evaluate(() => {
         let pane = document.querySelector(".docs-prose").parentElement;
