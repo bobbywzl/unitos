@@ -187,8 +187,18 @@ async function handle(req: Request, t: TFunc) {
     include: {
       blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true } },
     },
+    // An import's rich text runs to megabytes: only a core anchor and the
+    // assistant's suggestions read it (storedRichText).
+    omit: { richText: true },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
+  const [{ rich }] = await db.$queryRaw<{ rich: boolean }[]>`
+    SELECT ("richText" IS NOT NULL) AS "rich" FROM "Document" WHERE "id" = ${document.id}`;
+  let stored: { richText: unknown } | null | undefined;
+  const storedRichText = async (): Promise<unknown> => {
+    stored ??= await db.document.findUnique({ where: { id: document.id }, select: { richText: true } });
+    return stored?.richText ?? null;
+  };
 
   const [profile, sections, attachedDocs, notes] = await Promise.all([
     loadProfile(data.notebookId),
@@ -259,7 +269,7 @@ async function handle(req: Request, t: TFunc) {
   // A core anchor (SPEC.md §28) resolves against the cores, its context the
   // cores around it.
   const layer = (toolNote ? toolNote.sources[0]?.layer : data.anchor?.layer) === "core" ? ("core" as const) : null;
-  const anchorBlocks = layer === "core" ? coreBlocks(document.collapse, document.blocks, document.richText) : document.blocks;
+  const anchorBlocks = layer === "core" ? coreBlocks(document.collapse, document.blocks, await storedRichText()) : document.blocks;
   const passage = anchorInput ? resolvePassage(anchorBlocks, anchorInput, segmentsInput) : [];
   const anchor = passage[0] ?? null;
   const anchored = anchor ? passageContext(anchorBlocks, passage) : null;
@@ -269,8 +279,9 @@ async function handle(req: Request, t: TFunc) {
   // The assistant's suggestions (SPEC.md §29) change a document with rich
   // text; a chip changes the selected words. An import another account's
   // project holds takes no edits.
-  const shared = takesSuggestions(document) && (await importShared(document.id));
-  const edits: DocumentEdits = shared ? "none" : takesSuggestions(document) ? "suggestions" : "blocks";
+  const suggestible = takesSuggestions({ richText: rich, format: document.format });
+  const shared = suggestible && (await importShared(document.id));
+  const edits: DocumentEdits = shared ? "none" : suggestible ? "suggestions" : "blocks";
   if (chip && shared) return importSharedResponse(t);
   if (chip && edits !== "suggestions") return NextResponse.json({ error: t("api.suggestNeedsRichText") }, { status: 400 });
   if (chip && passage.length === 0) return NextResponse.json({ error: t("api.anchorMissing") }, { status: 400 });
@@ -446,7 +457,7 @@ async function handle(req: Request, t: TFunc) {
   let suggestions: SuggestResult | undefined;
   if (suggest && !(await featureConfigured("suggest"))) warnings.push(t("api.suggestNeedsKey"));
   else if (chip || suggest) {
-    const doc = suggestDocument(document);
+    const doc = suggestDocument({ ...document, richText: await storedRichText() });
     let scope: SuggestScope;
     let window: { n: number; of: number; whole: boolean } | null = null;
     const cut: string[] = [];
