@@ -13,7 +13,7 @@ import { ReaderInteractions } from "@/components/reader/reader-interactions";
 import { setRevealFlag } from "@/components/reader/reveal";
 import type { ArticleLayer } from "@/components/video/video-pane";
 import { Markdown } from "@/components/markdown";
-import { ThinkingIndicator } from "@/components/thinking";
+import { StopPill, ThinkingIndicator } from "@/components/thinking";
 import { runFormalize } from "@/lib/video/formalize-client";
 import { formatTimeRange, type Region } from "@/lib/video/types";
 import type { AssistantPlan, FormalizedArticle, FormalizeFormat } from "@/lib/types";
@@ -353,6 +353,8 @@ export function MediaAssistant({
 // the bar that switches views. Open as document opens the article's own
 // document in the corpus; Copy takes the markdown out for publishing;
 // Regenerate overwrites, like summaries — the same document's blocks rewrite.
+// While the rewrite runs, Regenerate reads Stop: a press ends the request and
+// the model call, and the article stays as it was.
 export function useArticleActions({
   notebookId,
   documentId,
@@ -371,16 +373,34 @@ export function useArticleActions({
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The rewrite on its way: Stop ends it, and so does leaving the document.
+  const regenerateAbort = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      regenerateAbort.current?.abort();
+      regenerateAbort.current = null;
+    },
+    [documentId],
+  );
+
   async function regenerate() {
-    if (busy) return;
+    if (busy) {
+      regenerateAbort.current?.abort();
+      return;
+    }
     setBusy(true);
     setError(null);
+    const controller = new AbortController();
+    regenerateAbort.current = controller;
     try {
-      await runFormalize({ documentId, notebookId, format: "article" });
+      await runFormalize({ documentId, notebookId, format: "article" }, controller.signal);
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: no message.
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : t("video.assistantFailed"));
     } finally {
+      if (regenerateAbort.current === controller) regenerateAbort.current = null;
       setBusy(false);
     }
   }
@@ -451,12 +471,12 @@ export function useArticleActions({
       {canEdit && (
         <button
           onClick={() => void regenerate()}
-          data-track="video-article-regenerate"
-          disabled={busy}
-          className={action}
-          data-tip={t("video.regenerateArticleTitle")}
+          data-track={busy ? "video-article-regenerate-stop" : "video-article-regenerate"}
+          className={`flex items-center gap-1.5 ${action}`}
+          data-tip={t(busy ? "video.regenerateArticleStopTitle" : "video.regenerateArticleTitle")}
         >
           {busy ? t("common.working") : t("common.regenerate")}
+          {busy && <StopPill />}
         </button>
       )}
     </>

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useCollab } from "@/components/collab/collab-context";
 import { SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import { StopPill } from "@/components/thinking";
 import { api } from "@/lib/api";
 import type { ContentsEntry } from "@/lib/contents";
 import type { TranscriptLine } from "@/lib/video/types";
@@ -12,7 +13,9 @@ import type { TranscriptLine } from "@/lib/video/types";
 // the media pane's view bar, and the list under it. Stored chapters list
 // as jumps — a click seeks the player to the chapter's line; none stored:
 // the ask and Generate chapters (an editor), which runs the one Jev pass
-// (lib/video/chapters.ts). The list is fetched when the button opens.
+// (lib/video/chapters.ts); while it runs the button reads Stop, and a
+// press ends the pass with nothing stored. The list is fetched when the
+// button opens.
 export function ChaptersMenu({
   documentId,
   lines,
@@ -48,16 +51,42 @@ export function ChaptersMenu({
     };
   }, [open]);
 
+  // The pass on its way: the button's Stop ends it, and so does leaving the
+  // document.
+  const abort = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      abort.current?.abort();
+      abort.current = null;
+    },
+    [documentId],
+  );
+
   async function load(generate: boolean) {
+    // While chapters are being made, a press on the button is Stop.
+    if (busy) {
+      if (generate) abort.current?.abort();
+      return;
+    }
     setBusy(true);
     setError(null);
+    const controller = new AbortController();
+    abort.current = controller;
     try {
-      const result = await api<{ parts: ContentsEntry[] }>(`/api/documents/${documentId}/contents`, "POST", generate ? { generate: true } : {});
+      const result = await api<{ parts: ContentsEntry[] }>(
+        `/api/documents/${documentId}/contents`,
+        "POST",
+        generate ? { generate: true } : {},
+        { signal: controller.signal },
+      );
       setParts(result.parts);
       if (generate && result.parts.length === 0) setNone(true);
     } catch (err) {
+      // Stopped, not failed: no message.
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : t("video.chaptersFailed"));
     } finally {
+      if (abort.current === controller) abort.current = null;
       setBusy(false);
     }
   }
@@ -124,12 +153,13 @@ export function ChaptersMenu({
               {canEdit && !none && (
                 <button
                   onClick={() => void load(true)}
-                  disabled={busy}
-                  data-track="chapters-generate"
-                  className="flex items-center gap-1.5 self-start rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                  data-track={busy ? "chapters-stop" : "chapters-generate"}
+                  data-tip={busy ? t("video.chaptersStopTitle") : undefined}
+                  className="flex items-center gap-1.5 self-start rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600"
                 >
                   {busy && <SpinnerIcon size={11} className="motion-safe:animate-spin" />}
                   {busy ? t("video.chaptersGenerating") : t("video.chaptersGenerate")}
+                  {busy && <StopPill />}
                 </button>
               )}
             </div>

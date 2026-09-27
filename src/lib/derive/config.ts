@@ -91,7 +91,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   ANALYZE: GLM_5_3, // an image attached goes to VISION_MODEL, an SVG chart to SVG_CHART_MODEL (api/derive)
   VOICE: CLAUDE_SONNET_5, // the voice command (SPEC.md §6): VOICE_MODEL below, not a chat call
   VISUALIZE: CLAUDE_OPUS_5_5, // the strongest model at drawing: the picture has to be faithful or refused (SPEC.md §20)
-  DEFINE: GLM_5_3_FLASH, // one word or one phrase in its sentence (SPEC.md §6)
+  DEFINE: GLM_5_3_FLASH, // one word in its sentence (SPEC.md §6)
 };
 
 export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {

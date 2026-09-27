@@ -179,15 +179,28 @@ export function VideoPane({
   // back on the server props, so the run only reports its outcome here.
   const [speakersBusy, setSpeakersBusy] = useState(false);
   const [speakersNote, setSpeakersNote] = useState<string | null>(null);
+  // The speakers pass on its way: its Stop ends it, and so does leaving
+  // the document; the route then saves nothing.
+  const speakersAbort = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      speakersAbort.current?.abort();
+      speakersAbort.current = null;
+    },
+    [documentId],
+  );
   async function detectSpeakers() {
     if (speakersBusy) return;
     setSpeakersBusy(true);
     setSpeakersNote(null);
+    const controller = new AbortController();
+    speakersAbort.current = controller;
     try {
       const result = await api<{ speakers: { id: string; name: string }[] }>(
         `/api/documents/${documentId}/speakers`,
         "POST",
         {},
+        { signal: controller.signal },
       );
       setSpeakersNote(
         result.speakers.length > 0
@@ -196,8 +209,11 @@ export function VideoPane({
       );
       router.refresh();
     } catch (err) {
+      // Stopped, not failed: no note.
+      if (controller.signal.aborted) return;
       setSpeakersNote(err instanceof Error ? err.message : t("video.speakersFailed"));
     } finally {
+      if (speakersAbort.current === controller) speakersAbort.current = null;
       setSpeakersBusy(false);
     }
   }
@@ -1026,6 +1042,7 @@ export function VideoPane({
                 note={speakersNote}
                 onTranscribe={() => void transcribe()}
                 onDetectSpeakers={canEdit ? () => void detectSpeakers() : null}
+                onStopSpeakers={() => speakersAbort.current?.abort()}
               />
             </>
           ) : null

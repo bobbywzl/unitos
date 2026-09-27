@@ -24,7 +24,7 @@ type Tool = (typeof TOOLS)[number];
 
 // What each tool does, as the choice's criteria.
 const TOOL_CRITERIA: Record<Tool, string> = {
-  define: "Define the selected word or phrase: what it means in this sentence.",
+  define: "Define the selected word: what it means in this sentence.",
   assistant: "Ask the assistant a question about the selection, or give it a command.",
   explain: "Explain the selection in plain words, tuned to the reader's background.",
   simplify: "Rewrite the selection in plain words, sentence by sentence.",

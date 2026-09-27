@@ -353,6 +353,9 @@ export async function runSpeakers(
   documentId: string,
   // The reader who pressed Detect speakers, for the admin usage page.
   userId: string | null = null,
+  // The reader's Stop: a stopped run saves nothing. The pass itself finishes
+  // the call it is in; its answer is dropped.
+  signal?: AbortSignal,
 ): Promise<{ ok: true; speakers: Speaker[] } | { ok: false; status: number; error: string }> {
   if (!geminiConfigured()) {
     return { ok: false, status: 503, error: "Set GEMINI_API_KEY or the gateway. Detecting speakers needs one." };
@@ -387,6 +390,7 @@ export async function runSpeakers(
       lines.map((b) => ({ start: b.startTime!, end: b.endTime!, text: b.text })),
       { deadline: startedAt + SPEAKERS_BUDGET_MS, userId },
     );
+    if (signal?.aborted) return { ok: false, status: 499, error: "Stopped" };
     await db.$transaction(async (tx) => {
       await Promise.all(
         lines.map((block, i) =>

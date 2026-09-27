@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SpinnerIcon } from "@/components/icons";
+import { StopPill } from "@/components/thinking";
 import { useT } from "@/components/lang-provider";
 
 // The transcript under the player (SPEC.md §11), in article form. The lines
@@ -54,13 +55,15 @@ export function ViewBar({
 // The view bar's actions while the transcription shows: Detect speakers, then
 // Transcribe again. Detect speakers reads the recording again and says who
 // speaks each line; a transcription finds them on its own, so this is for a
-// transcript that landed before, or one that was pasted.
+// transcript that landed before, or one that was pasted. While it runs its
+// label is Stop: a press ends the run, and nothing is saved.
 export function TranscriptActions({
   audio,
   busy,
   note,
   onTranscribe,
   onDetectSpeakers,
+  onStopSpeakers,
 }: {
   audio: boolean;
   /** The speakers pass is running: its own label stands in for the button. */
@@ -69,6 +72,8 @@ export function TranscriptActions({
   note: string | null;
   onTranscribe: () => void;
   onDetectSpeakers: (() => void) | null;
+  /** Stop the speakers pass that runs. */
+  onStopSpeakers: () => void;
 }) {
   const t = useT();
   const action =
@@ -77,10 +82,16 @@ export function TranscriptActions({
     <>
       {note && <span className="px-1 text-[11px] text-sand-500">{note}</span>}
       {busy ? (
-        <span className="flex items-center gap-1.5 px-2 text-[11px] font-semibold text-sand-600">
+        <button
+          onClick={onStopSpeakers}
+          data-track="video-detect-speakers-stop"
+          className={`flex items-center gap-1.5 ${action}`}
+          data-tip={t("video.speakersStopTitle")}
+        >
           <SpinnerIcon size={11} className="text-clay motion-safe:animate-spin" />
           {t("video.detectingSpeakers")}
-        </span>
+          <StopPill />
+        </button>
       ) : (
         onDetectSpeakers && (
           <button

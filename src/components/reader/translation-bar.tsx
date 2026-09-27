@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { SpinnerIcon } from "@/components/icons";
+import { StopPill } from "@/components/thinking";
 import { useLang, useT } from "@/components/lang-provider";
 import { htmlLangOf, type Lang } from "@/lib/i18n/config";
 import { detectLang, langNameIn } from "@/lib/translate/detect";
@@ -10,7 +11,9 @@ import { detectLang, langNameIn } from "@/lib/translate/detect";
 // the document's — a Chinese document open in the English reader, an English
 // transcript in the Chinese reader. One click translates the whole document
 // through DeepL; each block's translation then reads under the block, and
-// the choice is remembered per document in this browser.
+// the choice is remembered per document in this browser. While it runs the
+// line reads Translating… with Stop: a press ends the request and the DeepL
+// call, and nothing is stored.
 type Status = "idle" | "loading" | "shown" | "hidden";
 
 function storageKey(documentId: string): string {
@@ -53,6 +56,17 @@ export function TranslationBar({
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const cache = useRef<Record<string, string> | null>(null);
+  // The translation on its way (not the restore from the cache): Stop ends
+  // it, and so does leaving the document.
+  const [running, setRunning] = useState(false);
+  const translateAbort = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      translateAbort.current?.abort();
+      translateAbort.current = null;
+    },
+    [documentId],
+  );
   // An unknown language (an empty document, or too few letters to tell) is
   // no reason to offer a translation.
   const offer = available && detected !== null && detected !== ui;
@@ -100,11 +114,15 @@ export function TranslationBar({
       return;
     }
     setStatus("loading");
+    setRunning(true);
+    const controller = new AbortController();
+    translateAbort.current = controller;
     try {
       const res = await fetch(`/api/documents/${documentId}/translate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lang: ui }),
+        signal: controller.signal,
       });
       const body = (await res.json().catch(() => null)) as
         | { translations?: Record<string, string>; error?: string }
@@ -118,7 +136,12 @@ export function TranslationBar({
       remember(documentId, true);
     } catch (err) {
       setStatus("idle");
+      // Stopped, not failed: no message.
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : t("panes.translateFailed"));
+    } finally {
+      if (translateAbort.current === controller) translateAbort.current = null;
+      setRunning(false);
     }
   }
 
@@ -141,7 +164,18 @@ export function TranslationBar({
       <span>
         {t("panes.documentIsIn", { language: langNameIn(detected, ui) })}
       </span>
-      {status === "loading" ? (
+      {status === "loading" && running ? (
+        <button
+          onClick={() => translateAbort.current?.abort()}
+          data-track="translate-stop"
+          data-tip={t("panes.translateStopTitle")}
+          className={`flex items-center gap-1.5 ${quiet}`}
+        >
+          <SpinnerIcon size={12} className="text-clay motion-safe:animate-spin" />
+          {t("panes.translating")}
+          <StopPill />
+        </button>
+      ) : status === "loading" ? (
         <span className="flex items-center gap-1.5 text-sand-600">
           <SpinnerIcon size={12} className="text-clay motion-safe:animate-spin" />
           {t("panes.translating")}

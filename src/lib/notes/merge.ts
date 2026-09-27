@@ -22,6 +22,8 @@ export async function mergeNoteText(
   notes: { id: string; content: string }[],
   userId: string | null,
   lang: Lang,
+  // The reader's Stop ends the model call; the route then merges nothing.
+  signal?: AbortSignal,
 ): Promise<string | null> {
   if (!(await featureConfigured("merge"))) return null;
   const listed = notes
@@ -37,6 +39,7 @@ export async function mergeNoteText(
     schema: mergeSchema,
     label: "MERGE",
     usage: { userId, feature: "merge", model: mergeCall.modelId } satisfies UsageMeta,
+    abortSignal: signal,
   });
   if (!result.ok) {
     console.error(`[merge] ${result.error}`);

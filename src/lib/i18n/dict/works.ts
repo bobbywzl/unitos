@@ -85,7 +85,7 @@ const en = {
   guideSelectHeader: "Select text and use the AI toolbar",
   guideDefine: "Define",
   guideDefineBody:
-    "Shows when the selection is one word or one phrase: the first row, under the highlight colors. The meaning the word has in this sentence, in plain words, tuned to your background. A key term shows the glossary's definition. Nothing is saved.",
+    "Shows when the selection is one word: the first row, under the highlight colors. Not on Chinese text. The meaning the word has in this sentence, in plain words, tuned to your background. A key term shows the glossary's definition. Nothing is saved.",
   guideAssistant: "Assistant",
   guideAssistantBody:
     "Type or speak a question or a command about the selection. A question is answered from the passages across the article that match the selection, each cited with a ¶ chip that jumps to it. A command proposes a plan: Ask mode waits for your approval, Auto mode runs it. The reply opens a chat beside the article; every turn applies to the selection.",
@@ -139,7 +139,7 @@ const en = {
     "- **Collapse** — the button at the top right of the article, beside Extract. Every block shows its core: what it really says, in plain words. Click a collapsed block to read it whole.\n- **Annotations full page** — the four arrows in the Annotations tab: every annotation of the project, grouped by document. Every kind of annotation now carries one color everywhere: comment blue, explain red, simplify green, analyze teal, visualize magenta, assistant violet.\n- **By document** — on the notes full page: the project's notes as a grid, one column per document, one row per section. The notes tray now shows the open document's notes only.\n- **Conversations** — at the top of the Assistant tab: your conversations of the project, one click to open each. New conversation keeps the old one. The scope and thinking rows sit right above the box.\n- **Drag an annotation onto a note** — the note gets the quote, a row that opens the annotation, and the annotation's text.\n- **Contents** stays at the top left as you scroll.\n\nThe controls that are new glow until you press them. Press ? at the top of the reader for the guide.",
   release20260925Title: "New: Define",
   release20260925Body:
-    "- **Define** — select one word or one phrase in any document: an article, a PDF, a transcript, slides, a sheet, a blank document. Define is the first row of the AI toolbar, under the highlight colors. It gives the meaning the word has in that sentence, in plain words, tuned to your background. A key term shows the glossary's definition at once. Nothing is saved.\n\nThe controls that are new glow until you press them. Press ? at the top of the reader for the guide.",
+    "- **Define** — select one word in any document: an article, a PDF, a transcript, slides, a sheet, a blank document. Not on Chinese text. Define is the first row of the AI toolbar, under the highlight colors. It gives the meaning the word has in that sentence, in plain words, tuned to your background. A key term shows the glossary's definition at once. Nothing is saved.\n\nThe controls that are new glow until you press them. Press ? at the top of the reader for the guide.",
   release20260925bTitle: "New: the reader opens where you left off",
   release20260925bBody:
     "- **Where you left off** — a document opens where you left off, in any tab and on any device you sign in on.\n- **The left-off mark** — a small ribbon above the block marks the place, so you can find it again after you scroll away.\n\nPress ? at the top of the reader for the guide.",
@@ -256,7 +256,7 @@ const zh: Record<keyof typeof en, string> = {
   guideSelectHeader: "选中文本，使用 AI 工具栏",
   guideDefine: "定义",
   guideDefineBody:
-    "选中一个词或一个短语时出现：第一行，在高亮颜色下方。用大白话给出这个词在这句话里的意思，贴合你的背景。关键术语显示术语表里的定义。不保存。",
+    "选中一个词时出现：第一行，在高亮颜色下方。中文文本上不出现。用大白话给出这个词在这句话里的意思，贴合你的背景。关键术语显示术语表里的定义。不保存。",
   guideAssistant: "助手",
   guideAssistantBody:
     "对选中内容输入或说出一个问题或一条指令。问题会根据全文中与选中内容匹配的片段作答，每处片段带一个 ¶ 标记，点击即可跳转。指令会提出计划：“询问”模式等你批准，“自动”模式直接执行。回复在文章旁打开聊天；每一轮都作用于选中内容。",
@@ -302,7 +302,7 @@ const zh: Record<keyof typeof en, string> = {
     "- **折叠**——文章右上角、提取旁边的按钮。每个块显示为它的核心：它真正要说的，用大白话。点击折叠后的块可读全文。\n- **整页批注**——批注页签里的四个箭头：项目里的每条批注，按文档分组。每类批注现在在各处都用同一种颜色：评论蓝、解释红、简化绿、分析青、可视化品红、助手紫。\n- **按文档**——整页笔记上：项目的笔记排成网格，每个文档一列，每个章节一行。笔记栏现在只显示当前文档的笔记。\n- **对话列表**——助手页签顶部：你在此项目中的对话，点击即可打开。新对话会保留当前对话。范围和思考两行就在输入框正上方。\n- **把批注拖到笔记上**——笔记会得到引文、一条打开批注的批注链接和批注内容。\n- **目录**在滚动时一直停在左上角。\n\n新功能的按钮会发光，直到你按下它。按阅读器顶部的 ? 打开指南。",
   release20260925Title: "新功能：定义",
   release20260925Body:
-    "- **定义**——在任何文档里选中一个词或一个短语：文章、PDF、逐字稿、幻灯片、工作表、空白文档。定义是 AI 工具栏的第一行，在高亮颜色下方。它用大白话给出这个词在这句话里的意思，贴合你的背景。关键术语会立即显示术语表里的定义。不保存。\n\n新功能的按钮会发光，直到你按下它。按阅读器顶部的 ? 打开指南。",
+    "- **定义**——在任何文档里选中一个词：文章、PDF、逐字稿、幻灯片、工作表、空白文档。中文文本上不出现。定义是 AI 工具栏的第一行，在高亮颜色下方。它用大白话给出这个词在这句话里的意思，贴合你的背景。关键术语会立即显示术语表里的定义。不保存。\n\n新功能的按钮会发光，直到你按下它。按阅读器顶部的 ? 打开指南。",
   release20260925bTitle: "新功能：阅读器在你上次读到的位置打开",
   release20260925bBody:
     "- **上次读到的位置**——文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。\n- **阅读标记**——块上方的小书签标出这个位置，滚动离开后也能找回来。\n\n按阅读器顶部的 ? 打开指南。",

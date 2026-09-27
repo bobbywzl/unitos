@@ -371,7 +371,7 @@ enum DerivationType {
   ANALYZE // a figure or table read by the vision model: values verbatim, estimates marked; one PENDING note on the block (SPEC.md §4)
   VOICE // a spoken note: transcribed, cleaned, landed PENDING for the reader to accept (SPEC.md §6)
   VISUALIZE // Unitos Ultra: the selection as a picture — a diagram, a drawing, or a short animation — stored as an SVG ImageAsset and one annotation on the selection; declined when the model is not certain the picture is faithful (SPEC.md §20)
-  DEFINE // one word or one phrase → its meaning in its sentence, streamed into the toolbar under the Define row; persists nothing (SPEC.md §4)
+  DEFINE // one word → its meaning in its sentence, streamed into the toolbar under the Define row; persists nothing (SPEC.md §4)
 }
 
 // One press of Recommend links (SPEC.md §13): the project-wide scan the

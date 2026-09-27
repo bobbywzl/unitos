@@ -125,8 +125,12 @@ export async function POST(req: Request) {
           [target, ...sources].map((n) => ({ id: n.id, content: n.content })),
           access.user.id || null,
           await currentLang(),
+          req.signal,
         )
       : null;
+  // Stopped by the reader: nothing merges. Without this, the failed AI call
+  // would fall back to Join text and merge anyway.
+  if (req.signal.aborted) return new Response(null, { status: 499 });
   const content = (written ?? joined).slice(0, MAX_CONTENT);
 
   // What the merge takes apart, before it does: the consumed notes' anchors

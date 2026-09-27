@@ -98,6 +98,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         { status: 502 },
       );
     }
+    // Stopped by the reader (SPEC.md §19): nothing is stored.
+    if (req.signal.aborted) return new Response(null, { status: 499 });
     const writes = missing.map((block, i) =>
       db.blockTranslation.upsert({
         where: { blockId_lang: { blockId: block.id, lang: data.lang } },

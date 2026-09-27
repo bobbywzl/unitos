@@ -108,7 +108,7 @@ import {
 import { Markdown } from "@/components/markdown";
 import { RatingButtons } from "@/components/rating-buttons";
 import { Collapse, Presence } from "@/components/presence";
-import { ThinkingIndicator } from "@/components/thinking";
+import { StopPill, ThinkingIndicator } from "@/components/thinking";
 import { type BlockData, type Highlight, ToolSymbol } from "@/components/reader/block-view";
 import { ArticleErrors } from "@/components/reader/article-errors";
 import { Bibliography, referenceCard, setReferenceCards } from "@/components/reader/bibliography";
@@ -293,8 +293,8 @@ const TOOL_LAYER = "z-40";
 // the kind under the selection and nothing else: a tool missing from a
 // kind's list is not offered there. The first tool of a kind after the
 // assistant is its lead tool and reads as recommended. Define comes before
-// the assistant, and only on a selection of one word or one phrase
-// (offersDefine): the first row, right under the highlight colors.
+// the assistant, and only on a selection of one word (offersDefine): the
+// first row, right under the highlight colors.
 type ContentKind = "text" | "figure" | "equation";
 type Tool =
   | "define"
@@ -325,16 +325,16 @@ function contentKindOf(type: string | undefined): ContentKind {
   return "text";
 }
 
-/** Whether the popover offers Define: text selected in one block, one word
-    or one phrase long (lib/define.ts). Never on the hold-and-circle
-    gesture, whose anchor is the whole block. */
+/** Whether the popover offers Define: one word selected in one block, never
+    a phrase and never Chinese text (lib/define.ts). Never on the
+    hold-and-circle gesture, whose anchor is the whole block. */
 function offersDefine(popover: Popover): boolean {
   return !popover.figure && segmentsOf(popover.anchor).length === 1 && definable(popover.anchor.quotedText);
 }
 
 // Define's output for one popover (SPEC.md §6): the meaning of the selected
-// word or phrase, shown under the Define row. glossary: the glossary's
-// definition of a key term, read with no model call.
+// word, shown under the Define row. glossary: the glossary's definition of
+// a key term, read with no model call.
 type Definition = {
   key: string;
   text: string;
@@ -3704,6 +3704,16 @@ export function ReaderInteractions({
   const [cores, setCores] = useState<Record<string, string> | null>(null);
   coresRef.current = cores;
   const [collapseBusy, setCollapseBusy] = useState(false);
+  // The Collapse run on its way: the button's Stop ends it, and so does
+  // leaving the document. The route passes the abort to the model calls.
+  const collapseAbortRef = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      collapseAbortRef.current?.abort();
+      collapseAbortRef.current = null;
+    },
+    [documentId],
+  );
   // The New glow (SPEC.md §18) on the Collapse button until it is pressed.
   const collapseNew = useNewFeature("collapse");
   const [flippedBlocks, setFlippedBlocks] = useState<ReadonlySet<string>>(() => new Set());
@@ -3743,7 +3753,12 @@ export function ReaderInteractions({
     }
   }
   async function toggleCollapse() {
-    if (collapseBusy) return;
+    // While the cores are being written, the press is Stop: the run ends,
+    // nothing is saved, and the article stays as it was (SPEC.md §28).
+    if (collapseBusy) {
+      collapseAbortRef.current?.abort();
+      return;
+    }
     setFlippedBlocks(new Set());
     if (collapseOn) {
       setCollapseOn(false);
@@ -3756,9 +3771,14 @@ export function ReaderInteractions({
       return;
     }
     setCollapseBusy(true);
+    const controller = new AbortController();
+    collapseAbortRef.current = controller;
     try {
       // An editor writes the cores the document lacks; a viewer reads what is stored.
-      const res = await fetch(`/api/documents/${documentId}/collapse`, { method: canEdit ? "POST" : "GET" });
+      const res = await fetch(`/api/documents/${documentId}/collapse`, {
+        method: canEdit ? "POST" : "GET",
+        signal: controller.signal,
+      });
       const body = (await res.json().catch(() => null)) as
         | { cores?: Record<string, string>; complete?: boolean; error?: string }
         | null;
@@ -3776,8 +3796,11 @@ export function ReaderInteractions({
       // whole, and the toast says why.
       if (body.error) showToast(t("reader.collapseFailed", { reason: body.error }));
     } catch (err) {
+      // Stopped, not failed: no toast.
+      if (controller.signal.aborted) return;
       showToast(t("reader.collapseFailed", { reason: err instanceof Error ? err.message : t("common.requestFailed") }));
     } finally {
+      if (collapseAbortRef.current === controller) collapseAbortRef.current = null;
       setCollapseBusy(false);
     }
   }
@@ -3850,7 +3873,7 @@ export function ReaderInteractions({
     if (kind === "figure") return;
     const key = popoverAnchorKey;
     // Only the tools the popover shows: a core selection has no Link (SPEC.md
-    // §28), and Define shows on one word or one phrase alone.
+    // §28), and Define shows on one word alone.
     const core = isCoreKey(popover.anchor.blockId);
     const define = offersDefine(popover);
     const tools = TOOLBARS[kind].filter(
@@ -4254,8 +4277,8 @@ export function ReaderInteractions({
     return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor), ...segmentsBody(anchor) });
   }
 
-  // DEFINE (SPEC.md §4, §6): the meaning of the selected word or phrase in
-  // its sentence, streamed into the toolbar under the Define row. Nothing
+  // DEFINE (SPEC.md §4, §6): the meaning of the selected word in its
+  // sentence, streamed into the toolbar under the Define row. Nothing
   // persists. A key term's definition is the glossary's, shown at once with
   // no call; a definition read once stays for the session. Pressing Define
   // again folds the definition away.
@@ -6993,7 +7016,7 @@ function blockFormatKind(
   // A selection in a core (SPEC.md §28) takes every tool but Link: a link
   // joins the texts themselves.
   const inCore = popover ? isCoreKey(popover.anchor.blockId) : false;
-  // Define shows on one word or one phrase alone (offersDefine).
+  // Define shows on one word alone (offersDefine).
   const has = (tool: Tool) =>
     TOOLBARS[popoverKind].includes(tool) &&
     !(inCore && tool === "link") &&
@@ -7342,16 +7365,18 @@ function blockFormatKind(
         if (page?.isEditable) fireDocs(page, DOCS_EVENT.mode, "viewing");
         void toggleCollapse();
       }}
-      data-track={collapseOn ? "collapse-off" : "collapse"}
+      data-track={collapseBusy ? "collapse-stop" : collapseOn ? "collapse-off" : "collapse"}
       aria-pressed={collapseOn}
-      disabled={collapseBusy}
-      data-tip={t(collapseOn ? "reader.collapseOffTitle" : "reader.collapseTitle")}
+      data-tip={t(
+        collapseBusy ? "reader.collapseStopTitle" : collapseOn ? "reader.collapseOffTitle" : "reader.collapseTitle",
+      )}
       className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-soft disabled:opacity-60 ${
         collapseOn ? "bg-ink text-paper" : "bg-sand-100 text-sand-600 hover:text-clay-800"
       }${collapseNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}`}
     >
       {collapseBusy ? <SpinnerIcon size={13} className="motion-safe:animate-spin" /> : <CollapseIcon size={13} />}
       {t(collapseBusy ? "reader.collapsing" : collapseOn ? "reader.collapsed" : "reader.collapse")}
+      {collapseBusy && <StopPill />}
       {collapseNew.isNew && <NewPill />}
     </button>
   );
@@ -7842,7 +7867,7 @@ function blockFormatKind(
           )}
 
           {/* Define (SPEC.md §6): the first row when the selection is one
-              word or one phrase, right under the highlight colors — on a
+              word, right under the highlight colors — on a
               coarse pointer, where the colors are the toolbox's first row,
               the row after them. The definition opens under the row. */}
           {has("define") && (

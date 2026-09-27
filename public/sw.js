@@ -22,6 +22,10 @@ const SHELL_URLS = ["/offline", "/icon.png", "/manifest.webmanifest"];
 // pattern for the client): offline, a call answers 503 with the plain
 // message, in the app's language — the page posts it on every load, and
 // it is kept in the shell cache so a restarted worker still has it.
+// Online, the call goes to the network untouched: a call the worker
+// fetched itself would not end when the page stops it (SPEC.md §6, Stop),
+// and the server would finish the run — a stopped Merge with AI would
+// still merge.
 const AI_ROUTE =
   /^\/api\/(derive|assistant(\/.*)?|notes\/gist|notes\/voice|documents\/[^/]+\/(glossary|translate|convert|reparse|transcribe|finish|article|figure|speakers)|multi(\/.*)?|notebooks\/[^/]+\/(connect|stitch)|drive\/import)$/;
 const LANG_KEY = "/__lang";
@@ -181,10 +185,9 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (request.method !== "GET") {
+    if (self.navigator.onLine) return;
     if (AI_ROUTE.test(url.pathname) || url.pathname === "/api/notes/merge") {
-      event.respondWith(
-        fetch(request).catch((err) => offlineAiResponse(request).catch(() => Promise.reject(err))),
-      );
+      event.respondWith(offlineAiResponse(request).catch(() => fetch(request)));
     }
     return;
   }

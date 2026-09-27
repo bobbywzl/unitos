@@ -15,6 +15,7 @@ import { scrollParent } from "@/components/docs/page/geometry";
 import { usePageRect } from "@/components/docs/page/ruler";
 import { OUTLINE_MAX, OUTLINE_MIN, usePageState, type PageStore } from "@/components/docs/page/store";
 import { useContents } from "@/components/reader/contents-menu";
+import { StopPill } from "@/components/thinking";
 import type { ContentsEntry } from "@/lib/contents";
 
 // The tabs & outlines panel (SPEC.md §29), Google Docs' left panel: the
@@ -229,14 +230,14 @@ function OutlineContents({
               <button
                 type="button"
                 className="docs-button-primary"
-                disabled={generating}
-                data-tip={t("reader.contentsGenerateTitle")}
-                data-track="contents-generate"
+                data-tip={t(generating ? "reader.contentsStopTitle" : "reader.contentsGenerateTitle")}
+                data-track={generating ? "contents-stop" : "contents-generate"}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => void generate()}
               >
                 {generating ? <SpinnerIcon size={14} className="animate-spin" /> : <SparkleIcon size={14} />}
                 {t(generating ? "reader.contentsBuilding" : "reader.contentsGenerate")}
+                {generating && <StopPill />}
               </button>
             </div>
             {generateError && (

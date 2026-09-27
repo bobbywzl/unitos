@@ -54,7 +54,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   if (document.video) {
     if (!jevEnabled()) return NextResponse.json({ error: t("api.chaptersNeedKey") }, { status: 503 });
     try {
-      const parts = await buildChapters(documentId, access.user.id);
+      const parts = await buildChapters(documentId, access.user.id, req.signal);
       return NextResponse.json({ ok: true, parts, fallback: false });
     } catch (err) {
       console.error("Chapters failed:", err);
@@ -65,7 +65,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
     return NextResponse.json({ error: t("api.contentsNeedsKey") }, { status: 503 });
   }
   try {
-    const parts = await buildContents(documentId, access.user.id);
+    const parts = await buildContents(documentId, access.user.id, req.signal);
     return NextResponse.json({ ok: true, parts, fallback: false });
   } catch (err) {
     console.error("Contents failed:", err);

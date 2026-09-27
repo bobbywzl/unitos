@@ -11,6 +11,7 @@ import { ReplyThread } from "@/components/collab/reply-thread";
 import { PageIcon, SparkleIcon, UnlinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
+import { StopPill } from "@/components/thinking";
 import { GeneratedList } from "@/components/graph/generated-list";
 import { LinkDetail } from "@/components/graph/link-detail";
 import { StitchBox } from "@/components/graph/stitch-box";
@@ -76,13 +77,20 @@ export function GraphOverlay({
   // Recommend links (SPEC.md §13): the scan the reader asks for. It reads
   // every document of the project whole against the others, so it runs only
   // here and only a few times a month; the button says how many are left.
+  // While it runs the button reads Stop: a press ends the scan, the links it
+  // already proposed stay, and the run still counts (it was recorded before
+  // the scan started). Closing the graph lets the scan finish.
   const [scanning, setScanning] = useState(false);
   const [scanLeft, setScanLeft] = useState(linkScansLeft);
   const [scanNotice, setScanNotice] = useState<string | null>(null);
   const scanAbort = useRef<AbortController | null>(null);
 
   async function scan() {
-    if (scanning || scanLeft <= 0) return;
+    if (scanning) {
+      scanAbort.current?.abort();
+      return;
+    }
+    if (scanLeft <= 0) return;
     setScanning(true);
     setScanNotice(null);
     const controller = new AbortController();
@@ -107,7 +115,12 @@ export function GraphOverlay({
         router.refresh();
       }
     } catch (err) {
-      if (!controller.signal.aborted) {
+      if (controller.signal.aborted) {
+        // Stopped: the run counts, and the links it proposed before the
+        // stop are on the page after a refresh.
+        setScanLeft((n) => Math.max(0, n - 1));
+        router.refresh();
+      } else {
         setScanNotice(err instanceof Error ? err.message : t("common.requestFailed"));
       }
     } finally {
@@ -139,20 +152,26 @@ export function GraphOverlay({
         {canEdit && nodes.length >= 2 && (
           <button
             onClick={() => void scan()}
-            data-track="graph-recommend-links"
-            disabled={scanning || scanLeft <= 0}
+            data-track={scanning ? "graph-recommend-links-stop" : "graph-recommend-links"}
+            disabled={!scanning && scanLeft <= 0}
             data-tip={
-              scanLeft > 0
-                ? t("panes.recommendScanTitle", { left: scanLeft })
-                : t("panes.recommendScanSpentTitle")
+              scanning
+                ? t("panes.recommendScanStopTitle")
+                : scanLeft > 0
+                  ? t("panes.recommendScanTitle", { left: scanLeft })
+                  : t("panes.recommendScanSpentTitle")
             }
             className="ml-auto flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
           >
             <SparkleIcon size={13} />
             {scanning ? t("panes.recommendScanRunning") : t("panes.recommendScan")}
-            <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
-              {scanLeft}
-            </span>
+            {scanning ? (
+              <StopPill />
+            ) : (
+              <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+                {scanLeft}
+              </span>
+            )}
           </button>
         )}
         <button

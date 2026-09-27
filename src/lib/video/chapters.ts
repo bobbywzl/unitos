@@ -38,7 +38,11 @@ export function chapterTitle(text: string): string {
 
 /** The chapter starts among the lines, by Jev's answers and the rules
     above; null when Jev fails. */
-export async function chapterStarts(lines: Line[], userId: string | null): Promise<Line[] | null> {
+export async function chapterStarts(
+  lines: Line[],
+  userId: string | null,
+  signal?: AbortSignal,
+): Promise<Line[] | null> {
   const chunks: { lines: Line[]; before: Line[] }[] = [];
   for (let i = 0; i < lines.length; i += CHUNK) {
     chunks.push({ lines: lines.slice(i, i + CHUNK), before: lines.slice(Math.max(0, i - LEAD_IN), i) });
@@ -66,6 +70,7 @@ export async function chapterStarts(lines: Line[], userId: string | null): Promi
       ),
       usage: { userId, feature: "chapters", model: JEV_MODEL },
       label: "CHAPTERS",
+      signal,
     });
     if (!result.ok) {
       failed = true;
@@ -99,8 +104,13 @@ export async function chapterStarts(lines: Line[], userId: string | null): Promi
 
 /** Build a media document's chapters and store them as its contents.
     Returns the entries; [] for a transcript too short to have chapters.
-    Throws when Jev is off or fails. */
-export async function buildChapters(documentId: string, userId: string | null): Promise<ContentsEntry[]> {
+    Throws when Jev is off or fails. signal: the reader's Stop ends the
+    calls, and nothing is stored. */
+export async function buildChapters(
+  documentId: string,
+  userId: string | null,
+  signal?: AbortSignal,
+): Promise<ContentsEntry[]> {
   if (!jevEnabled()) throw new Error("TYPESAFE_API_KEY is not set");
   const blocks = await db.block.findMany({
     where: { documentId, type: "TRANSCRIPT", startTime: { not: null } },
@@ -111,8 +121,9 @@ export async function buildChapters(documentId: string, userId: string | null): 
     b.startTime !== null && b.text.trim() ? [{ id: b.id, text: b.text.trim(), startTime: b.startTime }] : [],
   );
   if (lines.length < MIN_LINES) return [];
-  const starts = await chapterStarts(lines, userId);
+  const starts = await chapterStarts(lines, userId, signal);
   if (!starts) throw new Error("Jev did not answer");
+  if (signal?.aborted) throw new Error("The reader stopped the chapters.");
   const entries: ContentsEntry[] = starts.map((l) => ({ title: chapterTitle(l.text), blockId: l.id, level: 1 }));
   await db.document.update({ where: { id: documentId }, data: { contents: entries } });
   await bumpDocument(documentId);

@@ -79,11 +79,20 @@ const CLICK_FUNCTIONS: Record<ClickGroup, readonly string[]> = {
     // extract (distill) runs
     "distill-page-run",
     "distill-corpus-run",
-    // collapse (SPEC.md §28): the button, and a block read whole or folded again
+    // collapse (SPEC.md §28): the button, its Stop, and a block read whole or folded again
     "collapse",
     "collapse-off",
+    "collapse-stop",
     "collapse-expand",
     "collapse-fold",
+    // Stop on the other long runs: a stopped run is a reader who gave up on it
+    "contents-stop",
+    "chapters-stop",
+    "translate-stop",
+    "video-detect-speakers-stop",
+    "video-article-regenerate-stop",
+    "graph-recommend-links-stop",
+    "assistant-recommended-stop",
     // handwritten pages
     "page-ask",
     "page-explain",
