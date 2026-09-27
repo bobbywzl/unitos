@@ -377,6 +377,20 @@ function buildResponse(all) {
     return JSON.stringify({ parts });
   }
 
+  // Collapse (SPEC.md §28): every listed block's core, its first words under
+  // the block's ceiling. The document's own text of a block is its first
+  // [block] marker's; the list under the prompt repeats the markers.
+  if (all.includes('"cores"') && all.includes("Collapse the blocks listed below")) {
+    const own = new Map();
+    for (const b of blocks) if (!own.has(b.id)) own.set(b.id, b.text);
+    const cores = [...all.matchAll(/^\[block ([^\]]+)\] \([^)\n]*→ at most (\d+) words\)$/gm)].map((m) => {
+      const words = (own.get(m[1]) ?? "").split(/\s+/).filter(Boolean);
+      return { blockId: m[1], text: `Mock core: ${words.slice(0, Math.max(2, Number(m[2]) - 2)).join(" ")}.` };
+    });
+    console.log("[mock collapse]", cores.length, "cores");
+    return JSON.stringify({ cores });
+  }
+
   // Contents (SPEC.md §26): every HEADING block past the first as a part,
   // and the first paragraph of a document with no headings.
   if (all.includes('"parts"') && all.includes("Write the contents of this document")) {
