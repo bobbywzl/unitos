@@ -90,7 +90,13 @@ function blockIdOf(el: HTMLElement): string {
 
 function blockElement(container: HTMLElement, blockId: string): HTMLElement | null {
   const id = CSS.escape(blockId);
-  return container.querySelector<HTMLElement>(`[data-block-id="${id}"], [data-edit-block="${id}"]`);
+  const el = container.querySelector<HTMLElement>(`[data-block-id="${id}"], [data-edit-block="${id}"]`);
+  if (!el || el.getClientRects().length > 0) return el;
+  // A block the page editor's collapsed view does not draw (SPEC.md §28):
+  // the nearest block drawn before it, its core.
+  const blocks = Array.from(container.querySelectorAll<HTMLElement>(BLOCK_SELECTOR));
+  for (let i = blocks.indexOf(el) - 1; i >= 0; i--) if (blocks[i].getClientRects().length > 0) return blocks[i];
+  return el;
 }
 
 /** The block at the reading line and the offset from the line to its top. */

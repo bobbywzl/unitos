@@ -184,7 +184,7 @@ async function sourcesOf(documentId) {
   return db.source.findMany({
     where: { documentId },
     orderBy: { note: { createdAt: "asc" } },
-    select: { id: true, blockId: true, startOffset: true, endOffset: true, quotedText: true, anchoredText: true, orphaned: true, note: { select: { id: true, derivationType: true, status: true, content: true, color: true, sectionId: true } } },
+    select: { id: true, blockId: true, startOffset: true, endOffset: true, quotedText: true, anchoredText: true, orphaned: true, layer: true, note: { select: { id: true, derivationType: true, status: true, content: true, color: true, sectionId: true } } },
   });
 }
 
@@ -228,8 +228,8 @@ function paragraph(rand, sentences = 5) {
 /** The web page every web check reads: a kicker, a title, a byline, a
     lede with a citation, headings, a wide SVG chart, a short-captioned
     figure the body names ("Figure 3"), a row of two images, a YouTube embed,
-    a looping video, a table with merged cells, lists, a quote, code, a line,
-    an equation, and a reference list. */
+    a looping video, a figure on a box the page paints, a table with merged
+    cells, lists, a quote, code, a line, an equation, and a reference list. */
 function articleHtml(run) {
   const rand = rng(7);
   const points = Array.from({ length: 60 }, (_, i) => `${40 + i * 22},${250 - Math.round(80 + 70 * Math.sin(i / 6) + rand() * 30)}`).join(" ");
@@ -244,7 +244,7 @@ function articleHtml(run) {
 <style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;font-size:18px;line-height:1.6}
 .kicker{font:600 12px/1.4 Arial,sans-serif;text-transform:uppercase;letter-spacing:.08em;color:#a33}
 .byline{font:13px Arial,sans-serif;color:#666}figure{margin:28px 0}figcaption{font:13px Arial,sans-serif;color:#555}
-.row{display:flex;gap:12px}.row img{width:50%}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 8px}</style></head>
+.row{display:flex;gap:12px}.row img{width:50%}.boxed{background:#f8f9fa;padding:12px}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 8px}</style></head>
 <body><article>
 <p class="kicker">SCIENCE</p>
 <h1>The Quiet Engine of River Deltas</h1>
@@ -272,6 +272,7 @@ total = sum(load for day in season)</code></pre>
 <hr>
 <h2>What comes next</h2>
 <p>${paragraph(rand)}</p>
+<figure class="boxed"><img src="${FIXTURE}/gauge.png?run=${run}" alt="A gauge station" width="480" height="270"><figcaption>Figure 6. A gauge station, on the box the page paints.</figcaption></figure>
 <p>${paragraph(rand)}</p>
 <h2>References</h2>
 <ol><li id="ref1">Syvitski, J. et al. Sinking deltas due to human activities. Nature Geoscience 2, 681–686 (2009).</li></ol>
@@ -352,6 +353,7 @@ async function drawMedia(browser) {
     "/delta.png": { type: "image/png", body: await png(1280, 720, 190, "Delta") },
     "/left.png": { type: "image/png", body: await png(640, 360, 30, "2015") },
     "/right.png": { type: "image/png", body: await png(640, 360, 90, "2024") },
+    "/gauge.png": { type: "image/png", body: await png(480, 270, 260, "Gauge") },
   };
   const webm = await page.evaluate(async () => {
     const c = document.getElementById("c");
@@ -520,6 +522,15 @@ function qaHelpers() {
       const c = view.coordsAtPos(pos);
       return { x: c.left, y: (c.top + c.bottom) / 2, top: c.top, bottom: c.bottom };
     },
+    /** An element's middle at the band's middle: its box. */
+    async showEl(el) {
+      const b = qa.band();
+      await qa.place(() => {
+        const r = el.getBoundingClientRect();
+        return (r.top + r.bottom) / 2;
+      }, (b.top + b.bottom) / 2, el);
+      return el.getBoundingClientRect().toJSON();
+    },
     /** A node's box in the band: centered when it fits, else its top at the band's top. */
     async showNode(pos) {
       const view = window.__docsEditor.view;
@@ -581,6 +592,9 @@ async function newPage(theme = "light", { width = 1440, height = 900 } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, colorScheme: theme, acceptDownloads: true });
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
   await context.addInitScript(qaHelpers);
+  // A dev server under load answers slowly: a navigation or an action waits long before it fails.
+  context.setDefaultNavigationTimeout(120_000);
+  context.setDefaultTimeout(60_000);
   const page = await context.newPage();
   const errors = [];
   // The dev server's reloads while files change: a hydration mismatch and
@@ -758,6 +772,57 @@ async function selectWords(page, needle, nth = 0) {
   await dragSelect(page, r.from, r.to);
   return r;
 }
+/** Select words drawn over the editor's text (a core, a card), as a
+    person drags across them: the element `selector` finds, then `needle`
+    in its words. True when the toolbar opened. */
+async function dragWords(page, selector, needle) {
+  const at = await page.evaluate(async ({ selector, needle }) => {
+    const el = document.querySelector(selector);
+    if (!el) return null;
+    await window.__qa.showEl(el);
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let text = "";
+    const nodes = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      nodes.push({ n, at: text.length });
+      text += n.data;
+    }
+    const i = text.indexOf(needle);
+    if (i < 0) return null;
+    const point = (k) => {
+      const hit = nodes.findLast((x) => x.at <= k);
+      return [hit.n, k - hit.at];
+    };
+    const range = document.createRange();
+    range.setStart(...point(i));
+    range.setEnd(...point(i + needle.length - 1));
+    const rects = [...range.getClientRects()].filter((r) => r.width > 0);
+    const first = rects[0];
+    const last = rects.at(-1);
+    return { a: { x: first.left + 1, y: first.top + first.height / 2 }, b: { x: last.right + 2, y: last.top + last.height / 2 } };
+  }, { selector, needle });
+  if (!at) return false;
+  await page.mouse.move(at.a.x - 20, at.a.y - 10);
+  await page.mouse.move(at.a.x, at.a.y, { steps: 6 });
+  await page.mouse.down();
+  await page.mouse.move(at.b.x, at.b.y, { steps: 12 });
+  await page.mouse.up();
+  return toolbar(page);
+}
+/** Point at the first element `selector` finds, placed in the band: the
+    app's tooltip then, or null. */
+async function hoverTip(page, selector) {
+  const box = await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    return el ? window.__qa.showEl(el) : null;
+  }, selector);
+  if (!box) return null;
+  await page.mouse.move(box.x + box.width / 2 - 30, box.y + box.height / 2);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
+  const tip = await waitIn(page, () => document.querySelector("#app-tip")?.textContent || null, null, 5000);
+  await page.mouse.move(5, 450);
+  return tip;
+}
 /** The text toolbar (or a figure's tools) is open: waited for, `ms` at most. */
 async function toolbar(page, ms = 6000) {
   return Boolean(await waitIn(page, () => {
@@ -895,7 +960,7 @@ async function searchMenus(page, query) {
       label: r.querySelector(".docs-search-label")?.textContent ?? "",
       where: r.querySelector(".docs-search-where")?.textContent ?? "",
       off: r.getAttribute("aria-disabled") === "true",
-      text: r.textContent,
+      note: r.querySelector(".docs-search-note")?.textContent ?? "",
     })),
   );
 }
@@ -915,7 +980,7 @@ async function menuCommand(page, label) {
 }
 /** A File > Download command's file: its name and bytes, or null. */
 async function download(page, label) {
-  const file = page.waitForEvent("download", { timeout: 30_000 }).catch(() => null);
+  const file = page.waitForEvent("download", { timeout: 120_000 }).catch(() => null);
   const ran = await menuCommand(page, label);
   const d = ran ? await file : null;
   return d ? { name: d.suggestedFilename(), bytes: readFileSync(await d.path()) } : null;
@@ -1097,6 +1162,8 @@ RISKS.R1 = async (theme) => {
     await open(page, ctx.notebookId, added.id);
     // The editor's own copy against the stored rows: what a save would derive.
     const before = await rowsOf(added.id);
+    const stored = async () => JSON.stringify((await documentRow(added.id)).richText).length;
+    const size = await stored();
     const since = new Date();
     const target = before.find((r) => r.type === "PARAGRAPH" && r.text.length > 60 && !r.cell) ?? before.find((r) => r.type === "PARAGRAPH");
     await setMode(page, "editing");
@@ -1115,6 +1182,9 @@ RISKS.R1 = async (theme) => {
     const ok = changed.length === 1 && changed[0].id === target.id && gone.length === 0 && after.length === before.length && kinds.length === 1 && kinds[0] === "TEXT_EDIT";
     const detail = `${before.length} rows; changed ${changed.length} (${changed.slice(0, 3).map((r) => `${r.type} "${clip(r.text, 30)}"`).join(", ")}), removed ${gone.length}, added ${after.length - before.length + gone.length}; history ${JSON.stringify(kinds.slice(0, 6))}`;
     check("R1", ok, `${kind} (${theme}): one letter typed changes one row and writes one TEXT_EDIT`, detail);
+    // The save keeps the stored copy compact: attributes at their default stay out.
+    const saved = await stored();
+    check("R1", saved <= size * 1.01 + 100, `${kind} (${theme}): the first save keeps the stored rich text compact`, `${size} → ${saved} characters`);
     if (!ok && changed.length > 1) {
       // Why the other rows moved: the first field that differs.
       const r = changed.find((c) => c.id !== target.id);
@@ -1285,6 +1355,46 @@ RISKS.R5 = async (theme) => {
     await context.close();
     return;
   }
+  // A second annotation (Explain, from the figure's tools): a jump to it,
+  // as the Annotations tab's Jump fires it, brings the figure itself to the
+  // middle of the view, not its label.
+  await calm(page);
+  await clickFigure(page, fig3.pos);
+  if (await toolbar(page)) await tool(page, "explain");
+  const second = await sourceWhere(added.id, (x) => x.blockId === fig3.blockId && x.note.derivationType === "EXPLAIN", 30_000);
+  if (second) {
+    await calm(page);
+    await waitIn(page, (id) => document.querySelector(`.docs-object-label [data-source-id="${id}"]`), second.id);
+    await page.evaluate(() => {
+      window.__qa.pane().scrollTop = 0;
+    });
+    await page.evaluate((id) => window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId: id } })), second.id);
+    const middle = await page.evaluate(() => {
+      const r = window.__qa.pane().getBoundingClientRect();
+      return (r.top + r.bottom) / 2;
+    });
+    const off = await until(() => page.evaluate(({ p, middle }) => {
+      const r = window.__docsEditor.view.nodeDOM(p).getBoundingClientRect();
+      const d = Math.round((r.top + r.bottom) / 2 - middle);
+      return Math.abs(d) < 60 ? { d } : null;
+    }, { p: fig3.pos, middle }), 10_000) ?? { d: await page.evaluate(({ p, middle }) => Math.round(window.__docsEditor.view.nodeDOM(p).getBoundingClientRect().top - middle), { p: fig3.pos, middle }) };
+    const label = await page.evaluate(() => document.querySelector(".docs-object-label")?.textContent ?? null);
+    const jumpShot = await shot(page, `R5-jump-second-annotation-${theme}`);
+    check("R5", Math.abs(off.d) < 60 && /A1.*A2|A2.*A1/.test(label ?? ""), `(${theme}) a jump to the figure's second annotation brings the figure to the middle of the view`, `label "${label}"; the figure's middle ${off.d} px from the pane's ${jumpShot}`);
+  } else fail("R5", `(${theme}) Explain from the figure's tools stores a second annotation`, JSON.stringify((await sourcesOf(added.id)).map((x) => x.note.derivationType)));
+  // A link across texts that ends on the figure (the Markdown import's words
+  // to it) draws on the figure object: its ring and a link in its chip.
+  const md = await doc("markdown");
+  const from = (await rowsOf(md.id)).find((r) => r.text.startsWith("The marsh rises"));
+  const link = await db.docLink.create({ data: { fromDocumentId: md.id, fromBlockId: from.id, startOffset: 0, endOffset: 22, quotedText: from.text.slice(0, 22), prefix: "", suffix: from.text.slice(22, 54), toDocumentId: added.id, toBlockId: fig3.blockId, toStartOffset: 0, toEndOffset: fig3.caption.length, toQuotedText: fig3.caption, toPrefix: "", toSuffix: "", createdById: "user-1" } });
+  await reload(page);
+  const linked = (await waitIn(page, ({ p, id }) => {
+    const el = window.__docsEditor.view.nodeDOM(p);
+    const chip = [...document.querySelectorAll(".docs-object-label")].find((c) => Math.abs(c.getBoundingClientRect().top - el.getBoundingClientRect().top) < 40);
+    return el.getAttribute("data-link-id") === id || chip?.querySelector('[data-docs-open="link"]') ? { ring: el.getAttribute("data-link-id") === id, chipLink: Boolean(chip?.querySelector('[data-docs-open="link"]')), style: el.getAttribute("style") } : null;
+  }, { p: fig3.pos, id: link.id }, 20_000)) ?? { ring: false, chipLink: false };
+  const linkShot = await shot(page, `R5-link-to-figure-${theme}`);
+  check("R5", linked.ring && linked.chipLink, `(${theme}) a link across texts that ends on a figure draws on the figure: its ring and the link in its chip`, `${JSON.stringify(linked)} ${linkShot}`);
   // Delete the figure in Editing, as a person: a click on it, Escape for its
   // tools, Delete.
   await setMode(page, "editing");
@@ -1306,12 +1416,15 @@ RISKS.R5 = async (theme) => {
   const pick = async (caption) => {
     const f = await figureBy(page, (c) => c.trim() === caption);
     if (!f) return null;
-    const took = await press(f);
+    let took = await press(f);
     if (first) {
+      // Twice: the second press is on the selected figure.
       first = false;
-      check("R5", took.opened && took.selected, `(${theme}) in Editing a press on "${caption}" opens its tools, and Escape keeps it selected`, `tools ${took.opened}, selected ${took.selected}; pressed ${JSON.stringify(took.at)}`);
+      const again = await press(f);
+      check("R5", took.opened && took.selected && again.opened && again.selected, `(${theme}) in Editing a press on "${caption}" opens its tools and Escape keeps it selected, a second press too`, `first: tools ${took.opened}, selected ${took.selected}; second: tools ${again.opened}, selected ${again.selected}; pressed ${JSON.stringify(took.at)}`);
+      took = again;
     }
-    // A person presses again when the first press took nothing.
+    // A person presses again when the press took nothing.
     if (!took.selected) await press(f);
     return f;
   };
@@ -1610,6 +1723,11 @@ RISKS.R9 = async (theme) => {
   await page.keyboard.press("Escape");
   const editingOff = menu.items.filter((i) => i.track !== "docs:mode:viewing").every((i) => i.disabled);
   check("R9", editingOff && menu.reason.length > 10, `(${theme}) on a shared import Editing and Suggesting are off, with the reason`, `${JSON.stringify(menu.items)} "${clip(menu.reason, 100)}" ${path}`);
+  // Search the menus says the same.
+  const rows = ((await searchMenus(page, "mode")) ?? []).filter((r) => /^(Editing|Suggesting) mode$/.test(r.label));
+  const searchShot = await shot(page, `R9-shared-search-menus-${theme}`);
+  await page.keyboard.press("Escape");
+  check("R9", rows.length === 2 && rows.every((r) => r.off && r.note.length > 10), `(${theme}) on a shared import Search the menus shows Editing mode and Suggesting mode off, with the reason`, `${JSON.stringify(rows.map((r) => ({ label: r.label, off: r.off, note: clip(r.note, 50) })))} ${searchShot}`);
   if (theme === THEMES[0]) {
     const row = await documentRow(added.id);
     const put = await api(`/api/documents/${added.id}/rich-text`, "PUT", { richText: row.richText, rev: row.richTextRev });
@@ -1634,10 +1752,19 @@ RISKS.R9 = async (theme) => {
   const assistant = page.locator('[data-selection-popover] [data-track="assistant"]').first();
   if (await assistant.count()) {
     await assistant.click();
-    // Its own box (Viewing only): the field stands; no command chip in it.
-    await waitIn(page, () => document.querySelector("[data-assistant-bar], [data-side-card], [data-selection-popover] textarea, [data-selection-popover] input"), null, 10_000);
+    // Its own box (Viewing only): no command chip; a typed change lands
+    // nothing, and its plan holds no edit.
+    const field = page.locator("[data-layer-toolbar] textarea").first();
+    await field.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
     const chips = await page.locator('[data-track^="assistant-command:"]').count();
-    check("R9", chips === 0, `(${theme}) the assistant offers no edit commands on a shared import`, `${chips} command chips`);
+    const answered = page.waitForResponse((r) => r.url().includes("/api/assistant") && r.request().method() === "POST", { timeout: 60_000 }).catch(() => null);
+    await field.fill("Shorten this paragraph.").catch(() => {});
+    await page.keyboard.press("Enter");
+    const res = await answered;
+    const body = res ? await res.text().catch(() => "") : "";
+    const edits = [...body.matchAll(/"type":"(edit_block|insert_paragraph|remove_block|format_block|style|suggest)"/g)].map((m) => m[1]);
+    const landed = await page.evaluate(() => document.querySelectorAll(".docs-prose [data-suggestion]").length);
+    check("R9", chips === 0 && res?.status() === 200 && edits.length === 0 && landed === 0, `(${theme}) the assistant offers no edit on a shared import: no command chips, and a typed change plans no edit`, `${chips} command chips; answer HTTP ${res?.status() ?? "none"}; edit actions ${JSON.stringify(edits)}; suggestions in the page ${landed}`);
   }
   if (errors.length) note("R9", "console", errors.slice(0, 3).join(" | "));
   await context.close();
@@ -1917,6 +2044,22 @@ RISKS.R15 = async (theme) => {
   check("R15", re.status === 200 && kept, "a re-parse keeps the figure media the version \"Imported\" points at", `HTTP ${re.status}; media ${oldMedia.length} → ${media.length}, old kept ${kept}`);
   const { page, errors, context } = await newPage(theme);
   await open(page, ctx.notebookId, web.id);
+  // The page sends the media its text names, never an older parse's;
+  // Version history fetches the media a version names when it shows it.
+  const named = new Set([...JSON.stringify((await documentRow(web.id)).richText).matchAll(/"mediaId":"([^"]+)"/g)].map((m) => m[1]));
+  const html = await fetch(`${BASE}/n/${ctx.notebookId}?doc=${web.id}`).then((r) => r.text());
+  const sent = media.filter((m) => html.includes(m.id)).map((m) => m.id);
+  check("R15", named.size > 0 && sent.length === named.size && sent.every((id) => named.has(id)), "after a re-parse the page sends only the media its text names", `${sent.length} of ${media.length} media rows in the page (${Math.round(html.length / 1024)} KB); the text names ${named.size}`);
+  await openVersions(page);
+  await page.locator(".docs-versions-list .docs-versions-pick", { hasText: "Imported" }).last().click().catch(() => {});
+  const drawnOld = (await waitIn(page, () => {
+    const figs = [...document.querySelectorAll(".docs-versions-page .docs-figure")];
+    const drawn = figs.filter((f) => [...f.querySelectorAll("img, svg, video, iframe")].some((m) => m.tagName !== "IMG" || (m.complete && m.naturalWidth > 0)));
+    return figs.length > 0 && drawn.length === figs.length ? { figures: figs.length, drawn: drawn.length } : null;
+  }, null, 30_000)) ?? (await page.evaluate(() => ({ figures: document.querySelectorAll(".docs-versions-page .docs-figure").length, drawn: null })));
+  const versionShot = await shot(page, "R15-version-imported-media");
+  check("R15", drawnOld.figures === oldMedia.length && drawnOld.drawn === oldMedia.length, "Version history shows \"Imported\" with the media it names", `${JSON.stringify(drawnOld)} of ${oldMedia.length} ${versionShot}`);
+  await closeVersions(page);
   const versions = await api(`/api/documents/${web.id}/versions`);
   // Newest first: the original import's version is the last "Imported".
   const listed = Array.isArray(versions.body) ? versions.body : (versions.body.versions ?? []);
@@ -1991,6 +2134,30 @@ RISKS.R16 = async (theme) => {
     };
     const svgs = plates.filter((p) => p?.tag?.toLowerCase() === "svg");
     check("R16", svgs.length === 0 || svgs.every((p) => light(p.bg)), `dark: each chart of the ${d === web ? "web page" : "PDF"} sits on a light plate`, JSON.stringify(plates));
+    // A caption on the light box the page painted keeps dark words.
+    const boxed = d === web ? await figureBy(page, (c) => /Figure 6/.test(c)) : null;
+    if (boxed) {
+      await page.evaluate((p) => window.__qa.showNode(p), boxed.pos);
+      const legible = await page.evaluate((p) => {
+        const el = window.__docsEditor.view.nodeDOM(p);
+        const box = [...el.querySelectorAll("figure, div")].find((e) => /background/.test(e.getAttribute("style") ?? ""));
+        const caption = [...el.querySelectorAll("figcaption, p, span")].findLast((e) => /Figure 6/.test(e.textContent));
+        if (!box || !caption) return { box: Boolean(box), caption: Boolean(caption) };
+        const lum = (c) => {
+          const [r, g, b] = (/rgba?\((\d+), (\d+), (\d+)/.exec(c) ?? [0, 0, 0, 0]).slice(1).map((v) => {
+            const x = Number(v) / 255;
+            return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        const background = getComputedStyle(box).backgroundColor;
+        const color = getComputedStyle(caption).color;
+        const [hi, lo] = [lum(background), lum(color)].sort((a, b) => b - a);
+        return { background, color, contrast: Math.round(((hi + 0.05) / (lo + 0.05)) * 10) / 10 };
+      }, boxed.pos);
+      const boxShot = await shot(page, "R16-dark-web-figure-painted-box");
+      check("R16", (legible.contrast ?? 0) >= 4.5, "dark: a web figure's caption on the box the page painted stays legible", `${JSON.stringify(legible)} ${boxShot}`);
+    }
     await context.close();
   }
 };
@@ -2256,8 +2423,9 @@ RISKS.EDIT = async (theme) => {
 
 // AUDIT: the audit checklist (design section 5), as a Google Docs reader
 // checks an import: the chrome and the pages, the outline, page numbers and
-// the scroll tip, print, word count, Version history, downloads, and the
-// web page's lists, table, code, quote, line, equation, and figures.
+// the scroll tip, print, word count, Version history, and the web page's
+// lists, table, code, quote, line, equation, and figures (COPY has the
+// downloads).
 RISKS.AUDIT = async (theme) => {
   const pdf = await doc("pdf");
   const web = await doc("url");
@@ -2290,6 +2458,26 @@ RISKS.AUDIT = async (theme) => {
     }, null, 10_000)) ?? [];
     const outlineShot = await shot(page, `AUDIT-outline-${theme}`);
     check("AUDIT", items.some((i) => /Attention Is All You Need/.test(i)) && items.some((i) => /Introduction/.test(i)), `(${theme}) the outline lists the Title and the headings`, `${items.length}: ${items.slice(0, 5).join(" | ")} ${outlineShot}`);
+    // Under the headings, the contents (SPEC.md §26): Generate contents,
+    // then a part's press jumps to where it starts and flashes it.
+    const generate = page.locator('[data-track="contents-generate"]').first();
+    if (await generate.isVisible().catch(() => false)) await generate.click();
+    const parts = (await waitIn(page, () => {
+      const section = [...document.querySelectorAll("section")].find((e) => e.querySelector(":scope > .docs-outline-header"));
+      const list = [...(section?.querySelectorAll(".docs-outline-item") ?? [])].map((b) => b.textContent);
+      return list.length ? list : null;
+    }, null, 60_000)) ?? [];
+    const part = parts.find((t) => /Model Architecture/.test(t)) ?? parts[2];
+    let jumped = null;
+    if (part) {
+      await page.locator("section .docs-outline-item", { hasText: part }).first().click();
+      jumped = await waitIn(page, (text) => {
+        const el = [...document.querySelectorAll(".docs-prose .anchor-flash")].find((e) => e.textContent.includes(text));
+        return el ? { top: Math.round(el.getBoundingClientRect().top - window.__qa.band().top) } : null;
+      }, part, 10_000);
+    }
+    const partsShot = await shot(page, `AUDIT-outline-contents-${theme}`);
+    check("AUDIT", parts.length >= 3 && Boolean(jumped) && jumped.top > -20 && jumped.top < 200, `(${theme}) the panel lists the contents' parts under the headings; a part's press jumps to it and flashes it`, `${parts.length} parts: ${parts.slice(0, 3).join(" | ")}…; "${part}" ${JSON.stringify(jumped)} ${partsShot}`);
     await page.locator('[data-track="docs:outline-close"]').first().click().catch(() => {});
     await waitIn(page, () => !document.querySelector(".docs-outline-list"), null, 5000);
   }
@@ -2329,17 +2517,21 @@ RISKS.AUDIT = async (theme) => {
   await page.emulateMedia({ media: "screen" });
   check("AUDIT", Boolean(printed) && (printed.display === "none" || printed.before === "none" || printed.content === "none" || printed.visibility === "hidden"), `(${theme}) page starts do not print`, JSON.stringify(printed));
   // Word count: page starts add no words. Viewing first, as the import opens.
+  // The dialog's numbers once they hold (its first draw counts one page).
   const wordCount = async () => {
     await page.evaluate(() => window.__docsEditor.commands.focus());
     await page.keyboard.press("Control+Shift+c");
-    return (await waitIn(page, () => {
-      const rows = [...document.querySelectorAll(".docs-wc-table tr")].map((r) => r.textContent.trim());
-      return rows.length ? rows : null;
-    }, null, 5000)) ?? [];
+    let last = "[]";
+    return (await until(async () => {
+      const now = JSON.stringify(await page.evaluate(() => [...document.querySelectorAll(".docs-wc-table tr")].map((r) => r.textContent.trim())));
+      const held = now === last && now !== "[]";
+      last = now;
+      return held ? JSON.parse(now) : null;
+    }, 5000, 300)) ?? [];
   };
   let wc = await wordCount();
+  check("AUDIT", wc.length > 0, `(${theme}) Ctrl+Shift+C opens the word count in Viewing`, wc.length ? "" : "no dialog; Editing tried next");
   if (wc.length === 0) {
-    note("AUDIT", `(${theme}) Ctrl+Shift+C opens no word count in Viewing`, "Editing tried next");
     await setMode(page, "editing");
     wc = await wordCount();
   }
@@ -2372,37 +2564,6 @@ RISKS.AUDIT = async (theme) => {
   const versionShot = await shot(page, `AUDIT-version-imported-${theme}`);
   check("AUDIT", versions.some((v) => /Imported/.test(v)) && (versionView?.figures ?? 0) >= 12 && (versionView?.images ?? 0) > 0, `(${theme}) Version history lists "Imported" and its view draws the figures`, `${JSON.stringify(versions.slice(0, 4))}; view ${JSON.stringify(versionView)} ${versionShot}`);
   await closeVersions(page);
-  // Downloads: Word from the server, Markdown in the browser.
-  if (theme === THEMES[0]) {
-    const docx = await fetch(`${BASE}/api/documents/${pdf.id}/export?format=docx`);
-    const bytes = Buffer.from(await docx.arrayBuffer());
-    let xml = "";
-    try {
-      const { unzipSync, strFromU8 } = await import("fflate");
-      xml = strFromU8(unzipSync(new Uint8Array(bytes))["word/document.xml"] ?? new Uint8Array());
-    } catch (e) {
-      xml = `(unzip failed: ${e.message})`;
-    }
-    const docText = xml.replace(/<[^>]+>/g, " ");
-    check("AUDIT", docx.status === 200 && /Attention Is All You Need/.test(docText) && /Scaled Dot-Product Attention/.test(docText) && !/\bp\. 4\b/.test(docText), "the Word download holds the paper's words and no page labels", `HTTP ${docx.status}, ${bytes.length} bytes, pictures ${(xml.match(/<pic:pic/g) ?? []).length}`);
-    note("AUDIT", "figures in the Word download", `${(xml.match(/<pic:pic/g) ?? []).length} pictures for 12 figure objects (design: round 2)`);
-    let file = await download(page, "Download: Markdown (.md)");
-    if (!file) {
-      note("AUDIT", "Search the menus (and with it File > Download) is not on the toolbar in Viewing", "Editing tried next");
-      await setMode(page, "editing");
-      file = await download(page, "Download: Markdown (.md)");
-    }
-    const md = file ? file.bytes.toString("utf8") : "";
-    check("AUDIT", md.includes("Attention Is All You Need") && !/\bp\. \d+\b/.test(md), "the Markdown download holds the words and no page labels", `${md.length} characters; figure captions ${(md.match(/Figure \d+:/g) ?? []).length}`);
-  }
-  // Make a copy is off for an import, and says why.
-  if ((await mode(page)) !== "editing") await setMode(page, "editing");
-  await menuCommand(page, "Make a copy");
-  const copyDialog = (await waitIn(page, () => [...document.querySelectorAll('[role="dialog"]')].map((d) => d.textContent).join(" | ") || null, null, 5000)) ?? "";
-  const copyShot = await shot(page, `AUDIT-make-a-copy-${theme}`);
-  check("AUDIT", /off for an import/.test(copyDialog), `(${theme}) Make a copy is off for an import, with the reason`, `${clip(copyDialog, 140)} ${copyShot}`);
-  await page.keyboard.press("Escape");
-  await waitIn(page, () => !document.querySelector('[role="dialog"]'), null, 5000);
   // The web page: pageless; lists, the table's merged cells, code, a quote,
   // a line, and every figure's media.
   await open(page, ctx.notebookId, web.id);
@@ -2432,8 +2593,10 @@ RISKS.AUDIT = async (theme) => {
   });
   const webShot = await shot(page, `AUDIT-web-${theme}`);
   check("AUDIT", shape.pageless && shape.nested >= 1 && shape.ol3 && shape.rowspan && shape.colspan && shape.region === 1 && shape.code >= 1 && shape.quote >= 1 && shape.hr >= 1, `(${theme}) the web page: pageless, a nested list, a list from 3, the table's merged cells once, code, a quote, a line`, `${JSON.stringify({ ...shape, figs: undefined })} ${webShot}`);
-  check("AUDIT", shape.figs.length === 5 && shape.figs.every((f) => f.media) && shape.figs.filter((f) => f.media === "IMG").every((f) => f.loaded), `(${theme}) every figure of the web page draws its media`, JSON.stringify(shape.figs));
+  check("AUDIT", shape.figs.length === 6 && shape.figs.every((f) => f.media) && shape.figs.filter((f) => f.media === "IMG").every((f) => f.loaded), `(${theme}) every figure of the web page draws its media`, JSON.stringify(shape.figs));
   check("AUDIT", Boolean(shape.references), `(${theme}) the References section stands under the page`, `${shape.references}`);
+  const card = await hoverTip(page, ".docs-prose .docs-citation");
+  check("AUDIT", /Syvitski/.test(card ?? ""), `(${theme}) a citation's hover card shows its reference entry`, `"${clip(card, 100)}"`);
   const webLine = await page.evaluate(() => {
     const row = document.querySelector(".docs-title-row");
     return { text: (row?.textContent ?? "").replace(/\s+/g, " ").slice(0, 160), link: [...(row?.querySelectorAll("a[href]") ?? [])].map((a) => a.getAttribute("href")).find((h) => /^https?:/.test(h ?? "")) ?? null };
@@ -2511,17 +2674,6 @@ RISKS.AUDIT = async (theme) => {
     const keptEdit = kept.some((v) => JSON.stringify(v.richText).includes("(audit edit)"));
     const restoreShot = await shot(page, "AUDIT-version-restored");
     check("AUDIT", !restored.edit && !restored.open && !storedAfter && restoredStarts === 15 && restoredFigures === 12 && keptEdit, "Restore \"Imported\" brings the original's words back, with its page starts and figures, and a version keeps the edit", `edit in the page ${restored.edit}, stored ${storedAfter}; page starts ${restoredStarts}, figures ${restoredFigures}; a version holds the edit ${keptEdit} (${kept.length} versions) ${restoreShot}`);
-    // Downloads made in the browser: the web page and plain text.
-    await open(page, ctx.notebookId, pdf.id);
-    await setMode(page, "editing");
-    for (const [label, ext] of [["Download: Web Page (.html)", "html"], ["Download: Plain Text (.txt)", "txt"]]) {
-      const file = await download(page, label);
-      const body = file ? file.bytes.toString("utf8") : "";
-      const words = ext === "html" ? body.replace(/<[^>]+>/g, " ") : body;
-      const relative = ext === "html" ? (body.match(/<img[^>]+src="\/api\/documents\/[^"]+\/figure\/[^"]+"/g) ?? []).length : 0;
-      check("AUDIT", /Attention Is All You Need/.test(words) && /Scaled Dot-Product Attention/.test(words) && !/\bp\. \d+\b/.test(words), `the ${ext === "html" ? "web page" : "plain text"} download holds the words and no page labels`, `${body.length} characters${ext === "html" ? `; ${relative} figure images with a relative /api/ address` : ""}`);
-      if (relative > 0) note("AUDIT", "figures in the web page download", `${relative} figure images point at /api/documents/…/figure/…: they draw only beside a signed-in Unitos (figures in downloads: round 2)`);
-    }
   }
   if (errors.length) note("AUDIT", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
   await context.close();
@@ -2592,8 +2744,14 @@ RISKS.AI = async (theme) => {
   const fig = (await figureBy(page, (c) => /Figure 1/.test(c))) ?? (await figures(page))[0];
   const pressed = await clickFigure(page, fig.pos);
   const firstPress = await toolbar(page);
+  // In Viewing the press draws no selection frame (css/import.css).
+  const frame = await page.evaluate((p) => {
+    const el = window.__docsEditor.view.nodeDOM(p);
+    return { selected: el.classList.contains("ProseMirror-selectednode"), outline: getComputedStyle(el).outlineStyle };
+  }, fig.pos);
+  const frameShot = await shot(page, `AI-pdf-figure-first-press-${theme}`);
+  check("AI", firstPress && frame.outline === "none", `(${theme}) in Viewing the first press on a PDF figure opens its tools, with no selection frame`, `tools ${firstPress}; ${JSON.stringify(frame)}; pressed ${JSON.stringify(pressed)} ${frameShot}`);
   if (!firstPress) {
-    note("AI", `(${theme}) the first press on the PDF figure opened nothing`, `a second press opens its tools; pressed ${JSON.stringify(pressed)}`);
     await clickFigure(page, fig.pos);
     await toolbar(page);
   }
@@ -2799,6 +2957,309 @@ RISKS.AI = async (theme) => {
     } else fail("AI", `(${theme}) a click on the SVG chart opens Analyze`, "no Analyze");
   }
   if (errors.length) note("AI", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
+  await context.close();
+};
+
+// COLLAPSE: Collapse (SPEC.md §28) in the page editor: the paper and the web
+// page collapsed and read whole again; each unit one core in its place (a
+// list's lines one, a table one), headings and figures as they are, the
+// rich text unchanged; a unit read whole and folded again by its button; a
+// highlight on a core after a reload; Editing turns Collapse off.
+function collapsedView() {
+  const prose = document.querySelector(".docs-prose");
+  const shown = (el) => el.getClientRects().length > 0;
+  const cores = [...prose.querySelectorAll('.docs-core-slot[data-docs-core="core"]')];
+  if (cores.length === 0) return null;
+  // Each hidden node and the cores drawn right before it: its unit's.
+  const units = [...prose.querySelectorAll(".docs-core-hidden")].map((el) => {
+    let n = 0;
+    for (let w = el.previousElementSibling; w?.classList.contains("ProseMirror-widget"); w = w.previousElementSibling) if (w.dataset.docsCore === "core") n++;
+    return { tag: el.querySelector("table") ? "TABLE" : el.tagName, lines: el.querySelectorAll("li").length, cores: n };
+  });
+  const headings = [...prose.querySelectorAll("h1, h2, h3, h4, h5, h6")];
+  const figures = [...prose.querySelectorAll(".docs-figure")];
+  return {
+    cores: cores.length,
+    units: units.length,
+    oneEach: units.every((u) => u.cores === 1),
+    lists: units.filter((u) => u.tag === "UL" || u.tag === "OL").map((u) => `${u.lines} lines, ${u.cores} core`),
+    tables: units.filter((u) => u.tag === "TABLE").map((u) => `${u.cores} core`),
+    headings: `${headings.filter(shown).length} of ${headings.length} shown`,
+    figures: `${figures.filter(shown).length} of ${figures.length} shown`,
+    hiddenHeadings: headings.filter((h) => h.closest(".docs-core-hidden")).length,
+    hiddenFigures: figures.filter((f) => f.closest(".docs-core-hidden") || !shown(f)).length,
+    pages: [...prose.querySelectorAll(".docs-core-pages[data-page-label]")].map((e) => e.dataset.pageLabel).slice(0, 5),
+    first: cores[0].textContent.slice(0, 60),
+  };
+}
+RISKS.COLLAPSE = async (theme) => {
+  for (const kind of ["pdf", "url"]) {
+    const added = await fresh(kind, `-collapse${theme[0]}`);
+    const { page, errors, context } = await newPage(theme);
+    await open(page, ctx.notebookId, added.id);
+    const words = await page.evaluate(() => window.__docsEditor.state.doc.textContent);
+    const rev = (await documentRow(added.id)).richTextRev;
+    const button = page.locator('[data-track="collapse"]').first();
+    if (!(await button.waitFor({ state: "visible", timeout: 10_000 }).then(() => true).catch(() => false))) {
+      fail("COLLAPSE", `${kind} (${theme}): the Collapse button stands beside Extract`, "none");
+      await context.close();
+      continue;
+    }
+    await button.click();
+    const view = (await waitIn(page, collapsedView, null, 90_000)) ?? {};
+    const collapsedShot = await shot(page, `COLLAPSE-${kind}-collapsed-${theme}`);
+    const unchanged = (await page.evaluate(() => window.__docsEditor.state.doc.textContent)) === words && (await documentRow(added.id)).richTextRev === rev;
+    check("COLLAPSE", view.cores > 5 && view.oneEach && view.hiddenHeadings === 0 && view.hiddenFigures === 0 && unchanged, `${kind} (${theme}): Collapse draws each unit's core in its place, headings and figures as they are, the rich text unchanged`, `${JSON.stringify({ ...view, lists: undefined, tables: undefined })}; rich text unchanged ${unchanged} ${collapsedShot}`);
+    if (kind === "url") check("COLLAPSE", view.lists?.length >= 2 && view.tables?.length >= 1 && view.oneEach, `(${theme}) the web page: a list's lines take one core, a table one core`, JSON.stringify({ lists: view.lists, tables: view.tables }));
+    if (kind === "pdf") check("COLLAPSE", view.pages?.length > 0, `(${theme}) a core carries the page numbers of the PDF pages that begin in its unit`, JSON.stringify(view.pages));
+    // A unit read whole by its button, then folded again.
+    const unit = await page.evaluate(() => document.querySelectorAll('.docs-prose .docs-core-slot[data-docs-core="core"] [data-collapsed][data-block-id]')[2]?.dataset.blockId ?? null);
+    if (unit) {
+      const slot = (state) => `.docs-prose .docs-core-slot[data-docs-core="${state}"]:has([data-collapsed][data-block-id="${unit}"])`;
+      await page.locator(`${slot("core")} [data-track="collapse-expand"]`).click();
+      const whole = Boolean(await waitIn(page, (id) => {
+        const node = document.querySelector(`.docs-prose [data-block-id="${id}"]:not([data-collapsed])`);
+        return node && node.getClientRects().length > 0 && !node.closest(".docs-core-hidden");
+      }, unit, 10_000));
+      const fold = page.locator(`.docs-prose .docs-core-slot[data-docs-core="words"] [data-track="collapse-fold"]`).first();
+      await fold.click().catch(() => {});
+      const folded = Boolean(await waitIn(page, (sel) => document.querySelector(sel), slot("core"), 10_000));
+      check("COLLAPSE", whole && folded, `${kind} (${theme}): a unit's button reads it whole, and the fold chip folds it again`, `whole ${whole}, folded ${folded}`);
+    }
+    // A highlight on a core's words, and the page reloaded: Collapse is
+    // remembered, the mark paints on the core.
+    if (kind === "pdf") {
+      const core = await page.evaluate(() => {
+        const p = [...document.querySelectorAll('.docs-prose .docs-core-slot[data-docs-core="core"] [data-collapsed][data-block-id]')].find((e) => e.textContent.split(/\s+/).length > 8);
+        return p ? { id: p.dataset.blockId, words: p.textContent.replace(/^Mock core:\s*/, "").split(/\s+/).slice(1, 5).join(" ").replace(/[,.;:!?]+$/, "") } : null;
+      });
+      if (core) {
+        const selector = `.docs-prose [data-collapsed][data-block-id="${core.id}"]`;
+        const opened = await dragWords(page, selector, core.words);
+        const made = opened ? await pressHighlight(page, added.id) : [];
+        await reload(page);
+        const marks = made.length ? await waitIn(page, ({ selector, id }) => {
+          const m = [...document.querySelectorAll(`${selector} [data-source-id="${id}"]`)].map((e) => e.textContent).join("");
+          return m || null;
+        }, { selector, id: made[0].id }, 30_000) : null;
+        const coreShot = await shot(page, `COLLAPSE-core-highlight-${theme}`);
+        check("COLLAPSE", made.length === 1 && made[0].layer === "core" && made[0].quotedText === core.words && (marks ?? "").replace(/\s+/g, " ").trim() === core.words, `(${theme}) a highlight on a core's words is the core's, and paints on the core after a reload`, `toolbar ${opened}; stored ${made.map((m) => `"${m.quotedText}" layer ${m.layer}`).join(", ") || "none"}; painted "${marks}" ${coreShot}`);
+      }
+    }
+    // Editing needs the words: Collapse off. Collapse in Editing goes to
+    // Viewing; pressed again, the text reads whole.
+    await setMode(page, "editing");
+    const off = Boolean(await waitIn(page, () => !document.querySelector(".docs-prose .docs-core-slot, .docs-prose .docs-core-hidden") && document.querySelector('[data-track="collapse"]'), null, 10_000));
+    await page.locator('[data-track="collapse"]').first().click();
+    const back = Boolean(await waitIn(page, () => document.querySelector('[data-track="docs:mode"]')?.getAttribute("data-mode") === "viewing" && document.querySelector('.docs-prose .docs-core-slot[data-docs-core="core"]'), null, 30_000));
+    await page.locator('[data-track="collapse-off"]').first().click();
+    // Whole: no core drawn; each unit keeps its own button (SPEC.md §28).
+    const whole = Boolean(await waitIn(page, () => !document.querySelector('.docs-prose .docs-core-slot[data-docs-core="core"], .docs-prose .docs-core-hidden'), null, 10_000));
+    check("COLLAPSE", off && back && whole, `${kind} (${theme}): Editing turns Collapse off; Collapse pressed in Editing turns to Viewing; pressed again, the text reads whole`, `off in Editing ${off}, Viewing and collapsed ${back}, whole again ${whole}`);
+    if (errors.length) note("COLLAPSE", `${kind}: console`, errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
+    await context.close();
+  }
+};
+
+// TRANSLATE: in the Chinese reader (the DeepL mock answers "[ZH] <text>"),
+// the Translate bar over the paper's first page; each paragraph's
+// translation under it, never the page's words (not in the rich text, not
+// selected, not copied), printed as the block reader prints it, remembered
+// on a reload, gone from a paragraph edited since; the glossary's key
+// terms underlined, with the definition on hover and on a press.
+RISKS.TRANSLATE = async (theme) => {
+  const pdf = await fresh("pdf", `-translate${theme[0]}`);
+  // A key term in the abstract's rows, defined in both languages.
+  const term = "sequence transduction";
+  const termRows = (await rowsOf(pdf.id)).filter((r) => r.type === "PARAGRAPH" && r.text.toLowerCase().includes(term)).slice(0, 3);
+  const definitions = { en: "QA: a model that turns one sequence into another.", zh: "QA：把一个序列变成另一个序列的模型。" };
+  await db.document.update({ where: { id: pdf.id }, data: { glossary: [{ term, definition: definitions.en, blockIds: termRows.map((r) => r.id), lang: "en", definitions }] } });
+  const { page, errors, context } = await newPage(theme);
+  await context.addCookies([{ name: "dissect-lang", value: "zh", url: BASE }]);
+  await open(page, ctx.notebookId, pdf.id);
+  const words = await page.evaluate(() => window.__docsEditor.state.doc.textContent);
+  const lines = () => waitIn(page, () => {
+    const n = document.querySelectorAll(".docs-prose [data-translation]").length;
+    return n > 20 ? n : null;
+  }, null, 90_000);
+  const translate = page.locator('.docs-banner [data-translation-bar] [data-track="translate"]').first();
+  const bar = await translate.waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false);
+  if (bar) await translate.click();
+  const count = (await lines()) ?? 0;
+  const sample = await page.evaluate(() => {
+    const el = [...document.querySelectorAll(".docs-prose p[data-translation]")].find((e) => e.textContent.length > 80);
+    return el ? { id: el.dataset.blockId, words: el.textContent, line: el.getAttribute("data-translation"), drawn: getComputedStyle(el, "::after").content } : null;
+  });
+  const translatedShot = await shot(page, `TRANSLATE-lines-${theme}`);
+  check("TRANSLATE", bar && count > 20 && sample?.line === `[ZH] ${sample?.words}` && sample.drawn.includes("[ZH]"), `(${theme}) the Translate bar stands over the paper, and each paragraph's translation reads under it`, `bar ${bar}; ${count} lines; e.g. "${clip(sample?.line, 60)}" ${translatedShot}`);
+  // Never the page's words: the rich text, a selection across a line, a copy.
+  const inText = (await page.evaluate(() => window.__docsEditor.state.doc.textContent)) !== words;
+  const para = sample ? await find(page, sample.words.slice(0, 30)) : null;
+  let selected = "";
+  let copied = "";
+  if (para) {
+    const next = await page.evaluate((p) => {
+      const $p = window.__docsEditor.state.doc.resolve(p);
+      return $p.after($p.depth) + 6;
+    }, para.from);
+    await dragSelect(page, para.from, next);
+    selected = await page.evaluate(() => window.getSelection().toString());
+    await page.keyboard.press("Control+c");
+    copied = await clipboardText(page);
+    await calm(page);
+  }
+  await page.emulateMedia({ media: "print" });
+  const printed = await page.evaluate((id) => getComputedStyle(document.querySelector(`.docs-prose [data-block-id="${id}"]`), "::after").content, sample?.id ?? "");
+  await page.emulateMedia({ media: "screen" });
+  check("TRANSLATE", sample && !inText && selected.length > 20 && !selected.includes("[ZH]") && !copied.includes("[ZH]") && printed.includes("[ZH]"), `(${theme}) a translation is never the page's words: not in the rich text, not selected, not copied; it prints`, `rich text changed ${inText}; selected "${clip(selected, 50)}"; copied "${clip(copied, 50)}"; printed ${clip(printed, 30)}`);
+  // Far down the paper too, and again after a reload, with no press.
+  const late = (await pageStarts(page)).find((s) => s.page === 10);
+  if (late) await page.evaluate((p) => window.__qa.show(p), late.pos);
+  const far = await page.evaluate(() => {
+    const b = window.__qa.band();
+    return [...document.querySelectorAll(".docs-prose [data-translation]")].filter((e) => {
+      const r = e.getBoundingClientRect();
+      return r.bottom > b.top && r.top < b.bottom;
+    }).length;
+  });
+  await reload(page);
+  const again = (await lines()) ?? 0;
+  check("TRANSLATE", far > 0 && again > 20, `(${theme}) the translations read on p. 10 too, and come back after a reload`, `${far} in view at p. 10; ${again} after the reload`);
+  // Editing shows the words alone; a paragraph edited since reads its words
+  // alone back in Viewing.
+  if (sample) {
+    await setMode(page, "editing");
+    const inEditing = await page.evaluate(() => [...document.querySelectorAll(".docs-prose [data-translation]")].filter((e) => getComputedStyle(e, "::after").content.includes("[ZH]")).length);
+    const end = await find(page, sample.words.slice(-12));
+    await clickPos(page, end.to);
+    await page.keyboard.type(" QA");
+    await waitSaved(page).catch(() => {});
+    await setMode(page, "viewing");
+    const after = await waitIn(page, (id) => {
+      const n = document.querySelectorAll(".docs-prose [data-translation]").length;
+      return n > 20 ? { lines: n, edited: document.querySelector(`.docs-prose [data-block-id="${id}"]`)?.hasAttribute("data-translation") ?? null } : null;
+    }, sample.id, 15_000);
+    check("TRANSLATE", inEditing === 0 && after?.edited === false, `(${theme}) Editing shows no translations; back in Viewing, the paragraph edited since reads its words alone`, `in Editing ${inEditing}; after ${JSON.stringify(after)}`);
+  }
+  // The key term: underlined in the page; its definition on hover and on a press.
+  const underlined = await waitIn(page, (t) => {
+    const el = [...document.querySelectorAll(".docs-prose .glossary-term")].find((e) => e.textContent.toLowerCase().includes(t.split(" ")[0]));
+    return el ? { words: el.textContent, count: document.querySelectorAll(".docs-prose .glossary-term").length } : null;
+  }, term, 20_000);
+  let tip = null;
+  let pressed = null;
+  if (underlined) {
+    tip = await hoverTip(page, ".docs-prose .glossary-term");
+    await page.locator(".docs-prose .glossary-term").first().click();
+    const define = page.locator('[data-layer-toolbar] [data-track="define"]').first();
+    if (await define.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false)) {
+      await define.click();
+      pressed = await waitIn(page, () => document.querySelector("[data-definition]")?.textContent || null, null, 10_000);
+    }
+  }
+  const termShot = await shot(page, `TRANSLATE-key-term-${theme}`);
+  check("TRANSLATE", Boolean(underlined) && (tip ?? "").includes(definitions.zh) && (pressed ?? "").includes(definitions.zh), `(${theme}) the key term is underlined; its definition on hover and on a press (Define)`, `${JSON.stringify(underlined)}; hover "${clip(tip, 60)}"; press "${clip(pressed, 60)}" ${termShot}`);
+  if (errors.length) note("TRANSLATE", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
+  await context.close();
+};
+
+// COPY: File > Download and File > Make a copy of an import (SPEC.md §29,
+// §30). The paper's and the web page's Word, web page, Markdown, and plain
+// text files hold the words, no page labels, and every figure (a PDF
+// figure's crop, a web figure's images); the web page file opens in a
+// browser with its figures drawn, in the light theme's colors. A copy of
+// the paper keeps its figures (media of its own), its page setup, and its
+// page numbers, and opens in Editing like any blank document.
+RISKS.COPY = async (theme) => {
+  const kinds = { pdf: { words: ["Attention Is All You Need", "Scaled Dot-Product Attention"], figures: 12, pictures: 12 }, url: { words: ["The Quiet Engine of River Deltas", "Where the sediment goes"], figures: 6, pictures: 5 } };
+  const { page, errors, context } = await newPage(theme);
+  for (const [kind, want] of Object.entries(kinds)) {
+    const added = await doc(kind);
+    const noLabels = (text) => !/\bp\. \d+\b/.test(text);
+    // Word, from the server (once: the theme does not reach it).
+    if (theme === THEMES[0]) {
+      const res = await fetch(`${BASE}/api/documents/${added.id}/export?format=docx`);
+      const bytes = Buffer.from(await res.arrayBuffer());
+      let xml = "";
+      let media = 0;
+      try {
+        const { unzipSync, strFromU8 } = await import("fflate");
+        const files = unzipSync(new Uint8Array(bytes));
+        xml = strFromU8(files["word/document.xml"] ?? new Uint8Array());
+        media = Object.keys(files).filter((f) => f.startsWith("word/media/")).length;
+      } catch (e) {
+        xml = `(unzip failed: ${e.message})`;
+      }
+      const text = xml.replace(/<[^>]+>/g, " ");
+      const pictures = (xml.match(/<pic:pic\b/g) ?? []).length;
+      check("COPY", res.status === 200 && want.words.every((w) => text.includes(w)) && noLabels(text) && pictures >= want.pictures, `${kind}: the Word file holds the words, no page labels, and the figures' pictures`, `HTTP ${res.status}, ${bytes.length} bytes, ${pictures} pictures (${media} media files) for ${want.figures} figure objects`);
+    }
+    // The web page, Markdown, and plain text files, made in the browser.
+    await open(page, ctx.notebookId, added.id);
+    const files = {};
+    for (const [format, label] of [["html", "Download: Web Page (.html)"], ["md", "Download: Markdown (.md)"], ["txt", "Download: Plain Text (.txt)"]]) {
+      files[format] = (await download(page, label))?.bytes.toString("utf8") ?? "";
+    }
+    const html = files.html;
+    const htmlWords = html.replace(/<[^>]+>/g, " ");
+    const images = (html.match(/<img\b[^>]*\bsrc="(?:data:|https?:)/g) ?? []).length + (html.match(/<svg\b/g) ?? []).length;
+    const relative = (html.match(/\bsrc="\/api\//g) ?? []).length;
+    check("COPY", want.words.every((w) => htmlWords.includes(w)) && noLabels(htmlWords) && images >= want.pictures && relative === 0, `${kind} (${theme}): the web page file holds the words, no page labels, and the figures' pictures inside`, `${html.length} characters; ${images} pictures; ${relative} app addresses left`);
+    // Opened as a file: its figures draw, in the light theme's words.
+    const view = await context.newPage();
+    await view.setContent(html, { waitUntil: "load", timeout: 60_000 }).catch(() => {});
+    const opened = await view.evaluate(() => {
+      const imgs = [...document.images];
+      const p = [...document.querySelectorAll("p")].find((e) => e.textContent.trim().length > 60);
+      const lum = (c) => {
+        const m = /rgba?\((\d+), (\d+), (\d+)/.exec(c ?? "");
+        return m ? Math.round((Number(m[1]) + Number(m[2]) + Number(m[3])) / 3) : null;
+      };
+      return { images: imgs.length, drawn: imgs.filter((i) => i.complete && i.naturalWidth > 0).length, svgs: document.querySelectorAll("svg").length, words: lum(p && getComputedStyle(p).color), ground: lum(getComputedStyle(document.body).backgroundColor) };
+    });
+    const fileShot = await shot(view, `COPY-${kind}-html-file-${theme}`);
+    await view.close();
+    check("COPY", opened.drawn + opened.svgs >= want.pictures && opened.drawn === opened.images && opened.words !== null && opened.words < 110, `${kind} (${theme}): the web page file opens with its figures drawn, dark words on a light page`, `${JSON.stringify(opened)} ${fileShot}`);
+    const md = files.md;
+    const mdImages = (md.match(/!\[[^\]]*\]\([^)]+\)/g) ?? []).length;
+    check("COPY", want.words.every((w) => md.includes(w)) && noLabels(md) && mdImages >= want.pictures, `${kind} (${theme}): the Markdown file holds the words, no page labels, and the figures' pictures`, `${md.length} characters; ${mdImages} images`);
+    check("COPY", want.words.every((w) => files.txt.includes(w)) && noLabels(files.txt), `${kind} (${theme}): the plain text file holds the words and no page labels`, `${files.txt.length} characters`);
+  }
+  // Make a copy of the paper, as a person makes it: Search the menus, the
+  // dialog's name, OK; the copy opens in this tab.
+  const pdf = await doc("pdf");
+  await open(page, ctx.notebookId, pdf.id);
+  await menuCommand(page, "Make a copy");
+  const dialog = page.locator(".docs-tb-dialog").first();
+  const named = await dialog.waitFor({ state: "visible", timeout: 10_000 }).then(() => dialog.locator("input.docs-field").inputValue()).catch(() => null);
+  await dialog.locator('.docs-tb-dialog-actions button[type="submit"]').click().catch(() => {});
+  const copyId = await waitIn(page, (from) => {
+    const id = new URLSearchParams(location.search).get("doc");
+    return id && id !== from ? id : null;
+  }, pdf.id, 60_000);
+  if (!copyId) {
+    fail("COPY", `(${theme}) Make a copy of the paper opens the copy`, `dialog name "${named}"; still on the paper ${await shot(page, `COPY-no-copy-${theme}`)}`);
+  } else {
+    await ready(page);
+    const [original, copy, mediaOriginal, mediaCopy, rowsOriginal, rowsCopy, sources] = await Promise.all([
+      documentRow(pdf.id),
+      documentRow(copyId),
+      db.figureMedia.findMany({ where: { documentId: pdf.id }, select: { id: true } }),
+      db.figureMedia.findMany({ where: { documentId: copyId }, select: { id: true } }),
+      db.block.count({ where: { documentId: pdf.id } }),
+      db.block.count({ where: { documentId: copyId } }),
+      db.source.count({ where: { documentId: copyId } }),
+    ]);
+    const own = mediaCopy.length === 12 && mediaCopy.every((m) => !mediaOriginal.some((o) => o.id === m.id));
+    const images = await loadFigureImages(page);
+    const starts = await pageStarts(page);
+    const labels = await page.evaluate(() => [...document.querySelectorAll(".docs-prose .docs-page-start[data-page-label]")].map((e) => e.getAttribute("data-page-label")));
+    const m = await mode(page);
+    const copyShot = await shot(page, `COPY-copy-of-paper-${theme}`);
+    check("COPY", named === "Copy of Attention Is All You Need" && copy?.importRev === null && Boolean(copy?.richText) && own && JSON.stringify(copy.pageSetup) === JSON.stringify(original.pageSetup) && JSON.stringify(copy.pageLabels) === JSON.stringify(original.pageLabels) && rowsCopy === rowsOriginal && sources === 0, `(${theme}) Make a copy of the paper: a blank document with media of its own, the page setup, the page labels, every row, no annotations`, `name "${named}"; importRev ${copy?.importRev}; media ${mediaCopy.length} (own ${own}); page setup kept ${JSON.stringify(copy?.pageSetup) === JSON.stringify(original.pageSetup)}; rows ${rowsCopy}/${rowsOriginal}; sources ${sources}`);
+    check("COPY", images.total >= 12 && images.loaded === images.total && starts.length === 15 && labels.includes("p. 7") && m === "editing", `(${theme}) the copy opens in Editing with its figures drawn and its page numbers`, `figures ${images.loaded}/${images.total}${images.failed.length ? ` (not drawn: ${images.failed.join(", ")})` : ""}; page starts ${starts.length}; labels ${labels.slice(0, 3).join(", ")}…; mode ${m} ${copyShot}`);
+  }
+  if (errors.length) note("COPY", "console", errors.slice(0, 3).map((e) => clip(e, 160)).join(" | "));
   await context.close();
 };
 

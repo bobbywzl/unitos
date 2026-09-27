@@ -6,7 +6,7 @@ import type { Transaction } from "@tiptap/pm/state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OWN_SAVE_EVENT, REFRESH_EVENT } from "@/components/collab/use-sync";
 import { mergeRichText } from "@/lib/docs/merge";
-import { newBlockId, type RichNode } from "@/lib/docs/schema";
+import { compactRichText, newBlockId, type AttrDefaults, type RichNode } from "@/lib/docs/schema";
 
 // Saving a blank document (SPEC.md §29), the way Google Docs saves: no Save
 // button. Typing marks the document unsaved; a pause of SAVE_DELAY_MS, or
@@ -56,6 +56,27 @@ export function unknownTypes(json: RichNode, schema: Schema): string[] {
   };
   walk(json);
   return [...unknown];
+}
+
+const defaultsBySchema = new WeakMap<Schema, AttrDefaults>();
+
+/** The editor's text as a save sends it: compact, without the attributes
+    that hold their default (lib/docs/schema.ts compactRichText). */
+function savedCopy(editor: Editor): RichNode {
+  let defaults = defaultsBySchema.get(editor.schema);
+  if (!defaults) {
+    type Types = Record<string, { spec: { attrs?: Record<string, { default?: unknown }> } }>;
+    const of = (types: Types) =>
+      Object.fromEntries(
+        Object.entries(types).map(([name, type]) => [
+          name,
+          Object.fromEntries(Object.entries(type.spec.attrs ?? {}).filter(([, spec]) => Object.hasOwn(spec, "default")).map(([attr, spec]) => [attr, spec.default])),
+        ]),
+      );
+    defaults = { nodes: of(editor.schema.nodes), marks: of(editor.schema.marks) };
+    defaultsBySchema.set(editor.schema, defaults);
+  }
+  return compactRichText(editor.getJSON() as RichNode, defaults);
 }
 
 // A stored copy holds a type this build does not know: the page reloads
@@ -239,7 +260,7 @@ export function useDocsSave({
     clearTimer();
     if (!dirtyRef.current) return;
     const version = versionRef.current;
-    const doc = editor.getJSON() as RichNode;
+    const doc = savedCopy(editor);
     // The text is the stored copy again (typed and taken back): nothing to
     // send, and the page's revision still names the screen.
     if (JSON.stringify(doc) === JSON.stringify(baseRef.current)) {
@@ -380,7 +401,7 @@ export function useDocsSave({
   useEffect(() => {
     if (!editor || !live) return;
     const onLeave = (e: BeforeUnloadEvent) => {
-      if (dirtyRef.current) saveOnLeave(e, url, "PUT", { richText: editor.getJSON(), rev: revRef.current });
+      if (dirtyRef.current) saveOnLeave(e, url, "PUT", { richText: savedCopy(editor), rev: revRef.current });
     };
     window.addEventListener("beforeunload", onLeave);
     return () => window.removeEventListener("beforeunload", onLeave);

@@ -10,7 +10,7 @@ import { PX_PER_PT } from "@/components/docs/page/geometry";
 import { namedStyleSheet } from "@/components/docs/toolbar/styles";
 import { fragmentToMarkdown } from "@/components/docs/typing/markdown";
 import { deriveBlocks, withoutSuggestions } from "@/lib/docs/blocks";
-import type { RichNode } from "@/lib/docs/schema";
+import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { KATEX_MACROS } from "@/lib/katex";
 
 // File > Download (SPEC.md §29). Microsoft Word comes from the server
@@ -213,7 +213,7 @@ sup[data-footnote-ref]::after { content: counter(footnote); }
 /** The web page: the page's HTML with the document's named styles, its
     images inside, its equations as MathML, its tables of contents drawn,
     and an import's figures as the page draws them. */
-async function webPage(editor: Editor, doc: PMNode, title: string): Promise<string> {
+async function webPage(editor: Editor, doc: PMNode, title: string, setup: PageSetup): Promise<string> {
   const page = new DOMParser().parseFromString(getHTMLFromFragment(doc.content, editor.schema), "text/html");
   const body = page.body;
   // A page start adds no words: nothing of it goes in the file.
@@ -256,8 +256,7 @@ async function webPage(editor: Editor, doc: PMNode, title: string): Promise<stri
       if (words instanceof HTMLAnchorElement) words.href = `#${entry.blockId}`;
     }
   });
-  const setup = insertContext(editor)?.pageSetup;
-  const width = setup ? `body { max-width: ${(setup.width - setup.margins.left - setup.margins.right) * PX_PER_PT}px; }` : "";
+  const width = `body { max-width: ${(setup.width - setup.margins.left - setup.margins.right) * PX_PER_PT}px; }`;
   page.title = title;
   const meta = page.createElement("meta");
   meta.setAttribute("charset", "utf-8");
@@ -297,7 +296,7 @@ export async function downloadDocument(editor: Editor, format: DownloadFormat): 
       const md = withFigurePictures(editor, doc);
       save(new Blob([markdown(md, await imageData(imageSrcs(md)))], { type: "text/markdown;charset=utf-8" }), `${title}.md`);
     } else {
-      save(new Blob([await webPage(editor, doc, title)], { type: "text/html;charset=utf-8" }), `${title}.html`);
+      save(new Blob([await webPage(editor, doc, title, ctx.pageSetup)], { type: "text/html;charset=utf-8" }), `${title}.html`);
     }
   } catch {
     toast(ctx.t("common.requestFailed"), editor);

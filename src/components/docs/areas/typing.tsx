@@ -207,6 +207,8 @@ export function TypingLayer({ editor }: DocsAreaProps) {
         else stepResult(view, e.shiftKey ? -1 : 1);
       } else if (mod && !e.altKey && !e.shiftKey && (key === "/" || code === "Slash")) setShortcutsOpen(true);
       else if (mod && e.shiftKey && !e.altKey && code === "KeyS") setVoiceOpen(true);
+      // The word count in Viewing too, where the page takes no focus.
+      else if (mod && e.shiftKey && !e.altKey && code === "KeyC") fireDocs(editor, TYPING_EVENT.wordCount);
       else if ((mod && e.altKey && !e.shiftKey && code === "KeyX") || (e.key === "F7" && !mod && !e.altKey)) toggleSpelling();
       else if (mod && !e.altKey && !e.shiftKey && key === "s") {
         // Every change saves by itself; the browser's Save page never opens.

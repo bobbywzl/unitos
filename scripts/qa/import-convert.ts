@@ -10,9 +10,10 @@
 //   5. page starts rise, one for each page that holds words;
 //   6. the size numbers are the rich text's.
 // It also reads what a reader would miss: the masthead (the kicker, one
-// Title, the Subtitle), each row's page, each cell's place (C1), the words
-// after each page start against the PDF's own page, links to headings,
-// styles, citations, text runs, and the page setup. Nothing is stored.
+// Title, the Subtitle), each row's page and how the AI prefix names it,
+// each cell's place (C1), the words after each page start against the
+// PDF's own page, links to headings, styles, citations, text runs, and the
+// page setup. Nothing is stored.
 //
 // Usage:
 //   npx tsx --tsconfig tsconfig.json scripts/qa/import-convert.ts [--offline] [--json <file>] [--verbose] [source …]
@@ -28,6 +29,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { getDocumentProxy } from "unpdf";
+import { pageNames, renderBlockLines } from "@/lib/derive/context";
 import { deriveBlocks, inlineText, type DerivedBlock } from "@/lib/docs/blocks";
 import { richTextFromImport } from "@/lib/docs/import";
 import {
@@ -730,6 +732,25 @@ async function checkFixture(f: Fixture): Promise<Report> {
         (wrongPage.length ? `; ${wrongPage.length} wrong: ${wrongPage.slice(0, 3).join(" | ")}` : ""),
     );
     if (codeInside.length) note("a page that begins inside a code block draws at its top, and the row reads it", codeInside.slice(0, 3).join(" | "));
+    // The AI reads each row's page as the margin names it (SPEC.md §30):
+    // `[block <id>] (PARAGRAPH, p. 7)`, a cell's `(PARAGRAPH, table 2, row 3,
+    // column 1, p. 7)`; a document that is not an import names no page.
+    const pageName = pageNames({ importRev: 1, pageLabels: f.pageLabels ?? null });
+    const tagOff: string[] = [];
+    let example = "";
+    for (const r of rows) {
+      const place = r.cell ? `, table ${r.cell.table}, row ${r.cell.row}, column ${r.cell.column}` : "";
+      const page = typeof r.page === "number" ? `, p. ${f.pageLabels?.[r.page - 1] || r.page}` : "";
+      const tag = renderBlockLines([r], pageName).split("\n")[0];
+      if (tag !== `[block ${r.id}] (${r.type}${place}${page})`) tagOff.push(tag);
+      else if (r.cell && page && !example) example = tag;
+      if (renderBlockLines([r], null).split("\n")[0] !== `[block ${r.id}] (${r.type}${place})`) tagOff.push(`without pages: ${renderBlockLines([r], null).split("\n")[0]}`);
+    }
+    check(
+      pageName !== null && pageNames({ importRev: null, pageLabels: null }) === null && tagOff.length === 0,
+      "the AI prefix names each row's page (a cell's place first)",
+      tagOff.length ? `${tagOff.length} of ${rows.length}: ${tagOff.slice(0, 3).join(" | ")}` : `${rows.length} rows${example ? `, e.g. ${example}` : ""}`,
+    );
     if (titleRow && typeof titleRow.page !== "number") note("the Title row has no page", "no page start stands before the Title");
     if (f.pageLabels?.length) note("page labels", `${f.pageLabels.length} labels: ${f.pageLabels.slice(0, 5).join(", ")}…`);
   } else {

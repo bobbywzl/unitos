@@ -2945,9 +2945,10 @@ export function ReaderInteractions({
   }, []);
 
   // Scroll to an anchor and flash it. Retries while the refreshed tree paints.
-  // The mark may not be painted yet — the document is still rendering, or the
-  // reader arrived here from a note in another document — so the look-up
-  // retries for a while, reading the container fresh each time.
+  // The mark may not be painted yet — the document is still rendering, the
+  // page editor's code is still loading, or the reader arrived here from a
+  // note in another document — so the look-up retries for PAGE_WAIT_MS at
+  // most, reading the container fresh each time.
   const flashSource = useCallback((sourceId: string) => {
     let attempts = 0;
     // A core anchor paints only while its block shows its core (SPEC.md §28).
@@ -2959,7 +2960,7 @@ export function ReaderInteractions({
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         flashElement(el);
-      } else if (attempts++ < 30) {
+      } else if (attempts++ < PAGE_WAIT_MS / 200) {
         setTimeout(tryScroll, 200);
       }
     };
@@ -2982,7 +2983,7 @@ export function ReaderInteractions({
       const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${src}"]`);
       if (el) {
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: src } }));
-      } else if (attempts++ < 30) {
+      } else if (attempts++ < PAGE_WAIT_MS / 200) {
         timer = setTimeout(tryOpen, 200);
       }
     };
@@ -3004,7 +3005,7 @@ export function ReaderInteractions({
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         flashElement(el);
-      } else if (attempts++ < 10) {
+      } else if (attempts++ < PAGE_WAIT_MS / 200) {
         setTimeout(tryScroll, 200);
       }
     };
