@@ -205,8 +205,8 @@ function sharedLabel(editor: Editor, pages: number[]): string {
 /** A page start whose number CSS alone does not place: one in a table's
     cell (the cell is its label's box, so the label would stand beside the
     cell, cut off by the table), and one of several in a paragraph (two can
-    share a line). `line` names the row or the paragraph it stands in. */
-type Placed = { pos: number; page: number; line: number; cell: boolean };
+    share a line). `within` is where the row or the paragraph starts. */
+type Placed = { pos: number; page: number; within: number; cell: boolean };
 
 function placedStarts(doc: PMNode): Placed[] {
   const out: Placed[] = [];
@@ -214,7 +214,7 @@ function placedStarts(doc: PMNode): Placed[] {
     if (node.type.name === "tableRow") {
       node.descendants((child, offset) => {
         const page = beginsPage(child);
-        if (page !== null) out.push({ pos: pos + 1 + offset, page, line: pos, cell: true });
+        if (page !== null) out.push({ pos: pos + 1 + offset, page, within: pos, cell: true });
         return !child.isLeaf;
       });
       return false;
@@ -223,7 +223,7 @@ function placedStarts(doc: PMNode): Placed[] {
     const starts: Placed[] = [];
     node.forEach((child, offset) => {
       const page = child.type.name === "pageStart" ? pageOf(child.attrs.page) : null;
-      if (page !== null) starts.push({ pos: pos + 1 + offset, page, line: pos, cell: false });
+      if (page !== null) starts.push({ pos: pos + 1 + offset, page, within: pos, cell: false });
     });
     if (starts.length > 1) out.push(...starts);
     return false;
@@ -267,7 +267,7 @@ function placedPageLabels(editor: Editor): Plugin<DecorationSet> {
           if (start.cell && box !== view.dom) continue;
           const placed = { ...start, top: el.getBoundingClientRect().top, shift };
           const line = lines.at(-1);
-          if (line && line[0].line === start.line && Math.abs(line[0].top - placed.top) < 3) line.push(placed);
+          if (line && line[0].within === start.within && Math.abs(line[0].top - placed.top) < 3) line.push(placed);
           else lines.push([placed]);
         }
         const size = (pos: number) => doc.nodeAt(pos)?.nodeSize ?? 1;
@@ -383,7 +383,7 @@ export const PageStart = Node.create({
   },
 
   addProseMirrorPlugins() {
-    return [keepPageStarts(), blockPageLabels(this.editor), pastedWithoutPageStarts()];
+    return [keepPageStarts(), blockPageLabels(this.editor), placedPageLabels(this.editor), pastedWithoutPageStarts()];
   },
 });
 
