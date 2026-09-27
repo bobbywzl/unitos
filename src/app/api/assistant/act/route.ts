@@ -192,7 +192,7 @@ async function handle(req: Request, t: TFunc) {
     omit: { richText: true },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
-  const [{ rich }] = await db.$queryRaw<{ rich: boolean }[]>`
+  const [presence] = await db.$queryRaw<{ rich: boolean }[]>`
     SELECT ("richText" IS NOT NULL) AS "rich" FROM "Document" WHERE "id" = ${document.id}`;
   let stored: { richText: unknown } | null | undefined;
   const storedRichText = async (): Promise<unknown> => {
@@ -279,7 +279,7 @@ async function handle(req: Request, t: TFunc) {
   // The assistant's suggestions (SPEC.md §29) change a document with rich
   // text; a chip changes the selected words. An import another account's
   // project holds takes no edits.
-  const suggestible = takesSuggestions({ richText: rich, format: document.format });
+  const suggestible = takesSuggestions({ richText: presence?.rich ?? false, format: document.format });
   const shared = suggestible && (await importShared(document.id));
   const edits: DocumentEdits = shared ? "none" : suggestible ? "suggestions" : "blocks";
   if (chip && shared) return importSharedResponse(t);

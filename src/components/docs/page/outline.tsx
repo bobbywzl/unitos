@@ -99,8 +99,8 @@ function useDoc(editor: Editor): PMNode {
   return doc;
 }
 
-/** The heading at the top of the view: the last one whose top has passed
-    the view's top. */
+/** The item at the top of the view: the last one whose top has passed the
+    view's top. */
 function useCurrent(editor: Editor, items: OutlineItem[], viewTop: number): number {
   const [current, setCurrent] = useState(-1);
   useEffect(() => {
