@@ -1008,6 +1008,20 @@ body:has(> [data-docs-menu]) .docs-prose {
     outline: none !important;
     print-color-adjust: exact;
   }
+  /* A white page prints white; on screen it is Unitos's paper (frame.css).
+     In dark mode its words print in the light theme's colors. */
+  .docs-page[data-white] {
+    --docs-ground: #ffffff !important;
+  }
+  .dark .docs-page[data-white] {
+    --docs-ink: #000000;
+    --docs-link: #1155cc;
+    --docs-code: #56633f;
+    --docs-gray-3: #434343;
+    --docs-gray-2: #666666;
+    --docs-code-block: color-mix(in srgb, #201e1d 6%, transparent);
+    --docs-grid: #000000;
+  }
   .docs-spacer-block,
   .docs-spacer-line,
   .docs-prose .docs-spacer-row > td {
