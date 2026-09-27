@@ -1265,6 +1265,8 @@ export function Reader({
           imported={richText.imported ?? null}
           media={richText.media ?? null}
           footer={richText.footer}
+          banner={banner}
+          translations={translations ?? null}
         />
       </DocsFrameContext.Provider>
     );
