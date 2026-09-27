@@ -120,7 +120,7 @@ export function loadFixtures(): Map<string, Fixture> {
 
 // The blocks as the routes render them: the cached system prefix.
 export function fixturePrefix(fixture: Fixture): string {
-  return documentPrefix(fixture.title, fixture.blocks);
+  return documentPrefix(fixture.title, fixture.blocks, null, null);
 }
 
 /** The anchor a case names: a block by its order (1-based) and the text
