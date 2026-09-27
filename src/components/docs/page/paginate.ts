@@ -1,5 +1,6 @@
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
+import { coreSlotOf } from "@/components/docs/layer/core-slot";
 
 // Pagination (SPEC.md §29), Google Docs' way: line by line. A spacer at each
 // page's end pushes what follows to the next page's text top. This module
@@ -102,17 +103,6 @@ function textFlags(node: PMNode) {
   };
 }
 
-/** The core the collapsed view draws in a node's place (SPEC.md §28,
-    docs/layer/collapse.tsx): the node is not drawn, and the core, a widget
-    right before it, takes its room as one piece. */
-function coreInPlaceOf(el: HTMLElement | null): HTMLElement | null {
-  if (!el?.classList.contains("docs-core-hidden")) return null;
-  for (let before = el.previousElementSibling; before?.classList.contains("ProseMirror-widget"); before = before.previousElementSibling) {
-    if (before instanceof HTMLElement && before.dataset.docsCore === "core") return before;
-  }
-  return null;
-}
-
 /** The layout units in document order — every textblock, table row, atom,
     and page break, each with its DOM — and the footnotes by id. */
 function collectUnits(view: EditorView): { units: Unit[]; footnotes: Map<string, { pos: number; dom: HTMLElement }> } {
@@ -133,7 +123,8 @@ function collectUnits(view: EditorView): { units: Unit[]; footnotes: Map<string,
   };
   const whole = { together: true, widow: false, breakBefore: false };
   const visit = (node: PMNode, pos: number, spacerPos: number, spacerKind: "block" | "row") => {
-    const core = coreInPlaceOf(dom(pos));
+    // A node the collapsed view draws as its core: the core takes its room.
+    const core = coreSlotOf(dom(pos));
     if (core) {
       units.push({ type: "atom", pos, node, dom: core, spacerPos, spacerKind, refs: [], header: null, keepNext: false, ...whole });
       return;
@@ -394,7 +385,7 @@ export function paginate(view: EditorView, config: PaginationConfig): PaginateRe
     const target = areaOf(to).top + headerHeight(header);
     out.push(header ? { kind, pos, target, header: header.table } : { kind, pos, target });
     const at = view.nodeDOM(pos);
-    const after = at instanceof HTMLElement ? (coreInPlaceOf(at) ?? at) : at;
+    const after = at instanceof HTMLElement ? (coreSlotOf(at) ?? at) : at;
     if (after instanceof HTMLElement && !after.hasAttribute("data-docs-spacer")) {
       offset = target + (kind === "row" ? 0 : m.marginTop(after)) - m.box(after).top;
     } else if (next < units.length) {

@@ -1457,9 +1457,10 @@ RISKS.R5 = async (theme) => {
     const jumpShot = await shot(page, `R5-jump-second-annotation-${theme}`);
     check("R5", Math.abs(off.d) < 60 && /A1.*A2|A2.*A1/.test(label ?? ""), `(${theme}) a jump to the figure's second annotation brings the figure to the middle of the view`, `label "${label}"; the figure's middle ${off.d} px from the pane's ${jumpShot}`);
   } else fail("R5", `(${theme}) Explain from the figure's tools stores a second annotation`, JSON.stringify((await sourcesOf(added.id)).map((x) => x.note.derivationType)));
-  // A link across texts that ends on the figure (the Markdown import's words
-  // to it) draws on the figure object: its ring and a link in its chip.
-  const md = await doc("markdown");
+  // A link across texts that ends on the figure (a Markdown import's words
+  // to it) draws on the figure object: its ring and a link in its chip. Its
+  // own Markdown import: the AI group links the shared one's words.
+  const md = await fresh("markdown", `-r5${theme[0]}`);
   const from = (await rowsOf(md.id)).find((r) => r.text.startsWith("The marsh rises"));
   const link = await db.docLink.create({ data: { fromDocumentId: md.id, fromBlockId: from.id, startOffset: 0, endOffset: 22, quotedText: from.text.slice(0, 22), prefix: "", suffix: from.text.slice(22, 54), toDocumentId: added.id, toBlockId: fig3.blockId, toStartOffset: 0, toEndOffset: fig3.caption.length, toQuotedText: fig3.caption, toPrefix: "", toSuffix: "", createdById: "user-1" } });
   await reload(page);

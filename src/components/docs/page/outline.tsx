@@ -9,6 +9,7 @@ import { useT } from "@/components/lang-provider";
 import { DocIcon, OutlineIcon } from "@/components/docs/icons";
 import { importedOf } from "@/components/docs/insert/figure";
 import { ArrowBackIcon } from "@/components/docs/insert/icons";
+import { coreSlotOf } from "@/components/docs/layer/core-slot";
 import { flashInPage } from "@/components/docs/layer/events";
 import { scrollParent } from "@/components/docs/page/geometry";
 import { usePageRect } from "@/components/docs/page/ruler";
@@ -111,7 +112,8 @@ function useCurrent(editor: Editor, items: OutlineItem[], viewTop: number): numb
       for (let i = 0; i < items.length; i++) {
         const dom = editor.view.nodeDOM(items[i].pos);
         if (!(dom instanceof HTMLElement)) continue;
-        if (dom.getBoundingClientRect().top <= viewTop + 48) found = i;
+        // In the collapsed view, a part stands where its core does.
+        if ((coreSlotOf(dom) ?? dom).getBoundingClientRect().top <= viewTop + 48) found = i;
         else break;
       }
       setCurrent(found);
@@ -132,13 +134,15 @@ function useCurrent(editor: Editor, items: OutlineItem[], viewTop: number): numb
 }
 
 /** Scroll an item's paragraph to near the top of the view and put the
-    caret at its start (a figure takes no caret). Returns its element. */
+    caret at its start (a figure takes no caret). Returns its element: in
+    the collapsed view (SPEC.md §28), the core that stands for it. */
 function goTo(editor: Editor, item: OutlineItem, viewTop: number): HTMLElement | null {
-  const dom = editor.view.nodeDOM(item.pos);
+  const node = editor.view.nodeDOM(item.pos);
   const chain = editor.chain().focus(undefined, { scrollIntoView: false });
   if (editor.state.doc.nodeAt(item.pos)?.isTextblock) chain.setTextSelection(item.pos + 1);
   chain.run();
-  if (!(dom instanceof HTMLElement)) return null;
+  if (!(node instanceof HTMLElement)) return null;
+  const dom = coreSlotOf(node)?.querySelector<HTMLElement>("[data-collapsed]") ?? node;
   const scroller = scrollParent(dom);
   if (scroller) scroller.scrollTop += dom.getBoundingClientRect().top - viewTop - 24;
   return dom;

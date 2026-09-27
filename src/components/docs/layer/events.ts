@@ -16,11 +16,16 @@ export const PAGE_EDITED_EVENT = "docs:edited";
 export const COMMENTS_EVENT = "docs:comments";
 export type CommentsView = "all" | "minimized" | "hidden";
 
-/** Flash an element of the page's text; false when it is not in a page, or
-    is a core the collapsed view draws over the page (SPEC.md §28), which
-    flashes as the block reader's does. */
+/** Flash an element of the page's text; false when it is not in a page. A
+    core the collapsed view draws over the page (SPEC.md §28) is not the
+    editor's text: it flashes as the block reader's blocks do. */
 export function flashInPage(el: Element): boolean {
-  if (!el.closest("[data-docs-body]") || el.closest("[data-collapsed]")) return false;
+  if (!el.closest("[data-docs-body]")) return false;
+  if (el.closest("[data-collapsed]")) {
+    el.classList.add("anchor-flash");
+    setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+    return true;
+  }
   el.dispatchEvent(new CustomEvent(PAGE_FLASH_EVENT, { bubbles: true }));
   return true;
 }

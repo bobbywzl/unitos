@@ -8,6 +8,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { repaginate } from "@/components/docs/ext/page";
+import { CORE_HIDDEN } from "@/components/docs/layer/core-slot";
 import { pageStartLabel } from "@/components/docs/insert/page-start";
 import { findState } from "@/components/docs/typing/find";
 import type { Highlight } from "@/components/reader/block-view";
@@ -58,8 +59,6 @@ type Drawn = { key: string; from: number; to: number; core: boolean; dom: HTMLEl
     mapped them, until they are drawn again. */
 type Layer = { set: DecorationSet; signature: string | null };
 const collapseKey = new PluginKey<Layer>("docsCollapse");
-/** A node of a unit that shows its core (css/collapse.css). */
-const HIDDEN = "docs-core-hidden";
 /** A node of a unit read whole: its button shows while the pointer is on it. */
 const WHOLE = "docs-core-whole";
 const LISTS = new Set(["bulletList", "orderedList", "taskList"]);
@@ -123,7 +122,7 @@ function decorationsFor(doc: PMNode, drawn: Drawn[]): DecorationSet {
   for (const d of drawn) {
     doc.nodesBetween(d.from, d.to, (node, pos) => {
       if (pos < d.from || pos + node.nodeSize > d.to) return true;
-      out.push(Decoration.node(pos, pos + node.nodeSize, { class: d.core ? HIDDEN : WHOLE }));
+      out.push(Decoration.node(pos, pos + node.nodeSize, { class: d.core ? CORE_HIDDEN : WHOLE }));
       return false;
     });
     // After every other widget at its place (a page's spacer, the words of
