@@ -703,6 +703,8 @@ async function handle(req: Request, t: TFunc) {
   const document = await db.document.findUnique({
     where: { id: documentId },
     include: { blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true } } },
+    // An import's rich text runs to megabytes: only a core anchor reads it (below).
+    omit: { richText: true },
   });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
   const blockById = new Map(document.blocks.map((b) => [b.id, { id: b.id, text: b.text }]));
@@ -717,7 +719,14 @@ async function handle(req: Request, t: TFunc) {
   // is the cores around it: the tool reads the collapsed view the reader
   // selected in. The cached prefix stays the whole document.
   const layer = data.anchor?.layer ?? null;
-  const anchorBlocks = layer === "core" ? coreBlocks(document.collapse, document.blocks, document.richText) : document.blocks;
+  const anchorBlocks =
+    layer === "core"
+      ? coreBlocks(
+          document.collapse,
+          document.blocks,
+          (await db.document.findUnique({ where: { id: documentId }, select: { richText: true } }))?.richText ?? null,
+        )
+      : document.blocks;
   const passage = data.anchor ? resolvePassage(anchorBlocks, data.anchor, data.segments) : [];
   const anchor = passage[0] ?? null;
   let anchored: ReturnType<typeof passageContext> = null;

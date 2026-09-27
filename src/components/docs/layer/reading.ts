@@ -1,7 +1,7 @@
 import { Extension, type Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey, TextSelection, type Transaction } from "@tiptap/pm/state";
-import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
+import { Plugin, PluginKey, TextSelection, type StateField, type Transaction } from "@tiptap/pm/state";
+import { Decoration, DecorationSet, type EditorProps, type EditorView } from "@tiptap/pm/view";
 import { annotationMarksKey, type MarksMeta } from "@/components/docs/annotation-marks";
 import { FIGURE, aroundPageStarts, findBlock, posInBlock } from "@/components/docs/layer/anchor";
 import { TERM_MARK, termTip, type Highlight } from "@/components/reader/block-view";
@@ -17,6 +17,35 @@ import type { RichNode } from "@/lib/docs/schema";
 
 /** The page is read, not written: no caret, so a press is the reader's. */
 const reading = (view: EditorView | null) => view !== null && !view.editable;
+
+/** A plugin whose decorations show while the page is read. */
+function readingPlugin<T>(
+  key: PluginKey<T>,
+  state: StateField<T>,
+  decorations: (value: T) => DecorationSet,
+  props: EditorProps = {},
+): Plugin<T> {
+  let view: EditorView | null = null;
+  return new Plugin<T>({
+    key,
+    state,
+    view(editorView) {
+      view = editorView;
+      return {
+        destroy() {
+          view = null;
+        },
+      };
+    },
+    props: {
+      ...props,
+      decorations: (s) => {
+        const value = key.getState(s);
+        return reading(view) && value !== undefined ? decorations(value) : null;
+      },
+    },
+  });
+}
 
 // ── Key terms ───────────────────────────────────────────────────────────────
 
@@ -121,11 +150,10 @@ function clickTerm(view: EditorView, event: MouseEvent): boolean {
 /** The terms come with the marks layer's repaint (docs-editor.tsx), so they
     take its timing: painted from the stored copy's offsets, moved with the
     words in between. */
-function keyTermsPlugin(): Plugin<DecorationSet> {
-  let view: EditorView | null = null;
-  return new Plugin<DecorationSet>({
-    key: termsKey,
-    state: {
+const keyTerms = () =>
+  readingPlugin<DecorationSet>(
+    termsKey,
+    {
       init: () => DecorationSet.empty,
       apply(tr, set) {
         const marks = tr.getMeta(annotationMarksKey) as MarksMeta | undefined;
@@ -133,22 +161,11 @@ function keyTermsPlugin(): Plugin<DecorationSet> {
         return tr.docChanged ? set.map(tr.mapping, tr.doc) : set;
       },
     },
-    view(editorView) {
-      view = editorView;
-      return {
-        destroy() {
-          view = null;
-        },
-      };
-    },
-    props: {
-      decorations: (state) => (reading(view) ? termsKey.getState(state) : null),
-      // Before the reader's own mouseup (on the document), which the toolbar
-      // this opens tells to stand aside.
-      handleDOMEvents: { mouseup: clickTerm },
-    },
-  });
-}
+    (set) => set,
+    // Before the reader's own mouseup (on the document), which the toolbar
+    // this opens tells to stand aside.
+    { handleDOMEvents: { mouseup: clickTerm } },
+  );
 
 // ── Translations ────────────────────────────────────────────────────────────
 
@@ -236,11 +253,10 @@ function changedLines(tr: Transaction, lines: Lines): DecorationSet {
   return add.length > 0 ? set.add(tr.doc, add) : set;
 }
 
-function translationLinesPlugin(): Plugin<Lines> {
-  let view: EditorView | null = null;
-  return new Plugin<Lines>({
-    key: linesKey,
-    state: {
+const translationLines = () =>
+  readingPlugin<Lines>(
+    linesKey,
+    {
       init: () => ({ translations: null, sources: new Map(), set: DecorationSet.empty }),
       apply(tr, lines) {
         const translations = tr.getMeta(linesKey) as Record<string, string> | null | undefined;
@@ -251,19 +267,8 @@ function translationLinesPlugin(): Plugin<Lines> {
         return tr.docChanged && lines.translations ? { ...lines, set: changedLines(tr, lines) } : lines;
       },
     },
-    view(editorView) {
-      view = editorView;
-      return {
-        destroy() {
-          view = null;
-        },
-      };
-    },
-    props: {
-      decorations: (state) => (reading(view) ? linesKey.getState(state)?.set : null),
-    },
-  });
-}
+    (lines) => lines.set,
+  );
 
 /** The document's translations (the Translate bar, SPEC.md §19), each under
     its paragraph; null takes them away. */
@@ -277,6 +282,6 @@ export function showTranslations(editor: Editor, translations: Record<string, st
 export const ReadingLayer = Extension.create({
   name: "docsReading",
   addProseMirrorPlugins() {
-    return [keyTermsPlugin(), translationLinesPlugin()];
+    return [keyTerms(), translationLines()];
   },
 });

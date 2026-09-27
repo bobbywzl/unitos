@@ -64,6 +64,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
     select: {
       id: true,
       fileHash: true,
+      sourceUrl: true,
       handwritten: true,
       richTextRev: true,
       importRev: true,
@@ -75,6 +76,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
   // sourceUrl as an article would replace them (SPEC.md §11).
   if (document.video) {
     return NextResponse.json({ error: t("api.videoNoReparse") }, { status: 400 });
+  }
+  // Nothing to parse again: a blank document, or a copy of an import, which
+  // keeps its PDF's bytes only for its figures (SPEC.md §29).
+  if (document.fileHash === null && document.sourceUrl === null) {
+    return NextResponse.json({ error: t("panes.reparseNoSource") }, { status: 400 });
   }
   // A shape switch needs the PDF bytes.
   if (as && document.fileHash === null) {

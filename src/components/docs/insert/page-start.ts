@@ -186,6 +186,133 @@ function blockPageLabels(editor: Editor): Plugin<DecorationSet> {
   });
 }
 
+/** What page starts on one line draw: "p. 7 · p. 8", and three pages or
+    more in a row as one span, "p. 7–9". */
+function sharedLabel(editor: Editor, pages: number[]): string {
+  const runs: number[][] = [];
+  for (const page of pages) {
+    const run = runs.at(-1);
+    if (run && page === run[run.length - 1] + 1) run.push(page);
+    else runs.push([page]);
+  }
+  const t = translator(editor);
+  const labels = runs.flatMap((run) =>
+    run.length < 3 ? run.map((page) => pageStartLabel(editor, page)) : [t("docsInsert.pageStart", { page: `${pageName(editor, run[0])}–${pageName(editor, run[run.length - 1])}` })],
+  );
+  return labels.join(" · ");
+}
+
+/** A page start whose number CSS alone does not place: one in a table's
+    cell (the cell is its label's box, so the label would stand beside the
+    cell, cut off by the table), and one of several in a paragraph (two can
+    share a line). `line` names the row or the paragraph it stands in. */
+type Placed = { pos: number; page: number; line: number; cell: boolean };
+
+function placedStarts(doc: PMNode): Placed[] {
+  const out: Placed[] = [];
+  doc.descendants((node, pos) => {
+    if (node.type.name === "tableRow") {
+      node.descendants((child, offset) => {
+        const page = beginsPage(child);
+        if (page !== null) out.push({ pos: pos + 1 + offset, page, line: pos, cell: true });
+        return !child.isLeaf;
+      });
+      return false;
+    }
+    if (!node.isTextblock) return !node.isAtom;
+    const starts: Placed[] = [];
+    node.forEach((child, offset) => {
+      const page = child.type.name === "pageStart" ? pageOf(child.attrs.page) : null;
+      if (page !== null) starts.push({ pos: pos + 1 + offset, page, line: pos, cell: false });
+    });
+    if (starts.length > 1) out.push(...starts);
+    return false;
+  });
+  return out;
+}
+
+/** Where the page lays these page starts out, one frame after a change:
+    page starts on one line draw one label for them all, and a page start
+    in a cell moves its label out of the cell to the page's margin
+    (--docs-page-shift, the cell's distance from the text's left edge). */
+function placedPageLabels(editor: Editor): Plugin<DecorationSet> {
+  const key = new PluginKey<DecorationSet>("docsPageStartPlaced");
+  return new Plugin<DecorationSet>({
+    key,
+    state: {
+      init: () => DecorationSet.empty,
+      apply: (tr, set) => (tr.getMeta(key) as DecorationSet | undefined) ?? (tr.docChanged ? set.map(tr.mapping, tr.doc) : set),
+    },
+    props: {
+      decorations: (state) => key.getState(state),
+    },
+    view(view) {
+      let frame = 0;
+      let width = -1;
+      const place = () => {
+        frame = 0;
+        const { doc } = view.state;
+        const lines: (Placed & { top: number; shift: number })[][] = [];
+        for (const start of placedStarts(doc)) {
+          const el = view.nodeDOM(start.pos);
+          if (!(el instanceof HTMLElement)) continue;
+          // The cell's distance from the text's left edge, in the page's own
+          // lengths whatever its zoom.
+          let shift = 0;
+          let box: Element | null = start.cell ? el.closest("td, th") : null;
+          while (box instanceof HTMLElement && box !== view.dom) {
+            shift += box.offsetLeft;
+            box = box.offsetParent;
+          }
+          if (start.cell && box !== view.dom) continue;
+          const placed = { ...start, top: el.getBoundingClientRect().top, shift };
+          const line = lines.at(-1);
+          if (line && line[0].line === start.line && Math.abs(line[0].top - placed.top) < 3) line.push(placed);
+          else lines.push([placed]);
+        }
+        const size = (pos: number) => doc.nodeAt(pos)?.nodeSize ?? 1;
+        const node = (pos: number, attrs: Record<string, string>) => Decoration.node(pos, pos + size(pos), attrs, { attrs: JSON.stringify(attrs) });
+        const decorations = lines.flatMap(([first, ...rest]) => {
+          const attrs: Record<string, string> = {};
+          if (rest.length > 0) attrs["data-page-labels"] = sharedLabel(editor, [first, ...rest].map((start) => start.page));
+          if (first.cell) Object.assign(attrs, { "data-page-cell": "", style: `--docs-page-shift: ${first.shift}px` });
+          if (Object.keys(attrs).length === 0) return [];
+          return [node(first.pos, attrs), ...rest.map((start) => node(start.pos, { "data-page-joined": "" }))];
+        });
+        // The decorations drawn, moved with the text since, may be these.
+        const drawn = key.getState(view.state)?.find() ?? [];
+        const same =
+          drawn.length === decorations.length &&
+          decorations.every((d) => drawn.some((e) => e.from === d.from && e.to === d.to && e.spec.attrs === d.spec.attrs));
+        if (!same) view.dispatch(view.state.tr.setMeta(key, DecorationSet.create(doc, decorations)).setMeta("addToHistory", false));
+      };
+      const schedule = () => {
+        if (!frame) frame = requestAnimationFrame(place);
+      };
+      // A new width wraps the lines anew.
+      const resize =
+        typeof ResizeObserver === "undefined"
+          ? null
+          : new ResizeObserver(([entry]) => {
+              if (entry.contentRect.width === width) return;
+              width = entry.contentRect.width;
+              schedule();
+            });
+      resize?.observe(view.dom);
+      schedule();
+      return {
+        update(next, prev) {
+          if (next.state.doc !== prev.doc) schedule();
+        },
+        destroy() {
+          cancelAnimationFrame(frame);
+          resize?.disconnect();
+        },
+      };
+    },
+  });
+}
+
 /** Pasted and dropped content never brings a page start: a page begins
     where the PDF's page began, once. */
 function pastedWithoutPageStarts(): Plugin {
