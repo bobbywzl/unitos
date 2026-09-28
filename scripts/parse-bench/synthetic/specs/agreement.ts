@@ -1,5 +1,5 @@
 /**
- * A subscription agreement made in Word, as the owner's legal packet is: clauses numbered 1. / 1.1 / (a) / (i)
+ * A Word-made subscription agreement: clauses numbered 1. / 1.1 / (a) / (i)
  * by Word's own numbering, defined terms in bold italics, a running header from page 2, "Page X of Y" in the
  * footer, a footnote, a ruled form with empty cells, a questionnaire with checkboxes and lettered options,
  * and a signature block laid out as a table without lines.

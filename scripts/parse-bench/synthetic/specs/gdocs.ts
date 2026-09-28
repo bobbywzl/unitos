@@ -1,5 +1,5 @@
 /**
- * Meeting notes laid out the way a Google Docs PDF export looks (the owner's notes are one): Arial, a title,
+ * Meeting notes laid out the way a Google Docs PDF export looks: Arial, a title,
  * headings, bold runs, links, yellow highlights, bullets whose glyph changes with depth (● ○ ■), a checklist, a
  * table, a horizontal rule, a diagram drawn in SVG whose box labels and arrow labels are text in the PDF, and a
  * paragraph in Chinese. No header or footer, as in an export.

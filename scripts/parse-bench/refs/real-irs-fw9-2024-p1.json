@@ -1,0 +1,510 @@
+{
+ "id": "real-irs-fw9-2024-p1",
+ "category": "form",
+ "source": {
+  "pdf": ".bench/real/irs-fw9-2024.pdf",
+  "url": "https://www.irs.gov/pub/irs-pdf/fw9.pdf"
+ },
+ "pages": [
+  1,
+  1
+ ],
+ "license": "public-domain",
+ "provenance": "hand",
+ "notes": "IRS Form W-9 (Rev. March 2024), Request for Taxpayer Identification Number and Certification; a work of the United States government, an XFA form made in Adobe Designer 6.5 (Helvetica Neue, Franklin Gothic). Scored: page 1: the masthead band (form number, the title, the side notes: the title is the title; the band's cells read left to right as paragraphs), a lead-in with a bold run-in label, the sideways 'Print or type' note in the left margin, the numbered fields as one ruled table (fields 1, 2, and 7 across both columns, field 4 and the requester's address each spanning two rows; the checkbox squares are drawn, not text: the options stay words in their cell; the leader dots of fields 3a and 3b are no words), 'Part I'/'Part II' bars (white on black, h1), the SSN and EIN box labels, a numbered certification list, the signature row (a table), and the General Instructions in two columns (h1, h2 headings, a first-line indent). The last paragraph continues on page 2: only its words on page 1 are here.",
+ "furniture": [
+  "Cat. No. 10231X",
+  "Form W-9 (Rev. 3-2024)"
+ ],
+ "blocks": [
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Form "
+    },
+    {
+     "text": "W-9",
+     "bold": true
+    },
+    {
+     "text": " (Rev. March 2024) Department of the Treasury Internal Revenue Service"
+    }
+   ]
+  },
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "Request for Taxpayer Identification Number and Certification"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Go to ",
+     "bold": true
+    },
+    {
+     "text": "www.irs.gov/FormW9",
+     "bold": true,
+     "italic": true
+    },
+    {
+     "text": " for instructions and the latest information.",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Give form to the requester. Do not send to the IRS.",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Before you begin.",
+     "bold": true
+    },
+    {
+     "text": " For guidance related to the purpose of Form W-9, see "
+    },
+    {
+     "text": "Purpose of Form",
+     "italic": true
+    },
+    {
+     "text": ", below."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Print or type.",
+     "bold": true
+    },
+    {
+     "text": " See "
+    },
+    {
+     "text": "Specific Instructions",
+     "bold": true,
+     "italic": true
+    },
+    {
+     "text": " on page 3."
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "1",
+         "bold": true
+        },
+        {
+         "text": " Name of entity/individual. An entry is required. (For a sole proprietor or disregarded entity, enter the owner’s name on line 1, and enter the business/disregarded entity’s name on line 2.)"
+        }
+       ],
+       "colspan": 2
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "2",
+         "bold": true
+        },
+        {
+         "text": " Business name/disregarded entity name, if different from above."
+        }
+       ],
+       "colspan": 2
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "3a",
+         "bold": true
+        },
+        {
+         "text": " Check the appropriate box for federal tax classification of the entity/individual whose name is entered on line 1. Check only "
+        },
+        {
+         "text": "one",
+         "bold": true
+        },
+        {
+         "text": " of the following seven boxes. Individual/sole proprietor C corporation S corporation Partnership Trust/estate LLC. Enter the tax classification (C = C corporation, S = S corporation, P = Partnership) "
+        },
+        {
+         "text": "Note:",
+         "bold": true
+        },
+        {
+         "text": " Check the “LLC” box above and, in the entry space, enter the appropriate code (C, S, or P) for the tax classification of the LLC, unless it is a disregarded entity. A disregarded entity should instead check the appropriate box for the tax classification of its owner. Other (see instructions)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "4",
+         "bold": true
+        },
+        {
+         "text": " Exemptions (codes apply only to certain entities, not individuals; see instructions on page 3): Exempt payee code (if any) Exemption from Foreign Account Tax Compliance Act (FATCA) reporting code (if any) "
+        },
+        {
+         "text": "(Applies to accounts maintained outside the United States.)",
+         "italic": true
+        }
+       ],
+       "rowspan": 2
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "3b",
+         "bold": true
+        },
+        {
+         "text": " If on line 3a you checked “Partnership” or “Trust/estate,” or checked “LLC” and entered “P” as its tax classification, and you are providing this form to a partnership, trust, or estate in which you have an ownership interest, check this box if you have any foreign partners, owners, or beneficiaries. See instructions"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "5",
+         "bold": true
+        },
+        {
+         "text": " Address (number, street, and apt. or suite no.). See instructions."
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Requester’s name and address (optional)"
+        }
+       ],
+       "rowspan": 2
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "6",
+         "bold": true
+        },
+        {
+         "text": " City, state, and ZIP code"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "7",
+         "bold": true
+        },
+        {
+         "text": " List account number(s) here (optional)"
+        }
+       ],
+       "colspan": 2
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Part I Taxpayer Identification Number (TIN)",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Enter your TIN in the appropriate box. The TIN provided must match the name given on line 1 to avoid backup withholding. For individuals, this is generally your social security number (SSN). However, for a resident alien, sole proprietor, or disregarded entity, see the instructions for Part I, later. For other entities, it is your employer identification number (EIN). If you do not have a number, see "
+    },
+    {
+     "text": "How to get a TIN",
+     "italic": true
+    },
+    {
+     "text": ", later."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Note:",
+     "bold": true
+    },
+    {
+     "text": " If the account is in more than one name, see the instructions for line 1. See also "
+    },
+    {
+     "text": "What Name and Number To Give the Requester",
+     "italic": true
+    },
+    {
+     "text": " for guidelines on whose number to enter."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Social security number",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "or",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Employer identification number",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Part II Certification",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Under penalties of perjury, I certify that:"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "1.",
+     "spans": [
+      {
+       "text": "The number shown on this form is my correct taxpayer identification number (or I am waiting for a number to be issued to me); and"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "2.",
+     "spans": [
+      {
+       "text": "I am not subject to backup withholding because (a) I am exempt from backup withholding, or (b) I have not been notified by the Internal Revenue Service (IRS) that I am subject to backup withholding as a result of a failure to report all interest or dividends, or (c) the IRS has notified me that I am no longer subject to backup withholding; and"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "3.",
+     "spans": [
+      {
+       "text": "I am a U.S. citizen or other U.S. person (defined below); and"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "4.",
+     "spans": [
+      {
+       "text": "The FATCA code(s) entered on this form (if any) indicating that I am exempt from FATCA reporting is correct."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Certification instructions.",
+     "bold": true
+    },
+    {
+     "text": " You must cross out item 2 above if you have been notified by the IRS that you are currently subject to backup withholding because you have failed to report all interest and dividends on your tax return. For real estate transactions, item 2 does not apply. For mortgage interest paid, acquisition or abandonment of secured property, cancellation of debt, contributions to an individual retirement arrangement (IRA), and, generally, payments other than interest and dividends, you are not required to sign the certification, but you must provide your correct TIN. See the instructions for Part II, later."
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Sign Here",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Signature of U.S. person Date",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "General Instructions",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Section references are to the Internal Revenue Code unless otherwise noted."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Future developments",
+     "bold": true
+    },
+    {
+     "text": ". For the latest information about developments related to Form W-9 and its instructions, such as legislation enacted after they were published, go to "
+    },
+    {
+     "text": "www.irs.gov/FormW9",
+     "italic": true
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "What’s New",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Line 3a has been modified to clarify how a disregarded entity completes this line. An LLC that is a disregarded entity should check the appropriate box for the tax classification of its owner. Otherwise, it should check the “LLC” box and enter its appropriate tax classification."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "New line 3b has been added to this form. A flow-through entity is required to complete this line to indicate that it has direct or indirect foreign partners, owners, or beneficiaries when it provides the Form W-9 to another flow-through entity in which it has an ownership interest. This change is intended to provide a flow-through entity with information regarding the status of its indirect foreign partners, owners, or beneficiaries, so that it can satisfy any applicable reporting requirements. For example, a partnership that has any indirect foreign partners may be required to complete Schedules K-2 and K-3. See the Partnership Instructions for Schedules K-2 and K-3 (Form 1065)."
+    }
+   ],
+   "indent": "first"
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Purpose of Form",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "An individual or entity (Form W-9 requester) who is required to file an information return with the IRS is giving you this form because they"
+    }
+   ]
+  }
+ ]
+}

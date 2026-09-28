@@ -1,10 +1,10 @@
 /**
- * Lecture notes set the way the owner's probability notes are (amsbook): a title page; a chapter with
+ * Probability lecture notes set as amsbook lecture notes are: a title page; a chapter with
  * numbered sections and run-in subsections; Definition, Exercise, Example, Proposition, Theorem, and Remark
  * blocks with small-caps heads and italic bodies; lettered items with hanging indents, items typed as lines
  * at the margin, nested items; inline and numbered display math (cases, aligned lines, sums, integrals,
  * a matrix); footnotes; citations; running heads that alternate the page number with the chapter's and the
- * section's names. The PDF has no ToUnicode maps, so math glyphs garble as in the owner's file.
+ * section's names. The PDF has no ToUnicode maps, so math glyphs garble as in a pdfLaTeX file with no Unicode maps.
  */
 import { b, chapter, eq, flushList, fn, h, i, li, li1, list, m, p, pi, role, row, runIn, table, theorem, title, up, type SpecBlock, type Spec, type TheoremStyle } from "../spec";
 

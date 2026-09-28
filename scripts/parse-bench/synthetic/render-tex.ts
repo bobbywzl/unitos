@@ -14,7 +14,7 @@ import { tableGrid, type Group, type HeadingLevel, type Leaf, type RenderBlock, 
 export type TexLayout = {
   documentClass: string;
   classOptions?: string;
-  /** No ToUnicode maps, as in the owner's notes: a parser reads glyph names, and math glyphs garble. */
+  /** No ToUnicode maps, as in many pdfLaTeX files: a parser reads glyph names, and math glyphs garble. */
   noToUnicode?: true;
   /** Packages and settings after \documentclass. */
   preamble: string;
