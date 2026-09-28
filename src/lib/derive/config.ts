@@ -253,6 +253,7 @@ export const SUGGEST_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "lo
 export const SUGGEST_MAX_OUTPUT_TOKENS = 32768; // room for the reasoning and the ops
 export const SUGGEST_MAX_OPS = 80; // per call: a window's worth; more is a model running away
 export const SUGGEST_WINDOW_CHARS = 8_000; // a window's full rewrite is about 2,500 output tokens: under a minute
+export const SUGGEST_WINDOW_ROWS = 60; // short lines and empty paragraphs take an op each: a window's rows stay under SUGGEST_MAX_OPS
 export const SUGGEST_MAX_WINDOWS = 12; // per command, about 16,000 words; past it the reader selects words or names a section
 export const SUGGEST_PARALLEL = 4; // windows at once: the gateway's rate limits
 export const SUGGEST_MAX_NEW_CHARS = 100_000; // new text per command, across its windows

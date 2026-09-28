@@ -36,7 +36,7 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { actionsSchema, enrichActions, type DocumentEdits, type RawAction } from "@/lib/assistant/plan";
+import { actionsSchema, enrichActions, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { SUGGEST_COMMANDS, type SuggestCommand } from "@/lib/prompts/suggest";
 import { parseBody } from "@/lib/validate";
@@ -415,7 +415,7 @@ async function handle(req: Request, t: TFunc) {
   const chat = svgChart ?? chatCall;
   // A chip asks the chat model nothing: its command is fixed.
   const result = chip
-    ? { ok: true as const, data: { reply: null, actions: [] as RawAction[] } }
+    ? { ok: true as const, data: { reply: null, actions: { actions: [], unreadable: [] } as ReadActions } }
     : await callForJson({
         model: chat.model,
         messages,

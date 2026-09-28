@@ -127,7 +127,7 @@ function actLines(act: PageActions): string[] {
     "Action types:",
     ...actionLines(act.edits ?? "blocks"),
     "Rules for actions:",
-    "1. A message that asks for a change to the document or the notes: write the answer, then end with a fenced block whose info string is actions, holding a JSON array of the actions. Nothing after the block.",
+    "1. A message that asks for a change to the document or the notes: write the answer, then end with a fenced block whose info string is actions, holding a JSON array of the actions, one action too. Nothing after the block. To reorganize, format, restructure, rewrite, fix, shorten, or translate the open document is a change to it, and so is a change to \"my notes\" or \"these notes\" when the open document holds the reader's own notes.",
     "2. A message that asks for analysis, an answer, or a summary, and no change: no block.",
     "3. Use block ids exactly as given in the [block <id>] tags. Every quote must be an exact substring of the named block's text.",
     "4. Use the smallest set of actions that fulfils the message. Never change text the message did not ask to change.",

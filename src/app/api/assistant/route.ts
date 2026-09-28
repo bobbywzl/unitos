@@ -327,10 +327,12 @@ async function handle(req: Request, t: TFunc) {
     let cancelled = false;
     // The plan (SPEC.md §7): the fence's content as actions, validated and
     // enriched against the real document, so the client executes ready-made
-    // requests after the reader approves them. A fence that does not read
-    // as actions is one warning.
-    const planFrom = async (content: string) => {
-      const raw = parseActionsFence(content);
+    // requests after the reader approves them. Each action that does not
+    // read is a warning and the others stand; a fence where nothing reads
+    // is one warning. A suggest action that does not read runs with the
+    // answer, which says what will change, as its instruction.
+    const planFrom = async (answer: string, content: string) => {
+      const raw = parseActionsFence(content, answer, act!.edits);
       if (!raw) return { actions: [], warnings: [t("api.warnActionsUnreadable")] };
       const blocks = await db.block.findMany({
         where: { documentId: data.documentId! },
@@ -400,7 +402,7 @@ async function handle(req: Request, t: TFunc) {
             // The text before the fence, whole: the relay held back what
             // could have been the fence's start.
             flush();
-            if (content !== null) send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(content))}`);
+            if (content !== null) send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(text, content))}`);
           }
           // The check (SPEC.md §25): the answer against its rubric, after
           // the reader has it; a weak answer is flagged for the loop.

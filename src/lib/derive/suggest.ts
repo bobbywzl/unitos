@@ -39,6 +39,7 @@ const SKIPPED: Record<ServerSkip, TKey> = {
   notText: "api.suggestSkipNotText",
   object: "api.suggestSkipFigure",
   limit: "api.suggestSkipLimit",
+  unreadable: "api.suggestSkipUnreadable",
 };
 
 /** A document with rich text as the suggestions read it: its paragraph index
@@ -152,10 +153,17 @@ export async function runSuggest(run: SuggestRun): Promise<SuggestResult> {
     abortSignal: run.signal,
   });
   if (!result.ok) throw new Error(run.t("api.suggestFailed", { reason: result.error }));
-  const { ops, skipped } = resolveOps(result.data.ops, { rows: document.rows, places: document.places, scope, budget: run.budget });
+  // An op that did not read is skipped with its why; ops past the cap say
+  // the command covered too much for one run.
+  const read = result.data.ops;
+  const { ops, skipped } = resolveOps(read.ops, { rows: document.rows, places: document.places, scope, budget: run.budget });
   return {
     ops,
-    warnings: skipped.map((s) => run.t(SKIPPED[s.reason], { why: s.why })),
-    summary: result.data.summary.trim(),
+    warnings: [
+      ...read.unreadable.map((why) => run.t(SKIPPED.unreadable, { why })),
+      ...skipped.map((s) => run.t(SKIPPED[s.reason], { why: s.why })),
+      ...(read.over > 0 ? [run.t("api.suggestTooLong")] : []),
+    ],
+    summary: result.data.summary,
   };
 }

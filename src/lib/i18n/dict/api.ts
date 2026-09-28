@@ -100,7 +100,7 @@ const en = {
   warnLinkTargetNotAttached: "Skipped: the link target is not another attached document. ({description})",
   warnActionsUnreadable: "The assistant's actions could not be read. Ask again.",
   warnActionNotForDocument: "Skipped: this action does not apply to this document. ({description})",
-  warnOneSuggest: "Skipped: one request for suggestions per message. ({description})",
+  warnActionUnreadable: "Skipped: the action could not be read. ({description})",
 
   // Derivations
   deriveNeedsKey: "MOONSHOT_API_KEY is not set. Derivations need it.",
@@ -162,6 +162,7 @@ const en = {
   suggestSkipNotText: "Skipped: the block cannot take this change. ({why})",
   suggestSkipFigure: "Skipped: the assistant cannot change a figure. ({why})",
   suggestSkipLimit: "Skipped: the command reached its limit of new text. ({why})",
+  suggestSkipUnreadable: "Skipped: the change could not be read. ({why})",
   translateNeedsKey: "DEEPL_API_KEY is not set. Translation needs it.",
   translateNothing: "This document has no text to translate",
   translateFailed: "Translation failed. {reason}",
@@ -414,7 +415,7 @@ const zh: Record<keyof typeof en, string> = {
   warnLinkTargetNotAttached: "已跳过：链接目标不是此项目中的另一个文档。（{description}）",
   warnActionsUnreadable: "无法读取助手的操作。请再问一次。",
   warnActionNotForDocument: "已跳过：此操作不适用于此文档。（{description}）",
-  warnOneSuggest: "已跳过：每条消息只能请求一组建议。（{description}）",
+  warnActionUnreadable: "已跳过：无法读取该操作。（{description}）",
 
   deriveNeedsKey: "未设置 MOONSHOT_API_KEY。AI 生成需要它。",
   typeNotBuilt: "{type} 尚未实现",
@@ -472,6 +473,7 @@ const zh: Record<keyof typeof en, string> = {
   suggestSkipNotText: "已跳过：该块不能接受这种修改。（{why}）",
   suggestSkipFigure: "已跳过：助手不能改动插图。（{why}）",
   suggestSkipLimit: "已跳过：指令已达到新文字的上限。（{why}）",
+  suggestSkipUnreadable: "已跳过：无法读取该修改。（{why}）",
   translateNeedsKey: "未设置 DEEPL_API_KEY。翻译需要它。",
   translateNothing: "此文档没有可翻译的文本",
   translateFailed: "翻译失败。{reason}",

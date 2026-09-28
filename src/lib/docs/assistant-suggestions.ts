@@ -25,7 +25,7 @@ export type ResolvedOp =
   | { i: number; op: "remove_blocks"; blockIds: string[]; base: string[]; why: string }
   | { i: number; op: "set_style"; blockId: string; style: SuggestStyle; baseStyle: SuggestStyle; why: string };
 /** Why an op did not land. The page shows each reason in the reader's language. */
-export type SkipReason = "outside" | "notFound" | "ambiguous" | "overlap" | "notText" | "changed" | "object" | "limit";
+export type SkipReason = "outside" | "notFound" | "ambiguous" | "overlap" | "notText" | "changed" | "object" | "limit" | "unreadable";
 export type SuggestResult = { ops: ResolvedOp[]; warnings: string[]; summary: string };
 export type SuggestEvent =
   | { stage: "read" }

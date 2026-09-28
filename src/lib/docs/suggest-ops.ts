@@ -9,7 +9,7 @@ import {
 } from "@/lib/docs/assistant-suggestions";
 import { withoutSuggestions } from "@/lib/docs/blocks";
 import { INDEXED_NODE_TYPES, SUGGESTION_MARK_TYPES, suggestionAuthor, ZWSP, type RichNode } from "@/lib/docs/schema";
-import { SUGGEST_MAX_OPS, SUGGEST_WINDOW_CHARS } from "@/lib/derive/config";
+import { SUGGEST_MAX_OPS, SUGGEST_WINDOW_CHARS, SUGGEST_WINDOW_ROWS } from "@/lib/derive/config";
 
 // The assistant's suggestions on the server (SPEC.md §29): the ops the model
 // answers with, checked against the paragraph index and the stored rich text
@@ -17,7 +17,8 @@ import { SUGGEST_MAX_OPS, SUGGEST_WINDOW_CHARS } from "@/lib/derive/config";
 // is skipped with its reason; the rest stand.
 
 const id = z.string().min(1).max(64);
-const why = z.string().min(1).max(240);
+const WHY_MAX = 240;
+const why = z.string().min(1).max(WHY_MAX);
 const find = z.string().min(1).max(2_000);
 const markdown = z.string().min(1).max(20_000);
 const STYLES = ["normal", "title", "subtitle", "h1", "h2", "h3", "h4", "h5", "h6", "bulleted", "numbered", "checklist"] as const satisfies readonly SuggestStyle[];
@@ -30,11 +31,39 @@ const suggestOpSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("set_style"), blockId: id, style: z.enum(STYLES), why }),
   z.object({ op: z.literal("format_words"), blockId: id, find, format: z.enum(["bold", "italic", "underline", "strikethrough"]), why }),
 ]);
-export const suggestAnswerSchema = z.object({
-  summary: z.string().max(400),
-  ops: z.array(suggestOpSchema).max(SUGGEST_MAX_OPS),
-});
 type SuggestOp = z.infer<typeof suggestOpSchema>;
+
+/** Words cut to `max` characters, with an ellipsis. */
+const clip = (text: string, max: number): string => (text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`);
+
+/** The ops a model wrote, each read on its own: the ones that read, up to
+    SUGGEST_MAX_OPS; the why of each one that does not; and how many past
+    the cap were left. A why past its length is cut to it, and a field
+    written null is left out (afterBlockId null is the document's start). */
+export type ReadOps = { ops: SuggestOp[]; unreadable: string[]; over: number };
+function readOps(items: unknown[]): ReadOps {
+  const read: ReadOps = { ops: [], unreadable: [], over: 0 };
+  for (const item of items) {
+    const fields = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
+    const lenient = Object.fromEntries(
+      Object.entries(fields).flatMap(([key, value]) =>
+        value === null && key !== "afterBlockId" ? [] : [[key, key === "why" && typeof value === "string" ? clip(value.trim(), WHY_MAX) : value]],
+      ),
+    );
+    const parsed = suggestOpSchema.safeParse(lenient);
+    if (!parsed.success) read.unreadable.push(typeof fields.why === "string" && fields.why.trim() ? clip(fields.why.trim(), WHY_MAX) : String(fields.op ?? "?"));
+    else if (read.ops.length < SUGGEST_MAX_OPS) read.ops.push(parsed.data);
+    else read.over++;
+  }
+  return read;
+}
+
+/** The model's answer: the summary (cut to 400 characters), and the ops read
+    one by one, so one op that does not read never fails the others. */
+export const suggestAnswerSchema = z.object({
+  summary: z.string().catch("").transform((s) => clip(s.trim(), 400)),
+  ops: z.array(z.unknown()).transform(readOps),
+});
 
 /** A row of the paragraph index. */
 export type IndexRow = { id: string; type: string; text: string };
@@ -123,9 +152,9 @@ export function scopeOf(rows: IndexRow[], places: Map<string, BlockPlace>, block
   return out;
 }
 
-/** The scope cut into windows of SUGGEST_WINDOW_CHARS of text: a window
-    ends before a heading once it passes half its size, and never inside a
-    list or a table. */
+/** The scope cut into windows of SUGGEST_WINDOW_CHARS of text and at most
+    SUGGEST_WINDOW_ROWS rows: a window ends before a heading once it passes
+    half its size, and never inside a list or a table. */
 export function windowsOf(rows: IndexRow[], places: Map<string, BlockPlace>, scope: string[]): string[][] {
   const wanted = new Set(scope);
   const windows: string[][] = [];
@@ -136,7 +165,7 @@ export function windowsOf(rows: IndexRow[], places: Map<string, BlockPlace>, sco
     if (!wanted.has(row.id)) continue;
     const place = places.get(row.id);
     const inside = group !== null && place?.group === group;
-    const full = used + row.text.length > SUGGEST_WINDOW_CHARS;
+    const full = used + row.text.length > SUGGEST_WINDOW_CHARS || current.length >= SUGGEST_WINDOW_ROWS;
     const heading = row.type === "HEADING" && used >= SUGGEST_WINDOW_CHARS / 2;
     if (current.length > 0 && !inside && (full || heading)) {
       windows.push(current);
