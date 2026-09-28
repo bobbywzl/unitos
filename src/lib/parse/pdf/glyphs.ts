@@ -64,14 +64,14 @@ export function fontFlags(name: string | null): FontFlags {
     mono: /mono|courier|consolas|menlo|typewriter|^CMTT|^CMSLTT|^CMITT|cursor/i.test(n),
     // A small-caps font draws lowercase letters as small capitals; the text
     // layer gives them lowercase. Computer Modern's CMCSC, its T1 twins SFCC
-    // and SFXC, Latin Modern's LMRomanCaps, and "-SC" or ".sc" names (the
-    // owner's notes set 217 theorem labels in CMCSC10: they read as plain
-    // words). "Caps" ends a word in the name: PTSans-Caption is no small caps,
+    // and SFXC, Latin Modern's LMRomanCaps, and "-SC" or ".sc" names (an
+    // amsbook sets its theorem labels in CMCSC10: they read as plain words).
+    // "Caps" ends a word in the name: PTSans-Caption is no small caps,
     // and neither is NotoSansSC (Simplified Chinese).
     smallCaps: /^CMCSC|^SFCC|^SFXC|SmallCaps|Caps(?![a-z])|-SC$|\.sc$/i.test(n),
     // Math fonts by name: TeX's math families, the other TeX math fonts, an
     // OpenType math font ("Math" in its name), and Adobe's Symbol. The word
-    // "Symbol" alone says nothing: Segoe UI Symbol draws the legal packet's
+    // "Symbol" alone says nothing: Segoe UI Symbol draws a Word form's
     // checkboxes, and its lines read as equations (census class 12).
     math: (family !== null && family !== "ot1") || /^(stmary|wasy)|Math|^Symbol(MT)?$/i.test(n),
   };

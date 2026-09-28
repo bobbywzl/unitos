@@ -76,6 +76,17 @@ export function isIndented(line: Line, ctx: PageContext): boolean {
 // column's only full line, apple-fy24q4 p1). A line read alone across a
 // page's columns (a title over two columns) stands in the page's width.
 function columnEdges(lines: Line[], k: number, ctx: PageContext): { left: number; right: number } {
+  if (process.env.R2OLD) {
+    let r = 0;
+    for (let d = 1; d <= lines.length && r === 0; d *= 2) {
+      for (let n = Math.max(0, k - 4 * d); n < Math.min(lines.length, k + 4 * d + 1); n++) {
+        const l = lines[n];
+        if (n === k || l.cells.length !== 1 || [...l.text].length <= 30) continue;
+        if (Math.abs(l.x - ctx.columnLeft) <= l.size) r = Math.max(r, l.xEnd);
+      }
+    }
+    return { left: ctx.columnLeft, right: r };
+  }
   const line = lines[k];
   const column = lineColumn(line);
   const alone = column !== undefined && Math.abs(column[0] - line.x) < 0.5 && Math.abs(column[1] - line.xEnd) < 0.5;

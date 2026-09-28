@@ -284,15 +284,21 @@ function sectionHeading(lines: Line[], i: number, ctx: PageContext): Step | null
     j++;
   }
   // Set apart above, or over a paragraph's indented first line; a centered
-  // title set apart below.
+  // title set apart below. A page may end under the title: a printed web
+  // page set "IV. EXPERIMENTS" last on its page, its section on the next.
   const last = run[run.length - 1];
   const above = lines[i - 1];
   const below = lines[j];
-  if (!below) return null;
+  if (!below) return apartAbove(above, line, ctx) ? heading(run, j) : null;
   const opens = below.x > line.x + line.size * 0.8 && below.x < line.x + line.size * 3 && textShare(below, (item) => item.italic) < 0.5;
   if (!apartAbove(above, line, ctx) && !opens && !(centered && apartBelow(last, below, ctx))) return null;
-  const { text: joined, runs } = joinGroup(run);
-  return { segments: [headingOf(run, joined.replace(/\n/g, " "), runs)], next: j };
+  return heading(run, j);
+}
+
+// One heading of a run of lines, wrapped lines joined with spaces.
+function heading(run: Line[], next: number): Step {
+  const { text, runs } = joinGroup(run);
+  return { segments: [headingOf(run, text.replace(/\n/g, " "), runs)], next };
 }
 
 // An unnumbered title in capitals on a line of its own, centered in its

@@ -10,8 +10,8 @@
 // a backtick, and ≠ as "6=" (memo P0-F §1.2). The character code names the
 // symbol whatever the producer, and a formula's layout needs each glyph's
 // box. The walk mirrors pdf.js's own drawing of text (canvas.js showText):
-// on the owner's notes, a legal packet from Word, a Google Docs export, and
-// a pdfLaTeX file, every text item's origin is a glyph origin here.
+// on amsbook notes, a Word form, a Google Docs export, and a pdfLaTeX
+// paper, every text item's origin is a glyph origin here.
 
 import { mathFamily, unicodeMath, type MathFamily, type MathVariant } from "@/lib/parse/pdf/glyphs";
 import type { Box } from "@/lib/parse/pdf/types";

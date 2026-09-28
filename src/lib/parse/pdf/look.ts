@@ -167,6 +167,7 @@ const sameMarks = (a: Marks, b: Marks) =>
     and the words after it as one run of one font). hrefAt: the link at a
     place (index.ts). */
 export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject, hrefAt: (x: number, y: number, w: number, size: number) => string | null) {
+  if (process.env.R2NOLOOK) return;
   const faces = new Map<string, string>();
   const faceFor = (item: Item) => {
     if (item.math || !item.font || (item.glyphs?.length && item.glyphs.every((g) => g.mode === 3))) return "";
@@ -217,6 +218,7 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
       out.push(item);
       continue;
     }
+    if (process.env.R2SPLIT) console.log("R2SPLIT", JSON.stringify(item.str), "→", parts.map((p) => JSON.stringify(p.str) + JSON.stringify(marks[glyphs.indexOf(p.glyphs![0])])).join(" | "));
     for (const part of parts) {
       part.look = lookOf(marks[glyphs.indexOf(part.glyphs![0])]);
       part.href = hrefAt(part.x, part.y, part.w, part.size);

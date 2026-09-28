@@ -171,13 +171,14 @@ export function levelMarker(level: ListLevel, numbers: number[]): string {
   return level.format.replace(/%([0-8])/g, (_, k: string) => counterText(level.counter, numbers[Number(k)] ?? 1));
 }
 
-/** The level a numbered line draws `depth` levels into the outermost list
-    `outer`: the outer list's, or the default's where the outer list draws a
-    bullet (a numbered list inside a bulleted one). */
-export function numberLevel(outer: { type: string; attrs?: Record<string, unknown> | null } | null, depth: number): ListLevel {
+/** The level a line draws `depth` levels into the outermost list `outer`:
+    the outer list's when it is of the line's kind (a number or a bullet),
+    else the default's (a numbered list inside a bulleted one). */
+export function lineLevel(outer: { type: string; attrs?: Record<string, unknown> | null } | null, depth: number, numbered: boolean): ListLevel {
   const k = Math.max(0, Math.min(depth, 8));
   const own = outer ? levelsOf(outer)[k] : undefined;
-  return own && "counter" in own ? own : NUMBER_PRESETS[0].levels[k];
+  if (own && "counter" in own === numbered) return own;
+  return (numbered ? NUMBER_PRESETS : BULLET_PRESETS)[0].levels[k];
 }
 
 /** The marker the page draws before a numbered line: `outer` is the
@@ -185,7 +186,7 @@ export function numberLevel(outer: { type: string; attrs?: Record<string, unknow
     there down, its own last ([2, 3]: the third line of the list under the
     outer list's second line). */
 export function listMarker(outer: { type: string; attrs?: Record<string, unknown> | null } | null, numbers: number[]): string {
-  return levelMarker(numberLevel(outer, numbers.length - 1), numbers);
+  return levelMarker(lineLevel(outer, numbers.length - 1, true), numbers);
 }
 
 /** Words as a CSS string: a quote, a backslash, or a line end escaped. */

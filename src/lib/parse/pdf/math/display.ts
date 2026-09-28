@@ -19,7 +19,7 @@ import { BULLET_RE } from "@/lib/parse/pdf/markers";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { hangingBox, hangingFamily } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
-import { balanced, orphanGlyphs } from "@/lib/parse/pdf/math/zones";
+import { balanced, orphanGlyphs, paintsRule } from "@/lib/parse/pdf/math/zones";
 import type { Box, Cell, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
 // A numbered display equation: "… = softmax(QKᵀ/√d)V   (1)". Its words are
@@ -543,7 +543,9 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
       (r.dir === "h" && r.x1 >= line.x - 2 && r.x2 <= line.xEnd + 2 && r.y1 >= low && r.y1 <= high) ||
       (r.dir === "v" && r.x1 > line.x && r.x1 < line.xEnd && r.y1 >= low - size && r.y2 <= high + size),
   );
-  const paths = ctx.drawing.paths.filter((b) => !b.clip && b.x1 >= line.x - size * 1.5 && b.x1 < line.xEnd && b.y1 >= low - size && b.y2 <= high + size);
+  const paths = ctx.drawing.paths.filter(
+    (b) => !b.clip && b.x1 >= line.x - size * 1.5 && b.x1 < line.xEnd && b.y1 >= low - size && b.y2 <= high + size && !paintsRule(b, ctx.drawing.rules),
+  );
   try {
     const { latex, check } = layoutLatex(glyphs, rules, { display: true, size }, paths);
     // A display cut in two (its operators and an opening bracket on one line,

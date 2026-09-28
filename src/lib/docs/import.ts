@@ -1,4 +1,4 @@
-import { BULLET_PRESETS, NUMBER_PRESETS, TYPED_PRESETS, numberLevel, sameLevel } from "@/components/docs/toolbar/lists";
+import { BULLET_PRESETS, NUMBER_PRESETS, TYPED_PRESETS, lineLevel, sameLevel } from "@/components/docs/toolbar/lists";
 import {
   DEFAULT_PAGE_SETUP,
   formatParts,
@@ -315,6 +315,8 @@ type ListLine = {
   /** The list the line belongs to; null when its start is no marker. */
   type: ListType | null;
   checked: boolean;
+  /** A bullet's glyph as the line prints it. */
+  bullet?: string;
   /** A counter, the words before and after it, and a legal number's
       numbers above its own. */
   count?: Count & { before: string; after: string; parents?: number[] };
@@ -326,6 +328,10 @@ type ListLine = {
   /** The words after the marker; `whole` keeps the marker. */
   words: Source;
   whole: Source;
+  /** The line's paragraph once made, and the blocks its item holds after
+      it (the lines between a list and its resumed items). */
+  node?: RichNode;
+  more?: RichNode[];
 };
 
 /** A counter's style and number: "12" decimal 12, "03" 3 with its zero,
@@ -367,6 +373,7 @@ function listLine(line: Source): ListLine {
     cut = m[0].length;
   } else if ((m = LIST_BULLET.exec(text))) {
     out.type = "bulletList";
+    out.bullet = text[0];
     cut = m[0].length;
     const box = TASK_BOX.exec(text.slice(cut));
     if (box) {
@@ -393,19 +400,25 @@ function listLine(line: Source): ListLine {
   return out;
 }
 
-/** Each counter's level at its line's depth, in reading order. A numeral of
-    one letter reads as a letter where the line before it at its depth is
-    the letter before it ("(h)", "(i)"). A legal number draws the numbers
-    above its own from the lines above it when they are those numbers
-    ("1.2" under "1.": "%0.%1"), else prints them ("1.2" at the top: "1.%0").
-    A counter whose words the page cannot draw (lib/docs/schema.ts
+/** A printed bullet as the page editor's glyph: a round, a hollow, and a
+    square bullet are Google Docs' own (● ○ ■); any other as printed. */
+const BULLET_GLYPHS: Record<string, string> = { "•": "●", "·": "●", "∙": "●", "◦": "○", "▪": "■" };
+
+/** Each marker's level at its line's depth, in reading order. A bullet the
+    parse keeps as printed (`printed`) draws its glyph. A numeral of one
+    letter reads as a letter where the line before it at its depth is the
+    letter before it ("(h)", "(i)"). A legal number draws the numbers above
+    its own from the lines above it when they are those numbers ("1.2"
+    under "1.": "%0.%1"), else prints them ("1.2" at the top: "1.%0"). A
+    counter whose words the page cannot draw (lib/docs/schema.ts
     formatParts) is no marker. */
-function levelsOfLines(lines: ListLine[]): void {
+function levelsOfLines(lines: ListLine[], printed: () => boolean): void {
   const open: ListLine[] = [];
   for (const line of lines) {
     const prev = open[line.depth];
     open[line.depth] = line;
     open.length = line.depth + 1;
+    if (line.bullet && line.type === "bulletList" && printed()) line.level = { bullet: BULLET_GLYPHS[line.bullet] ?? line.bullet };
     let count = line.count;
     if (!count) continue;
     const k = Math.min(line.depth, 8);
@@ -425,8 +438,8 @@ function levelsOfLines(lines: ListLine[]): void {
   }
 }
 
-/** The list a line joins: its type, and a counter's level. */
-const keyOf = (line: ListLine) => (line.level ? `${line.type} ${line.level.counter} ${line.level.format}` : String(line.type));
+/** The list a line joins: its type and its level. */
+const keyOf = (line: ListLine) => (line.level ? `${line.type} ${JSON.stringify(line.level)}` : String(line.type));
 
 /** The outermost list's levels with the lines' added, by depth; null when
     a line draws its depth otherwise and `strict`, else the first stands. */
@@ -480,11 +493,10 @@ function listsAt(lines: ListLine[], from: number, depth: number, tops?: Top[]): 
     }
     expected = value + 1;
     const sub = listsAt(lines, i + 1, depth + 1);
-    const paragraph = paragraphNode(inline(line.words));
+    line.node ??= paragraphNode(inline(line.words));
+    const content = [line.node, ...(line.more ?? []), ...sub.nodes];
     const item: RichNode =
-      line.type === "taskList"
-        ? { type: "taskItem", attrs: { checked: line.checked }, content: [paragraph, ...sub.nodes] }
-        : { type: "listItem", content: [paragraph, ...sub.nodes] };
+      line.type === "taskList" ? { type: "taskItem", attrs: { checked: line.checked }, content } : { type: "listItem", content };
     (list.content ??= []).push(item);
     i = sub.next;
   }
@@ -495,12 +507,11 @@ function listsAt(lines: ListLine[], from: number, depth: number, tops?: Top[]): 
     level its lines print, else the first preset that does, else levels of
     its own (the default's where no line says). */
 function formatAttrs(type: string, seen: (ListLevel | undefined)[]): Record<string, unknown> | null {
-  const draws = (attrs: Record<string, unknown>) => seen.every((level, k) => !level || sameLevel(numberLevel({ type, attrs }, k), level));
+  const draws = (attrs: Record<string, unknown>) =>
+    seen.every((level, k) => !level || sameLevel(lineLevel({ type, attrs }, k, "counter" in level), level));
   if (draws({})) return null;
-  if (type === "orderedList") {
-    const preset = [...NUMBER_PRESETS, ...TYPED_PRESETS].find((p) => p.kind === "orderedList" && p.style !== null && draws({ listStyle: p.style }));
-    if (preset) return { listStyle: preset.style };
-  }
+  const preset = [...BULLET_PRESETS, ...NUMBER_PRESETS, ...TYPED_PRESETS].find((p) => p.kind === type && p.style !== null && draws({ listStyle: p.style }));
+  if (preset) return { listStyle: preset.style };
   const base = type === "orderedList" ? NUMBER_PRESETS[0].levels : BULLET_PRESETS[0].levels;
   return { listLevels: JSON.stringify(base.map((level, k) => seen[k] ?? level)) };
 }
@@ -534,6 +545,9 @@ class Converter {
   private readonly figures: ImportFigure[] = [];
   /** The open blockquote, while quoted paragraphs follow one another. */
   private quote: RichNode | null = null;
+  /** The last list block drawn as lists: its lines, and its nodes from
+      out[at], for a list that resumes after it. */
+  private lastList: { lines: ListLine[]; nodes: RichNode[]; at: number } | null = null;
   /** The last page whose start is placed, and page starts a block could not
       hold, for the next block. */
   private page = 0;
@@ -845,26 +859,75 @@ class Converter {
     // their markers ("1 Introduction", "2.1 Background").
     const contents =
       tokensOf(block.html).includes("contents") || (block.links ?? []).some((l) => l.targetOrder !== undefined);
+    if (!contents && this.resume(lines, index)) return;
     // A line goes at most one level deeper than the line before it.
     let depth = -1;
     for (const l of lines) depth = l.depth = Math.min(l.depth, depth + 1);
-    levelsOfLines(lines);
-    let nodes: RichNode[];
+    levelsOfLines(lines, this.printed);
     if (contents || lines.some((l) => l.type === null)) {
       // A contents list, or lines the page editor's lists cannot draw:
       // a paragraph per line, the words as they stand, indented as printed.
-      nodes = lines.map((l) => paragraphNode(inline(l.whole), l.indent > 0 ? { indentLeft: l.indent * INDENT_PT } : {}));
-    } else {
-      const tops: Top[] = [];
-      nodes = listsAt(lines, 0, 0, tops).nodes;
-      for (const top of tops) {
-        const attrs = formatAttrs(top.node.type, top.seen);
-        if (attrs) top.node.attrs = { ...top.node.attrs, ...attrs };
-      }
+      const nodes = lines.map((l) => paragraphNode(inline(l.whole), l.indent > 0 ? { indentLeft: l.indent * INDENT_PT } : {}));
+      const last = lastParagraph(nodes);
+      if (last?.attrs) last.attrs.spaceAfter = PARAGRAPH_SPACE_PT;
+      this.place(index, nodes);
+      return;
+    }
+    const nodes = this.lists(lines);
+    this.place(index, nodes);
+    this.lastList = { lines, nodes, at: this.out.length - nodes.length };
+  }
+
+  /** A PDF's and a Word file's bullets are as printed ("•" where the page
+      draws one the text does not hold); a web page's and a text file's "-"
+      is any bullet. */
+  private readonly printed = () => this.input.kind === "docx" || this.input.kind === "pdf";
+
+  /** The lines as lists, each outermost list in its format, the last line
+      spaced as a paragraph is. */
+  private lists(lines: ListLine[]): RichNode[] {
+    const tops: Top[] = [];
+    const nodes = listsAt(lines, 0, 0, tops).nodes;
+    for (const top of tops) {
+      const attrs = formatAttrs(top.node.type, top.seen);
+      if (attrs) top.node.attrs = { ...top.node.attrs, ...attrs };
     }
     const last = lastParagraph(nodes);
     if (last?.attrs) last.attrs.spaceAfter = PARAGRAPH_SPACE_PT;
-    this.place(index, nodes);
+    return nodes;
+  }
+
+  /** A list that resumes a level in after a line or two between its items
+      (a centered label under an item, a display): its lines go on the list
+      before it, whose last item holds the blocks between, so each item
+      keeps its level. False when the list before is not the last thing
+      placed but those blocks, or the lines do not go on it. */
+  private resume(lines: ListLine[], index: number): boolean {
+    const last = this.lastList;
+    if (!last || lines[0].depth < 1 || this.quote) return false;
+    const between = this.out.slice(last.at + last.nodes.length);
+    const placed = last.nodes.every((node, k) => this.out[last.at + k] === node);
+    if (!placed || between.length > 2 || between.some((n) => n.type !== "paragraph" && n.type !== "blockMath")) return false;
+    const tail = last.lines[last.lines.length - 1];
+    let depth = tail.depth;
+    for (const l of lines) depth = l.depth = Math.min(l.depth, depth + 1);
+    const all = [...last.lines, ...lines];
+    levelsOfLines(all, this.printed);
+    if (lines.some((l) => l.type === null)) return false;
+    if (tail.node?.attrs && !tail.more?.length) delete tail.node.attrs.spaceAfter;
+    tail.more = [...(tail.more ?? []), ...between];
+    this.out.splice(last.at);
+    const nodes = this.lists(all);
+    // A link to the resumed block lands on its first line.
+    const first = lines[0].node;
+    if (first?.attrs) {
+      const id = this.targets.get(index);
+      if (id) first.attrs.blockId = id;
+      if (typeof first.attrs.blockId === "string") this.firstIds.set(index, first.attrs.blockId);
+    }
+    for (const node of nodes) this.push(node);
+    this.lastList = { lines: all, nodes, at: this.out.length - nodes.length };
+    return true;
   }
 
   private table(block: ParsedBlock, index: number, starts: PageStart[]) {

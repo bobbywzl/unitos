@@ -173,7 +173,7 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
 
     // A lone item cut off at the page end joins the LIST that follows.
     if (segment.type === "LIST" && prev.type === "PARAGRAPH" && prev.listItem && !segment.tocEntries && itemOfList(prev, segment, true)) {
-      const marker = BULLET_RE.test(prev.text) ? "" : "- ";
+      const marker = BULLET_RE.test(prev.text) ? "" : "• ";
       const offset = marker.length;
       // The list now starts with the item's words, on the item's page; its
       // page stays the list's, the page the merge compares against.
@@ -193,7 +193,7 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       continue;
     }
     if (segment.type === "PARAGRAPH" && segment.listItem && prev.type === "LIST" && !prev.tocEntries && itemOfList(segment, prev, false)) {
-      const marker = BULLET_RE.test(segment.text) ? "" : "- ";
+      const marker = BULLET_RE.test(segment.text) ? "" : "• ";
       const offset = prev.text.length + 1 + marker.length;
       // The page starts at the item's line, its marker included.
       prev.breaks = joinBreaks(prev, segment, prev.text.length + 1);
