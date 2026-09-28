@@ -45,7 +45,7 @@ import type { DocStyle } from "@/components/docs/extensions";
 import { firstFamily } from "@/components/docs/fonts";
 import type { FigureMediaView } from "@/components/docs/insert/figure";
 import { DEFAULT_HF_MARGIN_PT, PX_PER_PT } from "@/components/docs/page/geometry";
-import { lineLevel } from "@/components/docs/toolbar/lists";
+import { levelMarker, lineLevel } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, styleFont, type NamedStyle } from "@/components/docs/toolbar/styles";
 import { authEnabled } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -346,8 +346,14 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
 
 // ── Lists ───────────────────────────────────────────────────────────────────
 
-/** Level n sits n + 1 half inches in, its glyph a quarter inch before it. */
-const levelIndent = (level: number) => ({ left: 720 * (level + 1), hanging: 360 });
+/** Level n sits n + 1 half inches in, its glyph a quarter inch before it,
+    or farther for a wider glyph and a space ("*15", "1.1", "A-1." ran into
+    their words at a quarter inch). `width` is in twips. */
+const levelIndent = (level: number, width = 0) => ({ left: 720 * (level + 1), hanging: Math.max(360, width + 110) });
+
+/** A glyph's width in Arial 11 pt, in twips: about 70 a narrow character
+    ("i", ".", "(") and 122 any other. */
+const glyphWidth = (glyph: string) => [...glyph].reduce((w, c) => w + (/[iljtfr.,:;()[\]*'-]/.test(c) ? 70 : 122), 0);
 
 function bulletLevels(glyph: string): ILevelsOptions[] {
   return Array.from({ length: 9 }, (_, level) => ({
@@ -364,6 +370,7 @@ function bulletLevels(glyph: string): ILevelsOptions[] {
     ("(%1)" for "(%0)"), a legal level's numbers above it as numbers, as the
     page draws them. The list starts at its start at its own level. */
 function listLevels(list: RichNode, drawer: RichNode, depth: number): ILevelsOptions[] {
+  const widths = markerWidths(list, drawer, depth, []);
   return Array.from({ length: 9 }, (_, level) => {
     const glyph = lineLevel(drawer, level, list.type === "orderedList");
     return {
@@ -376,9 +383,22 @@ function listLevels(list: RichNode, drawer: RichNode, depth: number): ILevelsOpt
             isLegalNumberingStyle: /%\d.*%\d/.test(glyph.format) || undefined,
           }),
       start: level === depth ? Number(list.attrs?.start) || 1 : 1,
-      style: { paragraph: { indent: levelIndent(level) } },
+      style: { paragraph: { indent: levelIndent(level, widths[level]) } },
     };
   });
+}
+
+/** The widest glyph of a list at each level, in twips: its lines' and
+    those of the lists of its kind inside it, numbered from `above`. */
+function markerWidths(list: RichNode, drawer: RichNode, depth: number, above: number[], out: number[] = []): number[] {
+  const start = Number(list.attrs?.start) || 1;
+  (list.content ?? []).forEach((item, i) => {
+    const numbers = [...above, start + i];
+    const glyph = levelMarker(lineLevel(drawer, depth, list.type === "orderedList"), numbers);
+    out[depth] = Math.max(out[depth] ?? 0, glyphWidth(glyph));
+    for (const child of item.content ?? []) if (child.type === list.type) markerWidths(child, drawer, depth + 1, numbers, out);
+  });
+  return out;
 }
 
 /** A list's lines. A list nested in a list of its kind goes one level down

@@ -1,0 +1,967 @@
+{
+ "id": "real-libreoffice-mathguide-72-p59",
+ "category": "book",
+ "source": {
+  "pdf": ".bench/real/libreoffice-mathguide-72.pdf",
+  "url": "https://documentation.libreoffice.org/assets/Uploads/Documentation/en/MG72/MG72-MathGuide.pdf"
+ },
+ "pages": [
+  59,
+  59
+ ],
+ "license": "open",
+ "provenance": "hand",
+ "notes": "The Document Foundation, LibreOffice 7.2 Math Guide (the LibreOffice Documentation Team; GPL v3 or later, or CC BY 4.0), exported by LibreOffice 7.2 Writer (Liberation fonts, formulas as LibreOffice Math objects in OpenSymbol and Liberation Serif). Scored: page 59, Appendix A: the last rows of Table 3 (continued from page 58 with no header row: here a table of their own, which a parse joins to its first part), a green section heading with a rule (h2: chapters are h1 in the guide's outline), a paragraph, and Table 4 with its italic caption above it, a shaded header row, markup cells in monospace on a grey highlight (code spans; 'or' between two of them is not code), and an example formula in every row (an inline formula in its cell: 'A≠B' is A \\neq B). The running foot 'Appendix A, Commands Reference | 59' is furniture.",
+ "furniture": [
+  "Appendix A, Commands Reference | 59"
+ ],
+ "blocks": [
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Backslash"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> bslash <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A∖B",
+         "latex": "A \\setminus B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Slash in circle"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> odivide <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A⊘B",
+         "latex": "A \\oslash B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Small multiply symbol in circle"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> odot <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A⊙B",
+         "latex": "A \\odot B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Subtract symbol in circle"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> ominus <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A⊖B",
+         "latex": "A \\ominus B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Add symbol in circle"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> oplus <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A⊕B",
+         "latex": "A \\oplus B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Multiply symbol in circle"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> otimes <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A⊗B",
+         "latex": "A \\otimes B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "User defined binary operator"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> boper ????? <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A binOp B",
+         "latex": "A \\mathit{binOp} B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "User defined unary operator"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "uoper ????? <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "unOp B",
+         "latex": "\\mathit{unOp} B"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Relation commands",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To access the icons used for entering markup language for relations commands into the Formula Editor, select "
+    },
+    {
+     "text": "Relations",
+     "italic": true
+    },
+    {
+     "text": " from the drop-down list at the top of the Elements dock."
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Operation",
+         "bold": true,
+         "italic": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Markup language",
+         "bold": true,
+         "italic": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Example formula",
+         "bold": true,
+         "italic": true
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is equal"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> = <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A=B",
+         "latex": "A = B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is not equal"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> <> <?>",
+         "code": true
+        },
+        {
+         "text": " or "
+        },
+        {
+         "text": "<?> neq <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A≠B",
+         "latex": "A \\neq B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is less than"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> < <?>",
+         "code": true
+        },
+        {
+         "text": " or "
+        },
+        {
+         "text": "<?> lt <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A<B",
+         "latex": "A < B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is less than or equal to"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> <= <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A≤B",
+         "latex": "A \\leq B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is less than or equal to"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> leslant <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A⩽B",
+         "latex": "A \\leqslant B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is greater than"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> > <?>",
+         "code": true
+        },
+        {
+         "text": " or "
+        },
+        {
+         "text": "<?> gt <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A>B",
+         "latex": "A > B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is greater than or equal to"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> >= <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A≥B",
+         "latex": "A \\geq B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is greater than or equal to"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> geslant <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A⩾B",
+         "latex": "A \\geqslant B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is much less than"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> << <?>",
+         "code": true
+        },
+        {
+         "text": " or "
+        },
+        {
+         "text": "<?> ll <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A≪B",
+         "latex": "A \\ll B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is much greater than"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> >> <?>",
+         "code": true
+        },
+        {
+         "text": " or "
+        },
+        {
+         "text": "<?> gg <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A≫B",
+         "latex": "A \\gg B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is approximately equal"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> approx <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A≈B",
+         "latex": "A \\approx B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is similar to"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> sim <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A∼B",
+         "latex": "A \\sim B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is similar to or equal"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> simeq <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A≃B",
+         "latex": "A \\simeq B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is congruent to"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> equiv <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A≡B",
+         "latex": "A \\equiv B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is proportional to"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> prop <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A∝B",
+         "latex": "A \\propto B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is parallel to"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> parallel <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A∥B",
+         "latex": "A \\parallel B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Is orthogonal to"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> ortho <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A⊥B",
+         "latex": "A \\perp B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Divides"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> divides <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A∣B",
+         "latex": "A \\mid B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Does not divide"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> ndivides <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A∤B",
+         "latex": "A \\nmid B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Toward"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> toward <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A→B",
+         "latex": "A \\to B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Double arrow left"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> dlarrow <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A⇐B",
+         "latex": "A \\Leftarrow B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Double arrow left and right"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> dlrarrow <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A⇔B",
+         "latex": "A \\Leftrightarrow B"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Double arrow right"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "<?> drarrow <?>",
+         "code": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "A⇒B",
+         "latex": "A \\Rightarrow B"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "caption": [
+    {
+     "text": "Table 4: Relation commands",
+     "italic": true
+    }
+   ]
+  }
+ ]
+}

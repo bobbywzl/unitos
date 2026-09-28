@@ -7,6 +7,7 @@ import { figureImageUrl, importedOf } from "@/components/docs/insert/figure";
 import { levelsOf, styleOf, tocEntries } from "@/components/docs/insert/toc";
 import { flushDocument } from "@/components/docs/layer/flush";
 import { PX_PER_PT } from "@/components/docs/page/geometry";
+import { listSheet, markersAsWords } from "@/components/docs/toolbar/lists";
 import { namedStyleSheet } from "@/components/docs/toolbar/styles";
 import { fragmentToMarkdown } from "@/components/docs/typing/markdown";
 import { deriveBlocks, withoutSuggestions } from "@/lib/docs/blocks";
@@ -141,8 +142,9 @@ function imageSrcs(doc: PMNode): string[] {
 }
 
 /** Plain text: one line per paragraph of the paragraph index (a figure's
-    line is its caption), a footnote's number as [n], and each footnote at
-    the end after its number. */
+    line is its caption), a list line after its marker as the page draws it
+    ("(a) ", "☑ "), a footnote's number as [n], and each footnote at the end
+    after its number. */
 function plainText(doc: PMNode): string {
   const numbers = new Map<string, number>();
   const cite = (id: unknown) => `[${numbers.get(String(id)) ?? numbers.set(String(id), numbers.size + 1).size}]`;
@@ -155,7 +157,7 @@ function plainText(doc: PMNode): string {
     }
     return { ...node, content };
   };
-  return deriveBlocks(walk(doc.toJSON() as RichNode))
+  return deriveBlocks(walk(markersAsWords(doc.toJSON() as RichNode)))
     .filter((b) => b.type !== "FIGURE" || b.text.trim() !== "")
     .map((b) => b.text)
     .join("\n");
@@ -184,8 +186,6 @@ table { border-collapse: collapse; }
 td, th { border: 1pt solid #000; padding: 5pt; vertical-align: top; text-align: left; }
 [data-valign="middle"] { vertical-align: middle; }
 [data-valign="bottom"] { vertical-align: bottom; }
-ol ol { list-style-type: lower-alpha; }
-ol ol ol { list-style-type: lower-roman; }
 ul[data-type="taskList"] { list-style: none; padding-left: 0; }
 ul[data-type="taskList"] li { display: flex; gap: 8px; }
 ul:not([data-list-style="CHECKLIST_NO_STRIKETHROUGH"]) > li[data-checked="true"] p { text-decoration: line-through; color: #666; }
@@ -262,7 +262,7 @@ async function webPage(editor: Editor, doc: PMNode, title: string, setup: PageSe
   const meta = page.createElement("meta");
   meta.setAttribute("charset", "utf-8");
   const css = page.createElement("style");
-  css.textContent = [PAGE_CSS, width, namedStyleSheet(doc, "body", true)].join("\n");
+  css.textContent = [PAGE_CSS, listSheet("body"), width, namedStyleSheet(doc, "body", true)].join("\n");
   page.head.prepend(meta);
   page.head.append(css);
   return `<!DOCTYPE html>\n${page.documentElement.outerHTML}\n`;

@@ -1,6 +1,7 @@
 import type { Editor } from "@tiptap/core";
-import type { Node as PMNode } from "@tiptap/pm/model";
-import type { NodeView } from "@tiptap/pm/view";
+import type { Mark, Node as PMNode } from "@tiptap/pm/model";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Decoration, DecorationSet, type NodeView } from "@tiptap/pm/view";
 import { BlockMath, InlineMath } from "@tiptap/extension-mathematics";
 import katex from "katex";
 import "katex/dist/katex.min.css";
@@ -79,9 +80,102 @@ class MathView implements NodeView {
   }
 }
 
+// A formula's closing mark stays on the formula's line. A browser may break
+// a line right after an inline block, even before a period, and a math
+// PDF's import opened lines with a lone "." or ")." (one line ending "μ",
+// the next starting "."). The formula takes the mark's room as its margin,
+// and the mark gives the room back as a negative margin: both draw where
+// they did, and a line with room for the formula has room for its mark.
+// The page keeps its spaces (white-space: break-spaces), so a space after
+// the mark takes room at a line's end too, and the formula takes that room
+// as well. A character's room is its width in the widest of the page
+// editor's text fonts, in em, rounded up.
+const ROOM: ReadonlyMap<string, number> = new Map([
+  [".", 0.35], [",", 0.35], [";", 0.35], [":", 0.35], ["!", 0.4], ["?", 0.6],
+  [")", 0.4], ["]", 0.4], ["}", 0.65], ["’", 0.35], ["'", 0.3], ["”", 0.55], ['"', 0.5], ["»", 0.65],
+  ["%", 1], ["…", 1], ["-", 0.4], ["‐", 0.4], ["–", 0.6],
+]);
+const SPACE_ROOM = 0.35;
+
+/** The most closing marks one formula keeps on its line: ").", "?”". */
+const MOST_MARKS = 3;
+
+/** The marks that set a run's font size. One em is one width on the
+    formula and on its mark only where the two agree on these. */
+const SIZING: ReadonlySet<string> = new Set(["subscript", "superscript", "code"]);
+
+function sizing(marks: readonly Mark[]): string {
+  return marks
+    .map((m) => (m.type.name === "textStyle" ? (m.attrs.fontSize ? `size ${String(m.attrs.fontSize)}` : "") : SIZING.has(m.type.name) ? m.type.name : ""))
+    .filter(Boolean)
+    .sort()
+    .join(",");
+}
+
+/** A formula followed right away by closing marks: its offset in the
+    textblock, its size, how many marks follow, and their room in em. */
+type Tail = { at: number; size: number; marks: number; room: number };
+
+const tailsOf = new WeakMap<PMNode, Tail[]>();
+
+/** A textblock's tails, kept per node: typing redoes one textblock. */
+function blockTails(block: PMNode): Tail[] {
+  const kept = tailsOf.get(block);
+  if (kept) return kept;
+  const tails: Tail[] = [];
+  block.forEach((child, offset, index) => {
+    if (child.type.name !== "inlineMath" || index + 1 >= block.childCount) return;
+    const next = block.child(index + 1);
+    if (!next.isText || sizing(next.marks) !== sizing(child.marks)) return;
+    const text = next.text ?? "";
+    let marks = 0;
+    let room = 0;
+    for (const ch of text) {
+      const width = ROOM.get(ch);
+      if (width === undefined || marks === MOST_MARKS) break;
+      marks += 1;
+      room += width;
+    }
+    if (text[marks] === " ") room += SPACE_ROOM;
+    if (marks > 0) tails.push({ at: offset, size: child.nodeSize, marks, room: Math.round(room * 100) / 100 });
+  });
+  tailsOf.set(block, tails);
+  return tails;
+}
+
+function tailDecorations(doc: PMNode): DecorationSet {
+  const decorations: Decoration[] = [];
+  doc.descendants((node, pos) => {
+    if (!node.isTextblock) return true;
+    for (const t of blockTails(node)) {
+      const end = pos + 1 + t.at + t.size;
+      decorations.push(Decoration.node(end - t.size, end, { style: `margin-inline-end: ${t.room}em` }));
+      decorations.push(Decoration.inline(end, end + t.marks, { style: `margin-inline-start: -${t.room}em` }));
+    }
+    return false;
+  });
+  return decorations.length ? DecorationSet.create(doc, decorations) : DecorationSet.empty;
+}
+
+const tailKey = new PluginKey<DecorationSet>("docsMathTail");
+
+function mathTailPlugin(): Plugin<DecorationSet> {
+  return new Plugin<DecorationSet>({
+    key: tailKey,
+    state: {
+      init: (_config, state) => tailDecorations(state.doc),
+      apply: (tr, set, _old, state) => (tr.docChanged ? tailDecorations(state.doc) : set),
+    },
+    props: { decorations: (state) => tailKey.getState(state) },
+  });
+}
+
 const DocsInlineMath = InlineMath.extend({
   addNodeView() {
     return ({ node, editor, getPos }) => new MathView(node, editor, getPos, false);
+  },
+  addProseMirrorPlugins() {
+    return [...(this.parent?.() ?? []), mathTailPlugin()];
   },
 });
 

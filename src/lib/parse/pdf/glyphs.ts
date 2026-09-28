@@ -466,6 +466,7 @@ export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
         const rise = (a.y - b.y) / em;
         return (
           is(b, ["ot1", 0x3d]) &&
+          a.size >= b.size * 0.85 &&
           (cong ? Math.abs(b.x - a.x) < em * 0.12 && rise > 0.15 && rise < 0.45 : center(a) > b.x && center(a) < b.x + b.w && rise > 0.4 && rise < 0.75)
         );
       });
@@ -617,6 +618,9 @@ export function sameFlags(a: Flags, b: Flags): boolean {
     Boolean(a.sup) === Boolean(b.sup) &&
     Boolean(a.sub) === Boolean(b.sub) &&
     a.zone === b.zone &&
-    a.look === b.look
+    // A formula's glyphs are one run whatever their look: its face and size
+    // are the equation's (a heading's bold lead lost its formula when an
+    // upright Ω and a math ℱ read as two runs).
+    (a.zone !== undefined || a.look === b.look)
   );
 }

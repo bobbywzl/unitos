@@ -10,7 +10,7 @@ import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { insertContext } from "@/components/docs/insert/context";
 import { isMac } from "@/components/docs/keys";
 import { viewingCopy } from "@/components/docs/page/download";
-import { levelStyle, presetNamed } from "@/components/docs/toolbar/lists";
+import { levelStyle, listSheet, presetNamed } from "@/components/docs/toolbar/lists";
 import { blockText, runAutocorrect } from "@/components/docs/typing/autocorrect";
 import { wordAt } from "@/components/docs/typing/chars";
 import { findPlugin } from "@/components/docs/typing/find";
@@ -190,6 +190,14 @@ const DocsTyping = Extension.create({
     const editor = this.editor;
     const plugin = new Plugin({
       key: typingKey,
+      // The lists' rules (toolbar/lists.ts listSheet), one sheet for every
+      // page editor.
+      view: () => {
+        const sheet = document.getElementById("docs-list-sheet") ?? document.head.appendChild(document.createElement("style"));
+        sheet.id = "docs-list-sheet";
+        sheet.textContent = listSheet(".docs-prose");
+        return {};
+      },
       props: {
         // Typed text goes in as one undo step with the typing around it;
         // then the autocorrect rules for the character run, each its own step.

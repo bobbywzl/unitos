@@ -6,6 +6,7 @@
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
 import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
+import { firstPageOf } from "@/lib/parse/pdf/merge";
 import { mathSpans } from "@/lib/parse/pdf/math/zones";
 import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup } from "@/lib/parse/pdf/text";
 import type { Cell, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
@@ -248,6 +249,47 @@ export function tableSegment(
   return { type: "TABLE", text, html, page, ...where };
 }
 
+// A table's caption opens with its label and a mark after the number:
+// "Table 2:", "TABLE 1.", "Table II.", "Table A1 –" ("Table 3 shows …" is
+// a sentence).
+const TABLE_CAPTION_RE = /^(?:table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+)\s*[.:|–—-]/i;
+
+/** A table's caption joins its table: the paragraph right before it on its
+    page that opens with a table's label, or with none there the one right
+    after it, is the table's <caption>, and the table's text opens with the
+    caption's line, as a Word table's does (lib/parse/docx.ts). The import
+    draws it as the table's caption above the table, and the benchmark reads
+    it as the table's (the captions stood apart as paragraphs: real-mmwr-7301
+    p. 3's import read no caption). Runs after the joins across pages: a
+    table continued on the next page joins its rows first. */
+export function attachTableCaptions(segments: Segment[]): Segment[] {
+  const taken = new Set<Segment>();
+  segments.forEach((table, i) => {
+    if (table.type !== "TABLE" || !table.html || table.html.includes("<caption>")) return;
+    const first = firstPageOf(table);
+    const last = table.breaks?.at(-1)?.page ?? first;
+    const before = segments[i - 1];
+    const after = segments[i + 1];
+    const caption =
+      before && !taken.has(before) && isCaption(before) && before.page === first ? before
+      : after && !taken.has(after) && isCaption(after) && after.page === last ? after
+      : null;
+    if (!caption) return;
+    taken.add(caption);
+    // The caption is one line of the table's text: its breaks are spaces.
+    const text = caption.text.replace(/[\t\n]/g, " ");
+    const words = wordsHtml(text, caption.runs ?? [], mathSpans(text, caption.runs), 0, text.length);
+    table.html = table.html.replace(/^<table[^>]*>/, (open) => `${open}<caption>${words}<span class="cell-gap">\n</span></caption>`);
+    table.text = `${text}\n${table.text}`;
+    table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
+  });
+  return segments.filter((s) => !taken.has(s));
+}
+
+function isCaption(s: Segment): boolean {
+  return s.type === "PARAGRAPH" && !s.footnote && s.text.length <= 1200 && TABLE_CAPTION_RE.test(s.text.trim());
+}
+
 // Leading rows whose words are bold: the header rows (never every row).
 export function boldHeaderRows(rows: TableRow[]): number {
   let n = 0;
@@ -380,7 +422,9 @@ export function tableFromRun(run: Line[], leading: number): Segment {
     return { type: "FIGURE", text: builder.text, page, runs: builder.runs, ...geom(run) };
   }
   const headerRows = rows.length > 1 && boldHeaderRows(rows) > 0 ? 1 : 0;
-  return tableSegment(rows, headerRows, page, geom(run));
+  const edges = [Math.min(...run.map((l) => l.x)), ...separators, Math.max(...run.map((l) => l.xEnd))];
+  const look = { size: Math.round(median(run.map((l) => l.size)) * 2) / 2, columns: edges.slice(1).map((x, k) => x - edges[k]) };
+  return tableSegment(rows, headerRows, page, geom(run), look);
 }
 
 // ── Tables of text alone ────────────────────────────────────────────────────
@@ -452,6 +496,25 @@ export function isWrappedRowLine(line: Line, lines: Line[]): boolean {
       Math.abs(row.cells[0].x - line.cells[0].x) < 6 &&
       Math.abs(row.cells[row.cells.length - 1].x - line.cells[1].x) < 6,
   );
+}
+
+// A cell of prose: six words or more.
+const proseCell = (text: string) => text.split(/\s+/).filter((w) => /\p{L}{2}/u.test(w)).length >= 6;
+
+// Lines whose cells hold prose: two prose cells side by side on half of
+// them or more (two columns of text), or on a scan's text layer a prose
+// cell on half of them or more (text beside a drawing's labels).
+function isProseColumns(lines: Line[], ocr: boolean): boolean {
+  const prose = lines.filter((l) => l.cells.filter((c) => proseCell(c.text)).length >= (ocr ? 1 : 2)).length;
+  return lines.length > 0 && prose * 2 >= lines.length;
+}
+
+// Form lines: every cell a label awaiting its words ("Name:"), a blank to
+// fill ("____"), or boxes to tick, with no rule drawn around them (a ruled
+// form is found by its grid, ruled.ts).
+function isFormLines(lines: Line[]): boolean {
+  const cells = lines.flatMap((l) => l.cells.map((c) => c.text.trim())).filter((t) => t.length > 0);
+  return cells.length > 0 && cells.every((t) => /:$/.test(t) || /_{3,}$/.test(t) || /[☐☑☒]/.test(t));
 }
 
 // Table runs, computed before segmentation. A run grows forward over
@@ -569,6 +632,15 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     // One multi-cell line alone is a "Label: text" paragraph, unless the
     // lines around it are a table whose labels sit on their own baselines.
     if (multi < 2 && !(leftOnlyCount >= 2 && alignedCount >= 2)) {
+      i++;
+      continue;
+    }
+    // Text that only lines up is no table: two columns of prose side by side
+    // (a page whose columns were not split: MMWR p. 21's text above Table 3,
+    // arXiv 2504.02736's reference list), form lines with no rule drawn (a
+    // label, its boxes, a blank to fill), and on a scan's text layer prose
+    // wrapped beside a drawing's labels.
+    if (isProseColumns(multiCell.map((k) => lines[k]), ctx.ocr) || isFormLines(members.map((k) => lines[k]))) {
       i++;
       continue;
     }

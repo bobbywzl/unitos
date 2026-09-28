@@ -19,7 +19,10 @@ import type { Box, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf
 // finding: charts read as tables of ticks, equations as tables, figures shown
 // as whole pages.
 
-export const CAPTION_RE = /^(fig\.|figure|table|tab\.)\s*(\d+|[A-Z]\d+)[a-z]?\s*[.:|–—-]\s*/i;
+// A caption's label and its stop: "Figure 2:", "Fig. 3a.", "Table A1 |", and
+// the roman numbers of REVTeX and IEEE ("TABLE II. Fitting parameters …",
+// arXiv 2502.02648, read as a paragraph with no caption).
+export const CAPTION_RE = /^(fig\.|figure|table|tab\.)\s*(\d+[a-z]?|[A-Z]\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-]\s*/i;
 // "Table 3", "Table A1", and IEEE's "TABLE IV".
 const TABLE_CAPTION_RE = /^(table|tab\.)\s*(\d+|[A-Z]\d+|[IVXL]+\b)/i;
 // A float's label at a line's start, with a stop after it or none.

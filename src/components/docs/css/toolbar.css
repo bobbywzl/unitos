@@ -1304,39 +1304,3 @@
     widows: 1;
   }
 }
-
-/* ── Lists ────────────────────────────────────────────────────────────────
-   A list line n levels deep draws level n of its outermost list: a bullet
-   from --docs-bullet-n, a number from --docs-marker-n (::marker's content:
-   its glyph format's words around counter(), or counters() for a legal
-   number), or, where ::marker takes no content, the counter in
-   --docs-number-n. The outermost list's inline style sets its preset's or
-   its own levels (toolbar/lists.ts levelStyle); the page sets Google Docs'
-   defaults (● ○ ■, 1. a. i.). */
-.docs-prose {
-  --docs-bullet-1: "●\2003"; --docs-bullet-2: "○\2003"; --docs-bullet-3: "■\2003"; --docs-bullet-4: "●\2003"; --docs-bullet-5: "○\2003"; --docs-bullet-6: "■\2003"; --docs-bullet-7: "●\2003"; --docs-bullet-8: "○\2003"; --docs-bullet-9: "■\2003";
-  --docs-number-1: decimal; --docs-number-2: lower-alpha; --docs-number-3: lower-roman; --docs-number-4: decimal; --docs-number-5: lower-alpha; --docs-number-6: lower-roman; --docs-number-7: decimal; --docs-number-8: lower-alpha; --docs-number-9: lower-roman;
-  --docs-marker-1: counter(list-item, decimal) ".\2003"; --docs-marker-2: counter(list-item, lower-alpha) ".\2003"; --docs-marker-3: counter(list-item, lower-roman) ".\2003";
-  --docs-marker-4: counter(list-item, decimal) ".\2003"; --docs-marker-5: counter(list-item, lower-alpha) ".\2003"; --docs-marker-6: counter(list-item, lower-roman) ".\2003";
-  --docs-marker-7: counter(list-item, decimal) ".\2003"; --docs-marker-8: counter(list-item, lower-alpha) ".\2003"; --docs-marker-9: counter(list-item, lower-roman) ".\2003";
-}
-.docs-prose li { --docs-level-bullet: var(--docs-bullet-1); --docs-level-number: var(--docs-number-1); --docs-level-marker: var(--docs-marker-1); }
-.docs-prose li li { --docs-level-bullet: var(--docs-bullet-2); --docs-level-number: var(--docs-number-2); --docs-level-marker: var(--docs-marker-2); }
-.docs-prose li li li { --docs-level-bullet: var(--docs-bullet-3); --docs-level-number: var(--docs-number-3); --docs-level-marker: var(--docs-marker-3); }
-.docs-prose li li li li { --docs-level-bullet: var(--docs-bullet-4); --docs-level-number: var(--docs-number-4); --docs-level-marker: var(--docs-marker-4); }
-.docs-prose li li li li li { --docs-level-bullet: var(--docs-bullet-5); --docs-level-number: var(--docs-number-5); --docs-level-marker: var(--docs-marker-5); }
-.docs-prose li li li li li li { --docs-level-bullet: var(--docs-bullet-6); --docs-level-number: var(--docs-number-6); --docs-level-marker: var(--docs-marker-6); }
-.docs-prose li li li li li li li { --docs-level-bullet: var(--docs-bullet-7); --docs-level-number: var(--docs-number-7); --docs-level-marker: var(--docs-marker-7); }
-.docs-prose li li li li li li li li { --docs-level-bullet: var(--docs-bullet-8); --docs-level-number: var(--docs-number-8); --docs-level-marker: var(--docs-marker-8); }
-.docs-prose li li li li li li li li li { --docs-level-bullet: var(--docs-bullet-9); --docs-level-number: var(--docs-number-9); --docs-level-marker: var(--docs-marker-9); }
-.docs-prose ul:not([data-type="taskList"]) > li {
-  list-style-type: var(--docs-level-bullet);
-}
-.docs-prose ol > li {
-  list-style-type: var(--docs-level-number);
-}
-/* A line a suggestion adds or removes whole sits in the suggestion's
-   wrapper (css/suggest.css). */
-.docs-prose :is(ol > li, ol > [data-suggestion-block] > li)::marker {
-  content: var(--docs-level-marker);
-}

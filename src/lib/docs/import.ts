@@ -1,5 +1,5 @@
 import type { DocStyle } from "@/components/docs/extensions";
-import { BULLET_PRESETS, NUMBER_PRESETS, TYPED_PRESETS, lineLevel, sameLevel } from "@/components/docs/toolbar/lists";
+import { listFormat, sameLevel } from "@/components/docs/toolbar/lists";
 import { DEFAULT_STYLES, STYLE_ATTR, styleChanges, type NamedStyle } from "@/components/docs/toolbar/styles";
 import {
   DEFAULT_PAGE_SETUP,
@@ -580,19 +580,6 @@ function listsAt(lines: ListLine[], from: number, depth: number, tops?: Top[]): 
   return { nodes, next: i };
 }
 
-/** An outermost list's format: none when its type's default draws every
-    level its lines print, else the first preset that does, else levels of
-    its own (the default's where no line says). */
-function formatAttrs(type: string, seen: (ListLevel | undefined)[]): Record<string, unknown> | null {
-  const draws = (attrs: Record<string, unknown>) =>
-    seen.every((level, k) => !level || sameLevel(lineLevel({ type, attrs }, k, "counter" in level), level));
-  if (draws({})) return null;
-  const preset = [...BULLET_PRESETS, ...NUMBER_PRESETS, ...TYPED_PRESETS].find((p) => p.kind === type && p.style !== null && draws({ listStyle: p.style }));
-  if (preset) return { listStyle: preset.style };
-  const base = type === "orderedList" ? NUMBER_PRESETS[0].levels : BULLET_PRESETS[0].levels;
-  return { listLevels: JSON.stringify(base.map((level, k) => seen[k] ?? level)) };
-}
-
 /** The last paragraph under a node, in reading order. */
 function lastParagraph(nodes: RichNode[]): RichNode | null {
   for (let i = nodes.length - 1; i >= 0; i--) {
@@ -836,7 +823,10 @@ class Converter {
     const named = this.named(style);
     const attrs: Record<string, unknown> = {};
     if (font.family !== named.font) attrs.fontFamily = font.family;
-    if (font.size !== named.size) attrs.fontSize = `${font.size}pt`;
+    // A kicker, a label, a caption, a footnote, and a display line keep
+    // their role's size (paragraph): no named style draws them.
+    const role = block.type === "PARAGRAPH" && ROLES.some((r) => r !== "meta" && r !== "quote" && tokensOf(block.html).includes(r));
+    if (font.size !== named.size && !role) attrs.fontSize = `${font.size}pt`;
     const marks: RichMark[] = Object.keys(attrs).length > 0 ? [{ type: "textStyle", attrs }] : [];
     if (block.type === "HEADING" && font.bold && !named.bold) marks.push({ type: "bold" });
     return marks;
@@ -927,19 +917,15 @@ class Converter {
     const tokens = tokensOf(block.html);
     const role: Role | undefined = ROLES.find((r) => tokens.includes(r));
     const attrs: Record<string, unknown> = {};
-    const align = alignOf(tokens) ?? (role === "caption" ? "center" : null);
+    // A caption stands centered whatever the page's lines do.
+    const align = role === "caption" && alignOf(tokens) !== "right" ? "center" : alignOf(tokens);
     if (align) attrs.textAlign = align;
     if (role === "meta") attrs.docStyle = "subtitle";
     else if (role !== "kicker") attrs.spaceAfter = PARAGRAPH_SPACE_PT;
     const indent = INDENT_TOKENS.find((k) => tokens.includes(k));
     if (indent) Object.assign(attrs, INDENTS[indent]);
-    // A role's size where the page gives none: a PDF's and a Word file's
-    // blocks carry their own (lookMarks).
     const size =
-      block.font ? null
-      : role === "kicker" || role === "label" || role === "caption" || role === "footnote" ? SMALL_SIZE
-      : role === "display" ? DISPLAY_SIZE
-      : null;
+      role === "kicker" || role === "label" || role === "caption" || role === "footnote" ? SMALL_SIZE : role === "display" ? DISPLAY_SIZE : null;
     const extra: RichMark[] = size ? [{ type: "textStyle", attrs: { fontSize: size } }] : [];
     const nodes = splitLong(this.sourceOf(block, starts)).map((part) => paragraphNode(inline(part, extra), attrs));
     this.place(index, nodes, role === "quote");
@@ -989,6 +975,7 @@ class Converter {
       const last = lastParagraph(nodes);
       if (last?.attrs) last.attrs.spaceAfter = PARAGRAPH_SPACE_PT;
       this.place(index, nodes);
+      this.lastList = null;
       return;
     }
     const nodes = this.lists(lines);
@@ -1008,7 +995,7 @@ class Converter {
     const tops: Top[] = [];
     const nodes = listsAt(lines, 0, 0, tops).nodes;
     for (const top of tops) {
-      const attrs = formatAttrs(top.node.type, top.seen);
+      const attrs = listFormat(top.node.type, top.seen);
       if (attrs) top.node.attrs = { ...top.node.attrs, ...attrs };
     }
     const last = lastParagraph(nodes);
@@ -1033,7 +1020,8 @@ class Converter {
     const all = [...last.lines, ...lines];
     levelsOfLines(all, this.printed);
     if (lines.some((l) => l.type === null)) return false;
-    if (tail.node?.attrs && !tail.more?.length) delete tail.node.attrs.spaceAfter;
+    // The list's last line is no longer its last.
+    if (tail.node?.attrs) delete tail.node.attrs.spaceAfter;
     tail.more = [...(tail.more ?? []), ...between];
     this.out.splice(last.at);
     const nodes = this.lists(all);

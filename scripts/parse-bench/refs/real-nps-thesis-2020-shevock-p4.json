@@ -1,0 +1,351 @@
+{
+ "id": "real-nps-thesis-2020-shevock-p4",
+ "category": "form",
+ "source": {
+  "pdf": ".bench/real/nps-thesis-2020-shevock.pdf",
+  "url": "https://calhoun.nps.edu/server/api/core/bitstreams/8bdab7d0-42cf-4066-94db-050c5ae96e60/content"
+ },
+ "pages": [
+  4,
+  4
+ ],
+ "license": "public-domain",
+ "provenance": "hand",
+ "notes": "Kelsey M. Shevock, 'Optimization of Moving Target Defense Using a Partially Observable Markov Decision Process and Determinized Sparse Partially Observable Tree', master's thesis, Naval Postgraduate School, June 2020; a work of the United States government (NPS Calhoun: copyright protection is not available). Made in Word (Acrobat PDFMaker 17; Times New Roman not embedded, Cambria Math), with Calhoun's cover page in front. Scored: page 4, the DTIC Report Documentation Page (Standard Form 298): one ruled form whose rows change their column grid (one to four cells; field 5 spans two rows, so does field 14), numbered bold field labels with their values in the same cell, a first-line-indented abstract inside a cell, and the form's identifiers under it. The table's columns are four here: each row's cells span the columns so a row adds up to four. The lower-case roman page number is furniture.",
+ "furniture": [
+  "i"
+ ],
+ "blocks": [
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "REPORT DOCUMENTATION PAGE",
+         "bold": true
+        }
+       ],
+       "colspan": 3
+      },
+      {
+       "spans": [
+        {
+         "text": "Form Approved OMB No. 0704-0188",
+         "italic": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Public reporting burden for this collection of information is estimated to average 1 hour per response, including the time for reviewing instruction, searching existing data sources, gathering and maintaining the data needed, and completing and reviewing the collection of information. Send comments regarding this burden estimate or any other aspect of this collection of information, including suggestions for reducing this burden, to Washington headquarters Services, Directorate for Information Operations and Reports, 1215 Jefferson Davis Highway, Suite 1204, Arlington, VA 22202-4302, and to the Office of Management and Budget, Paperwork Reduction Project (0704-0188) Washington, DC 20503."
+        }
+       ],
+       "colspan": 4
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "1. AGENCY USE ONLY ",
+         "bold": true
+        },
+        {
+         "text": "(Leave blank)",
+         "bold": true,
+         "italic": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2. REPORT DATE",
+         "bold": true
+        },
+        {
+         "text": " June 2020"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3. REPORT TYPE AND DATES COVERED",
+         "bold": true
+        },
+        {
+         "text": " Master’s thesis"
+        }
+       ],
+       "colspan": 2
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "4. TITLE AND SUBTITLE",
+         "bold": true
+        },
+        {
+         "text": " OPTIMIZATION OF MOVING TARGET DEFENSE USING A PARTIALLY OBSERVABLE MARKOV DECISION PROCESS AND DETERMINIZED SPARSE PARTIALLY OBSERVABLE TREE"
+        }
+       ],
+       "colspan": 3
+      },
+      {
+       "spans": [
+        {
+         "text": "5. FUNDING NUMBERS",
+         "bold": true
+        }
+       ],
+       "rowspan": 2
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "6. AUTHOR(S)",
+         "bold": true
+        },
+        {
+         "text": " Kelsey M. Shevock"
+        }
+       ],
+       "colspan": 3
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "7. PERFORMING ORGANIZATION NAME(S) AND ADDRESS(ES)",
+         "bold": true
+        },
+        {
+         "text": " Naval Postgraduate School Monterey, CA 93943-5000"
+        }
+       ],
+       "colspan": 3
+      },
+      {
+       "spans": [
+        {
+         "text": "8. PERFORMING ORGANIZATION REPORT NUMBER",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "9. SPONSORING / MONITORING AGENCY NAME(S) AND ADDRESS(E",
+         "bold": true
+        },
+        {
+         "text": "S) N/A"
+        }
+       ],
+       "colspan": 3
+      },
+      {
+       "spans": [
+        {
+         "text": "10. SPONSORING / MONITORING AGENCY REPORT NUMBER",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "11. SUPPLEMENTARY NOTES",
+         "bold": true
+        },
+        {
+         "text": " The views expressed in this thesis are those of the author and do not reflect the official policy or position of the Department of Defense or the U.S. Government."
+        }
+       ],
+       "colspan": 4
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "12a. DISTRIBUTION / AVAILABILITY STATEMENT",
+         "bold": true
+        },
+        {
+         "text": " Approved for public release. Distribution is unlimited."
+        }
+       ],
+       "colspan": 3
+      },
+      {
+       "spans": [
+        {
+         "text": "12b. DISTRIBUTION CODE",
+         "bold": true
+        },
+        {
+         "text": " A"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "13. ABSTRACT (maximum 200 words)",
+         "bold": true
+        },
+        {
+         "text": " Those who defend systems against cyber-attacks can use moving target defense (MTD) to their advantage. However, optimal MTD techniques have yet to be sufficiently explored. In terms of cost-benefit analysis, the desired level of attack suppression will come at the cost of network availability, and optimization tools might be able to harness the advantages of MTD without undue sacrifice. This thesis formulates an attack/defense scenario as a partially observable Markov decision process (POMDP) to facilitate optimal MTD of a host. We develop a system in which service and IP reconfigurations can be employed as defense against a five-stage attack to maximize system availability and minimize cost. With an attack/defense scenario involving five attack stages and two defense options, we explore the utility of the Determinized Sparse Partially Observable Tree (DESPOT) algorithm for online optimal defense selection using the POMDP formulation. We compare optimization of the system for three different cases of the POMDP with varying levels of uncertainty (i.e., probability of detection) representing potential real-world scenarios. A significant result of this thesis is our development of a framework for optimizing MTD techniques. We also demonstrate, within the limitations of this research, how to determine the bounds for best performance when using DESPOT as an MTD controller."
+        }
+       ],
+       "colspan": 4
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "14. SUBJECT TERMS",
+         "bold": true
+        },
+        {
+         "text": " moving target defense, MTD, partially observable Markov decision process, POMDP, Determinized Sparse Partially Observable Tree, DESPOT, service reconfiguration, IP reconfiguration, attacker, defender, optimization"
+        }
+       ],
+       "colspan": 3,
+       "rowspan": 2
+      },
+      {
+       "spans": [
+        {
+         "text": "15. NUMBER OF PAGES",
+         "bold": true
+        },
+        {
+         "text": " 93"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "16. PRICE CODE",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "17. SECURITY CLASSIFICATION OF REPORT",
+         "bold": true
+        },
+        {
+         "text": " Unclassified"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "18. SECURITY CLASSIFICATION OF THIS PAGE",
+         "bold": true
+        },
+        {
+         "text": " Unclassified"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "19. SECURITY CLASSIFICATION OF ABSTRACT",
+         "bold": true
+        },
+        {
+         "text": " Unclassified"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "20. LIMITATION OF ABSTRACT",
+         "bold": true
+        },
+        {
+         "text": " UU"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "NSN 7540-01-280-5500"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Standard Form 298 (Rev. 2-89) Prescribed by ANSI Std. 239-18"
+    }
+   ],
+   "align": "right"
+  }
+ ]
+}

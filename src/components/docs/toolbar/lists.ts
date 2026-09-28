@@ -2,7 +2,7 @@ import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { Command, EditorState } from "@tiptap/pm/state";
 import { isList } from "@/components/docs/typing/lists";
-import { formatParts, listLevelsOf, type ListCounter, type ListLevel } from "@/lib/docs/schema";
+import { formatParts, listLevelsOf, type ListCounter, type ListLevel, type RichNode } from "@/lib/docs/schema";
 
 // Google Docs' lists (SPEC.md §29). Each of a list's nine nesting levels
 // draws a bullet, or a counter in its glyph format: the text around the
@@ -11,7 +11,7 @@ import { formatParts, listLevelsOf, type ListCounter, type ListLevel } from "@/l
 // outermost list keeps its preset in `listStyle` (null is its kind's
 // default), or, when its levels are no preset's (an import's "a)." or
 // "[12]"), the levels themselves in `listLevels`; a nested list draws its
-// level of the outermost list's (css/toolbar.css). Restart numbering and
+// level of the outermost list's (listSheet). Restart numbering and
 // Continue previous numbering set a numbered list's `start`.
 
 type ListKind = "bulletList" | "orderedList" | "taskList";
@@ -115,6 +115,20 @@ export function sameLevel(a: ListLevel, b: ListLevel): boolean {
   return "bullet" in a ? "bullet" in b && a.bullet === b.bullet : "counter" in b && a.counter === b.counter && a.format === b.format;
 }
 
+/** The format of an outermost list whose lines draw `seen` (by depth; a
+    gap is any level): none when its type's default draws them, else the
+    first preset that does, else levels of its own, the default's where
+    `seen` has none. */
+export function listFormat(type: string, seen: (ListLevel | undefined)[]): { listStyle: string } | { listLevels: string } | null {
+  const draws = (attrs: Record<string, unknown>) =>
+    seen.every((level, k) => !level || sameLevel(lineLevel({ type, attrs }, k, "counter" in level), level));
+  if (draws({})) return null;
+  const preset = PRESETS.find((p) => p.kind === type && p.style !== null && draws({ listStyle: p.style }));
+  if (preset?.style) return { listStyle: preset.style };
+  const base = (type === "orderedList" ? NUMBER_PRESETS : BULLET_PRESETS)[0].levels;
+  return { listLevels: JSON.stringify(base.map((level, k) => seen[k] ?? level)) };
+}
+
 /** Two lists that draw alike: the same preset and the same own levels. */
 export function sameFormat(a: PMNode, b: PMNode): boolean {
   return (a.attrs.listStyle ?? null) === (b.attrs.listStyle ?? null) && (a.attrs.listLevels ?? null) === (b.attrs.listLevels ?? null);
@@ -192,7 +206,7 @@ export function listMarker(outer: { type: string; attrs?: Record<string, unknown
 /** Words as a CSS string: a quote, a backslash, or a line end escaped. */
 const cssString = (text: string) => `"${text.replace(/["\\\n\r\f]/g, (c) => `\\${c.charCodeAt(0).toString(16)} `)}"`;
 
-/** A list's levels as its inline style (css/toolbar.css): level n's bullet
+/** A list's levels as its inline style (listSheet): level n's bullet
     in --docs-bullet-n, its counter in --docs-number-n (list-style-type, for
     a browser that draws no ::marker content), and its marker in
     --docs-marker-n (::marker's content: its format's words around the
@@ -201,15 +215,58 @@ export function levelStyle(levels: ListLevel[]): string {
   return levels
     .map((level, k) => {
       const n = k + 1;
-      if ("bullet" in level) return `--docs-bullet-${n}: ${cssString(`${level.bullet} `)}`;
+      if ("bullet" in level) return `--docs-bullet-${n}: ${cssString(`${level.bullet}\u2003`)}`;
       const parts = formatParts(level.format, k);
       if (!parts) return "";
       const count = parts.sep === null ? `counter(list-item, ${level.counter})` : `counters(list-item, ${cssString(parts.sep)}, ${level.counter})`;
-      const marker = [parts.before ? cssString(parts.before) : "", count, cssString(`${parts.after} `)].filter(Boolean).join(" ");
+      const marker = [parts.before ? cssString(parts.before) : "", count, cssString(`${parts.after}\u2003`)].filter(Boolean).join(" ");
       return `--docs-number-${n}: ${level.counter}; --docs-marker-${n}: ${marker}`;
     })
     .filter(Boolean)
     .join("; ");
+}
+
+/** The list rules under `root` (".docs-prose" in the page editor, "body"
+    in the web page download): Google Docs' defaults (● ○ ■, 1. a. i.), each
+    depth's level, a bullet as list-style-type, and a number as ::marker's
+    content, with its counter as list-style-type where a browser draws no
+    ::marker content. A line a suggestion adds or removes whole sits in the
+    suggestion's wrapper (css/suggest.css). */
+export function listSheet(root: string): string {
+  const li = (n: number) => `${root} ${Array.from({ length: n }, () => "li").join(" ")}`;
+  return [
+    `${root} { ${levelStyle(BULLET_PRESETS[0].levels)}; ${levelStyle(NUMBER_PRESETS[0].levels)}; }`,
+    ...Array.from(
+      { length: 9 },
+      (_, k) => `${li(k + 1)} { --docs-level-bullet: var(--docs-bullet-${k + 1}); --docs-level-number: var(--docs-number-${k + 1}); --docs-level-marker: var(--docs-marker-${k + 1}); }`,
+    ),
+    `${root} ul:not([data-type="taskList"]) > li { list-style-type: var(--docs-level-bullet); }`,
+    `${root} ol > li { list-style-type: var(--docs-level-number); }`,
+    `${root} :is(ol > li, ol > [data-suggestion-block] > li)::marker { content: var(--docs-level-marker); }`,
+  ].join("\n");
+}
+
+const LIST_TYPES = new Set(["bulletList", "orderedList", "taskList"]);
+
+/** The rich text with each list line's marker as words before its words,
+    as the page draws it ("(a) ", "☑ "): the plain text download's lines.
+    `outer` is the outermost list, `above` the numbers of the lines above. */
+export function markersAsWords(node: RichNode, outer: RichNode | null = null, above: number[] = []): RichNode {
+  if (!LIST_TYPES.has(node.type)) return node.content ? { ...node, content: node.content.map((c) => markersAsWords(c)) } : node;
+  const top = outer ?? node;
+  const start = Number(node.attrs?.start) || 1;
+  const items = (node.content ?? []).map((item, i) => {
+    const numbers = [...above, start + i];
+    const marker =
+      node.type === "taskList" ? (item.attrs?.checked === true ? "☑" : "☐") : levelMarker(lineLevel(top, numbers.length - 1, node.type === "orderedList"), numbers);
+    const content = (item.content ?? []).map((child, k) => {
+      if (LIST_TYPES.has(child.type)) return markersAsWords(child, top, numbers);
+      const words = markersAsWords(child);
+      return k === 0 ? { ...words, content: [{ type: "text", text: `${marker} ` }, ...(words.content ?? [])] } : words;
+    });
+    return { ...item, content };
+  });
+  return { ...node, content: items };
 }
 
 /** A preset by its name, of any kind: the styles a list's HTML carries. */

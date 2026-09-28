@@ -297,9 +297,17 @@ function fuseComposites(input: Atom[]): Atom[] {
         }
       }
       // Stacked over "=": \cong (a tilde), \doteq (a dot).
+      // (The dot is set at the text's size: a label's period over "=" is a
+      // script's, "a.s." over "=" read as \doteq.)
       if (a.tex === "=") {
         const b = out.find(
-          (b) => b !== a && Math.abs(cx(b) - cx(a)) < 0.15 * em && b.yb > a.yb + 0.1 * em && b.yb < a.yb + 0.7 * em && (b.tex === "\\sim" || b.tex === "."),
+          (b) =>
+            b !== a &&
+            b.size >= a.size * 0.85 &&
+            Math.abs(cx(b) - cx(a)) < 0.15 * em &&
+            b.yb > a.yb + 0.1 * em &&
+            b.yb < a.yb + 0.7 * em &&
+            (b.tex === "\\sim" || b.tex === "."),
         );
         if (b) {
           a.tex = b.tex === "\\sim" ? "\\cong" : "\\doteq";
@@ -836,6 +844,28 @@ function linearAt(input: Atom[]): string {
     }
     return { end, word };
   };
+  // A label stacked over a relation (\overset{a.s.}{\to}, an L with its
+  // exponent over an arrow) or under it is the relation's before any symbol
+  // takes its scripts: small glyphs over its width, their baseline half an
+  // em over its own or more (a superscript stands a third of an em up, and
+  // beside). The label's first letter starts left of the arrow, and the
+  // symbol before took it for its superscript.
+  const labels = new Map<Atom, { over: Atom[]; under: Atom[] }>();
+  for (const a of main) {
+    if (a.cls !== "rel") continue;
+    const stacked = (over: boolean) =>
+      small.filter(
+        (s) =>
+          !s.claimed &&
+          cx(s) > a.x1 - 0.1 * em &&
+          cx(s) < a.x2 + 0.1 * em &&
+          (over ? s.yb - a.yb > 0.4 * baseSize && s.bottom > a.yb : a.yb - s.yb > 0.25 * baseSize && s.top < a.yb),
+      );
+    const over = stacked(true);
+    const under = stacked(false);
+    for (const s of [...over, ...under]) s.claimed = true;
+    if (over.length || under.length) labels.set(a, { over, under });
+  }
   // The limit under \lim, \sup, \max in display is claimed before any
   // script: wider than the name, it starts left of it ("N → ∞" under "lim"
   // read as a subscript of the "=" before it).
@@ -927,6 +957,9 @@ function linearAt(input: Atom[]): string {
     const next = main[k + 1];
     if (tex === "|" && prev && next && a.x1 - prev.x2 > 0.22 * em && next.x1 - a.x2 > 0.22 * em) tex = "\\mid";
     if (tex === ":" && prev && a.x1 - prev.x2 < 0.25 * em && next && next.x1 - a.x2 > 0.3 * em) tex = "\\colon";
+    const label = labels.get(a);
+    if (label?.over.length) tex = `\\overset{${linear(label.over.map((s) => ({ ...s, claimed: false })))}}{${tex}}`;
+    if (label?.under.length) tex = `\\underset{${linear(label.under.map((s) => ({ ...s, claimed: false })))}}{${tex}}`;
     const right = next ? next.x1 : Infinity;
     let mine = small.filter((s) => !s.claimed && s.x1 >= last.x2 - 0.25 * em && s.x1 < right - 0.05 * em);
     // A relation, an operator, punctuation, or an opening bracket takes a

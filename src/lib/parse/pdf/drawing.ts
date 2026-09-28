@@ -420,8 +420,8 @@ export function readDrawing(
         // dvips draws every rule so — Grinstead–Snell's fraction bars (9 on
         // its p. 26, and no rule read) and its tables' \hline.
         if (annotation > 0) break;
-        const box = boxOf([apply(state.ctm, 0, 0), apply(state.ctm, 1, 0), apply(state.ctm, 0, 1), apply(state.ctm, 1, 1)]);
-        addFilledBox(box, state.clip, rules, fills, paint(state));
+        const box = shownPart(boxOf([apply(state.ctm, 0, 0), apply(state.ctm, 1, 0), apply(state.ctm, 0, 1), apply(state.ctm, 1, 1)]), state.clip);
+        if (box) addFilledBox(box, null, rules, fills, paint(state));
         break;
       }
     }
@@ -435,10 +435,10 @@ function intersect(a: Box, b: Box): Box {
 }
 
 // What of a box the clip in effect shows: its part inside, or null when none
-// of it shows. Images, rules, and filled boxes are cut alike: KaTeX draws a
-// \sqrt's bar 400 em long and clips it to its formula (synth-math-html read
-// rules 5,300 pt long). A line has no extent across it: it shows when it
-// lies inside. slack lets a rule on the clip's very edge (a table's outer
+// of it shows. Images and rules are cut alike: KaTeX draws a \sqrt's bar
+// 400 em long and clips it to its formula (synth-math-html read rules
+// 5,300 pt long). A line has no extent across it: it shows when it lies
+// inside. slack lets a rule on the clip's very edge (a table's outer
 // border, a hairline) stay whole.
 const RULE_SLACK = 0.5;
 function shownPart(box: Box, clip: Box | null, slack = 0): Box | null {
@@ -552,17 +552,20 @@ function paint(state: State): string | undefined {
 
 // A filled box at most 2 pt thick is a rule; any other is a filled box.
 // Each is what the clip shows of it.
-function addFilledBox(drawn: Box, clip: Box | null, rules: Rule[], fills: Fill[], color?: string) {
-  const box = shownPart(drawn, clip, RULE_SLACK);
-  if (!box) return;
+// A rule is what the clip shows of it; a filled box stays as drawn (cut to
+// its clip, a figure's clipped background read as a lone box in a figure and
+// took its labels: arXiv 2411.19946 p. 1).
+function addFilledBox(box: Box, clip: Box | null, rules: Rule[], fills: Fill[], color?: string) {
   const w = box.x2 - box.x1;
   const h = box.y2 - box.y1;
   if (h <= 2 && w > h) {
+    const shown = shownPart(box, clip, RULE_SLACK);
     const y = (box.y1 + box.y2) / 2;
-    rules.push({ dir: "h", x1: box.x1, y1: y, x2: box.x2, y2: y, thickness: h });
+    if (shown) rules.push({ dir: "h", x1: shown.x1, y1: y, x2: shown.x2, y2: y, thickness: h });
   } else if (w <= 2 && h > w) {
+    const shown = shownPart(box, clip, RULE_SLACK);
     const x = (box.x1 + box.x2) / 2;
-    rules.push({ dir: "v", x1: x, y1: box.y1, x2: x, y2: box.y2, thickness: w });
+    if (shown) rules.push({ dir: "v", x1: x, y1: shown.y1, x2: x, y2: shown.y2, thickness: w });
   } else {
     fills.push(color ? { ...box, color } : box);
   }

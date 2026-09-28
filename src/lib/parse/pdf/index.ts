@@ -25,7 +25,7 @@ import { firstPageOf, mergeAcrossPages, shiftSpansInto } from "@/lib/parse/pdf/m
 import { isOcrLayer } from "@/lib/parse/pdf/paragraphs";
 import { placeTables, ruledTables, takeTables } from "@/lib/parse/pdf/ruled";
 import { segmentPage } from "@/lib/parse/pdf/segment";
-import { isWrappedRowLine } from "@/lib/parse/pdf/tables";
+import { attachTableCaptions, isWrappedRowLine } from "@/lib/parse/pdf/tables";
 import { collectHyphenation, joinWrapped, spansFromRuns } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, Segment, UriRegion } from "@/lib/parse/pdf/types";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
@@ -421,6 +421,8 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   }
 
   segments = mergeAcrossPages(fused);
+  // A table's caption is the table's, once its rows joined across pages.
+  segments = attachTableCaptions(segments);
 
   // A long title wraps across layout lines: consecutive equal-size HEADING
   // segments at the top of page 0 are one title, not several headings.
@@ -459,9 +461,12 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   }
 
   // The title's look and alignment (the import's Title), read before the
-  // heading it came from leaves the blocks.
+  // heading it came from leaves the blocks: the look of its largest letters
+  // (a title that took the line under it as its scripts read as that
+  // line's size).
   const titleSegment = title ? segments.find((s) => s.page === 0 && s.type === "HEADING" && s.text === title) : undefined;
-  const titleFont = titleSegment ? spansFromRuns(titleSegment.text, titleSegment.runs).font : undefined;
+  const titleRuns = titleSegment?.runs?.filter((r) => (r.look?.size ?? 0) >= (titleSegment.rawSize ?? 0) - 0.5);
+  const titleFont = titleSegment ? spansFromRuns(titleSegment.text, titleRuns?.length ? titleRuns : titleSegment.runs).font : undefined;
 
   // The reader shows the title above the blocks; the heading it came from
   // would show it twice.

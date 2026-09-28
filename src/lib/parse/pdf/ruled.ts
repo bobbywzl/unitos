@@ -8,7 +8,7 @@
 // before (census class 3: MMWR's Table 1 in six blocks), and prose beside a
 // table joined its rows.
 
-import type { PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
+import type { Fill, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { joinedRules, latticeGrids, ruleStacks, type Grid, type GridCell } from "@/lib/parse/pdf/lattice";
 import { buildLines } from "@/lib/parse/pdf/lines";
@@ -25,7 +25,7 @@ import {
   type TableRow,
 } from "@/lib/parse/pdf/tables";
 import { isMonoLine, joinGroup } from "@/lib/parse/pdf/text";
-import type { Box, Cell, Item, Line, Run, Segment, TableRegion } from "@/lib/parse/pdf/types";
+import type { Box, Cell, Item, Line, MathZone, Run, Segment, TableRegion } from "@/lib/parse/pdf/types";
 
 // What the ruled tables read of a page's drawing.
 type TableDrawing = Pick<PageDrawing, "rules" | "fills" | "images" | "paths">;
@@ -217,7 +217,6 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[]): Box
     const band = { x1: x1 - 2, x2: x2 + 2, y1: sorted[k + 1].y1, y2: sorted[k].y1 };
     const lines = buildLines(items.filter((it) => inBox(it, band)), 0);
     const breaks = lines.some((l) => isProseLine(l, x2 - x1) || CAPTION_START_RE.test(l.text));
-    if (process.env.R2T_DEBUG) console.error("BAND", band.y1, band.y2, breaks, lines.map((l) => [l.cells.length, Math.round(l.xEnd - l.x), l.text.slice(0, 50)]));
     if (breaks) {
       close();
       continue;
@@ -314,7 +313,11 @@ function gridHead(grid: Grid, body: Item[], items: Item[]): Item[] {
     const line = lines[k];
     const aligned = !phraseColumns(line, grid.xs).some((p) => p.from === 0 && p.to > 0);
     const plain = !CAPTION_START_RE.test(line.text) && !/[.!?]$/.test(line.text.trim()) && !isProseLine(line, b.x2 - b.x1);
-    if (line.y - edge > pitch * 1.5 || line.size > size * 1.15 || !aligned || !plain) {
+    // A line that runs on past the table's sides is the page's: a running
+    // head with its page number beside the table (synth-notes-html p. 8's
+    // dice table took its running head for a head row).
+    const beyond = items.some((it) => Math.abs(it.y - line.y) < line.size * 0.5 && (it.x + it.w < b.x1 - 2 || it.x > b.x2 + 2));
+    if (line.y - edge > pitch * 1.5 || line.size > size * 1.15 || !aligned || !plain || beyond) {
       stop = line;
       break;
     }
@@ -378,7 +381,6 @@ export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number
       regions.push({ box, items: inside, lines, grid: null, rules: inner, drawing });
     }
   }
-  if (process.env.R2T_DEBUG) for (const r of regions) console.error("REGION", r.grid ? "grid" : "rules", JSON.stringify(r.box), r.lines.length, r.lines.slice(0, 2).map((l) => l.text.slice(0, 60)));
   return regions;
 }
 
@@ -459,9 +461,10 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
   // against the glyphs and rules the page draws (a failed check keeps the
   // words; synth-notes-tex's table of fractions read "1 36" for 1/36).
   const built: Line[] = [];
-  const segment = (rows: TableRow[], headerRows: number) => {
+  const segment = (rows: TableRow[], headerRows: number, edges: number[]) => {
     resolveZones(built, region.drawing);
-    return tableSegment(rows, headerRows, page, where);
+    const look = { size: Math.round(median(region.items.map((it) => it.size)) * 2) / 2, columns: edges.slice(1).map((x, k) => x - edges[k]) };
+    return tableSegment(rows, headerRows, page, where, look);
   };
   if (region.grid) {
     const grid = region.grid;
@@ -478,44 +481,143 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
       last = covers;
     });
     const head = groups.map((g) => headerRow(g, grid.xs, built));
-    const rows = [...head, ...gridRows(grid, region.items.filter((it) => centerOf(it).y <= grid.box.y2), page, built)];
+    const rows = [...head, ...gridRows(grid, region.items.filter((it) => centerOf(it).y <= grid.box.y2), page, built, region.drawing)];
     const headerRows = boldHeaderRows(rows);
     spanHeadColumns(rows, headerRows);
-    return segment(rows, headerRows);
+    return segment(rows, headerRows, grid.xs);
   }
   const width = region.box.x2 - region.box.x1;
+  // A line's phrases are its words: pdf.js reads phrases across a column
+  // gap into one string (arXiv 2504.02736's Table III read its three heads
+  // "Kitaev", "complex fermion", "bosonic" as one).
+  const phrased = buildLines(region.items.flatMap(splitWide), page);
   const full = region.rules.filter((r) => r.x2 - r.x1 >= width * 0.9).map((r) => r.y1);
-  const headerRule = full.find((y) => lines.some((l) => l.y > y) && lines.filter((l) => l.y < y).length >= 2);
-  const head = headerRule === undefined ? [] : lines.filter((l) => l.y > headerRule);
-  const body = headerRule === undefined ? lines : lines.filter((l) => l.y < headerRule);
-  const separators = columnSeparators(body.length >= 2 ? body : lines);
-  const columnCount = separators.length + 1;
-  const rows: TableRow[] = [];
+  const headerRule = full.find((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2);
+  const head = headerRule === undefined ? [] : phrased.filter((l) => l.y > headerRule);
+  const body = headerRule === undefined ? phrased : phrased.filter((l) => l.y < headerRule);
   // Header rows: lines between two partial rules are one row, each cell its
   // column's words; a cell whose words cross a column separator spans the
-  // columns it covers.
-  const partial = region.rules.filter((r) => r.x2 - r.x1 < width * 0.9).map((r) => r.y1);
+  // columns it covers, or the ones the partial rule under it spans.
+  const partial = region.rules.filter((r) => r.x2 - r.x1 < width * 0.9);
   const headGroups: Line[][] = [];
   head.forEach((line, k) => {
-    const cut = k > 0 && partial.some((y) => y < head[k - 1].y && y > line.y);
+    const cut = k > 0 && partial.some((r) => r.y1 < head[k - 1].y && r.y1 > line.y);
     if (k === 0 || cut) headGroups.push([]);
     headGroups[headGroups.length - 1].push(line);
   });
+  // The columns: the gaps no body line crosses, nor the column heads over
+  // them (the last head row). A head row parts a column its values' merged
+  // cells cross: "EN-DE" and "EN-FR" under "Training Cost (FLOPs)" over
+  // "3.3 · 10^18" set across both (arXiv 1706.03762's Table 2).
+  const scanned = columnSeparators(body.length >= 2 ? [...body, ...(headGroups.at(-1) ?? [])] : phrased);
+  const separators = [...scanned, ...headSeparators(headGroups.at(-1) ?? [], body, scanned, region.box)].sort((a, b) => a - b);
+  const columnCount = separators.length + 1;
   const bounds = [region.box.x1, ...separators, region.box.x2];
-  for (const group of headGroups) rows.push(headerRow(group, bounds, built));
-  if (process.env.R2T_DEBUG) {
-    console.error("BOUNDS", bounds.map((b) => Math.round(b * 10) / 10).join(","), "partial", partial.map((y) => Math.round(y)));
-    for (const group of headGroups) for (const line of group) console.error("  HEADLINE", Math.round(line.y), phraseColumns(line, bounds).map((p) => `${p.from}-${p.to}:${p.items.map((i) => i.str).join("|")}@${Math.round(p.items[0].x)}-${Math.round(p.items[p.items.length - 1].x + p.items[p.items.length - 1].w)}`).join("  "));
-  }
+  const rows: TableRow[] = [];
+  for (const group of headGroups) rows.push(headerRow(group, bounds, built, partial));
   const headerRows = rows.length;
   spanHeadColumns(rows, headerRows);
   if (body.length > 0) {
     built.push(...body);
     const cellsOf = body.map((line) => cellsBySeparators(line, separators));
     const starts = regionRowStarts(body, cellsOf);
-    rows.push(...spanCenteredLabels(rowsOf(cellsOf, starts, columnCount), starts.map((k) => body[k].y), full));
+    const bodyRows = rowsOf(cellsOf, starts, columnCount);
+    spanValues(bodyRows, body, starts, separators);
+    rows.push(...spanCenteredLabels(bodyRows, starts.map((k) => body[k].y), full));
   }
-  return segment(rows, headerRows || (rows.length > 1 && boldHeaderRows(rows) > 0 ? 1 : 0));
+  return segment(rows, headerRows || (rows.length > 1 && boldHeaderRows(rows) > 0 ? 1 : 0), bounds);
+}
+
+// An item cut at its wide gaps: two glyphs more than 0.8 of the size apart,
+// with a space between them in the string, part two phrases. An item whose
+// glyphs do not match its characters one to one stays whole.
+function splitWide(it: Item): Item[] {
+  const glyphs = it.glyphs ?? [];
+  const at: number[] = [];
+  for (let i = 0; i < it.str.length; ) {
+    const ch = String.fromCodePoint(it.str.codePointAt(i) ?? 0);
+    if (ch.trim()) at.push(i);
+    i += ch.length;
+  }
+  if (glyphs.length < 2 || at.length !== glyphs.length) return [it];
+  const out: Item[] = [];
+  let from = 0;
+  for (let k = 1; k <= glyphs.length; k++) {
+    const wide =
+      k < glyphs.length &&
+      glyphs[k].x - (glyphs[k - 1].x + glyphs[k - 1].w) > it.size * 0.8 &&
+      /\s/.test(it.str.slice(at[k - 1], at[k]));
+    if (k < glyphs.length && !wide) continue;
+    const [first, last] = [glyphs[from], glyphs[k - 1]];
+    const end = k < glyphs.length ? at[k] : it.str.length;
+    out.push({ ...it, str: it.str.slice(at[from], end).trimEnd(), x: first.x, w: last.x + last.w - first.x, glyphs: glyphs.slice(from, k) });
+    from = k;
+  }
+  return out;
+}
+
+// A line's phrases: its items a word gap apart or closer.
+function phrasesOf(line: Line): { x1: number; x2: number }[] {
+  const out: { x1: number; x2: number }[] = [];
+  for (const it of line.items) {
+    const last = out[out.length - 1];
+    if (last && it.x - last.x2 < line.size * 0.6) last.x2 = Math.max(last.x2, it.x + it.w);
+    else out.push({ x1: it.x, x2: it.x + it.w });
+  }
+  return out;
+}
+
+// The columns a head row parts where the body's own gaps are crossed: two
+// heads set apart over one column of the body ("EN-DE" and "EN-FR" under
+// "Training Cost (FLOPs)", arXiv 1706.03762's Table 2) part it, when most
+// body lines with words on both sides of the gap between the heads leave
+// it open and the few that cross it are values set across both (a merged
+// cell: "3.3 · 10^18").
+function headSeparators(head: Line[], body: Line[], separators: number[], box: Box): number[] {
+  const out: number[] = [];
+  for (const line of head) {
+    const phrases = phrasesOf(line);
+    for (let k = 1; k < phrases.length; k++) {
+      const [a, b] = [phrases[k - 1].x2, phrases[k].x1];
+      if (b - a < line.size * 0.8 || separators.some((x) => x > a && x < b)) continue;
+      const x = (a + b) / 2;
+      const lo = Math.max(box.x1, ...separators.filter((s) => s < x));
+      const hi = Math.min(box.x2, ...separators.filter((s) => s > x));
+      let both = 0;
+      let across = 0;
+      for (const row of body) {
+        const inside = phrasesOf(row).filter((p) => p.x2 > lo && p.x1 < hi);
+        if (inside.some((p) => p.x1 < x && p.x2 > x)) across++;
+        else if (inside.some((p) => p.x2 <= x) && inside.some((p) => p.x1 >= x)) both++;
+      }
+      if (both >= 2 && across * 2 <= both) out.push(x);
+    }
+  }
+  return out;
+}
+
+// A value set across two columns or more is one cell spanning them: a
+// phrase with a fifth of it or more on each side of a column's edge ("3.3 ·
+// 10^18" under both of Table 2's cost columns, arXiv 1706.03762). Its row is
+// read again without the edges it crosses. starts: each row's first line.
+function spanValues(rows: TableRow[], lines: Line[], starts: number[], separators: number[]) {
+  rows.forEach((row, r) => {
+    const rowLines = lines.slice(starts[r], starts[r + 1] ?? lines.length);
+    const crossed = new Set(
+      rowLines.flatMap((l) => phrasesOf(l)).flatMap((p) => separators.filter((x) => x - p.x1 >= (p.x2 - p.x1) * 0.2 && p.x2 - x >= (p.x2 - p.x1) * 0.2)),
+    );
+    if (crossed.size === 0) return;
+    const kept = separators.filter((x) => !crossed.has(x));
+    const [merged] = rowsOf(rowLines.map((l) => cellsBySeparators(l, kept)), [0], kept.length + 1);
+    // Each cell covers the columns up to the next edge kept.
+    let col = 0;
+    row.cells = merged.cells.map((cell, k) => {
+      const end = k < kept.length ? separators.indexOf(kept[k]) + 1 : separators.length + 1;
+      const span = end - col;
+      col = end;
+      return span > 1 ? { ...cell, colspan: span } : cell;
+    });
+  });
 }
 
 // A label set alone on its line midway between two rows, with no rule
@@ -607,12 +709,20 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
 // One header row out of lines: the words of each column joined, a phrase
 // over several columns one cell spanning them. bounds are the column edges,
 // the table's left edge first.
-function headerRow(lines: Line[], bounds: number[], built: Line[]): TableRow {
+function headerRow(lines: Line[], bounds: number[], built: Line[], rules: Rule[] = []): TableRow {
   type Piece = { from: number; to: number; items: Item[] };
   const pieces: Piece[] = [];
   const columns = bounds.length - 1;
+  const middles = bounds.slice(1).map((x, c) => (bounds[c] + x) / 2);
   for (const line of lines) {
-    for (const { from, to, items } of phraseColumns(line, bounds)) {
+    for (const phrase of phraseColumns(line, bounds)) {
+      // A rule drawn under a head spans the columns the head does (a
+      // booktabs \cmidrule): its ends say which, where a head centered
+      // over them falls short of the first (MMWR p. 21's Table 3).
+      const x = (phrase.items[0].x + phrase.items[phrase.items.length - 1].x + phrase.items[phrase.items.length - 1].w) / 2;
+      const rule = rules.find((r) => r.y1 < line.y && line.y - r.y1 <= line.size * 1.5 && r.x1 <= x && r.x2 >= x);
+      const under = rule ? middles.flatMap((m, c) => (m > rule.x1 && m < rule.x2 ? [c] : [])) : [];
+      const { from, to, items } = under.length > 0 ? { from: under[0], to: under[under.length - 1], items: phrase.items } : phrase;
       const piece = pieces.find((p) => p.from <= to && p.to >= from);
       if (piece) {
         piece.from = Math.min(piece.from, from);
@@ -663,12 +773,13 @@ function linesText(lines: Line[]): { text: string; runs: Run[] } {
 // The rows of a grid: each item in the cell its center is in; an item that
 // runs across a column line is cut there (splitAt). Each cell's lines go
 // into `built`, where the table's formulas are read.
-function gridRows(grid: Grid, items: Item[], page: number, built: Line[]): TableRow[] {
+function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawing: TableDrawing): TableRow[] {
   const inner = grid.xs.slice(1, -1);
   const pieces = items.flatMap((it) => splitAt(it, inner.filter((x) => x > it.x + it.w * 0.05 && x < it.x + it.w * 0.95)));
   const rowCount = grid.ys.length - 1;
   const rows: TableRow[] = Array.from({ length: rowCount }, () => ({ cells: [] }));
-  const cellLines = grid.cells.map((cell) => buildLines(pieces.filter((it) => inBox(it, cell)), page));
+  const size = median(items.map((it) => it.size));
+  const cellLines = grid.cells.map((cell) => fractionCell(buildLines(pieces.filter((it) => inBox(it, cell)), page), drawing.rules, size));
   // The cells' padding: the least a line stands from its cell's left edge,
   // and from its right edge (Word's 5.4 pt); more is a line set in.
   const least = (gaps: number[]) => Math.min(10, ...gaps.filter((d) => d >= 0));
@@ -682,9 +793,46 @@ function gridRows(grid: Grid, items: Item[], page: number, built: Line[]): Table
     const out: TableCell = words.text.trim() === "" ? { text: "", runs: [] } : words;
     if (cell.colspan > 1) out.colspan = cell.colspan;
     if (cell.rowspan > 1) out.rowspan = cell.rowspan;
+    const fill = cellFill(cell, grid.box, drawing.fills);
+    if (fill) out.fill = fill;
     rows[cell.row].cells.push(out);
   });
   return rows.filter((r) => r.cells.length > 0);
+}
+
+// A fraction alone in a cell: its numerator and its denominator read as two
+// lines, too far apart for one (no words of the cell's size between them
+// to join). With a bar drawn between them, the cell's glyphs are one
+// formula (synth-notes-tex's table of fractions read "1 36" for 1/36).
+function fractionCell(lines: Line[], rules: Rule[], size: number): Line[] {
+  if (lines.length < 2 || !lines.every((l) => /^[\p{L}\p{N}+\-−=(),.\s]{1,12}$/u.test(l.text))) return lines;
+  const x1 = Math.min(...lines.map((l) => l.x));
+  const x2 = Math.max(...lines.map((l) => l.xEnd));
+  const barred = lines.slice(1).every((l, k) => rules.some((r) => r.dir === "h" && r.y1 < lines[k].yMin && r.y1 > l.yMax && r.x1 < x2 && r.x2 > x1));
+  const glyphs = lines.flatMap((l) => l.items.flatMap((it) => it.glyphs ?? []));
+  if (!barred || glyphs.length === 0) return lines;
+  const zone: MathZone = { glyphs, size, latex: "", ok: false, open: false };
+  for (const line of lines) {
+    for (const it of line.items) it.zone = zone;
+    for (const r of line.runs) r.zone = zone;
+  }
+  return lines;
+}
+
+// A cell's shading: the last box filled over the cell's middle that covers
+// most of the cell and stays inside the table (a page's or a slide's
+// background is none); white is none.
+function cellFill(cell: Box, table: Box, fills: Fill[]): string | undefined {
+  const [cx, cy] = [(cell.x1 + cell.x2) / 2, (cell.y1 + cell.y2) / 2];
+  for (let k = fills.length - 1; k >= 0; k--) {
+    const f = fills[k];
+    if (f.x1 > cx || f.x2 < cx || f.y1 > cy || f.y2 < cy) continue;
+    if (f.x1 < table.x1 - 2 || f.x2 > table.x2 + 2 || f.y1 < table.y1 - 2 || f.y2 > table.y2 + 2) continue;
+    const overlap = (Math.min(f.x2, cell.x2) - Math.max(f.x1, cell.x1)) * (Math.min(f.y2, cell.y2) - Math.max(f.y1, cell.y1));
+    if (overlap < (cell.x2 - cell.x1) * (cell.y2 - cell.y1) * 0.6) continue;
+    return f.color && !/^#(?:f[5-9a-f]){3}$/i.test(f.color) ? f.color : undefined;
+  }
+  return undefined;
 }
 
 // A grid cell's lines as its paragraphs: a line breaks where the page

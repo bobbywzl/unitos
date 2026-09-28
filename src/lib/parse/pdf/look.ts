@@ -54,6 +54,12 @@ export function luminance(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+// A light gray: a shading, not a highlighter's color.
+const isShading = (hex: string) => {
+  const c = channels(hex);
+  return Math.max(...c) - Math.min(...c) <= 0x0c && luminance(hex) >= 0.55;
+};
+
 // A link's blue is the link's, no color of its words (Google Docs' #1155cc,
 // Word's #0563c1, a browser's #0000ee and its visited purple).
 const isBlue = (hex: string) => {
@@ -148,7 +154,9 @@ function drawnMarks(glyphs: Glyph[], drawing: PageDrawing): Map<Glyph, Marks> {
     if (through.length > 0 && !cutsWord(byY, through)) set(through, { strike: true });
   }
   for (const fill of drawing.fills) {
-    if (!fill.color || luminance(fill.color) > 0.97) continue;
+    // White is the page, a light gray a table's shading (apple-fy24q4's
+    // rows set every number on #efefef), no highlighter's color.
+    if (!fill.color || luminance(fill.color) > 0.97 || isShading(fill.color)) continue;
     // A box from under the baseline to over the x-height, about a line
     // tall: a highlight. A shaded frame holds lines, a cell its padding.
     const inside = marked(byY, fill.x1, fill.x2, fill.y1, -0.1, 0.9).filter(
