@@ -1,0 +1,2352 @@
+{
+ "id": "arxiv-2302-12627",
+ "category": "math-tex",
+ "source": {
+  "pdf": ".bench/arxiv/2302.12627v3.pdf",
+  "url": "https://arxiv.org/abs/2302.12627v3"
+ },
+ "pages": [
+  1,
+  8
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "Cox reduction and confidence sets of models: a theoretical elucidation"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Rebecca M. Lewis∗ and Heather S. Battey"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Imperial College London"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "∗",
+   "spans": [
+    {
+     "text": "Corresponding author, rml15@ic.ac.uk, Supplementary Material available on request."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Abstract"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For sparse high-dimensional regression problems, Cox and Battey [2, 13] emphasised the need for confidence sets of models: an enumeration of those small sets of variables that fit the data equivalently well in a suitable statistical sense. This is to be contrasted with the single model returned by penalised regression procedures, effective for prediction but potentially misleading for subject-matter understanding. The proposed construction of such sets relied on preliminary reduction of the full set of variables. While various possibilities could be considered for this, [13] proposed a succession of regression fits based on incomplete block designs. The purpose of the present paper is to provide insight on both aspects of [13]. For an unspecified reduction strategy, we begin by characterising models that are likely to be retained in the model confidence set, emphasising geometric aspects. We then evaluate possible reduction schemes based on penalised regression or marginal screening, before theoretically elucidating the reduction of [13]. We identify features of the covariate matrix that may reduce its efficacy, and indicate improvements to the original proposal. An advantage of the approach is its ability to reveal its own stability or fragility for the data at hand."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "1 Introduction"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In the context of regression with a large number "
+    },
+    {
+     "text": "p",
+     "latex": "p",
+     "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+    },
+    {
+     "text": " of potential explanatory features on "
+    },
+    {
+     "text": "n≪p",
+     "latex": "n\\ll p",
+     "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo>≪</mo><mi>p</mi></mrow></math>"
+    },
+    {
+     "text": " independent individuals, usual practice is to identify a single low-dimensional model. Motivated by scientific studies in which subject-matter understanding is sought rather than immediate predictive success, [13] argued that when several reasonable explanations are statistically indistinguishable, one should aim to specify a confidence set of models. The arguments for this are in our view compelling, yet there may be some flexibility in how the broad goal is operationalised. The following approach was suggested in [13]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A "
+    },
+    {
+     "text": "reduction phase",
+     "italic": true
+    },
+    {
+     "text": " starts with the full set of "
+    },
+    {
+     "text": "p",
+     "latex": "p",
+     "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+    },
+    {
+     "text": " variables and aims to identify a much smaller set "
+    },
+    {
+     "text": "𝒮^⊂{1,…,p}",
+     "latex": "\\hat{\\mathcal{S}}\\subset\\{1,\\dots,p\\}",
+     "mathml": "<math display=\"inline\"><mrow><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover><mo>⊂</mo><mrow><mo stretchy=\"false\">{</mo><mrow><mn>1</mn><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>p</mi></mrow><mo stretchy=\"false\">}</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " indexing variables with apparent explanatory power. The set "
+    },
+    {
+     "text": "𝒮^",
+     "latex": "\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " is called the "
+    },
+    {
+     "text": "comprehensive model",
+     "italic": true
+    },
+    {
+     "text": ". Following this reduction, the "
+    },
+    {
+     "text": "model assessment phase",
+     "italic": true
+    },
+    {
+     "text": " assesses all sub-models of "
+    },
+    {
+     "text": "𝒮^",
+     "latex": "\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " for their compatibility with the data, having taken necessary measures to prevent miscalibration due to double use of the data. The "
+    },
+    {
+     "text": "confidence set of models ",
+     "italic": true
+    },
+    {
+     "text": "ℳ",
+     "latex": "\\mathcal{M}",
+     "mathml": "<math display=\"inline\"><mi>ℳ</mi></math>"
+    },
+    {
+     "text": " is an enumeration of those small sets of variables that fit the data equivalently well in a suitable statistical sense."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The reduction phase as outlined in [13] is termed "
+    },
+    {
+     "text": "Cox reduction",
+     "italic": true
+    },
+    {
+     "text": " throughout the present paper and proceeds as follows."
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Arrange the "
+      },
+      {
+       "text": "p",
+       "latex": "p",
+       "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+      },
+      {
+       "text": " variable indices at random either in a "
+      },
+      {
+       "text": "k×k",
+       "latex": "k\\times k",
+       "mathml": "<math display=\"inline\"><mrow><mi>k</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>k</mi></mrow></math>"
+      },
+      {
+       "text": " square or a "
+      },
+      {
+       "text": "k×k×k",
+       "latex": "k\\times k\\times k",
+       "mathml": "<math display=\"inline\"><mrow><mi>k</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>k</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>k</mi></mrow></math>"
+      },
+      {
+       "text": " cube, where preferably "
+      },
+      {
+       "text": "k≤15",
+       "latex": "k\\leq 15",
+       "mathml": "<math display=\"inline\"><mrow><mi>k</mi><mo>≤</mo><mn>15</mn></mrow></math>"
+      },
+      {
+       "text": ". Extensions to four or more dimensions are possible. There is no loss of generality in assuming that "
+      },
+      {
+       "text": "p",
+       "latex": "p",
+       "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+      },
+      {
+       "text": " is a perfect cube, as otherwise some positions are left unoccupied. A visualisation is in Figure S1 of the supplementary material [36]."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Any intrinsic biological or physiological characteristics, known to be important, are either used to partition the sample or are included in all regressions and should not be arranged in the cube."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Traverse the cube from its three directions, the rows, columns and “corridors”, specifying "
+      },
+      {
+       "text": "3k2",
+       "latex": "3k^{2}",
+       "mathml": "<math display=\"inline\"><mrow><mn>3</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>k</mi><mn>2</mn></msup></mrow></math>"
+      },
+      {
+       "text": " sets of "
+      },
+      {
+       "text": "k",
+       "latex": "k",
+       "mathml": "<math display=\"inline\"><mi>k</mi></math>"
+      },
+      {
+       "text": " variables. Fit a least squares regression to each set."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "From each regression, provisionally select a small number of variables. This might be the two variables with most significant effect, or all those variables, if any, whose Student "
+      },
+      {
+       "text": "t",
+       "latex": "t",
+       "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+      },
+      {
+       "text": " statistics exceed a threshold. Cox and Battey [13] recommended that variables never selected or selected only once be discarded, except in the absence of strong prior counter evidence."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "The next step depends on the number of variables remaining. If this remains large (in excess of 30, say), a second phase is carried out, similar to the first, typically based on a square rather than a cube. The resulting set of variables from this two-stage reduction is "
+      },
+      {
+       "text": "𝒮^",
+       "latex": "\\hat{\\mathcal{S}}",
+       "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+      },
+      {
+       "text": "."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A form of this procedure is presented in pseudo-code in Section S1 of the supplementary material [36]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The arrangement of variables into "
+    },
+    {
+     "text": "3k2",
+     "latex": "3k^{2}",
+     "mathml": "<math display=\"inline\"><mrow><mn>3</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>k</mi><mn>2</mn></msup></mrow></math>"
+    },
+    {
+     "text": " distinct blocks of size "
+    },
+    {
+     "text": "k",
+     "latex": "k",
+     "mathml": "<math display=\"inline\"><mi>k</mi></math>"
+    },
+    {
+     "text": " is the partially balanced incomplete block design of Yates [47] used in a design setting where the number of treatments exceeds the number of experimental units per block. The context of Cox reduction is fundamentally different in that there is no blocking of units and no randomisation of treatments to units. The analogy is that the design aims to minimise loss or redundancy of information. As contrasted with, say, fitting "
+    },
+    {
+     "text": "3k2",
+     "latex": "3k^{2}",
+     "mathml": "<math display=\"inline\"><mrow><mn>3</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>k</mi><mn>2</mn></msup></mrow></math>"
+    },
+    {
+     "text": " regressions on totally random sets of "
+    },
+    {
+     "text": "k",
+     "latex": "k",
+     "mathml": "<math display=\"inline\"><mi>k</mi></math>"
+    },
+    {
+     "text": " variables, Cox reduction ensures that every variable is assessed an equal number times, and never alongside the same set of variables. A practical advantage of Cox reduction is the reassurance it offers, through rerandomisation of the variable indices in the cube, over the security or otherwise of the conclusions. In particular, unstable sets "
+    },
+    {
+     "text": "𝒮^",
+     "latex": "\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " point to fragility of the method on the data at hand and thereby guide the choice of tuning parameters."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "While inspiration came from [47], motivation for Cox reduction is from Bradford Hill’s [30] discussion of the circumstances under which an effect obtained in an observational study is relatively likely to have a causal interpretation. Such conditions include that the effect is reproduced in independent studies and behaves appropriately when the potential cause is applied, removed and then reinstated [12]. See [14, p.165–6] for further discussion. These aspects point to Cox reduction as at least a broadly appropriate approach for an initial phase of analysis, to be considered alongside some more established procedures such as marginal screening or penalised regression. We will show in Section 4 that the set of variables retained by Cox reduction is better suited than some other reduction strategies for assessment of models in the second phase. A further motivation for theoretical elucidation is that the procedure appears to be in use, as indicated by the download logs for the R package "
+    },
+    {
+     "text": "HCmodelSets ",
+     "code": true
+    },
+    {
+     "text": "[31]. Some published applications of Cox reduction include [3], [4], [33], [39]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Among the most relevant procedures proposed elsewhere in the high-dimensional literature is the multi-environment knockoff filter discussed by [37], although this generally comes with a different type of theoretical guarantee. The confidence set of [13] identifies a number of models that are by definition statistically indistinguishable, whereas the knockoff procedure returns a single model with a control on the false discovery rate [1, 8]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In a low-dimensional context, confidence sets of models have been emphasised repeatedly by Cox (see e.g., [11], [15], [16, Appendix A.2.5]). They have been considered from a different perspective in [29], which begins with a collection of candidate models and aims to identify those with the smallest expected loss at a given significance level. In [29], the relative explanatory power of pairs of models in the candidate set are compared, whereas [13] uses the comprehensive model as a reference set against which to gauge the adequacy of each submodel. If no submodel achieves comparable fit, the model confidence set of [13] is empty, whereas the set of [29] contains several models with equally poor fit. Bayesian approaches to model selection and the resulting credible sets of models are in the same vein, with obvious operational differences. For example, the posterior distributions in [38] and [28] assign non-zero weight to multiple models."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The purpose of the present paper is to provide theoretical insight into the construction of the model confidence set proposed by [13], revealing situations that lead the procedure to partially fail, either by discarding a genuinely relevant variable in the reduction phase, or by discarding the true model at the model assessment phase. Several modifications to the original proposal are possible, of which some were mentioned in [2] but others are new to the present paper, having emerged from theoretical analyses contained herein."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A presentational quirk of the paper is that a theoretical analysis of the model assessment phase of the procedure, relating to the model confidence set "
+    },
+    {
+     "text": "ℳ",
+     "latex": "\\mathcal{M}",
+     "mathml": "<math display=\"inline\"><mi>ℳ</mi></math>"
+    },
+    {
+     "text": ", is discussed first (Section 4) conditional on a comprehensive model "
+    },
+    {
+     "text": "𝒮^",
+     "latex": "\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " having already been isolated. This is to emphasise the possibility of using other reduction strategies besides Cox reduction for the construction of "
+    },
+    {
+     "text": "𝒮^",
+     "latex": "\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": ". Such alternatives are discussed in Sections 5. An analysis of Cox reduction is presented in Section 6."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Two sources of randomness will be used in the forthcoming analysis. When considering the model assessment phase (Section 4), the randomness is induced through the generative model for the outcome. For the theoretical analysis of Cox reduction (Section 6), the outcome is treated as fixed and the only source of randomness comes from the arrangement of variables in the cube. In Section 6, it is convenient to think of the outcome "
+    },
+    {
+     "text": "Y∈ℝn",
+     "latex": "Y\\in\\mathbb{R}^{n}",
+     "mathml": "<math display=\"inline\"><mrow><mi>Y</mi><mo>∈</mo><msup><mi>ℝ</mi><mi>n</mi></msup></mrow></math>"
+    },
+    {
+     "text": " as generated according to the linear model "
+    },
+    {
+     "text": "Y=Xθ0+ϵ",
+     "latex": "Y=X\\theta^{0}+\\epsilon",
+     "mathml": "<math display=\"inline\"><mrow><mi>Y</mi><mo>=</mo><mrow><mrow><mi>X</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>θ</mi><mn>0</mn></msup></mrow><mo>+</mo><mi>ϵ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " where "
+    },
+    {
+     "text": "X∈ℝn×p",
+     "latex": "X\\in\\mathbb{R}^{n\\times p}",
+     "mathml": "<math display=\"inline\"><mrow><mi>X</mi><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>n</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>p</mi></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " is a design matrix, "
+    },
+    {
+     "text": "θ0∈ℝp",
+     "latex": "\\theta^{0}\\in\\mathbb{R}^{p}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>θ</mi><mn>0</mn></msup><mo>∈</mo><msup><mi>ℝ</mi><mi>p</mi></msup></mrow></math>"
+    },
+    {
+     "text": " is a sparse vector satisfying "
+    },
+    {
+     "text": "‖θ0‖0=s≪p",
+     "latex": "\\|\\theta^{0}\\|_{0}=s\\ll p",
+     "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><msup><mi>θ</mi><mn>0</mn></msup><mo stretchy=\"false\">‖</mo></mrow><mn>0</mn></msub><mo>=</mo><mi>s</mi><mo>≪</mo><mi>p</mi></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ϵ",
+     "latex": "\\epsilon",
+     "mathml": "<math display=\"inline\"><mi>ϵ</mi></math>"
+    },
+    {
+     "text": " consists of independent and identically distributed random entries with mean zero and variance "
+    },
+    {
+     "text": "σ2",
+     "latex": "\\sigma^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi>σ</mi><mn>2</mn></msup></math>"
+    },
+    {
+     "text": ". Such a modelling assumption, while convenient for sharpening terminology and notation, plays a negligible role in results of Section 6. A referee indicated p. 106 of Scheffé [41], which emphasises the role of randomisation to ensure statistical inferences from a notional normal-theory linear model are fair approximations under more realistic generative models. See also the comments on binary outcomes in Section 9.4."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "2 A simple explicit example"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The following explicit example helps motivate the confidence set of models perspective. Data were generated according to the the model"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "Y=X\\theta^{0}+\\epsilon,\\quad\\quad\\epsilon\\sim N_{n}(\\mathbf{0}_{n},\\mathbb{I}_{n\\times n})",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mi>Y</mi><mo>=</mo><mrow><mrow><mi>X</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>θ</mi><mn>0</mn></msup></mrow><mo>+</mo><mi>ϵ</mi></mrow></mrow><mo rspace=\"2.167em\">,</mo><mrow><mi>ϵ</mi><mo>∼</mo><mrow><msub><mi>N</mi><mi>n</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mn>𝟎</mn><mi>n</mi></msub><mo>,</mo><msub><mi>𝕀</mi><mrow><mi>n</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>n</mi></mrow></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>",
+   "label": "(1)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "θ0=(1,1,0,…,0)T∈ℝp",
+     "latex": "\\theta^{0}=(1,1,0,\\dots,0)^{T}\\in\\mathbb{R}^{p}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>θ</mi><mn>0</mn></msup><mo>=</mo><msup><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow><mi>T</mi></msup><mo>∈</mo><msup><mi>ℝ</mi><mi>p</mi></msup></mrow></math>"
+    },
+    {
+     "text": " with "
+    },
+    {
+     "text": "p=25",
+     "latex": "p=25",
+     "mathml": "<math display=\"inline\"><mrow><mi>p</mi><mo>=</mo><mn>25</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "n=100",
+     "latex": "n=100",
+     "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo>=</mo><mn>100</mn></mrow></math>"
+    },
+    {
+     "text": ". Since "
+    },
+    {
+     "text": "p",
+     "latex": "p",
+     "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+    },
+    {
+     "text": " is relatively small, there is no need for the reduction phase; confidence sets can be constructed directly. Rows of "
+    },
+    {
+     "text": "X",
+     "latex": "X",
+     "mathml": "<math display=\"inline\"><mi>X</mi></math>"
+    },
+    {
+     "text": " were generated independently from a normal distribution of zero mean and covariance"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\Sigma=\\begin{pmatrix}1&0.99&0.99&0.5&0.5&\\dots&0.5\\\\\n0.99&1&0.99&0.5&0.5&\\dots&0.5\\\\\n0.99&0.99&1&0.5&0.5&\\dots&0.5\\\\\n0.5&0.5&0.5&1&0.5&\\dots&0.5\\\\\n\\vdots&&&&\\ddots&&\\vdots\\\\\n0.5&0.5&0.5&\\dots&0.5&1&0.5\\\\\n0.5&0.5&0.5&\\dots&0.5&0.5&1\\\\\n\\end{pmatrix}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mi mathvariant=\"normal\">Σ</mi><mo>=</mo><mrow><mo>(</mo><mtable columnspacing=\"5pt\" displaystyle=\"true\" rowspacing=\"0pt\"><mtr><mtd><mn>1</mn></mtd><mtd><mn>0.99</mn></mtd><mtd><mn>0.99</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mi mathvariant=\"normal\">…</mi></mtd><mtd><mn>0.5</mn></mtd></mtr><mtr><mtd><mn>0.99</mn></mtd><mtd><mn>1</mn></mtd><mtd><mn>0.99</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mi mathvariant=\"normal\">…</mi></mtd><mtd><mn>0.5</mn></mtd></mtr><mtr><mtd><mn>0.99</mn></mtd><mtd><mn>0.99</mn></mtd><mtd><mn>1</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mi mathvariant=\"normal\">…</mi></mtd><mtd><mn>0.5</mn></mtd></mtr><mtr><mtd><mn>0.5</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mn>1</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mi mathvariant=\"normal\">…</mi></mtd><mtd><mn>0.5</mn></mtd></mtr><mtr><mtd></mtd><mtd></mtd><mtd></mtd><mtd></mtd><mtd><mi mathvariant=\"normal\">⋱</mi></mtd><mtd></mtd><mtd></mtd></mtr><mtr><mtd><mn>0.5</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mi mathvariant=\"normal\">…</mi></mtd><mtd><mn>0.5</mn></mtd><mtd><mn>1</mn></mtd><mtd><mn>0.5</mn></mtd></mtr><mtr><mtd><mn>0.5</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mi mathvariant=\"normal\">…</mi></mtd><mtd><mn>0.5</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mn>1</mn></mtd></mtr></mtable><mo>)</mo></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This setting was constructed so that the covariates indexed by "
+    },
+    {
+     "text": "{1,2,3}",
+     "latex": "\\{1,2,3\\}",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">{</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo stretchy=\"false\">}</mo></mrow></math>"
+    },
+    {
+     "text": " are statistically indistinguishable. A linear regression model fitted with a LASSO penalty by cross-validation selected the single model indexed by covariate "
+    },
+    {
+     "text": "{2}",
+     "latex": "\\{2\\}",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">{</mo><mn>2</mn><mo stretchy=\"false\">}</mo></mrow></math>"
+    },
+    {
+     "text": ". A likelihood ratio test of each model "
+    },
+    {
+     "text": "𝒮m⊆{1,2,3}",
+     "latex": "\\mathcal{S}_{m}\\subseteq\\{1,2,3\\}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>𝒮</mi><mi>m</mi></msub><mo>⊆</mo><mrow><mo stretchy=\"false\">{</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo stretchy=\"false\">}</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " against "
+    },
+    {
+     "text": "[p]={1,…,p}",
+     "latex": "[p]=\\{1,\\dots,p\\}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">[</mo><mi>p</mi><mo stretchy=\"false\">]</mo></mrow><mo>=</mo><mrow><mo stretchy=\"false\">{</mo><mrow><mn>1</mn><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>p</mi></mrow><mo stretchy=\"false\">}</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " declared "
+    },
+    {
+     "text": "{2}",
+     "latex": "\\{2\\}",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">{</mo><mn>2</mn><mo stretchy=\"false\">}</mo></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "{1,2}",
+     "latex": "\\{1,2\\}",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">{</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo stretchy=\"false\">}</mo></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "{2,3}",
+     "latex": "\\{2,3\\}",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">{</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo stretchy=\"false\">}</mo></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "{1,2,3}",
+     "latex": "\\{1,2,3\\}",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">{</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo stretchy=\"false\">}</mo></mrow></math>"
+    },
+    {
+     "text": " as statistically indistinguishable from model "
+    },
+    {
+     "text": "[p]",
+     "latex": "[p]",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">[</mo><mi>p</mi><mo stretchy=\"false\">]</mo></mrow></math>"
+    },
+    {
+     "text": " at the "
+    },
+    {
+     "text": "1%",
+     "latex": "1\\%",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>%</mo></mrow></math>"
+    },
+    {
+     "text": " level. These models constitute the confidence set "
+    },
+    {
+     "text": "ℳ",
+     "latex": "\\mathcal{M}",
+     "mathml": "<math display=\"inline\"><mi>ℳ</mi></math>"
+    },
+    {
+     "text": ", together with any other low-dimensional sub-models of "
+    },
+    {
+     "text": "[p]",
+     "latex": "[p]",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">[</mo><mi>p</mi><mo stretchy=\"false\">]</mo></mrow></math>"
+    },
+    {
+     "text": " not rejected at the same significance level. All four models produced similar predicted values (the correlations between their fitted values and those obtained from the full model were at least "
+    },
+    {
+     "text": "0.97",
+     "latex": "0.97",
+     "mathml": "<math display=\"inline\"><mn>0.97</mn></math>"
+    },
+    {
+     "text": "). While for prediction the choice between well-fitting models is rather arbitrary, if understanding is the goal, an arbitrary choice among statistically indistinguishable models is a misleading portrayal of the information in the data, particularly if the different models have fundamentally different scientific interpretations. For more elaborate examples based on real data see Section 8 and the empirical work in [13]."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "3 Notation"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Let "
+    },
+    {
+     "text": "X",
+     "latex": "X",
+     "mathml": "<math display=\"inline\"><mi>X</mi></math>"
+    },
+    {
+     "text": " be an "
+    },
+    {
+     "text": "(n×p)",
+     "latex": "(n\\times p)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>p</mi></mrow><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": "-dimensional matrix of covariate observations with rows "
+    },
+    {
+     "text": "(xiT)i=1n",
+     "latex": "(x_{i}^{T})_{i=1}^{n}",
+     "mathml": "<math display=\"inline\"><msubsup><mrow><mo stretchy=\"false\">(</mo><msubsup><mi>x</mi><mi>i</mi><mi>T</mi></msubsup><mo stretchy=\"false\">)</mo></mrow><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup></math>"
+    },
+    {
+     "text": " corresponding to "
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": " observational units. The letter "
+    },
+    {
+     "text": "i",
+     "latex": "i",
+     "mathml": "<math display=\"inline\"><mi>i</mi></math>"
+    },
+    {
+     "text": " is reserved for indexing the transposed rows in this way, with other letters specifying columns. Let "
+    },
+    {
+     "text": "Y=(Y1,…,Yn)T",
+     "latex": "Y=(Y_{1},\\ldots,Y_{n})^{T}",
+     "mathml": "<math display=\"inline\"><mrow><mi>Y</mi><mo>=</mo><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>Y</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>Y</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mi>T</mi></msup></mrow></math>"
+    },
+    {
+     "text": " be the vector of outcomes. Define "
+    },
+    {
+     "text": "θ0∈ℝp",
+     "latex": "\\theta^{0}\\in\\mathbb{R}^{p}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>θ</mi><mn>0</mn></msup><mo>∈</mo><msup><mi>ℝ</mi><mi>p</mi></msup></mrow></math>"
+    },
+    {
+     "text": " to be the maximiser of an expected log likelihood function, whose sample version is"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\ell(\\theta)=\\textstyle{\\sum_{i=1}^{n}}\\ell_{i}(\\theta,Y_{i}),\\quad\\quad\\theta\\in\\mathbb{R}^{p}",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>θ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mstyle displaystyle=\"false\"><msubsup><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup></mstyle><mrow><msub><mi mathvariant=\"normal\">ℓ</mi><mi>i</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>θ</mi><mo>,</mo><msub><mi>Y</mi><mi>i</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo rspace=\"2.167em\">,</mo><mrow><mi>θ</mi><mo>∈</mo><msup><mi>ℝ</mi><mi>p</mi></msup></mrow></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "ℓi(θ,Yi)",
+     "latex": "\\ell_{i}(\\theta,Y_{i})",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">ℓ</mi><mi>i</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>θ</mi><mo>,</mo><msub><mi>Y</mi><mi>i</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is a function of "
+    },
+    {
+     "text": "xiTθ",
+     "latex": "x_{i}^{T}\\theta",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>x</mi><mi>i</mi><mi>T</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>θ</mi></mrow></math>"
+    },
+    {
+     "text": ". Let "
+    },
+    {
+     "text": "𝒮={j:θj0≠0}",
+     "latex": "\\mathcal{S}=\\{j:\\theta^{0}_{j}\\neq 0\\}",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝒮</mi><mo>=</mo><mrow><mo stretchy=\"false\">{</mo><mi>j</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msubsup><mi>θ</mi><mi>j</mi><mn>0</mn></msubsup><mo>≠</mo><mn>0</mn></mrow><mo stretchy=\"false\">}</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " be the set of signal variables and any indices not included in this set specify noise variables. We refer to "
+    },
+    {
+     "text": "Xθ0",
+     "latex": "X\\theta^{0}",
+     "mathml": "<math display=\"inline\"><mrow><mi>X</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>θ</mi><mn>0</mn></msup></mrow></math>"
+    },
+    {
+     "text": " as the signal."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Upper-case and lower-case letters denote matrices and vectors respectively. With the context ensuring no ambiguity, capital letters are also used for sets. For a vector "
+    },
+    {
+     "text": "u∈ℝp",
+     "latex": "u\\in\\mathbb{R}^{p}",
+     "mathml": "<math display=\"inline\"><mrow><mi>u</mi><mo>∈</mo><msup><mi>ℝ</mi><mi>p</mi></msup></mrow></math>"
+    },
+    {
+     "text": ", a matrix "
+    },
+    {
+     "text": "X∈ℝn×p",
+     "latex": "X\\in\\mathbb{R}^{n\\times p}",
+     "mathml": "<math display=\"inline\"><mrow><mi>X</mi><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>n</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>p</mi></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " and a set "
+    },
+    {
+     "text": "A⊆{1,…,p}",
+     "latex": "\\mathit{A}\\subseteq\\{1,\\dots,p\\}",
+     "mathml": "<math display=\"inline\"><mrow><mi>A</mi><mo>⊆</mo><mrow><mo stretchy=\"false\">{</mo><mrow><mn>1</mn><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>p</mi></mrow><mo stretchy=\"false\">}</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "uA",
+     "latex": "u_{\\mathit{A}}",
+     "mathml": "<math display=\"inline\"><msub><mi>u</mi><mi>A</mi></msub></math>"
+    },
+    {
+     "text": " denotes the vector of entries of "
+    },
+    {
+     "text": "u",
+     "latex": "u",
+     "mathml": "<math display=\"inline\"><mi>u</mi></math>"
+    },
+    {
+     "text": " indexed by the set "
+    },
+    {
+     "text": "A",
+     "latex": "\\mathit{A}",
+     "mathml": "<math display=\"inline\"><mi>A</mi></math>"
+    },
+    {
+     "text": ". The columns of "
+    },
+    {
+     "text": "X",
+     "latex": "X",
+     "mathml": "<math display=\"inline\"><mi>X</mi></math>"
+    },
+    {
+     "text": " indexed by "
+    },
+    {
+     "text": "A",
+     "latex": "\\mathit{A}",
+     "mathml": "<math display=\"inline\"><mi>A</mi></math>"
+    },
+    {
+     "text": " are written "
+    },
+    {
+     "text": "XA",
+     "latex": "X_{\\mathit{A}}",
+     "mathml": "<math display=\"inline\"><msub><mi>X</mi><mi>A</mi></msub></math>"
+    },
+    {
+     "text": " if "
+    },
+    {
+     "text": "|A|>1",
+     "latex": "|\\mathit{A}|>1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">|</mo><mi>A</mi><mo stretchy=\"false\">|</mo></mrow><mo>&gt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "xA",
+     "latex": "x_{\\mathit{A}}",
+     "mathml": "<math display=\"inline\"><msub><mi>x</mi><mi>A</mi></msub></math>"
+    },
+    {
+     "text": " if "
+    },
+    {
+     "text": "|A|=1",
+     "latex": "|\\mathit{A}|=1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">|</mo><mi>A</mi><mo stretchy=\"false\">|</mo></mrow><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ". For any "
+    },
+    {
+     "text": "a∈A",
+     "latex": "a\\in\\mathit{A}",
+     "mathml": "<math display=\"inline\"><mrow><mi>a</mi><mo>∈</mo><mi>A</mi></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "A−a",
+     "latex": "\\mathit{A}_{-a}",
+     "mathml": "<math display=\"inline\"><msub><mi>A</mi><mrow><mo>−</mo><mi>a</mi></mrow></msub></math>"
+    },
+    {
+     "text": " is the set "
+    },
+    {
+     "text": "A\\{a}",
+     "latex": "\\mathit{A}\\backslash\\{a\\}",
+     "mathml": "<math display=\"inline\"><mrow><mi>A</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">\\</mo><mrow><mo stretchy=\"false\">{</mo><mi>a</mi><mo stretchy=\"false\">}</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "Ac",
+     "latex": "\\mathit{A}^{c}",
+     "mathml": "<math display=\"inline\"><msup><mi>A</mi><mi>c</mi></msup></math>"
+    },
+    {
+     "text": " its complement "
+    },
+    {
+     "text": "{1,…,p}\\A",
+     "latex": "\\{1,\\dots,p\\}\\backslash\\mathit{A}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">{</mo><mrow><mn>1</mn><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>p</mi></mrow><mo rspace=\"0.222em\" stretchy=\"false\">}</mo></mrow><mo rspace=\"0.222em\">\\</mo><mi>A</mi></mrow></math>"
+    },
+    {
+     "text": ". Let "
+    },
+    {
+     "text": "PX=X(XTX)−1XT",
+     "latex": "P_{X}=X(X^{T}X)^{-1}X^{T}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>P</mi><mi>X</mi></msub><mo>=</mo><mrow><mi>X</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><msup><mi>X</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>X</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>X</mi><mi>T</mi></msup></mrow></mrow></math>"
+    },
+    {
+     "text": ", i.e. the projection matrix onto the column span of "
+    },
+    {
+     "text": "X",
+     "latex": "X",
+     "mathml": "<math display=\"inline\"><mi>X</mi></math>"
+    },
+    {
+     "text": ". To avoid double subscripting we write "
+    },
+    {
+     "text": "PA=XA(XATXA)−1XAT",
+     "latex": "P_{\\mathit{A}}=X_{\\mathit{A}}(X_{\\mathit{A}}^{T}X_{\\mathit{A}})^{-1}X_{\\mathit{A}}^{T}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>P</mi><mi>A</mi></msub><mo>=</mo><mrow><msub><mi>X</mi><mi>A</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><msubsup><mi>X</mi><mi>A</mi><mi>T</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>X</mi><mi>A</mi></msub></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mi>X</mi><mi>A</mi><mi>T</mi></msubsup></mrow></mrow></math>"
+    },
+    {
+     "text": ". The vector "
+    },
+    {
+     "text": "ej",
+     "latex": "e_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>e</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": " for "
+    },
+    {
+     "text": "j∈ℕ\\{0}",
+     "latex": "j\\in\\mathbb{N}\\backslash\\{0\\}",
+     "mathml": "<math display=\"inline\"><mrow><mi>j</mi><mo>∈</mo><mrow><mi>ℕ</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">\\</mo><mrow><mo stretchy=\"false\">{</mo><mn>0</mn><mo stretchy=\"false\">}</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " denotes the "
+    },
+    {
+     "text": "j",
+     "latex": "j",
+     "mathml": "<math display=\"inline\"><mi>j</mi></math>"
+    },
+    {
+     "text": "-th standard basis vector whose dimension will be clear from the context. Let "
+    },
+    {
+     "text": "∥⋅∥0",
+     "latex": "\\|\\cdot\\|_{0}",
+     "mathml": "<math display=\"inline\"><mrow><mo rspace=\"0em\">∥</mo><mo lspace=\"0em\" rspace=\"0em\">⋅</mo><mo lspace=\"0em\">∥</mo><msub><mrow></mrow><mn>0</mn></msub></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "∥⋅∥2",
+     "latex": "\\|\\cdot\\|_{2}",
+     "mathml": "<math display=\"inline\"><mrow><mo rspace=\"0em\">∥</mo><mo lspace=\"0em\" rspace=\"0em\">⋅</mo><mo lspace=\"0em\">∥</mo><msub><mrow></mrow><mn>2</mn></msub></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "∥⋅∥∞",
+     "latex": "\\|\\cdot\\|_{\\infty}",
+     "mathml": "<math display=\"inline\"><mrow><mo rspace=\"0em\">∥</mo><mo lspace=\"0em\" rspace=\"0em\">⋅</mo><mo lspace=\"0em\">∥</mo><msub><mrow></mrow><mi mathvariant=\"normal\">∞</mi></msub></mrow></math>"
+    },
+    {
+     "text": " be the "
+    },
+    {
+     "text": "ℓ0",
+     "latex": "\\ell_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">ℓ</mi><mn>0</mn></msub></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "ℓ2",
+     "latex": "\\ell_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">ℓ</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ℓ∞",
+     "latex": "\\ell_{\\infty}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">ℓ</mi><mi mathvariant=\"normal\">∞</mi></msub></math>"
+    },
+    {
+     "text": " vector norms. When the argument is a matrix, "
+    },
+    {
+     "text": "∥⋅∥2",
+     "latex": "\\|\\cdot\\|_{2}",
+     "mathml": "<math display=\"inline\"><mrow><mo rspace=\"0em\">∥</mo><mo lspace=\"0em\" rspace=\"0em\">⋅</mo><mo lspace=\"0em\">∥</mo><msub><mrow></mrow><mn>2</mn></msub></mrow></math>"
+    },
+    {
+     "text": " refers to the spectral norm and "
+    },
+    {
+     "text": "∥⋅∥∞",
+     "latex": "\\|\\cdot\\|_{\\infty}",
+     "mathml": "<math display=\"inline\"><mrow><mo rspace=\"0em\">∥</mo><mo lspace=\"0em\" rspace=\"0em\">⋅</mo><mo lspace=\"0em\">∥</mo><msub><mrow></mrow><mi mathvariant=\"normal\">∞</mi></msub></mrow></math>"
+    },
+    {
+     "text": " to the infinity matrix norm given by the maximum absolute row sum of the matrix. The maximum eigenvalue of a square matrix "
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " is written "
+    },
+    {
+     "text": "λmax(M)",
+     "latex": "\\lambda_{\\text{max}}(M)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>λ</mi><mtext>max</mtext></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". The sub-Gaussian norm of a univariate random variable "
+    },
+    {
+     "text": "Z",
+     "latex": "Z",
+     "mathml": "<math display=\"inline\"><mi>Z</mi></math>"
+    },
+    {
+     "text": " is"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\|Z\\|_{\\psi_{2}}=\\sup_{q\\geq 1}q^{-1/2}(\\mathbb{E}|Z|^{q})^{1/q}.",
+   "mathml": "<math display=\"block\"><mrow><mo rspace=\"0.167em\">∥</mo><mi>Z</mi><msub><mo lspace=\"0em\" rspace=\"0.0835em\">∥</mo><msub><mi>ψ</mi><mn>2</mn></msub></msub><mo lspace=\"0.0835em\" rspace=\"0.1389em\">=</mo><munder><mo lspace=\"0.1389em\" movablelimits=\"false\" rspace=\"0.167em\">sup</mo><mrow><mi>q</mi><mo>≥</mo><mn>1</mn></mrow></munder><msup><mi>q</mi><mrow><mo>−</mo><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup><msup><mrow><mo stretchy=\"false\">(</mo><mi>𝔼</mi><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mi>Z</mi><msup><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mi>q</mi></msup><mo stretchy=\"false\">)</mo></mrow><mrow><mn>1</mn><mo>/</mo><mi>q</mi></mrow></msup><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The sample correlation coefficient between two centred vectors "
+    },
+    {
+     "text": "u",
+     "latex": "u",
+     "mathml": "<math display=\"inline\"><mi>u</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "v",
+     "latex": "v",
+     "mathml": "<math display=\"inline\"><mi>v</mi></math>"
+    },
+    {
+     "text": " is written"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "R(u,v)=\\frac{u^{T}v}{\\|u\\|_{2}\\|v\\|_{2}}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>R</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>u</mi><mo>,</mo><mi>v</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mfrac><mrow><msup><mi>u</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>v</mi></mrow><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mi>u</mi><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo stretchy=\"false\">‖</mo><mi>v</mi><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn></msub></mrow></mfrac></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The sample multiple correlation coefficient between a centred vector "
+    },
+    {
+     "text": "u",
+     "latex": "u",
+     "mathml": "<math display=\"inline\"><mi>u</mi></math>"
+    },
+    {
+     "text": " and a matrix "
+    },
+    {
+     "text": "X",
+     "latex": "X",
+     "mathml": "<math display=\"inline\"><mi>X</mi></math>"
+    },
+    {
+     "text": " with centred columns is"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "R(u,X)=\\max_{\\alpha\\in\\mathbb{R}^{p}}\\frac{u^{T}X\\alpha}{\\|u\\|_{2}\\|X\\alpha\\|_{2}}=R(u,P_{X}u).",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>R</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>u</mi><mo>,</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><munder><mi>max</mi><mrow><mi>α</mi><mo>∈</mo><msup><mi>ℝ</mi><mi>p</mi></msup></mrow></munder><mo lspace=\"0.167em\">⁡</mo><mfrac><mrow><msup><mi>u</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>X</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>α</mi></mrow><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mi>u</mi><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mi>X</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>α</mi></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn></msub></mrow></mfrac></mrow><mo>=</mo><mrow><mi>R</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>u</mi><mo>,</mo><mrow><msub><mi>P</mi><mi>X</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>u</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For two matrices "
+    },
+    {
+     "text": "XA",
+     "latex": "X_{\\mathit{A}}",
+     "mathml": "<math display=\"inline\"><msub><mi>X</mi><mi>A</mi></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "XB",
+     "latex": "X_{B}",
+     "mathml": "<math display=\"inline\"><msub><mi>X</mi><mi>B</mi></msub></math>"
+    },
+    {
+     "text": " with centred columns,"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "R(X_{\\mathit{A}},X_{\\mathit{B}})=\\max_{\\alpha,\\beta}\\frac{\\alpha^{T}X_{\\mathit{A}}^{T}X_{\\mathit{B}}\\beta}{\\|X_{\\mathit{A}}\\alpha\\|_{2}\\|X_{\\mathit{B}}\\beta\\|_{2}}=\\|P_{\\mathit{A}}P_{\\mathit{B}}\\|_{2},",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>R</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>X</mi><mi>A</mi></msub><mo>,</mo><msub><mi>X</mi><mi>B</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><munder><mi>max</mi><mrow><mi>α</mi><mo>,</mo><mi>β</mi></mrow></munder><mo lspace=\"0.167em\">⁡</mo><mfrac><mrow><msup><mi>α</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mi>X</mi><mi>A</mi><mi>T</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>X</mi><mi>B</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>β</mi></mrow><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><msub><mi>X</mi><mi>A</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>α</mi></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><msub><mi>X</mi><mi>B</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>β</mi></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn></msub></mrow></mfrac></mrow><mo>=</mo><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><msub><mi>P</mi><mi>A</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>P</mi><mi>B</mi></msub></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn></msub></mrow><mo>,</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where the final equality follows from the proof of Lemma S5 in [36]."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "4 Model assessment phase"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "4.1 Framework"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Given a comprehensive model "
+    },
+    {
+     "text": "𝒮^",
+     "latex": "\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": ", the model assessment phase enumerates all sub-models of "
+    },
+    {
+     "text": "𝒮^",
+     "latex": "\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " that fit the data equivalently well. As suggested by [13], this may be obtained by identifying all submodels of "
+    },
+    {
+     "text": "𝒮^",
+     "latex": "\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " that are not rejected in a likelihood ratio test at a given significance level "
+    },
+    {
+     "text": "ϑ",
+     "latex": "\\vartheta",
+     "mathml": "<math display=\"inline\"><mi>ϑ</mi></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For any "
+    },
+    {
+     "text": "𝒮m⊆𝒮^",
+     "latex": "\\mathcal{S}_{m}\\subseteq\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>𝒮</mi><mi>m</mi></msub><mo>⊆</mo><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></mrow></math>"
+    },
+    {
+     "text": ", define "
+    },
+    {
+     "text": "𝒰=𝒮mc∩𝒮^",
+     "latex": "\\mathcal{U}=\\mathcal{S}_{m}^{c}\\cap\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝒰</mi><mo>=</mo><mrow><msubsup><mi>𝒮</mi><mi>m</mi><mi>c</mi></msubsup><mo>∩</mo><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></mrow></mrow></math>"
+    },
+    {
+     "text": " and"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{array}{rcl} \\displaystyle\\Theta_{0}^{(m)} & \\displaystyle= & \\displaystyle\\{\\theta\\in\\mathbb{R}^{p}:\\,\\theta_{\\mathcal{S}_{m}^{c}}=0\\}, \\\\ \\displaystyle\\Theta_{1}^{(m)} & \\displaystyle= & \\displaystyle\\{\\theta\\in\\mathbb{R}^{p}:\\,\\theta_{\\mathcal{U}}\\neq 0,\\,\\theta_{\\hat{\\mathcal{S}}^{c}}=0\\}. \\end{array}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><msubsup><mi mathvariant=\"normal\">Θ</mi><mn>0</mn><mrow><mo stretchy=\"false\">(</mo><mi>m</mi><mo stretchy=\"false\">)</mo></mrow></msubsup></mtd><mtd><mo>=</mo></mtd><mtd><mrow><mrow><mo stretchy=\"false\">{</mo><mrow><mi>θ</mi><mo>∈</mo><msup><mi>ℝ</mi><mi>p</mi></msup></mrow><mo lspace=\"0.278em\" rspace=\"0.448em\">:</mo><mrow><msub><mi>θ</mi><msubsup><mi>𝒮</mi><mi>m</mi><mi>c</mi></msubsup></msub><mo>=</mo><mn>0</mn></mrow><mo stretchy=\"false\">}</mo></mrow><mo>,</mo></mrow></mtd></mtr><mtr><mtd><msubsup><mi mathvariant=\"normal\">Θ</mi><mn>1</mn><mrow><mo stretchy=\"false\">(</mo><mi>m</mi><mo stretchy=\"false\">)</mo></mrow></msubsup></mtd><mtd><mo>=</mo></mtd><mtd><mrow><mrow><mo stretchy=\"false\">{</mo><mi>θ</mi><mo>∈</mo><msup><mi>ℝ</mi><mi>p</mi></msup><mo lspace=\"0.278em\" rspace=\"0.448em\">:</mo><msub><mi>θ</mi><mi>𝒰</mi></msub><mo>≠</mo><mn>0</mn><mo rspace=\"0.337em\">,</mo><msub><mi>θ</mi><msup><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover><mi>c</mi></msup></msub><mo>=</mo><mn>0</mn><mo stretchy=\"false\">}</mo></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Let "
+    },
+    {
+     "text": "r^",
+     "latex": "\\hat{r}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>r</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "rm",
+     "latex": "r_{m}",
+     "mathml": "<math display=\"inline\"><msub><mi>r</mi><mi>m</mi></msub></math>"
+    },
+    {
+     "text": " be the column ranks of "
+    },
+    {
+     "text": "X~",
+     "latex": "\\widetilde{X}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "X~m",
+     "latex": "\\widetilde{X}_{m}",
+     "mathml": "<math display=\"inline\"><msub><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mi>m</mi></msub></math>"
+    },
+    {
+     "text": ", where "
+    },
+    {
+     "text": "X~m",
+     "latex": "\\widetilde{X}_{m}",
+     "mathml": "<math display=\"inline\"><msub><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mi>m</mi></msub></math>"
+    },
+    {
+     "text": " consists of the columns of "
+    },
+    {
+     "text": "X",
+     "latex": "X",
+     "mathml": "<math display=\"inline\"><mi>X</mi></math>"
+    },
+    {
+     "text": " indexed by "
+    },
+    {
+     "text": "𝒮m",
+     "latex": "\\mathcal{S}_{m}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒮</mi><mi>m</mi></msub></math>"
+    },
+    {
+     "text": ". The likelihood ratio test of "
+    },
+    {
+     "text": "H0:θ0∈Θ0(m)",
+     "latex": "H_{0}:\\theta^{0}\\in\\Theta_{0}^{(m)}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>H</mi><mn>0</mn></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>θ</mi><mn>0</mn></msup><mo>∈</mo><msubsup><mi mathvariant=\"normal\">Θ</mi><mn>0</mn><mrow><mo stretchy=\"false\">(</mo><mi>m</mi><mo stretchy=\"false\">)</mo></mrow></msubsup></mrow></mrow></math>"
+    },
+    {
+     "text": " against "
+    },
+    {
+     "text": "H1:θ0∈Θ1(m)",
+     "latex": "H_{1}:\\theta^{0}\\in\\Theta_{1}^{(m)}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>H</mi><mn>1</mn></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>θ</mi><mn>0</mn></msup><mo>∈</mo><msubsup><mi mathvariant=\"normal\">Θ</mi><mn>1</mn><mrow><mo stretchy=\"false\">(</mo><mi>m</mi><mo stretchy=\"false\">)</mo></mrow></msubsup></mrow></mrow></math>"
+    },
+    {
+     "text": " is"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\psi_{m}(Y,X)={\\rm I\\hskip-6.54413pt1}\\{w(\\mathcal{S}_{m})\\leq\\chi^{2}_{\\hat{r}-r_{m}}(1-\\vartheta)\\},",
+   "mathml": "<math display=\"block\"><mrow><msub><mi>ψ</mi><mi>m</mi></msub><mrow><mo stretchy=\"false\">(</mo><mi>Y</mi><mo>,</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow><mo>=</mo><mi>I1</mi><mrow><mo stretchy=\"false\">{</mo><mi>w</mi><mrow><mo stretchy=\"false\">(</mo><msub><mi>𝒮</mi><mi>m</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo>≤</mo><msubsup><mi>χ</mi><mrow><mover accent=\"true\"><mi>r</mi><mo>^</mo></mover><mo>−</mo><msub><mi>r</mi><mi>m</mi></msub></mrow><mn>2</mn></msubsup><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo>−</mo><mi>ϑ</mi><mo stretchy=\"false\">)</mo></mrow><mo stretchy=\"false\">}</mo></mrow><mo>,</mo></mrow></math>",
+   "label": "(2)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "χr^−rm2(1−ϑ)",
+     "latex": "\\chi^{2}_{\\hat{r}-r_{m}}(1-\\vartheta)",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>χ</mi><mrow><mover accent=\"true\"><mi>r</mi><mo>^</mo></mover><mo>−</mo><msub><mi>r</mi><mi>m</mi></msub></mrow><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>ϑ</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is the "
+    },
+    {
+     "text": "1−ϑ",
+     "latex": "1-\\vartheta",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>−</mo><mi>ϑ</mi></mrow></math>"
+    },
+    {
+     "text": " quantile of the "
+    },
+    {
+     "text": "χ2",
+     "latex": "\\chi^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi>χ</mi><mn>2</mn></msup></math>"
+    },
+    {
+     "text": " distribution with "
+    },
+    {
+     "text": "r^−rm",
+     "latex": "\\hat{r}-r_{m}",
+     "mathml": "<math display=\"inline\"><mrow><mover accent=\"true\"><mi>r</mi><mo>^</mo></mover><mo>−</mo><msub><mi>r</mi><mi>m</mi></msub></mrow></math>"
+    },
+    {
+     "text": " degrees of freedom and"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "w(\\mathcal{S}_{m})=2\\left\\{\\sup_{\\theta\\in\\Theta_{1}^{(m)}\\cup\\Theta_{0}^{(m)}}\\ell(\\theta)-\\sup_{\\theta\\in\\Theta_{0}^{(m)}}\\ell(\\theta)\\right\\}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>w</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>𝒮</mi><mi>m</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>{</mo><mrow><mrow><munder><mo lspace=\"0em\" movablelimits=\"false\" rspace=\"0.167em\">sup</mo><mrow><mi>θ</mi><mo>∈</mo><mrow><msubsup><mi mathvariant=\"normal\">Θ</mi><mn>1</mn><mrow><mo stretchy=\"false\">(</mo><mi>m</mi><mo stretchy=\"false\">)</mo></mrow></msubsup><mo>∪</mo><msubsup><mi mathvariant=\"normal\">Θ</mi><mn>0</mn><mrow><mo stretchy=\"false\">(</mo><mi>m</mi><mo stretchy=\"false\">)</mo></mrow></msubsup></mrow></mrow></munder><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>θ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>−</mo><mrow><munder><mo lspace=\"0em\" movablelimits=\"false\" rspace=\"0.167em\">sup</mo><mrow><mi>θ</mi><mo>∈</mo><msubsup><mi mathvariant=\"normal\">Θ</mi><mn>0</mn><mrow><mo stretchy=\"false\">(</mo><mi>m</mi><mo stretchy=\"false\">)</mo></mrow></msubsup></mrow></munder><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>θ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo>}</mo></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A model "
+    },
+    {
+     "text": "𝒮m",
+     "latex": "\\mathcal{S}_{m}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒮</mi><mi>m</mi></msub></math>"
+    },
+    {
+     "text": " is included in the model confidence set "
+    },
+    {
+     "text": "ℳ",
+     "latex": "\\mathcal{M}",
+     "mathml": "<math display=\"inline\"><mi>ℳ</mi></math>"
+    },
+    {
+     "text": " if "
+    },
+    {
+     "text": "ψm(Y,X)=1",
+     "latex": "\\psi_{m}(Y,X)=1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>ψ</mi><mi>m</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>Y</mi><mo>,</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ". To reduce the computational burden, it is reasonable to construct the confidence set of models by only testing submodels of "
+    },
+    {
+     "text": "𝒮^",
+     "latex": "\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " of size less than "
+    },
+    {
+     "text": "s#",
+     "latex": "s^{\\#}",
+     "mathml": "<math display=\"inline\"><msup><mi>s</mi><mi>#</mi></msup></math>"
+    },
+    {
+     "text": " say, chosen independently of "
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": ". The uncheckable assumption "
+    },
+    {
+     "text": "s#≥s",
+     "latex": "s^{\\#}\\geq s",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>s</mi><mi>#</mi></msup><mo>≥</mo><mi>s</mi></mrow></math>"
+    },
+    {
+     "text": " is needed, otherwise the true model is necessarily excluded. Algorithm 1 in Section S1 of the supplementary material of [36] provides pseudo-code for the model assessment phase."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The likelihood ratio test has greater power to distinguish between some models than others. This section uncovers geometric features associated with models in the confidence set. This is considered under the assumptions that "
+    },
+    {
+     "text": "𝒮⊆𝒮^",
+     "latex": "\\mathcal{S}\\subseteq\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝒮</mi><mo>⊆</mo><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></mrow></math>"
+    },
+    {
+     "text": " where "
+    },
+    {
+     "text": "𝒮",
+     "latex": "\\mathcal{S}",
+     "mathml": "<math display=\"inline\"><mi>𝒮</mi></math>"
+    },
+    {
+     "text": " is the set of signal variables, and "
+    },
+    {
+     "text": "𝒮^",
+     "latex": "\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ℳ",
+     "latex": "\\mathcal{M}",
+     "mathml": "<math display=\"inline\"><mi>ℳ</mi></math>"
+    },
+    {
+     "text": " are independent. It follows that "
+    },
+    {
+     "text": "𝒮",
+     "latex": "\\mathcal{S}",
+     "mathml": "<math display=\"inline\"><mi>𝒮</mi></math>"
+    },
+    {
+     "text": " is contained in the model confidence set with probability converging to the chosen level "
+    },
+    {
+     "text": "1−ϑ",
+     "latex": "1-\\vartheta",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>−</mo><mi>ϑ</mi></mrow></math>"
+    },
+    {
+     "text": " as "
+    },
+    {
+     "text": "n→∞",
+     "latex": "n\\rightarrow\\infty",
+     "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo stretchy=\"false\">→</mo><mi mathvariant=\"normal\">∞</mi></mrow></math>"
+    },
+    {
+     "text": ". We begin by describing the local behaviour of the test using Le Cam’s formulation of asymptotic normality. We then extend the results by examining more general departures from the null hypothesis."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For the rest of this section, let "
+    },
+    {
+     "text": "γ0",
+     "latex": "\\gamma^{0}",
+     "mathml": "<math display=\"inline\"><msup><mi>γ</mi><mn>0</mn></msup></math>"
+    },
+    {
+     "text": " be the entries of "
+    },
+    {
+     "text": "θ0",
+     "latex": "\\theta^{0}",
+     "mathml": "<math display=\"inline\"><msup><mi>θ</mi><mn>0</mn></msup></math>"
+    },
+    {
+     "text": " indexed by the comprehensive model "
+    },
+    {
+     "text": "𝒮^",
+     "latex": "\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " and let "
+    },
+    {
+     "text": "X~",
+     "latex": "\\widetilde{X}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover></math>"
+    },
+    {
+     "text": " be the corresponding columns of "
+    },
+    {
+     "text": "X",
+     "latex": "X",
+     "mathml": "<math display=\"inline\"><mi>X</mi></math>"
+    },
+    {
+     "text": ". Rearranging covariates if necessary, assume that "
+    },
+    {
+     "text": "γ0",
+     "latex": "\\gamma^{0}",
+     "mathml": "<math display=\"inline\"><msup><mi>γ</mi><mn>0</mn></msup></math>"
+    },
+    {
+     "text": " corresponds to the first few entries of "
+    },
+    {
+     "text": "θ0",
+     "latex": "\\theta^{0}",
+     "mathml": "<math display=\"inline\"><msup><mi>θ</mi><mn>0</mn></msup></math>"
+    },
+    {
+     "text": ". The notation "
+    },
+    {
+     "text": "ℓ(γ0,0)",
+     "latex": "\\ell(\\gamma^{0},0)",
+     "mathml": "<math display=\"inline\"><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>γ</mi><mn>0</mn></msup><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is used to represent "
+    },
+    {
+     "text": "ℓ(θ0)",
+     "latex": "\\ell(\\theta^{0})",
+     "mathml": "<math display=\"inline\"><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>θ</mi><mn>0</mn></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " when "
+    },
+    {
+     "text": "θ0=(γ0,0)",
+     "latex": "\\theta^{0}=(\\gamma^{0},0)",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>θ</mi><mn>0</mn></msup><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>γ</mi><mn>0</mn></msup><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "4.2 Behaviour under contiguous alternatives"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Interpretation of the log-likelihood ratio test "
+    },
+    {
+     "text": "ψm(Y,X)",
+     "latex": "\\psi_{m}(Y,X)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ψ</mi><mi>m</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>Y</mi><mo>,</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " in general models is aided through appeal to Le Cam’s formulation of local asymptotic normality [34]. Under standard parametric regularity conditions, notably that the statistical model is differentiable in quadratic mean at "
+    },
+    {
+     "text": "γ0",
+     "latex": "\\gamma^{0}",
+     "mathml": "<math display=\"inline\"><msup><mi>γ</mi><mn>0</mn></msup></math>"
+    },
+    {
+     "text": ", [46, Theorem 7.2] gives the following local asymptotic expansion of the log likelihood, which holds under model "
+    },
+    {
+     "text": "𝒮^",
+     "latex": "\\hat{\\mathcal{S}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒮</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " or any submodel thereof:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\ell(\\gamma^{0}+h_{n},0)-\\ell(\\gamma^{0},0)=h^{T}Z_{n}-\\frac{1}{2}h^{T}H_{0}h+o_{p}(1).",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msup><mi>γ</mi><mn>0</mn></msup><mo>+</mo><msub><mi>h</mi><mi>n</mi></msub></mrow><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow><mo>−</mo><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>γ</mi><mn>0</mn></msup><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>=</mo><mrow><mrow><mrow><msup><mi>h</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>Z</mi><mi>n</mi></msub></mrow><mo>−</mo><mrow><mfrac><mn>1</mn><mn>2</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>h</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>H</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi></mrow></mrow><mo>+</mo><mrow><msub><mi>o</mi><mi>p</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(3)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In equation (3), "
+    },
+    {
+     "text": "H0",
+     "latex": "H_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi>H</mi><mn>0</mn></msub></math>"
+    },
+    {
+     "text": " is the Fisher information per observation, "
+    },
+    {
+     "text": "Zn=n−1/2∇γℓ(γ0,0)",
+     "latex": "Z_{n}=n^{-1/2}\\nabla_{\\gamma}\\ell(\\gamma^{0},0)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>Z</mi><mi>n</mi></msub><mo>=</mo><msup><mi>n</mi><mrow><mo>−</mo><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup><msub><mo lspace=\"0.167em\" rspace=\"0.167em\">∇</mo><mi>γ</mi></msub><mi mathvariant=\"normal\">ℓ</mi><mrow><mo stretchy=\"false\">(</mo><msup><mi>γ</mi><mn>0</mn></msup><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " converges in distribution to a normal random vector of mean zero and covariance matrix "
+    },
+    {
+     "text": "H0",
+     "latex": "H_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi>H</mi><mn>0</mn></msub></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "n1/2hn→h",
+     "latex": "n^{1/2}h_{n}\\rightarrow h",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msup><mi>n</mi><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>h</mi><mi>n</mi></msub></mrow><mo stretchy=\"false\">→</mo><mi>h</mi></mrow></math>"
+    },
+    {
+     "text": ". Sufficient conditions for differentiability in quadratic mean are given by [46, Proposition 7.6]. These are satisfied, for example, by most exponential family regression models. It follows from (3) that"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\ell(\\gamma^{0}+h_{n},0)-\\ell(\\gamma^{0},0)\\stackrel{{\\scriptstyle\\gamma^{0}}}{{\\longrightarrow}}N\\biggl(-\\frac{1}{2}h^{T}H_{0}h,h^{T}H_{0}h\\biggr),",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msup><mi>γ</mi><mn>0</mn></msup><mo>+</mo><msub><mi>h</mi><mi>n</mi></msub></mrow><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow><mo>−</mo><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>γ</mi><mn>0</mn></msup><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mover><mo stretchy=\"false\">⟶</mo><msup><mi>γ</mi><mn>0</mn></msup></mover><mrow><mi>N</mi><mo>⁡</mo><mrow><mo maxsize=\"2.100em\" minsize=\"2.100em\">(</mo><mrow><mo>−</mo><mrow><mfrac><mn>1</mn><mn>2</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>h</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>H</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi></mrow></mrow><mo>,</mo><mrow><msup><mi>h</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>H</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi></mrow><mo maxsize=\"2.100em\" minsize=\"2.100em\">)</mo></mrow></mrow></mrow><mo>,</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "⟶γ0",
+     "latex": "\\stackrel{{\\scriptstyle\\gamma^{0}}}{{\\longrightarrow}}",
+     "mathml": "<math display=\"inline\"><mover><mo stretchy=\"false\">⟶</mo><msup><mi>γ</mi><mn>0</mn></msup></mover></math>"
+    },
+    {
+     "text": " means converges weakly under the true distribution defined by "
+    },
+    {
+     "text": "θ0=(γ0,0)",
+     "latex": "\\theta^{0}=(\\gamma^{0},0)",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>θ</mi><mn>0</mn></msup><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>γ</mi><mn>0</mn></msup><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Evans [22] generalised this result to allow two models, whose components are both in a "
+    },
+    {
+     "text": "O(n−1/2)",
+     "latex": "O(n^{-1/2})",
+     "mathml": "<math display=\"inline\"><mrow><mi>O</mi><mrow><mo stretchy=\"false\">(</mo><msup><mi>n</mi><mrow><mo>−</mo><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " neighbourhood of the true distribution. This is a restriction to so-called contiguous alternatives, which in the context of equation (2) would imply that the model indexed by "
+    },
+    {
+     "text": "𝒮m",
+     "latex": "\\mathcal{S}_{m}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒮</mi><mi>m</mi></msub></math>"
+    },
+    {
+     "text": ", if false, only omits variables whose associated signal strengths are dominated by the estimation error of the maximum likelihood estimator. This characterisation belongs to formal theory but indicates the directions from "
+    },
+    {
+     "text": "γ0",
+     "latex": "\\gamma^{0}",
+     "mathml": "<math display=\"inline\"><msup><mi>γ</mi><mn>0</mn></msup></math>"
+    },
+    {
+     "text": " in which the likelihood ratio test is expected to have relatively high or low power. As in [22], introduce "
+    },
+    {
+     "text": "hn",
+     "latex": "h_{n}",
+     "mathml": "<math display=\"inline\"><msub><mi>h</mi><mi>n</mi></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "h~n",
+     "latex": "\\widetilde{h}_{n}",
+     "mathml": "<math display=\"inline\"><msub><mover accent=\"true\"><mi>h</mi><mo>~</mo></mover><mi>n</mi></msub></math>"
+    },
+    {
+     "text": " such that "
+    },
+    {
+     "text": "hn→0",
+     "latex": "h_{n}\\rightarrow 0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>h</mi><mi>n</mi></msub><mo stretchy=\"false\">→</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "h~n→0",
+     "latex": "\\widetilde{h}_{n}\\rightarrow 0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mover accent=\"true\"><mi>h</mi><mo>~</mo></mover><mi>n</mi></msub><mo stretchy=\"false\">→</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "n1/2(hn−h~n)→k",
+     "latex": "n^{1/2}(h_{n}-\\widetilde{h}_{n})\\rightarrow k",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msup><mi>n</mi><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>h</mi><mi>n</mi></msub><mo>−</mo><msub><mover accent=\"true\"><mi>h</mi><mo>~</mo></mover><mi>n</mi></msub></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">→</mo><mi>k</mi></mrow></math>"
+    },
+    {
+     "text": ". Provided that the true distribution belongs to a model whose density with respect to an appropriate dominating measure is doubly differentiable in quadratic mean, in the sense of [22, Definition 2.8], then"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{array}{rcl} \\displaystyle\\ell(\\gamma^{0}+h_{n},0)-\\ell(\\gamma^{0}+\\widetilde{h}_{n},0) & \\displaystyle= & \\displaystyle\\frac{k^{T}}{\\sqrt{n}}\\nabla_{\\gamma}\\ell(\\gamma^{0}+\\widetilde{h}_{n},0)-\\frac{1}{2}k^{T}H_{0}k+o_{p}(1) \\end{array}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msup><mi>γ</mi><mn>0</mn></msup><mo>+</mo><msub><mi>h</mi><mi>n</mi></msub></mrow><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow><mo>−</mo><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msup><mi>γ</mi><mn>0</mn></msup><mo>+</mo><msub><mover accent=\"true\"><mi>h</mi><mo>~</mo></mover><mi>n</mi></msub></mrow><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mtd><mtd><mo>=</mo></mtd><mtd><mrow><mrow><mrow><mstyle displaystyle=\"true\"><mfrac><msup><mi>k</mi><mi>T</mi></msup><msqrt><mi>n</mi></msqrt></mfrac></mstyle><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><msub><mo rspace=\"0.167em\">∇</mo><mi>γ</mi></msub><mi mathvariant=\"normal\">ℓ</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msup><mi>γ</mi><mn>0</mn></msup><mo>+</mo><msub><mover accent=\"true\"><mi>h</mi><mo>~</mo></mover><mi>n</mi></msub></mrow><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow><mo>−</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mn>2</mn></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>k</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>H</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>k</mi></mrow></mrow><mo>+</mo><mrow><msub><mi>o</mi><mi>p</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mtd></mtr></mtable></math>",
+   "label": "(4)"
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{array}{rcl} & \\displaystyle\\stackrel{{\\scriptstyle\\gamma^{0}}}{{\\longrightarrow}} & \\displaystyle N\\biggl(-\\frac{1}{2}k^{T}H_{0}k,k^{T}H_{0}k\\biggr). \\end{array}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd></mtd><mtd><mover><mo stretchy=\"false\">⟶</mo><msup><mi>γ</mi><mn>0</mn></msup></mover></mtd><mtd><mrow><mrow><mi>N</mi><mo>⁡</mo><mrow><mo maxsize=\"2.100em\" minsize=\"2.100em\">(</mo><mrow><mo>−</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mn>2</mn></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>k</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>H</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>k</mi></mrow></mrow><mo>,</mo><mrow><msup><mi>k</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>H</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>k</mi></mrow><mo maxsize=\"2.100em\" minsize=\"2.100em\">)</mo></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To interpret this result in general models, suppose that "
+    },
+    {
+     "text": "k",
+     "latex": "k",
+     "mathml": "<math display=\"inline\"><mi>k</mi></math>"
+    },
+    {
+     "text": " is a scalar multiple of a unit eigenvector "
+    },
+    {
+     "text": "v",
+     "latex": "v",
+     "mathml": "<math display=\"inline\"><mi>v</mi></math>"
+    },
+    {
+     "text": " of "
+    },
+    {
+     "text": "H0",
+     "latex": "H_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi>H</mi><mn>0</mn></msub></math>"
+    },
+    {
+     "text": " with associated eigenvalue "
+    },
+    {
+     "text": "λ",
+     "latex": "\\lambda",
+     "mathml": "<math display=\"inline\"><mi>λ</mi></math>"
+    },
+    {
+     "text": ", so that "
+    },
+    {
+     "text": "k=av",
+     "latex": "k=av",
+     "mathml": "<math display=\"inline\"><mrow><mi>k</mi><mo>=</mo><mrow><mi>a</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>v</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "kTH0k=(aλ)2vTv=a2λ2",
+     "latex": "k^{T}H_{0}k=(a\\lambda)^{2}v^{T}v=a^{2}\\lambda^{2}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msup><mi>k</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>H</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>k</mi></mrow><mo>=</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>a</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>λ</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>v</mi><mi>T</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>v</mi></mrow><mo>=</mo><mrow><msup><mi>a</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>λ</mi><mn>2</mn></msup></mrow></mrow></math>"
+    },
+    {
+     "text": ". Since eigenvectors of "
+    },
+    {
+     "text": "H0",
+     "latex": "H_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi>H</mi><mn>0</mn></msub></math>"
+    },
+    {
+     "text": " indicate orthogonal directions in which the Fisher information varies from highest to lowest, equation (4) shows that the false hypotheses in a local neighbourhood of "
+    },
+    {
+     "text": "γ0",
+     "latex": "\\gamma^{0}",
+     "mathml": "<math display=\"inline\"><msup><mi>γ</mi><mn>0</mn></msup></math>"
+    },
+    {
+     "text": " that are most likely to be excluded from the confidence set "
+    },
+    {
+     "text": "ℳ",
+     "latex": "\\mathcal{M}",
+     "mathml": "<math display=\"inline\"><mi>ℳ</mi></math>"
+    },
+    {
+     "text": " are those for which "
+    },
+    {
+     "text": "k",
+     "latex": "k",
+     "mathml": "<math display=\"inline\"><mi>k</mi></math>"
+    },
+    {
+     "text": " coincides with directions of high curvature of the log likelihood function."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "4.3 Extensions to other alternatives"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The results in the previous section focus on models "
+    },
+    {
+     "text": "𝒮m",
+     "latex": "\\mathcal{S}_{m}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒮</mi><mi>m</mi></msub></math>"
+    },
+    {
+     "text": " where the unknown parameter "
+    },
+    {
+     "text": "γ0",
+     "latex": "\\gamma^{0}",
+     "mathml": "<math display=\"inline\"><msup><mi>γ</mi><mn>0</mn></msup></math>"
+    },
+    {
+     "text": " can be consistently estimated. Depending on the form of the log-likelihood, consistent estimation of "
+    },
+    {
+     "text": "γ0",
+     "latex": "\\gamma^{0}",
+     "mathml": "<math display=\"inline\"><msup><mi>γ</mi><mn>0</mn></msup></math>"
+    },
+    {
+     "text": " is not necessary for accurate characterisation of the log-likelihood "
+    },
+    {
+     "text": "ℓ(γ0,0)",
+     "latex": "\\ell(\\gamma^{0},0)",
+     "mathml": "<math display=\"inline\"><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>γ</mi><mn>0</mn></msup><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". Consider the normal theory linear model with covariate matrix "
+    },
+    {
+     "text": "X~",
+     "latex": "\\widetilde{X}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover></math>"
+    },
+    {
+     "text": " and known variance. Let "
+    },
+    {
+     "text": "X~m",
+     "latex": "\\widetilde{X}_{m}",
+     "mathml": "<math display=\"inline\"><msub><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mi>m</mi></msub></math>"
+    },
+    {
+     "text": " consist of the columns of "
+    },
+    {
+     "text": "X~",
+     "latex": "\\widetilde{X}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover></math>"
+    },
+    {
+     "text": " indexed by "
+    },
+    {
+     "text": "𝒮m",
+     "latex": "\\mathcal{S}_{m}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒮</mi><mi>m</mi></msub></math>"
+    },
+    {
+     "text": ". Then,"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{array}{rcl} \\displaystyle w(\\mathcal{S}_{m}) & \\displaystyle= & \\displaystyle\\sigma^{-2}\\|(P_{\\widetilde{X}}-P_{\\widetilde{X}_{m}})Y\\|_{2}^{2}\\sim\\chi^{2}_{\\hat{r}-r_{m}}(\\lambda), \\\\ \\displaystyle\\lambda & \\displaystyle= & \\displaystyle\\sigma^{-2}\\|(I-P_{m})\\widetilde{X}\\gamma^{0}\\|_{2}^{2} \\end{array}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><mi>w</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>𝒮</mi><mi>m</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mtd><mtd><mo>=</mo></mtd><mtd><mrow><mrow><mrow><msup><mi>σ</mi><mrow><mo>−</mo><mn>2</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mrow><mo stretchy=\"false\">‖</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>P</mi><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover></msub><mo>−</mo><msub><mi>P</mi><msub><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mi>m</mi></msub></msub></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>Y</mi></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn><mn>2</mn></msubsup></mrow><mo>∼</mo><mrow><msubsup><mi>χ</mi><mrow><mover accent=\"true\"><mi>r</mi><mo>^</mo></mover><mo>−</mo><msub><mi>r</mi><mi>m</mi></msub></mrow><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>λ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>,</mo></mrow></mtd></mtr><mtr><mtd><mi>λ</mi></mtd><mtd><mo>=</mo></mtd><mtd><mrow><msup><mi>σ</mi><mrow><mo>−</mo><mn>2</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mrow><mo stretchy=\"false\">‖</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>I</mi><mo>−</mo><msub><mi>P</mi><mi>m</mi></msub></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>γ</mi><mn>0</mn></msup></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn><mn>2</mn></msubsup></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "when "
+    },
+    {
+     "text": "X~",
+     "latex": "\\widetilde{X}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover></math>"
+    },
+    {
+     "text": " has full rank and "
+    },
+    {
+     "text": "Pm",
+     "latex": "P_{m}",
+     "mathml": "<math display=\"inline\"><msub><mi>P</mi><mi>m</mi></msub></math>"
+    },
+    {
+     "text": " is the projection matrix onto "
+    },
+    {
+     "text": "X~m",
+     "latex": "\\widetilde{X}_{m}",
+     "mathml": "<math display=\"inline\"><msub><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mi>m</mi></msub></math>"
+    },
+    {
+     "text": ". A model "
+    },
+    {
+     "text": "𝒮m",
+     "latex": "\\mathcal{S}_{m}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒮</mi><mi>m</mi></msub></math>"
+    },
+    {
+     "text": " is included in the model confidence set with probability converging to "
+    },
+    {
+     "text": "1−ϑ",
+     "latex": "1-\\vartheta",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>−</mo><mi>ϑ</mi></mrow></math>"
+    },
+    {
+     "text": " whenever "
+    },
+    {
+     "text": "‖(I−Pm)X~γ0‖2",
+     "latex": "\\|(I-P_{m})\\widetilde{X}\\gamma^{0}\\|_{2}",
+     "mathml": "<math display=\"inline\"><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>I</mi><mo>−</mo><msub><mi>P</mi><mi>m</mi></msub></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>γ</mi><mn>0</mn></msup></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " converges to zero, that is, whenever the portion of the signal "
+    },
+    {
+     "text": "X~γ0",
+     "latex": "\\widetilde{X}\\gamma^{0}",
+     "mathml": "<math display=\"inline\"><mrow><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>γ</mi><mn>0</mn></msup></mrow></math>"
+    },
+    {
+     "text": " that is orthogonal to the column span of "
+    },
+    {
+     "text": "X~m",
+     "latex": "\\widetilde{X}_{m}",
+     "mathml": "<math display=\"inline\"><msub><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mi>m</mi></msub></math>"
+    },
+    {
+     "text": " converges to zero. This result applies irrespective of how well "
+    },
+    {
+     "text": "γ0",
+     "latex": "\\gamma^{0}",
+     "mathml": "<math display=\"inline\"><msup><mi>γ</mi><mn>0</mn></msup></math>"
+    },
+    {
+     "text": " is estimated by "
+    },
+    {
+     "text": "𝒮m",
+     "latex": "\\mathcal{S}_{m}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒮</mi><mi>m</mi></msub></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To extend the results in the previous section, we consider likelihoods that depend on "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " only through "
+    },
+    {
+     "text": "X~γ",
+     "latex": "\\widetilde{X}\\gamma",
+     "mathml": "<math display=\"inline\"><mrow><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>γ</mi></mrow></math>"
+    },
+    {
+     "text": " for "
+    },
+    {
+     "text": "γ∈ℝs^",
+     "latex": "\\gamma\\in\\mathbb{R}^{\\hat{s}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>∈</mo><msup><mi>ℝ</mi><mover accent=\"true\"><mi>s</mi><mo>^</mo></mover></msup></mrow></math>"
+    },
+    {
+     "text": ". The following result shows that models satisfying assumptions (a)-(d) below are included in the model confidence set with probability converging to "
+    },
+    {
+     "text": "1−ϑ",
+     "latex": "1-\\vartheta",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>−</mo><mi>ϑ</mi></mrow></math>"
+    },
+    {
+     "text": " as the sample size grows."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proposition 1. ",
+     "bold": true
+    },
+    {
+     "text": "Suppose the log-likelihood function ",
+     "italic": true
+    },
+    {
+     "text": "ℓ(γ,0)",
+     "latex": "\\ell(\\gamma,0)",
+     "mathml": "<math display=\"inline\"><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>γ</mi><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " depends on ",
+     "italic": true
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " only through ",
+     "italic": true
+    },
+    {
+     "text": "η=X~γ",
+     "latex": "\\eta=\\widetilde{X}\\gamma",
+     "mathml": "<math display=\"inline\"><mrow><mi>η</mi><mo>=</mo><mrow><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>γ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " and write ",
+     "italic": true
+    },
+    {
+     "text": "ℓ¯(η)=ℓ(γ,0)",
+     "latex": "\\bar{\\ell}(\\eta)=\\ell(\\gamma,0)",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mover accent=\"true\"><mi mathvariant=\"normal\">ℓ</mi><mo>¯</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>η</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mi mathvariant=\"normal\">ℓ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>γ</mi><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ". Let ",
+     "italic": true
+    },
+    {
+     "text": "η0=X~γ0",
+     "latex": "\\eta^{0}=\\widetilde{X}\\gamma^{0}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>η</mi><mn>0</mn></msup><mo>=</mo><mrow><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>γ</mi><mn>0</mn></msup></mrow></mrow></math>"
+    },
+    {
+     "text": " and suppose there exist unique maximisers",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{array}{rcl} \\displaystyle\\hat{\\eta}_{m} & \\displaystyle= & \\displaystyle\\text{argmax}_{\\eta\\in\\text{Col-Sp}(\\widetilde{X}_{m})}\\bar{\\ell}(\\eta) \\\\ \\displaystyle\\hat{\\eta} & \\displaystyle= & \\displaystyle\\text{argmax}_{\\eta\\in\\text{Col-Sp}(\\widetilde{X})}\\bar{\\ell}(\\eta). \\end{array}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><msub><mover accent=\"true\"><mi>η</mi><mo>^</mo></mover><mi>m</mi></msub></mtd><mtd><mo>=</mo></mtd><mtd><mrow><msub><mtext>argmax</mtext><mrow><mi>η</mi><mo>∈</mo><mrow><mtext>Col-Sp</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mi>m</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mover accent=\"true\"><mi mathvariant=\"normal\">ℓ</mi><mo>¯</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>η</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mtd></mtr><mtr><mtd><mover accent=\"true\"><mi>η</mi><mo>^</mo></mover></mtd><mtd><mo>=</mo></mtd><mtd><mrow><mrow><msub><mtext>argmax</mtext><mrow><mi>η</mi><mo>∈</mo><mrow><mtext>Col-Sp</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mover accent=\"true\"><mi>X</mi><mo>~</mo></mover><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mover accent=\"true\"><mi mathvariant=\"normal\">ℓ</mi><mo>¯</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>η</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Assume the following:",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "(a)",
+     "spans": [
+      {
+       "text": "Weak omitted signal: ",
+       "italic": true
+      },
+      {
+       "text": "∥(I−Pm)η0∥2=o(n−1/2)",
+       "latex": "\\|(I-P_{m})\\eta^{0}\\|_{2}=o(n^{-1/2})",
+       "mathml": "<math display=\"inline\"><mrow><mo rspace=\"0.167em\">∥</mo><mrow><mo stretchy=\"false\">(</mo><mi>I</mi><mo>−</mo><msub><mi>P</mi><mi>m</mi></msub><mo stretchy=\"false\">)</mo></mrow><msup><mi>η</mi><mn>0</mn></msup><msub><mo lspace=\"0em\" rspace=\"0.0835em\">∥</mo><mn>2</mn></msub><mo lspace=\"0.0835em\">=</mo><mi>o</mi><mrow><mo stretchy=\"false\">(</mo><msup><mi>n</mi><mrow><mo>−</mo><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": ",",
+       "italic": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "(b)",
+     "spans": [
+      {
+       "text": "Predictive consistency under both models: ",
+       "italic": true
+      },
+      {
+       "text": "∥η^−η0∥33=OP(n−1/2)",
+       "latex": "\\|\\hat{\\eta}-\\eta^{0}\\|_{3}^{3}=O_{P}(n^{-1/2})",
+       "mathml": "<math display=\"inline\"><mrow><mo rspace=\"0.167em\">∥</mo><mover accent=\"true\"><mi>η</mi><mo>^</mo></mover><mo>−</mo><msup><mi>η</mi><mn>0</mn></msup><msubsup><mo lspace=\"0em\" rspace=\"0.0835em\">∥</mo><mn>3</mn><mn>3</mn></msubsup><mo lspace=\"0.0835em\">=</mo><msub><mi>O</mi><mi>P</mi></msub><mrow><mo stretchy=\"false\">(</mo><msup><mi>n</mi><mrow><mo>−</mo><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": " and ",
+       "italic": true
+      },
+      {
+       "text": "∥η^m−η0∥33=OP(n−1/2)",
+       "latex": "\\|\\hat{\\eta}_{m}-\\eta^{0}\\|_{3}^{3}=O_{P}(n^{-1/2})",
+       "mathml": "<math display=\"inline\"><mrow><mo rspace=\"0.167em\">∥</mo><msub><mover accent=\"true\"><mi>η</mi><mo>^</mo></mover><mi>m</mi></msub><mo>−</mo><msup><mi>η</mi><mn>0</mn></msup><msubsup><mo lspace=\"0em\" rspace=\"0.0835em\">∥</mo><mn>3</mn><mn>3</mn></msubsup><mo lspace=\"0.0835em\">=</mo><msub><mi>O</mi><mi>P</mi></msub><mrow><mo stretchy=\"false\">(</mo><msup><mi>n</mi><mrow><mo>−</mo><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": ".",
+       "italic": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "(c)",
+     "spans": [
+      {
+       "text": "A local asymptotic expansion: for ",
+       "italic": true
+      },
+      {
+       "text": "Mn=o(1)",
+       "latex": "M_{n}=o(1)",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>M</mi><mi>n</mi></msub><mo>=</mo><mrow><mi>o</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+      },
+      {
+       "text": ",",
+       "italic": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{array}{rcl} \\displaystyle\\sup_{h\\in B_{n}}|\\bar{\\ell}(\\eta^{0}+h)-f(\\eta^{0},h)| & \\displaystyle= & \\displaystyle o_{P}(1) \\end{array}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><munder><mo movablelimits=\"false\">sup</mo><mrow><mi>h</mi><mo>∈</mo><msub><mi>B</mi><mi>n</mi></msub></mrow></munder><mrow><mo lspace=\"0em\" stretchy=\"false\">|</mo><mrow><mrow><mover accent=\"true\"><mi mathvariant=\"normal\">ℓ</mi><mo>¯</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msup><mi>η</mi><mn>0</mn></msup><mo>+</mo><mi>h</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>−</mo><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>η</mi><mn>0</mn></msup><mo>,</mo><mi>h</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo stretchy=\"false\">|</mo></mrow></mrow></mtd><mtd><mo>=</mo></mtd><mtd><mrow><msub><mi>o</mi><mi>P</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "where ",
+       "italic": true
+      },
+      {
+       "text": "Bn={h∈ℝn:‖h‖3≤Mn}",
+       "latex": "B_{n}=\\{h\\in\\mathbb{R}^{n}:\\|h\\|_{3}\\leq M_{n}\\}",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>B</mi><mi>n</mi></msub><mo>=</mo><mrow><mo stretchy=\"false\">{</mo><mrow><mi>h</mi><mo>∈</mo><msup><mi>ℝ</mi><mi>n</mi></msup></mrow><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mi>h</mi><mo stretchy=\"false\">‖</mo></mrow><mn>3</mn></msub><mo>≤</mo><msub><mi>M</mi><mi>n</mi></msub></mrow><mo stretchy=\"false\">}</mo></mrow></mrow></math>"
+      },
+      {
+       "text": " and",
+       "italic": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{array}{rcl} \\displaystyle f(\\eta^{0},h) & \\displaystyle= & \\displaystyle\\bar{\\ell}(\\eta^{0})+h^{T}\\nabla_{\\eta}\\bar{\\ell}(\\eta^{0})+\\frac{1}{2}h^{T}\\nabla_{\\eta\\eta}^{2}\\bar{\\ell}(\\eta^{0})h. \\end{array}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>η</mi><mn>0</mn></msup><mo>,</mo><mi>h</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mtd><mtd><mo>=</mo></mtd><mtd><mrow><mrow><mrow><mover accent=\"true\"><mi mathvariant=\"normal\">ℓ</mi><mo>¯</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>η</mi><mn>0</mn></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mrow><msup><mi>h</mi><mi>T</mi></msup><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><msub><mo rspace=\"0.167em\">∇</mo><mi>η</mi></msub><mover accent=\"true\"><mi mathvariant=\"normal\">ℓ</mi><mo>¯</mo></mover></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>η</mi><mn>0</mn></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mn>2</mn></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>h</mi><mi>T</mi></msup><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><msubsup><mo rspace=\"0.167em\">∇</mo><mrow><mi>η</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>η</mi></mrow><mn>2</mn></msubsup><mover accent=\"true\"><mi mathvariant=\"normal\">ℓ</mi><mo>¯</mo></mover></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>η</mi><mn>0</mn></msup><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Further, ",
+       "italic": true
+      },
+      {
+       "text": "∥n−1/2∇ηℓ¯(η0)∥2",
+       "latex": "\\|n^{-1/2}\\nabla_{\\eta}\\bar{\\ell}(\\eta^{0})\\|_{2}",
+       "mathml": "<math display=\"inline\"><mrow><mo rspace=\"0.167em\">∥</mo><msup><mi>n</mi><mrow><mo>−</mo><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup><msub><mo lspace=\"0.167em\" rspace=\"0.167em\">∇</mo><mi>η</mi></msub><mover accent=\"true\"><mi mathvariant=\"normal\">ℓ</mi><mo>¯</mo></mover><mrow><mo stretchy=\"false\">(</mo><msup><mi>η</mi><mn>0</mn></msup><mo stretchy=\"false\">)</mo></mrow><msub><mo lspace=\"0em\">∥</mo><mn>2</mn></msub></mrow></math>"
+      },
+      {
+       "text": " and ",
+       "italic": true
+      },
+      {
+       "text": "‖∇ηη2ℓ¯(η0)‖2",
+       "latex": "\\|\\nabla_{\\eta\\eta}^{2}\\bar{\\ell}(\\eta^{0})\\|_{2}",
+       "mathml": "<math display=\"inline\"><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><msubsup><mo>∇</mo><mrow><mi>η</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>η</mi></mrow><mn>2</mn></msubsup><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mover accent=\"true\"><mi mathvariant=\"normal\">ℓ</mi><mo>¯</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>η</mi><mn>0</mn></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn></msub></math>"
+      },
+      {
+       "text": " are ",
+       "italic": true
+      },
+      {
+       "text": "OP(1)",
+       "latex": "O_{P}(1)",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>O</mi><mi>P</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": ".",
+       "italic": true
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "furniture": [
+  "arXiv:2302.12627v3 [stat.ME] 9 Jun 2025",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8"
+ ],
+ "license": "open",
+ "provenance": "latexml",
+ "notes": "arXiv 2302.12627v3 (statistics; article, one column, A4), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Macros expanded: \\mathbbm."
+}

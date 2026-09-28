@@ -1,0 +1,4852 @@
+{
+ "id": "arxiv-2504-02736",
+ "category": "paper",
+ "source": {
+  "pdf": ".bench/arxiv/2504.02736v2.pdf",
+  "url": "https://arxiv.org/abs/2504.02736v2"
+ },
+ "pages": [
+  1,
+  5
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "Parity violation as enforced symmetry breaking in 3D fermionic topological order"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Shang-Qiang Ning,1, 2 Yang Qi,3, 4, ∗ Chenjie Wang,5, † and Zheng-Cheng Gu1, ‡"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "1 Department of Physics, The Chinese University of Hong Kong, Shatin, New Territories, Hong Kong, China"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "2 Department of Physics, The Hong Kong University of Science and Technology, Clear Water Bay, Kowloon, Hong Kong, China"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "3 Center for Field Theory and Particle Physics, Department of Physics, Fudan University, Shanghai 200433, China"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "4 State Key Laboratory of Surface Physics, Fudan University, Shanghai 200433, China"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "5 Department of Physics and HK Institute of Quantum Science & Technology,"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The University of Hong Kong, Pokfulam Road, Hong Kong, China"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Symmetry can be intrinsically broken in topological phases due to inherent incompatibilities, a phenomenon known as enforced symmetry breaking (ESB) in the framework of topological order. In our previous work, we developed a systematic framework to understand ESB within 2D invertible topological order. Meanwhile, the origin of parity violation in the Standard Model remains one of the most profound mysteries in physics, with no clear explanation to date. In this study, we explore the ESB of parity symmetry by three-dimensional fermionic topological order (fTO), offering potential insights into the origins of parity violation. As the simplest example, here we consider an fTO related to the intrinsic interacting fermionic SPT phase protected by "
+    },
+    {
+     "text": "ℤ2f×ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}^{f}\\times\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " symmetry in three dimensions. We show that time-reversal symmetry (TRS) with "
+    },
+    {
+     "text": "𝒯2=1",
+     "latex": "\\mathcal{T}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " on physical fermions is incompatible with such fTO; then, through the so-called crystalline equivalence principle, we show that the parity symmetry is also incompatible with it. In comparison, conventional TRS with "
+    },
+    {
+     "text": "𝒯2=𝒫f",
+     "latex": "\\mathcal{T}^{2}=\\mathcal{P}_{f}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><msub><mi>𝒫</mi><mi>f</mi></msub></mrow></math>"
+    },
+    {
+     "text": " remains compatible to this fTO. We also discuss a general framework to study the ESB phenomenon for 3D fTO."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Introduction",
+     "italic": true
+    },
+    {
+     "text": " — Symmetry and its breaking are at the very heart of modern physics—from phenomena such as Bose-Einstein condensation, magnetization, and superconductivity in condensed matter to the Higgs mechanism in high-energy physics [1]. Yet, the discovery of the fractional quantum Hall effect ushered in an era of topological phases that transcend the traditional Landau paradigm [2–4]. The intricate interplay between symmetry and topology has, in turn, given rise to a myriad of new concepts, notably symmetry-protected topological (SPT) order and symmetry-enriched topological (SET) order, which have attracted extensive recent attention. ."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "However, symmetry does not always align compatibly with a topological order (TO). In certain situations, a symmetry can be incompatible with a given TO, which means there does not exist a Hamiltonian whose ground state realizing the given TO is invariant under that symmetry. Such an incompatibility is called enforced symmetry breaking (ESB). It is well known that the 1D Kitaev chain (KC)—the sole example of intrinsic topological order in one dimension—is incompatible with a time-reversal symmetry (TRS) defined by "
+    },
+    {
+     "text": "𝒯2=𝒫f",
+     "latex": "\\mathcal{T}^{2}=\\mathcal{P}_{f}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><msub><mi>𝒫</mi><mi>f</mi></msub></mrow></math>"
+    },
+    {
+     "text": " while compatible with "
+    },
+    {
+     "text": "𝒯2=1",
+     "latex": "\\mathcal{T}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": "[5]. The ESB can be determined by the inherent topological nature of the TO, without necessitating the explicit ground state wavefunctions. So it is a kind of intrinsic symmetry breaking rooted in the universal many-body entanglement structure of the TO. While the renowned LSM theorem can limit possible ground states [6–12] by only forbidding the gapped symmetric featureless state, the ESB, however, imposes stricter constraints on ground states than LSM-type theorems by ruling out certain TOs."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In the previous work Ref.[13], we systematically studied the ESB for 2D invertible fTO. Herein, we venture into the ESB phenomenon of 3D fTO. As there is no invertible fTO in 3D, we have to consider intrinsic fTO. In this work, we will focus on 3D ESB of TRS. We show that TRS is intrinsically broken by the presence of certain 3D fermionic TO (fTO) characterized by exotic non-Abelian three-loop braiding statistics. Such an fTO is closely related to an intrinsic interacting fermionic SPT (fSPT) order, which is specifically protected by symmetry "
+    },
+    {
+     "text": "Kf=ℤ2f×ℤ2×ℤ8",
+     "latex": "K_{f}=\\mathbb{Z}_{2}^{f}\\times\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>K</mi><mi>f</mi></msub><mo>=</mo><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", characterized by non-Abelian three-loop braiding statistics [14]. This fTO is obtained by gauging "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " in the fSPT state, and will be referred to as Ising fTO. As we shall show, this "
+    },
+    {
+     "text": "Kf",
+     "latex": "K_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>K</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " fSPT is incompatible with "
+    },
+    {
+     "text": "𝒯2=1",
+     "latex": "\\mathcal{T}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " while compatible with "
+    },
+    {
+     "text": "𝒯2=𝒫f",
+     "latex": "\\mathcal{T}^{2}=\\mathcal{P}_{f}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><msub><mi>𝒫</mi><mi>f</mi></msub></mrow></math>"
+    },
+    {
+     "text": ". Its incompatibility with the "
+    },
+    {
+     "text": "𝒯2=1",
+     "latex": "\\mathcal{T}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " TRS becomes exactly the ESB of TRS by this fTO. To our knowledge, this is the first and simplest example of TRS incompatibility of 3D fTO. This example readily extends to the realm of parity symmetry through the crystalline equivalence principle, while the concept of ESB unveils a novel pathway for comprehending parity violation within the Standard Model (SM), under the assumption that its vacuum acquires emergent generalized symmetry[15–17] characterized as certain 3D Ising fTO. We will also discuss the general framework for understanding 3D ESB phenomena."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "3D fSPT and fTO",
+     "italic": true
+    },
+    {
+     "text": " — Let us briefly review the "
+    },
+    {
+     "text": "Kf",
+     "latex": "K_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>K</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " 3D fSPT and the corresponding gauged fTO. An elegant way to understand the SPT is using the decoration domain wall construction[18–20]. In the 3D bulk with "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " symmetry, there are 2D "
+    },
+    {
+     "text": "ℤ8",
+     "latex": "\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>8</mn></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ℤ2",
+     "latex": "\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " domain walls (DW), denoted "
+    },
+    {
+     "text": "𝐠",
+     "latex": "\\mathbf{g}",
+     "mathml": "<math display=\"inline\"><mi>𝐠</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "𝐡",
+     "latex": "\\mathbf{h}",
+     "mathml": "<math display=\"inline\"><mi>𝐡</mi></math>"
+    },
+    {
+     "text": ", respectively. This fSPT is constructed by decorating the KC on the intersection line of "
+    },
+    {
+     "text": "𝐠",
+     "latex": "\\mathbf{g}",
+     "mathml": "<math display=\"inline\"><mi>𝐠</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "𝐡",
+     "latex": "\\mathbf{h}",
+     "mathml": "<math display=\"inline\"><mi>𝐡</mi></math>"
+    },
+    {
+     "text": " DWs, whose coherent fluctuation gives rise to the fSPT wavefunction (see Fig.1a). The decoration is characterized by a function that depends on two group elements in "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": ", called the two-cocycle "
+    },
+    {
+     "text": "n2",
+     "latex": "n_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>n</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " that can take a value of 0 or 1, indicating the absence or presence of KC [19]. On the other hand, it can be equivalently viewed as the coherently decorated 2D root "
+    },
+    {
+     "text": "ℤ2f×ℤ2",
+     "latex": "\\mathbb{Z}_{2}^{f}\\times\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub></mrow></math>"
+    },
+    {
+     "text": " fSPT on 2D "
+    },
+    {
+     "text": "𝐠",
+     "latex": "\\mathbf{g}",
+     "mathml": "<math display=\"inline\"><mi>𝐠</mi></math>"
+    },
+    {
+     "text": " DW [21]. The classification of 2D "
+    },
+    {
+     "text": "ℤ2f×ℤ2",
+     "latex": "\\mathbb{Z}_{2}^{f}\\times\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub></mrow></math>"
+    },
+    {
+     "text": " fSPT is "
+    },
+    {
+     "text": "ℤ8",
+     "latex": "\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>8</mn></msub></math>"
+    },
+    {
+     "text": " [22–25], which can be denoted as "
+    },
+    {
+     "text": "[n]",
+     "latex": "[n]",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">[</mo><mi>n</mi><mo stretchy=\"false\">]</mo></mrow></math>"
+    },
+    {
+     "text": " with "
+    },
+    {
+     "text": "n=0,1,..7",
+     "latex": "n=0,1,..7",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>n</mi><mo>=</mo><mn>0</mn></mrow><mo>,</mo><mn>1</mn><mo>,</mo><mn>..7</mn></mrow></math>"
+    },
+    {
+     "text": ", realizing by the stacking of "
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": " copies of the root phase "
+    },
+    {
+     "text": "[1]",
+     "latex": "[1]",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">[</mo><mn>1</mn><mo stretchy=\"false\">]</mo></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Upon gauging "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " in this fSPT (promoting the global "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " symmetry to be a local gauge symmetry), we obtain a 3D fTO, dubbed Ising fTO, with two elementary particle-like topological excitations: gauge charges "
+    },
+    {
+     "text": "𝖾1,2",
+     "latex": "\\mathsf{e}_{1,2}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝖾</mi><mrow><mn>1</mn><mo>,</mo><mn>2</mn></mrow></msub></math>"
+    },
+    {
+     "text": ", together with two elementary loop excitations "
+    },
+    {
+     "text": "Ω1,2",
+     "latex": "\\Omega_{1,2}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mrow><mn>1</mn><mo>,</mo><mn>2</mn></mrow></msub></math>"
+    },
+    {
+     "text": ", containing unit flux of "
+    },
+    {
+     "text": "ℤ2",
+     "latex": "\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ℤ8",
+     "latex": "\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>8</mn></msub></math>"
+    },
+    {
+     "text": " gauge group, respectively. Besides, there is also fermionic excitation that can be created by local operators and is usually called the transparent fermion "
+    },
+    {
+     "text": "f",
+     "latex": "f",
+     "mathml": "<math display=\"inline\"><mi>f</mi></math>"
+    },
+    {
+     "text": ". General loop excitations contain the gauge flux and gauge charge. The flux of loop excitations forms the fusion group "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": ". This fTO has many exotic properties. First, when "
+    },
+    {
+     "text": "Ω1",
+     "latex": "\\Omega_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": " is linked to the base loop "
+    },
+    {
+     "text": "Ω2",
+     "latex": "\\Omega_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": ", its topological spin "
+    },
+    {
+     "text": "θΩ1;Ω2",
+     "latex": "\\theta_{\\Omega_{1};\\Omega_{2}}",
+     "mathml": "<math display=\"inline\"><msub><mi>θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo>;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></mrow></msub></math>"
+    },
+    {
+     "text": " satisfies "
+    },
+    {
+     "text": "ΘΩ1;Ω2=2θΩ1;Ω2=π4",
+     "latex": "\\Theta_{\\Omega_{1};\\ \\Omega_{2}}=2\\theta_{\\Omega_{1};\\ \\Omega_{2}}=\\frac{\\pi}{4}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo rspace=\"0.577em\">;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></mrow></msub><mo>=</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo rspace=\"0.577em\">;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></mrow></msub></mrow><mo>=</mo><mfrac><mi>π</mi><mn>4</mn></mfrac></mrow></math>"
+    },
+    {
+     "text": " mod "
+    },
+    {
+     "text": "π2",
+     "latex": "\\frac{\\pi}{2}",
+     "mathml": "<math display=\"inline\"><mfrac><mi>π</mi><mn>2</mn></mfrac></math>"
+    },
+    {
+     "text": ". Secondly, for two linked "
+    },
+    {
+     "text": "Ω1",
+     "latex": "\\Omega_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "Ω2",
+     "latex": "\\Omega_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": ", each carries a Majorana zero mode (MZM), indicating the non-Abelian nature (see Fig.1c) [19, 14]. Thirdly, when further gauging the fermion parity, this resulting TO has fascinating statistics among loops, one of which is called the non-Abelian Ising three-loop braiding statistics as seen in Fig.1b . We note that in general the topological invariant "
+    },
+    {
+     "text": "ΘΩ1;Ω2=xπ4",
+     "latex": "\\Theta_{\\Omega_{1};\\ \\Omega_{2}}=\\frac{x\\pi}{4}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo rspace=\"0.577em\">;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></mrow></msub><mo>=</mo><mfrac><mrow><mi>x</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>π</mi></mrow><mn>4</mn></mfrac></mrow></math>"
+    },
+    {
+     "text": " mod "
+    },
+    {
+     "text": "2π",
+     "latex": "2\\pi",
+     "mathml": "<math display=\"inline\"><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>π</mi></mrow></math>"
+    },
+    {
+     "text": ", and it is non-Abelian when "
+    },
+    {
+     "text": "x",
+     "latex": "x",
+     "mathml": "<math display=\"inline\"><mi>x</mi></math>"
+    },
+    {
+     "text": " takes odd integer. In addition, there is another topological invariant "
+    },
+    {
+     "text": "ΘΩ2;Ω1",
+     "latex": "\\Theta_{\\Omega_{2};\\ \\Omega_{1}}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo rspace=\"0.577em\">;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub></mrow></msub></math>"
+    },
+    {
+     "text": " which can take "
+    },
+    {
+     "text": "0",
+     "latex": "0",
+     "mathml": "<math display=\"inline\"><mn>0</mn></math>"
+    },
+    {
+     "text": " or "
+    },
+    {
+     "text": "π",
+     "latex": "\\pi",
+     "mathml": "<math display=\"inline\"><mi>π</mi></math>"
+    },
+    {
+     "text": " characterizing an Abelian bosonic TO of "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " Dijkgraaf-Witten models. (For completeness, a concise overview of fSPT and associated three-loop braiding is provided in the supplementary materials). We also note that the ESB by TRS or parity symmetry we discuss below applies to these fTOs for all odd "
+    },
+    {
+     "text": "x",
+     "latex": "x",
+     "mathml": "<math display=\"inline\"><mi>x</mi></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Figure 1. The physics of 3D fTO and corresponding fSPT. (a) The fSPT is characterized by KC decoration on the intersection line of "
+    },
+    {
+     "text": "ℤ2",
+     "latex": "\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ℤ8",
+     "latex": "\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>8</mn></msub></math>"
+    },
+    {
+     "text": " domain wall. (b) is about non-Abelian three loop braiding statistics. Blue loops represent two "
+    },
+    {
+     "text": "Ω0",
+     "latex": "\\Omega_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>0</mn></msub></math>"
+    },
+    {
+     "text": " loop excitations, green one represents the bosonic "
+    },
+    {
+     "text": "ℤ2",
+     "latex": "\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " loop and the red base loop is the "
+    },
+    {
+     "text": "ℤ8",
+     "latex": "\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>8</mn></msub></math>"
+    },
+    {
+     "text": " loop. We braid the middle "
+    },
+    {
+     "text": "Ω0",
+     "latex": "\\Omega_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>0</mn></msub></math>"
+    },
+    {
+     "text": " loop along the path labeled by (1), (2), (3) and (4) consecutively. Note that any of the four loops in (b) can be base loop and the other three exhibit the same non-Abelian three loop braiding statistics. (c) For two linked "
+    },
+    {
+     "text": "Ω1",
+     "latex": "\\Omega_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "Ω2",
+     "latex": "\\Omega_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": ", each carries a MZM at the point of the loop intersecting with the other supporting membrane, denoted as blue dot."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "TRS and its ESB in ",
+     "italic": true
+    },
+    {
+     "text": "3D",
+     "latex": "3D",
+     "mathml": "<math display=\"inline\"><mrow><mn>3</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>D</mi></mrow></math>"
+    },
+    {
+     "text": " fTO",
+     "italic": true
+    },
+    {
+     "text": " — Let us assume that there exists an anomaly-free TRS Ising fTO, such that TRS action can be consistently defined on topological excitations. First, TRS may permute topological excitations, including both particles and loops. For loops, TRS may permute both gauge flux and gauge charge. Let us consider how it permutes the gauge flux. The permutations must preserve the gauge flux fusion structure, which implies that TRS must act as an automorphism of "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": ". We denote the permutation as "
+    },
+    {
+     "text": "ρ",
+     "latex": "\\rho",
+     "mathml": "<math display=\"inline\"><mi>ρ</mi></math>"
+    },
+    {
+     "text": ", with "
+    },
+    {
+     "text": "ρ∈Aut(ℤ2×ℤ8)≅ℤ2×D4",
+     "latex": "\\rho\\in\\text{Aut}(\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8})\\cong\\mathbb{Z}_{2}\\times D_{4}",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>∈</mo><mrow><mtext>Aut</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≅</mo><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>D</mi><mn>4</mn></msub></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "As the fermionic parity does not induce flux permutation, the automorphism must satisfy "
+    },
+    {
+     "text": "(ρ)2=1",
+     "latex": "(\\rho)^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mi>ρ</mi><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", regardless of "
+    },
+    {
+     "text": "𝒯2=1",
+     "latex": "\\mathcal{T}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " or "
+    },
+    {
+     "text": "𝒫f",
+     "latex": "\\mathcal{P}_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒫</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": ". Among all automorphisms in "
+    },
+    {
+     "text": "Aut(ℤ2×ℤ8)",
+     "latex": "\\text{Aut}(\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8})",
+     "mathml": "<math display=\"inline\"><mrow><mtext>Aut</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", 12 of them satisfy this condition. They can be labeled by a triplet "
+    },
+    {
+     "text": "𝐫=(p,q,t)",
+     "latex": "\\mathbf{r}=(p,q,t)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐫</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo>,</mo><mi>q</mi><mo>,</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", where "
+    },
+    {
+     "text": "p=0,1,2,3",
+     "latex": "p=0,1,2,3",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>p</mi><mo>=</mo><mn>0</mn></mrow><mo>,</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "q,t=0,1",
+     "latex": "q,t=0,1",
+     "mathml": "<math display=\"inline\"><mrow><mi>q</mi><mo>,</mo><mrow><mi>t</mi><mo>=</mo><mn>0</mn></mrow><mo>,</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " with "
+    },
+    {
+     "text": "qt=0",
+     "latex": "qt=0",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ". More explicitly, under TRS action, "
+    },
+    {
+     "text": "ρ(Ω1)=(Ω2)4tΩ1",
+     "latex": "\\rho(\\Omega_{1})=(\\Omega_{2})^{4t}\\Omega_{1}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mrow><mn>4</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ρ(Ω2)=(Ω2)2p+1(Ω1)q",
+     "latex": "\\rho(\\Omega_{2})=(\\Omega_{2})^{2p+1}(\\Omega_{1})^{q}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi></mrow><mo>+</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow><mi>q</mi></msup></mrow></mrow></math>"
+    },
+    {
+     "text": " (Depending on the context, we use "
+    },
+    {
+     "text": "ρ(Ω)",
+     "latex": "\\rho(\\Omega)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">Ω</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " to denote either the permutations of the loop itself or its gauge flux)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Under TRS action, topological observables, including Aharonov–Bohm statistics and three-loop braiding statistics, are required to be preserved after a complex conjugation. With Aharonov-Bohm statistics, this requirement completely fixes the permutation of particles for a given permutation "
+    },
+    {
+     "text": "ρ",
+     "latex": "\\rho",
+     "mathml": "<math display=\"inline\"><mi>ρ</mi></math>"
+    },
+    {
+     "text": " of gauge fluxes."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For three-loop statistics, this requirement leads to the conditions "
+    },
+    {
+     "text": "ΘΩ1;Ω2=−Θρ(Ω1);ρ(Ω2)",
+     "latex": "\\Theta_{\\Omega_{1};\\Omega_{2}}=-\\Theta_{\\rho(\\Omega_{1});\\ \\rho(\\Omega_{2})}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo>;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></mrow></msub><mo>=</mo><mrow><mo>−</mo><msub><mi mathvariant=\"normal\">Θ</mi><mrow><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo rspace=\"0.577em\">;</mo><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></msub></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ΘΩ2;Ω1=−Θρ(Ω2);ρ(Ω1)",
+     "latex": "\\Theta_{\\Omega_{2};\\Omega_{1}}=-\\Theta_{\\rho(\\Omega_{2});\\ \\rho(\\Omega_{1})}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo>;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub></mrow></msub><mo>=</mo><mrow><mo>−</mo><msub><mi mathvariant=\"normal\">Θ</mi><mrow><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo rspace=\"0.577em\">;</mo><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", where"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{aligned} \\Theta_{\\rho(\\Omega_{1});\\ \\rho(\\Omega_{2})} & =(2p+1)\\Theta_{\\Omega_{1};\\ \\Omega_{2}}+t\\Theta_{\\Omega_{1},\\Omega_{2};\\ \\Omega_{2}} \\\\ \\Theta_{\\rho(\\Omega_{2});\\ \\rho(\\Omega_{1})} & =\\Theta_{\\Omega_{2};\\ \\Omega_{1}}+q\\Theta_{\\Omega_{2},\\Omega_{1};\\ \\Omega_{1}} \\end{aligned}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><msub><mi mathvariant=\"normal\">Θ</mi><mrow><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo rspace=\"0.577em\">;</mo><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></msub></mtd><mtd><mrow><mphantom></mphantom><mo>=</mo><mrow><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi></mrow><mo>+</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi mathvariant=\"normal\">Θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo rspace=\"0.577em\">;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></mrow></msub></mrow><mo>+</mo><mrow><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi mathvariant=\"normal\">Θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo>,</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo rspace=\"0.577em\">;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></mrow></msub></mrow></mrow></mrow></mtd></mtr><mtr><mtd><msub><mi mathvariant=\"normal\">Θ</mi><mrow><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo rspace=\"0.577em\">;</mo><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></msub></mtd><mtd><mrow><mphantom></mphantom><mo>=</mo><mrow><msub><mi mathvariant=\"normal\">Θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo rspace=\"0.577em\">;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub></mrow></msub><mo>+</mo><mrow><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi mathvariant=\"normal\">Θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo>,</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo rspace=\"0.577em\">;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub></mrow></msub></mrow></mrow></mrow></mtd></mtr></mtable></math>",
+   "label": "(1)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "(see End Matter for derivations). Solving the equations, we find (i) when "
+    },
+    {
+     "text": "t=0",
+     "latex": "t=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "p=3",
+     "latex": "p=3",
+     "mathml": "<math display=\"inline\"><mrow><mi>p</mi><mo>=</mo><mn>3</mn></mrow></math>"
+    },
+    {
+     "text": "; (ii) when "
+    },
+    {
+     "text": "t=1",
+     "latex": "t=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "p=3",
+     "latex": "p=3",
+     "mathml": "<math display=\"inline\"><mrow><mi>p</mi><mo>=</mo><mn>3</mn></mrow></math>"
+    },
+    {
+     "text": " if "
+    },
+    {
+     "text": "ΘΩ1,Ω2;Ω2=0",
+     "latex": "\\Theta_{\\Omega_{1},\\Omega_{2};\\ \\Omega_{2}}=0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo>,</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo rspace=\"0.577em\">;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></mrow></msub><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "p=1",
+     "latex": "p=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>p</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " if "
+    },
+    {
+     "text": "ΘΩ1,Ω2;Ω2=π",
+     "latex": "\\Theta_{\\Omega_{1},\\Omega_{2};\\ \\Omega_{2}}=\\pi",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Θ</mi><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo>,</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo rspace=\"0.577em\">;</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></mrow></msub><mo>=</mo><mi>π</mi></mrow></math>"
+    },
+    {
+     "text": "; (iii) "
+    },
+    {
+     "text": "q=0",
+     "latex": "q=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>q</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ". Therefore, we are left with only three possibly consistent "
+    },
+    {
+     "text": "ρ",
+     "latex": "\\rho",
+     "mathml": "<math display=\"inline\"><mi>ρ</mi></math>"
+    },
+    {
+     "text": ", labeled by "
+    },
+    {
+     "text": "𝐫=(3,0,0)",
+     "latex": "\\mathbf{r}=(3,0,0)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐫</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mn>3</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "(3,0,1)",
+     "latex": "(3,0,1)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mn>3</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "(1,0,1)",
+     "latex": "(1,0,1)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": ", respectively."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We still need to consider the local Kramers degeneracy (singlet or doublet) on those topological excitations that are invariant under TRS. Below, we show that no consistent Kramers degeneracy assignment exists for the above three permutations "
+    },
+    {
+     "text": "ρ",
+     "latex": "\\rho",
+     "mathml": "<math display=\"inline\"><mi>ρ</mi></math>"
+    },
+    {
+     "text": " if the physical fermion "
+    },
+    {
+     "text": "f",
+     "latex": "f",
+     "mathml": "<math display=\"inline\"><mi>f</mi></math>"
+    },
+    {
+     "text": " carries "
+    },
+    {
+     "text": "𝒯2=1",
+     "latex": "\\mathcal{T}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ". To do that, we first gauge the fermion parity so that the fTO becomes a bosonic TO where "
+    },
+    {
+     "text": "f",
+     "latex": "f",
+     "mathml": "<math display=\"inline\"><mi>f</mi></math>"
+    },
+    {
+     "text": " now becomes a true topological excitation and there is one more elementary loop excitation from fermion parity in addition to "
+    },
+    {
+     "text": "Ω1",
+     "latex": "\\Omega_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "Ω2",
+     "latex": "\\Omega_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": ". The TRS with "
+    },
+    {
+     "text": "𝒯2=1",
+     "latex": "\\mathcal{T}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " or "
+    },
+    {
+     "text": "𝒫f",
+     "latex": "\\mathcal{P}_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒫</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " now becomes whether "
+    },
+    {
+     "text": "f",
+     "latex": "f",
+     "mathml": "<math display=\"inline\"><mi>f</mi></math>"
+    },
+    {
+     "text": " carries a local Kramers singlet or doublet, denoted as "
+    },
+    {
+     "text": "𝒯f2=1",
+     "latex": "\\mathcal{T}_{f}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>𝒯</mi><mi>f</mi><mn>2</mn></msubsup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " or "
+    },
+    {
+     "text": "−1",
+     "latex": "-1",
+     "mathml": "<math display=\"inline\"><mrow><mo>−</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", respectively. The permutation "
+    },
+    {
+     "text": "ρ",
+     "latex": "\\rho",
+     "mathml": "<math display=\"inline\"><mi>ρ</mi></math>"
+    },
+    {
+     "text": " acts on gauge fluxes in the same way as above, since TRS does not permute the fermion-parity flux."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We use dimensional reduction to argue that "
+    },
+    {
+     "text": "𝒯f2=−1",
+     "latex": "\\mathcal{T}^{2}_{f}=-1",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>𝒯</mi><mi>f</mi><mn>2</mn></msubsup><mo>=</mo><mrow><mo>−</mo><mn>1</mn></mrow></mrow></math>"
+    },
+    {
+     "text": " for any consistent "
+    },
+    {
+     "text": "ρ",
+     "latex": "\\rho",
+     "mathml": "<math display=\"inline\"><mi>ρ</mi></math>"
+    },
+    {
+     "text": ". Let us take "
+    },
+    {
+     "text": "𝐫=(3,0,0)",
+     "latex": "\\mathbf{r}=(3,0,0)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐫</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mn>3</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " as an example. In this case, the gauge flux of "
+    },
+    {
+     "text": "Ω1",
+     "latex": "\\Omega_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": " is invariant under TRS, so there exists a TRS-invariant membrane operator that creates "
+    },
+    {
+     "text": "Ω1",
+     "latex": "\\Omega_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": ". Taking periodic boundary conditions in "
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi>z</mi></math>"
+    },
+    {
+     "text": " direction, inserting this membrane operator in "
+    },
+    {
+     "text": "xy",
+     "latex": "xy",
+     "mathml": "<math display=\"inline\"><mrow><mi>x</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>y</mi></mrow></math>"
+    },
+    {
+     "text": " plane, and performing a dimensional reduction, we obtain a TRS-invariant 2D bosonic TO. Next, we consider the fusion product of "
+    },
+    {
+     "text": "Ω2",
+     "latex": "\\Omega_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " (now particle-like in 2D) and "
+    },
+    {
+     "text": "ρ(Ω2)",
+     "latex": "\\rho(\\Omega_{2})",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". Importantly, both "
+    },
+    {
+     "text": "Ω1",
+     "latex": "\\Omega_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ρ(Ω2)",
+     "latex": "\\rho(\\Omega_{2})",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " are Majorana-type, such that "
+    },
+    {
+     "text": "Ω2×ρ(Ω2)=e+ef+…",
+     "latex": "\\Omega_{2}\\times\\rho(\\Omega_{2})=e+ef+\\dots",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>=</mo><mrow><mi>e</mi><mo>+</mo><mrow><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow><mo>+</mo><mi mathvariant=\"normal\">…</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " where the left side is TRS invariant as "
+    },
+    {
+     "text": "ρ2=1",
+     "latex": "\\rho^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>ρ</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and each fusion outcome of the right side is TRS invariant. According to Refs.[26, 27], the Kramers degeneracy of anyons appearing in the fusion outcome is locked to their topological spin, i.e., "
+    },
+    {
+     "text": "𝒯e2=θe",
+     "latex": "\\mathcal{T}^{2}_{e}=\\theta_{e}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>𝒯</mi><mi>e</mi><mn>2</mn></msubsup><mo>=</mo><msub><mi>θ</mi><mi>e</mi></msub></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "𝒯ef2=θef",
+     "latex": "\\mathcal{T}_{ef}^{2}=\\theta_{ef}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>𝒯</mi><mrow><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow><mn>2</mn></msubsup><mo>=</mo><msub><mi>θ</mi><mrow><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow></msub></mrow></math>"
+    },
+    {
+     "text": ". Since "
+    },
+    {
+     "text": "e",
+     "latex": "e",
+     "mathml": "<math display=\"inline\"><mi>e</mi></math>"
+    },
+    {
+     "text": " is a boson and "
+    },
+    {
+     "text": "ef",
+     "latex": "ef",
+     "mathml": "<math display=\"inline\"><mrow><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow></math>"
+    },
+    {
+     "text": " is a fermion, we obtain "
+    },
+    {
+     "text": "𝒯f2=𝒯ef2/𝒯e2=θef/θe=−1",
+     "latex": "\\mathcal{T}_{f}^{2}=\\mathcal{T}_{ef}^{2}/\\mathcal{T}_{e}^{2}=\\theta_{ef}/\\theta_{e}=-1",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>𝒯</mi><mi>f</mi><mn>2</mn></msubsup><mo>=</mo><mrow><msubsup><mi>𝒯</mi><mrow><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow><mn>2</mn></msubsup><mo>/</mo><msubsup><mi>𝒯</mi><mi>e</mi><mn>2</mn></msubsup></mrow><mo>=</mo><mrow><msub><mi>θ</mi><mrow><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow></msub><mo>/</mo><msub><mi>θ</mi><mi>e</mi></msub></mrow><mo>=</mo><mrow><mo>−</mo><mn>1</mn></mrow></mrow></math>"
+    },
+    {
+     "text": ". Similarly, for "
+    },
+    {
+     "text": "𝐫=(3,0,1)",
+     "latex": "\\mathbf{r}=(3,0,1)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐫</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mn>3</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "(1,0,1)",
+     "latex": "(1,0,1)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": ", we can use the TRS-invariant gauge flux of "
+    },
+    {
+     "text": "Ω1(Ω2)2",
+     "latex": "\\Omega_{1}(\\Omega_{2})^{2}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Ω</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Ω</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></mrow></math>"
+    },
+    {
+     "text": " to argue for "
+    },
+    {
+     "text": "𝒯f2=−1",
+     "latex": "\\mathcal{T}_{f}^{2}=-1",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>𝒯</mi><mi>f</mi><mn>2</mn></msubsup><mo>=</mo><mrow><mo>−</mo><mn>1</mn></mrow></mrow></math>"
+    },
+    {
+     "text": ". Thus, we conclude that TRS with "
+    },
+    {
+     "text": "𝒯f2=1",
+     "latex": "\\mathcal{T}^{2}_{f}=1",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>𝒯</mi><mi>f</mi><mn>2</mn></msubsup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " is incompatible with the 3D Ising fTO."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Absence of fSPT with ",
+     "italic": true
+    },
+    {
+     "text": "𝒯",
+     "latex": "\\mathcal{T}",
+     "mathml": "<math display=\"inline\"><mi>𝒯</mi></math>"
+    },
+    {
+     "text": "-extended symmetry",
+     "italic": true
+    },
+    {
+     "text": " — To reconfirm the above conclusion, we provide an alternative argument. It is widely believed that all 3D anomaly-free SETs can be realized by partially gauging 3D SPT phases[28, 29]. So, the existence of a 3D anomaly-free SET implies the existence of a corresponding 3D SPT phase. Accordingly, we will explore all possible "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " which (i) is an extension of TRS by "
+    },
+    {
+     "text": "Kf",
+     "latex": "K_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>K</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " and (ii) contains both "
+    },
+    {
+     "text": "ℤ2f",
+     "latex": "\\mathbb{Z}_{2}^{f}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " as normal subgroups. Note that "
+    },
+    {
+     "text": "Kf",
+     "latex": "K_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>K</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " being normal in "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " does not necessarily imply that "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " is normal. Imposing the normality of "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " in "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " allows us to gauge "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " and obtain the aforementioned TRS-symmetric fTO. We will classify all 3D fSPTs of all these "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": "’s using a computer program [30]. Among all 3D fSPTs of all "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": "’s, if none becomes the 3D Ising fTO after gauging "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": ", we then conclude that TRS is enforced to break by the Ising fTO."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The structure of "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " is described by: (1) how TRS acts on the subgroup "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": ": "
+    },
+    {
+     "text": "ρ𝒯(𝐠)=𝐠1+2p𝐡q",
+     "latex": "\\rho_{\\mathcal{T}}(\\mathbf{g})=\\mathbf{g}^{1+2p}\\mathbf{h}^{q}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>ρ</mi><mi>𝒯</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐠</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><msup><mi>𝐠</mi><mrow><mn>1</mn><mo>+</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>𝐡</mi><mi>q</mi></msup></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ρ𝒯(𝐡)=𝐠4t𝐡",
+     "latex": "\\rho_{\\mathcal{T}}(\\mathbf{h})=\\mathbf{g}^{4t}\\mathbf{h}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>ρ</mi><mi>𝒯</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐡</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><msup><mi>𝐠</mi><mrow><mn>4</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>𝐡</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ", where "
+    },
+    {
+     "text": "𝐫=(p,q,t)",
+     "latex": "\\mathbf{r}=(p,q,t)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐫</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo>,</mo><mi>q</mi><mo>,</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is the same as above [31]; and (2) what "
+    },
+    {
+     "text": "𝒯2",
+     "latex": "\\mathcal{T}^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi>𝒯</mi><mn>2</mn></msup></math>"
+    },
+    {
+     "text": " is: "
+    },
+    {
+     "text": "𝒯2=ν2aν2b∈Kf",
+     "latex": "\\mathcal{T}^{2}=\\nu_{2}^{a}\\nu_{2}^{b}\\in K_{f}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mrow><msubsup><mi>ν</mi><mn>2</mn><mi>a</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup></mrow><mo>∈</mo><msub><mi>K</mi><mi>f</mi></msub></mrow></math>"
+    },
+    {
+     "text": ", where "
+    },
+    {
+     "text": "ν2a=1",
+     "latex": "\\nu_{2}^{a}=1",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ν</mi><mn>2</mn><mi>a</mi></msubsup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " or "
+    },
+    {
+     "text": "𝒫f",
+     "latex": "\\mathcal{P}_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒫</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "ν2b=1,𝐠2,𝐠4",
+     "latex": "\\nu_{2}^{b}=1,\\mathbf{g}^{2},\\mathbf{g}^{4}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup><mo>=</mo><mn>1</mn></mrow><mo>,</mo><msup><mi>𝐠</mi><mn>2</mn></msup><mo>,</mo><msup><mi>𝐠</mi><mn>4</mn></msup></mrow></math>"
+    },
+    {
+     "text": " for "
+    },
+    {
+     "text": "𝐫=(3,0,0)",
+     "latex": "\\mathbf{r}=(3,0,0)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐫</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mn>3</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " or "
+    },
+    {
+     "text": "(p,1,0)",
+     "latex": "(p,1,0)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo>,</mo><mn>1</mn><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ν2b=1",
+     "latex": "\\nu_{2}^{b}=1",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " for other choices of "
+    },
+    {
+     "text": "𝐫",
+     "latex": "\\mathbf{r}",
+     "mathml": "<math display=\"inline\"><mi>𝐫</mi></math>"
+    },
+    {
+     "text": " (after considering some physical constraints for simplification [32]; see End Matter). All 12 choices of "
+    },
+    {
+     "text": "𝐫",
+     "latex": "\\mathbf{r}",
+     "mathml": "<math display=\"inline\"><mi>𝐫</mi></math>"
+    },
+    {
+     "text": " are considered, not limited to the three choices compatible with three-loop statistics. The Kramer-singlet and -doublet fermion systems correspond to "
+    },
+    {
+     "text": "ν2a=1",
+     "latex": "\\nu_{2}^{a}=1",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ν</mi><mn>2</mn><mi>a</mi></msubsup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "Pf",
+     "latex": "P_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>P</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": ", respectively. Below we demonstrate that ESB occurs for Kramer-singlet fermions. In this case, "
+    },
+    {
+     "text": "Gf=ℤ2f×Gb",
+     "latex": "G_{f}=\\mathbb{Z}_{2}^{f}\\times G_{b}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>G</mi><mi>f</mi></msub><mo>=</mo><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>G</mi><mi>b</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", where "
+    },
+    {
+     "text": "Gb",
+     "latex": "G_{b}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>b</mi></msub></math>"
+    },
+    {
+     "text": " is the group extension of "
+    },
+    {
+     "text": "ℤ2𝒯",
+     "latex": "\\mathbb{Z}_{2}^{\\mathcal{T}}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>ℤ</mi><mn>2</mn><mi>𝒯</mi></msubsup></math>"
+    },
+    {
+     "text": " by "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " with "
+    },
+    {
+     "text": "ρ𝒯",
+     "latex": "\\rho_{\\mathcal{T}}",
+     "mathml": "<math display=\"inline\"><msub><mi>ρ</mi><mi>𝒯</mi></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ν2b",
+     "latex": "\\nu_{2}^{b}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup></math>"
+    },
+    {
+     "text": ". In total, there are twelve groups with "
+    },
+    {
+     "text": "ν2b=1",
+     "latex": "\\nu_{2}^{b}=1",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " (Table 1) and five groups with "
+    },
+    {
+     "text": "ν2b=𝐠2m",
+     "latex": "\\nu_{2}^{b}=\\mathbf{g}^{2m}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup><mo>=</mo><msup><mi>𝐠</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>m</mi></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " (Table 2)."
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "Table I. Classification of fSPT for Kramers-singlet fermions with "
+    },
+    {
+     "text": "Gf=ℤ2f×Gb",
+     "latex": "G_{f}=\\mathbb{Z}_{2}^{f}\\times G_{b}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>G</mi><mi>f</mi></msub><mo>=</mo><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>G</mi><mi>b</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "𝒯2=ν2b=1",
+     "latex": "\\mathcal{T}^{2}=\\nu_{2}^{b}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ". "
+    },
+    {
+     "text": "Gb",
+     "latex": "G_{b}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>b</mi></msub></math>"
+    },
+    {
+     "text": " is generated by "
+    },
+    {
+     "text": "𝐠",
+     "latex": "\\mathbf{g}",
+     "mathml": "<math display=\"inline\"><mi>𝐠</mi></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "𝐡",
+     "latex": "\\mathbf{h}",
+     "mathml": "<math display=\"inline\"><mi>𝐡</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "𝒯",
+     "latex": "\\mathcal{T}",
+     "mathml": "<math display=\"inline\"><mi>𝒯</mi></math>"
+    },
+    {
+     "text": ", with relations "
+    },
+    {
+     "text": "𝐠8=𝐡2=𝒯2=1",
+     "latex": "\\mathbf{g}^{8}=\\mathbf{h}^{2}=\\mathcal{T}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝐠</mi><mn>8</mn></msup><mo>=</mo><msup><mi>𝐡</mi><mn>2</mn></msup><mo>=</mo><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "𝒯𝐠𝒯−1=𝐠1+2p𝐡q",
+     "latex": "\\mathcal{T}\\mathbf{g}\\mathcal{T}^{-1}=\\mathbf{g}^{1+2p}\\mathbf{h}^{q}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>𝐠</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>𝒯</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>=</mo><mrow><msup><mi>𝐠</mi><mrow><mn>1</mn><mo>+</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>𝐡</mi><mi>q</mi></msup></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "𝒯𝐡𝒯−1=𝐠4t𝐡",
+     "latex": "\\mathcal{T}\\mathbf{h}\\mathcal{T}^{-1}=\\mathbf{g}^{4t}\\mathbf{h}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>𝐡</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>𝒯</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>=</mo><mrow><msup><mi>𝐠</mi><mrow><mn>4</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>𝐡</mi></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Gf",
+         "latex": "G_{f}",
+         "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(p,q,t)",
+         "latex": "(p,q,t)",
+         "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo>,</mo><mi>q</mi><mo>,</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "𝒯2",
+         "latex": "\\mathcal{T}^{2}",
+         "mathml": "<math display=\"inline\"><msup><mi>𝒯</mi><mn>2</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Kitaev"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "complex fermion"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "bosonic"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦1",
+         "latex": "\\mathsf{G}_{1}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>1</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0,0,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "×",
+         "latex": "\\times",
+         "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)5",
+         "latex": "(\\mathbb{Z}_{2})^{5}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>5</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦2",
+         "latex": "\\mathsf{G}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(1,0,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "×",
+         "latex": "\\times",
+         "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦3",
+         "latex": "\\mathsf{G}_{3}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>3</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(2,0,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "×",
+         "latex": "\\times",
+         "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)3",
+         "latex": "(\\mathbb{Z}_{2})^{3}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>3</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦4",
+         "latex": "\\mathsf{G}_{4}",
+         "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">𝖦</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">4</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(3,0,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "×",
+         "latex": "\\times",
+         "mathml": "<math display=\"inline\"><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">×</mo></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ℤ</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)3",
+         "latex": "(\\mathbb{Z}_{2})^{3}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ℤ</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">3</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦5",
+         "latex": "\\mathsf{G}_{5}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>5</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0,1,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "×",
+         "latex": "\\times",
+         "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)3",
+         "latex": "(\\mathbb{Z}_{2})^{3}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>3</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦6",
+         "latex": "\\mathsf{G}_{6}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>6</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(1,1,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "×",
+         "latex": "\\times",
+         "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦7",
+         "latex": "\\mathsf{G}_{7}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>7</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(2,1,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "×",
+         "latex": "\\times",
+         "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)3",
+         "latex": "(\\mathbb{Z}_{2})^{3}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>3</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦8",
+         "latex": "\\mathsf{G}_{8}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>8</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(3,1,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "×",
+         "latex": "\\times",
+         "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦9",
+         "latex": "\\mathsf{G}_{9}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>9</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0,0,1)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "×",
+         "latex": "\\times",
+         "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦10",
+         "latex": "\\mathsf{G}_{10}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>10</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(1,0,1)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "×",
+         "latex": "\\times",
+         "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦11",
+         "latex": "\\mathsf{G}_{11}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>11</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(2,0,1)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "×",
+         "latex": "\\times",
+         "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦12",
+         "latex": "\\mathsf{G}_{12}",
+         "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">𝖦</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">12</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(3,0,1)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "×",
+         "latex": "\\times",
+         "mathml": "<math display=\"inline\"><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">×</mo></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ℤ</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ℤ</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msub></math>"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "Table II. Classification of fSPT for Kramers-singlet fermions with "
+    },
+    {
+     "text": "Gf=ℤ2f×Gb",
+     "latex": "G_{f}=\\mathbb{Z}_{2}^{f}\\times G_{b}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>G</mi><mi>f</mi></msub><mo>=</mo><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>G</mi><mi>b</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "𝒯2=ν2b=𝐠2",
+     "latex": "\\mathcal{T}^{2}=\\nu_{2}^{b}=\\mathbf{g}^{2}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup><mo>=</mo><msup><mi>𝐠</mi><mn>2</mn></msup></mrow></math>"
+    },
+    {
+     "text": " or "
+    },
+    {
+     "text": "𝐠4",
+     "latex": "\\mathbf{g}^{4}",
+     "mathml": "<math display=\"inline\"><msup><mi>𝐠</mi><mn>4</mn></msup></math>"
+    },
+    {
+     "text": ". In particular, "
+    },
+    {
+     "text": "𝖦13=ℤ2f×ℤ2×Q16",
+     "latex": "\\mathsf{G}_{13}=\\mathbb{Z}_{2}^{f}\\times\\mathbb{Z}_{2}\\times Q_{16}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>𝖦</mi><mn>13</mn></msub><mo>=</mo><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>Q</mi><mn>16</mn></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ". Note that the KC decoration for "
+    },
+    {
+     "text": "ℤ2f×Q16",
+     "latex": "\\mathbb{Z}_{2}^{f}\\times Q_{16}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>Q</mi><mn>16</mn></msub></mrow></math>"
+    },
+    {
+     "text": " is "
+    },
+    {
+     "text": "ℤ2",
+     "latex": "\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": ", so the "
+    },
+    {
+     "text": "ℤ2",
+     "latex": "\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " classification from KC decoration for "
+    },
+    {
+     "text": "𝖦13",
+     "latex": "\\mathsf{G}_{13}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>13</mn></msub></math>"
+    },
+    {
+     "text": " is purely from "
+    },
+    {
+     "text": "Q16",
+     "latex": "Q_{16}",
+     "mathml": "<math display=\"inline\"><msub><mi>Q</mi><mn>16</mn></msub></math>"
+    },
+    {
+     "text": " and does not correspond to the one that leads to 3D Ising fTO. In addition, all other KC-decorated fSPTs do not correspond to the "
+    },
+    {
+     "text": "Kf",
+     "latex": "K_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>K</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " fSPT that leads to 3D Ising fTO."
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Gf",
+         "latex": "G_{f}",
+         "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "(p,q,t)",
+         "latex": "(p,q,t)",
+         "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo>,</mo><mi>q</mi><mo>,</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "𝒯2",
+         "latex": "\\mathcal{T}^{2}",
+         "mathml": "<math display=\"inline\"><msup><mi>𝒯</mi><mn>2</mn></msup></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Kitaev"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "complex fermion"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "bosonic"
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦13",
+         "latex": "\\mathsf{G}_{13}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>13</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(3,0,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "𝐠4",
+         "latex": "\\mathbf{g}^{4}",
+         "mathml": "<math display=\"inline\"><msup><mi>𝐠</mi><mn>4</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)3",
+         "latex": "(\\mathbb{Z}_{2})^{3}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>3</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦14",
+         "latex": "\\mathsf{G}_{14}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>14</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0,1,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "𝐠2",
+         "latex": "\\mathbf{g}^{2}",
+         "mathml": "<math display=\"inline\"><msup><mi>𝐠</mi><mn>2</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦15",
+         "latex": "\\mathsf{G}_{15}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>15</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(1,1,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "𝐠4",
+         "latex": "\\mathbf{g}^{4}",
+         "mathml": "<math display=\"inline\"><msup><mi>𝐠</mi><mn>4</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)3",
+         "latex": "(\\mathbb{Z}_{2})^{3}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>3</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦16",
+         "latex": "\\mathsf{G}_{16}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>16</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(2,1,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "𝐠2",
+         "latex": "\\mathbf{g}^{2}",
+         "mathml": "<math display=\"inline\"><msup><mi>𝐠</mi><mn>2</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)3",
+         "latex": "(\\mathbb{Z}_{2})^{3}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>3</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝖦17",
+         "latex": "\\mathsf{G}_{17}",
+         "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>17</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(3,1,0)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "𝐠4",
+         "latex": "\\mathbf{g}^{4}",
+         "mathml": "<math display=\"inline\"><msup><mi>𝐠</mi><mn>4</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)3",
+         "latex": "(\\mathbb{Z}_{2})^{3}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>3</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ℤ2",
+         "latex": "\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We classify the 3D fSPT phases of all the groups listed in Table 1 and 2. 3D fSPT phases are constructed and classified in Refs. [19] using the decorated domain wall picture. The classification involves several layers of decoration, namely Kitaev-chain decoration, complex fermion decoration, and the intrinsic bosonic SPT phases. (There is an additional layer of "
+    },
+    {
+     "text": "p+ip",
+     "latex": "p+ip",
+     "mathml": "<math display=\"inline\"><mrow><mi>p</mi><mo>+</mo><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " superconductor decoration. However, it is not relevant to our discussion.) The compatibility between decorations in different layers results in the so-called "
+    },
+    {
+     "text": "obstruction functions",
+     "italic": true
+    },
+    {
+     "text": ". An fSPT state can be constructed if and only if the obstructions vanish. Technically, it is not easy to check whether the obstruction functions associated with a given decoration vanish. Hence, we adopt the computer codes implemented in GAP to do this job [30]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We find that, for all groups in Table 1, no Kitaev-chain decoration is valid, i.e., Kitaev-chain decoration always leads to an obstructed fSPT construction. Hence, none of the fSPT phases found in Table 1 reduces to the 3D Ising fTO after gauging the normal subgroup "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": ", because the latter results from Kitaev-chain decoration. Some of the cases are easy to understand. Take "
+    },
+    {
+     "text": "𝐫=(0,0,0)",
+     "latex": "\\mathbf{r}=(0,0,0)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐫</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " for example, i.e., "
+    },
+    {
+     "text": "𝖦1",
+     "latex": "\\mathsf{G}_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": " in Table 1. If an fSPT state of "
+    },
+    {
+     "text": "𝖦1",
+     "latex": "\\mathsf{G}_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": " symmetry is constructed based on Kitaev-chain decoration, it must also be an fSPT state of "
+    },
+    {
+     "text": "Kf⊂𝖦1",
+     "latex": "K_{f}\\subset\\mathsf{G}_{1}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>K</mi><mi>f</mi></msub><mo>⊂</mo><msub><mi>𝖦</mi><mn>1</mn></msub></mrow></math>"
+    },
+    {
+     "text": ". As discussed above, the root state of 2D "
+    },
+    {
+     "text": "ℤ2f×ℤ2",
+     "latex": "\\mathbb{Z}_{2}^{f}\\times\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub></mrow></math>"
+    },
+    {
+     "text": " fSPT, denoted as "
+    },
+    {
+     "text": "[1]",
+     "latex": "[1]",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">[</mo><mn>1</mn><mo stretchy=\"false\">]</mo></mrow></math>"
+    },
+    {
+     "text": ", is decorated on the "
+    },
+    {
+     "text": "𝐠",
+     "latex": "\\mathbf{g}",
+     "mathml": "<math display=\"inline\"><mi>𝐠</mi></math>"
+    },
+    {
+     "text": " DW. Under TRS, "
+    },
+    {
+     "text": "𝐠",
+     "latex": "\\mathbf{g}",
+     "mathml": "<math display=\"inline\"><mi>𝐠</mi></math>"
+    },
+    {
+     "text": " DW remains as "
+    },
+    {
+     "text": "𝐠",
+     "latex": "\\mathbf{g}",
+     "mathml": "<math display=\"inline\"><mi>𝐠</mi></math>"
+    },
+    {
+     "text": " DW, as determined by the group structure of "
+    },
+    {
+     "text": "𝖦1",
+     "latex": "\\mathsf{G}_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝖦</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": ". On the other hand, the root state "
+    },
+    {
+     "text": "[1]",
+     "latex": "[1]",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">[</mo><mn>1</mn><mo stretchy=\"false\">]</mo></mrow></math>"
+    },
+    {
+     "text": " is turned into the inverse state "
+    },
+    {
+     "text": "[7]",
+     "latex": "[7]",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">[</mo><mn>7</mn><mo stretchy=\"false\">]</mo></mrow></math>"
+    },
+    {
+     "text": " under TRS. Therefore, the "
+    },
+    {
+     "text": "Kf",
+     "latex": "K_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>K</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " fSPT is not invariant under TRS action, meaning TRS with "
+    },
+    {
+     "text": "𝐫=(0,0,0)",
+     "latex": "\\mathbf{r}=(0,0,0)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐫</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is not compatible with the "
+    },
+    {
+     "text": "Kf",
+     "latex": "K_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>K</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " fSPT. A similar simple argument exists for a few other cases, such as "
+    },
+    {
+     "text": "𝐫=(1,0,0)",
+     "latex": "\\mathbf{r}=(1,0,0)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐫</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "(2,0,0)",
+     "latex": "(2,0,0)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mn>2</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": ". In fact, this argument is equivalent to the compatibility between three-loop braiding and TRS, discussed above."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For the groups in Table 2, we do find valid (i.e. obstruction-free) Kitaev-chain decoration for constructing 3D fSPT phases. Nevertheless, these fSPT phases do not reduce to the 3D Ising fTO either. For "
+    },
+    {
+     "text": "𝐫=(3,0,0)",
+     "latex": "\\mathbf{r}=(3,0,0)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐫</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mn>3</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ν2b=𝐠4",
+     "latex": "\\nu_{2}^{b}=\\mathbf{g}^{4}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup><mo>=</mo><msup><mi>𝐠</mi><mn>4</mn></msup></mrow></math>"
+    },
+    {
+     "text": ", the group "
+    },
+    {
+     "text": "Gf=ℤ2f×ℤ2×Q16",
+     "latex": "G_{f}=\\mathbb{Z}_{2}^{f}\\times\\mathbb{Z}_{2}\\times Q_{16}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>G</mi><mi>f</mi></msub><mo>=</mo><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>Q</mi><mn>16</mn></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", where "
+    },
+    {
+     "text": "Q16",
+     "latex": "Q_{16}",
+     "mathml": "<math display=\"inline\"><msub><mi>Q</mi><mn>16</mn></msub></math>"
+    },
+    {
+     "text": " is the generalized quaternion group with order 16, with "
+    },
+    {
+     "text": "𝒯2=𝐠4",
+     "latex": "\\mathcal{T}^{2}=\\mathbf{g}^{4}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><msup><mi>𝐠</mi><mn>4</mn></msup></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "𝐠8=1",
+     "latex": "\\mathbf{g}^{8}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝐠</mi><mn>8</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "𝒯𝐠=𝐠7𝒯",
+     "latex": "\\mathcal{T}\\mathbf{g}=\\mathbf{g}^{7}\\mathcal{T}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>𝐠</mi></mrow><mo>=</mo><mrow><msup><mi>𝐠</mi><mn>7</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>𝒯</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ". We find that the fSPT phases with nontrivial Kitaev-chain decoration is protected by "
+    },
+    {
+     "text": "Q16",
+     "latex": "Q_{16}",
+     "mathml": "<math display=\"inline\"><msub><mi>Q</mi><mn>16</mn></msub></math>"
+    },
+    {
+     "text": " alone. It is verified by turning off the "
+    },
+    {
+     "text": "ℤ2",
+     "latex": "\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " symmetry and computing the classification of "
+    },
+    {
+     "text": "ℤ2f×Q16",
+     "latex": "\\mathbb{Z}_{2}^{f}\\times Q_{16}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>Q</mi><mn>16</mn></msub></mrow></math>"
+    },
+    {
+     "text": " fSPT phases (see caption of Table 2), which also contains a KC-decorated fSPT with "
+    },
+    {
+     "text": "ℤ2f×Q16",
+     "latex": "\\mathbb{Z}_{2}^{f}\\times Q_{16}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>Q</mi><mn>16</mn></msub></mrow></math>"
+    },
+    {
+     "text": ". Hence, by gauging "
+    },
+    {
+     "text": "ℤ2×ℤ8⊂ℤ2f×ℤ2×Q16",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}\\subset\\mathbb{Z}_{2}^{f}\\times\\mathbb{Z}_{2}\\times Q_{16}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow><mo>⊂</mo><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>Q</mi><mn>16</mn></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", we will not obtain the 3D Ising fTO. For "
+    },
+    {
+     "text": "𝐫=(p,1,0)",
+     "latex": "\\mathbf{r}=(p,1,0)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐫</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo>,</mo><mn>1</mn><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ν2b=𝐠2",
+     "latex": "\\nu_{2}^{b}=\\mathbf{g}^{2}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup><mo>=</mo><msup><mi>𝐠</mi><mn>2</mn></msup></mrow></math>"
+    },
+    {
+     "text": " or "
+    },
+    {
+     "text": "𝐠4",
+     "latex": "\\mathbf{g}^{4}",
+     "mathml": "<math display=\"inline\"><msup><mi>𝐠</mi><mn>4</mn></msup></math>"
+    },
+    {
+     "text": ", the group structures of "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": "s are more complicated but all are order 32 groups. We find that the only KC-decorated fSPT of each "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " does not reduce to the KC-decorated fSPT of "
+    },
+    {
+     "text": "Kf",
+     "latex": "K_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>K</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " as well. This is seen by restricting the two-cocycle "
+    },
+    {
+     "text": "n~2",
+     "latex": "\\tilde{n}_{2}",
+     "mathml": "<math display=\"inline\"><msub><mover accent=\"true\"><mi>n</mi><mo>~</mo></mover><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " of "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " (accounting for KC decoration) to "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": ", which turns out to be associated with a trivial topological invariant "
+    },
+    {
+     "text": "Ξ12=0",
+     "latex": "\\Xi_{12}=0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Ξ</mi><mn>12</mn></msub><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " mod 2. Meanwhile, the "
+    },
+    {
+     "text": "n2",
+     "latex": "n_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>n</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " associated with the KC-decorated "
+    },
+    {
+     "text": "Kf",
+     "latex": "K_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>K</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " fSPT has a nontrivial topological invariant "
+    },
+    {
+     "text": "Ξ12=n2(𝐠,𝐡)+n2(𝐡,𝐠)",
+     "latex": "\\Xi_{12}=n_{2}(\\mathbf{g},\\mathbf{h})+n_{2}(\\mathbf{h},\\mathbf{g})",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Ξ</mi><mn>12</mn></msub><mo>=</mo><mrow><mrow><msub><mi>n</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐠</mi><mo>,</mo><mi>𝐡</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mrow><msub><mi>n</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐡</mi><mo>,</mo><mi>𝐠</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " = 1 mod 2. Combining the above results, we conclude that none of the fSPT phases we find become the 3D Ising fTO after gauging the normal subgroup "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": ". That means TRS with "
+    },
+    {
+     "text": "𝒯2=1",
+     "latex": "\\mathcal{T}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " is incompatible with the 3D Ising fTO, consistent with the argument from the 3D SET viewpoint."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Finally, by employing the crystalline equivalence principle [33], we conclude that fermionic topological phase with "
+    },
+    {
+     "text": "𝒯2=1",
+     "latex": "\\mathcal{T}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " one-to-one corresponds to those with reflection symmetry "
+    },
+    {
+     "text": "ℳ2=𝒫f",
+     "latex": "\\mathcal{M}^{2}=\\mathcal{P}_{f}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>ℳ</mi><mn>2</mn></msup><mo>=</mo><msub><mi>𝒫</mi><mi>f</mi></msub></mrow></math>"
+    },
+    {
+     "text": "[34, 33]. Given that the Ising fTO enforces TRS with "
+    },
+    {
+     "text": "𝒯2=1",
+     "latex": "\\mathcal{T}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " to break, the reflection symmetry "
+    },
+    {
+     "text": "ℳ2=𝒫f",
+     "latex": "\\mathcal{M}^{2}=\\mathcal{P}_{f}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>ℳ</mi><mn>2</mn></msup><mo>=</mo><msub><mi>𝒫</mi><mi>f</mi></msub></mrow></math>"
+    },
+    {
+     "text": " must break as well 3. Additionally, in 3D where parity symmetry acts as reflection and two-fold rotation symmetries, we conclude that parity symmetry with "
+    },
+    {
+     "text": "P2=1",
+     "latex": "P^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>P</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " is enforced to break by such a 3D fTO as well."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Kramers-doublet fermions",
+     "italic": true
+    },
+    {
+     "text": " — Here we show that the 3D Ising fTO is compatible with "
+    },
+    {
+     "text": "𝒯2=𝒫f",
+     "latex": "\\mathcal{T}^{2}=\\mathcal{P}_{f}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><msub><mi>𝒫</mi><mi>f</mi></msub></mrow></math>"
+    },
+    {
+     "text": ". To do this, it is enough to find one obstruction-free fSPT example that contains "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " as a normal subgroup. The simplest example we find is associated with "
+    },
+    {
+     "text": "𝐫=(3,0,0)",
+     "latex": "\\mathbf{r}=(3,0,0)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐫</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mn>3</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ν2a=𝒫f",
+     "latex": "\\nu_{2}^{a}=\\mathcal{P}_{f}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ν</mi><mn>2</mn><mi>a</mi></msubsup><mo>=</mo><msub><mi>𝒫</mi><mi>f</mi></msub></mrow></math>"
+    },
+    {
+     "text": " and trivial "
+    },
+    {
+     "text": "ν2b",
+     "latex": "\\nu_{2}^{b}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup></math>"
+    },
+    {
+     "text": ". More explicitly, the related symmetry is "
+    },
+    {
+     "text": "Gf=(ℤ4𝒯f⋊ℤ8)×ℤ2",
+     "latex": "G_{f}=(\\mathbb{Z}_{4}^{\\mathcal{T}f}\\rtimes\\mathbb{Z}_{8})\\times\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>G</mi><mi>f</mi></msub><mo>=</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><msubsup><mi>ℤ</mi><mn>4</mn><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">⋊</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow><mo rspace=\"0.055em\" stretchy=\"false\">)</mo></mrow><mo rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub></mrow></mrow></math>"
+    },
+    {
+     "text": " or equivalently "
+    },
+    {
+     "text": "(ℤ4𝒯f×D16×ℤ2)/ℤ2𝒯",
+     "latex": "(\\mathbb{Z}_{4}^{\\mathcal{T}f}\\times D_{16}\\times\\mathbb{Z}_{2})/\\mathbb{Z}_{2}^{\\mathcal{T}}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><msubsup><mi>ℤ</mi><mn>4</mn><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>D</mi><mn>16</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub></mrow><mo stretchy=\"false\">)</mo></mrow><mo>/</mo><msubsup><mi>ℤ</mi><mn>2</mn><mi>𝒯</mi></msubsup></mrow></math>"
+    },
+    {
+     "text": " whose relations of the generators are given by "
+    },
+    {
+     "text": "𝐠8=𝐡2=1",
+     "latex": "\\mathbf{g}^{8}=\\mathbf{h}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝐠</mi><mn>8</mn></msup><mo>=</mo><msup><mi>𝐡</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "𝒯2=𝒫f",
+     "latex": "\\mathcal{T}^{2}=\\mathcal{P}_{f}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><msub><mi>𝒫</mi><mi>f</mi></msub></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "𝒯𝐠𝒯−1=𝐠7,𝒯𝐡𝒯−1=𝐡",
+     "latex": "\\mathcal{T}\\mathbf{g}\\mathcal{T}^{-1}=\\mathbf{g}^{7},\\mathcal{T}\\mathbf{h}\\mathcal{T}^{-1}=\\mathbf{h}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>𝐠</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>𝒯</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>=</mo><msup><mi>𝐠</mi><mn>7</mn></msup></mrow><mo>,</mo><mrow><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>𝐡</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>𝒯</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>=</mo><mi>𝐡</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ". We summarize its classification in Table 3. The KC decoration layer falls into "
+    },
+    {
+     "text": "(ℤ2)4",
+     "latex": "(\\mathbb{Z}_{2})^{4}",
+     "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>4</mn></msup></math>"
+    },
+    {
+     "text": " classification, where one "
+    },
+    {
+     "text": "ℤ2",
+     "latex": "\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " is protected solely by TRS, another by "
+    },
+    {
+     "text": "D16",
+     "latex": "D_{16}",
+     "mathml": "<math display=\"inline\"><msub><mi>D</mi><mn>16</mn></msub></math>"
+    },
+    {
+     "text": ", a third by jointly TRS and "
+    },
+    {
+     "text": "ℤ2",
+     "latex": "\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": ", and the last one jointly by "
+    },
+    {
+     "text": "ℤ2×D16",
+     "latex": "\\mathbb{Z}_{2}\\times D_{16}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>D</mi><mn>16</mn></msub></mrow></math>"
+    },
+    {
+     "text": ". The last "
+    },
+    {
+     "text": "ℤ2",
+     "latex": "\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℤ</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " reduces to the KC-decorated fSPT of "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": " when ignoring TRS. We have checked that it is indeed associated with the topological invariant "
+    },
+    {
+     "text": "Ξ12=1",
+     "latex": "\\Xi_{12}=1",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Ξ</mi><mn>12</mn></msub><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " mod 2. Hence, it becomes the 3D Ising fTO if we gauge "
+    },
+    {
+     "text": "ℤ2×ℤ8",
+     "latex": "\\mathbb{Z}_{2}\\times\\mathbb{Z}_{8}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℤ</mi><mn>2</mn></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+    },
+    {
+     "text": ". This phase can be realized through a real space construction by mapping to equivalent crystalline partners (see Supplementary Materials for more details)."
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "Table III. Classification of fSPT with Kramers-doublet fermions with "
+    },
+    {
+     "text": "Gf=(ℤ4𝒯f⋊ℤ8)×ℤ2",
+     "latex": "G_{f}=(\\mathbb{Z}_{4}^{\\mathcal{T}f}\\rtimes\\mathbb{Z}_{8})\\times\\mathbb{Z}_{2}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>G</mi><mi>f</mi></msub><mo>=</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><msubsup><mi>ℤ</mi><mn>4</mn><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">⋊</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow><mo rspace=\"0.055em\" stretchy=\"false\">)</mo></mrow><mo rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ". The first and second rows are classifications of fSPTs of its subgroups. All the three cases have another root fSPT from "
+    },
+    {
+     "text": "p+ip",
+     "latex": "p+ip",
+     "mathml": "<math display=\"inline\"><mrow><mi>p</mi><mo>+</mo><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " decoration which is ignored since it is not relevant."
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Gf",
+         "latex": "G_{f}",
+         "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Kitaev"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "complex fermion"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "bosonic"
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "ℤ4Tf×ℤ2",
+         "latex": "\\mathbb{Z}_{4}^{Tf}\\times\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><mrow><msubsup><mi mathsize=\"0.800em\">ℤ</mi><mn mathsize=\"0.800em\">4</mn><mrow><mi mathsize=\"0.800em\">T</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi mathsize=\"0.800em\">f</mi></mrow></msubsup><mo lspace=\"0.222em\" mathsize=\"0.800em\" rspace=\"0.222em\">×</mo><msub><mi mathsize=\"0.800em\">ℤ</mi><mn mathsize=\"0.800em\">2</mn></msub></mrow></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "ℤ4Tf⋊ℤ8",
+         "latex": "\\mathbb{Z}_{4}^{Tf}\\rtimes\\mathbb{Z}_{8}",
+         "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ℤ</mi><mn>4</mn><mrow><mi>T</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">⋊</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)3",
+         "latex": "(\\mathbb{Z}_{2})^{3}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>3</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)2",
+         "latex": "(\\mathbb{Z}_{2})^{2}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "(ℤ4Tf⋊ℤ8)×ℤ2",
+         "latex": "(\\mathbb{Z}_{4}^{Tf}\\rtimes\\mathbb{Z}_{8})\\times\\mathbb{Z}_{2}",
+         "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><msubsup><mi>ℤ</mi><mn>4</mn><mrow><mi>T</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">⋊</mo><msub><mi>ℤ</mi><mn>8</mn></msub></mrow><mo rspace=\"0.055em\" stretchy=\"false\">)</mo></mrow><mo rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub></mrow></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)4",
+         "latex": "(\\mathbb{Z}_{2})^{4}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>4</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)6",
+         "latex": "(\\mathbb{Z}_{2})^{6}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>6</mn></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(ℤ2)7",
+         "latex": "(\\mathbb{Z}_{2})^{7}",
+         "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mn>7</mn></msup></math>"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Generality of 3D ESB",
+     "italic": true
+    },
+    {
+     "text": " — Finally, we discuss a general framework for studying ESB in 3D TO. In TO, the global symmetry can have topologically distinct realizations, leading to diverse symmetry enrichment phenomena. These consist of the basis of SET phases. By definition, ESB occurs if no anomaly-free 3D SET exists with a given 3D TO and a given global symmetry. The general theory of 3D ESB can be derived from 3D SET theory, which is not yet well-established, or it can alternatively be established by examining the related 3D SPT problem. Here, we discuss the latter method, whose primary assumption is that all 3D anomaly-free SETs, regardless of bosonic or fermionic ones, can be realized by partially gauging certain 3D SPTs [28, 29]. For fTOs, we consider those that can be obtained by gauging "
+    },
+    {
+     "text": "N",
+     "latex": "N",
+     "mathml": "<math display=\"inline\"><mi>N</mi></math>"
+    },
+    {
+     "text": " of "
+    },
+    {
+     "text": "Nf=ℤ2f×N",
+     "latex": "N_{f}=\\mathbb{Z}_{2}^{f}\\times N",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>N</mi><mi>f</mi></msub><mo>=</mo><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>N</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " fSPT. Denote the global symmetry of the SET and of the corresponding fSPT as "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "𝒢f",
+     "latex": "\\mathcal{G}_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒢</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " respectively. The former contains "
+    },
+    {
+     "text": "ℤ2f",
+     "latex": "\\mathbb{Z}_{2}^{f}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup></math>"
+    },
+    {
+     "text": " in its center and it is a central extension of "
+    },
+    {
+     "text": "Gb",
+     "latex": "G_{b}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>b</mi></msub></math>"
+    },
+    {
+     "text": " (called bosonic symmetry) by "
+    },
+    {
+     "text": "ℤ2f",
+     "latex": "\\mathbb{Z}_{2}^{f}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup></math>"
+    },
+    {
+     "text": ", described by "
+    },
+    {
+     "text": "w2∈ℋ2(Gb,ℤ2f)",
+     "latex": "w_{2}\\in\\mathcal{H}^{2}(G_{b},\\mathbb{Z}_{2}^{f})",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>w</mi><mn>2</mn></msub><mo>∈</mo><mrow><msup><mi>ℋ</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>G</mi><mi>b</mi></msub><mo>,</mo><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ". The latter contains "
+    },
+    {
+     "text": "N",
+     "latex": "N",
+     "mathml": "<math display=\"inline\"><mi>N</mi></math>"
+    },
+    {
+     "text": " as a normal subgroup so that we can gauge it in "
+    },
+    {
+     "text": "𝒢f",
+     "latex": "\\mathcal{G}_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒢</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " fSPT to obtain the fTO with the physical symmetry "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " left. These groups are subjected to the following short exact sequence:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "1\\rightarrow N_{f}\\rightarrow\\mathcal{G}_{f}\\rightarrow G_{b}\\rightarrow 1",
+   "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo stretchy=\"false\">→</mo><msub><mi>N</mi><mi>f</mi></msub><mo stretchy=\"false\">→</mo><msub><mi>𝒢</mi><mi>f</mi></msub><mo stretchy=\"false\">→</mo><msub><mi>G</mi><mi>b</mi></msub><mo stretchy=\"false\">→</mo><mn>1</mn></mrow></math>",
+   "label": "(2)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "defined by a homomorphism "
+    },
+    {
+     "text": "ρ",
+     "latex": "\\rho",
+     "mathml": "<math display=\"inline\"><mi>ρ</mi></math>"
+    },
+    {
+     "text": " from "
+    },
+    {
+     "text": "Gb",
+     "latex": "G_{b}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>b</mi></msub></math>"
+    },
+    {
+     "text": " to "
+    },
+    {
+     "text": "Aut(Nf)",
+     "latex": "\\text{Aut}(N_{f})",
+     "mathml": "<math display=\"inline\"><mrow><mtext>Aut</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>N</mi><mi>f</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " and a second cohomology class "
+    },
+    {
+     "text": "ν2∈ℋρ2(Gb,𝒵(Nf))",
+     "latex": "\\nu_{2}\\in\\mathcal{H}_{\\rho}^{2}(G_{b},\\mathcal{Z}(N_{f}))",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ν</mi><mn>2</mn></msub><mo>∈</mo><mrow><msubsup><mi>ℋ</mi><mi>ρ</mi><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>G</mi><mi>b</mi></msub><mo>,</mo><mrow><mi>𝒵</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>N</mi><mi>f</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " , which should satisfy the following physical conditions: (i) the homomorphism "
+    },
+    {
+     "text": "ρ",
+     "latex": "\\rho",
+     "mathml": "<math display=\"inline\"><mi>ρ</mi></math>"
+    },
+    {
+     "text": " only restricts to those in "
+    },
+    {
+     "text": "Aut(N)",
+     "latex": "\\text{Aut}(N)",
+     "mathml": "<math display=\"inline\"><mrow><mtext>Aut</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>N</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", so the cohomology class can split into "
+    },
+    {
+     "text": "ν2=(ν2a,ν2b)",
+     "latex": "\\nu_{2}=(\\nu_{2}^{a},\\nu_{2}^{b})",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ν</mi><mn>2</mn></msub><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><msubsup><mi>ν</mi><mn>2</mn><mi>a</mi></msubsup><mo>,</mo><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " with "
+    },
+    {
+     "text": "ν2a∈ℋ2(Gb,ℤ2f)",
+     "latex": "\\nu_{2}^{a}\\in\\mathcal{H}^{2}(G_{b},\\mathbb{Z}_{2}^{f})",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ν</mi><mn>2</mn><mi>a</mi></msubsup><mo>∈</mo><mrow><msup><mi>ℋ</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>G</mi><mi>b</mi></msub><mo>,</mo><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ν2b∈ℋρ2(Gb,𝒵(N))",
+     "latex": "\\nu_{2}^{b}\\in\\mathcal{H}^{2}_{\\rho}(G_{b},\\mathcal{Z}(N))",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ν</mi><mn>2</mn><mi>b</mi></msubsup><mo>∈</mo><mrow><msubsup><mi>ℋ</mi><mi>ρ</mi><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>G</mi><mi>b</mi></msub><mo>,</mo><mrow><mi>𝒵</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>N</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " where "
+    },
+    {
+     "text": "𝒵(N)",
+     "latex": "\\mathcal{Z}(N)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝒵</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>N</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is the center of "
+    },
+    {
+     "text": "N",
+     "latex": "N",
+     "mathml": "<math display=\"inline\"><mi>N</mi></math>"
+    },
+    {
+     "text": "; and (ii) the cohomology class "
+    },
+    {
+     "text": "ν2a",
+     "latex": "\\nu_{2}^{a}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>ν</mi><mn>2</mn><mi>a</mi></msubsup></math>"
+    },
+    {
+     "text": " should be exactly the "
+    },
+    {
+     "text": "w2",
+     "latex": "w_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>w</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " defined by "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": ". If an anomaly-free 3D SET (with the given fTO and the given global symmetry "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": ") exists, there is at least one 3D SPT protected by "
+    },
+    {
+     "text": "𝒢f",
+     "latex": "\\mathcal{G}_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒢</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": ", which, when partially gauging "
+    },
+    {
+     "text": "N",
+     "latex": "N",
+     "mathml": "<math display=\"inline\"><mi>N</mi></math>"
+    },
+    {
+     "text": ", yields this SET. Conversely, the absence of such a 3D "
+    },
+    {
+     "text": "𝒢f",
+     "latex": "\\mathcal{G}_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒢</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " SPT indicates no anomaly-free 3D SET, which means ESB occurs. So, to look for ESB of the given global symmetry "
+    },
+    {
+     "text": "Gf",
+     "latex": "G_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " by the given fTO, we check the classification of "
+    },
+    {
+     "text": "𝒢f",
+     "latex": "\\mathcal{G}_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒢</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " fSPT with "
+    },
+    {
+     "text": "𝒢f",
+     "latex": "\\mathcal{G}_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒢</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " defined by the above conditional group extensions, among which if there is no "
+    },
+    {
+     "text": "𝒢f",
+     "latex": "\\mathcal{G}_{f}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒢</mi><mi>f</mi></msub></math>"
+    },
+    {
+     "text": " fSPT such that gauging "
+    },
+    {
+     "text": "N",
+     "latex": "N",
+     "mathml": "<math display=\"inline\"><mi>N</mi></math>"
+    },
+    {
+     "text": " results in the given fTO, then there will be ESB. Finally, we note that, for bosonic SETs, the scheme is similar and simpler as there is no complication from "
+    },
+    {
+     "text": "ℤ2f",
+     "latex": "\\mathbb{Z}_{2}^{f}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup></math>"
+    },
+    {
+     "text": ". Further discussion on the general theory of 3D ESB will appear in Ref.[36]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Conclusion and discussion —",
+     "italic": true
+    },
+    {
+     "text": " In summary, we demonstrate that "
+    },
+    {
+     "text": "𝒯2=1",
+     "latex": "\\mathcal{T}^{2}=1",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " TRS is enforced to break by a kind of exotic 3D fTO, featuring Ising non-Abelian three-loop braiding statistics. However, the usual TRS with "
+    },
+    {
+     "text": "𝒯2=𝒫f",
+     "latex": "\\mathcal{T}^{2}=\\mathcal{P}_{f}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒯</mi><mn>2</mn></msup><mo>=</mo><msub><mi>𝒫</mi><mi>f</mi></msub></mrow></math>"
+    },
+    {
+     "text": " is still compatible with such a 3D fTO. We also discussed a framework for exploring ESB for generic 3D fTOs. We further conjecture that parity violation in the Standard Model might arise from the vacuum being certain Ising 3D fTO, and it is a kind of ESB phenomenon."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Acknowledge",
+     "italic": true
+    },
+    {
+     "text": " — S.Q Ning thanks X.G Wen, H.T Lam and A. Raz for enlightening discussions at the PITP summer school. This work is supported by funding from Hong Kong’s Research Grants Council (GRF No. 14308223, RFS2324-4S02, AoE/P-404/18, CRF C7012-21GF, CRS HKU701/24). S.Q.N. is supported by a CRF from the Research Grants Council of the Hong Kong (No. C7037-22GF). Y.Q. is supported by National Key R&D Program of China (Grant No. 2022YFA1403402), by National Natural Science Foundation of China (Grant No. 12174068) and by the Science and Technology Commission of Shanghai Municipality (Grant No. 23JC1400600). C.W. is supported by Research Grants Council of Hong Kong (GRF 17300220 and GRF 17311322) and National Natural Science Foundation of China (Grant No. 12222416)."
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "[1]",
+     "spans": [
+      {
+       "text": "L. D. Landau, On the theory of phase transitions, Zh. Eksp. Teor. Fiz. "
+      },
+      {
+       "text": "7",
+       "bold": true
+      },
+      {
+       "text": ", 19 (1937)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[2]",
+     "spans": [
+      {
+       "text": "K. v. Klitzing, G. Dorda, and M. Pepper, New method for high-accuracy determination of the fine-structure constant based on quantized hall resistance, "
+      },
+      {
+       "text": "Phys. Rev. Lett. ",
+       "href": "https://doi.org/10.1103/PhysRevLett.45.494"
+      },
+      {
+       "text": "45",
+       "href": "https://doi.org/10.1103/PhysRevLett.45.494",
+       "bold": true
+      },
+      {
+       "text": ", 494 (1980)",
+       "href": "https://doi.org/10.1103/PhysRevLett.45.494"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[3]",
+     "spans": [
+      {
+       "text": "D. C. Tsui, H. L. Stormer, and A. C. Gossard, Two-dimensional magnetotransport in the extreme quantum limit, "
+      },
+      {
+       "text": "Phys. Rev. Lett. ",
+       "href": "https://doi.org/10.1103/PhysRevLett.48.1559"
+      },
+      {
+       "text": "48",
+       "href": "https://doi.org/10.1103/PhysRevLett.48.1559",
+       "bold": true
+      },
+      {
+       "text": ", 1559 (1982)",
+       "href": "https://doi.org/10.1103/PhysRevLett.48.1559"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[4]",
+     "spans": [
+      {
+       "text": "R. B. Laughlin, Anomalous quantum hall effect: An incompressible quantum fluid with fractionally charged excitations, "
+      },
+      {
+       "text": "Phys. Rev. Lett. ",
+       "href": "https://doi.org/10.1103/PhysRevLett.50.1395"
+      },
+      {
+       "text": "50",
+       "href": "https://doi.org/10.1103/PhysRevLett.50.1395",
+       "bold": true
+      },
+      {
+       "text": ", 1395 (1983)",
+       "href": "https://doi.org/10.1103/PhysRevLett.50.1395"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[5]",
+     "spans": [
+      {
+       "text": "L. Fidkowski and A. Kitaev, Topological phases of fermions in one dimension, "
+      },
+      {
+       "text": "Phys. Rev. B ",
+       "href": "https://doi.org/10.1103/PhysRevB.83.075103"
+      },
+      {
+       "text": "83",
+       "href": "https://doi.org/10.1103/PhysRevB.83.075103",
+       "bold": true
+      },
+      {
+       "text": ", 075103 (2011)",
+       "href": "https://doi.org/10.1103/PhysRevB.83.075103"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[6]",
+     "spans": [
+      {
+       "text": "E. Lieb, T. Schultz, and D. Mattis, Two soluble models of an antiferromagnetic chain, "
+      },
+      {
+       "text": "Annals of Physics ",
+       "href": "https://doi.org/https://doi.org/10.1016/0003-4916(61)90115-4"
+      },
+      {
+       "text": "16",
+       "href": "https://doi.org/https://doi.org/10.1016/0003-4916(61)90115-4",
+       "bold": true
+      },
+      {
+       "text": ", 407 (1961)",
+       "href": "https://doi.org/https://doi.org/10.1016/0003-4916(61)90115-4"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[7]",
+     "spans": [
+      {
+       "text": "I. Affleck and E. H. Lieb, A proof of part of Haldane’s conjecture on spin chains, "
+      },
+      {
+       "text": "Letters in Mathematical Physics ",
+       "href": "https://doi.org/10.1007/BF00400304"
+      },
+      {
+       "text": "12",
+       "href": "https://doi.org/10.1007/BF00400304",
+       "bold": true
+      },
+      {
+       "text": ", 57 (1986)",
+       "href": "https://doi.org/10.1007/BF00400304"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[8]",
+     "spans": [
+      {
+       "text": "I. Affleck, Spin gap and symmetry breaking in "
+      },
+      {
+       "text": "cuo2",
+       "latex": "{\\mathrm{cuo}}_{2}",
+       "mathml": "<math display=\"inline\"><msub><mi>cuo</mi><mn>2</mn></msub></math>"
+      },
+      {
+       "text": " layers and other antiferromagnets, "
+      },
+      {
+       "text": "Phys. Rev. B ",
+       "href": "https://doi.org/10.1103/PhysRevB.37.5186"
+      },
+      {
+       "text": "37",
+       "href": "https://doi.org/10.1103/PhysRevB.37.5186",
+       "bold": true
+      },
+      {
+       "text": ", 5186 (1988)",
+       "href": "https://doi.org/10.1103/PhysRevB.37.5186"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[9]",
+     "spans": [
+      {
+       "text": "M. Yamanaka, M. Oshikawa, and I. Affleck, Nonperturbative approach to luttinger’s theorem in one dimension, "
+      },
+      {
+       "text": "Phys. Rev. Lett. ",
+       "href": "https://doi.org/10.1103/PhysRevLett.79.1110"
+      },
+      {
+       "text": "79",
+       "href": "https://doi.org/10.1103/PhysRevLett.79.1110",
+       "bold": true
+      },
+      {
+       "text": ", 1110 (1997)",
+       "href": "https://doi.org/10.1103/PhysRevLett.79.1110"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[10]",
+     "spans": [
+      {
+       "text": "M. Oshikawa, Commensurability, excitation gap, and topology in quantum many-particle systems on a periodic lattice, "
+      },
+      {
+       "text": "Phys. Rev. Lett. ",
+       "href": "https://doi.org/10.1103/PhysRevLett.84.1535"
+      },
+      {
+       "text": "84",
+       "href": "https://doi.org/10.1103/PhysRevLett.84.1535",
+       "bold": true
+      },
+      {
+       "text": ", 1535 (2000)",
+       "href": "https://doi.org/10.1103/PhysRevLett.84.1535"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[11]",
+     "spans": [
+      {
+       "text": "M. B. Hastings, Lieb-schultz-mattis in higher dimensions, "
+      },
+      {
+       "text": "Phys. Rev. B ",
+       "href": "https://doi.org/10.1103/PhysRevB.69.104431"
+      },
+      {
+       "text": "69",
+       "href": "https://doi.org/10.1103/PhysRevB.69.104431",
+       "bold": true
+      },
+      {
+       "text": ", 104431 (2004)",
+       "href": "https://doi.org/10.1103/PhysRevB.69.104431"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[12]",
+     "spans": [
+      {
+       "text": "M. Cheng, M. Zaletel, M. Barkeshli, A. Vishwanath, and P. Bonderson, Translational symmetry and microscopic constraints on symmetry-enriched topological phases: A view from the surface, "
+      },
+      {
+       "text": "Phys. Rev. X ",
+       "href": "https://doi.org/10.1103/PhysRevX.6.041068"
+      },
+      {
+       "text": "6",
+       "href": "https://doi.org/10.1103/PhysRevX.6.041068",
+       "bold": true
+      },
+      {
+       "text": ", 041068 (2016)",
+       "href": "https://doi.org/10.1103/PhysRevX.6.041068"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[13]",
+     "spans": [
+      {
+       "text": "S.-Q. Ning, Y. Qi, Z.-C. Gu, and C. Wang, Enforced symmetry breaking by invertible topological order, "
+      },
+      {
+       "text": "Phys. Rev. Res. ",
+       "href": "https://doi.org/10.1103/PhysRevResearch.5.023153"
+      },
+      {
+       "text": "5",
+       "href": "https://doi.org/10.1103/PhysRevResearch.5.023153",
+       "bold": true
+      },
+      {
+       "text": ", 023153 (2023)",
+       "href": "https://doi.org/10.1103/PhysRevResearch.5.023153"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[14]",
+     "spans": [
+      {
+       "text": "J.-R. Zhou, Q.-R. Wang, C. Wang, and Z.-C. Gu, Non-Abelian three-loop braiding statistics for 3D fermionic topological phases, "
+      },
+      {
+       "text": "Nature Communications ",
+       "href": "https://doi.org/10.1038/s41467-021-23309-3"
+      },
+      {
+       "text": "12",
+       "href": "https://doi.org/10.1038/s41467-021-23309-3",
+       "bold": true
+      },
+      {
+       "text": ", 3191 (2021a)",
+       "href": "https://doi.org/10.1038/s41467-021-23309-3"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "arXiv:1912.13505 [cond-mat.str-el]",
+       "href": "https://arxiv.org/abs/1912.13505"
+      },
+      {
+       "text": " ."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[15]",
+     "spans": [
+      {
+       "text": "D. Gaiotto, A. Kapustin, N. Seiberg, and B. Willett, Generalized Global Symmetries, "
+      },
+      {
+       "text": "JHEP ",
+       "href": "https://doi.org/10.1007/JHEP02(2015)172"
+      },
+      {
+       "text": "02",
+       "href": "https://doi.org/10.1007/JHEP02(2015)172",
+       "bold": true
+      },
+      {
+       "text": ", 172",
+       "href": "https://doi.org/10.1007/JHEP02(2015)172"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "arXiv:1412.5148 [hep-th]",
+       "href": "https://arxiv.org/abs/1412.5148"
+      },
+      {
+       "text": " ."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[16]",
+     "spans": [
+      {
+       "text": "W. Ji and X.-G. Wen, Categorical symmetry and noninvertible anomaly in symmetry-breaking and topological phase transitions, "
+      },
+      {
+       "text": "Phys. Rev. Res. ",
+       "href": "https://doi.org/10.1103/PhysRevResearch.2.033417"
+      },
+      {
+       "text": "2",
+       "href": "https://doi.org/10.1103/PhysRevResearch.2.033417",
+       "bold": true
+      },
+      {
+       "text": ", 033417 (2020)",
+       "href": "https://doi.org/10.1103/PhysRevResearch.2.033417"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "arXiv:1912.13492 [cond-mat.str-el]",
+       "href": "https://arxiv.org/abs/1912.13492"
+      },
+      {
+       "text": " ."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[17]",
+     "spans": [
+      {
+       "text": "L. Kong, T. Lan, X.-G. Wen, Z.-H. Zhang, and H. Zheng, Algebraic higher symmetry and categorical symmetry – a holographic and entanglement view of symmetry, "
+      },
+      {
+       "text": "Phys. Rev. Res. ",
+       "href": "https://doi.org/10.1103/PhysRevResearch.2.043086"
+      },
+      {
+       "text": "2",
+       "href": "https://doi.org/10.1103/PhysRevResearch.2.043086",
+       "bold": true
+      },
+      {
+       "text": ", 043086 (2020)",
+       "href": "https://doi.org/10.1103/PhysRevResearch.2.043086"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "arXiv:2005.14178 [cond-mat.str-el]",
+       "href": "https://arxiv.org/abs/2005.14178"
+      },
+      {
+       "text": " ."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[18]",
+     "spans": [
+      {
+       "text": "X. Chen, Y.-M. Lu, and A. Vishwanath, Symmetry-protected topological phases from decorated domain walls, "
+      },
+      {
+       "text": "Nature Communications ",
+       "href": "https://doi.org/10.1038/ncomms4507"
+      },
+      {
+       "text": "5",
+       "href": "https://doi.org/10.1038/ncomms4507",
+       "bold": true
+      },
+      {
+       "text": ", 3507 (2014)",
+       "href": "https://doi.org/10.1038/ncomms4507"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "arXiv:1303.4301 [cond-mat.str-el]",
+       "href": "https://arxiv.org/abs/1303.4301"
+      },
+      {
+       "text": " ."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[19]",
+     "spans": [
+      {
+       "text": "Q.-R. Wang and Z.-C. Gu, Towards a complete classification of symmetry-protected topological phases for interacting fermions in three dimensions and a general group supercohomology theory, "
+      },
+      {
+       "text": "Phys. Rev. X ",
+       "href": "https://doi.org/10.1103/PhysRevX.8.011055"
+      },
+      {
+       "text": "8",
+       "href": "https://doi.org/10.1103/PhysRevX.8.011055",
+       "bold": true
+      },
+      {
+       "text": ", 011055 (2018)",
+       "href": "https://doi.org/10.1103/PhysRevX.8.011055"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[20]",
+     "spans": [
+      {
+       "text": "Q.-R. Wang, S.-Q. Ning, and M. Cheng, Domain Wall Decorations, Anomalies and Spectral Sequences in Bosonic Topological Phases, "
+      },
+      {
+       "text": "arXiv e-prints , arXiv:2104.13233 (2021)",
+       "href": "https://doi.org/10.48550/arXiv.2104.13233"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "arXiv:2104.13233 [cond-mat.str-el]",
+       "href": "https://arxiv.org/abs/2104.13233"
+      },
+      {
+       "text": " ."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[21]",
+     "spans": [
+      {
+       "text": "The intersection of the "
+      },
+      {
+       "text": "𝐠",
+       "latex": "\\mathbf{g}",
+       "mathml": "<math display=\"inline\"><mi>𝐠</mi></math>"
+      },
+      {
+       "text": "- and "
+      },
+      {
+       "text": "𝐡",
+       "latex": "\\mathbf{h}",
+       "mathml": "<math display=\"inline\"><mi>𝐡</mi></math>"
+      },
+      {
+       "text": "-DW can be viewed as a 1D "
+      },
+      {
+       "text": "𝐡",
+       "latex": "\\mathbf{h}",
+       "mathml": "<math display=\"inline\"><mi>𝐡</mi></math>"
+      },
+      {
+       "text": "-DW on the 2D "
+      },
+      {
+       "text": "𝐠",
+       "latex": "\\mathbf{g}",
+       "mathml": "<math display=\"inline\"><mi>𝐠</mi></math>"
+      },
+      {
+       "text": "-DW, where the proliferation of the (1D) "
+      },
+      {
+       "text": "𝐡",
+       "latex": "\\mathbf{h}",
+       "mathml": "<math display=\"inline\"><mi>𝐡</mi></math>"
+      },
+      {
+       "text": "-DW decorated by the KC leads to the 2D root "
+      },
+      {
+       "text": "ℤ2f×ℤ2",
+       "latex": "\\mathbb{Z}_{2}^{f}\\times\\mathbb{Z}_{2}",
+       "mathml": "<math display=\"inline\"><mrow><msubsup><mi>ℤ</mi><mn>2</mn><mi>f</mi></msubsup><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi>ℤ</mi><mn>2</mn></msub></mrow></math>"
+      },
+      {
+       "text": " fSPT."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[22]",
+     "spans": [
+      {
+       "text": "S. Ryu and S.-C. Zhang, Interacting topological phases and modular invariance, "
+      },
+      {
+       "text": "Phys. Rev. B ",
+       "href": "https://doi.org/10.1103/PhysRevB.85.245132"
+      },
+      {
+       "text": "85",
+       "href": "https://doi.org/10.1103/PhysRevB.85.245132",
+       "bold": true
+      },
+      {
+       "text": ", 245132 (2012)",
+       "href": "https://doi.org/10.1103/PhysRevB.85.245132"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[23]",
+     "spans": [
+      {
+       "text": "X.-L. Qi, A new class of (2+1)-dimensional topological superconductors with "
+      },
+      {
+       "text": "z8",
+       "latex": "z_{8}",
+       "mathml": "<math display=\"inline\"><msub><mi>z</mi><mn>8</mn></msub></math>"
+      },
+      {
+       "text": " topological classification, "
+      },
+      {
+       "text": "New Journal of Physics ",
+       "href": "https://doi.org/10.1088/1367-2630/15/6/065002"
+      },
+      {
+       "text": "15",
+       "href": "https://doi.org/10.1088/1367-2630/15/6/065002",
+       "bold": true
+      },
+      {
+       "text": ", 065002 (2013)",
+       "href": "https://doi.org/10.1088/1367-2630/15/6/065002"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[24]",
+     "spans": [
+      {
+       "text": "H. Yao and S. Ryu, Interaction effect on topological classification of superconductors in two dimensions, "
+      },
+      {
+       "text": "Phys. Rev. B ",
+       "href": "https://doi.org/10.1103/PhysRevB.88.064507"
+      },
+      {
+       "text": "88",
+       "href": "https://doi.org/10.1103/PhysRevB.88.064507",
+       "bold": true
+      },
+      {
+       "text": ", 064507 (2013)",
+       "href": "https://doi.org/10.1103/PhysRevB.88.064507"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[25]",
+     "spans": [
+      {
+       "text": "Z.-C. Gu and M. Levin, Effect of interactions on two-dimensional fermionic symmetry-protected topological phases with "
+      },
+      {
+       "text": "Z2",
+       "latex": "{Z}_{2}",
+       "mathml": "<math display=\"inline\"><msub><mi>Z</mi><mn>2</mn></msub></math>"
+      },
+      {
+       "text": " symmetry, "
+      },
+      {
+       "text": "Phys. Rev. B ",
+       "href": "https://doi.org/10.1103/PhysRevB.89.201113"
+      },
+      {
+       "text": "89",
+       "href": "https://doi.org/10.1103/PhysRevB.89.201113",
+       "bold": true
+      },
+      {
+       "text": ", 201113 (2014)",
+       "href": "https://doi.org/10.1103/PhysRevB.89.201113"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[26]",
+     "spans": [
+      {
+       "text": "M. Levin and A. Stern, Classification and analysis of two-dimensional abelian fractional topological insulators, "
+      },
+      {
+       "text": "Phys. Rev. B ",
+       "href": "https://doi.org/10.1103/PhysRevB.86.115131"
+      },
+      {
+       "text": "86",
+       "href": "https://doi.org/10.1103/PhysRevB.86.115131",
+       "bold": true
+      },
+      {
+       "text": ", 115131 (2012)",
+       "href": "https://doi.org/10.1103/PhysRevB.86.115131"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[27]",
+     "spans": [
+      {
+       "text": "M. Barkeshli, P. Bonderson, M. Cheng, and Z. Wang, Symmetry fractionalization, defects, and gauging of topological phases, "
+      },
+      {
+       "text": "Phys. Rev. B ",
+       "href": "https://doi.org/10.1103/PhysRevB.100.115147"
+      },
+      {
+       "text": "100",
+       "href": "https://doi.org/10.1103/PhysRevB.100.115147",
+       "bold": true
+      },
+      {
+       "text": ", 115147 (2019)",
+       "href": "https://doi.org/10.1103/PhysRevB.100.115147"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[28]",
+     "spans": [
+      {
+       "text": "T. Lan, L. Kong, and X.-G. Wen, Classification of "
+      },
+      {
+       "text": "(3+1)D",
+       "latex": "\\mathbf{(}3+1\\mathbf{)}\\mathrm{D}",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mn>3</mn><mo>+</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>D</mi></mrow></math>"
+      },
+      {
+       "text": " bosonic topological orders: The case when pointlike excitations are all bosons, "
+      },
+      {
+       "text": "Phys. Rev. X ",
+       "href": "https://doi.org/10.1103/PhysRevX.8.021074"
+      },
+      {
+       "text": "8",
+       "href": "https://doi.org/10.1103/PhysRevX.8.021074",
+       "bold": true
+      },
+      {
+       "text": ", 021074 (2018)",
+       "href": "https://doi.org/10.1103/PhysRevX.8.021074"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[29]",
+     "spans": [
+      {
+       "text": "T. Lan and X.-G. Wen, Classification of "
+      },
+      {
+       "text": "3+1D",
+       "latex": "3+1\\mathrm{D}",
+       "mathml": "<math display=\"inline\"><mrow><mn>3</mn><mo>+</mo><mrow><mn>1</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>D</mi></mrow></mrow></math>"
+      },
+      {
+       "text": " bosonic topological orders (ii): The case when some pointlike excitations are fermions, "
+      },
+      {
+       "text": "Phys. Rev. X ",
+       "href": "https://doi.org/10.1103/PhysRevX.9.021005"
+      },
+      {
+       "text": "9",
+       "href": "https://doi.org/10.1103/PhysRevX.9.021005",
+       "bold": true
+      },
+      {
+       "text": ", 021005 (2019)",
+       "href": "https://doi.org/10.1103/PhysRevX.9.021005"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[30]",
+     "spans": [
+      {
+       "text": "Y. Ouyang, Q.-R. Wang, Z.-C. Gu, and Y. Qi, Computing classification of interacting fermionic symmetry-protected topological phases using topological invariants*, "
+      },
+      {
+       "text": "Chinese Physics Letters ",
+       "href": "https://doi.org/10.1088/0256-307X/38/12/127101"
+      },
+      {
+       "text": "38",
+       "href": "https://doi.org/10.1088/0256-307X/38/12/127101",
+       "bold": true
+      },
+      {
+       "text": ", 127101 (2021)",
+       "href": "https://doi.org/10.1088/0256-307X/38/12/127101"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[31]",
+     "spans": [
+      {
+       "text": "J. Sommer-Simpson, Automorphism Groups for Semidirect Products of Cyclic Groups, "
+      },
+      {
+       "text": "arXiv e-prints , arXiv:1906.05901 (2019)",
+       "href": "https://doi.org/10.48550/arXiv.1906.05901"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "arXiv:1906.05901 [math.GR]",
+       "href": "https://arxiv.org/abs/1906.05901"
+      },
+      {
+       "text": " ."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[32]",
+     "spans": [
+      {
+       "text": "There are in total 28 different "
+      },
+      {
+       "text": "Gb",
+       "latex": "G_{b}",
+       "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>b</mi></msub></math>"
+      },
+      {
+       "text": ", which will simplify to 17 cases after these physical constraints. However, we calculate all the 28 cases and found no case can reduce to the "
+      },
+      {
+       "text": "Kf",
+       "latex": "K_{f}",
+       "mathml": "<math display=\"inline\"><msub><mi>K</mi><mi>f</mi></msub></math>"
+      },
+      {
+       "text": " fSPT."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[33]",
+     "spans": [
+      {
+       "text": "R. Thorngren and D. V. Else, Gauging spatial symmetries and the classification of topological crystalline phases, "
+      },
+      {
+       "text": "Phys. Rev. X ",
+       "href": "https://doi.org/10.1103/PhysRevX.8.011040"
+      },
+      {
+       "text": "8",
+       "href": "https://doi.org/10.1103/PhysRevX.8.011040",
+       "bold": true
+      },
+      {
+       "text": ", 011040 (2018)",
+       "href": "https://doi.org/10.1103/PhysRevX.8.011040"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "[34]",
+     "spans": [
+      {
+       "text": "E. Witten, Fermion path integrals and topological phases, "
+      },
+      {
+       "text": "Rev. Mod. Phys. ",
+       "href": "https://doi.org/10.1103/RevModPhys.88.035001"
+      },
+      {
+       "text": "88",
+       "href": "https://doi.org/10.1103/RevModPhys.88.035001",
+       "bold": true
+      },
+      {
+       "text": ", 035001 (2016)",
+       "href": "https://doi.org/10.1103/RevModPhys.88.035001"
+      },
+      {
+       "text": "."
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "furniture": [
+  "arXiv:2504.02736v2 [cond-mat.str-el] 8 Jun 2025",
+  "2",
+  "3",
+  "4",
+  "5"
+ ],
+ "license": "open",
+ "provenance": "latexml",
+ "notes": "arXiv 2504.02736v2 (physics (topological order); revtex letter, two columns, run-in heads), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words."
+}

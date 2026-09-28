@@ -1,0 +1,4133 @@
+{
+ "id": "arxiv-2502-02648",
+ "category": "paper",
+ "source": {
+  "pdf": ".bench/arxiv/2502.02648v2.pdf",
+  "url": "https://arxiv.org/abs/2502.02648v2"
+ },
+ "pages": [
+  1,
+  8
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "Spectral form factor and energy correlations in banded random matrices"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Adway Kumar Das,1 Anandamohan Ghosh,1 and Lea F. Santos2"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "1 Department of Physical Sciences, Indian Institute of Science Education and Research Kolkata, Mohanpur 741246, India"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "2 Department of Physics, University of Connecticut, Storrs, Connecticut 06269, USA"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Banded random matrices were introduced as a more realistic alternative to full random matrices for describing the spectral statistics of heavy nuclei. Initially considered by Wigner, they have since become a paradigmatic model for investigating level statistics and the localization-delocalization transition in disordered quantum systems. In this work, we demonstrate that, despite the absence of short-range energy correlations, weak long-range energy correlations persist in the nonergodic phase of banded random matrices. This result is supported by our numerical and analytical studies of quantities that probe both short- and long-range energy correlations, namely, the spectral form factor, level number variance, and power spectrum. We derive the timescales for the onset of spectral correlations (ramp) and for the saturation (plateau) of the spectral form factor. Unexpectedly, we find that in the nonergodic phase, these timescales decrease as the bandwidth of the matrices is reduced. We also show that the high-frequency behavior of the power spectrum of energy fluctuations can distinguish between the nonergodic and ergodic phases of the banded random matrices."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "I. INTRODUCTION"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Matrices filled with random numbers were originally studied by mathematicians in the context of probability theory and statistics. Their significance grew in the 1950s with Wigner’s works, where they were used to model the spectral properties of heavy nuclei [1–3]. These studies were soon extended to other complex systems, including atoms and molecules [4]. The main advantage of full random matrices is their analytical tractability. However, they are not physically realistic, as they imply all-to-all couplings and simultaneous interactions among all the particles. To better reflect the fact that the interactions in physical systems are local and decay with distance, Wigner introduced banded random matrices (BRMs) [5]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The entries of BRMs are non-zero only near the main diagonal [5–8]. The band of nonzero elements may be associated with a preferential basis [9, 10] and the matrices can also exhibit sparsity [11, 8] or correlated entries [12]. By increasing the bandwidth, BRMs can model the transition from integrability, characterized by Poisson level statistics, to chaos, where level statistics become comparable to that of full random matrices."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The band structure of BRMs is observed in the Hamiltonian of various physical systems, such as complex atoms [13], isolated thick wire with multiple transverse modes [14, 15], mesoscopic cylinder threaded by magnetic flux [16], and systems of two locally interacting particles confined to a one-dimensional potential well [17, 18]. Other examples include the one-excitation subspace of many-body systems with long-range couplings [19–25], field transmission matrix of multimode optical fibers in the weak coupling limit [26], and models for ocean acoustics [27]. The ubiquity of the band structure arises because typical operators are banded when expressed in the ordered eigenbasis of another operator under generic conditions [28, 29]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "BRMs have been applied to the studies of the kicked rotor, where the time evolution operator is banded in the angular momentum representation [30] with a bandwidth related to the chaos parameter [31–33]. BRMs are also extensively used in transport studies involving systems with local interactions and in the analysis of Anderson localization. This is because BRMs with small bandwidths describe disordered systems with short-range hopping, an example being a chain of one-dimensional harmonic oscillators with random inertia and coupling [34]. In the case of noninteracting Anderson localization [35, 36], the systems are described by tridiagonal Hamiltonian matrices, where the off-diagonal elements represent homogeneous nearest-neighbor hopping and the random diagonal elements represent onsite disorder, which leads to spatially localized eigenstates. Also included in the class of BRMs are the tridiagonal matrices of the "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi>β</mi></math>"
+    },
+    {
+     "text": "-ensemble [37], where the random off-diagonal elements are distributed according to the "
+    },
+    {
+     "text": "χ",
+     "latex": "\\chi",
+     "mathml": "<math display=\"inline\"><mi>χ</mi></math>"
+    },
+    {
+     "text": "-distribution. This ensemble presents a nonergodic phase [38–41] and nontrivial long-range energy correlations [42, 39]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Despite their widespread applicability, obtaining analytical results for BRMs remains challenging. Unlike full random matrices, the eigenvalues of BRMs are not strongly correlated and their eigenvectors are not fully random vectors. As a result, many studies that involve BRMs rely primarily on numerical calculations."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In this work, we present both numerical and semi-analytical results for BRMs in both the ergodic and nonergodic phases. Using the spectral form factor (SFF), level number variance, and power spectrum of noise, we demonstrate that weak long-range correlations persist in the nonergodic phase, despite the disappearance of short-range correlations."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The SFF enables the analysis of level statistics in the time domain [3, 4], quantifying energy correlations across short and long ranges. It is an effective detector of quantum chaos [43] and has proven to be particularly useful for analyzing molecular spectra [44–49], where line resolution is not as good as in nuclear physics. By obtaining semi-analytical expressions for the SFF of BRMs, we can determine how its timescales depend on the matrix bandwidth. We investigate various characteristic timescales, with an emphasis on the time for the manifestations of spectral correlations (ramp) and the time for the saturation of the SFF (plateau)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In the ergodic phase of BRMs, the timescales of the SFF align with those for full random matrices, as expected. But, in the nonergodic phase, the behavior changes significantly, and full random matrices no longer serve as an appropriate reference. In this phase, short-range energy correlations are non-existent and the long-range correlations are fundamentally different from those in full random matrices. We find that, contrary to many-body quantum systems approaching localized phases, where the time for the onset of spectral correlations increases with the disorder strength [50–52], in BRMs, both timescales, for the appearance of spectral correlations and for the saturation of the SFF, decrease as the bandwidth is reduced. These two timescales eventually merge at the point where the BRM becomes a diagonal matrix and belongs to the Poisson ensemble."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To further investigate the nature of the spectral correlations in the nonergodic phase of BRMs, we analyze the level number variance and the power spectrum of noise, both of which capture short- and long-range energy correlations. Our analysis of the level number variance reveals that in the nonergodic phase, weak long-range correlations, distinct from those in full random matrices, persist, which is consistent with predictions from Ref. [53]. This finding has implications for the SFF timescales, as mentioned above, and for the power spectrum. We show that the power spectrum can distinguish between the nonergodic and ergodic phases of BRMs at high frequencies of the energy level fluctuations, while at low frequencies, the behavior is identical for both phases."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The paper is organized as follows. The BRM model is introduced in Sec. II. Our numerical and analytical studies of the evolution of the SFF and its timescales are detailed in Sec. III. Our analyses of the level number variance and power spectrum are presented in Sec. IV. Concluding remarks are provided in Sec. V."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "II. BANDED RANDOM MATRIX MODEL"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The elements of the "
+    },
+    {
+     "text": "N×N",
+     "latex": "N\\times N",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>N</mi></mrow></math>"
+    },
+    {
+     "text": " real and symmetric BRMs with bandwidth "
+    },
+    {
+     "text": "b",
+     "latex": "b",
+     "mathml": "<math display=\"inline\"><mi>b</mi></math>"
+    },
+    {
+     "text": " that we investigate are defined as"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{array}{lll}H_{ij}\\sim{\\cal N}(\\bar{x},\\sigma^{2})&\\hskip 5.69046pt\\text{for}&\\hskip 5.69046pt|i-j|\\leq b,\\\\\nH_{ij}=0&\\hskip 5.69046pt\\text{for}&\\hskip 5.69046pt|i-j|>b,\\end{array}",
+   "mathml": "<math display=\"block\"><mtable columnspacing=\"5pt\" displaystyle=\"true\" rowspacing=\"0pt\"><mtr><mtd columnalign=\"left\"><mrow><msub><mi>H</mi><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>j</mi></mrow></msub><mo>∼</mo><mrow><mi>𝒩</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mover accent=\"true\"><mi>x</mi><mo>¯</mo></mover><mo>,</mo><msup><mi>σ</mi><mn>2</mn></msup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mtd><mtd columnalign=\"left\"><mtext>for</mtext></mtd><mtd columnalign=\"left\"><mrow><mrow><mrow><mo stretchy=\"false\">|</mo><mrow><mi>i</mi><mo>−</mo><mi>j</mi></mrow><mo stretchy=\"false\">|</mo></mrow><mo>≤</mo><mi>b</mi></mrow><mo>,</mo></mrow></mtd></mtr><mtr><mtd columnalign=\"left\"><mrow><msub><mi>H</mi><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>j</mi></mrow></msub><mo>=</mo><mn>0</mn></mrow></mtd><mtd columnalign=\"left\"><mtext>for</mtext></mtd><mtd columnalign=\"left\"><mrow><mrow><mrow><mo stretchy=\"false\">|</mo><mrow><mi>i</mi><mo>−</mo><mi>j</mi></mrow><mo stretchy=\"false\">|</mo></mrow><mo>&gt;</mo><mi>b</mi></mrow><mo>,</mo></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "𝒩(x¯,σ2)",
+     "latex": "{\\cal N}(\\bar{x},\\sigma^{2})",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝒩</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mover accent=\"true\"><mi>x</mi><mo>¯</mo></mover><mo>,</mo><msup><mi>σ</mi><mn>2</mn></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " indicates Gaussian random numbers with mean "
+    },
+    {
+     "text": "x¯=0",
+     "latex": "\\bar{x}=0",
+     "mathml": "<math display=\"inline\"><mrow><mover accent=\"true\"><mi>x</mi><mo>¯</mo></mover><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " and variance "
+    },
+    {
+     "text": "σ2=(1+δij)/2",
+     "latex": "\\sigma^{2}=(1+\\delta_{ij})/2",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>σ</mi><mn>2</mn></msup><mo>=</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><msub><mi>δ</mi><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>j</mi></mrow></msub></mrow><mo stretchy=\"false\">)</mo></mrow><mo>/</mo><mn>2</mn></mrow></mrow></math>"
+    },
+    {
+     "text": ". A BRM reduces to a diagonal matrix, belonging to the Poisson ensemble, when "
+    },
+    {
+     "text": "b=1",
+     "latex": "b=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>b</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", and becomes a full random matrix from the Gaussian orthogonal ensemble (GOE) [2] when "
+    },
+    {
+     "text": "b=N",
+     "latex": "b=N",
+     "mathml": "<math display=\"inline\"><mrow><mi>b</mi><mo>=</mo><mi>N</mi></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The typical localization length of the bulk energy eigenstates of BRMs is proportional to "
+    },
+    {
+     "text": "b2",
+     "latex": "b^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi>b</mi><mn>2</mn></msup></math>"
+    },
+    {
+     "text": " provided "
+    },
+    {
+     "text": "1≪b≪N",
+     "latex": "1\\ll b\\ll N",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>≪</mo><mi>b</mi><mo>≪</mo><mi>N</mi></mrow></math>"
+    },
+    {
+     "text": " [54]. Consequently, the appropriate scaling parameter for studying energy correlations and localization properties is "
+    },
+    {
+     "text": "b2/N",
+     "latex": "b^{2}/N",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>b</mi><mn>2</mn></msup><mo>/</mo><mi>N</mi></mrow></math>"
+    },
+    {
+     "text": ", so we consider the parametrization"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "b=N^{\\frac{\\gamma}{2}},\\quad\\quad 0\\leq\\gamma\\leq 2.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mi>b</mi><mo>=</mo><msup><mi>N</mi><mfrac><mi>γ</mi><mn>2</mn></mfrac></msup></mrow><mo rspace=\"2.167em\">,</mo><mrow><mn>0</mn><mo>≤</mo><mi>γ</mi><mo>≤</mo><mn>2</mn></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(1)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In Ref. [54], the localization-delocalization transition was associated with the result for the average localization length "
+    },
+    {
+     "text": "ℓ",
+     "latex": "\\ell",
+     "mathml": "<math display=\"inline\"><mi mathvariant=\"normal\">ℓ</mi></math>"
+    },
+    {
+     "text": " given by"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\ell\\propto e^{\\langle S\\rangle}\\propto\\begin{cases}N^{\\gamma},&\\gamma<1,\\\\\nN,&\\gamma>1,\\end{cases}",
+   "mathml": "<math display=\"block\"><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>∝</mo><msup><mi>e</mi><mrow><mo stretchy=\"false\">⟨</mo><mi>S</mi><mo stretchy=\"false\">⟩</mo></mrow></msup><mo>∝</mo><mrow><mo>{</mo><mtable columnspacing=\"5pt\" displaystyle=\"true\" rowspacing=\"0pt\"><mtr><mtd columnalign=\"left\"><mrow><msup><mi>N</mi><mi>γ</mi></msup><mo>,</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mrow><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow><mo>,</mo></mrow></mtd></mtr><mtr><mtd columnalign=\"left\"><mrow><mi>N</mi><mo>,</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mrow><mi>γ</mi><mo>&gt;</mo><mn>1</mn></mrow><mo>,</mo></mrow></mtd></mtr></mtable></mrow></mrow></math>",
+   "label": "(2)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "⟨S⟩",
+     "latex": "\\langle S\\rangle",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">⟨</mo><mi>S</mi><mo stretchy=\"false\">⟩</mo></mrow></math>"
+    },
+    {
+     "text": " is the average of the Shannon information entropy, "
+    },
+    {
+     "text": "Sα=−∑k=1N|ckα|2ln|ckα|2",
+     "latex": "S_{\\alpha}=-\\sum_{k=1}^{N}|c_{k}^{\\alpha}|^{2}\\ln|c_{k}^{\\alpha}|^{2}",
+     "mathml": "<math display=\"inline\"><mrow><mi>S</mi><msub><mrow></mrow><mi>α</mi></msub><mo rspace=\"0em\">=</mo><mo lspace=\"0em\" rspace=\"0.055em\">−</mo><mo rspace=\"0em\">∑</mo><msub><mrow></mrow><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow></msub><msup><mrow></mrow><mi>N</mi></msup><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mi>c</mi><msub><mrow></mrow><mi>k</mi></msub><msup><mrow></mrow><mi>α</mi></msup><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><msup><mrow></mrow><mn>2</mn></msup><mi>ln</mi><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mi>c</mi><msub><mrow></mrow><mi>k</mi></msub><msup><mrow></mrow><mi>α</mi></msup><mo fence=\"false\" stretchy=\"false\">|</mo><msup><mrow></mrow><mn>2</mn></msup></mrow></math>"
+    },
+    {
+     "text": ", over the eigenstates "
+    },
+    {
+     "text": "|α⟩",
+     "latex": "|\\alpha\\rangle",
+     "mathml": "<math display=\"inline\"><mrow><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mi>α</mi><mo stretchy=\"false\">⟩</mo></mrow></math>"
+    },
+    {
+     "text": " with coefficients "
+    },
+    {
+     "text": "ckα",
+     "latex": "c_{k}^{\\alpha}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>c</mi><mi>k</mi><mi>α</mi></msubsup></math>"
+    },
+    {
+     "text": " in a chosen basis. The localization length "
+    },
+    {
+     "text": "∝N",
+     "latex": "\\propto N",
+     "mathml": "<math display=\"inline\"><mrow><mphantom></mphantom><mo>∝</mo><mi>N</mi></mrow></math>"
+    },
+    {
+     "text": " for "
+    },
+    {
+     "text": "γ>1",
+     "latex": "\\gamma>1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&gt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " is consistent with the ergodic phase of a system hosting energy eigenstates that extend over the entire Hilbert space. On the other hand, for "
+    },
+    {
+     "text": "0<γ<1",
+     "latex": "0<\\gamma<1",
+     "mathml": "<math display=\"inline\"><mrow><mn>0</mn><mo>&lt;</mo><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", the typical localization length goes as "
+    },
+    {
+     "text": "Nγ",
+     "latex": "N^{\\gamma}",
+     "mathml": "<math display=\"inline\"><msup><mi>N</mi><mi>γ</mi></msup></math>"
+    },
+    {
+     "text": ", which means that the eigenstates are extended but cover only a vanishing fraction of the available Hilbert space, as found in nonergodic phases [39, 55, 56]. It is only at "
+    },
+    {
+     "text": "γ=0",
+     "latex": "\\gamma=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " that the localization length is "
+    },
+    {
+     "text": "𝒪(1)",
+     "latex": "\\mathcal{O}(1)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝒪</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", hence the eigenstates are localized. This is why we find it more appropriate to refer to the transition that happens at the critical point "
+    },
+    {
+     "text": "γc=1",
+     "latex": "\\gamma_{c}=1",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>γ</mi><mi>c</mi></msub><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " as a “nonergodic-ergodic transition” instead of a “localization-delocalization transition”, as often found in the literature. We then have the following phases and limiting ensembles for the different values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " in the BRM model:"
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "TABLE I. Limiting ensembles and phases associated with different values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " in BRM."
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "γ=0",
+         "latex": "\\gamma=0",
+         "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Poisson ensemble, "
+        },
+        {
+         "text": "b=1",
+         "latex": "b=1",
+         "mathml": "<math display=\"inline\"><mrow><mi>b</mi><mo>=</mo><mn>1</mn></mrow></math>"
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "0<γ<1",
+         "latex": "0<\\gamma<1",
+         "mathml": "<math display=\"inline\"><mrow><mn>0</mn><mo>&lt;</mo><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Nonergodic phase"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "γc=1",
+         "latex": "\\gamma_{c}=1",
+         "mathml": "<math display=\"inline\"><mrow><msub><mi>γ</mi><mi>c</mi></msub><mo>=</mo><mn>1</mn></mrow></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Critical point"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "1<γ<2",
+         "latex": "1<\\gamma<2",
+         "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>&lt;</mo><mi>γ</mi><mo>&lt;</mo><mn>2</mn></mrow></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Ergodic phase"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "γ=2",
+         "latex": "\\gamma=2",
+         "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>2</mn></mrow></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "GOE, "
+        },
+        {
+         "text": "b=N",
+         "latex": "b=N",
+         "mathml": "<math display=\"inline\"><mrow><mi>b</mi><mo>=</mo><mi>N</mi></mrow></math>"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The Poisson-Gaudin-Mehta conjecture states that the local bulk statistics of BRMs with "
+    },
+    {
+     "text": "N→∞",
+     "latex": "N\\rightarrow\\infty",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo stretchy=\"false\">→</mo><mi mathvariant=\"normal\">∞</mi></mrow></math>"
+    },
+    {
+     "text": " is the same as that of the Poisson ensemble for "
+    },
+    {
+     "text": "γ<1",
+     "latex": "\\gamma<1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and of the GOE for "
+    },
+    {
+     "text": "γ>1",
+     "latex": "\\gamma>1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&gt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " [57]. The transition from one behavior to the other can be verified with the distribution of the spacings "
+    },
+    {
+     "text": "s",
+     "latex": "s",
+     "mathml": "<math display=\"inline\"><mi>s</mi></math>"
+    },
+    {
+     "text": " between consecutive unfolded energy levels [58]. When the system size is sufficiently large, "
+    },
+    {
+     "text": "P(s)=e−s",
+     "latex": "P(s)=e^{-s}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>s</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>s</mi></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " for the Poisson ensemble ("
+    },
+    {
+     "text": "γ=0",
+     "latex": "\\gamma=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": "), and for the GOE ("
+    },
+    {
+     "text": "γ=2",
+     "latex": "\\gamma=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": "), the Wigner’s surmise, "
+    },
+    {
+     "text": "P(s)=π2se−π4s2",
+     "latex": "P(s)=\\frac{\\pi}{2}se^{-\\frac{\\pi}{4}s^{2}}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>s</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mfrac><mi>π</mi><mn>2</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mfrac><mi>π</mi><mn>4</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>s</mi><mn>2</mn></msup></mrow></mrow></msup></mrow></mrow></math>"
+    },
+    {
+     "text": " is approximately valid."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For a general "
+    },
+    {
+     "text": "b",
+     "latex": "b",
+     "mathml": "<math display=\"inline\"><mi>b</mi></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "P(s)",
+     "latex": "P(s)",
+     "mathml": "<math display=\"inline\"><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>s</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " has been studied using supersymmetry [59] and can be well fitted using the Izrailev distribution [60, 30],"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "P(s,\\beta)=A\\left(\\frac{\\pi s}{2}\\right)^{\\beta}\\!\\!\\exp\\left[-\\frac{1}{4}\\beta\\left(\\frac{\\pi s}{2}\\right)^{2}-\\left(Bs-\\frac{\\beta}{4}\\pi s\\right)\\right]",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>s</mi><mo>,</mo><mi>β</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mi>A</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac><mrow><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow><mn>2</mn></mfrac></mstyle><mo>)</mo></mrow><mi>β</mi></msup><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><mi>exp</mi><mo>⁡</mo><mrow><mo>[</mo><mrow><mrow><mo>−</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mn>4</mn></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>β</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac><mrow><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow><mn>2</mn></mfrac></mstyle><mo>)</mo></mrow><mn>2</mn></msup></mrow></mrow><mo>−</mo><mrow><mo>(</mo><mrow><mrow><mi>B</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow><mo>−</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mi>β</mi><mn>4</mn></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow></mrow><mo>)</mo></mrow></mrow><mo>]</mo></mrow></mrow></mrow></mrow></math>",
+   "label": "(3)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "A,B",
+     "latex": "A,B",
+     "mathml": "<math display=\"inline\"><mrow><mi>A</mi><mo>,</mo><mi>B</mi></mrow></math>"
+    },
+    {
+     "text": " are normalizing parameters obtained from"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\int_{0}^{\\infty}P(s,\\beta)ds=1\\hskip 8.5359pt\\text{and}\\hskip 8.5359pt\\int_{0}^{\\infty}sP(s,\\beta)ds=1,",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msubsup><mo>∫</mo><mn>0</mn><mi mathvariant=\"normal\">∞</mi></msubsup><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>s</mi><mo>,</mo><mi>β</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>s</mi></mrow></mrow></mrow><mo>=</mo><mrow><mn>1</mn><mo lspace=\"0.850em\" rspace=\"0em\">​</mo><mtext>and</mtext><mo lspace=\"1.017em\" rspace=\"0em\">​</mo><mrow><msubsup><mo>∫</mo><mn>0</mn><mi mathvariant=\"normal\">∞</mi></msubsup><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>P</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>s</mi><mo>,</mo><mi>β</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>s</mi></mrow></mrow></mrow></mrow><mo>=</mo><mn>1</mn></mrow><mo>,</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "and "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi>β</mi></math>"
+    },
+    {
+     "text": " is the fitting parameter 2. For a random tridiagonal matrix ("
+    },
+    {
+     "text": "b=2",
+     "latex": "b=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>b</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": "), the level spacing distribution follows the ansatz "
+    },
+    {
+     "text": "P(s→0)≈slogN−2(s−1)",
+     "latex": "P(s\\to 0)\\approx s\\log^{N-2}(s^{-1})",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>s</mi><mo stretchy=\"false\">→</mo><mn>0</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≈</mo><mrow><mi>s</mi><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><msup><mi>log</mi><mrow><mi>N</mi><mo>−</mo><mn>2</mn></mrow></msup><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>s</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ", which has been verified for small system sizes up to "
+    },
+    {
+     "text": "N=4",
+     "latex": "N=4",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo>=</mo><mn>4</mn></mrow></math>"
+    },
+    {
+     "text": " [62, 63]."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "FIG. 1. Level spacing distribution for BRMs of various values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": ", from "
+    },
+    {
+     "text": "γ=0",
+     "latex": "\\gamma=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " to "
+    },
+    {
+     "text": "γ=2",
+     "latex": "\\gamma=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ". Solid lines indicate numerical results and dashed lines represent the fitted curve using the Izrailev distribution [60] with a fitting parameter "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi>β</mi></math>"
+    },
+    {
+     "text": " provided in the legend. The matrix size is "
+    },
+    {
+     "text": "N=16384",
+     "latex": "N=16384",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo>=</mo><mn>16384</mn></mrow></math>"
+    },
+    {
+     "text": ", average is performed over 128 realizations, and for each realization 40% of the eigenvalues in the middle of the spectrum are considered. The inset shows the second moment of the nearest-neighbor level spacing, "
+    },
+    {
+     "text": "⟨s2⟩",
+     "latex": "\\langle s^{2}\\rangle",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">⟨</mo><msup><mi>s</mi><mn>2</mn></msup><mo stretchy=\"false\">⟩</mo></mrow></math>"
+    },
+    {
+     "text": " vs. "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " for matrix sizes from "
+    },
+    {
+     "text": "N=1024",
+     "latex": "N=1024",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo>=</mo><mn>1024</mn></mrow></math>"
+    },
+    {
+     "text": " to "
+    },
+    {
+     "text": "N=16384",
+     "latex": "N=16384",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo>=</mo><mn>16384</mn></mrow></math>"
+    },
+    {
+     "text": ". For the GOE with "
+    },
+    {
+     "text": "N≫1",
+     "latex": "N\\gg 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo>≫</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "⟨s2⟩≈1.285",
+     "latex": "\\langle s^{2}\\rangle\\approx 1.285",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">⟨</mo><msup><mi>s</mi><mn>2</mn></msup><mo stretchy=\"false\">⟩</mo></mrow><mo>≈</mo><mn>1.285</mn></mrow></math>"
+    },
+    {
+     "text": " [64]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Figure 1 shows that the Izrailev distribution with fitting parameter "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi>β</mi></math>"
+    },
+    {
+     "text": " indeed captures the level spacing distribution for BRMs across all values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": ". The values of "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi>β</mi></math>"
+    },
+    {
+     "text": " obtained from the resulting fit are system size invariant with respect to "
+    },
+    {
+     "text": "b2/N",
+     "latex": "b^{2}/N",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>b</mi><mn>2</mn></msup><mo>/</mo><mi>N</mi></mrow></math>"
+    },
+    {
+     "text": " [65]. We provide the values of the fit parameter "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi>β</mi></math>"
+    },
+    {
+     "text": " in the legend of Fig. 1."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In the inset of Fig. 1, we plot the second moment of the nearest-neighbor spacing "
+    },
+    {
+     "text": "s",
+     "latex": "s",
+     "mathml": "<math display=\"inline\"><mi>s</mi></math>"
+    },
+    {
+     "text": " as a function "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " for different system sizes to show the crossover from the Poisson ("
+    },
+    {
+     "text": "⟨s2⟩=2",
+     "latex": "\\langle s^{2}\\rangle=2",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">⟨</mo><msup><mi>s</mi><mn>2</mn></msup><mo stretchy=\"false\">⟩</mo></mrow><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ") to the GOE ("
+    },
+    {
+     "text": "⟨s2⟩≈1.285",
+     "latex": "\\langle s^{2}\\rangle\\approx 1.285",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">⟨</mo><msup><mi>s</mi><mn>2</mn></msup><mo stretchy=\"false\">⟩</mo></mrow><mo>≈</mo><mn>1.285</mn></mrow></math>"
+    },
+    {
+     "text": " [64]) limit. At the critical point ("
+    },
+    {
+     "text": "γc=1",
+     "latex": "\\gamma_{c}=1",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>γ</mi><mi>c</mi></msub><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": "), the level spacing distribution becomes scale invariant with "
+    },
+    {
+     "text": "⟨s2⟩≈1.36",
+     "latex": "\\langle s^{2}\\rangle\\approx 1.36",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">⟨</mo><msup><mi>s</mi><mn>2</mn></msup><mo stretchy=\"false\">⟩</mo></mrow><mo>≈</mo><mn>1.36</mn></mrow></math>"
+    },
+    {
+     "text": ", although it does not follow the semi-Poisson statistics [66]. For "
+    },
+    {
+     "text": "γ<1",
+     "latex": "\\gamma<1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", we observe that "
+    },
+    {
+     "text": "⟨s2⟩",
+     "latex": "\\left\\langle s^{2}\\right\\rangle",
+     "mathml": "<math display=\"inline\"><mrow><mo>⟨</mo><msup><mi>s</mi><mn>2</mn></msup><mo>⟩</mo></mrow></math>"
+    },
+    {
+     "text": " approaches "
+    },
+    {
+     "text": "2",
+     "latex": "2",
+     "mathml": "<math display=\"inline\"><mn>2</mn></math>"
+    },
+    {
+     "text": " as "
+    },
+    {
+     "text": "N",
+     "latex": "N",
+     "mathml": "<math display=\"inline\"><mi>N</mi></math>"
+    },
+    {
+     "text": " increases, indicating that in the thermodynamic limit ("
+    },
+    {
+     "text": "N→∞",
+     "latex": "N\\to\\infty",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo stretchy=\"false\">→</mo><mi mathvariant=\"normal\">∞</mi></mrow></math>"
+    },
+    {
+     "text": "), "
+    },
+    {
+     "text": "γc=1",
+     "latex": "\\gamma_{c}=1",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>γ</mi><mi>c</mi></msub><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " marks a transition instead of a crossover and that short-range energy correlations are absent in the nonergodic phase. A detailed analysis of the second and higher moments of "
+    },
+    {
+     "text": "s",
+     "latex": "s",
+     "mathml": "<math display=\"inline\"><mi>s</mi></math>"
+    },
+    {
+     "text": " for BRM is provided in [67]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "An alternative way to detect short-range correlations that avoids the unfolding procedure is the ratio "
+    },
+    {
+     "text": "r",
+     "latex": "r",
+     "mathml": "<math display=\"inline\"><mi>r</mi></math>"
+    },
+    {
+     "text": " of consecutive nearest-neighbor spacings [68]. The interpolating function to assess the degree of chaos of a given system was proposed in [69] and provides a good fit to the density of "
+    },
+    {
+     "text": "r",
+     "latex": "r",
+     "mathml": "<math display=\"inline\"><mi>r</mi></math>"
+    },
+    {
+     "text": " for BRMs with any value of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": ". We have also observed that the mean, "
+    },
+    {
+     "text": "⟨r⟩",
+     "latex": "\\langle r\\rangle",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">⟨</mo><mi>r</mi><mo stretchy=\"false\">⟩</mo></mrow></math>"
+    },
+    {
+     "text": ", is system size invariant with respect to "
+    },
+    {
+     "text": "b2/N",
+     "latex": "b^{2}/N",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>b</mi><mn>2</mn></msup><mo>/</mo><mi>N</mi></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "III. SPECTRAL FORM FACTOR"
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "FIG. 2. Spectral form factor for BRMs with (a) "
+    },
+    {
+     "text": "γ=0",
+     "latex": "\\gamma=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " (Poisson ensemble), (b) "
+    },
+    {
+     "text": "γ=0.4",
+     "latex": "\\gamma=0.4",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0.4</mn></mrow></math>"
+    },
+    {
+     "text": ", (c) "
+    },
+    {
+     "text": "γ=1",
+     "latex": "\\gamma=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", (d) "
+    },
+    {
+     "text": "γ=2",
+     "latex": "\\gamma=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": " (GOE), where "
+    },
+    {
+     "text": "N=1024",
+     "latex": "N=1024",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo>=</mo><mn>1024</mn></mrow></math>"
+    },
+    {
+     "text": ". The solid lines represent numerical results averaged over 1024 realizations and the dashed curves denote the analytical expressions from Eq. (18) for "
+    },
+    {
+     "text": "γ=0",
+     "latex": "\\gamma=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", Eq. (16) for "
+    },
+    {
+     "text": "0<γ<2",
+     "latex": "0<\\gamma<2",
+     "mathml": "<math display=\"inline\"><mrow><mn>0</mn><mo>&lt;</mo><mi>γ</mi><mo>&lt;</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ", and Eq. (17) for "
+    },
+    {
+     "text": "γ=2",
+     "latex": "\\gamma=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ". Horizontal dashed lines give the asymptotic SFF, "
+    },
+    {
+     "text": "𝒦¯=N−1",
+     "latex": "\\overline{\\mathcal{K}}=N^{-1}",
+     "mathml": "<math display=\"inline\"><mrow><mover accent=\"true\"><mi>𝒦</mi><mo stretchy=\"true\">¯</mo></mover><mo>=</mo><msup><mi>N</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow></math>"
+    },
+    {
+     "text": ". Vertical lines mark the dip ("
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": ") and Heisenberg ("
+    },
+    {
+     "text": "tH",
+     "latex": "t_{\\mathrm{H}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>H</mi></msub></math>"
+    },
+    {
+     "text": ") times, where "
+    },
+    {
+     "text": "tdip<tH",
+     "latex": "t_{\\mathrm{dip}}<t_{\\mathrm{H}}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>t</mi><mi>dip</mi></msub><mo>&lt;</mo><msub><mi>t</mi><mi>H</mi></msub></mrow></math>"
+    },
+    {
+     "text": ". The marker "
+    },
+    {
+     "text": "◀",
+     "latex": "\\blacktriangleleft",
+     "mathml": "<math display=\"inline\"><mo>◀</mo></math>"
+    },
+    {
+     "text": " indicates the relaxation time, "
+    },
+    {
+     "text": "tR",
+     "latex": "t_{\\mathrm{R}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>R</mi></msub></math>"
+    },
+    {
+     "text": ". The SFF power-law decay "
+    },
+    {
+     "text": "∝t−3",
+     "latex": "\\propto t^{-3}",
+     "mathml": "<math display=\"inline\"><mrow><mphantom></mphantom><mo>∝</mo><msup><mi>t</mi><mrow><mo>−</mo><mn>3</mn></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " is also indicated with a dashed line in (b)-(d)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The SFF detects both short- and long-range correlations in the energy spectrum, which makes it a useful tool for identifying the transition from the ergodic to the nonergodic phase. It is defined as"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathcal{K}\\mathinner{\\left(t\\right)}=\\frac{1}{N^{2}}\\left\\lvert \\sum_{n=1}^{N} e^{-iE_n t} \\right\\rvert^{2}=\\frac{1}{N^{2}}\\sum_{n,m=1}^{N}e^{-i(E_{n}-E_{m})t},",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mi>𝒦</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mi>t</mi><mo>)</mo></mrow></mrow><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><msup><mi>N</mi><mn>2</mn></msup></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo>|</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>n</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover></mstyle><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>E</mi><mi>n</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup></mrow><mo>|</mo></mrow><mn>2</mn></msup></mrow><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><msup><mi>N</mi><mn>2</mn></msup></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mrow><mi>n</mi><mo>,</mo><mi>m</mi></mrow><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover></mstyle><msup><mi>e</mi><mrow><mo>−</mo><mrow><mrow><mi>i</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>E</mi><mi>n</mi></msub><mo>−</mo><msub><mi>E</mi><mi>m</mi></msub></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup></mrow></mrow></mrow><mo>,</mo></mrow></math>",
+   "label": "(4)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "{E1,E2,…,EN}",
+     "latex": "\\mathinner{\\left\\{E_{1},E_{2},\\dots,E_{N}\\right\\}}",
+     "mathml": "<math display=\"inline\"><mrow><mo>{</mo><mrow><msub><mi>E</mi><mn>1</mn></msub><mo>,</mo><msub><mi>E</mi><mn>2</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>E</mi><mi>N</mi></msub></mrow><mo>}</mo></mrow></math>"
+    },
+    {
+     "text": " are the energy levels, "
+    },
+    {
+     "text": "t",
+     "latex": "t",
+     "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+    },
+    {
+     "text": " is time, and the normalization factor "
+    },
+    {
+     "text": "N−2",
+     "latex": "N^{-2}",
+     "mathml": "<math display=\"inline\"><msup><mi>N</mi><mrow><mo>−</mo><mn>2</mn></mrow></msup></math>"
+    },
+    {
+     "text": " ensures that "
+    },
+    {
+     "text": "𝒦(0)=1",
+     "latex": "\\mathcal{K}\\mathinner{\\left(0\\right)}=1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>𝒦</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mn>0</mn><mo>)</mo></mrow></mrow><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The SFF has been employed in the investigation of scale-invariant critical dynamics [70, 71] and the stability of the many-body localized phase [51]. Its strong connection with the survival probability (probability of detecting the initial state later in time) enables the study of spectral correlations through the dynamics of quantum systems [50, 72–82]. The SFF and the survival probability can be experimentally measured [82–85], as demonstrated in [86]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The SFF averaged over an ensemble of random matrices can be decomposed in three parts [3, 50],"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{aligned} \\left\\langle\\mathcal{K}\\mathinner{\\left(t\\right)}\\right\\rangle & =\\left|\\int e^{-iEt}\\rho(E)dE\\right|^{2} \\end{aligned}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><mo>⟨</mo><mrow><mi>𝒦</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mi>t</mi><mo>)</mo></mrow></mrow><mo>⟩</mo></mrow></mtd><mtd><mrow><mphantom></mphantom><mo>=</mo><msup><mrow><mo>|</mo><mstyle displaystyle=\"true\"><mrow><mo>∫</mo><mrow><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>E</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>ρ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>E</mi></mrow></mrow></mrow></mstyle><mo>|</mo></mrow><mn>2</mn></msup></mrow></mtd></mtr></mtable></math>",
+   "label": "(5)"
+  },
+  {
+   "kind": "equation",
+   "latex": "-\\frac{1}{N(N-1)}\\int e^{-i(E-E^{\\prime})t}T_{2}(E,E^{\\prime})dEdE^{\\prime}+\\overline{\\mathcal{K}},",
+   "mathml": "<math display=\"inline\"><mrow><mo>−</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mi>N</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>N</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle><mstyle displaystyle=\"true\"><mo>∫</mo></mstyle><msup><mi>e</mi><mrow><mo>−</mo><mrow><mrow><mi>i</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>E</mi><mo>−</mo><msup><mi>E</mi><mo>′</mo></msup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><msub><mi>T</mi><mn>2</mn></msub><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo>,</mo><msup><mi>E</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow><mi>d</mi><mi>E</mi><mi>d</mi><msup><mi>E</mi><mo>′</mo></msup><mo>+</mo><mover accent=\"true\"><mi>𝒦</mi><mo stretchy=\"true\">¯</mo></mover><mo>,</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "explained as follows. The first term is the squared modulus of the Fourier transform of the density of states,"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{split}\\rho(E)=\\frac{\\operatorname{Tr}\\delta\\mathinner{\\left(E-H\\right)}}{N}=\\frac{1}{N}\\sum_{n=1}^{N}\\delta\\mathinner{\\left(E-E_{n}\\right)},\\end{split}",
+   "mathml": "<math display=\"inline\"><mtable><mtr><mtd columnalign=\"right\"><mrow><mrow><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mstyle displaystyle=\"true\"><mfrac><mrow><mrow><mi>Tr</mi><mo lspace=\"0.167em\">⁡</mo><mi>δ</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mi>E</mi><mo>−</mo><mi>H</mi></mrow><mo>)</mo></mrow></mrow><mi>N</mi></mfrac></mstyle><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mi>N</mi></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>n</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover></mstyle><mrow><mi>δ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mi>E</mi><mo>−</mo><msub><mi>E</mi><mi>n</mi></msub></mrow><mo>)</mo></mrow></mrow></mrow></mrow></mrow><mo>,</mo></mrow></mtd></mtr></mtable></math>",
+   "label": "(6)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "which characterizes the initial decay of the SFF. The second term in Eq. (5) contains the two-level cluster function, "
+    },
+    {
+     "text": "T2(E,E′)",
+     "latex": "T_{2}(E,E^{\\prime})",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>T</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo>,</mo><msup><mi>E</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " [3], which is only present when the eigenvalues are correlated. The last term, "
+    },
+    {
+     "text": "𝒦¯",
+     "latex": "\\overline{\\mathcal{K}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒦</mi><mo stretchy=\"true\">¯</mo></mover></math>"
+    },
+    {
+     "text": " in Eq. (5), is the infinite-time average which marks the long-time saturation value of the SFF and "
+    },
+    {
+     "text": "𝒦¯=N−1",
+     "latex": "\\overline{\\mathcal{K}}=N^{-1}",
+     "mathml": "<math display=\"inline\"><mrow><mover accent=\"true\"><mi>𝒦</mi><mo stretchy=\"true\">¯</mo></mover><mo>=</mo><msup><mi>N</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " for any system."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In Figs. 2(a)-(d), we show the SFF for BRMs with four different values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": ", respectively: "
+    },
+    {
+     "text": "γ=0",
+     "latex": "\\gamma=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " (Poisson ensemble), "
+    },
+    {
+     "text": "γ=0.4",
+     "latex": "\\gamma=0.4",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0.4</mn></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "γ=1",
+     "latex": "\\gamma=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "γ=2",
+     "latex": "\\gamma=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": " (GOE). The solid lines give numerical results and the dashed lines correspond to the semi-analytical results [Eqs. (16), (17) and (18), described in Sec. III.1], indicating excellent agreement."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Using Taylor expansion of the SFF in Eq. (4) around "
+    },
+    {
+     "text": "t=0",
+     "latex": "t=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", one can see that it has a universal quadratic decay, "
+    },
+    {
+     "text": "𝒦(t)∼1−σE2t2",
+     "latex": "\\mathcal{K}\\mathinner{\\left(t\\right)}\\sim 1-\\sigma^{2}_{E}t^{2}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>𝒦</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mi>t</mi><mo>)</mo></mrow></mrow><mo>∼</mo><mrow><mn>1</mn><mo>−</mo><mrow><msubsup><mi>σ</mi><mi>E</mi><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>2</mn></msup></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " [50], at very short times ("
+    },
+    {
+     "text": "t≪tZeno=σE−1",
+     "latex": "t\\ll t_{\\mathrm{Zeno}}=\\sigma_{E}^{-1}",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>≪</mo><msub><mi>t</mi><mi>Zeno</mi></msub><mo>=</mo><msubsup><mi>σ</mi><mi>E</mi><mrow><mo>−</mo><mn>1</mn></mrow></msubsup></mrow></math>"
+    },
+    {
+     "text": "), where"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\sigma^{2}_{E}=\\langle E^{2}\\rangle-\\langle E\\rangle^{2}",
+   "mathml": "<math display=\"inline\"><mrow><msubsup><mi>σ</mi><mi>E</mi><mn>2</mn></msubsup><mo>=</mo><mrow><mrow><mo stretchy=\"false\">⟨</mo><msup><mi>E</mi><mn>2</mn></msup><mo stretchy=\"false\">⟩</mo></mrow><mo>−</mo><msup><mrow><mo stretchy=\"false\">⟨</mo><mi>E</mi><mo stretchy=\"false\">⟩</mo></mrow><mn>2</mn></msup></mrow></mrow></math>",
+   "label": "(7)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "is the energy variance of the density of states "
+    },
+    {
+     "text": "ρ(E)",
+     "latex": "\\rho(E)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", the "
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": "th energy moment is "
+    },
+    {
+     "text": "⟨En⟩≡∫dEEnρ(E)",
+     "latex": "\\left\\langle E^{n}\\right\\rangle\\equiv\\int dE\\;E^{n}\\rho(E)",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo>⟨</mo><msup><mi>E</mi><mi>n</mi></msup><mo>⟩</mo></mrow><mo rspace=\"0.111em\">≡</mo><mrow><mo>∫</mo><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>E</mi><mo lspace=\"0.280em\" rspace=\"0em\">​</mo><msup><mi>E</mi><mi>n</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>ρ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "tZeno",
+     "latex": "t_{\\mathrm{Zeno}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>Zeno</mi></msub></math>"
+    },
+    {
+     "text": " is the Zeno time [87]. Since the spectral width of a BRM depends on "
+    },
+    {
+     "text": "N",
+     "latex": "N",
+     "mathml": "<math display=\"inline\"><mi>N</mi></math>"
+    },
+    {
+     "text": ", we scale the energy levels as "
+    },
+    {
+     "text": "En→En/2σE",
+     "latex": "E_{n}\\to E_{n}/2\\sigma_{E}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>E</mi><mi>n</mi></msub><mo stretchy=\"false\">→</mo><mrow><mrow><msub><mi>E</mi><mi>n</mi></msub><mo>/</mo><mn>2</mn></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>σ</mi><mi>E</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", such that the bulk energy levels are within "
+    },
+    {
+     "text": "±1",
+     "latex": "\\pm 1",
+     "mathml": "<math display=\"inline\"><mrow><mo>±</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and energy variance becomes 1/4. Such a global scaling is not related to the unfolding of the energy spectrum. Beyond "
+    },
+    {
+     "text": "tZeno",
+     "latex": "t_{\\mathrm{Zeno}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>Zeno</mi></msub></math>"
+    },
+    {
+     "text": ", the behavior of the SFF depends on the shape of "
+    },
+    {
+     "text": "ρ(E)",
+     "latex": "\\rho(E)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", as further discussed in Sec. III.1.1, and on the spectral correlations, analyzed in Sec. III.1.2."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The effects of the second term in Eq. (5) are only relevant in Figs. 2(b)-(d), because any two eigenvalues in Fig. 2(a) are uncorrelated. The presence of correlated eigenvalues in Figs. 2(b)-(d) leads to the dip of "
+    },
+    {
+     "text": "⟨𝒦(t)⟩",
+     "latex": "\\left\\langle\\mathcal{K}\\mathinner{\\left(t\\right)}\\right\\rangle",
+     "mathml": "<math display=\"inline\"><mrow><mo>⟨</mo><mrow><mi>𝒦</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mi>t</mi><mo>)</mo></mrow></mrow><mo>⟩</mo></mrow></math>"
+    },
+    {
+     "text": " below "
+    },
+    {
+     "text": "𝒦¯",
+     "latex": "\\overline{\\mathcal{K}}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>𝒦</mi><mo stretchy=\"true\">¯</mo></mover></math>"
+    },
+    {
+     "text": " followed by a ramp toward saturation. This dip-ramp-plateau structure is known as the correlation hole [44–50, 72, 75–77, 82, 88, 89], which is a definite signature of spectral correlations [82]. The correlation hole can be detected experimentally in currently available superconducting quantum processors [86] and possibly also in experiments with trapped ions, cold atoms, and existing quantum computers [82]."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "A. Spectral Form Factor Analytical Expression"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To derive the analytical results for the SFF shown in Fig. 2, one needs the analytical expressions for the density of states and for the correlation hole of BRMs with different values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 4,
+   "spans": [
+    {
+     "text": "1. Density of states"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The density of states can be obtained in terms of the energy moments. In an ensemble of BRM, the probability density in the matrix space is normalized while the matrix norm, "
+    },
+    {
+     "text": "TrH2",
+     "latex": "\\sqrt{\\operatorname{Tr} H^{2}}",
+     "mathml": "<math display=\"inline\"><msqrt><mrow><mi>Tr</mi><mo lspace=\"0.167em\">⁡</mo><msup><mi>H</mi><mn>2</mn></msup></mrow></msqrt></math>"
+    },
+    {
+     "text": ", and the norm of the off-diagonal part have finite ensemble averages. Using the maximum entropy principle [90–93], i.e. by maximizing the Shannon entropy in the matrix space subject to the above constraints, we get the density of BRM in the matrix space as"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "P(H)=\\frac{1}{\\mathcal{Z}}\\exp\\mathinner{\\left(-\\frac{1}{2}\\sum_{j=1}^{N}H_{ii}^{2}-\\sum_{0<i-j<b}^{N}H_{ij}^{2}\\right)}",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>H</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mi>𝒵</mi></mfrac></mstyle><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><mi>exp</mi><mo>⁡</mo><mrow><mo>(</mo><mo lspace=\"0em\">−</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mn>2</mn></mfrac></mstyle><mstyle displaystyle=\"true\"><mo movablelimits=\"false\">∑</mo></mstyle><msub><mrow></mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow></msub><msup><mrow></mrow><mi>N</mi></msup><mi>H</mi><msub><mrow></mrow><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>i</mi></mrow></msub><msup><mrow></mrow><mn>2</mn></msup><mo>−</mo><mstyle displaystyle=\"true\"><mo movablelimits=\"false\">∑</mo></mstyle><msub><mrow></mrow><mrow><mn>0</mn><mo>&lt;</mo><mrow><mi>i</mi><mo>−</mo><mi>j</mi></mrow><mo>&lt;</mo><mi>b</mi></mrow></msub><msup><mrow></mrow><mi>N</mi></msup><mi>H</mi><msub><mrow></mrow><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>j</mi></mrow></msub><msup><mrow></mrow><mn>2</mn></msup><mo>)</mo></mrow></mrow></mrow></mrow></math>",
+   "label": "(8)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "𝒵=2N2πb(2N+1−b)4",
+     "latex": "\\mathcal{Z}=2^{\\frac{N}{2}}\\pi^{\\frac{b(2N+1-b)}{4}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝒵</mi><mo>=</mo><mrow><msup><mn>2</mn><mfrac><mi>N</mi><mn>2</mn></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>π</mi><mfrac><mrow><mi>b</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>N</mi></mrow><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>b</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mn>4</mn></mfrac></msup></mrow></mrow></math>"
+    },
+    {
+     "text": " is the normalization constant. Equation (8) enables the computation of the energy moments, "
+    },
+    {
+     "text": "⟨En⟩=1N∫dHP(H)TrHn",
+     "latex": "\\left\\langle E^{n}\\right\\rangle=\\frac{1}{N}\\int dHP(H)\\operatorname{Tr} H^{n}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo>⟨</mo><msup><mi>E</mi><mi>n</mi></msup><mo>⟩</mo></mrow><mo>=</mo><mrow><mfrac><mn>1</mn><mi>N</mi></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>∫</mo><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>H</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>P</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>H</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><mi>Tr</mi><mo lspace=\"0.167em\">⁡</mo><msup><mi>H</mi><mi>n</mi></msup></mrow></mrow></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "With the energy moments, we can express the density of states as"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\rho(E)=\\frac{1}{\\sqrt{2\\pi}}\\sum_{n=0}^{\\infty}\\frac{\\left\\langle E^{2n}\\right\\rangle}{2n!}\\dfrac{d^{2n}\\delta(E)}{dE^{2n}}.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><msqrt><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>π</mi></mrow></msqrt></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>n</mi><mo>=</mo><mn>0</mn></mrow><mi mathvariant=\"normal\">∞</mi></munderover></mstyle><mrow><mstyle displaystyle=\"true\"><mfrac><mrow><mo>⟨</mo><msup><mi>E</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi></mrow></msup><mo>⟩</mo></mrow><mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi></mrow><mo>!</mo></mrow></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mstyle displaystyle=\"true\"><mfrac><mrow><msup><mi>d</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>δ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>E</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi></mrow></msup></mrow></mfrac></mstyle></mrow></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(9)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Even though the odd energy moments are zero for BRM, reflecting the symmetry of the density of states about "
+    },
+    {
+     "text": "E=0",
+     "latex": "E=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>E</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", the explicit computation of all even energy moments from "
+    },
+    {
+     "text": "P(H)",
+     "latex": "P(H)",
+     "mathml": "<math display=\"inline\"><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>H</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is a daunting task. However, the density of states of the Rosenzweig-Porter ensemble (RPE) [55, 64, 94–103], has been obtained earlier [104]. We assume that "
+    },
+    {
+     "text": "ρ(E,α,a)",
+     "latex": "\\rho(E;\\alpha,a)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo>,</mo><mi>α</mi><mo>,</mo><mi>a</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " for RPE approximates the density of states for the BRM and derive (see details in App. A)"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{split}\\rho(E,\\kappa)&=\\frac{\\sqrt{\\frac{8(\\kappa+1)}{\\pi^{3}}}}{e^{2(\\kappa+1)E^{2}}}\\int_{-1}^{1}dx\\frac{\\sqrt{1-x^{2}}}{e^{2\\kappa x^{2}+4\\sqrt{\\kappa^{2}+\\kappa}Ex}},\\end{split}",
+   "mathml": "<math display=\"inline\"><mtable columnspacing=\"0pt\"><mtr><mtd columnalign=\"right\"><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo>,</mo><mi>κ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mtd><mtd columnalign=\"left\"><mrow><mrow><mphantom></mphantom><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><msqrt><mfrac><mrow><mn>8</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>κ</mi><mo>+</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><msup><mi>π</mi><mn>3</mn></msup></mfrac></msqrt><msup><mi>e</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>κ</mi><mo>+</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>E</mi><mn>2</mn></msup></mrow></msup></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mrow><mo>−</mo><mn>1</mn></mrow><mn>1</mn></msubsup></mstyle><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>x</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mstyle displaystyle=\"true\"><mfrac><msqrt><mrow><mn>1</mn><mo>−</mo><msup><mi>x</mi><mn>2</mn></msup></mrow></msqrt><msup><mi>e</mi><mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>κ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>x</mi><mn>2</mn></msup></mrow><mo>+</mo><mrow><mn>4</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><msup><mi>κ</mi><mn>2</mn></msup><mo>+</mo><mi>κ</mi></mrow></msqrt><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>E</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>x</mi></mrow></mrow></msup></mfrac></mstyle></mrow></mrow></mrow></mrow><mo>,</mo></mrow></mtd></mtr></mtable></math>",
+   "label": "(10)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{split}\\kappa&\\equiv\\frac{1-K+\\sqrt{1-K}}{K}\\end{split}",
+   "mathml": "<math display=\"inline\"><mtable columnspacing=\"0pt\"><mtr><mtd columnalign=\"right\"><mi>κ</mi></mtd><mtd columnalign=\"left\"><mrow><mphantom></mphantom><mo>≡</mo><mstyle displaystyle=\"true\"><mfrac><mrow><mrow><mn>1</mn><mo>−</mo><mi>K</mi></mrow><mo>+</mo><msqrt><mrow><mn>1</mn><mo>−</mo><mi>K</mi></mrow></msqrt></mrow><mi>K</mi></mfrac></mstyle></mrow></mtd></mtr></mtable></math>",
+   "label": "(11)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "and"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "K=\\frac{\\left\\langle E^{4}\\right\\rangle}{\\left\\langle E^{2}\\right\\rangle^{2}}-2.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mi>K</mi><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mrow><mo>⟨</mo><msup><mi>E</mi><mn>4</mn></msup><mo>⟩</mo></mrow><msup><mrow><mo>⟨</mo><msup><mi>E</mi><mn>2</mn></msup><mo>⟩</mo></mrow><mn>2</mn></msup></mfrac></mstyle><mo>−</mo><mn>2</mn></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(12)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "is the shifted Kurtosis, which is 1 for a Gaussian distribution and 0 for the semi-circle."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For "
+    },
+    {
+     "text": "κ=0",
+     "latex": "\\kappa=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>κ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", Eq. (10) yields the Gaussian distribution "
+    },
+    {
+     "text": "2πe−2E2",
+     "latex": "\\sqrt{\\frac{2}{\\pi}}e^{-2E^{2}}",
+     "mathml": "<math display=\"inline\"><mrow><msqrt><mfrac><mn>2</mn><mi>π</mi></mfrac></msqrt><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>E</mi><mn>2</mn></msup></mrow></mrow></msup></mrow></math>"
+    },
+    {
+     "text": ", valid for the Poisson ensemble ("
+    },
+    {
+     "text": "γ=0",
+     "latex": "\\gamma=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": "). For "
+    },
+    {
+     "text": "κ→∞",
+     "latex": "\\kappa\\to\\infty",
+     "mathml": "<math display=\"inline\"><mrow><mi>κ</mi><mo stretchy=\"false\">→</mo><mi mathvariant=\"normal\">∞</mi></mrow></math>"
+    },
+    {
+     "text": ", we get Wigner’s semi-circle law "
+    },
+    {
+     "text": "ρGOE(E)=2π1−E2",
+     "latex": "\\rho_{\\mathrm{GOE}}(E)=\\frac{2}{\\pi}\\sqrt{1-E^{2}}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>ρ</mi><mi>GOE</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mfrac><mn>2</mn><mi>π</mi></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mn>1</mn><mo>−</mo><msup><mi>E</mi><mn>2</mn></msup></mrow></msqrt></mrow></mrow></math>"
+    },
+    {
+     "text": " [105, 106], valid for the GOE ("
+    },
+    {
+     "text": "γ=2",
+     "latex": "\\gamma=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ")."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "FIG. 3. Density of states for BRMs with various values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " in (a) linear scale and (b) log-scale in the y-axis; "
+    },
+    {
+     "text": "N=1024",
+     "latex": "N=1024",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo>=</mo><mn>1024</mn></mrow></math>"
+    },
+    {
+     "text": " and average over 2048 realizations. Numerical results are shown with solid lines and the shaded curves in panel (b) denote "
+    },
+    {
+     "text": "ρ(E,κ)",
+     "latex": "\\rho(E,\\kappa)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo>,</mo><mi>κ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " from Eq. (10). The shape of "
+    },
+    {
+     "text": "ρ(E)",
+     "latex": "\\rho(E)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is Gaussian for "
+    },
+    {
+     "text": "γ=0",
+     "latex": "\\gamma=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " (Poisson ensemble) and semicircular for "
+    },
+    {
+     "text": "γ=2",
+     "latex": "\\gamma=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": " (GOE). The GOE curve is not shown, because the result for "
+    },
+    {
+     "text": "γ=1.2",
+     "latex": "\\gamma=1.2",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>1.2</mn></mrow></math>"
+    },
+    {
+     "text": " is already very close to it. The inset of panel (b) shows the shifted kurtosis vs. "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " for system size "
+    },
+    {
+     "text": "N=1024",
+     "latex": "N=1024",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo>=</mo><mn>1024</mn></mrow></math>"
+    },
+    {
+     "text": " [see Eq. (12)]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Figure 3 compares numerical results (solid lines) for the density of states of BRMs of various values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " with Eq. (10) (shaded curves), confirming that the equation provides an excellent approximation for "
+    },
+    {
+     "text": "ρ(E)",
+     "latex": "\\rho(E)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". The density of states in Fig. 3 is centered at "
+    },
+    {
+     "text": "⟨E⟩=0",
+     "latex": "\\left\\langle E\\right\\rangle=0",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo>⟨</mo><mi>E</mi><mo>⟩</mo></mrow><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " and has a standard deviation equal to "
+    },
+    {
+     "text": "1/2",
+     "latex": "1/2",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": " irrespective of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " due to the global scaling "
+    },
+    {
+     "text": "En→En/2σE",
+     "latex": "E_{n}\\to E_{n}/2\\sigma_{E}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>E</mi><mi>n</mi></msub><mo stretchy=\"false\">→</mo><mrow><mrow><msub><mi>E</mi><mi>n</mi></msub><mo>/</mo><mn>2</mn></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>σ</mi><mi>E</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ". For the Poisson ensemble, the density of states in Fig. 3 is a Gaussian function and for the GOE, we recover the semicircle law."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 4,
+   "spans": [
+    {
+     "text": "2. Correlation hole"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The two-level cluster function, "
+    },
+    {
+     "text": "T2(E,E′)",
+     "latex": "T_{2}(E,E^{\\prime})",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>T</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo>,</mo><msup><mi>E</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", captures the correlations among the energy levels [3, 107]. For unfolded energy levels, "
+    },
+    {
+     "text": "{ℰj}",
+     "latex": "\\mathinner{\\left\\{\\mathcal{E}_{j}\\right\\}}",
+     "mathml": "<math display=\"inline\"><mrow><mo>{</mo><msub><mi>ℰ</mi><mi>j</mi></msub><mo>}</mo></mrow></math>"
+    },
+    {
+     "text": ", the two-level cluster function is denoted by "
+    },
+    {
+     "text": "Y2(ℰ,ℰ′)",
+     "latex": "Y_{2}(\\mathcal{E},\\mathcal{E}^{\\prime})",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>Y</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>ℰ</mi><mo>,</mo><msup><mi>ℰ</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". Given the mean level spacing "
+    },
+    {
+     "text": "μ",
+     "latex": "\\mu",
+     "mathml": "<math display=\"inline\"><mi>μ</mi></math>"
+    },
+    {
+     "text": ", the above functions are related as "
+    },
+    {
+     "text": "T2(E,E′)≈Y2(ℰ,ℰ′)/μ2",
+     "latex": "T_{2}(E,E^{\\prime})\\approx Y_{2}(\\mathcal{E},\\mathcal{E}^{\\prime})/\\mu^{2}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>T</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>E</mi><mo>,</mo><msup><mi>E</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≈</mo><mrow><mrow><msub><mi>Y</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>ℰ</mi><mo>,</mo><msup><mi>ℰ</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo>/</mo><msup><mi>μ</mi><mn>2</mn></msup></mrow></mrow></math>"
+    },
+    {
+     "text": ". Since "
+    },
+    {
+     "text": "Y2(ℰ,ℰ′)=Y2(Δℰ)",
+     "latex": "Y_{2}(\\mathcal{E},\\mathcal{E}^{\\prime})=Y_{2}(\\Delta_{\\mathcal{E}})",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>Y</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>ℰ</mi><mo>,</mo><msup><mi>ℰ</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><msub><mi>Y</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " [3, 108], where "
+    },
+    {
+     "text": "Δℰ=|ℰ−ℰ′|",
+     "latex": "\\Delta_{\\mathcal{E}}=|\\mathcal{E}-\\mathcal{E}^{\\prime}|",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo>=</mo><mrow><mo stretchy=\"false\">|</mo><mrow><mi>ℰ</mi><mo>−</mo><msup><mi>ℰ</mi><mo>′</mo></msup></mrow><mo stretchy=\"false\">|</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is the spacing of two unfolded energy levels, we can express the Fourier transform of the two-level cluster function in Eq. (5) as"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{split}&-\\frac{1}{N(N-1)}\\int dE\\int dE^{\\prime}e^{-i2\\pi(E-E^{\\prime})t}T_{2}(E,E^{\\prime})\\\\\n&\\approx-\\frac{1}{N(N-1)}\\int\\mu d\\mathcal{E}\\int\\mu d\\mathcal{E}^{\\prime}e^{-i2\\pi\\mu(\\mathcal{E}-\\mathcal{E}^{\\prime})t}\\frac{1}{\\mu^{2}}Y_{2}(\\mathcal{E},\\mathcal{E}^{\\prime})\\\\\n&\\approx-\\frac{1}{N}\\int d\\Delta_{\\mathcal{E}}\\>e^{-i2\\pi\\mu\\Delta_{\\mathcal{E}}t}Y_{2}(\\Delta_{\\mathcal{E}})\\\\\n&=-\\frac{1}{N}b_{2}(\\mu t),\\end{split}",
+   "mathml": "<math display=\"inline\"><mtable columnspacing=\"0pt\" rowspacing=\"0pt\"><mtr><mtd></mtd><mtd columnalign=\"left\"><mrow><mo>−</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mi>N</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>N</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle><mstyle displaystyle=\"true\"><mo>∫</mo></mstyle><mi>d</mi><mi>E</mi><mstyle displaystyle=\"true\"><mo>∫</mo></mstyle><mi>d</mi><mi>E</mi><msup><mrow></mrow><mo>′</mo></msup><mi>e</mi><msup><mrow></mrow><mrow><mo>−</mo><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>E</mi><mo>−</mo><msup><mi>E</mi><mo>′</mo></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mi>T</mi><msub><mrow></mrow><mn>2</mn></msub><mo stretchy=\"false\">(</mo><mi>E</mi><mo>,</mo><mi>E</mi><msup><mrow></mrow><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mtd></mtr><mtr><mtd></mtd><mtd columnalign=\"left\"><mrow><mo rspace=\"0em\">≈</mo><mo lspace=\"0em\">−</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mi>N</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>N</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle><mstyle displaystyle=\"true\"><mo>∫</mo></mstyle><mi>μ</mi><mi>d</mi><mi>ℰ</mi><mstyle displaystyle=\"true\"><mo>∫</mo></mstyle><mi>μ</mi><mi>d</mi><mi>ℰ</mi><msup><mrow></mrow><mo>′</mo></msup><mi>e</mi><msup><mrow></mrow><mrow><mo>−</mo><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>μ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>ℰ</mi><mo>−</mo><msup><mi>ℰ</mi><mo>′</mo></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><msup><mi>μ</mi><mn>2</mn></msup></mfrac></mstyle><mi>Y</mi><msub><mrow></mrow><mn>2</mn></msub><mo stretchy=\"false\">(</mo><mi>ℰ</mi><mo>,</mo><mi>ℰ</mi><msup><mrow></mrow><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mtd></mtr><mtr><mtd></mtd><mtd columnalign=\"left\"><mrow><mo rspace=\"0em\">≈</mo><mo lspace=\"0em\">−</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mi>N</mi></mfrac></mstyle><mstyle displaystyle=\"true\"><mo>∫</mo></mstyle><mi>d</mi><mi mathvariant=\"normal\">Δ</mi><msub><mrow></mrow><mi>ℰ</mi></msub><mi>e</mi><msup><mrow></mrow><mrow><mo>−</mo><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>μ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mi>Y</mi><msub><mrow></mrow><mn>2</mn></msub><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">Δ</mi><msub><mrow></mrow><mi>ℰ</mi></msub><mo stretchy=\"false\">)</mo></mrow></mtd></mtr><mtr><mtd></mtd><mtd columnalign=\"left\"><mrow><mrow><mphantom></mphantom><mo>=</mo><mrow><mo>−</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mi>N</mi></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>b</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>μ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo>,</mo></mrow></mtd></mtr></mtable></math>",
+   "label": "(13)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "b2",
+     "latex": "b_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>b</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " is the two-level form factor. This function controls the long-time behavior of the SFF [50], giving rise to the correlation hole if the eigenvalues are correlated."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For the Poisson ensemble, "
+    },
+    {
+     "text": "b2(τ)=0",
+     "latex": "b_{2}(\\tau)=0",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>b</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", where "
+    },
+    {
+     "text": "τ",
+     "latex": "\\tau",
+     "mathml": "<math display=\"inline\"><mi>τ</mi></math>"
+    },
+    {
+     "text": " is the dimensionless time. For GOE [3],"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{aligned} b_{2}^{\\mathrm{GOE}}(\\tau) & =\\begin{cases}1-2\\tau+\\tau\\log\\mathinner{\\left(1+2\\tau\\right)},&\\tau\\leq 1,\\\\\n\\tau\\log\\left(\\dfrac{2\\tau+1}{2\\tau-1}\\right)-1,&\\tau>1.\\end{cases} \\end{aligned}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><msubsup><mi>b</mi><mn>2</mn><mi>GOE</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mtd><mtd><mrow><mphantom></mphantom><mo>=</mo><mrow><mo>{</mo><mtable columnspacing=\"5pt\" rowspacing=\"0pt\"><mtr><mtd columnalign=\"left\"><mrow><mrow><mrow><mn>1</mn><mo>−</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>τ</mi></mrow></mrow><mo>+</mo><mrow><mi>τ</mi><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><mi>log</mi><mo>⁡</mo><mrow><mo>(</mo><mrow><mn>1</mn><mo>+</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>τ</mi></mrow></mrow><mo>)</mo></mrow></mrow></mrow></mrow><mo>,</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mrow><mi>τ</mi><mo>≤</mo><mn>1</mn></mrow><mo>,</mo></mrow></mtd></mtr><mtr><mtd columnalign=\"left\"><mrow><mrow><mrow><mi>τ</mi><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><mi>log</mi><mo>⁡</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac><mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>τ</mi></mrow><mo>+</mo><mn>1</mn></mrow><mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>τ</mi></mrow><mo>−</mo><mn>1</mn></mrow></mfrac></mstyle><mo>)</mo></mrow></mrow></mrow><mo>−</mo><mn>1</mn></mrow><mo>,</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mrow><mi>τ</mi><mo>&gt;</mo><mn>1</mn></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></mrow></mrow></mtd></mtr></mtable></math>",
+   "label": "(14)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Motivated by the two-level form factor of the Rosenzweig-Porter ensemble [109], we propose the following ansatz for BRM,"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "b_{2}(\\tau)=b_{2}^{\\mathrm{GOE}}(\\tau)+f(\\tau)e^{-\\frac{\\tau}{\\eta}},",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><msub><mi>b</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mrow><msubsup><mi>b</mi><mn>2</mn><mi>GOE</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mrow><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mfrac><mi>τ</mi><mi>η</mi></mfrac></mrow></msup></mrow></mrow></mrow><mo>,</mo></mrow></math>",
+   "label": "(15)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "f(τ)",
+     "latex": "f(\\tau)",
+     "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is a second order polynomial and "
+    },
+    {
+     "text": "η",
+     "latex": "\\eta",
+     "mathml": "<math display=\"inline\"><mi>η</mi></math>"
+    },
+    {
+     "text": " is a fitting parameter."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In Fig. 4, we show that the ansatz in Eq. (15) (dashed lines) agrees very well with the numerical results (solid lines). In Table 2, we show the fitting parameters used in Fig. 4 for various values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": ". Notice that in the ergodic phase ("
+    },
+    {
+     "text": "γ>1",
+     "latex": "\\gamma>1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&gt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": "), "
+    },
+    {
+     "text": "b2(τ)≈b2GOE(τ)",
+     "latex": "b_{2}(\\tau)\\approx b_{2}^{\\mathrm{GOE}}(\\tau)",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>b</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≈</mo><mrow><msubsup><mi>b</mi><mn>2</mn><mi>GOE</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ", with small deviations appearing for "
+    },
+    {
+     "text": "τ≪1",
+     "latex": "\\tau\\ll 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>τ</mi><mo>≪</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ". On the other hand, the second term in Eq. (15) is dominant in the nonergodic phase ("
+    },
+    {
+     "text": "γ<1",
+     "latex": "\\gamma<1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ")."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "FIG. 4. Two-level form factor as a function of the dimensionless time "
+    },
+    {
+     "text": "τ",
+     "latex": "\\tau",
+     "mathml": "<math display=\"inline\"><mi>τ</mi></math>"
+    },
+    {
+     "text": " for BRMs at various values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": "; "
+    },
+    {
+     "text": "N=1024",
+     "latex": "N=1024",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo>=</mo><mn>1024</mn></mrow></math>"
+    },
+    {
+     "text": " and average over 2048 realizations. Solid lines show numerical results and dashed lines represent the ansatz in Eq. (15) with fitting parameters given in Table 2. The vertical dashed line marks the dimensionless Heisenberg time "
+    },
+    {
+     "text": "τH=1",
+     "latex": "\\tau_{\\mathrm{H}}=1",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>τ</mi><mi>H</mi></msub><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and the horizontal dashed line is the tolerance value "
+    },
+    {
+     "text": "ϵ",
+     "latex": "\\epsilon",
+     "mathml": "<math display=\"inline\"><mi>ϵ</mi></math>"
+    },
+    {
+     "text": " used to obtain the dimensionless relaxation time "
+    },
+    {
+     "text": "τR",
+     "latex": "\\tau_{\\mathrm{R}}",
+     "mathml": "<math display=\"inline\"><msub><mi>τ</mi><mi>R</mi></msub></math>"
+    },
+    {
+     "text": ". The circles indicate "
+    },
+    {
+     "text": "τR",
+     "latex": "\\tau_{\\mathrm{R}}",
+     "mathml": "<math display=\"inline\"><msub><mi>τ</mi><mi>R</mi></msub></math>"
+    },
+    {
+     "text": " for various values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " while "
+    },
+    {
+     "text": "τR=τH=1",
+     "latex": "\\tau_{\\mathrm{R}}=\\tau_{\\mathrm{H}}=1",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>τ</mi><mi>R</mi></msub><mo>=</mo><msub><mi>τ</mi><mi>H</mi></msub><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " for "
+    },
+    {
+     "text": "1<γ≤2",
+     "latex": "1<\\gamma\\leq 2",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>&lt;</mo><mi>γ</mi><mo>≤</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "TABLE II. Fitting parameters for the two-level form factor ansatz in Eq. (15) for different values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " shown in Fig. 4. The 2nd order polynomial has the form "
+    },
+    {
+     "text": "f(τ)=a(τ+b)(c−τ)",
+     "latex": "f(\\tau)=a(\\tau+b)(c-\\tau)",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mrow><mi>a</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>τ</mi><mo>+</mo><mi>b</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>c</mi><mo>−</mo><mi>τ</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "γ",
+         "latex": "\\gamma",
+         "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "η",
+         "latex": "\\eta",
+         "mathml": "<math display=\"inline\"><mi>η</mi></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "a"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "b"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "c"
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "0.6"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.2357"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.4552"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.0799"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.0127"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "0.7"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.2298"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "7.2859"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.0255"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1.6055"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "0.8"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.2711"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "4.3480"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.0361"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1.2508"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.3027"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.0196"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.0672"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.7757"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "1.2"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.3682"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.0145"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "9.1863"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.5486"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "1.6"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.0188"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.0673"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "13.0405"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.0774"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 4,
+   "spans": [
+    {
+     "text": "3. Analytical expression: SFF"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Combining the results for the density of states in Sec. III.1.1 and for the two-level form factor in Sec. III.1.2, we evaluate Eq. (5) and obtain the following semi-analytical expression for the SFF of BRM,"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{split}\\left\\langle\\mathcal{K}\\mathinner{\\left(t,\\kappa\\right)}\\right\\rangle&\\approx\\frac{\\textrm{J}_{1}\\mathinner{\\left(\\frac{2\\sigma_{E}t}{\\sqrt{1+\\frac{1}{\\kappa}}}\\right)}^{2}}{\\frac{\\sigma_{E}^{2}t^{2}}{1+\\frac{1}{\\kappa}}e^{\\frac{\\sigma_{E}^{2}t^{2}}{1+\\kappa}}}-\\frac{1}{N}b_{2}\\mathinner{\\left(\\frac{t}{t_{\\mathrm{H}}}\\right)}+\\frac{1}{N},\\end{split}",
+   "mathml": "<math display=\"inline\"><mtable columnspacing=\"0pt\"><mtr><mtd columnalign=\"right\"><mrow><mo>⟨</mo><mrow><mi>𝒦</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mi>t</mi><mo>,</mo><mi>κ</mi><mo>)</mo></mrow></mrow><mo>⟩</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mrow><mphantom></mphantom><mo>≈</mo><mrow><mrow><mstyle displaystyle=\"true\"><mfrac><mrow><msub><mtext>J</mtext><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo>(</mo><mfrac><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>σ</mi><mi>E</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><msqrt><mrow><mn>1</mn><mo>+</mo><mfrac><mn>1</mn><mi>κ</mi></mfrac></mrow></msqrt></mfrac><mo>)</mo></mrow><mn>2</mn></msup></mrow><mrow><mfrac><mrow><msubsup><mi>σ</mi><mi>E</mi><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>2</mn></msup></mrow><mrow><mn>1</mn><mo>+</mo><mfrac><mn>1</mn><mi>κ</mi></mfrac></mrow></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mfrac><mrow><msubsup><mi>σ</mi><mi>E</mi><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>2</mn></msup></mrow><mrow><mn>1</mn><mo>+</mo><mi>κ</mi></mrow></mfrac></msup></mrow></mfrac></mstyle><mo>−</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mi>N</mi></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>b</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac><mi>t</mi><msub><mi>t</mi><mi>H</mi></msub></mfrac></mstyle><mo>)</mo></mrow></mrow></mrow><mo>+</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mi>N</mi></mfrac></mstyle></mrow></mrow><mo>,</mo></mrow></mtd></mtr></mtable></math>",
+   "label": "(16)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where the first term comes from the Fourier transform of Eq. (10) and contains "
+    },
+    {
+     "text": "J1(t)",
+     "latex": "\\textrm{J}_{1}\\mathinner{\\left(t\\right)}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mtext>J</mtext><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mi>t</mi><mo>)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", which is the Bessel function of the first kind of order 1. The second term is the two-level form factor proposed in Eq. (15), where the dimensionless time "
+    },
+    {
+     "text": "τ=ttH",
+     "latex": "\\tau=\\frac{t}{t_{\\mathrm{H}}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>τ</mi><mo>=</mo><mfrac><mi>t</mi><msub><mi>t</mi><mi>H</mi></msub></mfrac></mrow></math>"
+    },
+    {
+     "text": " involves the Heisenberg time, "
+    },
+    {
+     "text": "tH",
+     "latex": "t_{\\mathrm{H}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>H</mi></msub></math>"
+    },
+    {
+     "text": ", given by the inverse of the mean level spaicng, "
+    },
+    {
+     "text": "1/μ",
+     "latex": "1/\\mu",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>/</mo><mi>μ</mi></mrow></math>"
+    },
+    {
+     "text": ", and explained below in Eq. (20)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For "
+    },
+    {
+     "text": "γ>1",
+     "latex": "\\gamma>1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&gt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", since "
+    },
+    {
+     "text": "κ≫1",
+     "latex": "\\kappa\\gg 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>κ</mi><mo>≫</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", Eq. (16) agrees well with the SFF of the GOE [50, 82]"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\langle\\mathcal{K}^{\\mathrm{GOE}}(t)\\right\\rangle=\\frac{\\textrm{J}_{1}\\mathinner{\\left(2\\sigma_{E}t\\right)}^{2}}{\\sigma_{E}^{2}t^{2}}-\\frac{1}{N}b_{2}^{\\mathrm{GOE}}\\mathinner{\\left(\\frac{t}{t_{\\mathrm{H}}}\\right)}+\\frac{1}{N},",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mo>⟨</mo><mrow><msup><mi>𝒦</mi><mi>GOE</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>⟩</mo></mrow><mo>=</mo><mrow><mrow><mstyle displaystyle=\"true\"><mfrac><mrow><msub><mtext>J</mtext><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo>(</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>σ</mi><mi>E</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mo>)</mo></mrow><mn>2</mn></msup></mrow><mrow><msubsup><mi>σ</mi><mi>E</mi><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>2</mn></msup></mrow></mfrac></mstyle><mo>−</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mi>N</mi></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mi>b</mi><mn>2</mn><mi>GOE</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac><mi>t</mi><msub><mi>t</mi><mi>H</mi></msub></mfrac></mstyle><mo>)</mo></mrow></mrow></mrow><mo>+</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mi>N</mi></mfrac></mstyle></mrow></mrow><mo>,</mo></mrow></math>",
+   "label": "(17)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "b2GOE(τ)",
+     "latex": "b_{2}^{\\mathrm{GOE}}(\\tau)",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>b</mi><mn>2</mn><mi>GOE</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is the two-level form factor of the GOE in Eq. (14)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For the Poisson ensemble ("
+    },
+    {
+     "text": "γ=0",
+     "latex": "\\gamma=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": "), where the correlation hole does not exist, the analytical expression for the SFF is simply [110–112]"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{split}\\left\\langle\\mathcal{K}^{\\mathrm{P}}(t)\\right\\rangle&=\\Theta\\mathinner{\\left(t_{\\mathrm{R}}^{\\textrm{P}}-t\\right)}e^{-\\sigma_{E}^{2}t^{2}}+\\Theta\\mathinner{\\left(t-t_{\\mathrm{R}}^{\\textrm{P}}\\right)}\\frac{1}{N},\\end{split}",
+   "mathml": "<math display=\"inline\"><mtable columnspacing=\"0pt\"><mtr><mtd columnalign=\"right\"><mrow><mo>⟨</mo><mrow><msup><mi>𝒦</mi><mi>P</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>⟩</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mrow><mphantom></mphantom><mo>=</mo><mrow><mrow><mi mathvariant=\"normal\">Θ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><msubsup><mi>t</mi><mi>R</mi><mtext>P</mtext></msubsup><mo>−</mo><mi>t</mi></mrow><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><msubsup><mi>σ</mi><mi>E</mi><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>2</mn></msup></mrow></mrow></msup></mrow><mo>+</mo><mrow><mi mathvariant=\"normal\">Θ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mi>t</mi><mo>−</mo><msubsup><mi>t</mi><mi>R</mi><mtext>P</mtext></msubsup></mrow><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mi>N</mi></mfrac></mstyle></mrow></mrow></mrow><mo>,</mo></mrow></mtd></mtr></mtable></math>",
+   "label": "(18)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "Θ(x)",
+     "latex": "\\Theta(x)",
+     "mathml": "<math display=\"inline\"><mrow><mi mathvariant=\"normal\">Θ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is the Heaviside step function and"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "t_{\\mathrm{R}}^{\\textrm{P}}=\\sqrt{\\ln N}/\\sigma_{E}",
+   "mathml": "<math display=\"block\"><mrow><msubsup><mi>t</mi><mi>R</mi><mtext>P</mtext></msubsup><mo>=</mo><mrow><msqrt><mrow><mi>ln</mi><mo lspace=\"0.167em\">⁡</mo><mi>N</mi></mrow></msqrt><mo>/</mo><msub><mi>σ</mi><mi>E</mi></msub></mrow></mrow></math>",
+   "label": "(19)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "is the time when the Gaussian decaying curve of the SFF meets the saturation value "
+    },
+    {
+     "text": "𝒦¯=1/N",
+     "latex": "\\overline{\\mathcal{K}}=1/N",
+     "mathml": "<math display=\"inline\"><mrow><mover accent=\"true\"><mi>𝒦</mi><mo stretchy=\"true\">¯</mo></mover><mo>=</mo><mrow><mn>1</mn><mo>/</mo><mi>N</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ". We get Eq. (18) from Eq. (16) for "
+    },
+    {
+     "text": "κ=0",
+     "latex": "\\kappa=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>κ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", since "
+    },
+    {
+     "text": "limx→0J1(x)x=12",
+     "latex": "\\lim\\limits_{x\\to 0}\\frac{\\textrm{J}_{1}\\mathinner{\\left(x\\right)}}{x}=\\frac{1}{2}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><munder><mo movablelimits=\"false\">lim</mo><mrow><mi>x</mi><mo stretchy=\"false\">→</mo><mn>0</mn></mrow></munder><mfrac><mrow><msub><mtext>J</mtext><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mi>x</mi><mo>)</mo></mrow></mrow><mi>x</mi></mfrac></mrow><mo>=</mo><mfrac><mn>1</mn><mn>2</mn></mfrac></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "B. Timescales"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The shortest timescale of the system is the Zeno time "
+    },
+    {
+     "text": "tZeno=σE−1",
+     "latex": "t_{\\mathrm{Zeno}}=\\sigma_{E}^{-1}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>t</mi><mi>Zeno</mi></msub><mo>=</mo><msubsup><mi>σ</mi><mi>E</mi><mrow><mo>−</mo><mn>1</mn></mrow></msubsup></mrow></math>"
+    },
+    {
+     "text": ", as mentioned in the beginning of Sec. III. The largest timescale is the Heisenberg time, defined as the inverse of the mean level spacing around "
+    },
+    {
+     "text": "E=0",
+     "latex": "E=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>E</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ","
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "t_{\\mathrm{H}}=\\frac{N}{\\sigma_{E}\\rho(0,\\kappa)}=\\frac{\\sqrt{\\pi}Ne^{\\kappa}}{\\sigma_{E}\\sqrt{2(\\kappa+1)}\\mathinner{\\left(\\textrm{I}_{0}\\mathinner{\\left(\\kappa\\right)}+\\textrm{I}_{1}\\mathinner{\\left(\\kappa\\right)}\\right)}},",
+   "mathml": "<math display=\"block\"><mrow><mrow><msub><mi>t</mi><mi>H</mi></msub><mo>=</mo><mfrac><mi>N</mi><mrow><msub><mi>σ</mi><mi>E</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>ρ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi>κ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac><mo>=</mo><mfrac><mrow><msqrt><mi>π</mi></msqrt><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>N</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mi>κ</mi></msup></mrow><mrow><msub><mi>σ</mi><mi>E</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>κ</mi><mo>+</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></msqrt><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mrow><msub><mtext>I</mtext><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mi>κ</mi><mo>)</mo></mrow></mrow><mo>+</mo><mrow><msub><mtext>I</mtext><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mi>κ</mi><mo>)</mo></mrow></mrow></mrow><mo>)</mo></mrow></mrow></mfrac></mrow><mo>,</mo></mrow></math>",
+   "label": "(20)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "κ",
+     "latex": "\\kappa",
+     "mathml": "<math display=\"inline\"><mi>κ</mi></math>"
+    },
+    {
+     "text": " is given in Eq. (36). Note that the global mean level spacing is "
+    },
+    {
+     "text": "σE/N",
+     "latex": "\\sigma_{E}/N",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>σ</mi><mi>E</mi></msub><mo>/</mo><mi>N</mi></mrow></math>"
+    },
+    {
+     "text": ", but the density of states is not uniform for BRMs, with the largest density occurring around "
+    },
+    {
+     "text": "E=0",
+     "latex": "E=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>E</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " and denoted by "
+    },
+    {
+     "text": "ρ(0,κ)",
+     "latex": "\\rho(0,\\kappa)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi>κ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". The energy spread in the vicinity of "
+    },
+    {
+     "text": "E=0",
+     "latex": "E=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>E</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " is thus approximately "
+    },
+    {
+     "text": "σEρ(0,κ)",
+     "latex": "\\sigma_{E}\\rho(0,\\kappa)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>σ</mi><mi>E</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>ρ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi>κ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", so the local mean level spacing is "
+    },
+    {
+     "text": "σEρ(0,κ)/N",
+     "latex": "\\sigma_{E}\\rho(0,\\kappa)/N",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>σ</mi><mi>E</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>ρ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi>κ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>/</mo><mi>N</mi></mrow></math>"
+    },
+    {
+     "text": " and its inverse leads to the Heisenberg time in the equation above. For the Poisson ensemble ("
+    },
+    {
+     "text": "γ=0",
+     "latex": "\\gamma=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": "), where "
+    },
+    {
+     "text": "κ=0",
+     "latex": "\\kappa=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>κ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", Eq. (20) leads to "
+    },
+    {
+     "text": "tHP=πN/2σE",
+     "latex": "t_{\\mathrm{H}}^{\\textrm{P}}=\\sqrt{\\pi}N/\\sqrt{2}\\sigma_{E}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>t</mi><mi>H</mi><mtext>P</mtext></msubsup><mo>=</mo><mrow><mrow><mrow><msqrt><mi>π</mi></msqrt><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>N</mi></mrow><mo>/</mo><msqrt><mn>2</mn></msqrt></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>σ</mi><mi>E</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ". For the GOE ("
+    },
+    {
+     "text": "γ=2",
+     "latex": "\\gamma=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": "), where "
+    },
+    {
+     "text": "κ→∞",
+     "latex": "\\kappa\\rightarrow\\infty",
+     "mathml": "<math display=\"inline\"><mrow><mi>κ</mi><mo stretchy=\"false\">→</mo><mi mathvariant=\"normal\">∞</mi></mrow></math>"
+    },
+    {
+     "text": ", Eq. (20) gives "
+    },
+    {
+     "text": "tHGOE=πN/2σE",
+     "latex": "t_{\\mathrm{H}}^{\\mathrm{GOE}}=\\pi N/2\\sigma_{E}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>t</mi><mi>H</mi><mi>GOE</mi></msubsup><mo>=</mo><mrow><mrow><mrow><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>N</mi></mrow><mo>/</mo><mn>2</mn></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>σ</mi><mi>E</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Before deriving the intermediate timescales "
+    },
+    {
+     "text": "t∈[tZeno,tH]",
+     "latex": "t\\in[t_{\\mathrm{Zeno}},t_{\\mathrm{H}}]",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>∈</mo><mrow><mo stretchy=\"false\">[</mo><mrow><msub><mi>t</mi><mi>Zeno</mi></msub><mo>,</mo><msub><mi>t</mi><mi>H</mi></msub></mrow><mo stretchy=\"false\">]</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " for BRMs, we discuss them for the Poisson ensemble and the GOE."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The simple behavior of the spectral form factor for the Poisson ensemble in Eq. (18) implies that beyond the Zeno time, the only remaining timescale is that for the relaxation of "
+    },
+    {
+     "text": "⟨𝒦P(t)⟩",
+     "latex": "\\left\\langle\\mathcal{K}^{\\mathrm{P}}(t)\\right\\rangle",
+     "mathml": "<math display=\"inline\"><mrow><mo>⟨</mo><mrow><msup><mi>𝒦</mi><mi>P</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>⟩</mo></mrow></math>"
+    },
+    {
+     "text": ", which happens at "
+    },
+    {
+     "text": "tRP",
+     "latex": "t_{\\mathrm{R}}^{\\textrm{P}}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>t</mi><mi>R</mi><mtext>P</mtext></msubsup></math>"
+    },
+    {
+     "text": " [Eq. (19)]. This time is shorter than the Heisenberg time, "
+    },
+    {
+     "text": "tRP≪tHP",
+     "latex": "t_{\\mathrm{R}}^{\\textrm{P}}\\ll t_{\\mathrm{H}}^{\\textrm{P}}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>t</mi><mi>R</mi><mtext>P</mtext></msubsup><mo>≪</mo><msubsup><mi>t</mi><mi>H</mi><mtext>P</mtext></msubsup></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For the GOE (and any ensemble showing a correlation hole), beyond the Zeno time and before relaxation, there is the time for the beginning of the ramp, denoted by "
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": ". This time happens after the power-law decay of the SFF, which is "
+    },
+    {
+     "text": "∝t−3",
+     "latex": "\\propto t^{-3}",
+     "mathml": "<math display=\"inline\"><mrow><mphantom></mphantom><mo>∝</mo><msup><mi>t</mi><mrow><mo>−</mo><mn>3</mn></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " for GOE [see Fig. 2(d)] and characterizes the asymptotic behavior of "
+    },
+    {
+     "text": "(J1(t)/t)2",
+     "latex": "\\mathinner{\\left(\\textrm{J}_{1}\\mathinner{\\left(t\\right)}/t\\right)}^{2}",
+     "mathml": "<math display=\"inline\"><msup><mrow><mo>(</mo><mrow><mrow><msub><mtext>J</mtext><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mi>t</mi><mo>)</mo></mrow></mrow><mo>/</mo><mi>t</mi></mrow><mo>)</mo></mrow><mn>2</mn></msup></math>"
+    },
+    {
+     "text": ". This algebraic decay is caused by the bounds in the density of states ([112–114] and the references therein). To obtain "
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": ", one needs to expand the first term in Eq. (17) for long times "
+    },
+    {
+     "text": "(∼1πσE3t3)",
+     "latex": "\\mathinner{\\left(\\sim\\frac{1}{\\pi\\sigma_{E}^{3}t^{3}}\\right)}",
+     "mathml": "<math display=\"inline\"><mrow><mo>(</mo><mrow><mphantom></mphantom><mo>∼</mo><mfrac><mn>1</mn><mrow><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mi>σ</mi><mi>E</mi><mn>3</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>3</mn></msup></mrow></mfrac></mrow><mo>)</mo></mrow></math>"
+    },
+    {
+     "text": " and the second term for short times "
+    },
+    {
+     "text": "(∼1N(4σEtπN−1))",
+     "latex": "\\mathinner{\\left(\\sim\\frac{1}{N}\\mathinner{\\left(\\frac{4\\sigma_{E}t}{\\pi N}-1\\right)}\\right)}",
+     "mathml": "<math display=\"inline\"><mrow><mo>(</mo><mrow><mphantom></mphantom><mo>∼</mo><mrow><mfrac><mn>1</mn><mi>N</mi></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mfrac><mrow><mn>4</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>σ</mi><mi>E</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mrow><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>N</mi></mrow></mfrac><mo>−</mo><mn>1</mn></mrow><mo>)</mo></mrow></mrow></mrow><mo>)</mo></mrow></math>"
+    },
+    {
+     "text": " and take their derivatives to determine where the two functions meet [50], which happens at"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{split}t_{\\mathrm{dip}}^{\\mathrm{GOE}}\\approx 3^{\\frac{1}{4}}\\sqrt{N}/\\sqrt{2}\\sigma_{E}.\\end{split}",
+   "mathml": "<math display=\"inline\"><mtable><mtr><mtd columnalign=\"right\"><mrow><mrow><msubsup><mi>t</mi><mi>dip</mi><mi>GOE</mi></msubsup><mo>≈</mo><mrow><mrow><mrow><msup><mn>3</mn><mfrac><mn>1</mn><mn>4</mn></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mi>N</mi></msqrt></mrow><mo>/</mo><msqrt><mn>2</mn></msqrt></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>σ</mi><mi>E</mi></msub></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>",
+   "label": "(21)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "At this time [82],"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\langle\\mathcal{K}^{\\mathrm{GOE}}\\mathinner{\\left(t=t_{\\mathrm{dip}}^{\\mathrm{GOE}}\\right)}\\right\\rangle\\approx\\frac{2\\sqrt{2}}{\\pi\\sqrt{N^{3}}}\\mathinner{\\left(3^{\\frac{1}{4}}+3^{-\\frac{1}{4}}\\right)}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mo>⟨</mo><mrow><msup><mi>𝒦</mi><mi>GOE</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mi>t</mi><mo>=</mo><msubsup><mi>t</mi><mi>dip</mi><mi>GOE</mi></msubsup></mrow><mo>)</mo></mrow></mrow><mo>⟩</mo></mrow><mo>≈</mo><mrow><mfrac><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mn>2</mn></msqrt></mrow><mrow><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><msup><mi>N</mi><mn>3</mn></msup></msqrt></mrow></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><msup><mn>3</mn><mfrac><mn>1</mn><mn>4</mn></mfrac></msup><mo>+</mo><msup><mn>3</mn><mrow><mo>−</mo><mfrac><mn>1</mn><mn>4</mn></mfrac></mrow></msup></mrow><mo>)</mo></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For "
+    },
+    {
+     "text": "t>tdipGOE",
+     "latex": "t>t_{\\mathrm{dip}}^{\\mathrm{GOE}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>&gt;</mo><msubsup><mi>t</mi><mi>dip</mi><mi>GOE</mi></msubsup></mrow></math>"
+    },
+    {
+     "text": ", the SFF is dictated by the two-level form factor up to the saturation at "
+    },
+    {
+     "text": "tRGOE",
+     "latex": "t_{\\mathrm{R}}^{\\mathrm{GOE}}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>t</mi><mi>R</mi><mi>GOE</mi></msubsup></math>"
+    },
+    {
+     "text": ". This time can be obtained by expanding "
+    },
+    {
+     "text": "b2GOE(t)",
+     "latex": "b_{2}^{\\mathrm{GOE}}(t)",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>b</mi><mn>2</mn><mi>GOE</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " for long times [50], which gives"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{split}t_{\\mathrm{R}}^{\\mathrm{GOE}}=\\frac{\\pi N}{4\\sigma_{E}\\sqrt{3\\epsilon}}.\\end{split}",
+   "mathml": "<math display=\"inline\"><mtable><mtr><mtd columnalign=\"right\"><mrow><mrow><msubsup><mi>t</mi><mi>R</mi><mi>GOE</mi></msubsup><mo>=</mo><mstyle displaystyle=\"true\"><mfrac><mrow><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>N</mi></mrow><mrow><mn>4</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>σ</mi><mi>E</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mn>3</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>ϵ</mi></mrow></msqrt></mrow></mfrac></mstyle></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>",
+   "label": "(22)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In the equation above, "
+    },
+    {
+     "text": "ϵ",
+     "latex": "\\epsilon",
+     "mathml": "<math display=\"inline\"><mi>ϵ</mi></math>"
+    },
+    {
+     "text": " is a small tolerance value used because the SFF approaches equilibrium in a power-law manner, "
+    },
+    {
+     "text": "b2GOE(t→∞)∝t−2",
+     "latex": "b_{2}^{\\mathrm{GOE}}(t\\rightarrow\\infty)\\propto t^{-2}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msubsup><mi>b</mi><mn>2</mn><mi>GOE</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>t</mi><mo stretchy=\"false\">→</mo><mi mathvariant=\"normal\">∞</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>∝</mo><msup><mi>t</mi><mrow><mo>−</mo><mn>2</mn></mrow></msup></mrow></math>"
+    },
+    {
+     "text": ". Since "
+    },
+    {
+     "text": "tHGOE=πN/2σE",
+     "latex": "t_{\\mathrm{H}}^{\\mathrm{GOE}}=\\pi N/2\\sigma_{E}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>t</mi><mi>H</mi><mi>GOE</mi></msubsup><mo>=</mo><mrow><mrow><mrow><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>N</mi></mrow><mo>/</mo><mn>2</mn></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>σ</mi><mi>E</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", Eq. (22) implies that the SFF relaxes on the same timescale as the Heisenberg time, "
+    },
+    {
+     "text": "tRGOE≈tHGOE",
+     "latex": "t_{\\mathrm{R}}^{\\mathrm{GOE}}\\approx t_{\\mathrm{H}}^{\\mathrm{GOE}}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>t</mi><mi>R</mi><mi>GOE</mi></msubsup><mo>≈</mo><msubsup><mi>t</mi><mi>H</mi><mi>GOE</mi></msubsup></mrow></math>"
+    },
+    {
+     "text": ". This is confirmed in Fig. 2(d), where the vertical line indicating the Heisenberg time coincides with the marker "
+    },
+    {
+     "text": "◀",
+     "latex": "\\blacktriangleleft",
+     "mathml": "<math display=\"inline\"><mo>◀</mo></math>"
+    },
+    {
+     "text": " representing the relaxation time."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Similar to the GOE, the SFF of BRMs with "
+    },
+    {
+     "text": "0<γ<2",
+     "latex": "0<\\gamma<2",
+     "mathml": "<math display=\"inline\"><mrow><mn>0</mn><mo>&lt;</mo><mi>γ</mi><mo>&lt;</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": " exhibits a ramp beginning at "
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": " and eventually saturates at "
+    },
+    {
+     "text": "tR",
+     "latex": "t_{\\mathrm{R}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>R</mi></msub></math>"
+    },
+    {
+     "text": ". These two timescales are discussed next. A key finding of our work is the existence of a correlation hole in the nonergodic phase despite the absence of short-range correlation with a "
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": " that decreases as "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " decreases, as further elaborated below."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 4,
+   "spans": [
+    {
+     "text": "1. Time for the beginning of the ramp for BRM: "
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To obtain "
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": " for BRMs with "
+    },
+    {
+     "text": "0<γ<2",
+     "latex": "0<\\gamma<2",
+     "mathml": "<math display=\"inline\"><mrow><mn>0</mn><mo>&lt;</mo><mi>γ</mi><mo>&lt;</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ", we expand the first term in Eq. (16) for large times and "
+    },
+    {
+     "text": "b2(τ)",
+     "latex": "b_{2}(\\tau)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>b</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " for short times, as done in the derivation of Eq. (21)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The expansion of the first term in Eq. (16) for "
+    },
+    {
+     "text": "t≫1+κ−1σE",
+     "latex": "t\\gg\\frac{\\sqrt{1+\\kappa^{-1}}}{\\sigma_{E}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>≫</mo><mfrac><msqrt><mrow><mn>1</mn><mo>+</mo><msup><mi>κ</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow></msqrt><msub><mi>σ</mi><mi>E</mi></msub></mfrac></mrow></math>"
+    },
+    {
+     "text": " gives"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\frac{\\left(1+\\kappa^{-1}\\right)^{\\frac{3}{2}}e^{-\\frac{\\sigma_{E}^{2}t^{2}}{1+\\kappa}}\\cos^{2}\\left(\\frac{\\pi}{4}+\\frac{2\\sigma_{E}t}{\\sqrt{1+\\kappa^{-1}}}\\right)}{\\pi\\sigma_{E}^{3}t^{3}},",
+   "mathml": "<math display=\"block\"><mrow><mfrac><mrow><msup><mrow><mo>(</mo><mrow><mn>1</mn><mo>+</mo><msup><mi>κ</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>)</mo></mrow><mfrac><mn>3</mn><mn>2</mn></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mfrac><mrow><msubsup><mi>σ</mi><mi>E</mi><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>2</mn></msup></mrow><mrow><mn>1</mn><mo>+</mo><mi>κ</mi></mrow></mfrac></mrow></msup><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><msup><mi>cos</mi><mn>2</mn></msup><mo>⁡</mo><mrow><mo>(</mo><mrow><mfrac><mi>π</mi><mn>4</mn></mfrac><mo>+</mo><mfrac><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>σ</mi><mi>E</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><msqrt><mrow><mn>1</mn><mo>+</mo><msup><mi>κ</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow></msqrt></mfrac></mrow><mo>)</mo></mrow></mrow></mrow><mrow><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mi>σ</mi><mi>E</mi><mn>3</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>3</mn></msup></mrow></mfrac><mo>,</mo></mrow></math>",
+   "label": "(23)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "which implies oscillations with the envelope "
+    },
+    {
+     "text": "t−3e−σE2t21+κ",
+     "latex": "t^{-3}e^{-\\frac{\\sigma_{E}^{2}t^{2}}{1+\\kappa}}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>t</mi><mrow><mo>−</mo><mn>3</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mfrac><mrow><msubsup><mi>σ</mi><mi>E</mi><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>2</mn></msup></mrow><mrow><mn>1</mn><mo>+</mo><mi>κ</mi></mrow></mfrac></mrow></msup></mrow></math>"
+    },
+    {
+     "text": ". As one approaches the GOE and "
+    },
+    {
+     "text": "κ≫1",
+     "latex": "\\kappa\\gg 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>κ</mi><mo>≫</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", the Gaussian part of this expression becomes negligible, since we are considering finite times up to "
+    },
+    {
+     "text": "t≲tdip",
+     "latex": "t\\lesssim t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>≲</mo><msub><mi>t</mi><mi>dip</mi></msub></mrow></math>"
+    },
+    {
+     "text": ". In this case, the SFF exhibits a power-law decay "
+    },
+    {
+     "text": "∝t−3",
+     "latex": "\\propto t^{-3}",
+     "mathml": "<math display=\"inline\"><mrow><mphantom></mphantom><mo>∝</mo><msup><mi>t</mi><mrow><mo>−</mo><mn>3</mn></mrow></msup></mrow></math>"
+    },
+    {
+     "text": ". In fact, we verified numerically that even in the nonergodic region with "
+    },
+    {
+     "text": "0<γ<1",
+     "latex": "0<\\gamma<1",
+     "mathml": "<math display=\"inline\"><mrow><mn>0</mn><mo>&lt;</mo><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", the power-law decay exponent is still close to 3, as seen in Fig. 2(b). This means that variations in the value of "
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": " with respect to "
+    },
+    {
+     "text": "tdipGOE",
+     "latex": "t_{\\mathrm{dip}}^{\\text{GOE}}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>t</mi><mi>dip</mi><mtext>GOE</mtext></msubsup></math>"
+    },
+    {
+     "text": " are mainly caused by deviations of the BRM two-level form factor "
+    },
+    {
+     "text": "b2(τ)",
+     "latex": "b_{2}(\\tau)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>b</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " from "
+    },
+    {
+     "text": "b2GOE(τ)",
+     "latex": "b_{2}^{\\text{GOE}}(\\tau)",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>b</mi><mn>2</mn><mtext>GOE</mtext></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The differences between "
+    },
+    {
+     "text": "b2(τ)",
+     "latex": "b_{2}(\\tau)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>b</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "b2GOE(τ)",
+     "latex": "b_{2}^{\\text{GOE}}(\\tau)",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>b</mi><mn>2</mn><mtext>GOE</mtext></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " for "
+    },
+    {
+     "text": "τ≪1",
+     "latex": "\\tau\\ll 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>τ</mi><mo>≪</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " are evident in Fig. 4 for any "
+    },
+    {
+     "text": "γ<2",
+     "latex": "\\gamma<2",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&lt;</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ". This deviation is particularly pronounced in the nonergodic phase and is attributed to the presence of weak long-range correlations (further discussed in the next section). It results in the peculiar situation where the correlation hole persists in the nonergodic phase despite the absence of short-range energy correlations. In this phase, we observe that the depth of the correlation hole diminishes as "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " decreases, resulting in shorter values of "
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": " [compare Fig. 2(d) with Figs. 2(b)-(c)]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The behavior of "
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": " for BRMs is markedly different from what is observed in disordered many-body quantum systems, which deserves further explanations. In many-body quantum systems, disorder can take the system away from the chaotic phase. By increasing the disorder strength, the length scale of energy correlations (Thouless energy) is reduced [115], delaying the onset of the ramp [50, 51]. However, any two eigenvalues with spacing smaller than the Thouless energy remain correlated as in full random matrices. This behavior is similar to what is seen in the ergodic phase ("
+    },
+    {
+     "text": "γ>1",
+     "latex": "\\gamma>1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&gt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ") of BRM, where "
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": " is close to "
+    },
+    {
+     "text": "tdipGOE",
+     "latex": "t_{\\mathrm{dip}}^{\\mathrm{GOE}}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>t</mi><mi>dip</mi><mi>GOE</mi></msubsup></math>"
+    },
+    {
+     "text": " and the ramp of the SFF is mainly described by the two-level form factor of GOE. But everything changes in the nonergodic phase ("
+    },
+    {
+     "text": "γ<1",
+     "latex": "\\gamma<1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ") of BRM, where the Thouless energy is comparable to the mean level spacing. This means that the existing weak long-range correlations causing the correlation hole in Fig. 2(b) are fundamentally different from that of the GOE. As "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " decreases, the depth of the correlation hole diminishes, yet the power-law decay in the slope of the SFF remains "
+    },
+    {
+     "text": "∝t−3",
+     "latex": "\\propto t^{-3}",
+     "mathml": "<math display=\"inline\"><mrow><mphantom></mphantom><mo>∝</mo><msup><mi>t</mi><mrow><mo>−</mo><mn>3</mn></mrow></msup></mrow></math>"
+    },
+    {
+     "text": ", leading to the reduction of "
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "FIG. 5. Zeno time ("
+    },
+    {
+     "text": "tZeno",
+     "latex": "t_{\\mathrm{Zeno}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>Zeno</mi></msub></math>"
+    },
+    {
+     "text": "), time for the beginning of the ramp ("
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": "), relaxation time ("
+    },
+    {
+     "text": "tR",
+     "latex": "t_{\\mathrm{R}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>R</mi></msub></math>"
+    },
+    {
+     "text": "), and Heisenberg time ("
+    },
+    {
+     "text": "tH",
+     "latex": "t_{\\mathrm{H}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>H</mi></msub></math>"
+    },
+    {
+     "text": ") as a function of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": "; "
+    },
+    {
+     "text": "N=1024",
+     "latex": "N=1024",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo>=</mo><mn>1024</mn></mrow></math>"
+    },
+    {
+     "text": ". The spectrum is scaled such that "
+    },
+    {
+     "text": "σE=1/2",
+     "latex": "\\sigma_{E}=1/2",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>σ</mi><mi>E</mi></msub><mo>=</mo><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow></mrow></math>"
+    },
+    {
+     "text": " for all values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 4,
+   "spans": [
+    {
+     "text": "2. Relaxation time for BRM: "
+    },
+    {
+     "text": "tR",
+     "latex": "t_{\\mathrm{R}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>R</mi></msub></math>"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To obtain "
+    },
+    {
+     "text": "tR",
+     "latex": "t_{\\mathrm{R}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>R</mi></msub></math>"
+    },
+    {
+     "text": " for BRMs with "
+    },
+    {
+     "text": "0<γ<2",
+     "latex": "0<\\gamma<2",
+     "mathml": "<math display=\"inline\"><mrow><mn>0</mn><mo>&lt;</mo><mi>γ</mi><mo>&lt;</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ", we expand "
+    },
+    {
+     "text": "b2(τ)",
+     "latex": "b_{2}(\\tau)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>b</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " for long times, as done in the derivation of Eq. (22). For "
+    },
+    {
+     "text": "γ>1",
+     "latex": "\\gamma>1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&gt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "b2(τ)",
+     "latex": "b_{2}(\\tau)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>b</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " in Eq. (15) is similar to "
+    },
+    {
+     "text": "b2GOE(τ)",
+     "latex": "b_{2}^{\\text{GOE}}(\\tau)",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>b</mi><mn>2</mn><mtext>GOE</mtext></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>τ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " for large "
+    },
+    {
+     "text": "τ",
+     "latex": "\\tau",
+     "mathml": "<math display=\"inline\"><mi>τ</mi></math>"
+    },
+    {
+     "text": ", as visible in Fig. 4, and "
+    },
+    {
+     "text": "tR≈tH",
+     "latex": "t_{\\mathrm{R}}\\approx t_{\\mathrm{H}}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>t</mi><mi>R</mi></msub><mo>≈</mo><msub><mi>t</mi><mi>H</mi></msub></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "As "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " decreases below 1 and the second term in Eq. (15) becomes dominant, the two-level form factor gets exponentially suppressed, as seen in Fig. 4. In this case, the correlation hole gets shallower and "
+    },
+    {
+     "text": "tR",
+     "latex": "t_{\\mathrm{R}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>R</mi></msub></math>"
+    },
+    {
+     "text": " becomes smaller than "
+    },
+    {
+     "text": "tH∼𝒪(N)",
+     "latex": "t_{\\mathrm{H}}\\sim\\mathcal{O}(N)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>t</mi><mi>H</mi></msub><mo>∼</mo><mrow><mi>𝒪</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>N</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ", gradually approaching "
+    },
+    {
+     "text": "tRP",
+     "latex": "t_{\\mathrm{R}}^{\\mathrm{P}}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>t</mi><mi>R</mi><mi>P</mi></msubsup></math>"
+    },
+    {
+     "text": " given in Eq. (19). This change can be observed by comparing Fig. 2(d) for "
+    },
+    {
+     "text": "γ=2",
+     "latex": "\\gamma=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": " (GOE) with Fig. 2(b) for "
+    },
+    {
+     "text": "γ=0.4",
+     "latex": "\\gamma=0.4",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0.4</mn></mrow></math>"
+    },
+    {
+     "text": ". In the latter case, the marker "
+    },
+    {
+     "text": "◀",
+     "latex": "\\blacktriangleleft",
+     "mathml": "<math display=\"inline\"><mo>◀</mo></math>"
+    },
+    {
+     "text": ", representing the relaxation time, is seen before the Heisenberg time."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Figure 5 summarizes our discussions about the timescales involved in the evolution of the SFF. The Zeno time ("
+    },
+    {
+     "text": "tZeno",
+     "latex": "t_{\\mathrm{Zeno}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>Zeno</mi></msub></math>"
+    },
+    {
+     "text": "), the time for the beginning of the ramp ("
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": "), the relaxation time ("
+    },
+    {
+     "text": "tR",
+     "latex": "t_{\\mathrm{R}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>R</mi></msub></math>"
+    },
+    {
+     "text": "), and the Heisenberg time ("
+    },
+    {
+     "text": "tH",
+     "latex": "t_{\\mathrm{H}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>H</mi></msub></math>"
+    },
+    {
+     "text": ") are shown as a function of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " for "
+    },
+    {
+     "text": "0≤γ≤2",
+     "latex": "0\\leq\\gamma\\leq 2",
+     "mathml": "<math display=\"inline\"><mrow><mn>0</mn><mo>≤</mo><mi>γ</mi><mo>≤</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ". The most evident changes happen in the nonergodic phase, where "
+    },
+    {
+     "text": "tdip",
+     "latex": "t_{\\mathrm{dip}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>dip</mi></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "tR",
+     "latex": "t_{\\mathrm{R}}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>R</mi></msub></math>"
+    },
+    {
+     "text": " decrease as "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " approaches zero, eventually merging together when the correlation hole vanishes."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Thus, we find that the SFF of a BRM in the nonergodic phase ("
+    },
+    {
+     "text": "0<γ<1",
+     "latex": "0<\\gamma<1",
+     "mathml": "<math display=\"inline\"><mrow><mn>0</mn><mo>&lt;</mo><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ") exhibits a correlation hole (Figs. 2(b)-(d)) despite the absence of short-range energy correlations. This is a manifestation of the weak long-range correlations following Altshuler-Shklovskii statistics, as we discuss next."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "IV. LONG-RANGE SPECTRAL STATISTICS OF BRM"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In this section, we investigate two measures that capture short- as well as long-range energy correlations, the level number variance and the power spectrum, and we identify the Thouless energy, "
+    },
+    {
+     "text": "ETh",
+     "latex": "E_{\\textrm{Th}}",
+     "mathml": "<math display=\"inline\"><msub><mi>E</mi><mtext>Th</mtext></msub></math>"
+    },
+    {
+     "text": " [116–122]. In the ergodic phase, the Thouless energy determines the energy scale below which any two energy levels are correlated as in the GOE."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "A. Level Number Variance"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The level number variance is a tool to study energy correlations at length "
+    },
+    {
+     "text": "Δℰ",
+     "latex": "\\Delta_{\\mathcal{E}}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub></math>"
+    },
+    {
+     "text": ", providing information about the rigidity of the spectrum. It is defined as [4],"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\Sigma^{2}(\\Delta_{\\mathcal{E}})=\\langle\\mathcal{N}^{2}(\\Delta_{\\mathcal{E}},\\mathcal{E})\\rangle-\\langle\\mathcal{N}(\\Delta_{\\mathcal{E}},\\mathcal{E})\\rangle^{2},",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msup><mi mathvariant=\"normal\">Σ</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mrow><mo stretchy=\"false\">⟨</mo><mrow><msup><mi>𝒩</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo>,</mo><mi>ℰ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">⟩</mo></mrow><mo>−</mo><msup><mrow><mo stretchy=\"false\">⟨</mo><mrow><mi>𝒩</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo>,</mo><mi>ℰ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">⟩</mo></mrow><mn>2</mn></msup></mrow></mrow><mo>,</mo></mrow></math>",
+   "label": "(24)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "ℰ",
+     "latex": "\\mathcal{E}",
+     "mathml": "<math display=\"inline\"><mi>ℰ</mi></math>"
+    },
+    {
+     "text": " is the unfolded energy, "
+    },
+    {
+     "text": "𝒩(Δℰ,ℰ)",
+     "latex": "\\mathcal{N}(\\Delta_{\\mathcal{E}},\\mathcal{E})",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝒩</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo>,</mo><mi>ℰ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is the number of energy levels in the window "
+    },
+    {
+     "text": "[ℰ−Δℰ/2,ℰ+Δℰ/2]",
+     "latex": "[\\mathcal{E}-\\Delta_{\\mathcal{E}}/2,\\mathcal{E}+\\Delta_{\\mathcal{E}}/2]",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">[</mo><mrow><mrow><mi>ℰ</mi><mo>−</mo><mrow><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo>/</mo><mn>2</mn></mrow></mrow><mo>,</mo><mrow><mi>ℰ</mi><mo>+</mo><mrow><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo>/</mo><mn>2</mn></mrow></mrow></mrow><mo stretchy=\"false\">]</mo></mrow></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "⟨.⟩",
+     "latex": "\\left\\langle.\\right\\rangle",
+     "mathml": "<math display=\"inline\"><mrow><mo>⟨</mo><mo lspace=\"0em\" rspace=\"0.167em\">.</mo><mo>⟩</mo></mrow></math>"
+    },
+    {
+     "text": " indicates average over the spectrum."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For GOE ("
+    },
+    {
+     "text": "γ=2",
+     "latex": "\\gamma=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": "), the energy spectrum is rigid, so any two energy levels are correlated and the level number variance exhibits a logarithmic behavior with "
+    },
+    {
+     "text": "Δℰ",
+     "latex": "\\Delta_{\\mathcal{E}}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub></math>"
+    },
+    {
+     "text": " [3]. For the Poisson ensemble ("
+    },
+    {
+     "text": "γ=0",
+     "latex": "\\gamma=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": "), absence of energy correlation leads to the linear increase of "
+    },
+    {
+     "text": "Σ2",
+     "latex": "\\Sigma^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi mathvariant=\"normal\">Σ</mi><mn>2</mn></msup></math>"
+    },
+    {
+     "text": " with "
+    },
+    {
+     "text": "Δℰ",
+     "latex": "\\Delta_{\\mathcal{E}}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To study the level number variance of BRMs with "
+    },
+    {
+     "text": "0<γ<2",
+     "latex": "0<\\gamma<2",
+     "mathml": "<math display=\"inline\"><mrow><mn>0</mn><mo>&lt;</mo><mi>γ</mi><mo>&lt;</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ", we focus on the middle of the unfolded spectrum, "
+    },
+    {
+     "text": "ℰ∼N/2",
+     "latex": "\\mathcal{E}\\sim N/2",
+     "mathml": "<math display=\"inline\"><mrow><mi>ℰ</mi><mo>∼</mo><mrow><mi>N</mi><mo>/</mo><mn>2</mn></mrow></mrow></math>"
+    },
+    {
+     "text": ", and perform ensemble averages. The results in Fig. 6(a) show curves for "
+    },
+    {
+     "text": "Σ2(Δℰ)",
+     "latex": "\\Sigma^{2}(\\Delta_{\\mathcal{E}})",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi mathvariant=\"normal\">Σ</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " between those for the Poisson ensemble and the GOE."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In the ergodic phase of BRM ("
+    },
+    {
+     "text": "γ>1",
+     "latex": "\\gamma>1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&gt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": "), an excitation propagates diffusively with a diffusion constant "
+    },
+    {
+     "text": "∼b2",
+     "latex": "\\sim b^{2}",
+     "mathml": "<math display=\"inline\"><mrow><mphantom></mphantom><mo>∼</mo><msup><mi>b</mi><mn>2</mn></msup></mrow></math>"
+    },
+    {
+     "text": " [123], hence, "
+    },
+    {
+     "text": "ETh≈b2/N2",
+     "latex": "E_{\\textrm{Th}}\\approx b^{2}/N^{2}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>E</mi><mtext>Th</mtext></msub><mo>≈</mo><mrow><msup><mi>b</mi><mn>2</mn></msup><mo>/</mo><msup><mi>N</mi><mn>2</mn></msup></mrow></mrow></math>"
+    },
+    {
+     "text": " provided "
+    },
+    {
+     "text": "σE",
+     "latex": "\\sigma_{E}",
+     "mathml": "<math display=\"inline\"><msub><mi>σ</mi><mi>E</mi></msub></math>"
+    },
+    {
+     "text": " is system size independent [53]. In contrast, in the non-ergodic phase, the absence of any short-range energy correlation implies that the Thouless energy has the same order of magnitude as the mean level spacing, thus "
+    },
+    {
+     "text": "ETh∼σE/N",
+     "latex": "E_{\\textrm{Th}}\\sim\\sigma_{E}/N",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>E</mi><mtext>Th</mtext></msub><mo>∼</mo><mrow><msub><mi>σ</mi><mi>E</mi></msub><mo>/</mo><mi>N</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ". This means that the unfolded Thouless energy can be expressed as"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathcal{E}_{\\mathrm{Th}}=N^{\\alpha_{\\mathrm{Th}}},\\quad\\alpha_{\\mathrm{Th}}=\\begin{cases}0,&\\gamma<1\\\\\n\\gamma-1,&\\gamma\\geq 1\\end{cases}.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><msub><mi>ℰ</mi><mi>Th</mi></msub><mo>=</mo><msup><mi>N</mi><msub><mi>α</mi><mi>Th</mi></msub></msup></mrow><mo rspace=\"1.167em\">,</mo><mrow><msub><mi>α</mi><mi>Th</mi></msub><mo>=</mo><mrow><mo>{</mo><mtable columnspacing=\"5pt\" rowspacing=\"0pt\"><mtr><mtd columnalign=\"left\"><mrow><mn>0</mn><mo>,</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow></mtd></mtr><mtr><mtd columnalign=\"left\"><mrow><mrow><mi>γ</mi><mo>−</mo><mn>1</mn></mrow><mo>,</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mi>γ</mi><mo>≥</mo><mn>1</mn></mrow></mtd></mtr></mtable></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(25)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We confirm the validity of Eq. (25) in Fig. 6(b). The scaling analysis to obtain "
+    },
+    {
+     "text": "αTh",
+     "latex": "\\alpha_{\\mathrm{Th}}",
+     "mathml": "<math display=\"inline\"><msub><mi>α</mi><mi>Th</mi></msub></math>"
+    },
+    {
+     "text": " is shown in the inset of Fig. 6(b)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In terms of "
+    },
+    {
+     "text": "ℰTh",
+     "latex": "\\mathcal{E}_{\\mathrm{Th}}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℰ</mi><mi>Th</mi></msub></math>"
+    },
+    {
+     "text": ", we corroborate in Fig. 6(a) that in the ergodic phase ("
+    },
+    {
+     "text": "γ>1",
+     "latex": "\\gamma>1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&gt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": "), any two unfolded eigenvalues with spacing smaller than "
+    },
+    {
+     "text": "ℰTh",
+     "latex": "\\mathcal{E}_{\\mathrm{Th}}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℰ</mi><mi>Th</mi></msub></math>"
+    },
+    {
+     "text": " are correlated as in the GOE, while in the nonergodic phase ("
+    },
+    {
+     "text": "γ<1",
+     "latex": "\\gamma<1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": "), they are uncorrelated. That is, for "
+    },
+    {
+     "text": "Δℰ<ℰTh",
+     "latex": "\\Delta_{\\mathcal{E}}<\\mathcal{E}_{\\mathrm{Th}}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo>&lt;</mo><msub><mi>ℰ</mi><mi>Th</mi></msub></mrow></math>"
+    },
+    {
+     "text": ","
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\Sigma^{2}(\\Delta_{\\mathcal{E}})\\propto\\begin{cases}\\log(\\Delta_\\mathcal{E}),&\\gamma>1\\\\\n\\Delta_{\\mathcal{E}},&\\gamma<1.\\end{cases}",
+   "mathml": "<math display=\"inline\"><mrow><mrow><msup><mi mathvariant=\"normal\">Σ</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>∝</mo><mrow><mo>{</mo><mtable columnspacing=\"5pt\" rowspacing=\"0pt\"><mtr><mtd columnalign=\"left\"><mrow><mrow><mi>log</mi><mo>⁡</mo><mrow><mo>(</mo><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo>)</mo></mrow></mrow><mo>,</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mi>γ</mi><mo>&gt;</mo><mn>1</mn></mrow></mtd></mtr><mtr><mtd columnalign=\"left\"><mrow><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo>,</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mrow><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></mrow></mrow></math>",
+   "label": "(26)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We also verified that in the ergodic phase ("
+    },
+    {
+     "text": "γ>1",
+     "latex": "\\gamma>1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&gt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": "), for a fixed value of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": ", the level number variance "
+    },
+    {
+     "text": "Σ2(Δℰ)",
+     "latex": "\\Sigma^{2}(\\Delta_{\\mathcal{E}})",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi mathvariant=\"normal\">Σ</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " deviates from the logarithmic behavior at larger values of "
+    },
+    {
+     "text": "Δℰ",
+     "latex": "\\Delta_{\\mathcal{E}}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub></math>"
+    },
+    {
+     "text": " upon increasing "
+    },
+    {
+     "text": "N",
+     "latex": "N",
+     "mathml": "<math display=\"inline\"><mi>N</mi></math>"
+    },
+    {
+     "text": ", that is, the Thouless energy grows with "
+    },
+    {
+     "text": "N",
+     "latex": "N",
+     "mathml": "<math display=\"inline\"><mi>N</mi></math>"
+    },
+    {
+     "text": " following Eq. (25). Thus, for a fixed value of "
+    },
+    {
+     "text": "γ>1",
+     "latex": "\\gamma>1",
+     "mathml": "<math display=\"inline\"><mrow><mi>γ</mi><mo>&gt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", the energy spectrum becomes more rigid as the matrix size increases. In contrast, the level number variance is system size independent at the critical point, "
+    },
+    {
+     "text": "γc=1",
+     "latex": "\\gamma_{c}=1",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>γ</mi><mi>c</mi></msub><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "FIG. 6. (a) Level number variance for various values of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": "; "
+    },
+    {
+     "text": "N=1024",
+     "latex": "N=1024",
+     "mathml": "<math display=\"inline\"><mrow><mi>N</mi><mo>=</mo><mn>1024</mn></mrow></math>"
+    },
+    {
+     "text": ", average over middle of the spectrum and ensemble realizations. Dashed blue (pink) line denotes the analytical expression for the Poisson ensemble (GOE). The power-law behavior for large energy gaps, "
+    },
+    {
+     "text": "Σ2(Δℰ≫1)∝Δℰα",
+     "latex": "\\Sigma^{2}(\\Delta_{\\mathcal{E}}\\gg 1)\\propto\\Delta_{\\mathcal{E}}^{\\alpha}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msup><mi mathvariant=\"normal\">Σ</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo>≫</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>∝</mo><msubsup><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi><mi>α</mi></msubsup></mrow></math>"
+    },
+    {
+     "text": ", is shown with gray dashed lines in the main panel and plotted in the inset (i) along with a linear fit in log-log scale. The fitting is used to obtain the power-law growth exponent, "
+    },
+    {
+     "text": "α",
+     "latex": "\\alpha",
+     "mathml": "<math display=\"inline\"><mi>α</mi></math>"
+    },
+    {
+     "text": ", shown in the inset (ii) as a function of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " via errorbars with 95% confidence interval. (b) "
+    },
+    {
+     "text": "αTh",
+     "latex": "\\alpha_{\\mathrm{Th}}",
+     "mathml": "<math display=\"inline\"><msub><mi>α</mi><mi>Th</mi></msub></math>"
+    },
+    {
+     "text": " from the system size scaling of the unfolded Thouless energy, "
+    },
+    {
+     "text": "ℰTh∝NαTh",
+     "latex": "\\mathcal{E}_{\\mathrm{Th}}\\propto N^{\\alpha_{\\mathrm{Th}}}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ℰ</mi><mi>Th</mi></msub><mo>∝</mo><msup><mi>N</mi><msub><mi>α</mi><mi>Th</mi></msub></msup></mrow></math>"
+    },
+    {
+     "text": ", as a function of "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": ". The dashed line follows Eq. (25). The inset shows "
+    },
+    {
+     "text": "ℰTh",
+     "latex": "\\mathcal{E}_{\\mathrm{Th}}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℰ</mi><mi>Th</mi></msub></math>"
+    },
+    {
+     "text": " vs. "
+    },
+    {
+     "text": "N",
+     "latex": "N",
+     "mathml": "<math display=\"inline\"><mi>N</mi></math>"
+    },
+    {
+     "text": " for various "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " with linear fit in log-log scale."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A rather counterintuitive scenario for BRM is what happens for "
+    },
+    {
+     "text": "Δℰ>ℰTh",
+     "latex": "\\Delta_{\\mathcal{E}}>\\mathcal{E}_{\\mathrm{Th}}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo>&gt;</mo><msub><mi>ℰ</mi><mi>Th</mi></msub></mrow></math>"
+    },
+    {
+     "text": ". As shown in Ref. [53], above the Thouless energy, weak long-range correlations exist for BRM and follow the Altshuler-Shklovskii statistics [117],"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\Sigma^{2}(\\Delta_{\\mathcal{E}})\\propto\\sqrt{\\Delta_{\\mathcal{E}}},",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msup><mi mathvariant=\"normal\">Σ</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>∝</mo><msqrt><msub><mi mathvariant=\"normal\">Δ</mi><mi>ℰ</mi></msub></msqrt></mrow><mo>,</mo></mrow></math>",
+   "label": "(27)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "irrespective of the localization properties of the eigenstates. This implies that even in the nonergodic phase with "
+    },
+    {
+     "text": "0<γ<1",
+     "latex": "0<\\gamma<1",
+     "mathml": "<math display=\"inline\"><mrow><mn>0</mn><mo>&lt;</mo><mi>γ</mi><mo>&lt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", any two unfolded eigenvalues with"
+    }
+   ]
+  }
+ ],
+ "furniture": [
+  "arXiv:2502.02648v2 [cond-mat.dis-nn] 9 Jun 2025",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8"
+ ],
+ "license": "open",
+ "provenance": "latexml",
+ "notes": "arXiv 2502.02648v2 (physics (random matrices); revtex, two columns), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Macros expanded: \\Ecal \\Tr \\absolutevalue."
+}

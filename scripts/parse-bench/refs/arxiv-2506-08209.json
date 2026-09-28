@@ -1,0 +1,615 @@
+{
+ "id": "arxiv-2506-08209",
+ "category": "paper",
+ "source": {
+  "pdf": ".bench/arxiv/2506.08209v1.pdf",
+  "url": "https://arxiv.org/abs/2506.08209v1"
+ },
+ "pages": [
+  1,
+  10
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "VALUING DIFFUSE GLOBAL PUBLIC GOODS FROM SATELLITE CONSTELLATIONS: EVIDENCE FROM GPS AND AIRLINE DELAYS",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Lev Ricanati∗"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "June 11, 2025"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "",
+   "spans": [
+    {
+     "text": "The author is grateful to Nicholas Buchholz and Brian Weeden for their assistance in crafting this paper."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "∗",
+   "spans": [
+    {
+     "text": "Department of Economics, Princeton University, levr@princeton.edu."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Abstract"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This paper studies the welfare impact of discrete improvements to global public goods in the context of the Global Positioning System (GPS). Specifically, I find that by disabling Selective Availability in May, 2000, and thus significantly increasing the accuracy of GPS, the United States generated at least $268 million (2000 dollars) of additional welfare gains. To quantify this welfare impact, I apply a difference-in-differences model to the Bureau of Transportation Statistics’s Airline On-Time Performance Data in the years 1999 and 2000. I use this model to estimate the time saved per flight attributable to the improved GPS and multiply these time savings by the number of passengers in the ensuing year and their values of time. I conclude by estimating the economic loss from current threats to the provision of satellite-based global public goods."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Contents"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "1",
+     "spans": [
+      {
+       "text": "Introduction",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "1.1",
+     "spans": [
+      {
+       "text": "Literature Review"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "1.2",
+     "spans": [
+      {
+       "text": "Background"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "2",
+     "spans": [
+      {
+       "text": "Data",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "2.1",
+     "spans": [
+      {
+       "text": "Creation of Additional Delay Variable"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "2.2",
+     "spans": [
+      {
+       "text": "Creation of Control Variables"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "2.3",
+     "spans": [
+      {
+       "text": "Additional Data Used"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "3",
+     "spans": [
+      {
+       "text": "Methodology",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "3.1",
+     "spans": [
+      {
+       "text": "Quantifying the Time Saved From Improved GPS"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "3.2",
+     "spans": [
+      {
+       "text": "Quantifying the Monetary Value of Time Saved"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "4",
+     "spans": [
+      {
+       "text": "Results",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "4.1",
+     "spans": [
+      {
+       "text": "GPS Effects on In-flight Delays"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "4.2",
+     "spans": [
+      {
+       "text": "Estimated Welfare Effects"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "4.3",
+     "spans": [
+      {
+       "text": "Challenges to GPS Provision: Jamming and Spoofing"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "5",
+     "spans": [
+      {
+       "text": "Policy Recommendations and Future Research",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "5.1",
+     "spans": [
+      {
+       "text": "Policy Recommendations: Jamming and Spoofing"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "5.2",
+     "spans": [
+      {
+       "text": "Limitations and Future Research"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "6",
+     "spans": [
+      {
+       "text": "Conclusion",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "A",
+     "spans": [
+      {
+       "text": "Estimated Welfare Gains Under Each Regression Scenario",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "B",
+     "spans": [
+      {
+       "text": "Data Cleaning Overview",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "C",
+     "spans": [
+      {
+       "text": "Estimation Coefficients",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "C.1",
+     "spans": [
+      {
+       "text": "Base Regression"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "C.2",
+     "spans": [
+      {
+       "text": "Regression by Month Groups"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "C.3",
+     "spans": [
+      {
+       "text": "Regression by Distance Groups"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "C.4",
+     "spans": [
+      {
+       "text": "Regression by Distance Groups Within Month Groups"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "D",
+     "spans": [
+      {
+       "text": "Regression Results by Flight Distance Within Recency-Based Subdivisions",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "D.1",
+     "spans": [
+      {
+       "text": "1 Month Regression"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "D.2",
+     "spans": [
+      {
+       "text": "2 Month Regression"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "D.3",
+     "spans": [
+      {
+       "text": "3 Month Regression"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "D.4",
+     "spans": [
+      {
+       "text": "4 Month Regression"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "E",
+     "spans": [
+      {
+       "text": "AI Acknowledgment",
+       "bold": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "1 Introduction"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Due to the immense welfare benefits generated by global public goods (GPGs), small improvements in their efficiency can lead to large increases in global welfare. Classic examples of GPGs include global standard regulatory practices, weather monitoring satellites, and the preservation of diverse ecosystems. The welfare benefits of GPGs are often quite diffuse meaning that benefits are large in aggregate rather than per individual. One important GPG with diffuse benefits is the Global Positioning System (GPS). GPS is a network of 31 satellites owned and operated by the United States (US) that provides anyone around the globe with their location free of charge (23)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In this paper, I investigate the impact of discrete improvements to satellite based GPGs, specifically by analyzing an accuracy improvement to GPS in May 2000. I find that the improvement led to a welfare gain of $268 million (2000 dollars) in the year following implementation.1 This amount is more than twice what the US congress appropriated for the system in 2000 (24). Importantly, the welfare gains I calculate are only a small part of the total gains from this improvement. The increased accuracy of GPS improved the commercial viability of existing GPS-reliant industries and spawned entirely new ones such as smartphone navigation and precision agriculture (O’Connor et al., 2019a). The total welfare generated by this improvement, both from its impact on existing industries and its enabling of new ones, was likely in the billions of dollars each year. This analysis illustrates how GPGs turn efficiency improvements into massive welfare gains. This is particularly important to understand amidst the recent rise in the use of GPS jamming and spoofing technologies in conflict zones, which has disrupted commercial flights and erased the benefits wrought from GPS."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "1",
+   "spans": [
+    {
+     "text": "Equivalent to just over $504 million in 2025 dollars (18)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "When it was initially designed and built, the widely available civil GPS signal was intentionally degraded in a policy known as Selective Availability (SA) which excluded non-military users from accessing precise GPS. While Selective Availability was in place, the civil GPS signal was only accurate to 300 feet, equivalent to the difference of trying to land on a runway and ending up one or two runway widths away (22). At midnight on May 2nd, 2000, President Clinton disabled Selective Availability, instantly making the civil signal 10 times more accurate (17). This decision transformed GPS overnight into a usable global public good without any cost incurred by the government or consumers."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "I focus my analysis of the economic effects of this decision on US airline delays. Using a government dataset of all domestic flights and their delays, I run a difference-in-differences regression to isolate the effect of SA on flight delays. Due to the lack of a natural control, I split the data and designate flights in 1999 as the control group and flights in 2000 as the treatment group. I conduct a series of regressions segmented by flight distance and amount of time post-treatment. The results of my analysis show that the removal of SA led to a general reduction in airline delays of 0.617 minutes per flight with savings of up to 3 minutes on longer flights in the first few months. I hypothesize that the mechanism for the reduced delays was pilots’ ability to adhere to flight plans more accurately throughout their flights."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To estimate the welfare gains, I multiply the time saved per flight by the number of domestic US passengers per month and the Department of Transportation’s estimates for how much passengers value the time they spend traveling by air. This method results in a value of $268 million in welfare savings from all US passengers in the year following May 2nd, 2000."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Global satellite constellations, like post-SA GPS, are true global public goods. They provide non-rival and non-excludable benefits to anyone with a receiver, which are relatively cheap to acquire. Welfare benefits from these constellations are accrued around the globe and are therefore difficult to quantify. This becomes a problem for governments deciding whether or not to invest in these systems. Lacking an easy cost-benefit analysis makes it more difficult to argue for the provision or improvement of satellite based GPGs. This can slow down the implementation of welfare-enhancing upgrades. This paper demonstrates that the removal of SA was indeed welfare-enhancing, hopefully motivating future investments into protecting and improving GPS services."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "I start by discussing relevant literature and then provide a brief history of GPS and SA. I proceed to talk about the origins of the data, including summary statistics and graphs. I then discuss the methodology I use as well as the assumptions I make, followed by the regression results. The results include a preliminary quantification of the welfare losses from 2 current threats to GPS provision, jamming and spoofing. Finally, I present policy recommendations for ensuring continuous GPS as well as directions for future research."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "1.1 Literature Review"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A lot has been written about the economic impact of GPS, both on existing markets and through the creation of novel ones. Two oft cited reports, one in 2011 and the other in 2019, attempt to quantify the economic benefits of GPS (O’Connor et al., 2019a; Pham, 2011a). The 2011 report places the economic benefit at $67.6 billion per year in the US. The author recognizes the growing nature of GPS enabled industries and predicts that this economic benefit could reach $122.4 billion per year (Pham, 2011a, p. 1). The later report, in 2019, concludes that GPS added $1.4 trillion in economic benefits since it was opened to public use in 1983 with about 90% of those benefits accumulating in the 2010s (O’Connor et al., 2019a, p. ES-3). These reports also attempt to quantify what the cost of a disruption to GPS would be. Pham (2011a) calculates the economic loss from a GPS disruption to be equal to the current benefit of GPS plus the monetary value invested into GPS technology, such as receivers (Pham, 2011a, p. 12). One problem with this approach is that some industries would be able to revert to other systems or practices in the event of an outage. These industries would still then be able to generate some economic activity, just not at the levels that GPS enabled. O’Connor et al. (2019a) take this into consideration in the methodology of their report leading to an estimation of $1 billion lost per day in the event of a GPS outage (O’Connor et al., 2019a, p. ES-4).2 As the authors acknowledge, this number is probably an underestimate because they did not include industries where GPS has led to efficiency gains but was not central to the performance of the industry. One of the industries they chose not to study was aviation, leaving a hole in the literature on the economic benefits of GPS."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "2",
+   "spans": [
+    {
+     "text": "They assume that other countries’ satellite navigation systems are also disabled."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "There has also been very little study of the Selective Availability decision and its economic impact. The literature that does exist on SA focuses more on the political decision making surrounding its removal rather than the economic effects (Gleason, 2009a; Weeden, 2017a). One unpublished cost-benefit analysis of the decision concluded that “the clear decision from an efficiency standpoint [was] to eliminate SA”, however, it stopped short of quantifying this efficiency gain (Weeden, 2013a, p. 24). Likewise, a 2002 paper charting the evolution of GPS, predicted that GPS, recently at its full commercial potential, could reduce flight times by 2% due to efficiencies in routing planes (Kumar & Moore, 2002a, p. 68). My paper intends to add to the scholarship on the economic impact of GPS by addressing the lack of quantification of the economic value to the US aviation industry generated by removing SA. My decision to focus on the impact on aviation is motivated by both the lack of previous literature on the specific effects of GPS on aviation and the use of improved aviation performance as one of the main arguments made for turning off SA (Weeden, 2017a, p. 151)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In quantifying the value of turning off SA, I utilize concepts from the economics literature on how consumers value their time. The economics field of transportation analysis contains several analyses of consumers’ Value of Time (VOT), i.e. how much a consumer would be willing to pay for a reduction in travel time. VOT numbers are influenced by factors such as the reliability of the travel, costs incurred, and the total travel time (Small, 2012a). VOT literature has focused on different components of the travel experience. Small (2012a) distinguishes between analyses that focus on consumer Value of Reliability (VOR) and VOT, referring primarily to the time spent in transit (Small, 2012a, p. 2). Another approach to VOT is to quantify consumer willingness to pay for reductions in pre-travel waiting times. This is useful for evaluating technologies such as ride-hailing apps that attempt to make waiting times transparent and shorter (Buchholz et al., 2024a). The analysis in this paper centers on a technology, GPS, that reduced inflight delays compared to pre-GPS flights. Passengers derived benefits from these reduced delays through having more time post-flight to allocate to work or leisure. In order to quantify the value of this additional time, I utilize the Department of Transportation’s (DOT) estimation of air travelers’ valuations of reduced travel times."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Finally, my paper is situated within the literature on global public goods. Classic GPG literature defines them as public goods that affect a majority of countries and that are provisioned by multiple countries (Buchholz & Sandler, 2021a). Examples include combating climate change, setting regulatory standards, or fighting a pandemic. Under this definition, GPS is a different kind of GPG because it can benefit anyone on the globe but is only provisioned and paid for by one country. This is partially because it was originally developed as a military system for global military operations, not as a public good for commercial use. GPS’s development and eventual conversion into a GPG can be explained using the framework developed by Boadway & Hayashi (1999a) for state decision making related to GPGs. They posit that states weigh the benefit to their citizens in addition to the benefit to the world when deciding whether to contribute to a GPG. Therefore, the US would want to develop GPS because of the large benefit it could provide to its citizens, both economically and as part of the public good of military protection."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "1.2 Background"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "GPS-enabled navigation is a relatively simple system. At all times, a constellation of, at minimum, 24 GPS satellites are orbiting the Earth such that any user always has 4 satellites overhead. Each satellite sends out radio signals with their location and the time of the signal. Using this information, GPS receivers triangulate users’ positions in 3 dimensions."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The first modern GPS satellite was launched in 1978 by the Department of Defense (DOD). Originally, the system was designed purely for military use and the location and timing signals were encrypted. GPS was indeed quite important to the military and contributed to the success of US ground forces in the 1991 Gulf War (21). However, in 1983, a passenger airliner was shot down after drifting into Soviet airspace prompting President Reagan to decree that GPS should be available to the public for free (Pellerin, 2013a). In order to maintain its military edge, the DOD implemented a policy of Selective Availability. SA involved intentionally introducing errors into the GPS signals such that non-military users were not able to pinpoint their location with a high degree of accuracy. As one US Navy official put it, it was the difference between “dropping a bomb in the stadium… [and] dropping a bomb in the huddle” (Weeden, 2017a, p. 151). A debate emerged in the 1990s over whether or not to disable SA. One of the major points of contention in this debate was whether the commercial gain would be worth sacrificing the military advantage of excludable GPS (Weeden, 2017a). As one DOD employee said in 1996, “something that’s always been lacking… is the ability to assign specific costs and benefits of the GPS contribution to society” (Weeden, 2017a, p. 155). This debate went back and forth between the FAA and the DOD with little progress towards resolving it."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "However, on May 1st, 2000, President Clinton declared that he was disabling SA at midnight that night. This decision came as a surprise to most people because the accepted timeline was that SA would be disabled at some point in the mid-2000s (Weeden, 2017a, p. 186). People familiar with the decision say that it was in part motivated by the European push to get their competing global navigation satellite system, Galileo, launched and operating (Weeden, 2017a, p. 187). Galileo has since been deployed but the decision to turn off SA before any Galileo satellites could be launched very likely contributed to GPS becoming the dominant and standard global navigation satellite system."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Since the public was given access to GPS’s full accuracy, many commercial industries have embraced the technology. These include existing industries such as shipping and aviation and brand new industries such as on-demand ride hailing, smartphone navigation, and precision agriculture. One such application of GPS made possible by the removal of SA was the advent of Geocaching, a global community of players who hide containers and publish the coordinates online for others to find using GPS. Public excitement about the removal of SA is evident in the fact that the first Geocache was placed on May 3rd, 2000, one day after SA was disabled (Brigitte, 2020a)."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "2 Data"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The main data source for this paper is the Bureau of Transportation Statistics’s (BTS) Airline On-Time Performance Data (16). This dataset includes routing and performance data for reported domestic US flights in a selected time period. The flights were reported to BTS by all airlines that were responsible for at least 1 percent of domestic scheduled passenger revenues. This paper specifically looks at all flights in the years 1999 and 2000. In total, there are 11,210,931 observations in the dataset split into 5,527,884 in 1999 and 5,683,047 in 2000."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The cleaned quantitative variables for each flight are summarized in Table 1.3 All of the variables were part of the original dataset except "
+    },
+    {
+     "text": "adddelay",
+     "italic": true
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "3",
+   "spans": [
+    {
+     "text": "Data cleaning procedures are described in Appendix B. In total, 631 flights were removed from the dataset for potential inaccuracies."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In addition to the quantitative variables, the dataset contained information on a given flight’s origin, destination, and airline. Due to the reporting requirements, the dataset contained flights from the 11 largest airlines at the time. These airlines are American Airlines (AA), Alaska Airlines (AS), Continental Airlines (CO), Delta Airlines (DL), America West Airlines (HP), Aloha Air Cargo (KH), Northwest Airlines (NW), Trans World Airways (TW), United Air Lines (UA), US Helicopter Corporation (US), and Southwest Airlines (WN)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "US Helicopter Corporation’s inclusion in the dataset helps explain the observations with low flight distances. The shortest flights were helicopter rides between regional airports"
+    }
+   ]
+  }
+ ],
+ "furniture": [
+  "arXiv:2506.08209v1 [econ.GN] 9 Jun 2025",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9"
+ ],
+ "license": "open",
+ "provenance": "latexml",
+ "notes": "arXiv 2506.08209v1 (economics; one column, double spaced, tables), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words."
+}

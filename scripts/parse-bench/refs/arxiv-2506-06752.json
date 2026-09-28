@@ -1,0 +1,1773 @@
+{
+ "id": "arxiv-2506-06752",
+ "category": "paper",
+ "source": {
+  "pdf": ".bench/arxiv/2506.06752v1.pdf",
+  "url": "https://arxiv.org/abs/2506.06752v1"
+ },
+ "pages": [
+  1,
+  8
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "Depth-Optimal Quantum Layout Synthesis as SAT"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Anna B. Jakobsen #"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Department of Computer Science, Aarhus University, Denmark"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Anders B. Clausen #"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Department of Computer Science, Aarhus University, Denmark"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Jaco van de Pol #"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Department of Computer Science, Aarhus University, Denmark"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Irfansha Shaik #"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Department of Computer Science, Aarhus University, Denmark"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Kvantify Aps, DK-2300 Copenhagen S, Denmark"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "∗",
+   "spans": [
+    {
+     "text": "This is the technical report for A. B. Jakobsen, A. B. Clausen, J. van de Pol and I. Shaik, Depth-Optimal Quantum Layout Synthesis as SAT. In: Proc. IC on Theory and Applications of Satisfiability Testing, SAT 2025, (SAT’25), Glasgow, UK, 2025."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Abstract"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Quantum circuits consist of gates applied to qubits. Current quantum hardware platforms impose connectivity restrictions on binary CX gates. Hence, Layout Synthesis is an important step to transpile quantum circuits before they can be executed. Since CX gates are noisy, it is important to reduce the CX count or CX depth of the mapped circuits."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We provide a new and efficient encoding of Quantum-circuit Layout Synthesis in SAT. Previous SAT encodings focused on gate count and CX-gate count. Our encoding instead guarantees that we find mapped circuits with minimal circuit depth or minimal CX-gate depth. We use incremental SAT solving and parallel plans for an efficient encoding. This results in speedups of more than 10-100x compared to OLSQ2, which guarantees depth-optimality. But minimizing depth still takes more time than minimizing gate count with Q-Synth."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We correlate the noise reduction achieved by simulating circuits after (CX)-count and (CX)-depth reduction. We find that minimizing for CX-count correlates better with reducing noise than minimizing for CX-depth. However, taking into account both CX-count and CX-depth provides the best noise reduction."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "2012 ACM Subject Classification Hardware → Quantum computation; Computing methodologies → Planning for deterministic actions"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Keywords and phrases Quantum Layout Synthesis, Transpiling, Circuit Mapping, Incremental SAT, Parallel Plans"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Supplementary Material Software (Github): https://github.com/anbclausen/quills Software and Experimental Data (Zenodo link): https://doi.org/10.5281/zenodo.15606051"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Funding This research was partially funded by the Innovation Fund Denmark project “Automated Planning for Quantum Circuit Optimization”. This research was also partially funded by the European Innovation Council through Accelerator grant no. 190124924."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Acknowledgements This paper is based on the MSc-thesis of Anna B. Jakobsen and Anders B. Clausen. They contributed equally to this work. We thank Kostiantyn V. Milkevych for porting Quills to Q-Synth v4."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "1 Introduction"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "With recent advances in quantum hardware, there is a surge of interest in scalable compilation techniques. In order to execute a quantum program, it must be compiled to a circuit with unary and binary gates, while handling hardware restrictions. The quantum compilation pipeline broadly consists of two steps: Circuit Synthesis and Layout Synthesis. In this paper, we focus on the Quantum Layout Synthesis (QLS) problem [13, 25, 15, 20] that transforms a “logical” quantum circuit consisting of native gates into an equivalent circuit that respects the connectivity of a physical quantum platform. Many quantum platforms do not support all-to-all connectivity of physical qubits, thus restricting the application of binary gates to only neighboring qubits. We assume that the only gates in the input circuit are unary gates and the binary CX (Conditional NOT) gate. The physical platform is specified by an (undirected) graph on physical qubits, the coupling map. The output is an initial mapping of the logical qubits onto the physical qubits, as well as a new, equivalent circuit, in which CX gates are only applied to physical qubits that are connected in the coupling map. To ensure this, so-called SWAP gates may be inserted to route interacting logical qubits towards connected physical qubits. During routing, the order of the gates must also be respected."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Note that the QLS problem may admit many possible solutions. One can easily schedule all gates by eagerly adding SWAP gates to bring distant logical qubits closer together. Although the primary objective of QLS is to handle connectivity restrictions, the secondary objective is to maximize hardware performance. In the current Noisy Intermediate Scale Quantum (NISQ) era, qubits are noisy, and every gate adds to the error. Reducing noise is crucial for practical quantum computing. While there does not exist a single metric that predicts actual hardware performance, there exist some simple metrics like gate-count that are indicative. Since binary CX gates can be up to 10 times more error-prone than unary gates, the number of CX gates (CX-count metric) is more relevant than just gate count [14]. Since SWAP gates are usually implemented by 3 CX gates each, solutions with too many SWAPs should be avoided. Several heuristic approaches have been proposed that reduce the additional SWAP gates. The most famous is SABRE [13] (available in IBM’s Qiskit), which implements a very fast heuristic to find a correct layout mapping. The tool MQT QMAP provides a heuristic approach based on the A*-algorithm [28]. There exist a myriad of other heuristic approaches that focus on CX-count optimization, we refer to [22] for a detailed survey. While heuristic approaches are fast, their solutions are often far from optimal [15]. Unfortunately, the optimal QLS problem is NP-hard [23]. The problem remains hard when considering natural restrictions on the coupling graph, like planar graphs [6] and bipartite graphs [11], and it is even conjectured to be NP-hard for simple linear neighbor graphs [8]. Thus, unless P=NP, one needs exhaustive exact approaches for (near)-optimal solutions."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Several exact approaches based on SMT [25, 15], Classical Planning [19], and SAT [20, 27] have been proposed to optimize CX-count. Synthesizing a "
+    },
+    {
+     "text": "k",
+     "latex": "k",
+     "mathml": "<math display=\"inline\"><mi>k</mi></math>"
+    },
+    {
+     "text": "-SWAP optimal circuit involves refuting the existence of a mapped circuit of at most "
+    },
+    {
+     "text": "k−1",
+     "latex": "k-1",
+     "mathml": "<math display=\"inline\"><mrow><mi>k</mi><mo>−</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " SWAPs. Recent SAT approaches proposed encodings whose makespan corresponds to the number of inserted SWAP gates instead of the number of CX-gates. Since there are typically fewer SWAP gates than CX gates, such SAT encodings significantly outperform earlier approaches [20]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Despite the progress in CX-count optimization, CX-count alone is not sufficient to predict the hardware performance. Note that qubits become unstable over time due to so-called "
+    },
+    {
+     "text": "decoherence",
+     "italic": true
+    },
+    {
+     "text": ". It is essential to execute gates in the circuit before the qubits become unstable. To reduce execution time, multiple gates can be executed in parallel, provided they are independent, i.e., do not act on the same qubits. This makes circuit depth an important metric, since it captures this notion of parallel execution. Since CX-gates are up to 10x slower compared to unary gates, we focus on reducing the CX-depth of the circuit. This metric counts the longest chain of dependent CX-gates."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Optimization of circuit depth has been explored in [15] in the context of SMT solving. Their tool OLSQ2 is the state-of-the-art tool for depth-optimal synthesis. In practice, optimization of (CX)-depth is harder than (CX)-count. Unlike (CX)-count optimization, the makespan of an encoding optimizing (CX)-depth must be at least the (CX)-depth of the initial circuit. Since the (CX)-depth is typically higher than the number of SWAPs, depth optimal synthesis becomes much harder in practice. Compared to the SAT based state-of-the-art tool Q-Synth v2 for CX-count optimization, OLSQ2 is indeed up to 5 orders of magnitude slower [20, 15]. Even the best SMT-based near-optimal tool TB-OLSQ2 is up to 2 orders of magnitude slower compared to Q-Synth v2 [20]. SAT-based tools are shown to significantly outperform SMT-based tools for QLS [20, 27]. The natural next step is to investigate if an efficient SAT-based depth optimal encoding is feasible."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Contributions ",
+     "bold": true
+    },
+    {
+     "text": "In this paper, we provide an encoding of (CX)-depth-optimal QLS in SAT for the first time. Additionally, we provide a tool, QuilLS1, which implements the encoding. Our approach is based on increasing the time horizon, where in each time step one layer of independent gates is added. The first SAT solution found corresponds to a mapped circuit with optimal depth. We use incremental SAT solving (reusing partial information from previous calls) [16] and parallel plans to encode depth as makespan for efficient solving."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "1",
+   "spans": [
+    {
+     "text": "Available at "
+    },
+    {
+     "text": "https://github.com/anbclausen/quills",
+     "code": true,
+     "href": "https://github.com/anbclausen/quills"
+    },
+    {
+     "text": ", also ported to Q-Synth v4 at "
+    },
+    {
+     "text": "https://github.com/irfansha/Q-Synth",
+     "code": true,
+     "href": "https://github.com/irfansha/Q-Synth"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A second contribution is an extensive experiment, comparing various tools with respect to their running time and their performance in actual (CX)-count and (CX)-depth metrics. We compare our new tool with SABRE, Q-Synth and (TB)-OLSQ2. We run these tools on a standard set of quantum circuit benchmarks, obtained from [15, 20] and on the coupling graph of a number of standard quantum platforms (with 5-80 qubits). Our tool is often more than 10-100x faster compared to previous tools with guaranteed depth-optimality, but still slower than size-optimal tools."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Finally, we investigate how the various optimization metrics correlate with a reduction in noise, which is the ultimate goal of optimal QLS. Following the approach in [12, 26], we simulate all mapped circuits on a quantum platform with and without simulated noise, using the Qiskit simulator, and compute the Hellinger distance [4, 7, 18] of these runs. Surprisingly, we find that a reduction in CX-count correlates better with noise reduction than CX-depth. However, taking both measures, CX-count + CX-depth, into account leads to the best noise reduction, motivating the importance of our contribution."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "(a) An Example circuit. (b) CX-depth optimal circuit with 1 extra SWAP. Figure 1 Example circuit, before and after mapping on a linear neighbour graph. The dotted box represents the extra SWAP gate implemented as 3 CX gates. Time steps "
+    },
+    {
+     "text": "t0",
+     "latex": "t_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mn>0</mn></msub></math>"
+    },
+    {
+     "text": " to "
+    },
+    {
+     "text": "t5",
+     "latex": "t_{5}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mn>5</mn></msub></math>"
+    },
+    {
+     "text": " indicate the CX gate parallel steps."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "2 Preliminaries"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.1 Layout Synthesis of an Example Circuit"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "As discussed previously in the introduction, the Quantum Layout Synthesis (QLS) problem takes as inputs a quantum circuit and a platform coupling map. For example, consider the "
+    },
+    {
+     "text": "4",
+     "latex": "4",
+     "mathml": "<math display=\"inline\"><mn>4</mn></math>"
+    },
+    {
+     "text": "-qubit circuit in Figure 1(a) with "
+    },
+    {
+     "text": "5",
+     "latex": "5",
+     "mathml": "<math display=\"inline\"><mn>5</mn></math>"
+    },
+    {
+     "text": " CX-gates and "
+    },
+    {
+     "text": "3",
+     "latex": "3",
+     "mathml": "<math display=\"inline\"><mn>3</mn></math>"
+    },
+    {
+     "text": " unary gates. For simplicity, consider a quantum platform of 4 qubits "
+    },
+    {
+     "text": "{p0,p1,p2,p3}",
+     "latex": "\\{p_{0},p_{1},p_{2},p_{3}\\}",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">{</mo><mrow><msub><mi>p</mi><mn>0</mn></msub><mo>,</mo><msub><mi>p</mi><mn>1</mn></msub><mo>,</mo><msub><mi>p</mi><mn>2</mn></msub><mo>,</mo><msub><mi>p</mi><mn>3</mn></msub></mrow><mo stretchy=\"false\">}</mo></mrow></math>"
+    },
+    {
+     "text": " with linear connections i.e., only "
+    },
+    {
+     "text": "(p0,p1),(p1,p2),(p2,p3)",
+     "latex": "(p_{0},p_{1}),(p_{1},p_{2}),(p_{2},p_{3})",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><msub><mi>p</mi><mn>0</mn></msub><mo>,</mo><msub><mi>p</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow><mo>,</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>p</mi><mn>1</mn></msub><mo>,</mo><msub><mi>p</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow><mo>,</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>p</mi><mn>2</mn></msub><mo>,</mo><msub><mi>p</mi><mn>3</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " are connected. Notice that CX gates at "
+    },
+    {
+     "text": "t0,t1,t4",
+     "latex": "t_{0},t_{1},t_{4}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>t</mi><mn>0</mn></msub><mo>,</mo><msub><mi>t</mi><mn>1</mn></msub><mo>,</mo><msub><mi>t</mi><mn>4</mn></msub></mrow></math>"
+    },
+    {
+     "text": " form a triangle in Figure 1(a), however our linear platform does not have a triangle. Thus, there is no mapping from logical to physical qubits such that all the CX gates can be scheduled. In such cases, SWAP gates can be inserted into the circuit, which allow physical qubits to swap their states. A SWAP gate can be constructed of three CX gates [17]. Indeed, as shown in Figure 1(b), by using one extra SWAP gate we can schedule all gates respecting connectivity restrictions."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Layout synthesis can be optimized using various metrics. One is size optimality, where the number of gates in the output circuit is minimized. In practice, this means minimizing the number of SWAP gates. Another is minimizing the depth of the output circuit, which is defined as the longest path in the dependency graph of the gates in the circuit. A similar metric is the CX-depth, where only the dependencies between the CX gates are considered. Our original circuit has CX-depth "
+    },
+    {
+     "text": "5",
+     "latex": "5",
+     "mathml": "<math display=\"inline\"><mn>5</mn></math>"
+    },
+    {
+     "text": " where as the mapped circuit has optimal CX-depth of "
+    },
+    {
+     "text": "6",
+     "latex": "6",
+     "mathml": "<math display=\"inline\"><mn>6</mn></math>"
+    },
+    {
+     "text": ". In Figure 1, we indicate the parallel steps with CX-gates before and after mapping. The number of parallel steps with CX-gates essentially corresponds to CX-depth. Optimization of CX-count differs from CX-depth largely due to the interleaving of SWAP gates with other CX gates. The choice of optimization goal can have a large impact. For example, one of the benchmark circuits used in our experimental evaluation (‘"
+    },
+    {
+     "text": "tof_5",
+     "code": true
+    },
+    {
+     "text": "’), has a depth-optimal solution on the platform Guadalupe of depth 64 using 31 SWAP gates, while a size-optimal circuit uses only 5 SWAP gates, but has depth 71."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.2 Layout Synthesis as SAT"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Given a propositional formula, the SAT problem is to find an assignment to the variables such that the formula evaluates to true. While the general problem is NP-complete, in practice several instances can be solved efficiently by modern SAT solvers [3]. This motivates encoding other NP-complete problems to SAT. However, finding an efficient problem encoding is highly non-trivial. As discussed earlier, recent SAT based approaches [20, 27] perform well on CX-count metric. Unlike (CX)-depth optimization, a SAT encoding optimizing (CX)-count only requires a makespan of 2 on the example in Figure 2. The key idea is to group CNOTs at each parallel step and add a single SWAP gate from time step "
+    },
+    {
+     "text": "t1",
+     "latex": "t_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": ". Thus, the makespan scales with the number of SWAPs which is typically much lower than the (CX)-count or (CX)-depth."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Figure 2 Mapped circuit with only 2 parallel steps in the context of CX-count optimization."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "While the disadvantage in the larger required makespan is unavoidable, we can still apply parallel plans [10] to schedule parallel gates in a mapped circuit. It is possible to encode depth in a sequential encoding, however allowing independent gates in the same time step can reduce the makespan. The makespan refers to the circuit (CX)-depth of the solution. Reducing makespan indeed avoids many variable copies, thus impacting performance. We adapt another main technique, incremental SAT solving, used in the earlier SAT encodings for our (CX)-depth optimal encoding. Remember that an optimal synthesis of "
+    },
+    {
+     "text": "k",
+     "latex": "k",
+     "mathml": "<math display=\"inline\"><mi>k</mi></math>"
+    },
+    {
+     "text": " (CX)-depth circuit requires refuting the existence of "
+    },
+    {
+     "text": "k−1",
+     "latex": "k-1",
+     "mathml": "<math display=\"inline\"><mrow><mi>k</mi><mo>−</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " or less (CX)-depth circuits. Instead of checking for circuits with (CX)-depth from "
+    },
+    {
+     "text": "0",
+     "latex": "0",
+     "mathml": "<math display=\"inline\"><mn>0</mn></math>"
+    },
+    {
+     "text": " to "
+    },
+    {
+     "text": "k−1",
+     "latex": "k-1",
+     "mathml": "<math display=\"inline\"><mrow><mi>k</mi><mo>−</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " independently, we reuse information from earlier SAT calls. By using incremental SAT solving, we can maintain a single CNF formula and “turn clauses on or off” instead of rebuilding the entire CNF formula every time. This also increases the performance during "
+    },
+    {
+     "text": "inprocessing",
+     "italic": true
+    },
+    {
+     "text": " (the actual work of the SAT solver). Finally, for a (CX)-depth optimal encoding, we need to handle the execution of SWAP gates over 3 time steps instead of just 1."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "3 Depth-optimal SAT encoding"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In the previous sections, we observed that SAT-based encodings in Q-Synth perform very well in the case of size-optimal synthesis. In this section, we formulate a similar SAT encoding of depth-optimal layout synthesis. In contrast to size-optimal synthesis, depth-optimal synthesis might produce solutions with a sub-optimal number of CX gates to find a solution with optimal circuit depth. Circuit depth refers to the longest path in the gate dependency graph. We employ two techniques, parallel plans, and incremental SAT solving for an efficient encoding. Unlike Q-Synth, a parallel step in our encoding encodes a single layer in a circuit, consisting of parallel gates applied to different qubits. Thus, the makespan of the encoding corresponds to the depth of the mapped circuit. The novelty of our encoding comes from the handling of SWAP gates while maintaining depth-optimality, which is non-trivial."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Algorithm 1 ",
+     "bold": true
+    },
+    {
+     "text": "Building and solving the SAT encoding."
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Input: Coupling map "
+      },
+      {
+       "text": "𝒫",
+       "latex": "\\mathcal{P}",
+       "mathml": "<math display=\"inline\"><mi>𝒫</mi></math>"
+      },
+      {
+       "text": " and circuit "
+      },
+      {
+       "text": "𝒞",
+       "latex": "\\mathcal{C}",
+       "mathml": "<math display=\"inline\"><mi>𝒞</mi></math>"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "let "
+      },
+      {
+       "text": "D",
+       "latex": "D",
+       "mathml": "<math display=\"inline\"><mi>D</mi></math>"
+      },
+      {
+       "text": " be the depth of "
+      },
+      {
+       "text": "𝒞",
+       "latex": "\\mathcal{C}",
+       "mathml": "<math display=\"inline\"><mi>𝒞</mi></math>"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "let instance be an empty CNF"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "for ",
+       "bold": true
+      },
+      {
+       "text": "t=1,2,…",
+       "latex": "t=1,2,\\dots",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mi>t</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mn>2</mn><mo>,</mo><mi mathvariant=\"normal\">…</mi></mrow></math>"
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "do",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Add "
+      },
+      {
+       "text": "MappingConstraints(t)",
+       "latex": "MappingConstraints(t)",
+       "mathml": "<math display=\"inline\"><mrow><mi>M</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>a</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>g</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>o</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>r</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>a</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": " to instance"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Add "
+      },
+      {
+       "text": "ConnectivityConstraints(t)",
+       "latex": "ConnectivityConstraints(t)",
+       "mathml": "<math display=\"inline\"><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>o</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>c</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>v</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>y</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>o</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>r</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>a</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": " to instance"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Add "
+      },
+      {
+       "text": "GateConstraints(t)",
+       "latex": "GateConstraints(t)",
+       "mathml": "<math display=\"inline\"><mrow><mi>G</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>a</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>o</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>r</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>a</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": " to instance"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Add "
+      },
+      {
+       "text": "SwapConstraints(t)",
+       "latex": "SwapConstraints(t)",
+       "mathml": "<math display=\"inline\"><mrow><mi>S</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>w</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>a</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>o</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>r</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>a</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": " to instance"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "",
+     "spans": [
+      {
+       "text": "if ",
+       "bold": true
+      },
+      {
+       "text": "t≥D",
+       "latex": "t\\geq D",
+       "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>≥</mo><mi>D</mi></mrow></math>"
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "then",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 2,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Add "
+      },
+      {
+       "text": "Assumptions(t)",
+       "latex": "Assumptions(t)",
+       "mathml": "<math display=\"inline\"><mrow><mi>A</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>u</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>m</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>o</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": " to instance"
+      }
+     ]
+    },
+    {
+     "depth": 2,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Solve instance with assumption "
+      },
+      {
+       "text": "asmt",
+       "latex": "asm^{t}",
+       "mathml": "<math display=\"inline\"><mrow><mi>a</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>m</mi><mi>t</mi></msup></mrow></math>"
+      }
+     ]
+    },
+    {
+     "depth": 2,
+     "marker": "",
+     "spans": [
+      {
+       "text": "if",
+       "bold": true
+      },
+      {
+       "text": " instance is satisfied "
+      },
+      {
+       "text": "then",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 3,
+     "marker": "",
+     "spans": [
+      {
+       "text": "return",
+       "bold": true
+      },
+      {
+       "text": " satisfying assignment"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The overall structure of the encoding can be seen in Algorithm 1. Since the output cannot have smaller depth than the input, we only test the existence of a mapping when the makespan is at least as large as the input depth. The first time step where the instance is satisfied is the optimal depth. Much of the structure of the encoding follows that of [20]. We will focus the in-depth explanation to those parts that are different."
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "Table 1 Encoding variables and descriptions"
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Variable"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Description"
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "mpq,pt",
+         "latex": "\\text{mp}^{t}_{q,p}",
+         "mathml": "<math display=\"inline\"><msubsup><mtext>mp</mtext><mrow><mi>q</mi><mo>,</mo><mi>p</mi></mrow><mi>t</mi></msubsup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "logical qubit "
+        },
+        {
+         "text": "q",
+         "latex": "q",
+         "mathml": "<math display=\"inline\"><mi>q</mi></math>"
+        },
+        {
+         "text": " is mapped to the physical qubit "
+        },
+        {
+         "text": "p",
+         "latex": "p",
+         "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+        },
+        {
+         "text": " at time "
+        },
+        {
+         "text": "t",
+         "latex": "t",
+         "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+        },
+        {
+         "text": "."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "ocpt",
+         "latex": "\\text{oc}^{t}_{p}",
+         "mathml": "<math display=\"inline\"><msubsup><mtext>oc</mtext><mi>p</mi><mi>t</mi></msubsup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "physical qubit "
+        },
+        {
+         "text": "p",
+         "latex": "p",
+         "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+        },
+        {
+         "text": " is occupied by some logical qubit at time "
+        },
+        {
+         "text": "t",
+         "latex": "t",
+         "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+        },
+        {
+         "text": "."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "eq,q′t",
+         "latex": "\\text{e}_{q,q^{\\prime}}^{t}",
+         "mathml": "<math display=\"inline\"><msubsup><mtext>e</mtext><mrow><mi>q</mi><mo>,</mo><msup><mi>q</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "logical qubits "
+        },
+        {
+         "text": "q,q′",
+         "latex": "q,q^{\\prime}",
+         "mathml": "<math display=\"inline\"><mrow><mi>q</mi><mo>,</mo><msup><mi>q</mi><mo>′</mo></msup></mrow></math>"
+        },
+        {
+         "text": " are mapped to connected qubits at time "
+        },
+        {
+         "text": "t",
+         "latex": "t",
+         "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+        },
+        {
+         "text": "."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "upt",
+         "latex": "\\text{u}_{p}^{t}",
+         "mathml": "<math display=\"inline\"><msubsup><mtext>u</mtext><mi>p</mi><mi>t</mi></msubsup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "physical qubit "
+        },
+        {
+         "text": "p",
+         "latex": "p",
+         "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+        },
+        {
+         "text": " is not part of a SWAP gate at time "
+        },
+        {
+         "text": "t",
+         "latex": "t",
+         "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+        },
+        {
+         "text": "."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "cgt",
+         "latex": "\\text{c}^{t}_{g}",
+         "mathml": "<math display=\"inline\"><msubsup><mtext>c</mtext><mi>g</mi><mi>t</mi></msubsup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "gate "
+        },
+        {
+         "text": "g",
+         "latex": "g",
+         "mathml": "<math display=\"inline\"><mi>g</mi></math>"
+        },
+        {
+         "text": " is currently applied at time "
+        },
+        {
+         "text": "t",
+         "latex": "t",
+         "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+        },
+        {
+         "text": "."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "agt",
+         "latex": "\\text{a}^{t}_{g}",
+         "mathml": "<math display=\"inline\"><msubsup><mtext>a</mtext><mi>g</mi><mi>t</mi></msubsup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "gate "
+        },
+        {
+         "text": "g",
+         "latex": "g",
+         "mathml": "<math display=\"inline\"><mi>g</mi></math>"
+        },
+        {
+         "text": " was applied at a time strictly before "
+        },
+        {
+         "text": "t",
+         "latex": "t",
+         "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+        },
+        {
+         "text": "."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "dgt",
+         "latex": "\\text{d}^{t}_{g}",
+         "mathml": "<math display=\"inline\"><msubsup><mtext>d</mtext><mi>g</mi><mi>t</mi></msubsup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "gate "
+        },
+        {
+         "text": "g",
+         "latex": "g",
+         "mathml": "<math display=\"inline\"><mi>g</mi></math>"
+        },
+        {
+         "text": " is delayed and has not been applied yet at time "
+        },
+        {
+         "text": "t",
+         "latex": "t",
+         "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+        },
+        {
+         "text": "."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "swp,p′t",
+         "latex": "\\text{sw}^{t}_{p,p^{\\prime}}",
+         "mathml": "<math display=\"inline\"><msubsup><mtext>sw</mtext><mrow><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "physical qubits "
+        },
+        {
+         "text": "p,p′",
+         "latex": "p,p^{\\prime}",
+         "mathml": "<math display=\"inline\"><mrow><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow></math>"
+        },
+        {
+         "text": " are swapped at times "
+        },
+        {
+         "text": "t",
+         "latex": "t",
+         "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+        },
+        {
+         "text": ", "
+        },
+        {
+         "text": "t−1",
+         "latex": "t-1",
+         "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></math>"
+        },
+        {
+         "text": " and "
+        },
+        {
+         "text": "t−2",
+         "latex": "t-2",
+         "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>−</mo><mn>2</mn></mrow></math>"
+        },
+        {
+         "text": "."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "𝑆𝑤(p)t",
+         "latex": "\\mathit{Sw(p)}^{t}",
+         "mathml": "<math display=\"inline\"><mrow><mi>𝑆𝑤</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo stretchy=\"false\">)</mo></mrow><mi>t</mi></msup></mrow></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "the set of variables "
+        },
+        {
+         "text": "swp,p′t",
+         "latex": "\\text{sw}^{t}_{p,p^{\\prime}}",
+         "mathml": "<math display=\"inline\"><msubsup><mtext>sw</mtext><mrow><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup></math>"
+        },
+        {
+         "text": " where "
+        },
+        {
+         "text": "(p,p′)∈P𝑐𝑜𝑛𝑛",
+         "latex": "(p,p^{\\prime})\\in\\mathit{P_{conn}}",
+         "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msub><mi>P</mi><mi>𝑐𝑜𝑛𝑛</mi></msub></mrow></math>"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "stpt",
+         "latex": "\\text{st}^{t}_{p}",
+         "mathml": "<math display=\"inline\"><msubsup><mtext>st</mtext><mi>p</mi><mi>t</mi></msubsup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "physical qubit "
+        },
+        {
+         "text": "p",
+         "latex": "p",
+         "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+        },
+        {
+         "text": " is touched by a SWAP at "
+        },
+        {
+         "text": "t",
+         "latex": "t",
+         "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+        },
+        {
+         "text": ", "
+        },
+        {
+         "text": "t−1",
+         "latex": "t-1",
+         "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></math>"
+        },
+        {
+         "text": " and "
+        },
+        {
+         "text": "t−2",
+         "latex": "t-2",
+         "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>−</mo><mn>2</mn></mrow></math>"
+        },
+        {
+         "text": "."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "asmt",
+         "latex": "\\text{asm}^{t}",
+         "mathml": "<math display=\"inline\"><msup><mtext>asm</mtext><mi>t</mi></msup></math>"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "assumption to indicate that "
+        },
+        {
+         "text": "t",
+         "latex": "t",
+         "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+        },
+        {
+         "text": " is the final time step."
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Table 1 presents the variables used in the encoding. For each time step, a set of variables is generated for the constraints of that time step. The asm"
+    },
+    {
+     "text": "t",
+     "italic": true
+    },
+    {
+     "text": " variable is special and is used for incremental SAT solving; it provides context to the SAT solver about previous attempts to find a solution, essentially reducing the search space of the solver. SWAP gates are scheduled over 3 time steps since they are commonly implemented as three consecutive CX gates. In the following, we describe each part of the constraints added for each time step."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The Mapping and Connectivity constraints are exactly as in [20], but are repeated here for the sake of completeness. We use "
+    },
+    {
+     "text": "P",
+     "latex": "P",
+     "mathml": "<math display=\"inline\"><mi>P</mi></math>"
+    },
+    {
+     "text": " for the set of physical qubits and "
+    },
+    {
+     "text": "Q",
+     "latex": "Q",
+     "mathml": "<math display=\"inline\"><mi>Q</mi></math>"
+    },
+    {
+     "text": " for the set of logical qubits. "
+    },
+    {
+     "text": "P𝑐𝑜𝑛𝑛",
+     "latex": "P_{\\mathit{conn}}",
+     "mathml": "<math display=\"inline\"><msub><mi>P</mi><mi>𝑐𝑜𝑛𝑛</mi></msub></math>"
+    },
+    {
+     "text": " indicates the edges between physical qubits in the connectivity graph. We use "
+    },
+    {
+     "text": "g.q",
+     "latex": "g.q",
+     "mathml": "<math display=\"inline\"><mrow><mi>g</mi><mo lspace=\"0em\" rspace=\"0.167em\">.</mo><mi>q</mi></mrow></math>"
+    },
+    {
+     "text": " to indicate the logical qubit that a unary gate must be applied on, and "
+    },
+    {
+     "text": "g.q0,g.q1",
+     "latex": "g.q_{0},g.q_{1}",
+     "mathml": "<math display=\"inline\"><mrow><mi>g</mi><mo lspace=\"0em\" rspace=\"0.167em\">.</mo><msub><mi>q</mi><mn>0</mn></msub><mo>,</mo><mi>g</mi><mo lspace=\"0em\" rspace=\"0.167em\">.</mo><msub><mi>q</mi><mn>1</mn></msub></mrow></math>"
+    },
+    {
+     "text": " for the qubits that a CX gate must be applied on. "
+    },
+    {
+     "text": "G𝐶𝑋",
+     "latex": "\\mathit{G_{CX}}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>𝐶𝑋</mi></msub></math>"
+    },
+    {
+     "text": " denotes the set of CX gates in the input circuit while "
+    },
+    {
+     "text": "G𝑢𝑛𝑎𝑟𝑦",
+     "latex": "\\mathit{G_{unary}}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>𝑢𝑛𝑎𝑟𝑦</mi></msub></math>"
+    },
+    {
+     "text": " denotes the set of unary gates."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "MappingConstraints",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{q\\in Q}\\text{ExactlyOne}(\\text{mp}^{t}_{q,p_{0}},\\dots,\\text{mp}^{t}_{q,p_{n}})",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>q</mi><mo>∈</mo><mi>Q</mi></mrow></munder><mrow><mtext>ExactlyOne</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msubsup><mtext>mp</mtext><mrow><mi>q</mi><mo>,</mo><msub><mi>p</mi><mn>0</mn></msub></mrow><mi>t</mi></msubsup><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msubsup><mtext>mp</mtext><mrow><mi>q</mi><mo>,</mo><msub><mi>p</mi><mi>n</mi></msub></mrow><mi>t</mi></msubsup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>",
+   "label": "(1)"
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{p\\in P}\\text{AtMostOne}(\\text{mp}^{t}_{q_{0},p},\\dots,\\text{mp}^{t}_{q_{m},p})",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>p</mi><mo>∈</mo><mi>P</mi></mrow></munder><mrow><mtext>AtMostOne</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msubsup><mtext>mp</mtext><mrow><msub><mi>q</mi><mn>0</mn></msub><mo>,</mo><mi>p</mi></mrow><mi>t</mi></msubsup><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msubsup><mtext>mp</mtext><mrow><msub><mi>q</mi><mi>m</mi></msub><mo>,</mo><mi>p</mi></mrow><mi>t</mi></msubsup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>",
+   "label": "(2)"
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{p\\in P}\\Big(\\text{oc}^{t}_{p}\\iff\\big(\\bigvee_{q\\in Q}\\text{mp}^{t}_{q,p}\\big)\\Big)",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>p</mi><mo>∈</mo><mi>P</mi></mrow></munder><mrow><mo lspace=\"0em\" maxsize=\"1.600em\" minsize=\"1.600em\">(</mo><msubsup><mtext>oc</mtext><mi>p</mi><mi>t</mi></msubsup><mo stretchy=\"false\">⇔</mo><mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><mrow><munder><mo lspace=\"0em\" movablelimits=\"false\">⋁</mo><mrow><mi>q</mi><mo>∈</mo><mi>Q</mi></mrow></munder><msubsup><mtext>mp</mtext><mrow><mi>q</mi><mo>,</mo><mi>p</mi></mrow><mi>t</mi></msubsup></mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow><mo maxsize=\"1.600em\" minsize=\"1.600em\">)</mo></mrow></mrow></math>",
+   "label": "(3)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The above constraints ensure that the mp"
+    },
+    {
+     "text": "q,pt",
+     "latex": "{}^{t}_{q,p}",
+     "mathml": "<math display=\"inline\"><mmultiscripts><mphantom></mphantom><mprescripts></mprescripts><mrow><mi>q</mi><mo>,</mo><mi>p</mi></mrow><mrow></mrow><mrow></mrow><mi>t</mi></mmultiscripts></math>"
+    },
+    {
+     "text": " and oc"
+    },
+    {
+     "text": "pt",
+     "latex": "{}^{t}_{p}",
+     "mathml": "<math display=\"inline\"><mmultiscripts><mphantom></mphantom><mprescripts></mprescripts><mi>p</mi><mrow></mrow><mrow></mrow><mi>t</mi></mmultiscripts></math>"
+    },
+    {
+     "text": " variables are set correctly. Here ExactlyOne"
+    },
+    {
+     "text": "(t1,…,tn)≜∑i=1nti=1",
+     "latex": "(t_{1},\\ldots,t_{n})\\triangleq\\sum_{i=1}^{n}t_{i}=1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><msub><mi>t</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>t</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo rspace=\"0.111em\">≜</mo><mrow><msubsup><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup><msub><mi>t</mi><mi>i</mi></msub></mrow><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " denotes that exactly one of "
+    },
+    {
+     "text": "{t1,…,tn}",
+     "latex": "\\{t_{1},\\ldots,t_{n}\\}",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">{</mo><msub><mi>t</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>t</mi><mi>n</mi></msub><mo stretchy=\"false\">}</mo></mrow></math>"
+    },
+    {
+     "text": " is true while AtMostOne"
+    },
+    {
+     "text": "(t1,…,tn)≜∑i=1nti≤1",
+     "latex": "(t_{1},\\ldots,t_{n})\\triangleq\\sum_{i=1}^{n}t_{i}\\leq 1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><msub><mi>t</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>t</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo rspace=\"0.111em\">≜</mo><mrow><msubsup><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup><msub><mi>t</mi><mi>i</mi></msub></mrow><mo>≤</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " denotes that at most one of "
+    },
+    {
+     "text": "{t1,…,tn}",
+     "latex": "\\{t_{1},\\ldots,t_{n}\\}",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">{</mo><msub><mi>t</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>t</mi><mi>n</mi></msub><mo stretchy=\"false\">}</mo></mrow></math>"
+    },
+    {
+     "text": " is true."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "ConnectivityConstraints",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{q,q^{\\prime}\\in Q}\\Big(\\bigwedge_{(p,p^{\\prime})\\in P_{\\mathit{conn}}}\\big((\\text{mp}^{t}_{q,p}\\land\\text{mp}^{t}_{q^{\\prime},p^{\\prime}})\\Rightarrow\\text{e}^{t}_{q,q^{\\prime}}\\big)\\quad\\land\\bigwedge_{p,p^{\\prime}\\not\\in P_{\\mathit{conn}}}\\big((\\text{mp}^{t}_{q,p}\\land\\text{mp}^{t}_{q^{\\prime},p^{\\prime}})\\Rightarrow\\neg\\text{e}^{t}_{q,q^{\\prime}}\\big)\\Big)",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mrow><mi>q</mi><mo>,</mo><msup><mi>q</mi><mo>′</mo></msup></mrow><mo>∈</mo><mi>Q</mi></mrow></munder><mrow><mo lspace=\"0em\" maxsize=\"1.600em\" minsize=\"1.600em\">(</mo><munder><mo lspace=\"0em\" movablelimits=\"false\" rspace=\"0em\">⋀</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msub><mi>P</mi><mi>𝑐𝑜𝑛𝑛</mi></msub></mrow></munder><mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><mrow><mo stretchy=\"false\">(</mo><msubsup><mtext>mp</mtext><mrow><mi>q</mi><mo>,</mo><mi>p</mi></mrow><mi>t</mi></msubsup><mo>∧</mo><msubsup><mtext>mp</mtext><mrow><msup><mi>q</mi><mo>′</mo></msup><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup><mo stretchy=\"false\">)</mo></mrow><mo stretchy=\"false\">⇒</mo><msubsup><mtext>e</mtext><mrow><mi>q</mi><mo>,</mo><msup><mi>q</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow><mo rspace=\"0.055em\">∧</mo><munder><mo movablelimits=\"false\" rspace=\"0em\">⋀</mo><mrow><mi>p</mi><mo>,</mo><mrow><msup><mi>p</mi><mo>′</mo></msup><mo>∉</mo><msub><mi>P</mi><mi>𝑐𝑜𝑛𝑛</mi></msub></mrow></mrow></munder><mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><mrow><mo stretchy=\"false\">(</mo><msubsup><mtext>mp</mtext><mrow><mi>q</mi><mo>,</mo><mi>p</mi></mrow><mi>t</mi></msubsup><mo>∧</mo><msubsup><mtext>mp</mtext><mrow><msup><mi>q</mi><mo>′</mo></msup><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup><mo stretchy=\"false\">)</mo></mrow><mo stretchy=\"false\">⇒</mo><mo rspace=\"0.167em\">¬</mo><msubsup><mtext>e</mtext><mrow><mi>q</mi><mo>,</mo><msup><mi>q</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow><mo maxsize=\"1.600em\" minsize=\"1.600em\">)</mo></mrow></mrow></math>",
+   "label": "(4)"
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{g\\in\\mathit{G_{CX}}}\\big(\\text{c}^{t}_{g}\\implies\\text{e}^{t}_{g.q_{0},g.q_{1}}\\big)",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>g</mi><mo>∈</mo><msub><mi>G</mi><mi>𝐶𝑋</mi></msub></mrow></munder><mrow><mo lspace=\"0em\" maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><mrow><msubsup><mtext>c</mtext><mi>g</mi><mi>t</mi></msubsup><mo stretchy=\"false\">⟹</mo><msubsup><mtext>e</mtext><mrow><mi>g</mi><mo lspace=\"0em\" rspace=\"0.167em\">.</mo><msub><mi>q</mi><mn>0</mn></msub><mo>,</mo><mi>g</mi><mo lspace=\"0em\" rspace=\"0.167em\">.</mo><msub><mi>q</mi><mn>1</mn></msub></mrow><mi>t</mi></msubsup></mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow></mrow></math>",
+   "label": "(5)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Constraint 4 ensures that the "
+    },
+    {
+     "text": "eq,q′t",
+     "latex": "e^{t}_{q,q^{\\prime}}",
+     "mathml": "<math display=\"inline\"><msubsup><mi>e</mi><mrow><mi>q</mi><mo>,</mo><msup><mi>q</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup></math>"
+    },
+    {
+     "text": " predicates are true if and only if the physical qubits assigned to "
+    },
+    {
+     "text": "q",
+     "latex": "q",
+     "mathml": "<math display=\"inline\"><mi>q</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "q′",
+     "latex": "q^{\\prime}",
+     "mathml": "<math display=\"inline\"><msup><mi>q</mi><mo>′</mo></msup></math>"
+    },
+    {
+     "text": " at time "
+    },
+    {
+     "text": "t",
+     "latex": "t",
+     "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+    },
+    {
+     "text": " are connected. Constraint 5 ensures that the CX gates are applied to connected physical qubits."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "GateConstraints",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The Gate constraints follow a similar pattern to those in [20], but are substantially different because in this encoding at most one gate can be scheduled on each qubit at a given time step. For a given time "
+    },
+    {
+     "text": "t",
+     "latex": "t",
+     "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+    },
+    {
+     "text": ", a gate is either currently scheduled denoted "
+    },
+    {
+     "text": "cgt",
+     "latex": "\\text{c}^{t}_{g}",
+     "mathml": "<math display=\"inline\"><msubsup><mtext>c</mtext><mi>g</mi><mi>t</mi></msubsup></math>"
+    },
+    {
+     "text": ", it has been scheduled for some "
+    },
+    {
+     "text": "t′<t",
+     "latex": "t^{\\prime}<t",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>t</mi><mo>′</mo></msup><mo>&lt;</mo><mi>t</mi></mrow></math>"
+    },
+    {
+     "text": " denoted "
+    },
+    {
+     "text": "agt",
+     "latex": "\\text{a}^{t}_{g}",
+     "mathml": "<math display=\"inline\"><msubsup><mtext>a</mtext><mi>g</mi><mi>t</mi></msubsup></math>"
+    },
+    {
+     "text": " (advanced), or it will be scheduled for some "
+    },
+    {
+     "text": "t′>t",
+     "latex": "t^{\\prime}>t",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>t</mi><mo>′</mo></msup><mo>&gt;</mo><mi>t</mi></mrow></math>"
+    },
+    {
+     "text": " denoted "
+    },
+    {
+     "text": "dgt",
+     "latex": "\\text{d}^{t}_{g}",
+     "mathml": "<math display=\"inline\"><msubsup><mtext>d</mtext><mi>g</mi><mi>t</mi></msubsup></math>"
+    },
+    {
+     "text": " (delayed) as encoded in constraint 6. Furthermore, no gate can be ‘advanced’ on the first time step since nothing has been applied yet as encoded in constraint 7."
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{g\\in G}\\text{ExactlyOne}(\\text{c}^{t}_{g},\\text{a}^{t}_{g},\\text{d}^{t}_{g})",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>g</mi><mo>∈</mo><mi>G</mi></mrow></munder><mrow><mtext>ExactlyOne</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msubsup><mtext>c</mtext><mi>g</mi><mi>t</mi></msubsup><mo>,</mo><msubsup><mtext>a</mtext><mi>g</mi><mi>t</mi></msubsup><mo>,</mo><msubsup><mtext>d</mtext><mi>g</mi><mi>t</mi></msubsup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>",
+   "label": "(6)"
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{g\\in G}\\neg\\text{a}^{1}_{g}",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>g</mi><mo>∈</mo><mi>G</mi></mrow></munder><mrow><mo rspace=\"0.167em\">¬</mo><msubsup><mtext>a</mtext><mi>g</mi><mn>1</mn></msubsup></mrow></mrow></math>",
+   "label": "(7)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The main idea from the size-optimal encoding was that of two-way propagation. This is adapted to a depth-optimal encoding by ensuring that if a gate is ‘current’ or ‘delayed’ its direct successors must be ‘delayed’, while if a gate is ‘current’ or ‘advanced’ its direct predecessors must be ‘advanced’. This information is propagated throughout the circuit, giving rise to the name. Constraint 8 enforces that the dependencies of the input circuit are preserved in the output circuit and that two gates are not applied on the same qubit at the same time. We use "
+    },
+    {
+     "text": "S(g)",
+     "latex": "S(g)",
+     "mathml": "<math display=\"inline\"><mrow><mi>S</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>g</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " (and "
+    },
+    {
+     "text": "P(g)",
+     "latex": "P(g)",
+     "mathml": "<math display=\"inline\"><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>g</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ") to denote the successors (predecessors) of gate "
+    },
+    {
+     "text": "g",
+     "latex": "g",
+     "mathml": "<math display=\"inline\"><mi>g</mi></math>"
+    },
+    {
+     "text": " in the dependency graph of the input circuit."
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{g\\in G}\\big(\\bigwedge_{g^{\\prime}\\in S(g)}(\\text{c}^{t}_{g}\\lor\\text{d}^{t}_{g})\\implies\\text{d}^{t}_{g^{\\prime}}\\ \\land\\bigwedge_{g^{\\prime}\\in P(g)}(\\text{c}^{t}_{g}\\lor\\text{a}^{t}_{g})\\implies\\text{a}^{t}_{g^{\\prime}}\\big)",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>g</mi><mo>∈</mo><mi>G</mi></mrow></munder><mrow><mo lspace=\"0em\" maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><mrow><mrow><munder><mo lspace=\"0em\" movablelimits=\"false\" rspace=\"0em\">⋀</mo><mrow><msup><mi>g</mi><mo>′</mo></msup><mo>∈</mo><mrow><mi>S</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>g</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></munder><mrow><mo stretchy=\"false\">(</mo><mrow><msubsup><mtext>c</mtext><mi>g</mi><mi>t</mi></msubsup><mo>∨</mo><msubsup><mtext>d</mtext><mi>g</mi><mi>t</mi></msubsup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">⟹</mo><mrow><msubsup><mtext>d</mtext><msup><mi>g</mi><mo>′</mo></msup><mi>t</mi></msubsup><mo rspace=\"0.055em\">∧</mo><mrow><munder><mo movablelimits=\"false\" rspace=\"0em\">⋀</mo><mrow><msup><mi>g</mi><mo>′</mo></msup><mo>∈</mo><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>g</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></munder><mrow><mo stretchy=\"false\">(</mo><mrow><msubsup><mtext>c</mtext><mi>g</mi><mi>t</mi></msubsup><mo>∨</mo><msubsup><mtext>a</mtext><mi>g</mi><mi>t</mi></msubsup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo stretchy=\"false\">⟹</mo><msubsup><mtext>a</mtext><msup><mi>g</mi><mo>′</mo></msup><mi>t</mi></msubsup></mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow></mrow></math>",
+   "label": "(8)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To ensure that gates are not skipped or applied twice, constraint 9 ensures that a gate is ‘advanced’ if and only if it was ‘current’ or ‘advanced’ in the previous time step. Likewise, a gate is ‘current’ or ‘delayed’ if and only if it was ‘delayed’ in the previous time step."
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{g\\in G}\\big(\\big((\\text{c}^{t-1}_{g}\\lor\\text{a}^{t-1}_{g})\\iff\\text{a}^{t}_{g}\\big)\\land\\big(\\text{d}^{t-1}_{g}\\iff(\\text{c}^{t}_{g}\\lor\\text{d}^{t}_{g})\\big)\\big)",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>g</mi><mo>∈</mo><mi>G</mi></mrow></munder><mrow><mo lspace=\"0em\" maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><mrow><mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msubsup><mtext>c</mtext><mi>g</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msubsup><mo>∨</mo><msubsup><mtext>a</mtext><mi>g</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msubsup></mrow><mo stretchy=\"false\">)</mo></mrow><mo stretchy=\"false\">⇔</mo><msubsup><mtext>a</mtext><mi>g</mi><mi>t</mi></msubsup><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow><mo>∧</mo><mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><msubsup><mtext>d</mtext><mi>g</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msubsup><mo stretchy=\"false\">⇔</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msubsup><mtext>c</mtext><mi>g</mi><mi>t</mi></msubsup><mo>∨</mo><msubsup><mtext>d</mtext><mi>g</mi><mi>t</mi></msubsup></mrow><mo stretchy=\"false\">)</mo></mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow></mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow></mrow></math>",
+   "label": "(9)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Constraint 10 is added to speed up solving time by reducing the search space. This constraint express that when a gate is ‘current’ none of its predecessors and successors can be ‘current’. We use "
+    },
+    {
+     "text": "𝑓𝑢𝑙𝑙𝑆(g)",
+     "latex": "\\mathit{fullS(g)}",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝑓𝑢𝑙𝑙𝑆</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>g</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " (and "
+    },
+    {
+     "text": "𝑓𝑢𝑙𝑙𝑃(g)",
+     "latex": "\\mathit{fullP(g)}",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝑓𝑢𝑙𝑙𝑃</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>g</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ") to denote the transitive closure of the successor (predecessor) relation in the dependency graph. We do this to improve the automatic propagation of the dependency constraints."
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{g\\in G}\\bigwedge_{g^{\\prime}\\in\\mathit{fullS(g)}\\cup\\mathit{fullP(g)}}\\text{c}^{t}_{g}\\implies\\neg\\text{c}^{t}_{g^{\\prime}}",
+   "mathml": "<math display=\"block\"><mrow><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>g</mi><mo>∈</mo><mi>G</mi></mrow></munder><mrow><munder><mo lspace=\"0.167em\" movablelimits=\"false\">⋀</mo><mrow><msup><mi>g</mi><mo>′</mo></msup><mo>∈</mo><mrow><mrow><mi>𝑓𝑢𝑙𝑙𝑆</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>g</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>∪</mo><mrow><mi>𝑓𝑢𝑙𝑙𝑃</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>g</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></munder><msubsup><mtext>c</mtext><mi>g</mi><mi>t</mi></msubsup></mrow></mrow><mo stretchy=\"false\">⟹</mo><mrow><mo rspace=\"0.167em\">¬</mo><msubsup><mtext>c</mtext><msup><mi>g</mi><mo>′</mo></msup><mi>t</mi></msubsup></mrow></mrow></math>",
+   "label": "(10)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Whenever a gate is ‘current’, the physical qubit(s) that it is being applied on must be ‘usable’, i.e., not undergoing a SWAP. This is encoded for binary gates in constraint 11 and for unary gates in constraint 12. These constraints ensure that a gate and a SWAP are not applied at the same time step."
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{g\\in\\mathit{G_{CX}}}\\bigwedge_{p\\in P}\\text{c}^{t}_{g}\\implies((\\text{mp}^{t}_{g.q_{0},p}\\lor\\text{mp}^{t}_{g.q_{1},p})\\implies\\text{u}^{t}_{p})",
+   "mathml": "<math display=\"block\"><mrow><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>g</mi><mo>∈</mo><msub><mi>G</mi><mi>𝐶𝑋</mi></msub></mrow></munder><mrow><munder><mo lspace=\"0.167em\" movablelimits=\"false\">⋀</mo><mrow><mi>p</mi><mo>∈</mo><mi>P</mi></mrow></munder><msubsup><mtext>c</mtext><mi>g</mi><mi>t</mi></msubsup></mrow></mrow><mo stretchy=\"false\">⟹</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><msubsup><mtext>mp</mtext><mrow><mi>g</mi><mo lspace=\"0em\" rspace=\"0.167em\">.</mo><msub><mi>q</mi><mn>0</mn></msub><mo>,</mo><mi>p</mi></mrow><mi>t</mi></msubsup><mo>∨</mo><msubsup><mtext>mp</mtext><mrow><mi>g</mi><mo lspace=\"0em\" rspace=\"0.167em\">.</mo><msub><mi>q</mi><mn>1</mn></msub><mo>,</mo><mi>p</mi></mrow><mi>t</mi></msubsup></mrow><mo stretchy=\"false\">)</mo></mrow><mo stretchy=\"false\">⟹</mo><msubsup><mtext>u</mtext><mi>p</mi><mi>t</mi></msubsup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></math>",
+   "label": "(11)"
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{g\\in\\mathit{G_{unary}}}\\bigwedge_{p\\in P}\\text{c}^{t}_{g}\\implies(\\text{mp}^{t}_{g.q,p}\\implies\\text{u}^{t}_{p})",
+   "mathml": "<math display=\"block\"><mrow><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>g</mi><mo>∈</mo><msub><mi>G</mi><mi>𝑢𝑛𝑎𝑟𝑦</mi></msub></mrow></munder><mrow><munder><mo lspace=\"0.167em\" movablelimits=\"false\">⋀</mo><mrow><mi>p</mi><mo>∈</mo><mi>P</mi></mrow></munder><msubsup><mtext>c</mtext><mi>g</mi><mi>t</mi></msubsup></mrow></mrow><mo stretchy=\"false\">⟹</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msubsup><mtext>mp</mtext><mrow><mi>g</mi><mo lspace=\"0em\" rspace=\"0.167em\">.</mo><mi>q</mi><mo>,</mo><mi>p</mi></mrow><mi>t</mi></msubsup><mo stretchy=\"false\">⟹</mo><msubsup><mtext>u</mtext><mi>p</mi><mi>t</mi></msubsup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></math>",
+   "label": "(12)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "SwapConstraints",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Constraint 13 encodes that a given physical qubit can participate in at most one SWAP gate for any three consecutive time steps. This is to ensure that SWAP gates are not applied in conflict with each other. We use "
+    },
+    {
+     "text": "𝑆𝑤(p)t",
+     "latex": "\\mathit{Sw(p)}^{t}",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝑆𝑤</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo stretchy=\"false\">)</mo></mrow><mi>t</mi></msup></mrow></math>"
+    },
+    {
+     "text": " to mean the set of variables "
+    },
+    {
+     "text": "swp,p′t",
+     "latex": "\\text{sw}^{t}_{p,p^{\\prime}}",
+     "mathml": "<math display=\"inline\"><msubsup><mtext>sw</mtext><mrow><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup></math>"
+    },
+    {
+     "text": " where "
+    },
+    {
+     "text": "(p,p′)∈P𝑐𝑜𝑛𝑛",
+     "latex": "(p,p^{\\prime})\\in\\mathit{P_{conn}}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msub><mi>P</mi><mi>𝑐𝑜𝑛𝑛</mi></msub></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{p\\in P}\\text{AtMostOne}(\\mathit{Sw(p)}^{t}\\cup\\mathit{Sw(p)}^{t-1}\\cup\\mathit{Sw(p)}^{t-2})",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>p</mi><mo>∈</mo><mi>P</mi></mrow></munder><mrow><mtext>AtMostOne</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mi>𝑆𝑤</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo stretchy=\"false\">)</mo></mrow><mi>t</mi></msup></mrow><mo>∪</mo><mrow><mi>𝑆𝑤</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo stretchy=\"false\">)</mo></mrow><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>∪</mo><mrow><mi>𝑆𝑤</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo stretchy=\"false\">)</mo></mrow><mrow><mi>t</mi><mo>−</mo><mn>2</mn></mrow></msup></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>",
+   "label": "(13)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The ‘swap’ variables indicate the last time step of a SWAP gate. To ensure that gates are not scheduled on top of SWAPs we require that if the ‘swap touched’ variable is set for a qubit, it is not available for gates to be scheduled on it for this and the preceding two time steps as seen in constraint 14. Also, as encoded in constraint 15, the ‘swap’ variables must all be set to false for the first three time steps."
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{p\\in P}\\bigwedge_{t^{\\prime}\\in\\{t,t-1,t-2\\}}\\big(\\text{st}^{t}_{p}\\implies\\neg\\text{u}^{t^{\\prime}}_{p}\\big)",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>p</mi><mo>∈</mo><mi>P</mi></mrow></munder><mrow><munder><mo lspace=\"0.167em\" movablelimits=\"false\" rspace=\"0em\">⋀</mo><mrow><msup><mi>t</mi><mo>′</mo></msup><mo>∈</mo><mrow><mo stretchy=\"false\">{</mo><mrow><mi>t</mi><mo>,</mo><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow><mo>,</mo><mrow><mi>t</mi><mo>−</mo><mn>2</mn></mrow></mrow><mo stretchy=\"false\">}</mo></mrow></mrow></munder><mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><mrow><msubsup><mtext>st</mtext><mi>p</mi><mi>t</mi></msubsup><mo stretchy=\"false\">⟹</mo><mrow><mo rspace=\"0.167em\">¬</mo><msubsup><mtext>u</mtext><mi>p</mi><msup><mi>t</mi><mo>′</mo></msup></msubsup></mrow></mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow></mrow></mrow></math>",
+   "label": "(14)"
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{p,p^{\\prime}\\in P_{\\mathit{conn}}}\\left(\\neg\\text{sw}^{1}_{p,p^{\\prime}}\\land\\neg\\text{sw}^{2}_{p,p^{\\prime}}\\land\\neg\\text{sw}^{3}_{p,p^{\\prime}}\\right)",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>p</mi><mo>,</mo><mrow><msup><mi>p</mi><mo>′</mo></msup><mo>∈</mo><msub><mi>P</mi><mi>𝑐𝑜𝑛𝑛</mi></msub></mrow></mrow></munder><mrow><mo lspace=\"0em\">(</mo><mrow><mrow><mo rspace=\"0.167em\">¬</mo><msubsup><mtext>sw</mtext><mrow><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mn>1</mn></msubsup></mrow><mo>∧</mo><mrow><mo rspace=\"0.167em\">¬</mo><msubsup><mtext>sw</mtext><mrow><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mn>2</mn></msubsup></mrow><mo>∧</mo><mrow><mo rspace=\"0.167em\">¬</mo><msubsup><mtext>sw</mtext><mrow><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mn>3</mn></msubsup></mrow></mrow><mo>)</mo></mrow></mrow></math>",
+   "label": "(15)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Nothing stops the SAT solver from swapping unmapped physical qubits. Such SWAPs are referred to as ’spurious SWAPs’. To ensure that no spurious SWAPs are scheduled, we require that at least one physical qubit in a SWAP must have a logical qubit mapped to it in constraint 16. We denote a SWAP with only one mapped physical qubit ’ancillary SWAP’. Ancillary SWAPs can be disabled by requiring that both physical qubits participating in a SWAP be occupied. We only present results allowing ancillary SWAPs."
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{p,p^{\\prime}\\in P_{\\mathit{conn}}}\\left(\\text{sw}^{t}_{p,p^{\\prime}}\\implies(\\text{oc}^{t}_{p}\\lor\\text{oc}^{t}_{p^{\\prime}})\\right)",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>p</mi><mo>,</mo><mrow><msup><mi>p</mi><mo>′</mo></msup><mo>∈</mo><msub><mi>P</mi><mi>𝑐𝑜𝑛𝑛</mi></msub></mrow></mrow></munder><mrow><mo lspace=\"0em\">(</mo><mrow><msubsup><mtext>sw</mtext><mrow><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup><mo stretchy=\"false\">⟹</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msubsup><mtext>oc</mtext><mi>p</mi><mi>t</mi></msubsup><mo>∨</mo><msubsup><mtext>oc</mtext><msup><mi>p</mi><mo>′</mo></msup><mi>t</mi></msubsup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>)</mo></mrow></mrow></math>",
+   "label": "(16)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Three final constraints are added to encode the effect of a SWAP gate. Constraint 17 says that if a ‘swap’ variable is set which includes the physical qubit "
+    },
+    {
+     "text": "p",
+     "latex": "p",
+     "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+    },
+    {
+     "text": ", the ‘swap touched’ variable for "
+    },
+    {
+     "text": "p",
+     "latex": "p",
+     "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+    },
+    {
+     "text": " is also set. Constraint 18 says that if the swap touched variable is not set for a qubit, its mapping is preserved from the last time step. Finally, constraint 19 says that when the swap variable for two qubits is set, the mappings for them switch compared to the previous time step."
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{p\\in P}\\big(\\text{st}^{t}_{p}\\iff\\big(\\bigvee_{p^{\\prime}\\in\\mathit{conn(p)}}\\text{sw}^{t}_{p,p^{\\prime}}\\big)\\big)",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>p</mi><mo>∈</mo><mi>P</mi></mrow></munder><mrow><mo lspace=\"0em\" maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><msubsup><mtext>st</mtext><mi>p</mi><mi>t</mi></msubsup><mo stretchy=\"false\">⇔</mo><mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><mrow><munder><mo lspace=\"0em\" movablelimits=\"false\">⋁</mo><mrow><msup><mi>p</mi><mo>′</mo></msup><mo>∈</mo><mrow><mi>𝑐𝑜𝑛𝑛</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></munder><msubsup><mtext>sw</mtext><mrow><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup></mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow></mrow></math>",
+   "label": "(17)"
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{p\\in P}\\bigwedge_{q\\in Q}\\left(\\neg\\text{st}^{t}_{p}\\implies(\\text{mp}^{t-1}_{q,p}\\iff\\text{mp}^{t}_{q,p})\\right)",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>p</mi><mo>∈</mo><mi>P</mi></mrow></munder><mrow><munder><mo lspace=\"0.167em\" movablelimits=\"false\" rspace=\"0em\">⋀</mo><mrow><mi>q</mi><mo>∈</mo><mi>Q</mi></mrow></munder><mrow><mo>(</mo><mrow><mrow><mo rspace=\"0.167em\">¬</mo><msubsup><mtext>st</mtext><mi>p</mi><mi>t</mi></msubsup></mrow><mo stretchy=\"false\">⟹</mo><mrow><mo stretchy=\"false\">(</mo><msubsup><mtext>mp</mtext><mrow><mi>q</mi><mo>,</mo><mi>p</mi></mrow><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msubsup><mo stretchy=\"false\">⇔</mo><msubsup><mtext>mp</mtext><mrow><mi>q</mi><mo>,</mo><mi>p</mi></mrow><mi>t</mi></msubsup><mo stretchy=\"false\">)</mo></mrow></mrow><mo>)</mo></mrow></mrow></mrow></math>",
+   "label": "(18)"
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigwedge_{p,p^{\\prime}\\in P_{\\mathit{conn}}}\\bigwedge_{q\\in Q}\\Big(\\text{sw}^{t}_{p,p^{\\prime}}\\implies\\big((\\text{mp}^{t-1}_{q,p}\\iff\\text{mp}^{t}_{q,p^{\\prime}})\\land(\\text{mp}^{t-1}_{q,p^{\\prime}}\\iff\\text{mp}^{t}_{q,p})\\big)\\Big)",
+   "mathml": "<math display=\"block\"><mrow><munder><mo movablelimits=\"false\">⋀</mo><mrow><mi>p</mi><mo>,</mo><mrow><msup><mi>p</mi><mo>′</mo></msup><mo>∈</mo><msub><mi>P</mi><mi>𝑐𝑜𝑛𝑛</mi></msub></mrow></mrow></munder><mrow><munder><mo lspace=\"0.167em\" movablelimits=\"false\" rspace=\"0em\">⋀</mo><mrow><mi>q</mi><mo>∈</mo><mi>Q</mi></mrow></munder><mrow><mo maxsize=\"1.600em\" minsize=\"1.600em\">(</mo><mrow><msubsup><mtext>sw</mtext><mrow><mi>p</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup><mo stretchy=\"false\">⟹</mo><mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><mrow><mrow><mo stretchy=\"false\">(</mo><msubsup><mtext>mp</mtext><mrow><mi>q</mi><mo>,</mo><mi>p</mi></mrow><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msubsup><mo stretchy=\"false\">⇔</mo><msubsup><mtext>mp</mtext><mrow><mi>q</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mi>t</mi></msubsup><mo stretchy=\"false\">)</mo></mrow><mo>∧</mo><mrow><mo stretchy=\"false\">(</mo><msubsup><mtext>mp</mtext><mrow><mi>q</mi><mo>,</mo><msup><mi>p</mi><mo>′</mo></msup></mrow><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msubsup><mo stretchy=\"false\">⇔</mo><msubsup><mtext>mp</mtext><mrow><mi>q</mi><mo>,</mo><mi>p</mi></mrow><mi>t</mi></msubsup><mo stretchy=\"false\">)</mo></mrow></mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow></mrow><mo maxsize=\"1.600em\" minsize=\"1.600em\">)</mo></mrow></mrow></mrow></math>",
+   "label": "(19)"
+  }
+ ],
+ "furniture": [
+  "arXiv:2506.06752v1 [quant-ph] 7 Jun 2025",
+  "2",
+  "Depth-Optimal Quantum Layout Synthesis as SAT",
+  "Anna B. Jakobsen, Anders B. Clausen, Jaco van de Pol, and Irfansha Shaik",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8"
+ ],
+ "license": "open",
+ "provenance": "latexml",
+ "notes": "arXiv 2506.06752v1 (quantum computing, algorithms; LIPIcs, algorithms), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Fixed where LaTeXML differs from the PDF: \"Coupling map\" → \"Input: Coupling map\"."
+}

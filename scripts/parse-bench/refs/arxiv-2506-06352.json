@@ -1,0 +1,1071 @@
+{
+ "id": "arxiv-2506-06352",
+ "category": "paper",
+ "source": {
+  "pdf": ".bench/arxiv/2506.06352v1.pdf",
+  "url": "https://arxiv.org/abs/2506.06352v1"
+ },
+ "pages": [
+  1,
+  8
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "Will artificial agents pursue power by default?"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Christian Tarsney"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "June 2025"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Abstract"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Researchers worried about catastrophic risks from advanced AI have argued that we should expect sufficiently capable AI agents to pursue power over humanity because power is a "
+    },
+    {
+     "text": "convergent instrumental goal",
+     "italic": true
+    },
+    {
+     "text": ", something that is useful for a wide range of final goals. Others have recently expressed skepticism of these claims. This paper aims to formalize the concepts of instrumental convergence and power-seeking in an abstract, decision-theoretic framework, and to assess the claim that power is a convergent instrumental goal. I conclude that this claim contains at least an element of truth, but might turn out to have limited predictive utility, since an agent’s options cannot always be ranked in terms of power in the absence of substantive information about the agent’s final goals. However, the fact of instrumental convergence is more predictive for agents who have a good shot at attaining absolute or near-absolute power."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Keywords",
+     "italic": true
+    },
+    {
+     "text": " AI alignment, AI safety, AI decision theory, instrumental convergence, power-seeking, orthogonality thesis"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "1 Introduction"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "With the rapid progress in artificial intelligence (AI) capabilities over the past several years, worries about catastrophic risks from advanced AI have become increasingly prominent.1 Many of these worries (though by no means all) focus on artificial "
+    },
+    {
+     "text": "agents",
+     "italic": true
+    },
+    {
+     "text": ": very roughly, AI systems that have goals in the external world, beliefs about the world, and behave in whatever ways they believe will best achieve their goals."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "1",
+   "spans": [
+    {
+     "text": "For recent surveys of these concerns, see Hendrycks et al. (2023) and Bales et al. (2024)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "It’s a matter of debate, and not at all obvious, whether any AI system with sufficient cognitive capabilities "
+    },
+    {
+     "text": "must",
+     "italic": true
+    },
+    {
+     "text": " be agentic in this sense. But it does seem likely that, as AI capabilities advance, we will "
+    },
+    {
+     "text": "choose",
+     "italic": true
+    },
+    {
+     "text": " to create increasingly agentic systems. For instance, present-day large language models (LLMs) aren’t particularly agentic on their own, but can be embedded within larger ‘‘language agent’’ systems that behave agentically: a human user supplies an objective in natural language, the LLM develops a plan to achieve that objective, and that plan is automatically implemented, with updates based on feedback from the environment.2 AI systems that can carry out complex plans autonomously can substitute for human labor, and perhaps eventually perform many tasks better than human workers, giving them potentially enormous economic value."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "2",
+   "spans": [
+    {
+     "text": "See for instance Park et al. (2023), Wang et al. (2023). For general discussion of language agents and their implications for AI catastrophic risk, see Goldstein and Kirk-Giannini (2023)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The "
+    },
+    {
+     "text": "alignment problem",
+     "italic": true
+    },
+    {
+     "text": " is, roughly, the problem of making sure that artificial agents want what we want them to want (Gabriel, 2020; Ngo et al., 2023). The more capable and widely deployed artificial agents become, the more the world will be influenced by their activities, and the more important it will be that they are pursuing the right goals."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Many researchers believe that aligning AI agents with human-level or greater capabilities will be extremely difficult, and that the creation of such agents therefore carries catastrophic risks.3 Two claims that often underlie these worries are that (i) there are some "
+    },
+    {
+     "text": "default tendencies",
+     "italic": true
+    },
+    {
+     "text": " for artificial agents to want things that we don’t want them to want, and (ii) it’s at least difficult to ensure before deployment that we’ve eliminated all those undesirable default tendencies from an AI agent."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "3",
+   "spans": [
+    {
+     "text": "See for instance Bostrom (2014), especially the discussion of “motivation selection methods” in Ch. 9; Carlsmith (2022), especially §4; Hendrycks et al. (2023, §5); Ngo et al. (2023); Bales et al. (2024, §2); Cappelen et al. (forthcoming, §3)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "My focus in this paper will be on the first of those claims—more specifically, on the idea that AI agents will end up with undesirable goals by default as a result of "
+    },
+    {
+     "text": "instrumental convergence",
+     "italic": true
+    },
+    {
+     "text": ". Roughly, instrumental convergence is the idea that certain goals are "
+    },
+    {
+     "text": "convergent",
+     "italic": true
+    },
+    {
+     "text": " in the sense that they are useful for achieving a very wide range of further goals. So, even if we are totally ignorant about an agent’s "
+    },
+    {
+     "text": "final",
+     "italic": true
+    },
+    {
+     "text": " goals (the ends that the agent values for their own sakes), if we can predict that the agent will be minimally instrumental rational, then we can make some non-trivial predictions about its "
+    },
+    {
+     "text": "instrumental",
+     "italic": true
+    },
+    {
+     "text": " goals—namely, that its instrumental goals will include many or all of these convergent goals. The idea of instrumental convergence has been advocated most prominently by Omohundro (2008) and Bostrom (2012). As Bostrom defines it, a convergent instrumental goal is something the attainment of which “would increase the chances of the agent’s goal being realized for a wide range of final goals and a wide range of situations, implying that these instrumental values are likely to be pursued by many intelligent agents” (Bostrom, 2012, p. 76)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Omohundro, Bostrom, and others have proposed a number of goals as being convergent instrumental goals in this sense. Perhaps the most obvious is "
+    },
+    {
+     "text": "self-preservation",
+     "italic": true
+    },
+    {
+     "text": ": You can’t fetch the coffee if you’re dead, you can’t make paperclips if you’re dead, etc (Russell, 2019, Ch. 5), so almost no matter what your final goals are, it’s useful to stay alive. Another commonly suggested candidate is "
+    },
+    {
+     "text": "final goal preservation",
+     "italic": true
+    },
+    {
+     "text": ". If a powerful agent goes from wanting to maximize the number of paperclips in the world to wanting to minimize the number of paperclips, the result is likely to be fewer paperclips. So an instrumentally rational paperclip maximizer will, by default, want to prevent its final goals from being tampered with.4 Other proposed examples of convergent instrumental goals include resources, information, cognitive self-enhancement, and keeping one’s options open, among others."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "4",
+   "spans": [
+    {
+     "text": "The “paperclip maximizer” is a stock example of an AI agent with arbitrary and potentially dangerous final goals, due to Bostrom (2003)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Many if not all of these proposed convergent instrumental goals can be subsumed under the general umbrella of "
+    },
+    {
+     "text": "power-seeking",
+     "italic": true
+    },
+    {
+     "text": ". For instance, self-preservation is instrumentally valuable because if you’re alive, you have at least some power to pursue your goals, and if you’re dead, you don’t. Likewise, resources, information, and cognitive enhancement are all clearly ways of increasing an agent’s power to achieve its goals.5"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "5",
+   "spans": [
+    {
+     "text": "I think one could argue that "
+    },
+    {
+     "text": "all",
+     "italic": true
+    },
+    {
+     "text": " plausible convergent instrumental goals are different forms of or contributors to power, though I won’t argue for that claim here and nothing I’m going to say will depend on it."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Though the concept of power plays little explicit role in Omohundro (2008) or Bostrom (2012), many subsequent researchers have identified it as a potential convergent instrumental goal.6 And the idea of power-seeking has figured centrally in recent worries about catastrophic risks from AI.7 For instance, Joseph Carlsmith writes: “[P]ower is extremely useful to accomplishing objectives—indeed, it is so almost by definition. So to the extent that an agent is engaging in unintended behavior in pursuit of problematic objectives, it will generally have incentives, other things equal, to gain and maintain forms of power in the process” (Carlsmith, 2022, p. 18)."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "6",
+   "spans": [
+    {
+     "text": "The idea that power is a convergent instrumental goal is discussed sympathetically, for example, by Turner et al. (2021), Carlsmith (2022, esp. §4.2), Hendrycks et al. (2023, §5.3), (Dung, 2024, §5), and Cappelen et al. (forthcoming, §3)."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "7",
+   "spans": [
+    {
+     "text": "See for instance Carlsmith (2022); Carlsmith (forthcoming), Hendrycks et al. (2023), Dung (2024), Bales et al. (2024), Cappelen et al. (forthcoming), and Ngo and Bales (forthcoming)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To claim that power is a convergent instrumental goal is to claim that there is, in a certain sense, a “default tendency” for agents with most possible final goals to engage in power-seeking behavior, at least if they’re instrumentally rational. If that’s true, so what? How does it support the claim that creating highly capable AI agents carries catastrophic risks?"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The argument from instrumentally convergent power-seeking to catastrophic risk involves, I think, two further significant premises. First, if agents do have a default tendency to pursue some goal "
+    },
+    {
+     "text": "g",
+     "latex": "g",
+     "mathml": "<math display=\"inline\"><mi>g</mi></math>"
+    },
+    {
+     "text": ", then it’s at least hard to be very confident, before deploying a new artificial agent for the first time, that we’ve trained that tendency out of it. This claim relies on two subpremises. The first is what Bostrom (2012) calls the "
+    },
+    {
+     "text": "orthogonality thesis",
+     "italic": true
+    },
+    {
+     "text": ", which says roughly that there’s no intrinsic relationship between intelligence and final goals: the fact that we’ve trained a very intelligent, very capable AI system, that’s very good at means-ends reasoning, doesn’t guarantee that it will have any particular final goals, like human welfare, the objective moral good, or an intrinsic aversion to power. The second subpremise is what we might call "
+    },
+    {
+     "text": "alignment difficulty",
+     "italic": true
+    },
+    {
+     "text": ". As the name suggests, this is the claim that aligning an artificial agent with a desired set of values is a hard problem—or at least, it’s hard to be confident that you’ve succeeded before you actually deploy the agent in the real world and give it an opportunity to pursue its goals. These claims together at least suggest that, if there is a default tendency for agents with most possible final goals to pursue instrumental goal "
+    },
+    {
+     "text": "g",
+     "latex": "g",
+     "mathml": "<math display=\"inline\"><mi>g</mi></math>"
+    },
+    {
+     "text": ", then we shouldn’t be "
+    },
+    {
+     "text": "extremely",
+     "italic": true
+    },
+    {
+     "text": " confident pre-deployment that the agent we’ve created won’t also pursue "
+    },
+    {
+     "text": "g",
+     "latex": "g",
+     "mathml": "<math display=\"inline\"><mi>g</mi></math>"
+    },
+    {
+     "text": ", even (or perhaps especially) if that agent is extremely intelligent and capable."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The second high-level premise is that an AI agent that has superhuman capabilities and instrumentally values power would pose catastrophic risks to humanity. There are various reasons why you might think that. For instance, you might think that if an AI agent has superhuman capabilities, it’s likely to be "
+    },
+    {
+     "text": "successful",
+     "italic": true
+    },
+    {
+     "text": " in its pursuit of power, that its successful pursuit of power would result in humanity being "
+    },
+    {
+     "text": "dis",
+     "italic": true
+    },
+    {
+     "text": "empowered, and that this outcome would be intrinsically catastrophic.8 Or you might think that, if a superhuman AI agent successfully attains great power, it will likely also succeed in achieving its final goals, and it’s likely that those "
+    },
+    {
+     "text": "final",
+     "italic": true
+    },
+    {
+     "text": " goals will be catastrophic for humanity—for instance, converting all matter in the solar system into paperclips. Or, finally, you might think that the best "
+    },
+    {
+     "text": "means",
+     "italic": true
+    },
+    {
+     "text": " for a superintelligent AI agent to pursue power will involve actions that are catastrophic for humanity, like wiping us out or enslaving us to ensure that we can’t threaten its power in future."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "8",
+   "spans": [
+    {
+     "text": "For a nuanced discussion of this last claim, see Bales (forthcoming-a)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Instrumentally convergent power-seeking, the difficulty of reliably eliminating default tendencies in AI agents pre-deployment, and the potentially catastrophic harms from superhuman AI agents seeking power together suggest that the creation of such agents is catastrophically risky."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Recently, though, some philosophers have pushed back on this story, and in particular on the initial premise that power is a convergent instrumental goal that agents have a default tendency to pursue. In particular, Gallow (2024) argues that there are some genuinely convergent instrumental goals, but doesn’t think that power-seeking is among them. And Thorstad (2024) examines some formal arguments for instrumentally convergent power-seeking from the reinforcement learning literature, and argues that they don’t show what they purport to show, and in particular don’t show anything that strongly supports worries about catastrophic AI risk.9"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "9",
+   "spans": [
+    {
+     "text": "For a skeptical perspective on instrumental convergence arguments more generally, see Sharadin (forthcoming)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Gallow’s and Thorstad’s arguments are both primarily negative: They don’t claim to provide comprehensive positive arguments "
+    },
+    {
+     "text": "against",
+     "italic": true
+    },
+    {
+     "text": " instrumentally convergent power-seeking. Rather, they find a lack of support "
+    },
+    {
+     "text": "for",
+     "italic": true
+    },
+    {
+     "text": " instrumentally convergent power-seeking, or at any rate for a version of that claim that could play a role in a compelling argument for catastrophic risks from AI. What their papers show is that, a bit surprisingly, there is not yet a satisfactory general formalization of the claim that power is a convergent instrumental goal, or a formal argument for that general claim."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "There are, as Thorstad discusses at length, a number of “power-seeking theorems” in the reinforcement literature (Benson-Tilsen and Soares, 2016; Turner et al., 2021; Turner and Tadepalli, 2022; Krakovna and Kramar, 2023). But while these theorems make valuable contributions, they have at least two limitations: First, they make fairly specific assumptions about the agent’s final goals—in particular the assumption, characteristic of reinforcement learning, that the agent is maximizing or has been trained to maximize a discounted sum of time-separable rewards. Second, they make substantial assumptions about the decision situations the agent faces. For instance, Benson-Tilsen and Soares (2016) assume that the agent operates in an environment divided into discrete regions, and that its choices concern the allocation of resources across regions, with particular rules for how the state of each region evolves, how the allocation of resources at one time-step generates new resources at the next time step, and so on. Results that depend on substantial assumptions about an agent’s final goals or about the environment can provide only limited support for claim that power or some other goal is instrumentally convergent, in Bostrom’s sense of “[increasing] the chances of the agent’s goals being realized for a wide range of final goals and a wide range of situations”."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Nevertheless, it seems to me that there’s something importantly right about the idea that power is a convergent instrumental goal. My aim in this paper is to articulate that important kernel of truth, in a way that’s more precise than the informal presentations of the idea in Omohundro (2008), Bostrom (2012), and elsewhere, and more general than the power-seeking theorems in the reinforcement learning literature.10 On the other hand, I will also point out some potential limits on the predictive utility of this truth, that is, limits on how much it allows us to predict about the behavior of future artificial agents."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "10",
+   "spans": [
+    {
+     "text": "In this existing literature, the closest precedent for my positive arguments is Turner et al. (2021). In particular, there are close conceptual parallels between our respective formalizations of "
+    },
+    {
+     "text": "power",
+     "italic": true
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "instrumental convergence",
+     "italic": true
+    },
+    {
+     "text": ". Our definitions and results differ in a number of ways, but the most important difference is that Turner et al. work in the standard reinforcement learning setting of Markov decision processes (where an agent follows an infinite trajectory through a finite set of states, aiming to maximize a discounted sum of state-based rewards), while I work in the decision-theoretic setting of finite decision trees with an arbitrary utility function over final outcomes (to be explained in the next section)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Here’s the plan: After some formal setup (§2), I’ll formalize the notion of instrumental convergence—or rather, three notions of instrumental convergence, with different degrees of strength—in an abstract decision-theoretic framework (§3). In §4, I’ll propose several few ways of formalizing the notion of power in that same framework, and show that they each (to different degrees) constitute convergent instrumental goals. In §5, I’ll prove a negative result: Neither power nor any other convergent instrumental goal provides a "
+    },
+    {
+     "text": "complete",
+     "italic": true
+    },
+    {
+     "text": " ordering of the options an agent might face. In many possible situations, the agent’s options will be unranked in terms of any notion of power that could constitute a convergent instrumental goal, and so the fact of instrumentally convergent power-seeking doesn’t help us predict the agent’s behavior in those situations. In §6, however, I’ll argue that instrumental convergence results are more likely to be predictive of the behavior of future artificial agents insofar as we expect those agents to have opportunities to acquire "
+    },
+    {
+     "text": "absolute",
+     "italic": true
+    },
+    {
+     "text": " or "
+    },
+    {
+     "text": "near-absolute",
+     "italic": true
+    },
+    {
+     "text": " power. §7 will conclude by surveying a few of the important questions about instrumentally convergent power-seeking left open by the preceding discussion."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To be clear at the outset, my aim in this paper will "
+    },
+    {
+     "text": "not",
+     "italic": true
+    },
+    {
+     "text": " be to defend the whole argument that power-seeking tendencies make advanced AI agents catastrophically risky. I’m not sure how much weight I ultimately give to that argument---in particular, it seems unclear at the moment whether aligning artificial agents in a way that reliably eliminates undesirable default tendencies will turn out to be a hard problem.11 My aim is just to partially vindicate one premise of that argument."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "11",
+   "spans": [
+    {
+     "text": "On this question, see for instance Goldstein and Kirk-Giannini (2023), who argue that language agents are easier to reliably align and therefore less risky than reinforcement learning agents."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "2 Setup"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We’ll work in the framework of sequential decision theory. That is, we assume an agent facing a "
+    },
+    {
+     "text": "sequential choice situation",
+     "italic": true
+    },
+    {
+     "text": ", represented by a decision tree. The tree consists of "
+    },
+    {
+     "text": "choice nodes",
+     "italic": true
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "chance nodes",
+     "italic": true
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "(final) outcomes",
+     "italic": true
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "branches",
+     "italic": true
+    },
+    {
+     "text": ". The agent follows a path through the tree, from an initial node, until eventually reaching an outcome. At choice nodes, the path she takes depends on her choice. At chance nodes, the path she takes depends on a chance event, with each branch having a predetermined probability. Figure 1 gives a simple illustration of a decision tree."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We will assume a set "
+    },
+    {
+     "text": "O",
+     "latex": "\\mathbb{O}",
+     "mathml": "<math display=\"inline\"><mi>O</mi></math>"
+    },
+    {
+     "text": " of possible outcomes that is finite but has cardinality "
+    },
+    {
+     "text": "≥3",
+     "latex": "\\geq 3",
+     "mathml": "<math display=\"inline\"><mrow><mphantom></mphantom><mo>≥</mo><mn>3</mn></mrow></math>"
+    },
+    {
+     "text": ". This defines a set "
+    },
+    {
+     "text": "𝒯O",
+     "latex": "\\mathcal{T}{O}",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>O</mi></mrow></math>"
+    },
+    {
+     "text": " of all finite decision trees (that is, decision trees with a finite number of nodes) terminating in outcomes from "
+    },
+    {
+     "text": "O",
+     "latex": "\\mathbb{O}",
+     "mathml": "<math display=\"inline\"><mi>O</mi></math>"
+    },
+    {
+     "text": ". A "
+    },
+    {
+     "text": "strategy",
+     "italic": true
+    },
+    {
+     "text": " for a sequential choice situation is a specification, for each choice node in the decision tree, of either an action or a probability distribution over actions. A decision tree "
+    },
+    {
+     "text": "t",
+     "latex": "t",
+     "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+    },
+    {
+     "text": " and a strategy "
+    },
+    {
+     "text": "s",
+     "latex": "s",
+     "mathml": "<math display=\"inline\"><mi>s</mi></math>"
+    },
+    {
+     "text": " for that tree together define a "
+    },
+    {
+     "text": "lottery ",
+     "italic": true
+    },
+    {
+     "text": "L(t,s)",
+     "latex": "L(t,s)",
+     "mathml": "<math display=\"inline\"><mrow><mi>L</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>s</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", the probability distribution over final outcomes for an agent following strategy "
+    },
+    {
+     "text": "s",
+     "latex": "s",
+     "mathml": "<math display=\"inline\"><mi>s</mi></math>"
+    },
+    {
+     "text": " from the initial node of tree "
+    },
+    {
+     "text": "t",
+     "latex": "t",
+     "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+    },
+    {
+     "text": ". We can also associate each decision tree "
+    },
+    {
+     "text": "t",
+     "latex": "t",
+     "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+    },
+    {
+     "text": " with a "
+    },
+    {
+     "text": "set",
+     "italic": true
+    },
+    {
+     "text": " of lotteries "
+    },
+    {
+     "text": "ℒ(t)",
+     "latex": "\\mathcal{L}(t)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ℒ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", namely, the set of lotteries associated with all possible strategies for tree "
+    },
+    {
+     "text": "t",
+     "latex": "t",
+     "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+    },
+    {
+     "text": ". These are, intuitively, the lotteries "
+    },
+    {
+     "text": "available",
+     "italic": true
+    },
+    {
+     "text": " to an agent at the initial node of "
+    },
+    {
+     "text": "t",
+     "latex": "t",
+     "mathml": "<math display=\"inline\"><mi>t</mi></math>"
+    },
+    {
+     "text": ", that she can choose from by adopting a particular strategy. Each node in a decision tree defines a "
+    },
+    {
+     "text": "subtree",
+     "italic": true
+    },
+    {
+     "text": ", the part of the overall decision tree accessible from that node."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "FIGURE 1: An example of a decision tree. Square nodes represent choices, circular nodes represent chance events, and numbers along branches represent probabilities."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Finally, we will assume that our agent is an "
+    },
+    {
+     "text": "expected utility maximizer",
+     "italic": true
+    },
+    {
+     "text": ". This means that there is some utility function "
+    },
+    {
+     "text": "u:O→R",
+     "latex": "u:\\mathbb{O}\\to\\mathbb{R}",
+     "mathml": "<math display=\"inline\"><mrow><mi>u</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mi>O</mi><mo stretchy=\"false\">→</mo><mi>R</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " such that, in any decision tree "
+    },
+    {
+     "text": "t∈𝒯O",
+     "latex": "t\\in\\mathcal{T}{O}",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>∈</mo><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>O</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ", she will follow a strategy "
+    },
+    {
+     "text": "s",
+     "latex": "s",
+     "mathml": "<math display=\"inline\"><mi>s</mi></math>"
+    },
+    {
+     "text": " such that the associated lottery "
+    },
+    {
+     "text": "L(t,s)",
+     "latex": "L(t,s)",
+     "mathml": "<math display=\"inline\"><mrow><mi>L</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>s</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " gives her at least as great an expectation of "
+    },
+    {
+     "text": "u",
+     "latex": "u",
+     "mathml": "<math display=\"inline\"><mi>u</mi></math>"
+    },
+    {
+     "text": " (expected utility) as any of the other available lotteries in "
+    },
+    {
+     "text": "ℒ(t)",
+     "latex": "\\mathcal{L}(t)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ℒ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". This is undeniably a substantive assumption. However, it is not an assumption about the content of the agent’s "
+    },
+    {
+     "text": "final goals",
+     "italic": true
+    },
+    {
+     "text": ", which are represented by her ranking of final outcomes—expected utility maximization is compatible with any ranking of final outcomes. Rather, it’s an assumption about what it means for an agent to be "
+    },
+    {
+     "text": "instrumentally rational",
+     "italic": true
+    },
+    {
+     "text": ", and the standard such assumption in the relevant machine learning and AI safety literatures.12 Since we are assuming that the set of possible outcomes "
+    },
+    {
+     "text": "O",
+     "latex": "\\mathbb{O}",
+     "mathml": "<math display=\"inline\"><mi>O</mi></math>"
+    },
+    {
+     "text": " is finite, utilities are necessarily bounded, and without loss of generality we can think of them as confined to the unit interval "
+    },
+    {
+     "text": "[0,1]",
+     "latex": "[0,1]",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy=\"false\">]</mo></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "12",
+   "spans": [
+    {
+     "text": "One potential substantive justification for this assumption is the idea that any sufficiently optimized agent can be represented as an expected-utility maximizer, because non-expected utility maximizers are subject to sure losses of a sort that will be penalized and thus eliminated by optimization processes (Yudkowsky, 2015). I’m skeptical of these arguments, though. For recent critical appraisals, see Thornley (2023), Bales (forthcoming)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In a slight abuse of notation, we will let "
+    },
+    {
+     "text": "u(l)",
+     "latex": "u(l)",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">u</mi><mo>⁡</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">l</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " denote the expected "
+    },
+    {
+     "text": "u",
+     "latex": "u",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">u</mi></math>"
+    },
+    {
+     "text": "-utility of lottery "
+    },
+    {
+     "text": "l",
+     "latex": "l",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">l</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "u(t)",
+     "latex": "u(t)",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">u</mi><mo>⁡</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">t</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " denote the maximum expected "
+    },
+    {
+     "text": "u",
+     "latex": "u",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">u</mi></math>"
+    },
+    {
+     "text": "-utility of any lottery available in decision tree "
+    },
+    {
+     "text": "t",
+     "latex": "t",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">t</mi></math>"
+    },
+    {
+     "text": " (i.e., "
+    },
+    {
+     "text": "maxl∈ℒ(t)u(l)",
+     "latex": "\\max_{l\\in\\mathcal{L}(t)}u(l)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">max</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">l</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">∈</mo><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ℒ</mi><mo>⁡</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">t</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow></mrow></msub><mo lspace=\"0.167em\">⁡</mo><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">u</mi><mo>⁡</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">l</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": "). "
+    },
+    {
+     "text": "u(t)",
+     "latex": "u(t)",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">u</mi><mo>⁡</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">t</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " represents the expected utility for an agent with utility function "
+    },
+    {
+     "text": "u",
+     "latex": "u",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">u</mi></math>"
+    },
+    {
+     "text": " of reaching the initial node of tree "
+    },
+    {
+     "text": "t",
+     "latex": "t",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">t</mi></math>"
+    },
+    {
+     "text": ", given the assumption that its future behavior will continue to maximize the expectation of "
+    },
+    {
+     "text": "u",
+     "latex": "u",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">u</mi></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Expected utility maximizers decide what to do at a given choice node in a decision tree based on the sets of lotteries available at subsequent nodes. That is, if such an agent is at a choice node with "
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": " options, leading to subtrees "
+    },
+    {
+     "text": "t1",
+     "latex": "t_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": " to "
+    },
+    {
+     "text": "tn",
+     "latex": "t_{n}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>n</mi></msub></math>"
+    },
+    {
+     "text": ", she will choose the subtree "
+    },
+    {
+     "text": "ti",
+     "latex": "t_{i}",
+     "mathml": "<math display=\"inline\"><msub><mi>t</mi><mi>i</mi></msub></math>"
+    },
+    {
+     "text": " whose set of available lotteries "
+    },
+    {
+     "text": "ℒ(ti)",
+     "latex": "\\mathcal{L}(t_{i})",
+     "mathml": "<math display=\"inline\"><mrow><mi>ℒ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>t</mi><mi>i</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " contains the lottery with greatest expected utility (or will choose "
+    },
+    {
+     "text": "one",
+     "italic": true
+    },
+    {
+     "text": " such subtree, in the case of ties). In other words, she chooses based on a fixed ranking of subtrees, without regard to the particular set of alternatives she faces at a given choice node, the larger structure of the decision tree in which she finds herself, or her own past choices."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "3 Instrumental convergence"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We now have the resources to formalize the notions of "
+    },
+    {
+     "text": "instrumental convergence",
+     "italic": true
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "power",
+     "italic": true
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Starting with instrumental convergence: The informal idea of instrumental convergence is that "
+    },
+    {
+     "text": "g",
+     "latex": "g",
+     "mathml": "<math display=\"inline\"><mi>g</mi></math>"
+    },
+    {
+     "text": " is a convergent instrumental goal if "
+    },
+    {
+     "text": "most",
+     "italic": true
+    },
+    {
+     "text": " final"
+    }
+   ]
+  }
+ ],
+ "furniture": [
+  "arXiv:2506.06352v1 [cs.AI] 2 Jun 2025",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8"
+ ],
+ "license": "open",
+ "provenance": "latexml",
+ "notes": "arXiv 2506.06352v1 (AI and philosophy; one column, small page, many footnotes), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Macros expanded: \\mdmathbb."
+}

@@ -1,0 +1,5728 @@
+{
+ "id": "arxiv-2503-22874",
+ "category": "paper",
+ "source": {
+  "pdf": ".bench/arxiv/2503.22874v2.pdf",
+  "url": "https://arxiv.org/abs/2503.22874v2"
+ },
+ "pages": [
+  1,
+  8
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "Constraining the redshift of PG 1553+113 using the photohadronic model"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Sarira Sahu1 ⋆, R. de J. Pacheco-Aké2 †, G. Sánchez-Colón2 ‡, D. I. Páez-Sánchez1 §,"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A. U. Puga Oliveros1 ¶ Subhash Rajpoot3 ∥,"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "1Instituto de Ciencias Nucleares, Universidad Nacional Autónoma de México, Circuito Exterior S/N, C.U., A.P. 70-543,"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "CDMX 04510, México."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "2Departamento de Fı́sica Aplicada, Centro de Investigación y de Estudios Avanzados del IPN, Unidad Mérida. A.P. 73, Cordemex,"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Mérida, Yucatán 97310, México."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "3Department of Physics and Astronomy, California State University, 1250 Bellflower Boulevard, Long Beach, CA 90840, USA."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "⋆",
+   "spans": [
+    {
+     "text": "Contact e-mail: sarira@nucleares.unam.mx"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "†",
+   "spans": [
+    {
+     "text": "Contact e-mail: rodrigo.pacheco@cinvestav.mx"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "‡",
+   "spans": [
+    {
+     "text": "Contact e-mail: gabriel.sanchez@cinvestav.mx"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "§",
+   "spans": [
+    {
+     "text": "Contact e-mail: diana.paez@correo.nucleares.unam.mx"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "¶",
+   "spans": [
+    {
+     "text": "Contact e-mail: angel.puga@correo.nucleares.unam.mx"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "∥",
+   "spans": [
+    {
+     "text": "Contact e-mail: Subhash.Rajpoot@csulb.edu"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "ABSTRACT"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Between 2005 and 2015, the BL Lacertae object PG 1553+113 exhibited multiple very high-energy (VHE; "
+    },
+    {
+     "text": ">100",
+     "latex": ">100",
+     "mathml": "<math display=\"inline\"><mrow><mphantom></mphantom><mo>&gt;</mo><mn>100</mn></mrow></math>"
+    },
+    {
+     "text": " GeV) gamma-ray flares, which were detected by the Cherenkov telescopes, High Energy Stereoscopic System (HESS), Major Atmospheric Gamma Imaging Cherenkov (MAGIC), and the Very Energetic Radiation Imaging Telescope Array System (VERITAS). Despite the uncertainty surrounding its redshift ("
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi>z</mi></math>"
+    },
+    {
+     "text": "), various studies have sought to estimate this value. In this study, seventeen independently observed VHE gamma-ray spectra of PG 1553+113 are analysed using four distinct extragalactic background light (EBL) models alongside the photohadronic framework. A global "
+    },
+    {
+     "text": "χ2",
+     "latex": "\\chi^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi>χ</mi><mn>2</mn></msup></math>"
+    },
+    {
+     "text": " fit is applied to all observational data to determine the best-fitting redshift for each EBL model. Additionally, confidence level (CL) intervals for the redshift are calculated across all EBL models. The findings demonstrate that the photohadronic framework effectively describes all observed spectra. Among the EBL models, the lowest total "
+    },
+    {
+     "text": "χ2",
+     "latex": "\\chi^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi>χ</mi><mn>2</mn></msup></math>"
+    },
+    {
+     "text": " value of 58.82 (with 58 degrees of freedom) was obtained using the model from Saldana-Lopez et al. (2021), while the highest value of 75.67 was associated with the model from Domínguez et al. (2011). The 95 per cent CL intervals for the statistical error of the redshift of PG 1553+113 are "
+    },
+    {
+     "text": "0.500<z<0.537",
+     "latex": "0.500<z<0.537",
+     "mathml": "<math display=\"inline\"><mrow><mn>0.500</mn><mo>&lt;</mo><mi>z</mi><mo>&lt;</mo><mn>0.537</mn></mrow></math>"
+    },
+    {
+     "text": " for the Saldana-Lopez model and "
+    },
+    {
+     "text": "0.491<z<0.527",
+     "latex": "0.491<z<0.527",
+     "mathml": "<math display=\"inline\"><mrow><mn>0.491</mn><mo>&lt;</mo><mi>z</mi><mo>&lt;</mo><mn>0.527</mn></mrow></math>"
+    },
+    {
+     "text": " for the Domínguez model. These results highlight the consistency of the photohadronic approach in interpreting the observed VHE gamma-ray spectra."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Key words: BL Lacertae objects: individual: PG 1553+113, galaxies: distances and redshifts, methods: statistical"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "1 INTRODUCTION"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "BL Lacertae (BL Lac) blazars represent a unique category of active galactic nuclei (AGN), distinguished by their non-thermal emission spectra, which arise from a relativistic jet oriented nearly parallel to the observer’s line of sight (Urry & Padovani 1995; Acciari et al. 2011). These objects display rapid variability across the entire electromagnetic spectrum. Their spectral energy distributions (SEDs) are marked by a characteristic two-peak structure (Abdo et al. 2010b). The low-energy peak is attributed to the synchrotron radiation emitted by the low-energy electrons as they traverse the jet’s magnetic field. The high-energy peak, on the other hand, can be either due to the inverse Compton scattering of high-energy electrons with their self-produced synchrotron photons—referred to as synchrotron self-Compton (SSC) scattering (Maraschi et al. 1992; Dermer & Schlickeiser 1993; Sikora et al. 1994; Blazejowski et al. 2000; Murase et al. 2012; Gao et al. 2013)—or the scattering of external photons originating from the accretion disk, broad-line regions, or the dusty torus surrounding the AGN (Dermer & Schlickeiser 1993; Sikora et al. 1994; Blazejowski et al. 2000)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In BL Lac objects, the non-thermal radiation significantly overshadows the stellar light emitted by their host galaxies, making it challenging to determine accurately the redshifts. This limitation creates uncertainties in studying the cosmic evolution, deciphering the source’s characteristics, and analysing its intrinsic VHE spectrum. Given that VHE photons are absorbed by the EBL, obtaining precise redshift measurements is essential for understanding the EBL’s influence on VHE photons."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "PG 1553+113, a well-known blazar, was first identified in a photographic survey (Green et al. 1986). Its spectral properties have been thoroughly examined, leading to its classification as a high-frequency synchrotron peaked BL Lac (HBL) (Chang et al. 2019). Over the years, multiple VHE observations have been carried out using different instruments. The HESS telescope array first detected this blazar in gamma-rays in 2005 (Aharonian et al. 2006), and it was later monitored by MAGIC and VERITAS in various campaigns between 2005 and 2015, especially during periods of heightened activity. PG 1553+113 is a prime target for high-energy astrophysics due to its extreme variability and emission mechanisms. However, its redshift remains unconfirmed via spectroscopy, making indirect estimation methods critical for interpreting its emission properties and cosmological impact."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The VHE gamma-ray flux from a blazar ("
+    },
+    {
+     "text": "Fγ",
+     "latex": "F_{\\gamma}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub></math>"
+    },
+    {
+     "text": "), as measured on Earth, can be expressed as (Hauser & Dwek 2001):"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "F_{\\gamma}(E_{\\gamma})=F_{\\rm int}(E_{\\gamma})\\,e^{-\\tau_{\\gamma\\gamma}(E_{\\gamma},z)},",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">=</mo><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">int</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow><mo lspace=\"0.170em\" rspace=\"0em\">​</mo><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">e</mi><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">−</mo><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">τ</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow></mrow></msup></mrow></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo></mrow></math>",
+   "label": "(1)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "Eγ",
+     "latex": "E_{\\gamma}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub></math>"
+    },
+    {
+     "text": " denotes the energy of the observed VHE photon, "
+    },
+    {
+     "text": "Fγ",
+     "latex": "F_{\\gamma}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub></math>"
+    },
+    {
+     "text": " is the observed flux, and "
+    },
+    {
+     "text": "Fint",
+     "latex": "F_{\\rm int}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">int</mi></msub></math>"
+    },
+    {
+     "text": " represents the intrinsic flux. The optical depth, "
+    },
+    {
+     "text": "τγγ",
+     "latex": "\\tau_{\\gamma\\gamma}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">τ</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></mrow></msub></math>"
+    },
+    {
+     "text": ", which arises from the pair production process "
+    },
+    {
+     "text": "γγ→e+e−",
+     "latex": "\\gamma\\gamma\\rightarrow e^{+}e^{-}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">→</mo><mrow><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">e</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">+</mo></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">e</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">−</mo></msup></mrow></mrow></math>"
+    },
+    {
+     "text": ", is a function of both "
+    },
+    {
+     "text": "Eγ",
+     "latex": "E_{\\gamma}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub></math>"
+    },
+    {
+     "text": " and the redshift "
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></math>"
+    },
+    {
+     "text": " of the source. The exponential term in Eq. (1) signifies the reduction in VHE flux caused by "
+    },
+    {
+     "text": "e+e−",
+     "latex": "e^{+}e^{-}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">e</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">+</mo></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">e</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">−</mo></msup></mrow></math>"
+    },
+    {
+     "text": " pair production (Stecker et al. 1992; Ackermann et al. 2012; Padovani et al. 2017). As a result, determining the redshift with precision is critical for deriving the intrinsic flux from the observed measurements. To analyse VHE gamma-ray spectra from sources at different redshifts, the Imaging Atmospheric Cherenkov Telescopes (IACTs) collaborations rely on well-established EBL models developed by Franceschini et al. (2008); Finke et al. (2010); Domínguez et al. (2011); Gilmore et al. (2012); Saldana-Lopez et al. (2021)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "PG 1553+113 lacks a direct spectroscopic redshift due to its featureless optical spectrum (a hallmark of BL Lacs) but has been inferred through various methods. Using data from HESS observations in 2005 and considering the absorption of VHE gamma-rays by the EBL, Aharonian et al. (2006) derived an upper limit of "
+    },
+    {
+     "text": "z<0.74",
+     "latex": "z<0.74",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&lt;</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.74</mn></mrow></math>"
+    },
+    {
+     "text": ". Later, Danforth et al. (2010) established a lower limit of "
+    },
+    {
+     "text": "0.4<z",
+     "latex": "0.4<z",
+     "mathml": "<math display=\"inline\"><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.4</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&lt;</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></mrow></math>"
+    },
+    {
+     "text": " by detecting intervening Ly "
+    },
+    {
+     "text": "α",
+     "latex": "\\alpha",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">α</mi></math>"
+    },
+    {
+     "text": " absorbers, while also setting an upper limit of "
+    },
+    {
+     "text": "z<0.58",
+     "latex": "z<0.58",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&lt;</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.58</mn></mrow></math>"
+    },
+    {
+     "text": " due to the absence of Ly "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">β</mi></math>"
+    },
+    {
+     "text": " absorbers at "
+    },
+    {
+     "text": "z>0.4",
+     "latex": "z>0.4",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&gt;</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.4</mn></mrow></math>"
+    },
+    {
+     "text": ". Subsequent studies have supported these constraints. For instance, Aliu et al. (2015) analysed the time-averaged VHE spectrum from VERITAS observations between 2010 and 2012, incorporating EBL evolution, and proposed a redshift upper limit of "
+    },
+    {
+     "text": "z≤0.62",
+     "latex": "z\\leq 0.62",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≤</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.62</mn></mrow></math>"
+    },
+    {
+     "text": ". More recently, Dorigo Jones et al. (2022) used a Ly "
+    },
+    {
+     "text": "α",
+     "latex": "\\alpha",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">α</mi></math>"
+    },
+    {
+     "text": "-forest-based approach to suggest a narrower redshift range of "
+    },
+    {
+     "text": "0.408<z<0.436",
+     "latex": "0.408<z<0.436",
+     "mathml": "<math display=\"inline\"><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.408</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&lt;</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&lt;</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.436</mn></mrow></math>"
+    },
+    {
+     "text": ". Our study aims to estimate the redshift of PG 1553+113 using the photohadronic model, employing a statistical approach and a comprehensive dataset."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The photohadronic model (Sahu 2019) has previously been applied successfully to interpret the VHE gamma-ray spectra of HBLs and extreme HBLs (EHBLs) (Sahu et al. 2020; Sahu et al. 2021; Sahu et al. 2022). In this work, the photohadronic model (Sahu 2019) is combined with four established EBL models (Franceschini et al. (2008); Domínguez et al. (2011); Gilmore et al. (2012); Saldana-Lopez et al. (2021)) to analyse seventeen VHE flaring events of PG 1553+113 observed between 2005 and 2015 by the HESS, VERITAS, and MAGIC collaborations. By performing a global "
+    },
+    {
+     "text": "χ2",
+     "latex": "\\chi^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">χ</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msup></math>"
+    },
+    {
+     "text": " fit to the experimental data from these VHE spectra, central values and CL intervals for the redshift of PG 1553+113 are determined for each EBL model. This method has been validated in prior analyses, such as the redshift constraint determination for the BL Lac object PKS 1424+240, which aligned with spectroscopic measurements (Sahu et al. 2024)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The structure of this paper is organized as follows. Section 2 provides an overview of the seventeen independent observations of PG 1553+113 used in the analysis. Section 3 offers a concise review of the photohadronic model and its relevance to this study. Section 4 presents the analysis and results, while Section 5 concludes with a summary and discussion of the findings."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "2 VHE OBSERVATIONS OF PG 1553+113"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This section provides a concise overview of the seventeen observations of blazar PG 1553+113 analysed in this study to constrain its redshift. The data were collected by three major Cherenkov telescopes: MAGIC (Moralejo & MAGIC Collaboration 2004), HESS (Hinton & HESS Collaboration 2004), and VERITAS (Holder et al. 2006). Key details for each observation are summarized in Table 1. To simplify referencing, each observation is labelled according to the telescope and the year it was conducted. For instance, the HESS observation of 2005 is labeled as H05."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.1 H05, H06"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In reference Aharonian et al. (2008), a re-analysis of the 2005 HESS data (7.6 hours) for PG 1553+113 (Aharonian et al. 2006) is presented, incorporating an improved calibration of the detector’s absolute energy scale. Additionally, results from 17.2 hours of HESS observations conducted in 2006 are reported."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The HESS system observed PG 1553+113 in the VHE gamma-ray regime during observational campaigns in 2005 and 2006. Over the two-year period, HESS accumulated 24.8 hours of live time, resulting in the detection of a VHE gamma-ray signal with a statistical significance of approximately 10 standard deviations. The emission displayed remarkable stability, with no significant flux variability or spectral changes observed across any timescale."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Complementary near-infrared spectroscopic observations targeting the "
+    },
+    {
+     "text": "H+K",
+     "latex": "H+K",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">H</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">+</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">K</mi></mrow></math>"
+    },
+    {
+     "text": " band (1.45–2.45 "
+    },
+    {
+     "text": "μ",
+     "latex": "\\mu",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">μ</mi></math>"
+    },
+    {
+     "text": "m) were conducted in March 2006 using the Spectrograph for INtegral Field Observations in the Near Infrared (SINFONI) on the European Southern Observatory’s Very Large Telescope (VLT) in Chile. Despite the exceptional sensitivity of the SINFONI integral field spectrometer, producing one of the highest-resolution near-infrared spectra of PG 1553+113 to date, the data revealed no detectable absorption or emission features. This absence of spectral lines precluded any direct constraints on the source’s redshift, leaving its cosmological distance uncertain."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A total of 30.3 hours of HESS observations were conducted, typically in segments of about 28 minutes (runs), during 2005 and 2006. The telescopes were offset by "
+    },
+    {
+     "text": "±0.5∘",
+     "latex": "\\pm 0.5^{\\circ}",
+     "mathml": "<math display=\"inline\"><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">±</mo><msup><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.5</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">∘</mo></msup></mrow></math>"
+    },
+    {
+     "text": " from the position of PG 1553+113 during these observations. After applying data-quality selection criteria, the useful exposure time amounted to 24.8 hours of live time, with 9 of the 66 runs excluded. The 2005 observation, referred to as H05, had a live time of 7.6 hours, while the 2006 observation, labelled H06, had a live time of 17.2 hours."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.2 H12"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The HESS telescopes observed significant flaring activity in the VHE gamma-ray emissions from the HBL PG 1553+113. Notably, the source’s flux enhanced by a factor of about three on the nights of April 26 and 27, 2012, compared to previous archival measurements, with indications of variability within the same night. Interestingly, during this period "
+    },
+    {
+     "text": "𝐹𝑒𝑟𝑚𝑖",
+     "latex": "{\\it Fermi}",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">𝐹𝑒𝑟𝑚𝑖</mi></math>"
+    },
+    {
+     "text": " Large Area Telescope did not detect any signal. Using Bayesian statistical approach to the above data, the redshift was found to be "
+    },
+    {
+     "text": "z=0.49±0.04",
+     "latex": "z=0.49\\pm 0.04",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">=</mo><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.49</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">±</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.04</mn></mrow></mrow></math>"
+    },
+    {
+     "text": " (Abramowski et al. 2015)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "As discussed previously, the observations H05 and H06 showed no signs of variability and are collectively termed as the \"pre-flare\" data set. This pre-flare data set comprises 26.4 hours of high-quality live time observations. During the 2012 flaring period (referred here as H12), eight observational runs, each lasting approximately 28 minutes were conducted on April 26 and 27, totalling 3.5 hours of live time. All observations were performed in wobble mode, where the source is positioned at an offset of 0.5∘ from the centre of the instrument’s field of view. This method resulted in acceptance-corrected live times of 24.8 hours for the pre-flare data and 3.2 hours for the flare data."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.3 H13"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The HESS phase II, with a fifth telescope CT5, observed the HBL PG 1553+113 in 2013 between May 29 and August 9, 2013 (MJD 56441–56513) (H.E.S.S. Collab. et al. 2017), referred to as H13 in this work. These observations are divided into 28-minute segments called runs and conducted in wobble mode, where the camera’s field of view is offset by "
+    },
+    {
+     "text": "0.5∘",
+     "latex": "0.5^{\\circ}",
+     "mathml": "<math display=\"inline\"><msup><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.5</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">∘</mo></msup></math>"
+    },
+    {
+     "text": " or "
+    },
+    {
+     "text": "0.7∘",
+     "latex": "0.7^{\\circ}",
+     "mathml": "<math display=\"inline\"><msup><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.7</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">∘</mo></msup></math>"
+    },
+    {
+     "text": " from the source position, either along the right-ascension or declination axis. For this analysis, only runs with the source positioned between "
+    },
+    {
+     "text": "0.35∘",
+     "latex": "0.35^{\\circ}",
+     "mathml": "<math display=\"inline\"><msup><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.35</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">∘</mo></msup></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "1.2∘",
+     "latex": "1.2^{\\circ}",
+     "mathml": "<math display=\"inline\"><msup><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">1.2</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">∘</mo></msup></math>"
+    },
+    {
+     "text": " from the camera centre were included. During the commissioning phase, some runs employed non-standard wobble offsets to evaluate the instrument’s performance. This approach ensures the source remains well within the field of view and facilitates accurate background subtraction. The analysis comprises 39 runs with 16.8 hours of live time."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.4 M0506"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The MAGIC telescope detected VHE gamma-ray emissions from the HBL PG 1553+113 during observations conducted in 2005 and 2006. The signal achieved an overall significance of 8.8 standard deviations over a total observation time of 18.8 hours. The spectrum did not exhibit significant daily flux variations and the flux levels in 2005 were notably higher than those recorded in 2006. The combined differential energy spectrum for PG 1553+113 from these two years is presented in reference Albert et al. (2007) and is referred to as M0506 in this work. Observations of PG 1553+113 with the MAGIC telescope took place in two main periods: 8.9 hours in April and May 2005, coinciding with HESS observations (Aharonian et al. 2008), and 19 hours from January to April 2006."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To ensure data quality, observations affected by poor weather conditions or hardware issues were excluded from the analysis. Additionally, only data collected at small zenith angles (< 30°), which correspond to a lower energy threshold suitable for studying steep energy spectra, were included. Although measurements extended up to zenith angles of 53°, the final analysis retained 7.0 hours of high-quality data from 2005 and 11.8 hours from 2006 after applying these selection criteria."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.5 M06"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The MAGIC telescope observed PG 1553+113 during a multiwavelength campaign from July 14 to July 27, 2006, accumulating 9.5 hours of data at zenith angles ranging between "
+    },
+    {
+     "text": "18∘",
+     "latex": "18^{\\circ}",
+     "mathml": "<math display=\"inline\"><msup><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">18</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">∘</mo></msup></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "35∘",
+     "latex": "35^{\\circ}",
+     "mathml": "<math display=\"inline\"><msup><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">35</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">∘</mo></msup></math>"
+    },
+    {
+     "text": " (Albert et al. 2009). These observations are labelled as M06 in this study. The data were collected in wobble mode, with the source positioned at an offset of "
+    },
+    {
+     "text": "±0.4∘",
+     "latex": "\\pm 0.4^{\\circ}",
+     "mathml": "<math display=\"inline\"><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">±</mo><msup><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.4</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">∘</mo></msup></mrow></math>"
+    },
+    {
+     "text": " from the camera’s centre, allowing simultaneous measurement of both the source and the background. Approximately one hour of data was discarded due to technical issues."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The quality of the data set was impacted by calima, a phenomenon involving Saharan sand-dust in the atmosphere, which caused nightly atmospheric absorption levels to vary between 5 and 40 per cent. To address the attenuation of Cherenkov light, correction factors were computed and applied to the affected data. After these adjustments, a signal with a significance of 5.0 standard deviations was detected in 8.5 hours of observation."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.6 M07, M08, M09"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Following its initial detection, PG 1553+113 became a regular target for observations with the MAGIC telescope. As reported in reference Aleksić et al. (2012), new data collected in 2007, 2008, and 2009 were analysed, and here we refer to these observations as M07, M08, and M09, respectively. Since the autumn of 2009, MAGIC has operated as a stereo system consisting of two IACTs located on La Palma in the Canary Islands, Spain. However, the data discussed here were acquired before this upgrade, using only the single MAGIC I telescope."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "As mentioned previously, PG 1553+113 was observed by MAGIC for approximately 19 hours in 2005 and 2006 (Albert et al. 2007) and was also the focus of a multiwavelength campaign in July 2006 involving optical, X-ray, and TeV gamma-ray (Albert et al. 2009). Reference Aleksić et al. (2012) presents the results of follow-up observations conducted for 14 hours in March–April 2007, nearly 26 hours in March–May 2008 (some of which were simultaneous with observations by other instruments (Aleksić et al. 2010)), and about 24 hours in March–July 2009, with some of the latter taken under moderate moonlight conditions. Unfortunately, the 2008 and 2009 observations were significantly impacted by adverse weather, including calima (Saharan sand dust in the atmosphere), which reduced the usable data and increased the energy threshold."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Rigorous quality cuts based on event rates after night sky background suppression were applied to the data. After these cuts, 28.7 hours of high-quality data remained, comprising 11.5 hours from 2007, 8.7 hours from 2008, and 8.5 hours from 2009. Combining the results from these three years, the 28.7 hours of observations yielded a signal with an overall significance of 8.8 standard deviations. The individual significances were 5.8 standard deviations for 2007, 8.1 for 2008, and 4.2 for 2009."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.7 M08II"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A comprehensive simultaneous multi-frequency observational campaign was conducted between March and April 2008, involving data collection across optical, X-ray, high-energy (HE) gamma-ray, and VHE gamma-ray bands (Aleksić et al. 2010). The average VHE differential spectrum of PG 1553+113 derived from these observations is reported and labelled as M08II in this work."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The MAGIC observations for this campaign took place on March 16–18 and April 13, 28–30, 2008, with zenith angles ranging from 18 to 36 degrees. Observations were conducted in wobble mode, where the source was positioned at a 0.4-degree offset from the camera centre, alternating directions every 20 minutes. After applying standard quality cuts and filtering based on trigger rates, a total of 7.18 hours of effective observation time was retained for analysis."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To reconstruct the gamma-ray spectrum, looser selection criteria were employed to ensure that over 90 per cent of simulated gamma photons were preserved. The impact of varying cut efficiencies, ranging from 50 to 95 per cent across the energy spectrum, was examined to assess systematic effects on the spectral shape. Corrections were applied to data affected by calima."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Analysis of the MAGIC data revealed an excess of 415 gamma-like events compared to 1835 normalized background events, resulting in a detection significance of 8.0 standard deviations."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.8 M12"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In early 2012, PG 1553+113 entered a high state, and by April of that year, it reached its highest recorded VHE flux level to date. A comprehensive multiwavelength observation campaign was conducted from February to June 2012, aimed at characterizing the SED and studying the variability of the source across different frequency bands with observations spanned from VHE gamma-rays to radio wavelengths."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Reference Aleksić et al. (2015) details the analysis of flux variability in the VHE, HE, and X-ray bands. MAGIC observed PG 1553+113 from February 26 (MJD 55983) to April 26 (MJD 56043), 2012. After applying quality cuts, the data set comprised 18.3 hours of observations with zenith angles ranging from 17 to 34 degrees. Observations were conducted in wobble mode, with the source positioned 0.4 degrees from the camera centre. The standard MAGIC analysis chain was used to process the data, yielding an energy threshold of approximately 70 GeV. The source was detected with a high statistical significance (> 70 standard deviations) during the February–April 2012 period, with the emission consistent with a point-like source at the location of PG 1553+113. Based on the flux levels, the data were divided into two subsets: MJD 55983–MJD 56016 (high state) and MJD 56037–MJD 56043 (flare state). During the flare, the VHE flux nearly doubled compared to the high state. The analysis of the VHE spectrum focuses on the April flare state, which is referred to as M12 in this work."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.9 M12II, M12III, M13, M14, M15"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In reference Acciari et al. (2019), a total of 32 MAGIC spectra were utilized to derive constraints on the EBL through a joint likelihood analysis of 12 blazars observed during extensive campaigns, amounting to over 300 hours of exposure. All data included in this study were collected during dark nights under optimal weather conditions."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Among these, five data sets correspond to the BL Lac object PG 1553+113, covering observations from 2012 to 2015 with a combined observation time of 66.36 hours. These data sets, as reported in reference Acciari et al. (2019), are labelled as PG1553+113_0202 (referred to here as M12II), PG1553+113_0203 (M12III), PG1553+113_0302 (M13), PG1553+113_0303 (M14), and PG1553+113_0306 (M15)."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.10 V1012"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The time-averaged VERITAS spectrum for the BL Lac object PG 1553+113, covering observations from 2010 to 2012 (referred to in this work as V1012), is analyzed in reference Aliu et al. (2015)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "VERITAS, an IACTs array, can detect PG 1553+113 at energies above 100 GeV with a significance of 5 standard deviations in approximately 43 minutes of observation, based on its average flux."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Observations of PG 1553+113 were conducted by VERITAS from May 2010 to June 2012, totalling 95 hours of observation time. Data were collected in wobble mode, with the source positioned at a 0.5-degree offset from the telescope’s pointing direction to enable simultaneous background estimation. The zenith angles for these observations ranged from 20 to 30 degrees, with an average of 23 degrees. The combination of low zenith angles and event selection cuts optimized for soft-spectrum sources resulted in an analysis energy threshold (the energy at which the photon rate peaks after cuts) of 180 GeV."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The analysis used a circular signal region centred on the source’s nominal position, extending radially outward by 0.14 degrees. After applying quality selection criteria based on weather conditions and instrument stability, and accounting for instrument read-out dead time, a total of 80 hours of live time were retained. These observations yielded an overall detection significance of 53 standard deviations, with the excess consistent with a point-like source at the location of PG 1553+113."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "3 THE PHOTOHADRONIC MODEL"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The photohadronic model proposes a double jet configuration during the VHE flaring process (Sahu 2019; Sahu et al. 2019). This configuration, previously suggested in earlier studies (Ghisellini & Tavecchio 2008; Giannios et al. 2010), involves a narrower, more compact jet of size "
+    },
+    {
+     "text": "Rf′",
+     "latex": "R^{\\prime}_{f}",
+     "mathml": "<math display=\"inline\"><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">R</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">f</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup></math>"
+    },
+    {
+     "text": " embedded within a broader jet of size "
+    },
+    {
+     "text": "Rb′",
+     "latex": "R^{\\prime}_{b}",
+     "mathml": "<math display=\"inline\"><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">R</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">b</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup></math>"
+    },
+    {
+     "text": ", where "
+    },
+    {
+     "text": "Rf′<Rb′",
+     "latex": "R^{\\prime}_{f}<R^{\\prime}_{b}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">R</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">f</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&lt;</mo><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">R</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">b</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup></mrow></math>"
+    },
+    {
+     "text": " (quantities in the comoving frame are denoted by primes). The photon density in the inner jet region, "
+    },
+    {
+     "text": "nγ,f′",
+     "latex": "n^{\\prime}_{\\gamma,f}",
+     "mathml": "<math display=\"inline\"><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">n</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">f</mi></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup></math>"
+    },
+    {
+     "text": ", is significantly higher than in the outer region, "
+    },
+    {
+     "text": "nγ′",
+     "latex": "n^{\\prime}_{\\gamma}",
+     "mathml": "<math display=\"inline\"><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">n</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup></math>"
+    },
+    {
+     "text": " ("
+    },
+    {
+     "text": "nγ,f′≫nγ′",
+     "latex": "n^{\\prime}_{\\gamma,f}\\gg n^{\\prime}_{\\gamma}",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">n</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">f</mi></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≫</mo><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">n</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup></mrow></math>"
+    },
+    {
+     "text": "). The model builds on the conventional interpretation of the first two peaks in the SED: the first peak arises from synchrotron radiation emitted by relativistic electrons in the jet, while the second peak results from the inverse Compton scattering process."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The inner jet is assumed to move at a slightly higher velocity, characterized by a bulk Lorentz factor "
+    },
+    {
+     "text": "Γin",
+     "latex": "\\Gamma_{\\rm in}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" mathvariant=\"normal\">Γ</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">in</mi></msub></math>"
+    },
+    {
+     "text": ", compared to the outer jet with "
+    },
+    {
+     "text": "Γext",
+     "latex": "\\Gamma_{\\rm ext}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" mathvariant=\"normal\">Γ</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ext</mi></msub></math>"
+    },
+    {
+     "text": ". For simplicity, it is assumed that "
+    },
+    {
+     "text": "Γin≃Γext≡Γ",
+     "latex": "\\Gamma_{\\rm in}\\simeq\\Gamma_{\\rm ext}\\equiv\\Gamma",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" mathvariant=\"normal\">Γ</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">in</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≃</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" mathvariant=\"normal\">Γ</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ext</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≡</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" mathvariant=\"normal\">Γ</mi></mrow></math>"
+    },
+    {
+     "text": ", and both share a common Doppler factor "
+    },
+    {
+     "text": "𝒟",
+     "latex": "\\mathcal{D}",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">𝒟</mi></math>"
+    },
+    {
+     "text": " (Ghisellini et al. 1998; Krawczynski et al. 2004). In the case of HBLs, "
+    },
+    {
+     "text": "Γ≃𝒟",
+     "latex": "\\Gamma\\simeq\\mathcal{D}",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" mathvariant=\"normal\">Γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≃</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">𝒟</mi></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In this scenario, protons are accelerated to extremely high energies within the inner jet region, following a power-law energy distribution, "
+    },
+    {
+     "text": "dNp/dEp∝Ep−α",
+     "latex": "dN_{p}/dE_{p}\\propto E^{-\\alpha}_{p}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">N</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">p</mi></msub></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">/</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">d</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">p</mi></msub></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">∝</mo><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">p</mi><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">−</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">α</mi></mrow></msubsup></mrow></math>"
+    },
+    {
+     "text": " (Dermer & Schlickeiser 1993), where "
+    },
+    {
+     "text": "Ep",
+     "latex": "E_{p}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">p</mi></msub></math>"
+    },
+    {
+     "text": " is the proton energy and "
+    },
+    {
+     "text": "α≥2",
+     "latex": "\\alpha\\geq 2",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">α</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≥</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></mrow></math>"
+    },
+    {
+     "text": " is the proton spectral index. The value of "
+    },
+    {
+     "text": "α",
+     "latex": "\\alpha",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">α</mi></math>"
+    },
+    {
+     "text": " varies depending on the type of shock involved, such as non-relativistic, highly relativistic, or oblique relativistic shocks (Keshet & Waxman 2005; Summerlin & Baring 2012). These high-energy protons interact with SSC background photons in the inner jet, producing "
+    },
+    {
+     "text": "Δ",
+     "latex": "\\Delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" mathvariant=\"normal\">Δ</mi></math>"
+    },
+    {
+     "text": "-resonances via the process "
+    },
+    {
+     "text": "p+γ→Δ+",
+     "latex": "p+\\gamma\\rightarrow\\Delta^{+}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">p</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">+</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">→</mo><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" mathvariant=\"normal\">Δ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">+</mo></msup></mrow></math>"
+    },
+    {
+     "text": ". The "
+    },
+    {
+     "text": "Δ",
+     "latex": "\\Delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" mathvariant=\"normal\">Δ</mi></math>"
+    },
+    {
+     "text": "-resonance decays into neutral and charged pions with different probabilities. While direct single-pion and multi-pion production processes also contribute, they are less efficient in the energy range considered here (Mücke et al. 1999; Owen et al. 2018), and their contributions are neglected in this work. The neutral pions decay into gamma-rays ("
+    },
+    {
+     "text": "π0→γγ",
+     "latex": "\\pi^{0}\\to\\gamma\\gamma",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">π</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msup><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">→</mo><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": "), while the charged pions decay into neutrinos ("
+    },
+    {
+     "text": "π+→e+νeνμν¯μ",
+     "latex": "\\pi^{+}\\to e^{+}\\nu_{e}\\nu_{\\mu}\\bar{\\nu}_{\\mu}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">π</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">+</mo></msup><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">→</mo><mrow><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">e</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">+</mo></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ν</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">e</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ν</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">μ</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mover accent=\"true\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ν</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">¯</mo></mover><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">μ</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ") (Sahu et al. 2012). In the photohadronic model, the gamma-rays from "
+    },
+    {
+     "text": "π0",
+     "latex": "\\pi^{0}",
+     "mathml": "<math display=\"inline\"><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">π</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msup></math>"
+    },
+    {
+     "text": " decay are blue-shifted to VHE energies and detected on Earth, while the positrons from "
+    },
+    {
+     "text": "π+",
+     "latex": "\\pi^{+}",
+     "mathml": "<math display=\"inline\"><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">π</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">+</mo></msup></math>"
+    },
+    {
+     "text": " decay emit synchrotron radiation."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The observed VHE gamma-ray energy "
+    },
+    {
+     "text": "Eγ",
+     "latex": "E_{\\gamma}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub></math>"
+    },
+    {
+     "text": " and the seed photon energy "
+    },
+    {
+     "text": "ϵγ",
+     "latex": "\\epsilon_{\\gamma}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ϵ</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub></math>"
+    },
+    {
+     "text": " are related by the condition (Sahu 2019; Sahu et al. 2019)"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "E_{\\gamma}\\epsilon_{\\gamma}\\simeq 0.032\\frac{{\\cal D}^{2}}{(1+z)^{2}}\\,\\mathrm{GeV}^{2}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ϵ</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≃</mo><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.032</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mfrac style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\"><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">𝒟</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msup><msup><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">1</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">+</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msup></mfrac><mo lspace=\"0.170em\" rspace=\"0em\">​</mo><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">GeV</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msup></mrow></mrow><mo style=\"--ltx-fg-color:#000000;\" lspace=\"0em\" mathcolor=\"#000000\">.</mo></mrow></math>",
+   "label": "(2)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In this process, the VHE photon carries roughly 10 per cent of the proton energy, such that "
+    },
+    {
+     "text": "Ep=10Eγ",
+     "latex": "E_{p}=10E_{\\gamma}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">p</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">=</mo><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">10</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ". Due to the inaccessibility of the inner jet region and the absence of direct methods to measure the photon density within it, a scaling relationship is assumed between the photon densities in the inner and outer jet regions. This relationship can be expressed as (Sahu et al. 2016)"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\frac{n^{\\prime}_{\\gamma,f}(\\epsilon_{\\gamma,1})}{n^{\\prime}_{\\gamma,f}(\\epsilon_{\\gamma,2})}\\simeq\\frac{n^{\\prime}_{\\gamma}(\\epsilon_{\\gamma,1})}{n^{\\prime}_{\\gamma}(\\epsilon_{\\gamma,2})},",
+   "mathml": "<math display=\"block\"><mrow><mrow><mfrac style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\"><mrow><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">n</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">f</mi></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ϵ</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">1</mn></mrow></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow><mrow><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">n</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">f</mi></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ϵ</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></mrow></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow></mfrac><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≃</mo><mfrac style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\"><mrow><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">n</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ϵ</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">1</mn></mrow></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow><mrow><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">n</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">ϵ</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></mrow></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow></mfrac></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo></mrow></math>",
+   "label": "(3)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where the left-hand side represents the unknown photon density ratio in the inner jet region, and the right-hand side corresponds to the known ratio in the outer jet region. This equation allows the unknown photon density in the inner region to be expressed in terms of the measurable photon density in the outer region."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The intrinsic gamma-ray flux resulting from the decay of "
+    },
+    {
+     "text": "π0",
+     "latex": "\\pi^{0}",
+     "mathml": "<math display=\"inline\"><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">π</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msup></math>"
+    },
+    {
+     "text": " particles is derived as"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "F_{\\rm int}(E_{\\gamma})\\equiv E^{2}_{\\gamma}\\frac{dN(E_{\\gamma})}{dE_{\\gamma}}\\propto E^{2}_{p}\\frac{dN(E_{p})}{dE_{p}}n^{\\prime}_{\\gamma,f}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">int</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≡</mo><mrow><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mfrac style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">N</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub></mrow></mfrac></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">∝</mo><mrow><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">p</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mfrac style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">N</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">p</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">p</mi></msub></mrow></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">n</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">f</mi></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">′</mo></msubsup></mrow></mrow><mo style=\"--ltx-fg-color:#000000;\" lspace=\"0em\" mathcolor=\"#000000\">.</mo></mrow></math>",
+   "label": "(4)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "By incorporating the seed photon density and the proton flux, the intrinsic flux can be expressed in the form"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "F_{\\rm int}(E_{\\gamma})=F_{0}\\left(\\frac{E_{\\gamma}}{\\rm TeV}\\right)^{-\\delta+3},",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">int</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">=</mo><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">(</mo><mfrac style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">TeV</mi></mfrac><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">)</mo></mrow><mrow><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">−</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">+</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">3</mn></mrow></msup></mrow></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo></mrow></math>",
+   "label": "(5)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "F0",
+     "latex": "F_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub></math>"
+    },
+    {
+     "text": " is a normalization factor. Substituting this into Eq. (1), the observed flux is given by"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "F_{\\gamma}(E_{\\gamma})=F_{0}\\left(\\frac{E_{\\gamma}}{\\rm TeV}\\right)^{-\\delta+3}e^{-\\tau_{\\gamma\\gamma}(E_{\\gamma},z)},",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">=</mo><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">(</mo><mfrac style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">TeV</mi></mfrac><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">)</mo></mrow><mrow><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">−</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">+</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">3</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">e</mi><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">−</mo><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">τ</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow></mrow></msup></mrow></mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo></mrow></math>",
+   "label": "(6)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "τγγ(Eγ,z)",
+     "latex": "\\tau_{\\gamma\\gamma}(E_{\\gamma},z)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">τ</mi><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">(</mo><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">,</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\" stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " accounts for the absorption of gamma-rays due to interactions with the EBL. The spectral index "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": " is defined as "
+    },
+    {
+     "text": "δ=α+β",
+     "latex": "\\delta=\\alpha+\\beta",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">=</mo><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">α</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">+</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">β</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ", where "
+    },
+    {
+     "text": "α",
+     "latex": "\\alpha",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">α</mi></math>"
+    },
+    {
+     "text": " is the proton spectral index and "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">β</mi></math>"
+    },
+    {
+     "text": " represents the power-law behaviour of the seed photon spectrum in the low-energy tail of the SSC spectrum. The normalization factor "
+    },
+    {
+     "text": "F0",
+     "latex": "F_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub></math>"
+    },
+    {
+     "text": " is determined from observational data, while "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": " serves as the sole free parameter in the photohadronic model (Sahu et al. 2019). As evident from Eq. (6), any curvature in the spectrum can be attributed to the exponential absorption term (Acciari et al. 2019)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "It is worth emphasizing that the photohadronic process is most effective for gamma-ray energies "
+    },
+    {
+     "text": "Eγ≳100",
+     "latex": "E_{\\gamma}\\gtrsim 100",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≳</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">100</mn></mrow></math>"
+    },
+    {
+     "text": " GeV. At lower energies, leptonic processes such as electron synchrotron radiation and the SSC mechanism dominate the multiwavelength SED."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "4 ANALYSIS AND RESULTS"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We analyse all the seventeen observations discussed in Sec. 2 in the context of the photohadronic model to constrain the redshift of the HBL PG 1553+113. To account for the EBL correction to the VHE gamma-ray spectra, we use four well known and widely used EBL models. Here, these models are referred to as Saldana (Saldana-Lopez et al. 2021), Franceschini (Franceschini et al. 2008), Domínguez (Domínguez et al. 2011), and Gilmore (Gilmore et al. 2012)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Following the classification scheme proposed by Sahu et al. (2019), the VHE emission states of a HBL are defined based on the value of the spectral index "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": ". A very high emission state corresponds to "
+    },
+    {
+     "text": "2.5≤δ≤2.6",
+     "latex": "2.5\\leq\\delta\\leq 2.6",
+     "mathml": "<math display=\"inline\"><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2.5</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≤</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≤</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2.6</mn></mrow></math>"
+    },
+    {
+     "text": ", a high emission state to "
+    },
+    {
+     "text": "2.6<δ<3.0",
+     "latex": "2.6<\\delta<3.0",
+     "mathml": "<math display=\"inline\"><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2.6</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&lt;</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&lt;</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">3.0</mn></mrow></math>"
+    },
+    {
+     "text": ", and a low emission state to "
+    },
+    {
+     "text": "δ=3.0",
+     "latex": "\\delta=3.0",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">=</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">3.0</mn></mrow></math>"
+    },
+    {
+     "text": ". Since PG 1553+113 is a HBL, "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": " is constrained to the range "
+    },
+    {
+     "text": "2.5≤δ≤3.0",
+     "latex": "2.5\\leq\\delta\\leq 3.0",
+     "mathml": "<math display=\"inline\"><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2.5</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≤</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≤</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">3.0</mn></mrow></math>"
+    },
+    {
+     "text": ". Given that the duration of observations varies across datasets, each observation is expected to represent a distinct emission state, necessitating independent values of "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": ". Therefore, "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": " is treated as a constrained but adjustable parameter during the fitting process."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To analyse the VHE spectra and determine the best fits, each EBL model is integrated into the photohadronic framework. A global "
+    },
+    {
+     "text": "χ2",
+     "latex": "\\chi^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">χ</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msup></math>"
+    },
+    {
+     "text": " fit is performed on all data points by simultaneously varying the redshift "
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></math>"
+    },
+    {
+     "text": " (common to all observations), the normalization constants "
+    },
+    {
+     "text": "F0",
+     "latex": "F_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub></math>"
+    },
+    {
+     "text": ", and the spectral parameter "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": " for each of the seventeen independent observations. This global fitting procedure is repeated for all four EBL models to identify the best-fitting values of "
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "F0",
+     "latex": "F_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": ". Confidence level intervals for the statistical errors of the redshift at 68, 90, and 95 per cent of coverage probability are then calculated for each EBL model."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "With 58 degrees of freedom (93 experimental data points and 35 free parameters), the minimum "
+    },
+    {
+     "text": "χ2",
+     "latex": "\\chi^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">χ</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msup></math>"
+    },
+    {
+     "text": " values obtained for the global fit are 58.82, 65.50, 68.50, and 75.67 for the Saldana, Gilmore, Franceschini, and Domínguez EBL models, respectively. The best-fitting values for "
+    },
+    {
+     "text": "F0",
+     "latex": "F_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": " for each observation, along with the corresponding EBL models, are shown in Table 2. Notably, the "
+    },
+    {
+     "text": "F0",
+     "latex": "F_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub></math>"
+    },
+    {
+     "text": " values exhibit minor variations across EBL models for a given observation, indicating similarities among the models. The best-fitting redshift and its CL intervals at 68, 90, and 95 per cent are presented in Table 3. Each EBL model predicts slightly different CL intervals for "
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></math>"
+    },
+    {
+     "text": ", reflecting variations in the models’ predictions."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The fits to the seventeen observed VHE spectra of PG 1553+113 are illustrated in Fig. 1, using the best-fitting parameters from the Saldana EBL model (detailed in Tables 2 and 3). Fits based on the Domínguez, Franceschini, and Gilmore EBL models are not shown, as they are visually indistinguishable from those of the Saldana model."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For comparison, all four EBL models are applied to fit the spectrum of H13, as shown in Fig. 3. While all models provide excellent fits, a slight discrepancy is observed for "
+    },
+    {
+     "text": "Eγ≳0.3",
+     "latex": "E_{\\gamma}\\gtrsim 0.3",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">E</mi><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">γ</mi></msub><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">≳</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.3</mn></mrow></math>"
+    },
+    {
+     "text": " TeV. Additionally, Table 4 summarizes the redshift constraints for PG 1553+113 estimated by various authors, including those derived in this work."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "5 SUMMARY AND DISCUSSION"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "PG 1553+113 is a luminous, highly variable gamma-ray blazar observed across the electromagnetic spectrum, from radio to TeV energies. Its extreme energy output and relativistic jet make it a pivotal target for probing particle acceleration mechanisms and jet dynamics in AGNs. As one of the brightest TeV emitters, its gamma-ray photons undergo interactions with the EBL during propagation to Earth. These interactions provide critical constraints on EBL models, which are indispensable for advancing the understanding of galaxy evolution and the cosmic infrared background. While PG 1553+113 lacks a spectroscopically confirmed redshift "
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></math>"
+    },
+    {
+     "text": ", estimating this parameter remains vital: "
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></math>"
+    },
+    {
+     "text": " directly determines the source’s intrinsic luminosity and distance, enabling precise modelling of EBL photon absorption attenuating its gamma-ray emission. Such modelling is essential for testing EBL density predictions."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In this work, the photohadronic model is employed in conjunction with four EBL models—Saldana, Franceschini, Domínguez, and Gilmore—to derive constraints on the redshift of the HBL PG 1553+113. The analysis incorporates seventeen independent VHE spectra collected by the HESS, MAGIC, and VERITAS telescopes between 2005 and 2015. The photohadronic model, which has been successfully applied in previous studies to constrain the redshifts of HBLs with unknown "
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></math>"
+    },
+    {
+     "text": " values (Sahu 2019; Sahu et al. 2019), is used here to interpret the VHE spectra of PG 1553+113."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A global "
+    },
+    {
+     "text": "χ2",
+     "latex": "\\chi^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">χ</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msup></math>"
+    },
+    {
+     "text": " fitting procedure is performed, simultaneously varying the redshift "
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></math>"
+    },
+    {
+     "text": ", the normalization constants "
+    },
+    {
+     "text": "F0",
+     "latex": "F_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub></math>"
+    },
+    {
+     "text": ", and the spectral parameter "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": " for each of the seventeen observations, to identify the best fit to the observed VHE spectra for a given EBL model. This process is repeated for the remaining three EBL models to determine the optimal values of "
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "F0",
+     "latex": "F_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": " for each case. Using these best-fitting parameters, CL intervals for the redshift at 68, 90, and 95 per cent are computed for each EBL model."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Table 4 presents, in chronological order, the redshift constraints for PG 1553+113 reported in previous studies, alongside those derived in this work. The 95 per cent CL intervals obtained here exhibit substantial overlap with earlier redshift estimates, demonstrating consistency with prior results. Notably, narrower intervals are achieved at high confidence levels in certain cases, attributable to the robust statistical power of the comprehensive dataset utilized in the fitting process, see Fig. 4. These outcomes underscore both the reliability of the photohadronic model and the accuracy of the EBL corrections employed in this analysis. The findings confirm that the photohadronic framework accurately models all observed spectra. Among the tested EBL models, the lowest total "
+    },
+    {
+     "text": "χ2",
+     "latex": "\\chi^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">χ</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msup></math>"
+    },
+    {
+     "text": " value (58.82 for 58 degrees of freedom) was achieved with the Saldana-Lopez et al. (2021) model, while the Domínguez et al. (2011) model yielded the highest value ("
+    },
+    {
+     "text": "χ2=75.67",
+     "latex": "\\chi^{2}=75.67",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">χ</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msup><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">=</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">75.67</mn></mrow></math>"
+    },
+    {
+     "text": "). The 95 per cent CL intervals for the redshift’s statistical uncertainty are "
+    },
+    {
+     "text": "0.500<z<0.537",
+     "latex": "0.500<z<0.537",
+     "mathml": "<math display=\"inline\"><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.500</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&lt;</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&lt;</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.537</mn></mrow></math>"
+    },
+    {
+     "text": " (Saldana-Lopez) and "
+    },
+    {
+     "text": "0.491<z<0.527",
+     "latex": "0.491<z<0.527",
+     "mathml": "<math display=\"inline\"><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.491</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&lt;</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">&lt;</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.527</mn></mrow></math>"
+    },
+    {
+     "text": " (Domínguez )."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The photohadronic model, combined with EBL corrections, provides a reliable method for estimating the redshift of PG 1553+113. The results highlight the effectiveness of the photohadronic model in interpreting the VHE gamma-ray spectra and its potential application to other HBLs with unknown redshifts."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "ACKNOWLEDGEMENTS"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We thank the reviewer for her/his constructive remarks which helped us to improve the manuscript substantially. R. de J. P-A and G. S-C thank SECIHTI (México) for its partial support. Partial support from CSU-Long Beach is gratefully acknowledged."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "DATA AVAILABILITY"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "No new data were generated or analysed in support of this research."
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "Table 1. Details of the seventeen PG 1553+113 observations used in this study are provided. The first and second columns list the observation name and the instrument used, respectively. The third, fourth, fifth, and sixth columns include the start date, end date, period span (in MJD), and live observation duration (in hours), respectively. The seventh column references the work where the data for each observation period is originally reported."
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Observation"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Instrument"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Start date"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "End date"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Period"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Live duration"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Reference"
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "H05"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "HESS"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2005 April"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2005 August"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "53492-53614"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "7.6"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Aharonian et al. (2008)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "H06"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "HESS"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2006 April"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2006 July"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "53849-53943"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "17.2"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Aharonian et al. (2008)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "H12"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "HESS"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2012 April 26"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2012 April 27"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "56043-56044"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.2"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Abramowski et al. (2015)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "H13"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "HESS"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2013 May 29"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2013 August 9"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "56441–56513"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "16.8"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "H.E.S.S. Collab. et al. (2017)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M0506"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "MAGIC"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2005 April"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2006 April"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "18.8"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Albert et al. (2007)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M06"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "MAGIC"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2006 July 14"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2006 July 27"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "53930-53943"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "8.5"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Albert et al. (2009)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M07"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "MAGIC"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2007 March 23"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2007 April 24"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "54182-54214"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "11.5"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Aleksić et al. (2012)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M08"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "MAGIC"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2008 March 17"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2008 May 7"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "54542-54593"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "8.7"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Aleksić et al. (2012)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M08II"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "MAGIC"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2008 March 16"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2008 April 30"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "54541-54586"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "7.18"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Aleksić et al. (2010)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M09"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "MAGIC"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2009 April 16"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2009 June 15"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "54937-54997"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "8.5"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Aleksić et al. (2012)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M12"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "MAGIC"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2012 April 20"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2012 April 26"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "56037-56043"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1.1"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Aleksić et al. (2015)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M12II"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "MAGIC"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2012 February 28"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2012 March 4"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "55985-55990"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.4"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Acciari et al. (2019)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M12III"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "MAGIC"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2012 March 13"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2012 May 2"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "55999-56049"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "24.84"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Acciari et al. (2019)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M13"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "MAGIC"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2013 April 7"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2013 June 12"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "56389-56455"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "11.42"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Acciari et al. (2019)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M14"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "MAGIC"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2014 March 11"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2014 March 25"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "56727-56741"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "1.93"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Acciari et al. (2019)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M15"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "MAGIC"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2015 January 25"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2015 August 7"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "57047-57241"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "25.77"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Acciari et al. (2019)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "V1012"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "VERITAS"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2010 May"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2012 June"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "80"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Aliu et al. (2015)"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "Table 2. The best-fitting values for the normalization constant "
+    },
+    {
+     "text": "F0",
+     "latex": "F_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub></math>"
+    },
+    {
+     "text": " (expressed in units of "
+    },
+    {
+     "text": "10−11ergcm−2s−1",
+     "latex": "10^{-11}\\,\\mathrm{erg\\,cm^{-2}\\,s^{-1}}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">10</mn><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">−</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">11</mn></mrow></msup><mo lspace=\"0.170em\" rspace=\"0em\">​</mo><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">erg</mi><mo lspace=\"0.170em\" rspace=\"0em\">​</mo><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">cm</mi><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">−</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">s</mi><mrow><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">−</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">1</mn></mrow></msup></mrow></math>"
+    },
+    {
+     "text": ") and the spectral index "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": " of the photohadronic model, determined from fitting the VHE spectra of PG 1553+113, are displayed in the third, fourth, seventh, and eighth columns. These results correspond to four distinct EBL models. The first and fifth columns identify the observations, while the second and sixth columns specify the EBL models applied, as outlined in the main text."
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Observation"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "EBL Model"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "F0",
+         "latex": "F_{0}",
+         "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "δ",
+         "latex": "\\delta",
+         "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Observation"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "EBL Model"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "F0",
+         "latex": "F_{0}",
+         "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "δ",
+         "latex": "\\delta",
+         "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "H05"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "11.14"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "H06"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "7.83"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "12.87"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "9.05"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "11.08"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "7.78"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "12.15"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "8.54"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "H12"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "37.91"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "H13"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "14.29"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.66"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "43.41"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "18.28"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.59"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "37.60"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "14.71"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.63"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "41.16"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "16.37"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.62"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M0506"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.82"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "M06"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.82"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "4.39"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.24"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.78"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.80"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "4.15"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.08"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M07"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.27"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "M08"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.22"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.96"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.63"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "6.23"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.93"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.25"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.30"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.94"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.48"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.78"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.95"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M08II"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "4.80"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.97"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "M09"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.23"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.88"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.93"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "6.03"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "4.88"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.95"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.18"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.39"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.95"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.70"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.50"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M12"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "10.00"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.94"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "M12II"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.71"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "12.39"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.88"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "6.41"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "10.06"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.92"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.62"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "11.21"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.91"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "6.14"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M12III"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "8.77"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.88"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "M13"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "4.50"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "10.71"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.84"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.27"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.97"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "8.89"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.87"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "4.42"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "9.83"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.86"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "4.82"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "M14"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.59"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "M15"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "4.70"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "6.19"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.26"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.49"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "4.62"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.98"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "5.05"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "3.00"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "V1012"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "6.16"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.83"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "6.99"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.84"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "6.20"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.82"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "6.72"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2.83"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "Table 3. The redshift values derived from the photohadronic model, based on a global "
+    },
+    {
+     "text": "χ2",
+     "latex": "\\chi^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">χ</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">2</mn></msup></math>"
+    },
+    {
+     "text": " fit to the VHE spectra of PG 1553+113, are summarized. The first column identifies the EBL models used, as discussed in the main text. The second column provides the best-fitting redshift "
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></math>"
+    },
+    {
+     "text": ", while the third, fourth, and fifth columns present the CL intervals for the statistical error at 68, 90, and 95 per cent, respectively, for each EBL model."
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "EBL Model"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Redshift"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Redshift CL intervals"
+        }
+       ],
+       "header": true,
+       "colspan": 3
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "z",
+         "latex": "z",
+         "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "68%",
+         "latex": "68\\%",
+         "mathml": "<math display=\"inline\"><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">68</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">%</mo></mrow></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "90%",
+         "latex": "90\\%",
+         "mathml": "<math display=\"inline\"><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">90</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">%</mo></mrow></math>"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "95%",
+         "latex": "95\\%",
+         "mathml": "<math display=\"inline\"><mrow><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">95</mn><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">%</mo></mrow></math>"
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Domínguez"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.509"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0.500, 0.518)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0.494, 0.524)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0.491, 0.527)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Saldana"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.518"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0.509, 0.528)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0.503, 0.534)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0.500, 0.537)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Franceschini"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.515"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0.506, 0.524)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0.500, 0.530)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0.497, 0.533)"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Gilmore"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "0.557"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0.547, 0.566)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0.541, 0.573)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "(0.538, 0.576)"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Figure 1. The photohadronic model, combined with the Saldana EBL model, is applied to fit the seventeen observed VHE gamma-ray spectra of PG 1553+113. The corresponding redshift is fixed at "
+    },
+    {
+     "text": "z=0.518",
+     "latex": "z=0.518",
+     "mathml": "<math display=\"inline\"><mrow><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">z</mi><mo style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">=</mo><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0.518</mn></mrow></math>"
+    },
+    {
+     "text": ", while the normalization constants "
+    },
+    {
+     "text": "F0",
+     "latex": "F_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">F</mi><mn style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">0</mn></msub></math>"
+    },
+    {
+     "text": " and spectral parameters "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi style=\"--ltx-fg-color:#000000;\" mathcolor=\"#000000\">δ</mi></math>"
+    },
+    {
+     "text": " are provided in Table 2."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "REFERENCES"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Abdo A. A., et al., 2010a, "
+      },
+      {
+       "text": "ApJ",
+       "href": "http://dx.doi.org/10.1088/0004-637X/708/2/1310"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "708, 1310",
+       "href": "https://ui.adsabs.harvard.edu/abs/2010ApJ...708.1310A"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Abdo A. A., et al., 2010b, "
+      },
+      {
+       "text": "ApJ",
+       "href": "http://dx.doi.org/10.1088/0004-637X/716/1/30"
+      },
+      {
+       "text": ", 716, 30"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Abramowski A., et al., 2015, "
+      },
+      {
+       "text": "ApJ",
+       "href": "http://dx.doi.org/10.1088/0004-637X/802/1/65"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "802, 65",
+       "href": "https://ui.adsabs.harvard.edu/abs/2015ApJ...802...65A"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Acciari V. A., et al., 2011, "
+      },
+      {
+       "text": "ApJ",
+       "href": "http://dx.doi.org/10.1088/0004-637X/729/1/2"
+      },
+      {
+       "text": ", 729, 2"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Acciari V. A., et al., 2019, "
+      },
+      {
+       "text": "MNRAS",
+       "href": "http://dx.doi.org/10.1093/mnras/stz943"
+      },
+      {
+       "text": ", 486, 4233"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Ackermann M., et al., 2012, "
+      },
+      {
+       "text": "Science",
+       "href": "http://dx.doi.org/10.1126/science.1227160"
+      },
+      {
+       "text": ", 338, 1190"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Aharonian F., et al., 2006, "
+      },
+      {
+       "text": "A&A",
+       "href": "http://dx.doi.org/10.1051/0004-6361:200600010"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "448, L19",
+       "href": "https://ui.adsabs.harvard.edu/abs/2006A&A...448L..19A"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Aharonian F., et al., 2008, "
+      },
+      {
+       "text": "A&A",
+       "href": "http://dx.doi.org/10.1051/0004-6361:20078603"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "477, 481",
+       "href": "https://ui.adsabs.harvard.edu/abs/2008A&A...477..481A"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Albert J., et al., 2007, "
+      },
+      {
+       "text": "ApJ",
+       "href": "http://dx.doi.org/10.1086/511384"
+      },
+      {
+       "text": ", 654, L119"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Albert J., et al., 2009, "
+      },
+      {
+       "text": "A&A",
+       "href": "http://dx.doi.org/10.1051/0004-6361:20079048"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "493, 467",
+       "href": "https://ui.adsabs.harvard.edu/abs/2009A&A...493..467A"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Aleksić J., et al., 2010, "
+      },
+      {
+       "text": "A&A",
+       "href": "http://dx.doi.org/10.1051/0004-6361/200913607"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "515, A76",
+       "href": "https://ui.adsabs.harvard.edu/abs/2010A&A...515A..76A"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Aleksić J., et al., 2012, "
+      },
+      {
+       "text": "ApJ",
+       "href": "http://dx.doi.org/10.1088/0004-637X/748/1/46"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "748, 46",
+       "href": "https://ui.adsabs.harvard.edu/abs/2012ApJ...748...46A"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Aleksić J., et al., 2015, "
+      },
+      {
+       "text": "MNRAS",
+       "href": "http://dx.doi.org/10.1093/mnras/stv811"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "450, 4399",
+       "href": "https://ui.adsabs.harvard.edu/abs/2015MNRAS.450.4399A"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Aliu E., et al., 2015, "
+      },
+      {
+       "text": "ApJ",
+       "href": "http://dx.doi.org/10.1088/0004-637X/799/1/7"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "799, 7",
+       "href": "https://ui.adsabs.harvard.edu/abs/2015ApJ...799....7A"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Blazejowski M., Sikora M., Moderski R., Madejski G., 2000, "
+      },
+      {
+       "text": "ApJ",
+       "href": "http://dx.doi.org/10.1086/317791"
+      },
+      {
+       "text": ", 545, 107"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Chang Y. L., Arsioli B., Giommi P., Padovani P., Brandt C. H., 2019, "
+      },
+      {
+       "text": "A&A",
+       "href": "http://dx.doi.org/10.1051/0004-6361/201834526"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "632, A77",
+       "href": "https://ui.adsabs.harvard.edu/abs/2019A&A...632A..77C"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Danforth C. W., Keeney B. A., Stocke J. T., Shull J. M., Yao Y., 2010, "
+      },
+      {
+       "text": "ApJ",
+       "href": "http://dx.doi.org/10.1088/0004-637X/720/1/976"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "720, 976",
+       "href": "https://ui.adsabs.harvard.edu/abs/2010ApJ...720..976D"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Dermer C. D., Schlickeiser R., 1993, "
+      },
+      {
+       "text": "ApJ",
+       "href": "http://dx.doi.org/10.1086/173251"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "416, 458",
+       "href": "https://ui.adsabs.harvard.edu/abs/1993ApJ...416..458D"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Domínguez A., et al., 2011, "
+      },
+      {
+       "text": "MNRAS",
+       "href": "http://dx.doi.org/10.1111/j.1365-2966.2010.17631.x"
+      },
+      {
+       "text": ", 410, 2556"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Dorigo Jones J., et al., 2022, "
+      },
+      {
+       "text": "MNRAS",
+       "href": "http://dx.doi.org/10.1093/mnras/stab3331"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "509, 4330",
+       "href": "https://ui.adsabs.harvard.edu/abs/2022MNRAS.509.4330D"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Finke J. D., Razzaque S., Dermer C. D., 2010, "
+      },
+      {
+       "text": "ApJ",
+       "href": "http://dx.doi.org/10.1088/0004-637X/712/1/238"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "712, 238",
+       "href": "https://ui.adsabs.harvard.edu/abs/2010ApJ...712..238F"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Franceschini A., Rodighiero G., Vaccari M., 2008, "
+      },
+      {
+       "text": "A&A.",
+       "href": "http://dx.doi.org/10.1051/0004-6361:200809691"
+      },
+      {
+       "text": ", 487, 837"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Gao H., Lei W.-H., Zhang B., 2013, "
+      },
+      {
+       "text": "MNRAS",
+       "href": "http://dx.doi.org/10.1093/mnras/stt1461"
+      },
+      {
+       "text": ", 435, 2520"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Ghisellini G., Tavecchio F., 2008, "
+      },
+      {
+       "text": "MNRAS",
+       "href": "http://dx.doi.org/10.1111/j.1365-2966.2008.13360.x"
+      },
+      {
+       "text": ", 387, 1669"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Ghisellini G., Celotti A., Fossati G., Maraschi L., Comastri A., 1998, "
+      },
+      {
+       "text": "MNRAS",
+       "href": "http://dx.doi.org/10.1046/j.1365-8711.1998.02032.x"
+      },
+      {
+       "text": ", 301, 451"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Giannios D., Uzdensky D. A., Begelman M. C., 2010, "
+      },
+      {
+       "text": "MNRAS",
+       "href": "http://dx.doi.org/10.1111/j.1365-2966.2009.16045.x"
+      },
+      {
+       "text": ", 402, 1649"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Gilmore R. C., Somerville R. S., Primack J. R., Domínguez A., 2012, "
+      },
+      {
+       "text": "MNRAS",
+       "href": "http://dx.doi.org/10.1111/j.1365-2966.2012.20841.x"
+      },
+      {
+       "text": ", 422, 3189"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Green R. F., Schmidt M., Liebert J., 1986, "
+      },
+      {
+       "text": "ApJS",
+       "href": "http://dx.doi.org/10.1086/191115"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "61, 305",
+       "href": "https://ui.adsabs.harvard.edu/abs/1986ApJS...61..305G"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "H.E.S.S. Collab. et al., 2017, "
+      },
+      {
+       "text": "A&A",
+       "href": "http://dx.doi.org/10.1051/0004-6361/201629427"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "600, A89",
+       "href": "https://ui.adsabs.harvard.edu/abs/2017A&A...600A..89H"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Hauser M. G., Dwek E., 2001, "
+      },
+      {
+       "text": "ARA&A",
+       "href": "http://dx.doi.org/10.1146/annurev.astro.39.1.249"
+      },
+      {
+       "text": ", 39, 249"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Hinton J. A., HESS Collaboration 2004, "
+      },
+      {
+       "text": "NAR",
+       "href": "http://dx.doi.org/10.1016/j.newar.2003.12.004"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "48, 331",
+       "href": "https://ui.adsabs.harvard.edu/abs/2004NewAR..48..331H"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Holder J., et al., 2006, "
+      },
+      {
+       "text": "Astroparticle Physics",
+       "href": "http://dx.doi.org/10.1016/j.astropartphys.2006.04.002"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "25, 391",
+       "href": "https://ui.adsabs.harvard.edu/abs/2006APh....25..391H"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Keshet U., Waxman E., 2005, "
+      },
+      {
+       "text": "PRL",
+       "href": "http://dx.doi.org/10.1103/PhysRevLett.94.111102"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "94, 111102",
+       "href": "https://ui.adsabs.harvard.edu/abs/2005PhRvL..94k1102K"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Krawczynski H., et al., 2004, "
+      },
+      {
+       "text": "ApJ",
+       "href": "http://dx.doi.org/10.1086/380393"
+      },
+      {
+       "text": ", 601, 151"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Landoni, M. Falomo, R. Treves, A. Sbarufatti, B. 2014, "
+      },
+      {
+       "text": "A&A",
+       "href": "http://dx.doi.org/10.1051/0004-6361/201424232"
+      },
+      {
+       "text": ", 570, A126"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "Malik Z., Sahayanathan S., Shah Z., Iqbal N., Manzoor"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "furniture": [
+  "MNRAS 000, 1–9 (2024)",
+  "Preprint 12 June 2025",
+  "Compiled using MNRAS LATEX style file v3.0",
+  "arXiv:2503.22874v2 [astro-ph.HE] 10 Jun 2025",
+  "© 2024 The Authors",
+  "2",
+  "Sarira Sahu et al.",
+  "Constraining the redshift of PG 1553+113 using the photohadronic model",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8"
+ ],
+ "license": "open",
+ "provenance": "latexml",
+ "notes": "arXiv 2503.22874v2 (astronomy; MNRAS, two columns, tables), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words."
+}

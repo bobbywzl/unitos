@@ -1,0 +1,3751 @@
+{
+ "id": "arxiv-2506-08494",
+ "category": "math-tex",
+ "source": {
+  "pdf": ".bench/arxiv/2506.08494v1.pdf",
+  "url": "https://arxiv.org/abs/2506.08494v1"
+ },
+ "pages": [
+  1,
+  8
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "MULTIVERSION OF THE HAUSDORFF–YOUNG INEQUALITY"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "PAATA IVANISVILI AND PAVLOS KALANTZOPOULOS"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "",
+   "spans": [
+    {
+     "text": "2010 Mathematics Subject Classification. 42B20, 42B35, 47A30, 42A38."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Abstract. We consider a family of "
+    },
+    {
+     "text": "jointly Gaussian",
+     "italic": true
+    },
+    {
+     "text": " random vectors "
+    },
+    {
+     "text": "ξj∈ℝkj",
+     "latex": "\\xi_{j}\\in\\mathbb{R}^{k_{j}}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ξ</mi><mi>j</mi></msub><mo>∈</mo><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup></mrow></math>"
+    },
+    {
+     "text": ", each standard normal but possibly correlated, and investigate when"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathbb{E}\\,F\\!\\Bigl(B\\bigl(|T_{z_{1}}f_{1}(\\xi_{1})|,\\dots,|T_{z_{n}}f_{n}(\\xi_{n})|\\bigr)\\Bigr)\\;\\;\\leq\\;\\;F\\!\\Bigl(\\,\\mathbb{E}\\,B\\bigl(|f_{1}(\\xi_{1})|,\\dots,|f_{n}(\\xi_{n})|\\bigr)\\Bigr)",
+   "mathml": "<math display=\"block\"><mrow><mrow><mi>𝔼</mi><mo lspace=\"0.170em\" rspace=\"0em\">​</mo><mpadded style=\"width:0.612em;\" width=\"0.612em\"><mi>F</mi></mpadded><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo maxsize=\"1.600em\" minsize=\"1.600em\">(</mo><mrow><mi>B</mi><mo>⁡</mo><mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>T</mi><msub><mi>z</mi><mn>1</mn></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>T</mi><msub><mi>z</mi><mi>n</mi></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>n</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow></mrow><mo maxsize=\"1.600em\" minsize=\"1.600em\" rspace=\"0.560em\">)</mo></mrow></mrow><mo rspace=\"0.838em\">≤</mo><mrow><mpadded style=\"width:0.612em;\" width=\"0.612em\"><mi>F</mi></mpadded><mo>⁡</mo><mrow><mo maxsize=\"1.600em\" minsize=\"1.600em\" rspace=\"0.170em\">(</mo><mrow><mi>𝔼</mi><mo lspace=\"0.170em\" rspace=\"0em\">​</mo><mi>B</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">(</mo><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>f</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>f</mi><mi>n</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\">)</mo></mrow></mrow><mo maxsize=\"1.600em\" minsize=\"1.600em\">)</mo></mrow></mrow></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds, where "
+    },
+    {
+     "text": "Tz",
+     "latex": "T_{z}",
+     "mathml": "<math display=\"inline\"><msub><mi>T</mi><mi>z</mi></msub></math>"
+    },
+    {
+     "text": " is either a Mehler transform ("
+    },
+    {
+     "text": "z∈ℂ",
+     "latex": "z\\in\\mathbb{C}",
+     "mathml": "<math display=\"inline\"><mrow><mi>z</mi><mo>∈</mo><mi>ℂ</mi></mrow></math>"
+    },
+    {
+     "text": ") or a noise operator ("
+    },
+    {
+     "text": "z∈ℝ",
+     "latex": "z\\in\\mathbb{R}",
+     "mathml": "<math display=\"inline\"><mrow><mi>z</mi><mo>∈</mo><mi>ℝ</mi></mrow></math>"
+    },
+    {
+     "text": "). This framework unifies and extends real and complex hypercontractivity to multi-function settings, yielding multiversions of the sharp Hausdorff–Young inequality, the log-Sobolev inequality, and a “noisy” Gaussian–Jensen inequality. Applications include a new covariance-based characterization of the Brascamp–Lieb inequality in the presence of noise."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "1. Introduction"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A classical result in harmonic analysis is the "
+    },
+    {
+     "text": "Hausdorff–Young inequality with sharp constant",
+     "italic": true
+    },
+    {
+     "text": ". It states that for functions "
+    },
+    {
+     "text": "g",
+     "latex": "g",
+     "mathml": "<math display=\"inline\"><mi>g</mi></math>"
+    },
+    {
+     "text": " in "
+    },
+    {
+     "text": "Lp(ℝn)",
+     "latex": "L^{p}(\\mathbb{R}^{n})",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>L</mi><mi>p</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><mi>n</mi></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " and exponents "
+    },
+    {
+     "text": "1<p≤2",
+     "latex": "1<p\\leq 2",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>&lt;</mo><mi>p</mi><mo>≤</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "q=pp−1",
+     "latex": "q=\\frac{p}{p-1}",
+     "mathml": "<math display=\"inline\"><mrow><mi>q</mi><mo>=</mo><mfrac><mi>p</mi><mrow><mi>p</mi><mo>−</mo><mn>1</mn></mrow></mfrac></mrow></math>"
+    },
+    {
+     "text": ", one has"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\bigl\\|\\widehat{g}\\bigr\\|_{L^{q}(\\mathbb{R}^{n})}\\;\\leq\\;C_{p,q}\\;\\bigl\\|g\\bigr\\|_{L^{p}(\\mathbb{R}^{n})},",
+   "mathml": "<math display=\"block\"><mrow><mrow><msub><mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\" stretchy=\"true\">‖</mo><mover accent=\"true\"><mi>g</mi><mo>^</mo></mover><mo maxsize=\"1.200em\" minsize=\"1.200em\" stretchy=\"true\">‖</mo></mrow><mrow><msup><mi>L</mi><mi>q</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><mi>n</mi></msup><mo stretchy=\"false\">)</mo></mrow></mrow></msub><mo lspace=\"0.558em\" rspace=\"0.558em\">≤</mo><mrow><msub><mi>C</mi><mrow><mi>p</mi><mo>,</mo><mi>q</mi></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo maxsize=\"1.200em\" minsize=\"1.200em\" stretchy=\"true\">‖</mo><mi>g</mi><mo maxsize=\"1.200em\" minsize=\"1.200em\" stretchy=\"true\">‖</mo></mrow><mrow><msup><mi>L</mi><mi>p</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><mi>n</mi></msup><mo stretchy=\"false\">)</mo></mrow></mrow></msub></mrow></mrow><mo>,</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "g^(x)=1(2π)n2∫ℝng(y)e−ix⋅ydy",
+     "latex": "\\widehat{g}(x)=\\frac{1}{(2\\pi)^{\\frac{n}{2}}}\\,\\int_{\\mathbb{R}^{n}}g(y)\\,e^{-\\,i\\,x\\cdot y}\\,\\mathrm{d}y",
+     "mathml": "<math display=\"inline\"><mrow><mover accent=\"true\"><mi>g</mi><mo>^</mo></mover><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mo>=</mo><mfrac><mn>1</mn><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>π</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mfrac><mi>n</mi><mn>2</mn></mfrac></msup></mfrac><msub><mo lspace=\"0.337em\">∫</mo><msup><mi>ℝ</mi><mi>n</mi></msup></msub><mi>g</mi><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo rspace=\"0.170em\" stretchy=\"false\">)</mo></mrow><msup><mi>e</mi><mrow><mo rspace=\"0.392em\">−</mo><mi>i</mi><mi>x</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">⋅</mo><mi>y</mi></mrow></msup><mi>d</mi><mi>y</mi></mrow></math>"
+    },
+    {
+     "text": " is the Fourier transform, and the constant "
+    },
+    {
+     "text": "Cp,q",
+     "latex": "C_{p,q}",
+     "mathml": "<math display=\"inline\"><msub><mi>C</mi><mrow><mi>p</mi><mo>,</mo><mi>q</mi></mrow></msub></math>"
+    },
+    {
+     "text": " is best possible. This celebrated theorem was first established by Beckner [11]. Beckner’s original argument began with an inequality on two points (a discrete "
+    },
+    {
+     "text": "{−1,1}",
+     "latex": "\\{-1,1\\}",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">{</mo><mrow><mrow><mo>−</mo><mn>1</mn></mrow><mo>,</mo><mn>1</mn></mrow><mo stretchy=\"false\">}</mo></mrow></math>"
+    },
+    {
+     "text": " hypercube setting), then used an induction and a central limit theorem to pass to the Gaussian setting, a result that has come to be called "
+    },
+    {
+     "text": "complex hypercontractivity",
+     "italic": true
+    },
+    {
+     "text": ". Afterward, a suitable change of variables yielded the Hausdorff–Young inequality in its full sharp form."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Over the years, several other remarkable proofs of this sharp inequality have appeared, together with stability results [24]. Janson [41] used a Brownian-motion (stochastic-calculus) approach; Lieb [44] exploited in a very illuminating way the symmetry of the Gaussian extremizers (“Gaussian kernels have only Gaussian maximizers”); and Hu [33] essentially replaced the stochastic part of Janson’s proof by writing everything in terms of heat flows. Later in [37] it was noted that the continuous heat-flow argument is, in fact, a limiting version of Beckner’s original discrete inductive scheme. This (continuous) flow is sometimes called the "
+    },
+    {
+     "text": "Beckner–Janson flow ",
+     "italic": true
+    },
+    {
+     "text": "[37], although it is perhaps less familiar to many experts. It turns out that if one tries to use "
+    },
+    {
+     "text": "standard",
+     "italic": true
+    },
+    {
+     "text": " heat-flow methods in the usual manner, the monotonic interpolation property for the Hausdorff–Young inequality "
+    },
+    {
+     "text": "fails",
+     "italic": true
+    },
+    {
+     "text": ", as shown by Bennett, Bez, and Carbery [4]. In contrast, the subtle Beckner–Janson flow does give a monotonic approach and is the key new ingredient in these proofs."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Multifunction extensions.",
+     "bold": true
+    },
+    {
+     "text": " In this paper, we carry forward the Beckner–Janson flow ideas to a "
+    },
+    {
+     "text": "multifunction",
+     "italic": true
+    },
+    {
+     "text": " setting. In doing so, we revisit several classical sharp estimates in harmonic analysis (such as the aforementioned Hausdorff–Young inequality, the Gaussian hypercontractive inequalities, etc.) and obtain their precise sharp analogues for multiple functions. To get a feel for one of our main results on the sharp multiversion of the Hausdorff–Young inequality, we refer the reader to Theorem 7, i.e., the “baby” two-function case with equal exponents; in that setting, taking "
+    },
+    {
+     "text": "f=g",
+     "latex": "f=g",
+     "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo>=</mo><mi>g</mi></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ρ=0",
+     "latex": "\\rho=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " recovers the sharp Beckner–Babenko inequality."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Beyond these specific corollaries, our main technical contribution lies in an "
+    },
+    {
+     "text": "FB theorem",
+     "italic": true
+    },
+    {
+     "text": ", i.e., Theorem 13, which provides a fairly general framework for proving sharp multifunction estimates via the Beckner–Janson flow. We show that the classical Brascamp–Lieb inequalities and our new multifunction Hausdorff–Young inequalities can all be viewed as special cases of this single abstract FB theorem. While we mostly focus here on how this theorem extends sharp known inequalities to their natural “multi” analogues, we believe it may well have broader applicability for other families of inequalities, by allowing one to choose different pairs of "
+    },
+    {
+     "text": "(F,B)",
+     "latex": "(F,B)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mi>F</mi><mo>,</mo><mi>B</mi><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "2. Main results"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Notations.",
+     "bold": true
+    },
+    {
+     "text": " In this paper "
+    },
+    {
+     "text": "ξ:=(ξ1,…,ξn)",
+     "latex": "\\xi:=(\\xi_{1},\\ldots,\\xi_{n})",
+     "mathml": "<math display=\"inline\"><mrow><mi>ξ</mi><mo>:=</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>ξ</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " denotes a normal random vector in "
+    },
+    {
+     "text": "ℝk1+…+kn",
+     "latex": "\\mathbb{R}^{k_{1}+\\ldots+k_{n}}",
+     "mathml": "<math display=\"inline\"><msup><mi>ℝ</mi><mrow><msub><mi>k</mi><mn>1</mn></msub><mo>+</mo><mi mathvariant=\"normal\">…</mi><mo>+</mo><msub><mi>k</mi><mi>n</mi></msub></mrow></msup></math>"
+    },
+    {
+     "text": ", where each "
+    },
+    {
+     "text": "ξj",
+     "latex": "\\xi_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>ξ</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": " is a standard normal Gaussian vector in "
+    },
+    {
+     "text": "ℝkj",
+     "latex": "\\mathbb{R}^{k_{j}}",
+     "mathml": "<math display=\"inline\"><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup></math>"
+    },
+    {
+     "text": " for "
+    },
+    {
+     "text": "j=1,…,n",
+     "latex": "j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ". We remark that "
+    },
+    {
+     "text": "ξ1,…,ξn,",
+     "latex": "\\xi_{1},\\ldots,\\xi_{n},",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>ξ</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>ξ</mi><mi>n</mi></msub></mrow><mo>,</mo></mrow></math>"
+    },
+    {
+     "text": " are not necessarily independent of each other. Throughout the paper, unless stated otherwise, the exponents "
+    },
+    {
+     "text": "p1,…,pn",
+     "latex": "p_{1},\\ldots,p_{n}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>p</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>p</mi><mi>n</mi></msub></mrow></math>"
+    },
+    {
+     "text": " are assumed to be positive, the matrix "
+    },
+    {
+     "text": "cov(ξ)",
+     "latex": "\\mathrm{cov}(\\xi)",
+     "mathml": "<math display=\"inline\"><mrow><mi>cov</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>ξ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " has full rank, "
+    },
+    {
+     "text": "λmin",
+     "latex": "\\lambda_{\\min}",
+     "mathml": "<math display=\"inline\"><msub><mi>λ</mi><mi>min</mi></msub></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "λmax",
+     "latex": "\\lambda_{\\max}",
+     "mathml": "<math display=\"inline\"><msub><mi>λ</mi><mi>max</mi></msub></math>"
+    },
+    {
+     "text": " will denote the smallest and the largest eigenvalues of the covariance matrix "
+    },
+    {
+     "text": "cov(ξ)",
+     "latex": "\\mathrm{cov}(\\xi)",
+     "mathml": "<math display=\"inline\"><mrow><mi>cov</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>ξ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". The symbol "
+    },
+    {
+     "text": "𝒫(ℝn)",
+     "latex": "\\mathscr{P}(\\mathbb{R}^{n})",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝒫</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><mi>n</mi></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " denotes the space of all polynomials "
+    },
+    {
+     "text": "h:ℝn↦ℂ",
+     "latex": "h:\\mathbb{R}^{n}\\mapsto\\mathbb{C}",
+     "mathml": "<math display=\"inline\"><mrow><mi>h</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><mi>n</mi></msup><mo stretchy=\"false\">↦</mo><mi>ℂ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ", and for any function "
+    },
+    {
+     "text": "f",
+     "latex": "f",
+     "mathml": "<math display=\"inline\"><mi>f</mi></math>"
+    },
+    {
+     "text": " we let "
+    },
+    {
+     "text": "𝒫(ℝn)f:={hf,h∈𝒫(ℝn)}",
+     "latex": "\\mathscr{P}(\\mathbb{R}^{n})f:=\\{hf,\\;h\\in\\mathscr{P}(\\mathbb{R}^{n})\\}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mi>𝒫</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><mi>n</mi></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow><mo>:=</mo><mrow><mo stretchy=\"false\">{</mo><mrow><mrow><mi>h</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow><mo rspace=\"0.447em\">,</mo><mrow><mi>h</mi><mo>∈</mo><mrow><mi>𝒫</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><mi>n</mi></msup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo stretchy=\"false\">}</mo></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Our first main result is the extension of complex hypercontractivity to several functions."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 1 ",
+     "bold": true
+    },
+    {
+     "text": "("
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": "-function complex hypercontractivity)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "α≥1",
+     "latex": "\\alpha\\geq 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>≥</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and ",
+     "italic": true
+    },
+    {
+     "text": "(z1,…,zn)∈ℂn",
+     "latex": "(z_{1},\\ldots,z_{n})\\in\\mathbb{C}^{n}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><msub><mi>z</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>z</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msup><mi>ℂ</mi><mi>n</mi></msup></mrow></math>"
+    },
+    {
+     "text": ". The inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\|\\prod_{j=1}^{n}|T_{z_{j}}f_{j}(\\xi_{j})|^{p_{j}}\\|_{\\alpha}\\leq\\|\\prod_{j=1}^{n}|f_{j}(\\xi_{j})|^{p_{j}}\\|_{1}",
+   "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><msup><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>T</mi><msub><mi>z</mi><mi>j</mi></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><msub><mi>p</mi><mi>j</mi></msub></msup></mrow><mo stretchy=\"false\">‖</mo></mrow><mi>α</mi></msub><mo>≤</mo><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><msup><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><msub><mi>p</mi><mi>j</mi></msub></msup></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>1</mn></msub></mrow></math>",
+   "label": "(2.1)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all polynomials ",
+     "italic": true
+    },
+    {
+     "text": "fj:ℝkj↦ℂ",
+     "latex": "f_{j}:\\mathbb{R}^{k_{j}}\\mapsto\\mathbb{C}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">↦</mo><mi>ℂ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " if and only if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\sum_{i,j}(\\Re w_{i})\\mathrm{cov}(\\xi_{i},\\xi_{j})(\\Re w_{j})^{T}-\\alpha(\\Re z_{i}w_{i})\\mathrm{cov}(\\xi_{i},\\xi_{j})(\\Re z_{j}w_{j})^{T}\\geq\\Re\\sum_{j}\\frac{(1-z_{j}^{2})w_{j}w_{j}^{T}}{p_{j}}",
+   "mathml": "<math display=\"inline\"><mrow><mstyle displaystyle=\"true\"><munder><mo movablelimits=\"false\">∑</mo><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow></munder></mstyle><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">ℜ</mi><msub><mi>w</mi><mi>i</mi></msub><mo stretchy=\"false\">)</mo></mrow><mi>cov</mi><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>i</mi></msub><mo>,</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow><msup><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">ℜ</mi><msub><mi>w</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow><mi>T</mi></msup><mo>−</mo><mi>α</mi><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">ℜ</mi><msub><mi>z</mi><mi>i</mi></msub><msub><mi>w</mi><mi>i</mi></msub><mo stretchy=\"false\">)</mo></mrow><mi>cov</mi><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>i</mi></msub><mo>,</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow><msup><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">ℜ</mi><msub><mi>z</mi><mi>j</mi></msub><msub><mi>w</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow><mi>T</mi></msup><mo>≥</mo><mi mathvariant=\"normal\">ℜ</mi><mstyle displaystyle=\"true\"><munder><mo movablelimits=\"false\">∑</mo><mi>j</mi></munder></mstyle><mstyle displaystyle=\"true\"><mfrac><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msubsup><mi>z</mi><mi>j</mi><mn>2</mn></msubsup></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>w</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mi>w</mi><mi>j</mi><mi>T</mi></msubsup></mrow><msub><mi>p</mi><mi>j</mi></msub></mfrac></mstyle></mrow></math>",
+   "label": "(2.2)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all ",
+     "italic": true
+    },
+    {
+     "text": "wj∈ℂkj",
+     "latex": "w_{j}\\in\\mathbb{C}^{k_{j}}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>w</mi><mi>j</mi></msub><mo>∈</mo><msup><mi>ℂ</mi><msub><mi>k</mi><mi>j</mi></msub></msup></mrow></math>"
+    },
+    {
+     "text": " where ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n",
+     "latex": "j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In the theorem "
+    },
+    {
+     "text": "‖X‖p=(𝔼|X|p)1/p",
+     "latex": "||X||_{p}=(\\mathbb{E}|X|^{p})^{1/p}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mi>X</mi><mo stretchy=\"false\">‖</mo></mrow><mi>p</mi></msub><mo>=</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">|</mo><mi>X</mi><mo stretchy=\"false\">|</mo></mrow><mi>p</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mn>1</mn><mo>/</mo><mi>p</mi></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " denotes the "
+    },
+    {
+     "text": "p",
+     "latex": "p",
+     "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+    },
+    {
+     "text": "’th moment of a random variable "
+    },
+    {
+     "text": "X",
+     "latex": "X",
+     "mathml": "<math display=\"inline\"><mi>X</mi></math>"
+    },
+    {
+     "text": ". The Mahler transform "
+    },
+    {
+     "text": "Tzj",
+     "latex": "T_{z_{j}}",
+     "mathml": "<math display=\"inline\"><msub><mi>T</mi><msub><mi>z</mi><mi>j</mi></msub></msub></math>"
+    },
+    {
+     "text": " acts on a polynomial "
+    },
+    {
+     "text": "fj",
+     "latex": "f_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>f</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": " written in Fourier-Hermite basis "
+    },
+    {
+     "text": "fj=∑|β|≤deg(fj)cβHβ",
+     "latex": "f_{j}=\\sum_{|\\beta|\\leq\\mathrm{deg}(f_{j})}c_{\\beta}H_{\\beta}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>j</mi></msub><mo rspace=\"0.111em\">=</mo><mrow><msub><mo>∑</mo><mrow><mrow><mo stretchy=\"false\">|</mo><mi>β</mi><mo stretchy=\"false\">|</mo></mrow><mo>≤</mo><mrow><mi>deg</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>f</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></msub><mrow><msub><mi>c</mi><mi>β</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>H</mi><mi>β</mi></msub></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " as follows"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "T_{z_{j}}f_{j}=\\sum_{|\\beta|\\leq\\mathrm{deg}(f_{j})}z_{j}^{|\\beta|}c_{\\beta}H_{\\beta},",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msub><mi>T</mi><msub><mi>z</mi><mi>j</mi></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>j</mi></msub></mrow><mo rspace=\"0.111em\">=</mo><mrow><munder><mo movablelimits=\"false\">∑</mo><mrow><mrow><mo stretchy=\"false\">|</mo><mi>β</mi><mo stretchy=\"false\">|</mo></mrow><mo>≤</mo><mrow><mi>deg</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>f</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></munder><mrow><msubsup><mi>z</mi><mi>j</mi><mrow><mo stretchy=\"false\">|</mo><mi>β</mi><mo stretchy=\"false\">|</mo></mrow></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>c</mi><mi>β</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>H</mi><mi>β</mi></msub></mrow></mrow></mrow><mo>,</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "β=(β1,…,βkj)∈(ℤ+)kj",
+     "latex": "\\beta=(\\beta_{1},\\ldots,\\beta_{k_{j}})\\in(\\mathbb{Z}_{+})^{k_{j}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>β</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>β</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>β</mi><msub><mi>k</mi><mi>j</mi></msub></msub><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℤ</mi><mo>+</mo></msub><mo stretchy=\"false\">)</mo></mrow><msub><mi>k</mi><mi>j</mi></msub></msup></mrow></math>"
+    },
+    {
+     "text": " is the multiindex, "
+    },
+    {
+     "text": "|β|=β1+…+βkj",
+     "latex": "|\\beta|=\\beta_{1}+\\ldots+\\beta_{k_{j}}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">|</mo><mi>β</mi><mo stretchy=\"false\">|</mo></mrow><mo>=</mo><mrow><msub><mi>β</mi><mn>1</mn></msub><mo>+</mo><mi mathvariant=\"normal\">…</mi><mo>+</mo><msub><mi>β</mi><msub><mi>k</mi><mi>j</mi></msub></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "cβ∈ℂ",
+     "latex": "c_{\\beta}\\in\\mathbb{C}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>c</mi><mi>β</mi></msub><mo>∈</mo><mi>ℂ</mi></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "Hβ(x)=𝔼(x+iξj)β",
+     "latex": "H_{\\beta}(x)=\\mathbb{E}(x+i\\xi_{j})^{\\beta}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>H</mi><mi>β</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>x</mi><mo>+</mo><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>ξ</mi><mi>j</mi></msub></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mi>β</mi></msup></mrow></mrow></math>"
+    },
+    {
+     "text": " denotes probabilists’ Hermite polynomial, where for a complex vector "
+    },
+    {
+     "text": "wj=(wj1,…,wjkj)∈ℂkj",
+     "latex": "w_{j}=(w_{j1},\\ldots,w_{jk_{j}})\\in\\mathbb{C}^{k_{j}}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>w</mi><mi>j</mi></msub><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>w</mi><mrow><mi>j</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mn>1</mn></mrow></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>w</mi><mrow><mi>j</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>k</mi><mi>j</mi></msub></mrow></msub><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msup><mi>ℂ</mi><msub><mi>k</mi><mi>j</mi></msub></msup></mrow></math>"
+    },
+    {
+     "text": " we set "
+    },
+    {
+     "text": "wjβ=wj1β1⋯wjkjβj",
+     "latex": "w_{j}^{\\beta}=w_{j1}^{\\beta_{1}}\\cdots w_{jk_{j}}^{\\beta_{j}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>w</mi><msub><mrow></mrow><mi>j</mi></msub><msup><mrow></mrow><mi>β</mi></msup><mo>=</mo><mi>w</mi><msub><mrow></mrow><mrow><mi>j</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mn>1</mn></mrow></msub><msup><mrow></mrow><msub><mi>β</mi><mn>1</mn></msub></msup><mo lspace=\"0em\" rspace=\"0em\">⋯</mo><mi>w</mi><msub><mrow></mrow><mrow><mi>j</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>k</mi><mi>j</mi></msub></mrow></msub><msup><mrow></mrow><msub><mi>β</mi><mi>j</mi></msub></msup></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "zjwj=(zjwj1,…,zjwjkj)",
+     "latex": "z_{j}w_{j}=(z_{j}w_{j1},\\ldots,z_{j}w_{jk_{j}})",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>z</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>w</mi><mi>j</mi></msub></mrow><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>z</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>w</mi><mrow><mi>j</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mn>1</mn></mrow></msub></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><msub><mi>z</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>w</mi><mrow><mi>j</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>k</mi><mi>j</mi></msub></mrow></msub></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "ℜwj=(ℜwj1,…,ℜwjkj)",
+     "latex": "\\Re w_{j}=(\\Re w_{j1},\\ldots,\\Re w_{jk_{j}})",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi mathvariant=\"normal\">ℜ</mi><mo lspace=\"0.167em\">⁡</mo><msub><mi>w</mi><mi>j</mi></msub></mrow><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi mathvariant=\"normal\">ℜ</mi><mo lspace=\"0.167em\">⁡</mo><msub><mi>w</mi><mrow><mi>j</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mn>1</mn></mrow></msub></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><mi mathvariant=\"normal\">ℜ</mi><mo lspace=\"0.167em\">⁡</mo><msub><mi>w</mi><mrow><mi>j</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>k</mi><mi>j</mi></msub></mrow></msub></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " for all "
+    },
+    {
+     "text": "j=1,…,n",
+     "latex": "j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "2.1. Case of imaginary ",
+     "bold": true
+    },
+    {
+     "text": "zj",
+     "latex": "z_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>z</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": "’s ",
+     "bold": true
+    },
+    {
+     "text": "If "
+    },
+    {
+     "text": "n=1",
+     "latex": "n=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " then the condition (2.2) simplifies to"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "|\\Re w_{1}|^{2}-\\alpha|\\Re z_{1}w_{1}|^{2}\\geq\\Re\\frac{(1-z_{1}^{2})w_{1}^{2}}{p_{1}}",
+   "mathml": "<math display=\"block\"><mrow><mrow><msup><mrow><mo stretchy=\"false\">|</mo><mrow><mi mathvariant=\"normal\">ℜ</mi><mo lspace=\"0.167em\">⁡</mo><msub><mi>w</mi><mn>1</mn></msub></mrow><mo stretchy=\"false\">|</mo></mrow><mn>2</mn></msup><mo>−</mo><mrow><mi>α</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">|</mo><mrow><mi mathvariant=\"normal\">ℜ</mi><mo lspace=\"0.167em\">⁡</mo><mrow><msub><mi>z</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>w</mi><mn>1</mn></msub></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mn>2</mn></msup></mrow></mrow><mo>≥</mo><mrow><mi mathvariant=\"normal\">ℜ</mi><mo lspace=\"0.167em\">⁡</mo><mfrac><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msubsup><mi>z</mi><mn>1</mn><mn>2</mn></msubsup></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mi>w</mi><mn>1</mn><mn>2</mn></msubsup></mrow><msub><mi>p</mi><mn>1</mn></msub></mfrac></mrow></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "which after setting "
+    },
+    {
+     "text": "p1=p",
+     "latex": "p_{1}=p",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>p</mi><mn>1</mn></msub><mo>=</mo><mi>p</mi></mrow></math>"
+    },
+    {
+     "text": " and choosing "
+    },
+    {
+     "text": "α=q/p",
+     "latex": "\\alpha=q/p",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>=</mo><mrow><mi>q</mi><mo>/</mo><mi>p</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " for any "
+    },
+    {
+     "text": "q≥p",
+     "latex": "q\\geq p",
+     "mathml": "<math display=\"inline\"><mrow><mi>q</mi><mo>≥</mo><mi>p</mi></mrow></math>"
+    },
+    {
+     "text": " becomes the same condition as in the classical complex hypercontractivity in Gauss space due to Beckner [11] for "
+    },
+    {
+     "text": "z=ip−1",
+     "latex": "z=i\\sqrt{p-1}",
+     "mathml": "<math display=\"inline\"><mrow><mi>z</mi><mo>=</mo><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mi>p</mi><mo>−</mo><mn>1</mn></mrow></msqrt></mrow></mrow></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "q=p/(p−1)",
+     "latex": "q=p/(p-1)",
+     "mathml": "<math display=\"inline\"><mrow><mi>q</mi><mo>=</mo><mrow><mi>p</mi><mo>/</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>p</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": "; Weissler [51] (for all exponents "
+    },
+    {
+     "text": "p,q",
+     "latex": "p,q",
+     "mathml": "<math display=\"inline\"><mrow><mi>p</mi><mo>,</mo><mi>q</mi></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "1<p≤q<∞",
+     "latex": "1<p\\leq q<\\infty",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>&lt;</mo><mi>p</mi><mo>≤</mo><mi>q</mi><mo>&lt;</mo><mi mathvariant=\"normal\">∞</mi></mrow></math>"
+    },
+    {
+     "text": " except "
+    },
+    {
+     "text": "2<p≤q≤3",
+     "latex": "2<p\\leq q\\leq 3",
+     "mathml": "<math display=\"inline\"><mrow><mn>2</mn><mo>&lt;</mo><mi>p</mi><mo>≤</mo><mi>q</mi><mo>≤</mo><mn>3</mn></mrow></math>"
+    },
+    {
+     "text": " and its dual), Janson [41], Lieb [44], and Epperson [26]. The complex hypercontractivity has found numerous applications in heat-smoothing conjecture [28, 45], Markov–Bernstein inequalities and its reverse forms [29], moment comparison inequalities [36, 29], and it provides "
+    },
+    {
+     "text": "Lp",
+     "latex": "L_{p}",
+     "mathml": "<math display=\"inline\"><msub><mi>L</mi><mi>p</mi></msub></math>"
+    },
+    {
+     "text": " bounds in a systematic way for Fourier multipliers acting on functions having prescribed frequencies [35, 29]. Perhaps the first application of complex hypercontractivity goes back to Beckner."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem A ",
+     "bold": true
+    },
+    {
+     "text": "(Beckner [11])"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "X∼N(0,Idn)",
+     "latex": "X\\sim N(0,\\mathrm{Id_{n}})",
+     "mathml": "<math display=\"inline\"><mrow><mi>X</mi><mo>∼</mo><mrow><mi>N</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><msub><mi>Id</mi><mi mathvariant=\"normal\">n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ". The inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\|T_{i\\sqrt{p-1}}f(X)\\|_{q}\\leq\\|f(X)\\|_{p},",
+   "mathml": "<math display=\"inline\"><mrow><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><msub><mi>T</mi><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mi>p</mi><mo>−</mo><mn>1</mn></mrow></msqrt></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">‖</mo></mrow><mi>q</mi></msub><mo>≤</mo><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">‖</mo></mrow><mi>p</mi></msub></mrow><mo>,</mo></mrow></math>",
+   "label": "(2.3)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all polynomials ",
+     "italic": true
+    },
+    {
+     "text": "f∈𝒫(ℝn)",
+     "latex": "f\\in\\mathscr{P}(\\mathbb{R}^{n})",
+     "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo>∈</mo><mrow><mi>𝒫</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><mi>n</mi></msup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\frac{1}{p}+\\frac{1}{q}=1,\\quad 1\\leq p\\leq 2.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mi>p</mi></mfrac></mstyle><mo>+</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mi>q</mi></mfrac></mstyle></mrow><mo>=</mo><mn>1</mn></mrow><mo rspace=\"1.167em\">,</mo><mrow><mn>1</mn><mo>≤</mo><mi>p</mi><mo>≤</mo><mn>2</mn></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The inequality (2.3) is equivalent to Hausdorff–Young inequality with a sharp constant, namely"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left[\\int_{\\mathbb{R}^{n}}\\left|\\widehat{g}\\left(x\\right)\\right|^{q}\\mathrm{d}x\\right]^{1/q}\\leq C\\left[\\int_{\\mathbb{R}^{n}}\\left|g\\left(x\\right)\\right|^{p}\\mathrm{d}x\\right]^{1/p}",
+   "mathml": "<math display=\"inline\"><mrow><msup><mrow><mo>[</mo><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><msup><mi>ℝ</mi><mi>n</mi></msup></msub></mstyle><mrow><msup><mrow><mo>|</mo><mrow><mover accent=\"true\"><mi>g</mi><mo>^</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mi>x</mi><mo>)</mo></mrow></mrow><mo>|</mo></mrow><mi>q</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>x</mi></mrow></mrow></mrow><mo>]</mo></mrow><mrow><mn>1</mn><mo>/</mo><mi>q</mi></mrow></msup><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo>[</mo><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><msup><mi>ℝ</mi><mi>n</mi></msup></msub></mstyle><mrow><msup><mrow><mo>|</mo><mrow><mi>g</mi><mo>⁡</mo><mrow><mo>(</mo><mi>x</mi><mo>)</mo></mrow></mrow><mo>|</mo></mrow><mi>p</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>x</mi></mrow></mrow></mrow><mo>]</mo></mrow><mrow><mn>1</mn><mo>/</mo><mi>p</mi></mrow></msup></mrow></mrow></math>",
+   "label": "(2.4)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all "
+    },
+    {
+     "text": "g=𝒫(ℝn)e−|x|2/2p",
+     "latex": "g=\\mathscr{P}(\\mathbb{R}^{n})e^{-|x|^{2}/2p}",
+     "mathml": "<math display=\"inline\"><mrow><mi>g</mi><mo>=</mo><mi>𝒫</mi><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><mi>n</mi></msup><mo stretchy=\"false\">)</mo></mrow><msup><mi>e</mi><mrow><mo rspace=\"0em\">−</mo><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mi>x</mi><mo fence=\"false\" stretchy=\"false\">|</mo><msup><mrow></mrow><mn>2</mn></msup><mo lspace=\"0em\">/</mo><mn>2</mn><mi>p</mi></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " with the best possible constant"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "C=\\frac{p^{n/2p}}{q^{n/2q}}(2\\pi)^{\\frac{n}{2q}-\\frac{n}{2p}},\\quad\\text{and}\\quad\\widehat{g}(x):=\\frac{1}{(2\\pi)^{n/2}}\\int_{\\mathbb{R}^{n}}g(y)e^{-ix\\cdot y}dy.",
+   "mathml": "<math display=\"inline\"><mrow><mi>C</mi><mo>=</mo><mstyle displaystyle=\"true\"><mfrac><msup><mi>p</mi><mrow><mrow><mi>n</mi><mo>/</mo><mn>2</mn></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi></mrow></msup><msup><mi>q</mi><mrow><mrow><mi>n</mi><mo>/</mo><mn>2</mn></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>q</mi></mrow></msup></mfrac></mstyle><msup><mrow><mo stretchy=\"false\">(</mo><mn>2</mn><mi>π</mi><mo stretchy=\"false\">)</mo></mrow><mrow><mfrac><mi>n</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>q</mi></mrow></mfrac><mo>−</mo><mfrac><mi>n</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi></mrow></mfrac></mrow></msup><mo rspace=\"1.167em\">,</mo><mtext>and</mtext><mover accent=\"true\"><mi>g</mi><mo>^</mo></mover><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mo>:=</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>π</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>n</mi><mo>/</mo><mn>2</mn></mrow></msup></mfrac></mstyle><mstyle displaystyle=\"true\"><msub><mo>∫</mo><msup><mi>ℝ</mi><mi>n</mi></msup></msub></mstyle><mi>g</mi><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><msup><mi>e</mi><mrow><mo>−</mo><mi>i</mi><mi>x</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">⋅</mo><mi>y</mi></mrow></msup><mi>d</mi><mi>y</mi><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The connection of "
+    },
+    {
+     "text": "Tzf",
+     "latex": "T_{z}f",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>T</mi><mi>z</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow></math>"
+    },
+    {
+     "text": " for imaginary "
+    },
+    {
+     "text": "z",
+     "latex": "z",
+     "mathml": "<math display=\"inline\"><mi>z</mi></math>"
+    },
+    {
+     "text": " and Fourier transform "
+    },
+    {
+     "text": "f^",
+     "latex": "\\widehat{f}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>f</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " can be seen through Mehler’s formula"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "T_{z}f(x)=\\int_{\\mathbb{R}^{n}}f(y)\\frac{1}{(\\sqrt{1-z^{2}})^{n}}\\exp\\left(-\\frac{|x|^{2}+|y|^{2}}{2}\\left(\\frac{z^{2}}{1-z^{2}}\\right)+x\\cdot y\\frac{z}{1-z^{2}}\\right)\\mathrm{d}\\gamma(y),",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><msub><mi>T</mi><mi>z</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><msup><mi>ℝ</mi><mi>n</mi></msup></msub></mstyle><mrow><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><msup><mrow><mo stretchy=\"false\">(</mo><msqrt><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mn>2</mn></msup></mrow></msqrt><mo stretchy=\"false\">)</mo></mrow><mi>n</mi></msup></mfrac></mstyle><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><mi>exp</mi><mo>⁡</mo><mrow><mo>(</mo><mrow><mrow><mo>−</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mrow><msup><mrow><mo stretchy=\"false\">|</mo><mi>x</mi><mo stretchy=\"false\">|</mo></mrow><mn>2</mn></msup><mo>+</mo><msup><mrow><mo stretchy=\"false\">|</mo><mi>y</mi><mo stretchy=\"false\">|</mo></mrow><mn>2</mn></msup></mrow><mn>2</mn></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac><msup><mi>z</mi><mn>2</mn></msup><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mn>2</mn></msup></mrow></mfrac></mstyle><mo>)</mo></mrow></mrow></mrow><mo>+</mo><mrow><mrow><mi>x</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">⋅</mo><mi>y</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mstyle displaystyle=\"true\"><mfrac><mi>z</mi><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mn>2</mn></msup></mrow></mfrac></mstyle></mrow></mrow><mo>)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>γ</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo>,</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "dγ(y)=e−|y|2/2(2π)n/2dy",
+     "latex": "d\\gamma(y)=\\frac{e^{-|y|^{2}/2}}{(2\\pi)^{n/2}}dy",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>γ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mfrac><mrow><mi>e</mi><msup><mrow></mrow><mrow><mo rspace=\"0em\">−</mo><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mi>y</mi><mo fence=\"false\" stretchy=\"false\">|</mo><msup><mrow></mrow><mn>2</mn></msup><mo lspace=\"0em\">/</mo><mn>2</mn></mrow></msup></mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>π</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>n</mi><mo>/</mo><mn>2</mn></mrow></msup></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>y</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " is the standard Gaussian measure on "
+    },
+    {
+     "text": "ℝn",
+     "latex": "\\mathbb{R}^{n}",
+     "mathml": "<math display=\"inline\"><msup><mi>ℝ</mi><mi>n</mi></msup></math>"
+    },
+    {
+     "text": ". Thus, for "
+    },
+    {
+     "text": "t≥1",
+     "latex": "t\\geq 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>≥</mo><mn>1</mn></mrow></math>"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{aligned} T_{i\\sqrt{t-1}}f(x) & =\\frac{e^{\\frac{|x|^{2}(t-1)}{2t}}}{t^{n/2}}\\widehat{fe^{-\\frac{|y|^{2}}{2t}}}\\left(-\\frac{x\\sqrt{t-1}}{t}\\right). \\end{aligned}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><msub><mi>T</mi><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msqrt></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mtd><mtd><mrow><mrow><mphantom></mphantom><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><msup><mi>e</mi><mfrac><mrow><msup><mrow><mo stretchy=\"false\">|</mo><mi>x</mi><mo stretchy=\"false\">|</mo></mrow><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mfrac></msup><msup><mi>t</mi><mrow><mi>n</mi><mo>/</mo><mn>2</mn></mrow></msup></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mover accent=\"true\"><mrow><mi>f</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mfrac><msup><mrow><mo stretchy=\"false\">|</mo><mi>y</mi><mo stretchy=\"false\">|</mo></mrow><mn>2</mn></msup><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mfrac></mrow></msup></mrow><mo>^</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mo>−</mo><mstyle displaystyle=\"true\"><mfrac><mrow><mi>x</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msqrt></mrow><mi>t</mi></mfrac></mstyle></mrow><mo>)</mo></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>",
+   "label": "(2.5)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Using the well-known scaling property of the Fourier transform, one can verify that the function "
+    },
+    {
+     "text": "et(x):=e−|x|2/2t",
+     "latex": "e_{t}(x):=e^{-|x|^{2}/2t}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>e</mi><mi>t</mi></msub><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mo>:=</mo><msup><mi>e</mi><mrow><mo rspace=\"0em\">−</mo><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mi>x</mi><mo fence=\"false\" stretchy=\"false\">|</mo><msup><mrow></mrow><mn>2</mn></msup><mo lspace=\"0em\">/</mo><mn>2</mn><mi>t</mi></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " has Fourier transform "
+    },
+    {
+     "text": "et^(ω)=tn/2e−|ω|2t/2",
+     "latex": "\\widehat{e_{t}}(\\omega)=t^{n/2}e^{-|\\omega|^{2}t/2}",
+     "mathml": "<math display=\"inline\"><mrow><mover accent=\"true\"><msub><mi>e</mi><mi>t</mi></msub><mo>^</mo></mover><mrow><mo stretchy=\"false\">(</mo><mi>ω</mi><mo stretchy=\"false\">)</mo></mrow><mo>=</mo><msup><mi>t</mi><mrow><mi>n</mi><mo>/</mo><mn>2</mn></mrow></msup><msup><mi>e</mi><mrow><mo rspace=\"0em\">−</mo><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mi>ω</mi><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><msup><mrow></mrow><mn>2</mn></msup><mi>t</mi><mo>/</mo><mn>2</mn></mrow></msup></mrow></math>"
+    },
+    {
+     "text": ". Thus formula (2.5) rewrites"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "T_{i\\sqrt{t-1}}f(x)=\\frac{\\widehat{fe_{t}}}{\\widehat{e_{t}}}\\left(-\\frac{x\\sqrt{t-1}}{t}\\right).",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><msub><mi>T</mi><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msqrt></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mover accent=\"true\"><mrow><mi>f</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>e</mi><mi>t</mi></msub></mrow><mo>^</mo></mover><mover accent=\"true\"><msub><mi>e</mi><mi>t</mi></msub><mo>^</mo></mover></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mo>−</mo><mstyle displaystyle=\"true\"><mfrac><mrow><mi>x</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msqrt></mrow><mi>t</mi></mfrac></mstyle></mrow><mo>)</mo></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(2.6)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Therefore, Beckner’s inequality (2.3) can be seen as another way of rewriting Hausdorff–Young inequality (2.4) in a form where the sharp constant becomes to be equal to "
+    },
+    {
+     "text": "1",
+     "latex": "1",
+     "mathml": "<math display=\"inline\"><mn>1</mn></math>"
+    },
+    {
+     "text": ", and Gaussians can be easily seen to be extremizers"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\|(\\widehat{g}/\\widehat{e_{p}})(\\eta)\\right\\|_{q}\\leq\\left\\|(g/e_{p})(X)\\right\\|_{p}\\quad\\text{where}\\quad\\eta=\\frac{\\sqrt{p-1}}{p}X,\\quad X\\sim N\\left(0,\\mathrm{Id}_{n}\\right).",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><msub><mrow><mo>‖</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mover accent=\"true\"><mi>g</mi><mo>^</mo></mover><mo>/</mo><mover accent=\"true\"><msub><mi>e</mi><mi>p</mi></msub><mo>^</mo></mover></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>η</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>‖</mo></mrow><mi>q</mi></msub><mo>≤</mo><msub><mrow><mo>‖</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>g</mi><mo>/</mo><msub><mi>e</mi><mi>p</mi></msub></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>‖</mo></mrow><mi>p</mi></msub></mrow><mspace style=\"width:1em;\" width=\"1em\"></mspace><mtext>where</mtext><mspace style=\"width:1em;\" width=\"1em\"></mspace><mrow><mi>η</mi><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><msqrt><mrow><mi>p</mi><mo>−</mo><mn>1</mn></mrow></msqrt><mi>p</mi></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>X</mi></mrow></mrow><mo rspace=\"1.167em\">,</mo><mrow><mi>X</mi><mo>∼</mo><mrow><mi>N</mi><mo>⁡</mo><mrow><mo>(</mo><mn>0</mn><mo>,</mo><msub><mi>Id</mi><mi>n</mi></msub><mo>)</mo></mrow></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(2.7)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "To summarize, the connection between (2.7) and Hausdorff–Young inequality (2.4) is that "
+    },
+    {
+     "text": "g=fep",
+     "latex": "g=fe_{p}",
+     "mathml": "<math display=\"inline\"><mrow><mi>g</mi><mo>=</mo><mrow><mi>f</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>e</mi><mi>p</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ". When "
+    },
+    {
+     "text": "zj",
+     "latex": "z_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>z</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": "’s are purely imaginary numbers in Theorem 1 then the condition (2.2) simplifies and we obtain"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 2 ",
+     "bold": true
+    },
+    {
+     "text": "("
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": "-function complex hypercontractivity for imaginary parameters)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "α≥1",
+     "latex": "\\alpha\\geq 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>≥</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and ",
+     "italic": true
+    },
+    {
+     "text": "(s1,…,sn)∈ℝn",
+     "latex": "(s_{1},\\ldots,s_{n})\\in\\mathbb{R}^{n}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><msub><mi>s</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>s</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msup><mi>ℝ</mi><mi>n</mi></msup></mrow></math>"
+    },
+    {
+     "text": ". The inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\|\\prod_{j=1}^{n}|T_{is_{j}}f_{j}(\\xi_{j})|^{p_{j}}\\|_{\\alpha}\\leq\\|\\prod_{j=1}^{n}|f_{j}(\\xi_{j})|^{p_{j}}\\|_{1}",
+   "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><msup><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>T</mi><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>s</mi><mi>j</mi></msub></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><msub><mi>p</mi><mi>j</mi></msub></msup></mrow><mo stretchy=\"false\">‖</mo></mrow><mi>α</mi></msub><mo>≤</mo><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><msup><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><msub><mi>p</mi><mi>j</mi></msub></msup></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>1</mn></msub></mrow></math>",
+   "label": "(2.8)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all polynomials ",
+     "italic": true
+    },
+    {
+     "text": "fj∈𝒫(ℝkj)",
+     "latex": "f_{j}\\in\\mathscr{P}(\\mathbb{R}^{k_{j}})",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>j</mi></msub><mo>∈</mo><mrow><mi>𝒫</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n,",
+     "latex": "j=1,\\ldots,n,",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow><mo>,</mo></mrow></math>"
+    },
+    {
+     "text": " if and only if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\frac{1}{\\alpha}\\mathrm{diag}\\left\\{\\frac{1+s_{j}^{2}}{s_{j}^{2}p_{j}}\\mathrm{Id}_{k_{j}}\\right\\}_{j=1}^{n}\\geq\\mathrm{cov}(\\xi)\\geq\\mathrm{diag}\\left\\{\\frac{1+s_{j}^{2}}{p_{j}}\\mathrm{Id}_{k_{j}}\\right\\}_{j=1}^{n}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mfrac><mn>1</mn><mi>α</mi></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>diag</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mrow><mo>{</mo><mrow><mfrac><mrow><mn>1</mn><mo>+</mo><msubsup><mi>s</mi><mi>j</mi><mn>2</mn></msubsup></mrow><mrow><msubsup><mi>s</mi><mi>j</mi><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>p</mi><mi>j</mi></msub></mrow></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>Id</mi><msub><mi>k</mi><mi>j</mi></msub></msub></mrow><mo>}</mo></mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup></mrow><mo>≥</mo><mrow><mi>cov</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>ξ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≥</mo><mrow><mi>diag</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mrow><mo>{</mo><mrow><mfrac><mrow><mn>1</mn><mo>+</mo><msubsup><mi>s</mi><mi>j</mi><mn>2</mn></msubsup></mrow><msub><mi>p</mi><mi>j</mi></msub></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>Id</mi><msub><mi>k</mi><mi>j</mi></msub></msub></mrow><mo>}</mo></mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(2.9)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In the theorem the symbol "
+    },
+    {
+     "text": "diag",
+     "latex": "\\mathrm{diag}",
+     "mathml": "<math display=\"inline\"><mi>diag</mi></math>"
+    },
+    {
+     "text": " stands for a diagonal matrix, and the diagonals are filled by block-diagonal matrices. The notation "
+    },
+    {
+     "text": "A≥B",
+     "latex": "A\\geq B",
+     "mathml": "<math display=\"inline\"><mrow><mi>A</mi><mo>≥</mo><mi>B</mi></mrow></math>"
+    },
+    {
+     "text": " for matrices "
+    },
+    {
+     "text": "A,B",
+     "latex": "A,B",
+     "mathml": "<math display=\"inline\"><mrow><mi>A</mi><mo>,</mo><mi>B</mi></mrow></math>"
+    },
+    {
+     "text": " means that the matrix "
+    },
+    {
+     "text": "A−B",
+     "latex": "A-B",
+     "mathml": "<math display=\"inline\"><mrow><mi>A</mi><mo>−</mo><mi>B</mi></mrow></math>"
+    },
+    {
+     "text": " is positive semidefinite."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 2 may seem a bit abstract compared to Beckner’s Thoerem A. If we let "
+    },
+    {
+     "text": "p1=…=pn=p",
+     "latex": "p_{1}=\\ldots=p_{n}=p",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>p</mi><mn>1</mn></msub><mo>=</mo><mi mathvariant=\"normal\">…</mi><mo>=</mo><msub><mi>p</mi><mi>n</mi></msub><mo>=</mo><mi>p</mi></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "α=q/p",
+     "latex": "\\alpha=q/p",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>=</mo><mrow><mi>q</mi><mo>/</mo><mi>p</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "s1=s2=…=sn",
+     "latex": "s_{1}=s_{2}=\\ldots=s_{n}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>s</mi><mn>1</mn></msub><mo>=</mo><msub><mi>s</mi><mn>2</mn></msub><mo>=</mo><mi mathvariant=\"normal\">…</mi><mo>=</mo><msub><mi>s</mi><mi>n</mi></msub></mrow></math>"
+    },
+    {
+     "text": " in Theorem 2 then we obtain a result which extends Beckner’s result to several functions."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 3 ",
+     "bold": true
+    },
+    {
+     "text": "(Multiversion of Beckner’s inequality)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "The inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\|\\prod_{j=1}^{n}T_{i\\sqrt{p\\lambda_{\\min}-1}}f_{j}(\\xi_{j})\\right\\|_{q}\\leq\\left\\|\\prod_{j=1}^{n}f_{j}(\\xi_{j})\\right\\|_{p}",
+   "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo>‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msub><mi>T</mi><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mo>−</mo><mn>1</mn></mrow></msqrt></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>‖</mo></mrow><mi>q</mi></msub><mo>≤</mo><msub><mrow><mo>‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>‖</mo></mrow><mi>p</mi></msub></mrow></math>",
+   "label": "(2.10)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all polynomials ",
+     "italic": true
+    },
+    {
+     "text": "fj∈𝒫(ℝkj)",
+     "latex": "f_{j}\\in\\mathscr{P}(\\mathbb{R}^{k_{j}})",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>j</mi></msub><mo>∈</mo><mrow><mi>𝒫</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n,",
+     "latex": "j=1,\\ldots,n,",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow><mo>,</mo></mrow></math>"
+    },
+    {
+     "text": " if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\frac{1}{p\\lambda_{\\min}}+\\frac{1}{q\\lambda_{\\max}}=1,\\quad 1\\leq p\\leq q.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow></mfrac></mstyle><mo>+</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>max</mi></msub></mrow></mfrac></mstyle></mrow><mo>=</mo><mn>1</mn></mrow><mo rspace=\"1.167em\">,</mo><mrow><mn>1</mn><mo>≤</mo><mi>p</mi><mo>≤</mo><mi>q</mi></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(2.11)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In the case "
+    },
+    {
+     "text": "n=1",
+     "latex": "n=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " we have "
+    },
+    {
+     "text": "λmin=λmax=1",
+     "latex": "\\lambda_{\\min}=\\lambda_{\\max}=1",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>λ</mi><mi>min</mi></msub><mo>=</mo><msub><mi>λ</mi><mi>max</mi></msub><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and, therefore, we recover Beckner’s inequality (2.3). The case "
+    },
+    {
+     "text": "n=2",
+     "latex": "n=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": " of Theorem 3 gives the following"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 4 ",
+     "bold": true
+    },
+    {
+     "text": "("
+    },
+    {
+     "text": "ρ",
+     "latex": "\\rho",
+     "mathml": "<math display=\"inline\"><mi>ρ</mi></math>"
+    },
+    {
+     "text": "-correlated Beckner’s inequality)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "X",
+     "latex": "X",
+     "mathml": "<math display=\"inline\"><mi>X</mi></math>"
+    },
+    {
+     "text": " and ",
+     "italic": true
+    },
+    {
+     "text": "Xρ",
+     "latex": "X_{\\rho}",
+     "mathml": "<math display=\"inline\"><msub><mi>X</mi><mi>ρ</mi></msub></math>"
+    },
+    {
+     "text": " be ",
+     "italic": true
+    },
+    {
+     "text": "ρ",
+     "latex": "\\rho",
+     "mathml": "<math display=\"inline\"><mi>ρ</mi></math>"
+    },
+    {
+     "text": "-correlated standard Gaussians in ",
+     "italic": true
+    },
+    {
+     "text": "ℝn",
+     "latex": "\\mathbb{R}^{n}",
+     "mathml": "<math display=\"inline\"><msup><mi>ℝ</mi><mi>n</mi></msup></math>"
+    },
+    {
+     "text": ", i.e., ",
+     "italic": true
+    },
+    {
+     "text": "cov(X,Xρ)=ρIdn",
+     "latex": "\\mathrm{cov}(X,X_{\\rho})=\\rho\\mathrm{Id}_{n}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>cov</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>X</mi><mo>,</mo><msub><mi>X</mi><mi>ρ</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mi>ρ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>Id</mi><mi>n</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", having joint Gaussian distribution. The inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\|T_{i\\sqrt{p(1-|\\rho|)-1}}f(X)T_{i\\sqrt{p(1-|\\rho|)-1}}g(X_{\\rho})\\|_{q}\\leq\\|f(X)g(X_{\\rho})\\|_{p}",
+   "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><msub><mi>T</mi><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mrow><mi>p</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mo stretchy=\"false\">|</mo><mi>ρ</mi><mo stretchy=\"false\">|</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>−</mo><mn>1</mn></mrow></msqrt></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>T</mi><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mrow><mi>p</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mo stretchy=\"false\">|</mo><mi>ρ</mi><mo stretchy=\"false\">|</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>−</mo><mn>1</mn></mrow></msqrt></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>g</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>X</mi><mi>ρ</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">‖</mo></mrow><mi>q</mi></msub><mo>≤</mo><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>g</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>X</mi><mi>ρ</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">‖</mo></mrow><mi>p</mi></msub></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all polynomials ",
+     "italic": true
+    },
+    {
+     "text": "f,g∈𝒫(ℝn)",
+     "latex": "f,g\\in\\mathscr{P}(\\mathbb{R}^{n})",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>f</mi><mo>,</mo><mi>g</mi></mrow><mo>∈</mo><mrow><mi>𝒫</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><mi>n</mi></msup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\frac{1}{p(1-|\\rho|)}+\\frac{1}{q(1+|\\rho|)}=1,\\quad 1\\leq p\\leq q.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mi>p</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mo stretchy=\"false\">|</mo><mi>ρ</mi><mo stretchy=\"false\">|</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle><mo>+</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mi>q</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mrow><mo stretchy=\"false\">|</mo><mi>ρ</mi><mo stretchy=\"false\">|</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle></mrow><mo>=</mo><mn>1</mn></mrow><mo rspace=\"1.167em\">,</mo><mrow><mn>1</mn><mo>≤</mo><mi>p</mi><mo>≤</mo><mi>q</mi></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Remark 1. ",
+     "bold": true
+    },
+    {
+     "text": "Notice that ",
+     "italic": true
+    },
+    {
+     "text": "0",
+     "latex": "0",
+     "mathml": "<math display=\"inline\"><mn>0</mn></math>"
+    },
+    {
+     "text": "-correlated case of Theorem 4 with ",
+     "italic": true
+    },
+    {
+     "text": "f=g",
+     "latex": "f=g",
+     "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo>=</mo><mi>g</mi></mrow></math>"
+    },
+    {
+     "text": " coincides with Theorem B due to Beckner.",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 2 together with the identity (2.6) will give us a general form of Hausdorff–Young inequality for several functions. The following two corollaries present reformulations of Theorem 2 and Theorem 3 in the language of Fourier transforms. We chose to state them separately to make the results accessible and engaging to readers from both the harmonic analysis and probability audiences, allowing each to appreciate the statements in their own familiar framework."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 5 ",
+     "bold": true
+    },
+    {
+     "text": "(general "
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": "-function Hausdorff–Young inequality)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "α≥1",
+     "latex": "\\alpha\\geq 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>≥</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and ",
+     "italic": true
+    },
+    {
+     "text": "ηj=tj−1tjξj",
+     "latex": "\\eta_{j}=\\frac{\\sqrt{t_{j}-1}}{t_{j}}\\xi_{j}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>η</mi><mi>j</mi></msub><mo>=</mo><mrow><mfrac><msqrt><mrow><msub><mi>t</mi><mi>j</mi></msub><mo>−</mo><mn>1</mn></mrow></msqrt><msub><mi>t</mi><mi>j</mi></msub></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>ξ</mi><mi>j</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n",
+     "latex": "j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ". Then",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\|\\prod_{j=1}^{n}\\left|(\\widehat{g}_{j}/\\widehat{e_{t_{j}}})(\\eta_{j})\\right|^{p_{j}}\\right\\|_{\\alpha}\\leq\\left\\|\\prod_{j=1}^{n}\\left|(g_{j}/e_{t_{j}})(\\xi_{j})\\right|^{p_{j}}\\right\\|_{1}",
+   "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo>‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><msup><mrow><mo>|</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mover accent=\"true\"><mi>g</mi><mo>^</mo></mover><mi>j</mi></msub><mo>/</mo><mover accent=\"true\"><msub><mi>e</mi><msub><mi>t</mi><mi>j</mi></msub></msub><mo>^</mo></mover></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>η</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>|</mo></mrow><msub><mi>p</mi><mi>j</mi></msub></msup></mrow><mo>‖</mo></mrow><mi>α</mi></msub><mo>≤</mo><msub><mrow><mo>‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><msup><mrow><mo>|</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>g</mi><mi>j</mi></msub><mo>/</mo><msub><mi>e</mi><msub><mi>t</mi><mi>j</mi></msub></msub></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>|</mo></mrow><msub><mi>p</mi><mi>j</mi></msub></msup></mrow><mo>‖</mo></mrow><mn>1</mn></msub></mrow></math>",
+   "label": "(2.12)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all ",
+     "italic": true
+    },
+    {
+     "text": "gj∈𝒫(ℝkj)etj",
+     "latex": "g_{j}\\in\\mathscr{P}(\\mathbb{R}^{k_{j}})e_{t_{j}}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>g</mi><mi>j</mi></msub><mo>∈</mo><mrow><mrow><mi>𝒫</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>e</mi><msub><mi>t</mi><mi>j</mi></msub></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n,",
+     "latex": "j=1,\\ldots,n,",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow><mo>,</mo></mrow></math>"
+    },
+    {
+     "text": " if and only if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\frac{1}{\\alpha}\\mathrm{diag}\\left\\{\\frac{t_{j}}{(t_{j}-1)p_{j}}\\mathrm{Id}_{k_{j}}\\right\\}_{j=1}^{n}\\geq\\mathrm{cov}(\\xi)\\geq\\mathrm{diag}\\left\\{\\frac{t_{j}}{p_{j}}\\mathrm{Id}_{k_{j}}\\right\\}_{j=1}^{n}.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mi>α</mi></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>diag</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mrow><mo>{</mo><mrow><mstyle displaystyle=\"true\"><mfrac><msub><mi>t</mi><mi>j</mi></msub><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>t</mi><mi>j</mi></msub><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>p</mi><mi>j</mi></msub></mrow></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>Id</mi><msub><mi>k</mi><mi>j</mi></msub></msub></mrow><mo>}</mo></mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup></mrow><mo>≥</mo><mrow><mi>cov</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>ξ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≥</mo><mrow><mi>diag</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mrow><mo>{</mo><mrow><mstyle displaystyle=\"true\"><mfrac><msub><mi>t</mi><mi>j</mi></msub><msub><mi>p</mi><mi>j</mi></msub></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>Id</mi><msub><mi>k</mi><mi>j</mi></msub></msub></mrow><mo>}</mo></mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(2.13)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The next Theorem is a reformulation of Theorem 3 in terms of Fourier transform."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 6 ",
+     "bold": true
+    },
+    {
+     "text": "("
+    },
+    {
+     "text": "Lp",
+     "latex": "L^{p}",
+     "mathml": "<math display=\"inline\"><msup><mi>L</mi><mi>p</mi></msup></math>"
+    },
+    {
+     "text": " to "
+    },
+    {
+     "text": "Lq",
+     "latex": "L^{q}",
+     "mathml": "<math display=\"inline\"><msup><mi>L</mi><mi>q</mi></msup></math>"
+    },
+    {
+     "text": " version of "
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": "-function Hausdorff–Young inequality)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "μ:=pλmin−1pλmin",
+     "latex": "\\mu:=\\frac{\\sqrt{p\\lambda_{\\min}-1}}{p\\lambda_{\\min}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>μ</mi><mo>:=</mo><mfrac><msqrt><mrow><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mo>−</mo><mn>1</mn></mrow></msqrt><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow></mfrac></mrow></math>"
+    },
+    {
+     "text": ". The inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\|e^{\\frac{|\\xi|^{2}}{2q\\lambda_{\\max}}}\\prod_{j=1}^{n}\\widehat{g}_{j}(\\mu\\xi_{j})\\right\\|_{q}\\leq(p\\lambda_{\\min})^{\\frac{\\sum k_{j}}{2}}\\left\\|e^{\\frac{|\\xi|^{2}}{2p\\lambda_{\\min}}}\\prod_{j=1}^{n}g_{j}(\\xi_{j})\\right\\|_{p}",
+   "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo>‖</mo><mrow><msup><mi>e</mi><mfrac><msup><mrow><mo stretchy=\"false\">|</mo><mi>ξ</mi><mo stretchy=\"false\">|</mo></mrow><mn>2</mn></msup><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>max</mi></msub></mrow></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msub><mover accent=\"true\"><mi>g</mi><mo>^</mo></mover><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>μ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>ξ</mi><mi>j</mi></msub></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo>‖</mo></mrow><mi>q</mi></msub><mo>≤</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mo stretchy=\"false\">)</mo></mrow><mfrac><mstyle scriptlevel=\"-2\"><mrow><mo maxsize=\"0.500em\" minsize=\"0.500em\" stretchy=\"true\">∑</mo><msub><mi mathsize=\"0.500em\">k</mi><mi mathsize=\"0.710em\">j</mi></msub></mrow></mstyle><mn>2</mn></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo>‖</mo><mrow><msup><mi>e</mi><mfrac><msup><mrow><mo stretchy=\"false\">|</mo><mi>ξ</mi><mo stretchy=\"false\">|</mo></mrow><mn>2</mn></msup><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msub><mi>g</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo>‖</mo></mrow><mi>p</mi></msub></mrow></mrow></math>",
+   "label": "(2.14)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all ",
+     "italic": true
+    },
+    {
+     "text": "gj∈𝒫(ℝkj)epλmin",
+     "latex": "g_{j}\\in\\mathscr{P}(\\mathbb{R}^{k_{j}})e_{p\\lambda_{\\min}}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>g</mi><mi>j</mi></msub><mo>∈</mo><mrow><mrow><mi>𝒫</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>e</mi><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n,",
+     "latex": "j=1,\\ldots,n,",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow><mo>,</mo></mrow></math>"
+    },
+    {
+     "text": " if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\frac{1}{p\\lambda_{\\min}}+\\frac{1}{q\\lambda_{\\max}}=1,\\quad 1\\leq p\\leq q.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow></mfrac></mstyle><mo>+</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>max</mi></msub></mrow></mfrac></mstyle></mrow><mo>=</mo><mn>1</mn></mrow><mo rspace=\"1.167em\">,</mo><mrow><mn>1</mn><mo>≤</mo><mi>p</mi><mo>≤</mo><mi>q</mi></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The constant ",
+     "italic": true
+    },
+    {
+     "text": "(pλmin)∑kj2",
+     "latex": "(p\\lambda_{\\min})^{\\frac{\\sum k_{j}}{2}}",
+     "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mo stretchy=\"false\">)</mo></mrow><mfrac><mstyle scriptlevel=\"-2\"><mrow><mo maxsize=\"0.500em\" minsize=\"0.500em\" stretchy=\"true\">∑</mo><msub><mi mathsize=\"0.500em\">k</mi><mi mathsize=\"0.710em\">j</mi></msub></mrow></mstyle><mn>2</mn></mfrac></msup></math>"
+    },
+    {
+     "text": " is sharp in (2.14) and it is achieved if ",
+     "italic": true
+    },
+    {
+     "text": "gj(ξj)=epλmin(ξj)",
+     "latex": "g_{j}(\\xi_{j})=e_{p\\lambda_{\\min}}(\\xi_{j})",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>g</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><msub><mi>e</mi><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " for all ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n",
+     "latex": "j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The application of the Theorem 6 to "
+    },
+    {
+     "text": "n=2",
+     "latex": "n=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": " gives the following."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 7 ",
+     "bold": true
+    },
+    {
+     "text": "("
+    },
+    {
+     "text": "ρ",
+     "latex": "\\rho",
+     "mathml": "<math display=\"inline\"><mi>ρ</mi></math>"
+    },
+    {
+     "text": "-correlated Hausdorff–Young inequality)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "ρ∈[0,1)",
+     "latex": "\\rho\\in[0,1)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ρ</mi><mo>∈</mo><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", and the exponents ",
+     "italic": true
+    },
+    {
+     "text": "q≥p≥1",
+     "latex": "q\\geq p\\geq 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>q</mi><mo>≥</mo><mi>p</mi><mo>≥</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " satisfy",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\frac{1}{p(1-\\rho)}+\\frac{1}{q(1+\\rho)}=1.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mi>p</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>ρ</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle><mo>+</mo><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mi>q</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mi>ρ</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle></mrow><mo>=</mo><mn>1</mn></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(2.15)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Then the inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left[\\int_{\\mathbb{R}^{n}}\\int_{\\mathbb{R}^{n}}|\\widehat{f}(x)\\widehat{g}(y)|^{q}e^{-\\frac{\\rho pq|x-y|^{2}}{2}}\\mathrm{d}x\\mathrm{d}y\\right]^{1/q}\\leq C\\left[\\int_{\\mathbb{R}^{n}}\\int_{\\mathbb{R}^{n}}\\left|f(x)g(y)\\right|^{p}e^{\\frac{\\rho|x+y|^{2}}{2(1-\\rho^{2})}}\\mathrm{d}x\\mathrm{d}y\\right]^{1/p}",
+   "mathml": "<math display=\"inline\"><mrow><msup><mrow><mo>[</mo><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><msup><mi>ℝ</mi><mi>n</mi></msup></msub></mstyle><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><msup><mi>ℝ</mi><mi>n</mi></msup></msub></mstyle><mrow><msup><mrow><mo stretchy=\"false\">|</mo><mrow><mover accent=\"true\"><mi>f</mi><mo>^</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mover accent=\"true\"><mi>g</mi><mo>^</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mi>q</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mfrac><mrow><mi>ρ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">|</mo><mrow><mi>x</mi><mo>−</mo><mi>y</mi></mrow><mo stretchy=\"false\">|</mo></mrow><mn>2</mn></msup></mrow><mn>2</mn></mfrac></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>x</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>y</mi></mrow></mrow></mrow></mrow><mo>]</mo></mrow><mrow><mn>1</mn><mo>/</mo><mi>q</mi></mrow></msup><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo>[</mo><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><msup><mi>ℝ</mi><mi>n</mi></msup></msub></mstyle><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><msup><mi>ℝ</mi><mi>n</mi></msup></msub></mstyle><mrow><msup><mrow><mo>|</mo><mrow><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>g</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>|</mo></mrow><mi>p</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mfrac><mrow><mi>ρ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">|</mo><mrow><mi>x</mi><mo>+</mo><mi>y</mi></mrow><mo stretchy=\"false\">|</mo></mrow><mn>2</mn></msup></mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>ρ</mi><mn>2</mn></msup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>x</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>y</mi></mrow></mrow></mrow></mrow><mo>]</mo></mrow><mrow><mn>1</mn><mo>/</mo><mi>p</mi></mrow></msup></mrow></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all ",
+     "italic": true
+    },
+    {
+     "text": "f,g∈𝒫(ℝn)ep(1−ρ)",
+     "latex": "f,g\\in\\mathscr{P}(\\mathbb{R}^{n})e_{p(1-\\rho)}",
+     "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo>,</mo><mrow><mi>g</mi><mo>∈</mo><mrow><mrow><mi>𝒫</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℝ</mi><mi>n</mi></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>e</mi><mrow><mi>p</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>ρ</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></msub></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ", and the best possible constant",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "C=\\frac{(p(1-\\rho))^{n-\\frac{n}{q}}}{(q(1+\\rho))^{\\frac{n}{q}}}\\frac{1}{\\left(2\\pi\\sqrt{1-\\rho^{2}}\\right)^{\\frac{n}{p}-\\frac{n}{q}}}",
+   "mathml": "<math display=\"block\"><mrow><mi>C</mi><mo>=</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>p</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>ρ</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>n</mi><mo>−</mo><mfrac><mi>n</mi><mi>q</mi></mfrac></mrow></msup><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>q</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mi>ρ</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mfrac><mi>n</mi><mi>q</mi></mfrac></msup></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><mfrac><mn>1</mn><msup><mrow><mo>(</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>π</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mn>1</mn><mo>−</mo><msup><mi>ρ</mi><mn>2</mn></msup></mrow></msqrt></mrow><mo>)</mo></mrow><mrow><mfrac><mi>n</mi><mi>p</mi></mfrac><mo>−</mo><mfrac><mi>n</mi><mi>q</mi></mfrac></mrow></msup></mfrac></mrow></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "which is achieved for ",
+     "italic": true
+    },
+    {
+     "text": "f=g=ep(1−ρ)",
+     "latex": "f=g=e_{p(1-\\rho)}",
+     "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo>=</mo><mi>g</mi><mo>=</mo><msub><mi>e</mi><mrow><mi>p</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>ρ</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></msub></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Notice that "
+    },
+    {
+     "text": "0",
+     "latex": "0",
+     "mathml": "<math display=\"inline\"><mn>0</mn></math>"
+    },
+    {
+     "text": "-correlated case of the theorem with "
+    },
+    {
+     "text": "f=g",
+     "latex": "f=g",
+     "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo>=</mo><mi>g</mi></mrow></math>"
+    },
+    {
+     "text": " coincides with Beckner–Babenko inequality (2.4) with the sharp constant."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Another application of Theorem 2 is reverse Hölder inequality for "
+    },
+    {
+     "text": "d",
+     "latex": "d",
+     "mathml": "<math display=\"inline\"><mi>d</mi></math>"
+    },
+    {
+     "text": "-homogeneous Gaussian chaoses. We say that the polynomial "
+    },
+    {
+     "text": "f:ℝk↦ℂ",
+     "latex": "f:\\mathbb{R}^{k}\\mapsto\\mathbb{C}",
+     "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><mi>k</mi></msup><mo stretchy=\"false\">↦</mo><mi>ℂ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " is "
+    },
+    {
+     "text": "d",
+     "latex": "d",
+     "mathml": "<math display=\"inline\"><mi>d</mi></math>"
+    },
+    {
+     "text": "-homogeneous Gaussian chaos if"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "f(x)=\\sum_{|\\alpha|=d}c_{\\alpha}H_{\\alpha}(x).",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo rspace=\"0.111em\">=</mo><mrow><munder><mo movablelimits=\"false\">∑</mo><mrow><mrow><mo stretchy=\"false\">|</mo><mi>α</mi><mo stretchy=\"false\">|</mo></mrow><mo>=</mo><mi>d</mi></mrow></munder><mrow><msub><mi>c</mi><mi>α</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>H</mi><mi>α</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 8 ",
+     "bold": true
+    },
+    {
+     "text": "(reverse Hölder for Gaussain chaoses)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "For any ",
+     "italic": true
+    },
+    {
+     "text": "q≥p≥1/λmin",
+     "latex": "q\\geq p\\geq 1/\\lambda_{\\min}",
+     "mathml": "<math display=\"inline\"><mrow><mi>q</mi><mo>≥</mo><mi>p</mi><mo>≥</mo><mrow><mn>1</mn><mo>/</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": " we have",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\|\\prod_{j=1}^{n}f_{j}(\\xi_{j})\\right\\|_{q}\\leq\\max\\left\\{\\frac{1}{p\\lambda_{\\min}-1},q\\lambda_{\\max}-1\\right\\}^{\\sum d_{j}/2}\\left\\|\\prod_{j=1}^{n}f_{j}(\\xi_{j})\\right\\|_{p}",
+   "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo>‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>‖</mo></mrow><mi>q</mi></msub><mo>≤</mo><mrow><mi>max</mi><mo>⁡</mo><mrow><msup><mrow><mo>{</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mo>−</mo><mn>1</mn></mrow></mfrac></mstyle><mo>,</mo><mrow><mrow><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>max</mi></msub></mrow><mo>−</mo><mn>1</mn></mrow></mrow><mo>}</mo></mrow><mstyle scriptlevel=\"-1\"><mrow><mo maxsize=\"0.700em\" minsize=\"0.700em\" stretchy=\"true\">∑</mo><mrow><msub><mi mathsize=\"0.700em\">d</mi><mi mathsize=\"0.710em\">j</mi></msub><mo maxsize=\"0.700em\" minsize=\"0.700em\" stretchy=\"true\" symmetric=\"true\">/</mo><mn mathsize=\"0.700em\">2</mn></mrow></mrow></mstyle></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo>‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>‖</mo></mrow><mi>p</mi></msub></mrow></mrow></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all ",
+     "italic": true
+    },
+    {
+     "text": "dj",
+     "latex": "d_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>d</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": "-homogeneous Gaussian chaoses ",
+     "italic": true
+    },
+    {
+     "text": "fj:ℝkj↦ℂ",
+     "latex": "f_{j}:\\mathbb{R}^{k_{j}}\\mapsto\\mathbb{C}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">↦</mo><mi>ℂ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n",
+     "latex": "j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In Theorem 12, we will derive similar results using real hypercontractivity for several functions. The advantage of complex hypercontractivity in the reverse Hölder inequality for Gaussian chaoses was only recently noted in [36], where it was demonstrated that Beckner’s inequality (2.3) implies the estimate "
+    },
+    {
+     "text": "‖f(X)‖2≤ed/2‖f(X)‖1",
+     "latex": "\\|f(X)\\|_{2}\\leq e^{d/2}\\|f(X)\\|_{1}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn></msub><mo>≤</mo><mrow><msup><mi>e</mi><mrow><mi>d</mi><mo>/</mo><mn>2</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>1</mn></msub></mrow></mrow></math>"
+    },
+    {
+     "text": " for any "
+    },
+    {
+     "text": "d",
+     "latex": "d",
+     "mathml": "<math display=\"inline\"><mi>d</mi></math>"
+    },
+    {
+     "text": "-homogeneous Gaussian chaos "
+    },
+    {
+     "text": "f",
+     "latex": "f",
+     "mathml": "<math display=\"inline\"><mi>f</mi></math>"
+    },
+    {
+     "text": ". Currently, "
+    },
+    {
+     "text": "ed/2",
+     "latex": "e^{d/2}",
+     "mathml": "<math display=\"inline\"><msup><mi>e</mi><mrow><mi>d</mi><mo>/</mo><mn>2</mn></mrow></msup></math>"
+    },
+    {
+     "text": " represents the best known upper bound. In contrast, real hypercontractivity yields the upper bound "
+    },
+    {
+     "text": "ed",
+     "latex": "e^{d}",
+     "mathml": "<math display=\"inline\"><msup><mi>e</mi><mi>d</mi></msup></math>"
+    },
+    {
+     "text": ", which is less sharp. However, for certain values of "
+    },
+    {
+     "text": "p",
+     "latex": "p",
+     "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "q",
+     "latex": "q",
+     "mathml": "<math display=\"inline\"><mi>q</mi></math>"
+    },
+    {
+     "text": ", real hypercontractivity can provide better upper bounds on "
+    },
+    {
+     "text": "‖f(X)‖q/‖f(X)‖p",
+     "latex": "\\|f(X)\\|_{q}/\\|f(X)\\|_{p}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">‖</mo></mrow><mi>q</mi></msub><mo>/</mo><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>X</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">‖</mo></mrow><mi>p</mi></msub></mrow></math>"
+    },
+    {
+     "text": ". For further details, see [36]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "2.2. Case of real ",
+     "bold": true
+    },
+    {
+     "text": "zj",
+     "latex": "z_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>z</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": "’s. ",
+     "bold": true
+    },
+    {
+     "text": "For "
+    },
+    {
+     "text": "r∈[−1,1]",
+     "latex": "r\\in[-1,1]",
+     "mathml": "<math display=\"inline\"><mrow><mi>r</mi><mo>∈</mo><mrow><mo stretchy=\"false\">[</mo><mrow><mrow><mo>−</mo><mn>1</mn></mrow><mo>,</mo><mn>1</mn></mrow><mo stretchy=\"false\">]</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " the noise operator "
+    },
+    {
+     "text": "Trf(x)=𝔼f(xr+ξ1−r2)",
+     "latex": "T_{r}f(x)=\\mathbb{E}f(xr+\\xi\\sqrt{1-r^{2}})",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>T</mi><mi>r</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mi>x</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>r</mi></mrow><mo>+</mo><mrow><mi>ξ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mn>1</mn><mo>−</mo><msup><mi>r</mi><mn>2</mn></msup></mrow></msqrt></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " for all measurable "
+    },
+    {
+     "text": "f:ℝn→[0,∞)",
+     "latex": "f:\\mathbb{R}^{n}\\to[0,\\infty)",
+     "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><mi>n</mi></msup><mo stretchy=\"false\">→</mo><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ", where "
+    },
+    {
+     "text": "ξ∼N(0,Idn)",
+     "latex": "\\xi\\sim N(0,\\mathrm{Id}_{n})",
+     "mathml": "<math display=\"inline\"><mrow><mi>ξ</mi><mo>∼</mo><mrow><mi>N</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><msub><mi>Id</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The next theorem shows that in the case "
+    },
+    {
+     "text": "(z1,…,zn)∈ℝn",
+     "latex": "(z_{1},\\ldots,z_{n})\\in\\mathbb{R}^{n}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><msub><mi>z</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>z</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msup><mi>ℝ</mi><mi>n</mi></msup></mrow></math>"
+    },
+    {
+     "text": " the inequality (2.1) extends to all nonnegative measurable test functions "
+    },
+    {
+     "text": "fj",
+     "latex": "f_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>f</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": ", and, moroever, the reverse form of Theorem 1 also holds true."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 9 ",
+     "bold": true
+    },
+    {
+     "text": "("
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": "-function forward and reverse real hypercontractivity)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "(r1,…,rn)∈[−1,1]n",
+     "latex": "(r_{1},\\ldots,r_{n})\\in[-1,1]^{n}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><msub><mi>r</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>r</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msup><mrow><mo stretchy=\"false\">[</mo><mrow><mrow><mo>−</mo><mn>1</mn></mrow><mo>,</mo><mn>1</mn></mrow><mo stretchy=\"false\">]</mo></mrow><mi>n</mi></msup></mrow></math>"
+    },
+    {
+     "text": ", and let ",
+     "italic": true
+    },
+    {
+     "text": "pj∈ℝ∖{0}",
+     "latex": "p_{j}\\in\\mathbb{R}\\setminus\\{0\\}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>p</mi><mi>j</mi></msub><mo>∈</mo><mrow><mi>ℝ</mi><mo>∖</mo><mrow><mo stretchy=\"false\">{</mo><mn>0</mn><mo stretchy=\"false\">}</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n",
+     "latex": "j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "(i)"
+    },
+    {
+     "text": " For ",
+     "italic": true
+    },
+    {
+     "text": "α∈(−∞,0)∪[1,∞)",
+     "latex": "\\alpha\\in(-\\infty,0)\\cup[1,\\infty)",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>∈</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mi mathvariant=\"normal\">∞</mi></mrow><mo>,</mo><mn>0</mn><mo stretchy=\"false\">)</mo></mrow><mo>∪</mo><mrow><mo stretchy=\"false\">[</mo><mn>1</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " the inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\|\\prod_{j=1}^{n}(T_{r_{j}}f_{j}(\\xi_{j}))^{p_{j}}\\|_{\\alpha}\\leq\\|\\prod_{j=1}^{n}f^{p_{j}}_{j}(\\xi_{j})\\|_{1}",
+   "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><msup><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>T</mi><msub><mi>r</mi><mi>j</mi></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><msub><mi>p</mi><mi>j</mi></msub></msup></mrow><mo stretchy=\"false\">‖</mo></mrow><mi>α</mi></msub><mo>≤</mo><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msubsup><mi>f</mi><mi>j</mi><msub><mi>p</mi><mi>j</mi></msub></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>1</mn></msub></mrow></math>",
+   "label": "(2.16)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all measurable ",
+     "italic": true
+    },
+    {
+     "text": "fj:ℝkj→(0,∞)",
+     "latex": "f_{j}:\\mathbb{R}^{k_{j}}\\to(0,\\infty)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">→</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " if and only if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathrm{diag}\\left\\{\\frac{1-r_{j}^{2}}{p_{j}}\\mathrm{Id}_{k_{j}}\\right\\}_{j=1}^{n}\\leq\\left\\{(1-\\alpha r_{u}r_{v})\\mathrm{cov}(\\xi_{u},\\xi_{v})\\right\\}_{u,v=1}^{n}.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mi>diag</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mrow><mo>{</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mrow><mn>1</mn><mo>−</mo><msubsup><mi>r</mi><mi>j</mi><mn>2</mn></msubsup></mrow><msub><mi>p</mi><mi>j</mi></msub></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>Id</mi><msub><mi>k</mi><mi>j</mi></msub></msub></mrow><mo>}</mo></mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup></mrow><mo>≤</mo><msubsup><mrow><mo>{</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mi>α</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>r</mi><mi>u</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>r</mi><mi>v</mi></msub></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>cov</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>u</mi></msub><mo>,</mo><msub><mi>ξ</mi><mi>v</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>}</mo></mrow><mrow><mrow><mi>u</mi><mo>,</mo><mi>v</mi></mrow><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(2.17)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "(ii)"
+    },
+    {
+     "text": " For ",
+     "italic": true
+    },
+    {
+     "text": "α∈(0,1]",
+     "latex": "\\alpha\\in(0,1]",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>∈</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy=\"false\">]</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " the inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\|\\prod_{j=1}^{n}(T_{r_{j}}f_{j}(\\xi_{j}))^{p_{j}}\\|_{\\alpha}\\geq\\|\\prod_{j=1}^{n}f^{p_{j}}_{j}(\\xi_{j})\\|_{1}",
+   "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><msup><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>T</mi><msub><mi>r</mi><mi>j</mi></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><msub><mi>p</mi><mi>j</mi></msub></msup></mrow><mo stretchy=\"false\">‖</mo></mrow><mi>α</mi></msub><mo>≥</mo><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msubsup><mi>f</mi><mi>j</mi><msub><mi>p</mi><mi>j</mi></msub></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo stretchy=\"false\">‖</mo></mrow><mn>1</mn></msub></mrow></math>",
+   "label": "(2.18)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all measurable ",
+     "italic": true
+    },
+    {
+     "text": "fj:ℝkj→(0,∞)",
+     "latex": "f_{j}:\\mathbb{R}^{k_{j}}\\to(0,\\infty)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">→</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " if and only if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathrm{diag}\\left\\{\\frac{1-r_{j}^{2}}{p_{j}}\\mathrm{Id}_{k_{j}}\\right\\}_{j=1}^{n}\\geq\\left\\{(1-\\alpha r_{u}r_{v})\\mathrm{cov}(\\xi_{u},\\xi_{v})\\right\\}_{u,v=1}^{n}.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mi>diag</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mrow><mo>{</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mrow><mn>1</mn><mo>−</mo><msubsup><mi>r</mi><mi>j</mi><mn>2</mn></msubsup></mrow><msub><mi>p</mi><mi>j</mi></msub></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>Id</mi><msub><mi>k</mi><mi>j</mi></msub></msub></mrow><mo>}</mo></mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup></mrow><mo>≥</mo><msubsup><mrow><mo>{</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mi>α</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>r</mi><mi>u</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>r</mi><mi>v</mi></msub></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>cov</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>u</mi></msub><mo>,</mo><msub><mi>ξ</mi><mi>v</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>}</mo></mrow><mrow><mrow><mi>u</mi><mo>,</mo><mi>v</mi></mrow><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(2.19)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The condition (2.17) is the same as (2.2) when "
+    },
+    {
+     "text": "(z1,…,zn)=(r1,…,rn)",
+     "latex": "(z_{1},\\ldots,z_{n})=(r_{1},\\ldots,r_{n})",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><msub><mi>z</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>z</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>r</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>r</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " are real numbers."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "When "
+    },
+    {
+     "text": "n=1",
+     "latex": "n=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " Theorem 9 coincides with real hypercontractivity due to Bonami, Nelson [17, 50], and reverse real hypercontractivity due to Borell [15]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "If we set "
+    },
+    {
+     "text": "r1=r2=…=rn=0",
+     "latex": "r_{1}=r_{2}=\\ldots=r_{n}=0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>r</mi><mn>1</mn></msub><mo>=</mo><msub><mi>r</mi><mn>2</mn></msub><mo>=</mo><mi mathvariant=\"normal\">…</mi><mo>=</mo><msub><mi>r</mi><mi>n</mi></msub><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " notice that the left hand side in (2.16) and in (2.18) takes the form"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\|\\prod_{j=1}^{n}(T_{r_{j}}f_{j}(\\xi_{j}))^{p_{j}}\\|_{\\alpha}=\\prod_{j=1}^{n}\\mathbb{E}(f_{j}(\\xi_{j}))^{p_{j}}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><munderover><mo lspace=\"0em\" movablelimits=\"false\" rspace=\"0em\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><msup><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>T</mi><msub><mi>r</mi><mi>j</mi></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><msub><mi>p</mi><mi>j</mi></msub></msup></mrow><mo stretchy=\"false\">‖</mo></mrow><mi>α</mi></msub><mo rspace=\"0.111em\">=</mo><mrow><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><msub><mi>p</mi><mi>j</mi></msub></msup></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In this case Theorem 9 recovers the following result."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem B ",
+     "bold": true
+    },
+    {
+     "text": "(Paouris, Chen, Dafnis [22])"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "pj∈ℝ∖{0},j=1,…,n",
+     "latex": "p_{j}\\in\\mathbb{R}\\setminus\\{0\\},\\,j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>p</mi><mi>j</mi></msub><mo>∈</mo><mi>ℝ</mi><mo>∖</mo><mrow><mo stretchy=\"false\">{</mo><mn>0</mn><mo stretchy=\"false\">}</mo></mrow><mo rspace=\"0.337em\">,</mo><mi>j</mi><mo>=</mo><mn>1</mn><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ". The inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\prod_{j=1}^{n}\\left(\\mathbb{E}f_{j}(\\xi_{j})\\right)^{p_{j}}\\leq\\mathbb{E}\\prod_{j=1}^{n}f_{j}(\\xi_{j})^{p_{j}}",
+   "mathml": "<math display=\"block\"><mrow><mrow><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><msup><mrow><mo lspace=\"0em\">(</mo><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>)</mo></mrow><msub><mi>p</mi><mi>j</mi></msub></msup></mrow><mo>≤</mo><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow><msub><mi>p</mi><mi>j</mi></msub></msup></mrow></mrow></mrow></mrow></math>",
+   "label": "(2.20)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all measurable functions ",
+     "italic": true
+    },
+    {
+     "text": "fj:ℝkj→(0,∞)",
+     "latex": "f_{j}:\\mathbb{R}^{k_{j}}\\to(0,\\infty)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">→</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n",
+     "latex": "j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": " if and only if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathrm{diag}\\left(\\frac{1}{p_{1}}\\mathrm{Id}_{k_{1}},\\ldots,\\frac{1}{p_{n}}\\mathrm{Id}_{k_{n}}\\right)\\leq\\mathrm{cov}(\\xi)",
+   "mathml": "<math display=\"block\"><mrow><mrow><mi>diag</mi><mo>⁡</mo><mrow><mo>(</mo><mrow><mfrac><mn>1</mn><msub><mi>p</mi><mn>1</mn></msub></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>Id</mi><msub><mi>k</mi><mn>1</mn></msub></msub></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><mfrac><mn>1</mn><msub><mi>p</mi><mi>n</mi></msub></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>Id</mi><msub><mi>k</mi><mi>n</mi></msub></msub></mrow><mo>)</mo></mrow></mrow><mo>≤</mo><mrow><mi>cov</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>ξ</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>",
+   "label": "(2.21)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Moreover, the inequality (2.20) reverses if and only if the inequality (2.21) is reversed.",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "As observed in [22], the reverse inequality to (2.20) admits a geometric interpretation as the Brascamp–Lieb inequality [14, 44], once the usual geometric condition is replaced by the covariance-dominance condition ("
+    },
+    {
+     "text": "i.e.",
+     "italic": true
+    },
+    {
+     "text": ", the reverse of (2.21)). Furthermore, through a limiting argument in (2.20), one recovers Barthe’s reverse Brascamp–Lieb result [8]. This perspective unifies forward and reverse inequalities under a single structural framework. Many developments and applications of these ideas appear throughout the literature, including works of Ball [3] and Barthe [7], who clarified extremizability in various settings; BCCT [13], which systematically analyzed the geometry and finiteness of the Brascamp–Lieb exponents; and Carlen–Lieb–Loss [21], Barthe–Cordero-Erausquin [5], and Barthe–Huet [9], where functional-analytic and entropy-based methods were further developed. Lehec [43] produced streamlined probabilistic proofs of the classical and reverse Brascamp–Lieb estimates, while subsequent refinements and generalizations appear in works such as Bennett–Bez–Carbery [4], Barthe–Cordero-Erausquin–Ledoux–Maurey [6], Courtade–Liu [23], and Anantharam–Jog–Nair [1]. More recent studies by Barthe–Wolff [10] and Bennett–Tao [12] explore extremizer classifications, functional extensions, and other structural properties of Brascamp–Lieb-type inequalities."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "2.3. Case of equal ",
+     "bold": true
+    },
+    {
+     "text": "rj",
+     "latex": "r_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>r</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": "’s and ",
+     "bold": true
+    },
+    {
+     "text": "pj",
+     "latex": "p_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>p</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": "’s ",
+     "bold": true
+    },
+    {
+     "text": "If we let "
+    },
+    {
+     "text": "r1=…=rn=r",
+     "latex": "r_{1}=\\ldots=r_{n}=r",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>r</mi><mn>1</mn></msub><mo>=</mo><mi mathvariant=\"normal\">…</mi><mo>=</mo><msub><mi>r</mi><mi>n</mi></msub><mo>=</mo><mi>r</mi></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "p1=…=pn=p",
+     "latex": "p_{1}=\\ldots=p_{n}=p",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>p</mi><mn>1</mn></msub><mo>=</mo><mi mathvariant=\"normal\">…</mi><mo>=</mo><msub><mi>p</mi><mi>n</mi></msub><mo>=</mo><mi>p</mi></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "α=q/p≥1",
+     "latex": "\\alpha=q/p\\geq 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>=</mo><mrow><mi>q</mi><mo>/</mo><mi>p</mi></mrow><mo>≥</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", then Theorem 9 part (i) implies the following"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 10 ",
+     "bold": true
+    },
+    {
+     "text": "(correlated "
+    },
+    {
+     "text": "(p,q)",
+     "latex": "(p,q)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mi>p</mi><mo>,</mo><mi>q</mi><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": " real hypercontractivity)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "q≥p≥1/λmin",
+     "latex": "q\\geq p\\geq 1/\\lambda_{\\min}",
+     "mathml": "<math display=\"inline\"><mrow><mi>q</mi><mo>≥</mo><mi>p</mi><mo>≥</mo><mrow><mn>1</mn><mo>/</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", and pick any ",
+     "italic": true
+    },
+    {
+     "text": "r∈[−1,1]",
+     "latex": "r\\in[-1,1]",
+     "mathml": "<math display=\"inline\"><mrow><mi>r</mi><mo>∈</mo><mrow><mo stretchy=\"false\">[</mo><mrow><mrow><mo>−</mo><mn>1</mn></mrow><mo>,</mo><mn>1</mn></mrow><mo stretchy=\"false\">]</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". The inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\|\\prod_{j=1}^{n}T_{r}f_{j}(\\xi_{j})\\right\\|_{q}\\leq\\left\\|\\prod_{j=1}^{n}f_{j}(\\xi_{j})\\right\\|_{p}",
+   "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo>‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msub><mi>T</mi><mi>r</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>‖</mo></mrow><mi>q</mi></msub><mo>≤</mo><msub><mrow><mo>‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>‖</mo></mrow><mi>p</mi></msub></mrow></math>",
+   "label": "(2.22)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all measurable ",
+     "italic": true
+    },
+    {
+     "text": "fj:ℝkj↦[0,∞)",
+     "latex": "f_{j}:\\mathbb{R}^{k_{j}}\\mapsto[0,\\infty)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">↦</mo><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " if and only if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "|r|\\leq\\sqrt{\\frac{p\\lambda_{\\min}-1}{q\\lambda_{\\min}-1}}.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mo stretchy=\"false\">|</mo><mi>r</mi><mo stretchy=\"false\">|</mo></mrow><mo>≤</mo><msqrt><mstyle displaystyle=\"true\"><mfrac><mrow><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mo>−</mo><mn>1</mn></mrow></mfrac></mstyle></msqrt></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(2.23)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Remark 2. ",
+     "bold": true
+    },
+    {
+     "text": "Perhaps the primary example to keep in mind is when ",
+     "italic": true
+    },
+    {
+     "text": "n=2",
+     "latex": "n=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ", and ",
+     "italic": true
+    },
+    {
+     "text": "ξ1",
+     "latex": "\\xi_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi>ξ</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": " and ",
+     "italic": true
+    },
+    {
+     "text": "ξ2",
+     "latex": "\\xi_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>ξ</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " are ",
+     "italic": true
+    },
+    {
+     "text": "ρ",
+     "latex": "\\rho",
+     "mathml": "<math display=\"inline\"><mi>ρ</mi></math>"
+    },
+    {
+     "text": "-correlated Gaussians in ",
+     "italic": true
+    },
+    {
+     "text": "ℝk",
+     "latex": "\\mathbb{R}^{k}",
+     "mathml": "<math display=\"inline\"><msup><mi>ℝ</mi><mi>k</mi></msup></math>"
+    },
+    {
+     "text": ", i.e., ",
+     "italic": true
+    },
+    {
+     "text": "k1=k2=k",
+     "latex": "k_{1}=k_{2}=k",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>k</mi><mn>1</mn></msub><mo>=</mo><msub><mi>k</mi><mn>2</mn></msub><mo>=</mo><mi>k</mi></mrow></math>"
+    },
+    {
+     "text": " and ",
+     "italic": true
+    },
+    {
+     "text": "cov(ξ1,ξ2)=ρIdk",
+     "latex": "\\mathrm{cov}(\\xi_{1},\\xi_{2})=\\rho\\mathrm{Id}_{k}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>cov</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mn>1</mn></msub><mo>,</mo><msub><mi>ξ</mi><mn>2</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mi>ρ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>Id</mi><mi>k</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ". In this case",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\lambda_{\\min}=1-|\\rho|,",
+   "mathml": "<math display=\"block\"><mrow><mrow><msub><mi>λ</mi><mi>min</mi></msub><mo>=</mo><mrow><mn>1</mn><mo>−</mo><mrow><mo stretchy=\"false\">|</mo><mi>ρ</mi><mo stretchy=\"false\">|</mo></mrow></mrow></mrow><mo>,</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "and the condition (2.23) takes the form ",
+     "italic": true
+    },
+    {
+     "text": "|r|≤p(1−|ρ|)−1q(1−|ρ|)−1",
+     "latex": "|r|\\leq\\sqrt{\\frac{p(1-|\\rho|)-1}{q(1-|\\rho|)-1}}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">|</mo><mi>r</mi><mo stretchy=\"false\">|</mo></mrow><mo>≤</mo><msqrt><mfrac><mrow><mrow><mi>p</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mo stretchy=\"false\">|</mo><mi>ρ</mi><mo stretchy=\"false\">|</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>q</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mo stretchy=\"false\">|</mo><mi>ρ</mi><mo stretchy=\"false\">|</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>−</mo><mn>1</mn></mrow></mfrac></msqrt></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Let "
+    },
+    {
+     "text": "L:=Δ−x⋅∇",
+     "latex": "L:=\\Delta-x\\cdot\\nabla",
+     "mathml": "<math display=\"inline\"><mrow><mi>L</mi><mo>:=</mo><mi mathvariant=\"normal\">Δ</mi><mo>−</mo><mi>x</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">⋅</mo><mo>∇</mo></mrow></math>"
+    },
+    {
+     "text": " be the generator of the Ornstein–Uhlenbeck process in "
+    },
+    {
+     "text": "ℝn",
+     "latex": "\\mathbb{R}^{n}",
+     "mathml": "<math display=\"inline\"><msup><mi>ℝ</mi><mi>n</mi></msup></math>"
+    },
+    {
+     "text": ". Theorem 10 is equivalent (by a standard differentiation argument, see Seciton 4) to the following"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 11 ",
+     "bold": true
+    },
+    {
+     "text": "(correlated log-Sobolev inequality)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "For any ",
+     "italic": true
+    },
+    {
+     "text": "p≥1/λmin",
+     "latex": "p\\geq 1/\\lambda_{\\min}",
+     "mathml": "<math display=\"inline\"><mrow><mi>p</mi><mo>≥</mo><mrow><mn>1</mn><mo>/</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": " we have",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathbb{E}\\,\\prod_{j=1}^{n}f^{p}_{j}(\\xi_{j})\\log\\prod_{j=1}^{n}f^{p}_{j}(\\xi_{j})-\\mathbb{E}\\prod_{j=1}^{n}f^{p}_{j}(\\xi_{j})\\log\\mathbb{E}\\prod_{j=1}^{n}f^{p}_{j}(\\xi_{j})\\leq",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mi>𝔼</mi><mo lspace=\"0.170em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msubsup><mi>f</mi><mi>j</mi><mi>p</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mi>log</mi><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msubsup><mi>f</mi><mi>j</mi><mi>p</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></mrow></mrow><mo>−</mo><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msubsup><mi>f</mi><mi>j</mi><mi>p</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mi>log</mi><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msubsup><mi>f</mi><mi>j</mi><mi>p</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></mrow></mrow></mrow><mo>≤</mo><mphantom></mphantom></mrow></math>",
+   "label": "(2.24)"
+  },
+  {
+   "kind": "equation",
+   "latex": "\\frac{p^{2}\\lambda_{\\min}}{2\\sqrt{p\\lambda_{\\min}-1}}\\mathbb{E}\\prod_{j=1}^{n}f^{p}_{j}(\\xi_{j})\\left(\\sum_{j=1}^{n}\\frac{Lf_{j}(\\xi_{j})}{f_{j}(\\xi_{j})}\\right)",
+   "mathml": "<math display=\"inline\"><mrow><mstyle displaystyle=\"true\"><mfrac><mrow><msup><mi>p</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mo>−</mo><mn>1</mn></mrow></msqrt></mrow></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msubsup><mi>f</mi><mi>j</mi><mi>p</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mstyle displaystyle=\"true\"><mfrac><mrow><mi>L</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle></mrow><mo>)</mo></mrow></mrow></mrow></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "for all measurable ",
+     "italic": true
+    },
+    {
+     "text": "fj:ℝkj↦(0,∞)",
+     "latex": "f_{j}:\\mathbb{R}^{k_{j}}\\mapsto(0,\\infty)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">↦</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n",
+     "latex": "j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ". Moroever, the constant ",
+     "italic": true
+    },
+    {
+     "text": "p2λmin2pλmin−1",
+     "latex": "\\frac{p^{2}\\lambda_{\\min}}{2\\sqrt{p\\lambda_{\\min}-1}}",
+     "mathml": "<math display=\"inline\"><mfrac><mrow><msup><mi>p</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msqrt><mrow><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mo>−</mo><mn>1</mn></mrow></msqrt></mrow></mfrac></math>"
+    },
+    {
+     "text": " is the best possible.",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We remark that uncorrelated version of Theorem 11, i.e., when "
+    },
+    {
+     "text": "ξ1,…,ξn",
+     "latex": "\\xi_{1},\\ldots,\\xi_{n}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ξ</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>ξ</mi><mi>n</mi></msub></mrow></math>"
+    },
+    {
+     "text": " are independent of each other, is equivalent to the classical log-Sobolev inequality due to Gross [30]. Indeed, in this case one needs to apply log-Sobolev inequality to each "
+    },
+    {
+     "text": "fj",
+     "latex": "f_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>f</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": " separately, multiply each of these inequalities by "
+    },
+    {
+     "text": "𝔼∏k≠jfkpk(ξk)",
+     "latex": "\\mathbb{E}\\prod_{k\\neq j}f_{k}^{p_{k}}(\\xi_{k})",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><msub><mo>∏</mo><mrow><mi>k</mi><mo>≠</mo><mi>j</mi></mrow></msub><mrow><msubsup><mi>f</mi><mi>k</mi><msub><mi>p</mi><mi>k</mi></msub></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>k</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " and sum up the resulted estimates."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 12 ",
+     "bold": true
+    },
+    {
+     "text": "(correlated moment comparison estimates)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "For any ",
+     "italic": true
+    },
+    {
+     "text": "q≥p≥1/λmin",
+     "latex": "q\\geq p\\geq 1/\\lambda_{\\min}",
+     "mathml": "<math display=\"inline\"><mrow><mi>q</mi><mo>≥</mo><mi>p</mi><mo>≥</mo><mrow><mn>1</mn><mo>/</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": " we have",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\|\\prod_{j=1}^{n}f_{j}(\\xi_{j})\\right\\|_{q}\\leq\\left(\\frac{q\\lambda_{\\min}-1}{p\\lambda_{\\min}-1}\\right)^{\\sum d_{j}/2}\\left\\|\\prod_{j=1}^{n}f_{j}(\\xi_{j})\\right\\|_{p}",
+   "mathml": "<math display=\"inline\"><mrow><msub><mrow><mo>‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>‖</mo></mrow><mi>q</mi></msub><mo>≤</mo><mrow><msup><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac><mrow><mrow><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>λ</mi><mi>min</mi></msub></mrow><mo>−</mo><mn>1</mn></mrow></mfrac></mstyle><mo>)</mo></mrow><mstyle scriptlevel=\"-1\"><mrow><mo maxsize=\"0.700em\" minsize=\"0.700em\" stretchy=\"true\">∑</mo><mrow><msub><mi mathsize=\"0.700em\">d</mi><mi mathsize=\"0.710em\">j</mi></msub><mo maxsize=\"0.700em\" minsize=\"0.700em\" stretchy=\"true\" symmetric=\"true\">/</mo><mn mathsize=\"0.700em\">2</mn></mrow></mrow></mstyle></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo>‖</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>‖</mo></mrow><mi>p</mi></msub></mrow></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all ",
+     "italic": true
+    },
+    {
+     "text": "dj",
+     "latex": "d_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>d</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": "-homogeneous Gaussian chaoses ",
+     "italic": true
+    },
+    {
+     "text": "fj:ℝkj↦ℂ",
+     "latex": "f_{j}:\\mathbb{R}^{k_{j}}\\mapsto\\mathbb{C}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">↦</mo><mi>ℂ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n",
+     "latex": "j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "2.4. Multiversion ",
+     "bold": true
+    },
+    {
+     "text": "FB",
+     "latex": "FB",
+     "mathml": "<math display=\"inline\"><mrow><mi>F</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>B</mi></mrow></math>"
+    },
+    {
+     "text": " complex hypercontractivity ",
+     "bold": true
+    },
+    {
+     "text": "Theorem 1 will be a corollary of a more general result proved in this paper. We say "
+    },
+    {
+     "text": "B:[0,∞)n→ℝ",
+     "latex": "B:[0,\\infty)^{n}\\to\\mathbb{R}",
+     "mathml": "<math display=\"inline\"><mrow><mi>B</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><msup><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow><mi>n</mi></msup><mo stretchy=\"false\">→</mo><mi>ℝ</mi></mrow></math>"
+    },
+    {
+     "text": " satisfies the polynomial growth condition if all second derivatives of "
+    },
+    {
+     "text": "B",
+     "latex": "B",
+     "mathml": "<math display=\"inline\"><mi>B</mi></math>"
+    },
+    {
+     "text": " are bounded by a polynomial on "
+    },
+    {
+     "text": "(0,∞)n",
+     "latex": "(0,\\infty)^{n}",
+     "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow><mi>n</mi></msup></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 13 ",
+     "bold": true
+    },
+    {
+     "text": "("
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": "-function "
+    },
+    {
+     "text": "FB",
+     "latex": "FB",
+     "mathml": "<math display=\"inline\"><mrow><mi>F</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>B</mi></mrow></math>"
+    },
+    {
+     "text": " complex hypercontractivity)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "F:[0,∞)↦ℝ",
+     "latex": "F:[0,\\infty)\\mapsto\\mathbb{R}",
+     "mathml": "<math display=\"inline\"><mrow><mi>F</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow><mo stretchy=\"false\">↦</mo><mi>ℝ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " and ",
+     "italic": true
+    },
+    {
+     "text": "B:[0,∞)n↦[0,∞)",
+     "latex": "B:[0,\\infty)^{n}\\mapsto[0,\\infty)",
+     "mathml": "<math display=\"inline\"><mrow><mi>B</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><msup><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow><mi>n</mi></msup><mo stretchy=\"false\">↦</mo><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " be smooth in the interior of their domains functions, satisfying the polynomial growth condition and continuous up to the boundary. We also assume that ",
+     "italic": true
+    },
+    {
+     "text": "F′>0",
+     "latex": "F^{\\prime}>0",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>F</mi><mo>′</mo></msup><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " on ",
+     "italic": true
+    },
+    {
+     "text": "(0,∞)",
+     "latex": "(0,\\infty)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": " and ",
+     "italic": true
+    },
+    {
+     "text": "Bm>0",
+     "latex": "B_{m}>0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>B</mi><mi>m</mi></msub><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " on ",
+     "italic": true
+    },
+    {
+     "text": "(0,∞)n",
+     "latex": "(0,\\infty)^{n}",
+     "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow><mi>n</mi></msup></math>"
+    },
+    {
+     "text": " for all ",
+     "italic": true
+    },
+    {
+     "text": "1≤m≤n",
+     "latex": "1\\leq m\\leq n",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>≤</mo><mi>m</mi><mo>≤</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ". Let ",
+     "italic": true
+    },
+    {
+     "text": "z=(z1,…,zn)∈ℂn",
+     "latex": "z=(z_{1},\\ldots,z_{n})\\in\\mathbb{C}^{n}",
+     "mathml": "<math display=\"inline\"><mrow><mi>z</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>z</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>z</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msup><mi>ℂ</mi><mi>n</mi></msup></mrow></math>"
+    },
+    {
+     "text": " with ",
+     "italic": true
+    },
+    {
+     "text": "|zj|≤1",
+     "latex": "|z_{j}|\\leq 1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">|</mo><msub><mi>z</mi><mi>j</mi></msub><mo stretchy=\"false\">|</mo></mrow><mo>≤</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n",
+     "latex": "j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ". Assume",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "(t,y)\\mapsto\\frac{F^{\\prime\\prime}(t)}{F^{\\prime}(t)}y^{2}\\quad\\text{is convex on}\\quad(0,\\infty)^{2}.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo stretchy=\"false\">↦</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mrow><msup><mi>F</mi><mo>′′</mo></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mrow><msup><mi>F</mi><mo>′</mo></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>y</mi><mn>2</mn></msup></mrow></mrow><mspace style=\"width:1em;\" width=\"1em\"></mspace><mtext>is convex on</mtext><mspace style=\"width:1em;\" width=\"1em\"></mspace><msup><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(2.25)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathbb{E}F(B(|T_{z_{1}}f_{1}(\\xi_{1})|,\\ldots,|T_{z_{n}}f_{n}(\\xi_{n})|))\\leq F\\left(\\mathbb{E}B(|f_{1}(\\xi_{1})|,\\ldots,|f_{n}(\\xi_{n})|\\right))",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>F</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>B</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>T</mi><msub><mi>z</mi><mn>1</mn></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>T</mi><msub><mi>z</mi><mi>n</mi></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>n</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≤</mo><mrow><mi>F</mi><mo>⁡</mo><mrow><mo>(</mo><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>B</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>f</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>f</mi><mi>n</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mo>)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>",
+   "label": "(2.26)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all polynomials ",
+     "italic": true
+    },
+    {
+     "text": "fp:ℝkp↦ℂ",
+     "latex": "f_{p}:\\mathbb{R}^{k_{p}}\\mapsto\\mathbb{C}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>p</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><msub><mi>k</mi><mi>p</mi></msub></msup><mo stretchy=\"false\">↦</mo><mi>ℂ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " if and only if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "-\\sum_{p,q}\\left(B_{pq}({\\bf{c}})+\\frac{F^{\\prime\\prime}(B(\\bf{c}))}{F^{\\prime}(B(\\bf{c}))}B_{p}({\\bf{c}})B_{q}({\\bf{c}})\\right)(\\Re z_{p}w_{p})\\mathrm{cov}(\\xi_{p},\\xi_{q})(\\Re z_{q}w_{q})^{T}",
+   "mathml": "<math display=\"inline\"><mrow><mo>−</mo><mstyle displaystyle=\"true\"><munder><mo movablelimits=\"false\">∑</mo><mrow><mi>p</mi><mo>,</mo><mi>q</mi></mrow></munder></mstyle><mrow><mo>(</mo><msub><mi>B</mi><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>q</mi></mrow></msub><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow><mo>+</mo><mstyle displaystyle=\"true\"><mfrac><mrow><msup><mi>F</mi><mo>′′</mo></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>B</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mrow><msup><mi>F</mi><mo>′</mo></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>B</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle><msub><mi>B</mi><mi>p</mi></msub><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow><msub><mi>B</mi><mi>q</mi></msub><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow><mo>)</mo></mrow><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">ℜ</mi><msub><mi>z</mi><mi>p</mi></msub><msub><mi>w</mi><mi>p</mi></msub><mo stretchy=\"false\">)</mo></mrow><mi>cov</mi><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>p</mi></msub><mo>,</mo><msub><mi>ξ</mi><mi>q</mi></msub><mo stretchy=\"false\">)</mo></mrow><msup><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">ℜ</mi><msub><mi>z</mi><mi>q</mi></msub><msub><mi>w</mi><mi>q</mi></msub><mo stretchy=\"false\">)</mo></mrow><mi>T</mi></msup></mrow></math>",
+   "label": "(2.27)"
+  },
+  {
+   "kind": "equation",
+   "latex": "+\\sum_{p,q}B_{pq}({\\bf{c}})(\\Re w_{p})\\mathrm{cov}(\\xi_{p},\\xi_{q})(\\Re w_{q})^{T}+\\sum_{p}\\frac{B_{p}({\\bf{c}})}{c_{p}}(|\\Im w_{p}|^{2}-|\\Im z_{p}w_{p}|^{2})\\geq 0",
+   "mathml": "<math display=\"inline\"><mrow><mo>+</mo><mstyle displaystyle=\"true\"><munder><mo movablelimits=\"false\">∑</mo><mrow><mi>p</mi><mo>,</mo><mi>q</mi></mrow></munder></mstyle><msub><mi>B</mi><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>q</mi></mrow></msub><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">ℜ</mi><msub><mi>w</mi><mi>p</mi></msub><mo stretchy=\"false\">)</mo></mrow><mi>cov</mi><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>p</mi></msub><mo>,</mo><msub><mi>ξ</mi><mi>q</mi></msub><mo stretchy=\"false\">)</mo></mrow><msup><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">ℜ</mi><msub><mi>w</mi><mi>q</mi></msub><mo stretchy=\"false\">)</mo></mrow><mi>T</mi></msup><mo>+</mo><mstyle displaystyle=\"true\"><munder><mo movablelimits=\"false\">∑</mo><mi>p</mi></munder></mstyle><mstyle displaystyle=\"true\"><mfrac><mrow><msub><mi>B</mi><mi>p</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow></mrow><msub><mi>c</mi><mi>p</mi></msub></mfrac></mstyle><mrow><mo stretchy=\"false\">(</mo><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mi mathvariant=\"normal\">ℑ</mi><msub><mi>w</mi><mi>p</mi></msub><msup><mo fence=\"false\" stretchy=\"false\">|</mo><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">−</mo><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mi mathvariant=\"normal\">ℑ</mi><msub><mi>z</mi><mi>p</mi></msub><msub><mi>w</mi><mi>p</mi></msub><msup><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mn>2</mn></msup><mo stretchy=\"false\">)</mo></mrow><mo>≥</mo><mn>0</mn></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all ",
+     "italic": true
+    },
+    {
+     "text": "c=(c1,…,cn)∈(0,∞)n",
+     "latex": "c=(c_{1},\\ldots,c_{n})\\in(0,\\infty)^{n}",
+     "mathml": "<math display=\"inline\"><mrow><mi>c</mi><mo>=</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>c</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>c</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msup><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow><mi>n</mi></msup></mrow></math>"
+    },
+    {
+     "text": ", and all ",
+     "italic": true
+    },
+    {
+     "text": "wp∈ℂkp",
+     "latex": "w_{p}\\in\\mathbb{C}^{k_{p}}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>w</mi><mi>p</mi></msub><mo>∈</mo><msup><mi>ℂ</mi><msub><mi>k</mi><mi>p</mi></msub></msup></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "p=1,…,n",
+     "latex": "p=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>p</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We list some of the applications of the theorem."
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "1.",
+     "spans": [
+      {
+       "text": "For "
+      },
+      {
+       "text": "F(t)=tα",
+       "latex": "F(t)=t^{\\alpha}",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mi>F</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><msup><mi>t</mi><mi>α</mi></msup></mrow></math>"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "B(c)=c1p1⋯cnpn",
+       "latex": "B(c)=c_{1}^{p_{1}}\\cdots c_{n}^{p_{n}}",
+       "mathml": "<math display=\"inline\"><mrow><mi>B</mi><mrow><mo stretchy=\"false\">(</mo><mi>c</mi><mo stretchy=\"false\">)</mo></mrow><mo>=</mo><msubsup><mi>c</mi><mn>1</mn><msub><mi>p</mi><mn>1</mn></msub></msubsup><mo lspace=\"0em\" rspace=\"0em\">⋯</mo><msubsup><mi>c</mi><mi>n</mi><msub><mi>p</mi><mi>n</mi></msub></msubsup></mrow></math>"
+      },
+      {
+       "text": " the theorem coincides with "
+      },
+      {
+       "text": "n",
+       "latex": "n",
+       "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+      },
+      {
+       "text": "-function complex hypercontractivity, i.e., Theorem 1."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "2.",
+     "spans": [
+      {
+       "text": "When "
+      },
+      {
+       "text": "n=1",
+       "latex": "n=1",
+       "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo>=</mo><mn>1</mn></mrow></math>"
+      },
+      {
+       "text": " the theorem recovers "
+      },
+      {
+       "text": "(P,Q)",
+       "latex": "(P,Q)",
+       "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mi>P</mi><mo>,</mo><mi>Q</mi><mo stretchy=\"false\">)</mo></mrow></math>"
+      },
+      {
+       "text": "-complex hypercontractivity, the main result of [38] which is a complex extension of Hariya’s theorem [32]."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "3.",
+     "spans": [
+      {
+       "text": "When "
+      },
+      {
+       "text": "F(t)=t",
+       "latex": "F(t)=t",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mi>F</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mi>t</mi></mrow></math>"
+      },
+      {
+       "text": ", and "
+      },
+      {
+       "text": "z1=…=zn=0",
+       "latex": "z_{1}=\\ldots=z_{n}=0",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>z</mi><mn>1</mn></msub><mo>=</mo><mi mathvariant=\"normal\">…</mi><mo>=</mo><msub><mi>z</mi><mi>n</mi></msub><mo>=</mo><mn>0</mn></mrow></math>"
+      },
+      {
+       "text": " we obtain one side of Gaussian–Jensen inequality (see [48, 49, 39, 42]) i.e.,"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathbb{E}B(f_{1}(\\xi_{1}),\\ldots,f_{n}(\\xi_{n}))\\geq B(\\mathbb{E}f_{1}(\\xi_{1}),\\ldots,\\mathbb{E}f_{n}(\\xi_{n}))",
+   "mathml": "<math display=\"block\"><mrow><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>B</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>f</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><msub><mi>f</mi><mi>n</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≥</mo><mrow><mi>B</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>n</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "holds if and only if "
+      },
+      {
+       "text": "{cov(ξp,ξq)Bpq(𝐜)}p,q=1n≥0",
+       "latex": "\\left\\{\\mathrm{cov}(\\xi_{p},\\xi_{q})B_{pq}({\\bf c})\\right\\}_{p,q=1}^{n}\\geq 0",
+       "mathml": "<math display=\"inline\"><mrow><msubsup><mrow><mo>{</mo><mrow><mrow><mi>cov</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>p</mi></msub><mo>,</mo><msub><mi>ξ</mi><mi>q</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>B</mi><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>q</mi></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>}</mo></mrow><mrow><mrow><mi>p</mi><mo>,</mo><mi>q</mi></mrow><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup><mo>≥</mo><mn>0</mn></mrow></math>"
+      },
+      {
+       "text": ", provided that an additional conditions "
+      },
+      {
+       "text": "Bp≥0",
+       "latex": "B_{p}\\geq 0",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>B</mi><mi>p</mi></msub><mo>≥</mo><mn>0</mn></mrow></math>"
+      },
+      {
+       "text": " for "
+      },
+      {
+       "text": "p=1,…,n",
+       "latex": "p=1,\\ldots,n",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mi>p</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+      },
+      {
+       "text": " are satisfied. In case of "
+      },
+      {
+       "text": "(z1,…,zn)∈ℝn",
+       "latex": "(z_{1},\\ldots,z_{n})\\in\\mathbb{R}^{n}",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><msub><mi>z</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>z</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msup><mi>ℝ</mi><mi>n</mi></msup></mrow></math>"
+      },
+      {
+       "text": " we will state a bit more general theorem in the next section which will not require mild polynomial growth assumptions on "
+      },
+      {
+       "text": "B",
+       "latex": "B",
+       "mathml": "<math display=\"inline\"><mi>B</mi></math>"
+      },
+      {
+       "text": " and "
+      },
+      {
+       "text": "F",
+       "latex": "F",
+       "mathml": "<math display=\"inline\"><mi>F</mi></math>"
+      },
+      {
+       "text": ", together with "
+      },
+      {
+       "text": "Bp>0,",
+       "latex": "B_{p}>0,",
+       "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>B</mi><mi>p</mi></msub><mo>&gt;</mo><mn>0</mn></mrow><mo>,</mo></mrow></math>"
+      },
+      {
+       "text": " and "
+      },
+      {
+       "text": "fj",
+       "latex": "f_{j}",
+       "mathml": "<math display=\"inline\"><msub><mi>f</mi><mi>j</mi></msub></math>"
+      },
+      {
+       "text": " being polynomials, "
+      },
+      {
+       "text": "j=1,…,n",
+       "latex": "j=1,\\ldots,n",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+      },
+      {
+       "text": "."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The assumption of "
+    },
+    {
+     "text": "F",
+     "latex": "F",
+     "mathml": "<math display=\"inline\"><mi>F</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "B",
+     "latex": "B",
+     "mathml": "<math display=\"inline\"><mi>B</mi></math>"
+    },
+    {
+     "text": " being smooth, in general, is not needed in the statement of Theorem 13. We will see that for the implication (2.26) implies (2.27) it suffices "
+    },
+    {
+     "text": "F",
+     "latex": "F",
+     "mathml": "<math display=\"inline\"><mi>F</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "B",
+     "latex": "B",
+     "mathml": "<math display=\"inline\"><mi>B</mi></math>"
+    },
+    {
+     "text": " to be two times continuously differentiable in the interior of their domains. For the implication (2.26) implies (2.27) it sufficies to have "
+    },
+    {
+     "text": "F",
+     "latex": "F",
+     "mathml": "<math display=\"inline\"><mi>F</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "B",
+     "latex": "B",
+     "mathml": "<math display=\"inline\"><mi>B</mi></math>"
+    },
+    {
+     "text": " to be three times continusly differentiable. In all our applications that we are aware of "
+    },
+    {
+     "text": "F",
+     "latex": "F",
+     "mathml": "<math display=\"inline\"><mi>F</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "B",
+     "latex": "B",
+     "mathml": "<math display=\"inline\"><mi>B</mi></math>"
+    },
+    {
+     "text": " happen to be smooth functions in the interior of their domains."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "2.5. Multiversion ",
+     "bold": true
+    },
+    {
+     "text": "FB",
+     "latex": "FB",
+     "mathml": "<math display=\"inline\"><mrow><mi>F</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>B</mi></mrow></math>"
+    },
+    {
+     "text": " forward and reverse real hypercontractivity. ",
+     "bold": true
+    },
+    {
+     "text": "In real case, i.e., "
+    },
+    {
+     "text": "(z1,…,zn)∈ℝn,",
+     "latex": "(z_{1},\\ldots,z_{n})\\in\\mathbb{R}^{n},",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mo stretchy=\"false\">(</mo><msub><mi>z</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>z</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msup><mi>ℝ</mi><mi>n</mi></msup></mrow><mo>,</mo></mrow></math>"
+    },
+    {
+     "text": " we are able to obtain forward and reverse inequalities in Theorem 13. Moreover, we will drop the mild requirements on "
+    },
+    {
+     "text": "F",
+     "latex": "F",
+     "mathml": "<math display=\"inline\"><mi>F</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "B",
+     "latex": "B",
+     "mathml": "<math display=\"inline\"><mi>B</mi></math>"
+    },
+    {
+     "text": " to satisfy polynomial growth condition, the test funtions "
+    },
+    {
+     "text": "fj",
+     "latex": "f_{j}",
+     "mathml": "<math display=\"inline\"><msub><mi>f</mi><mi>j</mi></msub></math>"
+    },
+    {
+     "text": " to be polynomials, and the extra assumptions "
+    },
+    {
+     "text": "Bm>0",
+     "latex": "B_{m}>0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>B</mi><mi>m</mi></msub><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " for all "
+    },
+    {
+     "text": "m=1,…,n",
+     "latex": "m=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>m</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Let "
+    },
+    {
+     "text": "C=∏j=1nCj",
+     "latex": "C=\\prod_{j=1}^{n}C_{j}",
+     "mathml": "<math display=\"inline\"><mrow><mi>C</mi><mo rspace=\"0.111em\">=</mo><mrow><msubsup><mo>∏</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup><msub><mi>C</mi><mi>j</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": " be rectangular box in "
+    },
+    {
+     "text": "ℝn",
+     "latex": "\\mathbb{R}^{n}",
+     "mathml": "<math display=\"inline\"><msup><mi>ℝ</mi><mi>n</mi></msup></math>"
+    },
+    {
+     "text": ", i.e., product of "
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": " closed intervals "
+    },
+    {
+     "text": "Cj⊂ℝ",
+     "latex": "C_{j}\\subset\\mathbb{R}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>C</mi><mi>j</mi></msub><mo>⊂</mo><mi>ℝ</mi></mrow></math>"
+    },
+    {
+     "text": ", and let "
+    },
+    {
+     "text": "J⊂ℝ",
+     "latex": "J\\subset\\mathbb{R}",
+     "mathml": "<math display=\"inline\"><mrow><mi>J</mi><mo>⊂</mo><mi>ℝ</mi></mrow></math>"
+    },
+    {
+     "text": " be any closed interval."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 14. ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "(r1,…,rn)∈[−1,1]n",
+     "latex": "(r_{1},\\ldots,r_{n})\\in[-1,1]^{n}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><msub><mi>r</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>r</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msup><mrow><mo stretchy=\"false\">[</mo><mrow><mrow><mo>−</mo><mn>1</mn></mrow><mo>,</mo><mn>1</mn></mrow><mo stretchy=\"false\">]</mo></mrow><mi>n</mi></msup></mrow></math>"
+    },
+    {
+     "text": ", and let ",
+     "italic": true
+    },
+    {
+     "text": "F:J→ℝ",
+     "latex": "F:J\\to\\mathbb{R}",
+     "mathml": "<math display=\"inline\"><mrow><mi>F</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mi>J</mi><mo stretchy=\"false\">→</mo><mi>ℝ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " and ",
+     "italic": true
+    },
+    {
+     "text": "B:C→J",
+     "latex": "B:C\\to J",
+     "mathml": "<math display=\"inline\"><mrow><mi>B</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mi>C</mi><mo stretchy=\"false\">→</mo><mi>J</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " be smooth functions in their domains with ",
+     "italic": true
+    },
+    {
+     "text": "F′(t)≠0",
+     "latex": "F^{\\prime}(t)\\neq 0",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msup><mi>F</mi><mo>′</mo></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≠</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ". The inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathbb{E}F(B(T_{r_{1}}f_{1}(\\xi_{1}),\\ldots,T_{r_{n}}f_{n}(\\xi_{n})))\\leq F\\left(\\mathbb{E}B(f_{1}(\\xi_{1}),\\ldots,f_{n}(\\xi_{n}))\\right)",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>F</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>B</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>T</mi><msub><mi>r</mi><mn>1</mn></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><msub><mi>T</mi><msub><mi>r</mi><mi>n</mi></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>n</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≤</mo><mrow><mi>F</mi><mo>⁡</mo><mrow><mo>(</mo><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>B</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>f</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><msub><mi>f</mi><mi>n</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>)</mo></mrow></mrow></mrow></math>",
+   "label": "(2.28)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all measurable functions ",
+     "italic": true
+    },
+    {
+     "text": "fp:ℝkp→Cp",
+     "latex": "f_{p}:\\mathbb{R}^{k_{p}}\\to C_{p}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>p</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><msub><mi>k</mi><mi>p</mi></msub></msup><mo stretchy=\"false\">→</mo><msub><mi>C</mi><mi>p</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "p=1,…,n",
+     "latex": "p=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>p</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ", if and only if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\{F^{\\prime}(B({\\bf{c}}))\\left((1-r_{p}r_{q})B_{pq}({\\bf{c}})-r_{p}r_{q}F^{\\prime\\prime}(B({\\bf{c}}))B_{p}({\\bf{c}})B_{q}({\\bf{c}})\\right)\\mathrm{cov}(\\xi_{p},\\xi_{q})\\right\\}_{p,q=1}^{n}\\geq 0.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><msubsup><mrow><mo>{</mo><mrow><msup><mi>F</mi><mo>′</mo></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>B</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><msub><mi>r</mi><mi>p</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>r</mi><mi>q</mi></msub></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>B</mi><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>q</mi></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>−</mo><mrow><msub><mi>r</mi><mi>p</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>r</mi><mi>q</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>F</mi><mo>′′</mo></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>B</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>B</mi><mi>p</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>B</mi><mi>q</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>cov</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>p</mi></msub><mo>,</mo><msub><mi>ξ</mi><mi>q</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>}</mo></mrow><mrow><mrow><mi>p</mi><mo>,</mo><mi>q</mi></mrow><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup><mo>≥</mo><mn>0</mn></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(2.29)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "for all ",
+     "italic": true
+    },
+    {
+     "text": "𝐜∈C",
+     "latex": "{\\bf{c}}\\in C",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐜</mi><mo>∈</mo><mi>C</mi></mrow></math>"
+    },
+    {
+     "text": " provided that",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "(t,y)\\mapsto\\frac{F^{\\prime\\prime}(t)}{|F^{\\prime}(t)|}y^{2}",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo stretchy=\"false\">↦</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mrow><msup><mi>F</mi><mo>′′</mo></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mrow><mo stretchy=\"false\">|</mo><mrow><msup><mi>F</mi><mo>′</mo></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>y</mi><mn>2</mn></msup></mrow></mrow></math>",
+   "label": "(2.30)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "is convex on ",
+     "italic": true
+    },
+    {
+     "text": "J×ℝ",
+     "latex": "J\\times\\mathbb{R}",
+     "mathml": "<math display=\"inline\"><mrow><mi>J</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>ℝ</mi></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We list several applications of Theorem 14."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "2.5.1. ",
+     "bold": true
+    },
+    {
+     "text": "F",
+     "latex": "F",
+     "mathml": "<math display=\"inline\"><mi>F</mi></math>"
+    },
+    {
+     "text": " and ",
+     "bold": true
+    },
+    {
+     "text": "B",
+     "latex": "B",
+     "mathml": "<math display=\"inline\"><mi>B</mi></math>"
+    },
+    {
+     "text": " are power functions ",
+     "bold": true
+    },
+    {
+     "text": "The choice "
+    },
+    {
+     "text": "F(t)=tα",
+     "latex": "F(t)=t^{\\alpha}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>F</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><msup><mi>t</mi><mi>α</mi></msup></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "B(𝐜)=c1p1⋯cnpn",
+     "latex": "B({\\bf c})=c_{1}^{p_{1}}\\cdots c_{n}^{p_{n}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>B</mi><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow><mo>=</mo><msubsup><mi>c</mi><mn>1</mn><msub><mi>p</mi><mn>1</mn></msub></msubsup><mo lspace=\"0em\" rspace=\"0em\">⋯</mo><msubsup><mi>c</mi><mi>n</mi><msub><mi>p</mi><mi>n</mi></msub></msubsup></mrow></math>"
+    },
+    {
+     "text": " in the theorem gives "
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": "-function forward and reverse real hypercontractivity, i.e., Theorem 9."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "2.5.2. Noisy Gaussian–Jensen inequality ",
+     "bold": true
+    },
+    {
+     "text": "If we choose "
+    },
+    {
+     "text": "F(t)=t",
+     "latex": "F(t)=t",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>F</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mi>t</mi></mrow></math>"
+    },
+    {
+     "text": ", then Theorem 14 gives a noisy extension of Gaussian–Jensen inequality. We decided to state it as a separate theorem due to its many applications in analysis of Gauss space."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 15 ",
+     "bold": true
+    },
+    {
+     "text": "(Noisy Gaussian–Jensen)"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "(r1,…,rn)∈[−1,1]n",
+     "latex": "(r_{1},\\ldots,r_{n})\\in[-1,1]^{n}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><msub><mi>r</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>r</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><msup><mrow><mo stretchy=\"false\">[</mo><mrow><mrow><mo>−</mo><mn>1</mn></mrow><mo>,</mo><mn>1</mn></mrow><mo stretchy=\"false\">]</mo></mrow><mi>n</mi></msup></mrow></math>"
+    },
+    {
+     "text": ", and let ",
+     "italic": true
+    },
+    {
+     "text": "B:C↦ℝ",
+     "latex": "B:C\\mapsto\\mathbb{R}",
+     "mathml": "<math display=\"inline\"><mrow><mi>B</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mi>C</mi><mo stretchy=\"false\">↦</mo><mi>ℝ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " be smooth in the interior of their domain and continuous up to the boundary. The inequality",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathbb{E}B(T_{r_{1}}f_{1}(\\xi_{1}),\\ldots,T_{r_{n}}f_{n}(\\xi_{n}))\\leq\\mathbb{E}B(f_{1}(\\xi_{1}),\\ldots,f_{n}(\\xi_{n}))",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>B</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>T</mi><msub><mi>r</mi><mn>1</mn></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><msub><mi>T</mi><msub><mi>r</mi><mi>n</mi></msub></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>f</mi><mi>n</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≤</mo><mrow><mi>𝔼</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>B</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>f</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mn>1</mn></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><msub><mi>f</mi><mi>n</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>n</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>",
+   "label": "(2.31)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "holds for all measurable ",
+     "italic": true
+    },
+    {
+     "text": "fj:ℝkj↦Cj",
+     "latex": "f_{j}:\\mathbb{R}^{k_{j}}\\mapsto C_{j}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>f</mi><mi>j</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℝ</mi><msub><mi>k</mi><mi>j</mi></msub></msup><mo stretchy=\"false\">↦</mo><msub><mi>C</mi><mi>j</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "j=1,…,n",
+     "latex": "j=1,\\ldots,n",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mi>n</mi></mrow></math>"
+    },
+    {
+     "text": ", if and only if",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\{(1-r_{p}r_{q})B_{pq}({\\bf c})\\mathrm{cov}(\\xi_{p},\\xi_{q})\\right\\}_{p,q=1}^{n}\\geq 0",
+   "mathml": "<math display=\"inline\"><mrow><msubsup><mrow><mo>{</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><msub><mi>r</mi><mi>p</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>r</mi><mi>q</mi></msub></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>B</mi><mrow><mi>p</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>q</mi></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝐜</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>cov</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ξ</mi><mi>p</mi></msub><mo>,</mo><msub><mi>ξ</mi><mi>q</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>}</mo></mrow><mrow><mrow><mi>p</mi><mo>,</mo><mi>q</mi></mrow><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup><mo>≥</mo><mn>0</mn></mrow></math>",
+   "label": "(2.32)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "for all ",
+     "italic": true
+    },
+    {
+     "text": "𝐜∈int(C)",
+     "latex": "{\\bf c}\\in\\mathrm{int}(C)",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝐜</mi><mo>∈</mo><mrow><mi>int</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>C</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  }
+ ],
+ "furniture": [
+  "arXiv:2506.08494v1 [math.FA] 10 Jun 2025",
+  "1",
+  "2",
+  "P. IVANISVILI AND P. KALANTZOPOULOS",
+  "MULTIVERSION OF THE HAUSDORFF–YOUNG INEQUALITY",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8"
+ ],
+ "license": "open",
+ "provenance": "latexml",
+ "notes": "arXiv 2506.08494v1 (analysis; amsart, running heads), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words."
+}

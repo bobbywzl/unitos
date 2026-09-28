@@ -1,0 +1,2975 @@
+{
+ "id": "arxiv-2411-09614",
+ "category": "math-tex",
+ "source": {
+  "pdf": ".bench/arxiv/2411.09614v2.pdf",
+  "url": "https://arxiv.org/abs/2411.09614v2"
+ },
+ "pages": [
+  1,
+  8
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "Moment estimates for the stochastic heat equation on Cartan-Hadamard manifolds"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Fabrice Baudoin Hongyi Chen Cheng Ouyang"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "June 13, 2025"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Abstract"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We study the effect of curvature on the Parabolic Anderson model by posing it over a Cartan-Hadamard manifold. We first construct a family of noises white in time and colored in space parameterized by a regularity parameter "
+    },
+    {
+     "text": "α",
+     "latex": "\\alpha",
+     "mathml": "<math display=\"inline\"><mi>α</mi></math>"
+    },
+    {
+     "text": ", which we use to explore regularity requirements for well-posedness. Then, we show that conditions on the heat kernel imply an exponential in time upper bound for the moments of the solution, and a lower bound for sectional curvature imply a corresponding lower bound. These results hold if the noise is strong enough, where the needed strength of the noise is affected by sectional curvature."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Contents"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "1",
+     "spans": [
+      {
+       "text": "Introduction",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "2",
+     "spans": [
+      {
+       "text": "Preliminaries",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "2.1",
+     "spans": [
+      {
+       "text": "Heat kernel Estimates on Cartan-Hadamard manifolds"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "2.2",
+     "spans": [
+      {
+       "text": "Fractional Laplacian and Colored Noise"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "2.3",
+     "spans": [
+      {
+       "text": "L2",
+       "latex": "L^{2}",
+       "mathml": "<math display=\"inline\"><msup><mi>L</mi><mn>2</mn></msup></math>"
+      },
+      {
+       "text": " estimate for the fractional Laplacian of the heat kernel"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "3",
+     "spans": [
+      {
+       "text": "Well-posedness of the stochastic heat equation and upper bound for moments of the solution",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "3.1",
+     "spans": [
+      {
+       "text": "Definition of Solution and Chaos Expansion"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "3.2",
+     "spans": [
+      {
+       "text": "Chaos and Solution Second Moment Upper Bounds"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "3.3",
+     "spans": [
+      {
+       "text": "P",
+       "latex": "P",
+       "mathml": "<math display=\"inline\"><mi>P</mi></math>"
+      },
+      {
+       "text": "-th Moment Upper Bound of the Solution"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "4",
+     "spans": [
+      {
+       "text": "Lower Bound for Moments",
+       "bold": true
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "4.1",
+     "spans": [
+      {
+       "text": "Feynman-Kac Formula for Moments and Correlation Lower Bound"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "4.2",
+     "spans": [
+      {
+       "text": "Moment Lower Bounds and Matching Growth in large "
+      },
+      {
+       "text": "β,p",
+       "latex": "\\beta,p",
+       "mathml": "<math display=\"inline\"><mrow><mi>β</mi><mo>,</mo><mi>p</mi></mrow></math>"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "5",
+     "spans": [
+      {
+       "text": "Appendix",
+       "bold": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "1 Introduction"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The main objective of this paper is to study the effects of curvature on the parabolic Anderson model, a stochastic PDE formally expressed as"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\partial_{t}u(t,x)=\\Delta u(t,x)+\\beta u(t,x)\\cdot W(t,x),\\quad u(0,x)=u_{0}(x).",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mrow><msub><mo>∂</mo><mi>t</mi></msub><mrow><mi>u</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>=</mo><mrow><mrow><mi mathvariant=\"normal\">Δ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>u</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mrow><mrow><mi>β</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>u</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo rspace=\"0.055em\" stretchy=\"false\">)</mo></mrow></mrow><mo rspace=\"0.222em\">⋅</mo><mrow><mi>W</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></mrow><mo rspace=\"1.167em\">,</mo><mrow><mrow><mi>u</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(1)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The solution of (1) is expected to be a random field, a stochastic process "
+    },
+    {
+     "text": "{u(t,x)}t∈ℝ+,x∈M",
+     "latex": "\\set{u(t,x)}_{t\\in\\mathbb{R}_{+},x\\in M}",
+     "mathml": "<math display=\"inline\"><msub><mrow><mo stretchy=\"false\">{</mo><mrow><mi>u</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">}</mo></mrow><mrow><mrow><mi>t</mi><mo>∈</mo><msub><mi>ℝ</mi><mo>+</mo></msub></mrow><mo>,</mo><mrow><mi>x</mi><mo>∈</mo><mi>M</mi></mrow></mrow></msub></math>"
+    },
+    {
+     "text": " for some space "
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": ". For us, "
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " will be an "
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": "-dimensional Cartan-Hadamard manifold, a simply connected complete Riemannian manifold with non-positive sectional curvature. We note that non-random field solutions have been constructed for various SPDEs on manifolds [BDFT23, HS23, MS23], but study of finer properties remains difficult. "
+    },
+    {
+     "text": "β>0",
+     "latex": "\\beta>0",
+     "mathml": "<math display=\"inline\"><mrow><mi>β</mi><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " is a parameter known as inverse temperature, which has been known to exhibit interesting behavior [CSZ17, DG20, DGRZ18, GHL24, Tao22]. "
+    },
+    {
+     "text": "Δ",
+     "latex": "\\Delta",
+     "mathml": "<math display=\"inline\"><mi mathvariant=\"normal\">Δ</mi></math>"
+    },
+    {
+     "text": " is the Laplace-Beltrami operator, defined by "
+    },
+    {
+     "text": "Δf=div(gradf)",
+     "latex": "\\Delta f=\\text{div}(\\text{grad}f)",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi mathvariant=\"normal\">Δ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow><mo>=</mo><mrow><mtext>div</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mtext>grad</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " for smooth functions "
+    },
+    {
+     "text": "f:M→ℝ",
+     "latex": "f:M\\to\\mathbb{R}",
+     "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mi>M</mi><mo stretchy=\"false\">→</mo><mi>ℝ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ". Finally, "
+    },
+    {
+     "text": "W",
+     "latex": "W",
+     "mathml": "<math display=\"inline\"><mi>W</mi></math>"
+    },
+    {
+     "text": " is a centered space-time Gaussian noise formally satisfying"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathbb{E}[W(t,x)W(t^{\\prime},x^{\\prime})]=\\delta(t-t^{\\prime})G(x,x^{\\prime})",
+   "mathml": "<math display=\"block\"><mrow><mrow><mi>𝔼</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">[</mo><mrow><mrow><mi>W</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>W</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>t</mi><mo>′</mo></msup><mo>,</mo><msup><mi>x</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">]</mo></mrow></mrow><mo>=</mo><mrow><mrow><mi>δ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>t</mi><mo>−</mo><msup><mi>t</mi><mo>′</mo></msup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>G</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><msup><mi>x</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi>δ</mi></math>"
+    },
+    {
+     "text": " is Dirac’s delta and "
+    },
+    {
+     "text": "G:M×M→ℝ",
+     "latex": "G:M\\times M\\to\\mathbb{R}",
+     "mathml": "<math display=\"inline\"><mrow><mi>G</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mrow><mi>M</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>M</mi></mrow><mo stretchy=\"false\">→</mo><mi>ℝ</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " is called the correlation function. In "
+    },
+    {
+     "text": "ℝn,ℤn",
+     "latex": "\\mathbb{R}^{n},\\mathbb{Z}^{n}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>ℝ</mi><mi>n</mi></msup><mo>,</mo><msup><mi>ℤ</mi><mi>n</mi></msup></mrow></math>"
+    },
+    {
+     "text": ", and graphs, the solution of (1) is the partition function for polymer models [ACQ10, CY04, CSZ20]. The corresponding free energy "
+    },
+    {
+     "text": "h=logu",
+     "latex": "h=\\log u",
+     "mathml": "<math display=\"inline\"><mrow><mi>h</mi><mo>=</mo><mrow><mi>log</mi><mo lspace=\"0.167em\">⁡</mo><mi>u</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " solves the KPZ equation [ACQ10, BG97], which also models growth of many fluctuating surfaces if "
+    },
+    {
+     "text": "n=1",
+     "latex": "n=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ". Exploration of these topics in our setting is left for future work."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "It is known that if "
+    },
+    {
+     "text": "G(x,x′)=δx(x′)",
+     "latex": "G(x,x^{\\prime})=\\delta_{x}(x^{\\prime})",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>G</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><msup><mi>x</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><msub><mi>δ</mi><mi>x</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>x</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ", (1) is not solvable in "
+    },
+    {
+     "text": "ℝn",
+     "latex": "\\mathbb{R}^{n}",
+     "mathml": "<math display=\"inline\"><msup><mi>ℝ</mi><mi>n</mi></msup></math>"
+    },
+    {
+     "text": " except when "
+    },
+    {
+     "text": "n=1",
+     "latex": "n=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ". In [Dal01], the condition"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\int_{\\mathbb{R}^{n}}\\frac{\\hat{G}(d\\xi)}{1+|\\xi|^{2}}<+\\infty,",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msub><mo>∫</mo><msup><mi>ℝ</mi><mi>n</mi></msup></msub><mfrac><mrow><mover accent=\"true\"><mi>G</mi><mo>^</mo></mover><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>ξ</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mrow><mn>1</mn><mo>+</mo><msup><mrow><mo stretchy=\"false\">|</mo><mi>ξ</mi><mo stretchy=\"false\">|</mo></mrow><mn>2</mn></msup></mrow></mfrac></mrow><mo>&lt;</mo><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></mrow><mo>,</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "G^",
+     "latex": "\\hat{G}",
+     "mathml": "<math display=\"inline\"><mover accent=\"true\"><mi>G</mi><mo>^</mo></mover></math>"
+    },
+    {
+     "text": " is the Fourier transform of "
+    },
+    {
+     "text": "G(x,x′)=G(x−x′)",
+     "latex": "G(x,x^{\\prime})=G(x-x^{\\prime})",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>G</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><msup><mi>x</mi><mo>′</mo></msup><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mi>G</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>x</mi><mo>−</mo><msup><mi>x</mi><mo>′</mo></msup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " was given for the well-posedness of (1). This is Dalang’s condition, which has been recognized as a regularity requirement for the noise "
+    },
+    {
+     "text": "W",
+     "latex": "W",
+     "mathml": "<math display=\"inline\"><mi>W</mi></math>"
+    },
+    {
+     "text": ". Motivated by this, [BOTW23] introduced a family of noises "
+    },
+    {
+     "text": "{Wα}α≥0",
+     "latex": "\\set{W_{\\alpha}}_{\\alpha\\geq 0}",
+     "mathml": "<math display=\"inline\"><msub><mrow><mo stretchy=\"false\">{</mo><msub><mi>W</mi><mi>α</mi></msub><mo stretchy=\"false\">}</mo></mrow><mrow><mi>α</mi><mo>≥</mo><mn>0</mn></mrow></msub></math>"
+    },
+    {
+     "text": ", where the regularity parameter "
+    },
+    {
+     "text": "α≥0",
+     "latex": "\\alpha\\geq 0",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>≥</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " is induced by making the correlation function "
+    },
+    {
+     "text": "G2α",
+     "latex": "G_{2\\alpha}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>α</mi></mrow></msub></math>"
+    },
+    {
+     "text": " the kernel of the operator "
+    },
+    {
+     "text": "(−Δ)−α",
+     "latex": "(-\\Delta)^{-\\alpha}",
+     "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mi mathvariant=\"normal\">Δ</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mi>α</mi></mrow></msup></math>"
+    },
+    {
+     "text": " on the Heisenberg group "
+    },
+    {
+     "text": "Hn",
+     "latex": "H^{n}",
+     "mathml": "<math display=\"inline\"><msup><mi>H</mi><mi>n</mi></msup></math>"
+    },
+    {
+     "text": " equipped with a sub-Riemannian structure. In Euclidean space "
+    },
+    {
+     "text": "ℝn",
+     "latex": "\\mathbb{R}^{n}",
+     "mathml": "<math display=\"inline\"><msup><mi>ℝ</mi><mi>n</mi></msup></math>"
+    },
+    {
+     "text": ", Dalang’s condition for this family of noises becomes "
+    },
+    {
+     "text": "α>n−24",
+     "latex": "\\alpha>\\frac{n-2}{4}",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&gt;</mo><mfrac><mrow><mi>n</mi><mo>−</mo><mn>2</mn></mrow><mn>4</mn></mfrac></mrow></math>"
+    },
+    {
+     "text": ". Since the topological dimension of "
+    },
+    {
+     "text": "Hn",
+     "latex": "H^{n}",
+     "mathml": "<math display=\"inline\"><msup><mi>H</mi><mi>n</mi></msup></math>"
+    },
+    {
+     "text": " is "
+    },
+    {
+     "text": "2n+1",
+     "latex": "2n+1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi></mrow><mo>+</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", one may initially expect Dalang’s condition to be "
+    },
+    {
+     "text": "α>2n−14",
+     "latex": "\\alpha>\\frac{2n-1}{4}",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&gt;</mo><mfrac><mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>n</mi></mrow><mo>−</mo><mn>1</mn></mrow><mn>4</mn></mfrac></mrow></math>"
+    },
+    {
+     "text": ", but [BOTW23] showed that the correct condition is in fact "
+    },
+    {
+     "text": "α>n2",
+     "latex": "\\alpha>\\frac{n}{2}",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&gt;</mo><mfrac><mi>n</mi><mn>2</mn></mfrac></mrow></math>"
+    },
+    {
+     "text": ". This is not surprising once one realizes that "
+    },
+    {
+     "text": "n2=2(n+1)−24",
+     "latex": "\\frac{n}{2}=\\frac{2(n+1)-2}{4}",
+     "mathml": "<math display=\"inline\"><mrow><mfrac><mi>n</mi><mn>2</mn></mfrac><mo>=</mo><mfrac><mrow><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>+</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>−</mo><mn>2</mn></mrow><mn>4</mn></mfrac></mrow></math>"
+    },
+    {
+     "text": ", where "
+    },
+    {
+     "text": "2(n+1)",
+     "latex": "2(n+1)",
+     "mathml": "<math display=\"inline\"><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>+</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is the Hausdorff dimension of "
+    },
+    {
+     "text": "Hn",
+     "latex": "H^{n}",
+     "mathml": "<math display=\"inline\"><msup><mi>H</mi><mi>n</mi></msup></math>"
+    },
+    {
+     "text": " with the sub-Riemannian structure. Noises of this type were also constructed in [BCH+24, COV23], and Section 2 of this paper will follow a similar construction, where the "
+    },
+    {
+     "text": "ℝn",
+     "latex": "\\mathbb{R}^{n}",
+     "mathml": "<math display=\"inline\"><msup><mi>ℝ</mi><mi>n</mi></msup></math>"
+    },
+    {
+     "text": " result "
+    },
+    {
+     "text": "α>n−24",
+     "latex": "\\alpha>\\frac{n-2}{4}",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&gt;</mo><mfrac><mrow><mi>n</mi><mo>−</mo><mn>2</mn></mrow><mn>4</mn></mfrac></mrow></math>"
+    },
+    {
+     "text": " is shown to still hold."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We also investigate when the "
+    },
+    {
+     "text": "p",
+     "latex": "p",
+     "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+    },
+    {
+     "text": "-"
+    },
+    {
+     "text": "th",
+     "latex": "th",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi></mrow></math>"
+    },
+    {
+     "text": " moment of the solution "
+    },
+    {
+     "text": "u(t,x)",
+     "latex": "u(t,x)",
+     "mathml": "<math display=\"inline\"><mrow><mi>u</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " grows exponentially in time. In "
+    },
+    {
+     "text": "ℤn",
+     "latex": "\\mathbb{Z}^{n}",
+     "mathml": "<math display=\"inline\"><msup><mi>ℤ</mi><mi>n</mi></msup></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ℝn",
+     "latex": "\\mathbb{R}^{n}",
+     "mathml": "<math display=\"inline\"><msup><mi>ℝ</mi><mi>n</mi></msup></math>"
+    },
+    {
+     "text": ", this has been related to the intermittent behavior of the solution, which is the presence of high peaks in the graph of any realization of the solution (see [CM94, BC95, HHNT14, Mol91]). [TV02] showed that upper exponential in time bounds for the moments hold for compact manifolds, hinting that intermittency is a local property. [CCL23, COV23] gave upper and lower bounds for the moments assuming rough "
+    },
+    {
+     "text": "u0",
+     "latex": "u_{0}",
+     "mathml": "<math display=\"inline\"><msub><mi>u</mi><mn>0</mn></msub></math>"
+    },
+    {
+     "text": " in bounded domains and the torus, respectively. The first positive exponential in time upper and lower moment bounds in a non-compact non-Euclidean manifold appears to be [BOTW23] which as noted prior worked on a sub-Riemannian Heisenberg group. Most recently, [BCH+24] was able to show that the exponential growth rate of the moments is affected by geometric quantities on very rough domains, such as fractals. In our case, "
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " is a Cartan-Hadamard manifold with negative curvature and our goal is to determine how the negative curvature environment affects the "
+    },
+    {
+     "text": "p",
+     "latex": "p",
+     "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+    },
+    {
+     "text": "-"
+    },
+    {
+     "text": "th",
+     "latex": "th",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi></mrow></math>"
+    },
+    {
+     "text": " moment growth of the solution. For such manifolds the spectrum has a positive bottom, see [McK70], one therefore expects that at least for small "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi>β</mi></math>"
+    },
+    {
+     "text": "’s the "
+    },
+    {
+     "text": "p",
+     "latex": "p",
+     "mathml": "<math display=\"inline\"><mi>p</mi></math>"
+    },
+    {
+     "text": "-"
+    },
+    {
+     "text": "th",
+     "latex": "th",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi></mrow></math>"
+    },
+    {
+     "text": " moment decays exponentially fast. This heuristic is made very precise in our Theorem 14, where we prove the following: Let "
+    },
+    {
+     "text": "p≥2",
+     "latex": "p\\geq 2",
+     "mathml": "<math display=\"inline\"><mrow><mi>p</mi><mo>≥</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ", then we have for "
+    },
+    {
+     "text": "u0∈L∞(M)∩Lr(M)",
+     "latex": "u_{0}\\in L^{\\infty}(M)\\cap L^{r}(M)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>u</mi><mn>0</mn></msub><mo>∈</mo><mrow><mrow><msup><mi>L</mi><mi mathvariant=\"normal\">∞</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>∩</mo><mrow><msup><mi>L</mi><mi>r</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\limsup_{t\\to+\\infty}\\frac{\\ln\\mathbb{E}[u(t,x)^{p}]}{t}\\leq\\frac{p}{2}\\left(\\Theta_{\\alpha}(\\sqrt{p-1}\\beta)-\\frac{(n-1)^{2}}{\\max(2,r)}K_{1}\\right),",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><munder><mo movablelimits=\"false\">lim sup</mo><mrow><mi>t</mi><mo stretchy=\"false\">→</mo><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></mrow></munder><mstyle displaystyle=\"true\"><mfrac><mrow><mi>ln</mi><mo lspace=\"0.167em\">⁡</mo><mrow><mi>𝔼</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">[</mo><mrow><mi>u</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mi>p</mi></msup></mrow><mo stretchy=\"false\">]</mo></mrow></mrow></mrow><mi>t</mi></mfrac></mstyle></mrow><mo>≤</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mi>p</mi><mn>2</mn></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mrow><msub><mi mathvariant=\"normal\">Θ</mi><mi>α</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msqrt><mrow><mi>p</mi><mo>−</mo><mn>1</mn></mrow></msqrt><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>β</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>−</mo><mrow><mstyle displaystyle=\"true\"><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mrow><mi>max</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mn>2</mn><mo>,</mo><mi>r</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub></mrow></mrow><mo>)</mo></mrow></mrow></mrow><mo>,</mo></mrow></math>",
+   "label": "(2)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "−K1",
+     "latex": "-K_{1}",
+     "mathml": "<math display=\"inline\"><mrow><mo>−</mo><msub><mi>K</mi><mn>1</mn></msub></mrow></math>"
+    },
+    {
+     "text": " is an upper bound on the sectional curvature of "
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "Θα",
+     "latex": "\\Theta_{\\alpha}",
+     "mathml": "<math display=\"inline\"><msub><mi mathvariant=\"normal\">Θ</mi><mi>α</mi></msub></math>"
+    },
+    {
+     "text": " is a function which is zero for "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi>β</mi></math>"
+    },
+    {
+     "text": " small enough and such that:"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "(i)",
+     "spans": [
+      {
+       "text": "if "
+      },
+      {
+       "text": "α∈(n−24,n4)",
+       "latex": "\\alpha\\in\\left(\\frac{n-2}{4},\\frac{n}{4}\\right)",
+       "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>∈</mo><mrow><mo>(</mo><mfrac><mrow><mi>n</mi><mo>−</mo><mn>2</mn></mrow><mn>4</mn></mfrac><mo>,</mo><mfrac><mi>n</mi><mn>4</mn></mfrac><mo>)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "Θα(β)∼β→∞(Cβ2)1−2α+n2",
+       "latex": "\\Theta_{\\alpha}(\\beta)\\sim_{\\beta\\to\\infty}(C\\beta^{2})^{1-2\\alpha+\\frac{n}{2}}",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Θ</mi><mi>α</mi></msub><mrow><mo stretchy=\"false\">(</mo><mi>β</mi><mo stretchy=\"false\">)</mo></mrow><msub><mo>∼</mo><mrow><mi>β</mi><mo stretchy=\"false\">→</mo><mi mathvariant=\"normal\">∞</mi></mrow></msub><msup><mrow><mo stretchy=\"false\">(</mo><mi>C</mi><msup><mi>β</mi><mn>2</mn></msup><mo stretchy=\"false\">)</mo></mrow><mrow><mrow><mn>1</mn><mo>−</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>α</mi></mrow></mrow><mo>+</mo><mfrac><mi>n</mi><mn>2</mn></mfrac></mrow></msup></mrow></math>"
+      },
+      {
+       "text": ","
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "(ii)",
+     "spans": [
+      {
+       "text": "if "
+      },
+      {
+       "text": "α=n4",
+       "latex": "\\alpha=\\frac{n}{4}",
+       "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>=</mo><mfrac><mi>n</mi><mn>4</mn></mfrac></mrow></math>"
+      },
+      {
+       "text": ", then "
+      },
+      {
+       "text": "Θα(β)∼β→+∞Cβ2ln([Cβ]2)2",
+       "latex": "\\Theta_{\\alpha}(\\beta)\\sim_{\\beta\\to+\\infty}\\frac{C\\beta^{2}}{\\ln([C\\beta]^2)^{2}}",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Θ</mi><mi>α</mi></msub><mrow><mo stretchy=\"false\">(</mo><mi>β</mi><mo stretchy=\"false\">)</mo></mrow><msub><mo>∼</mo><mrow><mi>β</mi><mo stretchy=\"false\">→</mo><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></mrow></msub><mfrac><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>β</mi><mn>2</mn></msup></mrow><msup><mrow><mi>ln</mi><mo>⁡</mo><mrow><mo>(</mo><msup><mrow><mo stretchy=\"false\">[</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>β</mi></mrow><mo stretchy=\"false\">]</mo></mrow><mn>2</mn></msup><mo>)</mo></mrow></mrow><mn>2</mn></msup></mfrac></mrow></math>"
+      },
+      {
+       "text": ","
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "(iii)",
+     "spans": [
+      {
+       "text": "if "
+      },
+      {
+       "text": "α>n4",
+       "latex": "\\alpha>\\frac{n}{4}",
+       "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&gt;</mo><mfrac><mi>n</mi><mn>4</mn></mfrac></mrow></math>"
+      },
+      {
+       "text": ", then "
+      },
+      {
+       "text": "Θα(β)∼β→+∞Cβ2",
+       "latex": "\\Theta_{\\alpha}(\\beta)\\sim_{\\beta\\to+\\infty}C\\beta^{2}",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi mathvariant=\"normal\">Θ</mi><mi>α</mi></msub><mrow><mo stretchy=\"false\">(</mo><mi>β</mi><mo stretchy=\"false\">)</mo></mrow><msub><mo>∼</mo><mrow><mi>β</mi><mo stretchy=\"false\">→</mo><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></mrow></msub><mi>C</mi><msup><mi>β</mi><mn>2</mn></msup></mrow></math>"
+      },
+      {
+       "text": "."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In particular, for "
+    },
+    {
+     "text": "r=2",
+     "latex": "r=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>r</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi>β</mi></math>"
+    },
+    {
+     "text": " small enough, we therefore get the upper bound"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\limsup_{t\\to+\\infty}\\frac{\\ln\\mathbb{E}[u(t,x)^{2}]}{t}\\leq-\\frac{(n-1)^{2}}{2}K_{1}",
+   "mathml": "<math display=\"block\"><mrow><mrow><munder><mo movablelimits=\"false\">lim sup</mo><mrow><mi>t</mi><mo stretchy=\"false\">→</mo><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></mrow></munder><mfrac><mrow><mi>ln</mi><mo lspace=\"0.167em\">⁡</mo><mrow><mi>𝔼</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">[</mo><mrow><mi>u</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></mrow><mo stretchy=\"false\">]</mo></mrow></mrow></mrow><mi>t</mi></mfrac></mrow><mo>≤</mo><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>2</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub></mrow></mrow></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "which is consistent with the McKean sharp estimate [McK70] which states that the bottom of the "
+    },
+    {
+     "text": "L2",
+     "latex": "L^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi>L</mi><mn>2</mn></msup></math>"
+    },
+    {
+     "text": "-spectrum of "
+    },
+    {
+     "text": "−Δ",
+     "latex": "-\\Delta",
+     "mathml": "<math display=\"inline\"><mrow><mo>−</mo><mi mathvariant=\"normal\">Δ</mi></mrow></math>"
+    },
+    {
+     "text": " for "
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " satisfying "
+    },
+    {
+     "text": "secM≤−K1<0",
+     "latex": "\\sec_{M}\\leq-K_{1}<0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>sec</mi><mi>M</mi></msub><mo>≤</mo><mrow><mo>−</mo><msub><mi>K</mi><mn>1</mn></msub></mrow><mo>&lt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " is bounded below by "
+    },
+    {
+     "text": "(n−1)24K1",
+     "latex": "\\frac{(n-1)^{2}}{4}K_{1}",
+     "mathml": "<math display=\"inline\"><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>4</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub></mrow></math>"
+    },
+    {
+     "text": ". In our Theorem 22, under the additional assumption of a lower bound on the sectional curvature, we remarkably obtain a matching lower bound to (2) in the asymptotic regime "
+    },
+    {
+     "text": "β→+∞",
+     "latex": "\\beta\\to+\\infty",
+     "mathml": "<math display=\"inline\"><mrow><mi>β</mi><mo stretchy=\"false\">→</mo><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ", therefore establishing the sharpness of (2) in the regime "
+    },
+    {
+     "text": "β→+∞",
+     "latex": "\\beta\\to+\\infty",
+     "mathml": "<math display=\"inline\"><mrow><mi>β</mi><mo stretchy=\"false\">→</mo><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This paper is organized as follows. In section 2 we clarify some notation, state a useful elementary result about the heat kernel on Cartan-Hadamard manifolds, and define a family of noises indexed by a regularity parameter "
+    },
+    {
+     "text": "α≥0",
+     "latex": "\\alpha\\geq 0",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>≥</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", which is well defined given some conditions on the heat kernel, which is implied by a negative sectional curvature upper bound on "
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": ". In section 3, we prove the well-posedness of (1) for "
+    },
+    {
+     "text": "α>n−24",
+     "latex": "\\alpha>\\frac{n-2}{4}",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&gt;</mo><mfrac><mrow><mi>n</mi><mo>−</mo><mn>2</mn></mrow><mn>4</mn></mfrac></mrow></math>"
+    },
+    {
+     "text": ", which we call Dalang’s condition, and show that (2) holds for these solutions. Finally in section 4 we show that a lower bound on sectional curvature gives rise to the aforementioned matching lower bound for moment asymptotics."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "2 Preliminaries"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We first gather some notation we will use in the paper."
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "1.",
+     "spans": [
+      {
+       "text": "M",
+       "latex": "M",
+       "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+      },
+      {
+       "text": " is a "
+      },
+      {
+       "text": "n",
+       "latex": "n",
+       "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+      },
+      {
+       "text": "-dimensional Cartan-Hadamard manifold, i.e. "
+      },
+      {
+       "text": "M",
+       "latex": "M",
+       "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+      },
+      {
+       "text": " is a Riemannian manifold that is complete and simply connected and has everywhere non-positive sectional curvature."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "2.",
+     "spans": [
+      {
+       "text": "For "
+      },
+      {
+       "text": "t>0,x,y∈M",
+       "latex": "t>0,x,y\\in M",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mi>t</mi><mo>&gt;</mo><mn>0</mn></mrow><mo>,</mo><mi>x</mi><mo>,</mo><mrow><mi>y</mi><mo>∈</mo><mi>M</mi></mrow></mrow></math>"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "Pt(x,y)",
+       "latex": "P_{t}(x,y)",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": " is the heat kernel of "
+      },
+      {
+       "text": "M",
+       "latex": "M",
+       "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "3.",
+     "spans": [
+      {
+       "text": "PtK(r)",
+       "latex": "P^{K}_{t}(r)",
+       "mathml": "<math display=\"inline\"><mrow><msubsup><mi>P</mi><mi>t</mi><mi>K</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>r</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": " for "
+      },
+      {
+       "text": "t>0,r≥0",
+       "latex": "t>0,r\\geq 0",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mi>t</mi><mo>&gt;</mo><mn>0</mn></mrow><mo>,</mo><mrow><mi>r</mi><mo>≥</mo><mn>0</mn></mrow></mrow></math>"
+      },
+      {
+       "text": " will denote the heat kernel of a Hadamard manifold with constant sectional curvature "
+      },
+      {
+       "text": "−K",
+       "latex": "-K",
+       "mathml": "<math display=\"inline\"><mrow><mo>−</mo><mi>K</mi></mrow></math>"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "4.",
+     "spans": [
+      {
+       "text": "secM≤(≥)K",
+       "latex": "\\sec_{M}\\leq(\\geq)K",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>sec</mi><mi>M</mi></msub><mo>≤</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mo lspace=\"0em\" rspace=\"0em\">≥</mo><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>K</mi></mrow></mrow></math>"
+      },
+      {
+       "text": " will be a uniform bound on the sectional curvature of "
+      },
+      {
+       "text": "M",
+       "latex": "M",
+       "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "5.",
+     "spans": [
+      {
+       "text": "B(x,R)",
+       "latex": "B(x,R)",
+       "mathml": "<math display=\"inline\"><mrow><mi>B</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>R</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": " will denote a geodesic ball of radius "
+      },
+      {
+       "text": "R",
+       "latex": "R",
+       "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+      },
+      {
+       "text": " centered at "
+      },
+      {
+       "text": "x",
+       "latex": "x",
+       "mathml": "<math display=\"inline\"><mi>x</mi></math>"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "6.",
+     "spans": [
+      {
+       "text": "For two functions "
+      },
+      {
+       "text": "f,g:ℝ→ℝ",
+       "latex": "f,g:\\mathbb{R}\\to\\mathbb{R}",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mi>f</mi><mo>,</mo><mi>g</mi></mrow><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mi>ℝ</mi><mo stretchy=\"false\">→</mo><mi>ℝ</mi></mrow></mrow></math>"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "f(x)∼x→ag(x)",
+       "latex": "f(x)\\sim_{x\\to a}g(x)",
+       "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><msub><mo>∼</mo><mrow><mi>x</mi><mo stretchy=\"false\">→</mo><mi>a</mi></mrow></msub><mi>g</mi><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": " means "
+      },
+      {
+       "text": "limx→af(x)g(x)=C≠0",
+       "latex": "\\lim_{x\\to a}\\frac{f(x)}{g(x)}=C\\neq 0",
+       "mathml": "<math display=\"inline\"><mrow><mrow><msub><mo>lim</mo><mrow><mi>x</mi><mo stretchy=\"false\">→</mo><mi>a</mi></mrow></msub><mfrac><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mrow><mi>g</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mrow><mo>=</mo><mi>C</mi><mo>≠</mo><mn>0</mn></mrow></math>"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "7.",
+     "spans": [
+      {
+       "text": "We will write "
+      },
+      {
+       "text": "f≤Cg≤Ch",
+       "latex": "f\\leq Cg\\leq Ch",
+       "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>g</mi></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi></mrow></mrow></math>"
+      },
+      {
+       "text": " where the first and second "
+      },
+      {
+       "text": "C",
+       "latex": "C",
+       "mathml": "<math display=\"inline\"><mi>C</mi></math>"
+      },
+      {
+       "text": " could be different and the second "
+      },
+      {
+       "text": "C",
+       "latex": "C",
+       "mathml": "<math display=\"inline\"><mi>C</mi></math>"
+      },
+      {
+       "text": " could depend on more parameters than the first. The same goes for "
+      },
+      {
+       "text": "f≥Cg≥Ch",
+       "latex": "f\\geq Cg\\geq Ch",
+       "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo>≥</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>g</mi></mrow><mo>≥</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi></mrow></mrow></math>"
+      },
+      {
+       "text": "."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.1 Heat kernel Estimates on Cartan-Hadamard manifolds"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We recall the following two results:"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 1. ",
+     "bold": true
+    },
+    {
+     "text": "If ",
+     "italic": true
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " is a Cartan-Hadamard manifold and ",
+     "italic": true
+    },
+    {
+     "text": "secM≤−K1≤0",
+     "latex": "\\sec_{M}\\leq-K_{1}\\leq 0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>sec</mi><mi>M</mi></msub><mo>≤</mo><mrow><mo>−</mo><msub><mi>K</mi><mn>1</mn></msub></mrow><mo>≤</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", then",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "P_{t}(x,y)\\leq P^{K_{1}}_{t}(d(x,y)).",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≤</mo><mrow><msubsup><mi>P</mi><mi>t</mi><msub><mi>K</mi><mn>1</mn></msub></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>d</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "If ",
+     "italic": true
+    },
+    {
+     "text": "secM≥−K2>−∞",
+     "latex": "\\sec_{M}\\geq-K_{2}>-\\infty",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>sec</mi><mi>M</mi></msub><mo>≥</mo><mrow><mo>−</mo><msub><mi>K</mi><mn>2</mn></msub></mrow><mo>&gt;</mo><mrow><mo>−</mo><mi mathvariant=\"normal\">∞</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ", then",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "P_{t}(x,y)\\geq P^{K_{2}}_{t}(d(x,y)).",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≥</mo><mrow><msubsup><mi>P</mi><mi>t</mi><msub><mi>K</mi><mn>2</mn></msub></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>d</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proof. ",
+     "italic": true
+    },
+    {
+     "text": "See [CY81]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 2. ",
+     "bold": true
+    },
+    {
+     "text": "Suppose ",
+     "italic": true
+    },
+    {
+     "text": "t>0,x,y∈ℍ1n",
+     "latex": "t>0,x,y\\in\\mathbb{H}^{n}_{1}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>t</mi><mo>&gt;</mo><mn>0</mn></mrow><mo>,</mo><mi>x</mi><mo>,</mo><mrow><mi>y</mi><mo>∈</mo><msubsup><mi mathvariant=\"normal\">ℍ</mi><mn>1</mn><mi>n</mi></msubsup></mrow></mrow></math>"
+    },
+    {
+     "text": ", the ",
+     "italic": true
+    },
+    {
+     "text": "n−",
+     "latex": "n-",
+     "mathml": "<math display=\"inline\"><mrow><mi>n</mi><mo>−</mo></mrow></math>"
+    },
+    {
+     "text": "dimensional hyperbolic space. The heat kernel ",
+     "italic": true
+    },
+    {
+     "text": "Pt1(x,y)",
+     "latex": "P^{1}_{t}(x,y)",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>P</mi><mi>t</mi><mn>1</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " satisfies for some ",
+     "italic": true
+    },
+    {
+     "text": "c,C>0",
+     "latex": "c,C>0",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>c</mi><mo>,</mo><mi>C</mi></mrow><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " depending on ",
+     "italic": true
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "ch(t,d(x,y))\\leq P^{1}_{t}(x,y)\\leq Ch(t,d(x,y)),",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>c</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mrow><mi>d</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≤</mo><mrow><msubsup><mi>P</mi><mi>t</mi><mn>1</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mrow><mi>d</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>,</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where the Davies-Mandouvalous function ",
+     "italic": true
+    },
+    {
+     "text": "h:ℝ+×ℝ+→ℝ+",
+     "latex": "h:\\mathbb{R}_{+}\\times\\mathbb{R}_{+}\\to\\mathbb{R}+",
+     "mathml": "<math display=\"inline\"><mrow><mi>h</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mrow><msub><mi mathvariant=\"normal\">ℝ</mi><mo>+</mo></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><msub><mi mathvariant=\"normal\">ℝ</mi><mo>+</mo></msub></mrow><mo stretchy=\"false\">→</mo><mrow><mi mathvariant=\"normal\">ℝ</mi><mo>+</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " is defined by",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "h(t,z):=t^{-\\frac{n}{2}}(1+t+z)^{\\frac{n-3}{2}}(1+z)\\exp\\left(-\\frac{z^{2}}{4t}-\\frac{(n-1)^{2}t}{4}-\\frac{(n-1)z}{2}\\right).",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>h</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>:=</mo><mrow><msup><mi>t</mi><mrow><mo>−</mo><mfrac><mi>n</mi><mn>2</mn></mfrac></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mi>t</mi><mo>+</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mfrac><mrow><mi>n</mi><mo>−</mo><mn>3</mn></mrow><mn>2</mn></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><mi>exp</mi><mo>⁡</mo><mrow><mo>(</mo><mrow><mrow><mo>−</mo><mfrac><msup><mi>z</mi><mn>2</mn></msup><mrow><mn>4</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mfrac></mrow><mo>−</mo><mfrac><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mn>4</mn></mfrac><mo>−</mo><mfrac><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>z</mi></mrow><mn>2</mn></mfrac></mrow><mo>)</mo></mrow></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proof. ",
+     "italic": true
+    },
+    {
+     "text": "See [DM88]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Our main tool for the rest of the paper is the following theorem."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 3. ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " be a Hadamard manifold. Suppose ",
+     "italic": true
+    },
+    {
+     "text": "t>0,x,y∈M",
+     "latex": "t>0,x,y\\in M",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>t</mi><mo>&gt;</mo><mn>0</mn></mrow><mo>,</mo><mi>x</mi><mo>,</mo><mrow><mi>y</mi><mo>∈</mo><mi>M</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ". If ",
+     "italic": true
+    },
+    {
+     "text": "secM≤−K1<0",
+     "latex": "\\sec_{M}\\leq-K_{1}<0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>sec</mi><mi>M</mi></msub><mo>≤</mo><mrow><mo>−</mo><msub><mi>K</mi><mn>1</mn></msub></mrow><mo>&lt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", the heat kernel ",
+     "italic": true
+    },
+    {
+     "text": "Pt(x,y)",
+     "latex": "P_{t}(x,y)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " satisfies",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "P_{t}(x,y)\\leq Ch(K_{1}t,\\sqrt{K_{1}}d(x,y))",
+   "mathml": "<math display=\"block\"><mrow><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mo>,</mo><mrow><msqrt><msub><mi>K</mi><mn>1</mn></msub></msqrt><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>",
+   "label": "(3)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where ",
+     "italic": true
+    },
+    {
+     "text": "C>0",
+     "latex": "C>0",
+     "mathml": "<math display=\"inline\"><mrow><mi>C</mi><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " depends on ",
+     "italic": true
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": " and ",
+     "italic": true
+    },
+    {
+     "text": "K1",
+     "latex": "K_{1}",
+     "mathml": "<math display=\"inline\"><msub><mi>K</mi><mn>1</mn></msub></math>"
+    },
+    {
+     "text": ". Similarly, if ",
+     "italic": true
+    },
+    {
+     "text": "secM≥−K2>−∞",
+     "latex": "\\sec_{M}\\geq-K_{2}>-\\infty",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>sec</mi><mi>M</mi></msub><mo>≥</mo><mrow><mo>−</mo><msub><mi>K</mi><mn>2</mn></msub></mrow><mo>&gt;</mo><mrow><mo>−</mo><mi mathvariant=\"normal\">∞</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ", we have",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "P_{t}(x,y)\\geq ch(K_{2}t,\\sqrt{K_{2}}d(x,y))",
+   "mathml": "<math display=\"block\"><mrow><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>≥</mo><mrow><mi>c</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>K</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mo>,</mo><mrow><msqrt><msub><mi>K</mi><mn>2</mn></msub></msqrt><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>",
+   "label": "(4)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where ",
+     "italic": true
+    },
+    {
+     "text": "c>0",
+     "latex": "c>0",
+     "mathml": "<math display=\"inline\"><mrow><mi>c</mi><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " depends on ",
+     "italic": true
+    },
+    {
+     "text": "n",
+     "latex": "n",
+     "mathml": "<math display=\"inline\"><mi>n</mi></math>"
+    },
+    {
+     "text": " and ",
+     "italic": true
+    },
+    {
+     "text": "K2",
+     "latex": "K_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>K</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proof. ",
+     "italic": true
+    },
+    {
+     "text": "Combine Theorem 1 and Theorem 2 with the identity"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "P^{K}_{t}(r)=K^{\\frac{n}{2}}P^{1}_{Kt}(\\sqrt{K}r),",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msubsup><mi>P</mi><mi>t</mi><mi>K</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>r</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><msup><mi>K</mi><mfrac><mi>n</mi><mn>2</mn></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mi>P</mi><mrow><mi>K</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mn>1</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msqrt><mi>K</mi></msqrt><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>r</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>,</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "which can be derived easily from the fact that scaling the metric tensor by "
+    },
+    {
+     "text": "1/K",
+     "latex": "1/\\sqrt{K}",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>/</mo><msqrt><mi>K</mi></msqrt></mrow></math>"
+    },
+    {
+     "text": " multiplies all sectional curvatures by "
+    },
+    {
+     "text": "K",
+     "latex": "K",
+     "mathml": "<math display=\"inline\"><mi>K</mi></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We first deduce the following from the above heat kernel estimate."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proposition 4. ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " be a Riemannian manifold, and ",
+     "italic": true
+    },
+    {
+     "text": "Pt",
+     "latex": "P_{t}",
+     "mathml": "<math display=\"inline\"><msub><mi>P</mi><mi>t</mi></msub></math>"
+    },
+    {
+     "text": " be the heat kernel at time ",
+     "italic": true
+    },
+    {
+     "text": "t>0",
+     "latex": "t>0",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "(i)",
+     "spans": [
+      {
+       "text": "If ",
+       "italic": true
+      },
+      {
+       "text": "u0∈L∞(M)",
+       "latex": "u_{0}\\in L^{\\infty}(M)",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>u</mi><mn>0</mn></msub><mo>∈</mo><mrow><msup><mi>L</mi><mi mathvariant=\"normal\">∞</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+      },
+      {
+       "text": ", then for all ",
+       "italic": true
+      },
+      {
+       "text": "x∈M",
+       "latex": "x\\in M",
+       "mathml": "<math display=\"inline\"><mrow><mi>x</mi><mo>∈</mo><mi>M</mi></mrow></math>"
+      },
+      {
+       "text": " we have",
+       "italic": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\lvert P_tu_0(x) \\right\\rvert\\leq\\left\\lVert u_0 \\right\\rVert_{\\infty}",
+   "mathml": "<math display=\"block\"><mrow><mrow><mo>|</mo><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>|</mo></mrow><mo>≤</mo><msub><mrow><mo>‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo>‖</mo></mrow><mi mathvariant=\"normal\">∞</mi></msub></mrow></math>",
+   "label": "(5)"
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "",
+     "spans": [
+      {
+       "text": "The following assume additionally that ",
+       "italic": true
+      },
+      {
+       "text": "M",
+       "latex": "M",
+       "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+      },
+      {
+       "text": " is a Cartan-Hadamard manifold with ",
+       "italic": true
+      },
+      {
+       "text": "secM≤−K1<0",
+       "latex": "\\sec_{M}\\leq-K_{1}<0",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>sec</mi><mi>M</mi></msub><mo>≤</mo><mrow><mo>−</mo><msub><mi>K</mi><mn>1</mn></msub></mrow><mo>&lt;</mo><mn>0</mn></mrow></math>"
+      },
+      {
+       "text": ".",
+       "italic": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "(ii)",
+     "spans": [
+      {
+       "text": "If ",
+       "italic": true
+      },
+      {
+       "text": "u0∈Lr(M)∩L∞(M)",
+       "latex": "u_{0}\\in L^{r}(M)\\cap L^{\\infty}(M)",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>u</mi><mn>0</mn></msub><mo>∈</mo><mrow><mrow><msup><mi>L</mi><mi>r</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>∩</mo><mrow><msup><mi>L</mi><mi mathvariant=\"normal\">∞</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>"
+      },
+      {
+       "text": ", ",
+       "italic": true
+      },
+      {
+       "text": "2≤r<∞",
+       "latex": "2\\leq r<\\infty",
+       "mathml": "<math display=\"inline\"><mrow><mn>2</mn><mo>≤</mo><mi>r</mi><mo>&lt;</mo><mi mathvariant=\"normal\">∞</mi></mrow></math>"
+      },
+      {
+       "text": ", then for all ",
+       "italic": true
+      },
+      {
+       "text": "t>0,x∈M",
+       "latex": "t>0,x\\in M",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mi>t</mi><mo>&gt;</mo><mn>0</mn></mrow><mo>,</mo><mrow><mi>x</mi><mo>∈</mo><mi>M</mi></mrow></mrow></math>"
+      },
+      {
+       "text": " we have",
+       "italic": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\lvert P_tu_0(x) \\right\\rvert\\leq Ce^{-\\frac{(n-1)^{2}}{2r}K_{1}t}\\left\\lVert u_0 \\right\\rVert_{\\infty}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mo>|</mo><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>|</mo></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>r</mi></mrow></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo>‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo>‖</mo></mrow><mi mathvariant=\"normal\">∞</mi></msub></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(6)"
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "(iii)",
+     "spans": [
+      {
+       "text": "If ",
+       "italic": true
+      },
+      {
+       "text": "u0∈Lr(M)∩L∞(M)",
+       "latex": "u_{0}\\in L^{r}(M)\\cap L^{\\infty}(M)",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>u</mi><mn>0</mn></msub><mo>∈</mo><mrow><mrow><msup><mi>L</mi><mi>r</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>∩</mo><mrow><msup><mi>L</mi><mi mathvariant=\"normal\">∞</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>"
+      },
+      {
+       "text": ", ",
+       "italic": true
+      },
+      {
+       "text": "1≤r≤2",
+       "latex": "1\\leq r\\leq 2",
+       "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>≤</mo><mi>r</mi><mo>≤</mo><mn>2</mn></mrow></math>"
+      },
+      {
+       "text": ", then for all ",
+       "italic": true
+      },
+      {
+       "text": "t>0,x∈M",
+       "latex": "t>0,x\\in M",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mi>t</mi><mo>&gt;</mo><mn>0</mn></mrow><mo>,</mo><mrow><mi>x</mi><mo>∈</mo><mi>M</mi></mrow></mrow></math>"
+      },
+      {
+       "text": " we have",
+       "italic": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\lvert P_tu_0(x) \\right\\rvert\\leq Ce^{-\\frac{(n-1)^{2}}{4}K_{1}t}\\left\\lVert u_0 \\right\\rVert_{\\infty}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mo>|</mo><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>|</mo></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>4</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo>‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo>‖</mo></mrow><mi mathvariant=\"normal\">∞</mi></msub></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(7)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proof. ",
+     "italic": true
+    },
+    {
+     "text": "Denote by "
+    },
+    {
+     "text": "x",
+     "latex": "x",
+     "mathml": "<math display=\"inline\"><mi>x</mi></math>"
+    },
+    {
+     "text": " a point in "
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": ". For (i), since "
+    },
+    {
+     "text": "∫MPt(x,y)𝑑y≤1",
+     "latex": "\\int_{M}P_{t}(x,y)dy\\leq 1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mo>∫</mo><mi>M</mi></msub><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>y</mi></mrow></mrow></mrow><mo>≤</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ","
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "|P_{t}u_{0}(x)|=\\left|\\int_{M}P_{t}(x,y)u_{0}(y)\\ dy\\right|\\leq\\left\\lVert P_t(x,\\cdot) \\right\\rVert_{1}\\left\\lVert u_0 \\right\\rVert_{\\infty}\\leq\\left\\lVert u_0 \\right\\rVert_{\\infty}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mo>=</mo><mrow><mo>|</mo><mrow><msub><mo lspace=\"0em\">∫</mo><mi>M</mi></msub><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0.500em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>y</mi></mrow></mrow></mrow><mo>|</mo></mrow><mo>≤</mo><mrow><msub><mrow><mo>‖</mo><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo rspace=\"0em\">,</mo><mo lspace=\"0em\" rspace=\"0em\">⋅</mo><mo stretchy=\"false\">)</mo></mrow></mrow><mo>‖</mo></mrow><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo>‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo>‖</mo></mrow><mi mathvariant=\"normal\">∞</mi></msub></mrow><mo>≤</mo><msub><mrow><mo>‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo>‖</mo></mrow><mi mathvariant=\"normal\">∞</mi></msub></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We claim the following holds for "
+    },
+    {
+     "text": "t≥1,x∈M",
+     "latex": "t\\geq 1,x\\in M",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>t</mi><mo>≥</mo><mn>1</mn></mrow><mo>,</mo><mrow><mi>x</mi><mo>∈</mo><mi>M</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " if "
+    },
+    {
+     "text": "secM≤−K1<0",
+     "latex": "\\sec_{M}\\leq-K_{1}<0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>sec</mi><mi>M</mi></msub><mo>≤</mo><mrow><mo>−</mo><msub><mi>K</mi><mn>1</mn></msub></mrow><mo>&lt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "If "
+      },
+      {
+       "text": "u0∈L2(M)",
+       "latex": "u_{0}\\in L^{2}(M)",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>u</mi><mn>0</mn></msub><mo>∈</mo><mrow><msup><mi>L</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+      },
+      {
+       "text": ", then there exists "
+      },
+      {
+       "text": "C>0",
+       "latex": "C>0",
+       "mathml": "<math display=\"inline\"><mrow><mi>C</mi><mo>&gt;</mo><mn>0</mn></mrow></math>"
+      },
+      {
+       "text": " such that"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\lvert P_tu_0(x) \\right\\rvert\\leq Ce^{-\\frac{(n-1)^{2}}{4}K_{1}t}\\left\\lVert u_0 \\right\\rVert_{2}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mo>|</mo><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>|</mo></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>4</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo>‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo>‖</mo></mrow><mn>2</mn></msub></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(8)"
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "If "
+      },
+      {
+       "text": "u0∈L1(M)",
+       "latex": "u_{0}\\in L^{1}(M)",
+       "mathml": "<math display=\"inline\"><mrow><msub><mi>u</mi><mn>0</mn></msub><mo>∈</mo><mrow><msup><mi>L</mi><mn>1</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+      },
+      {
+       "text": ", then there exists "
+      },
+      {
+       "text": "C>0",
+       "latex": "C>0",
+       "mathml": "<math display=\"inline\"><mrow><mi>C</mi><mo>&gt;</mo><mn>0</mn></mrow></math>"
+      },
+      {
+       "text": " such that"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\lvert P_tu_0(x) \\right\\rvert\\leq Ce^{-\\frac{(n-1)^{2}}{4}K_{1}t}\\left\\lVert u_0 \\right\\rVert_{1}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mo>|</mo><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>|</mo></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>4</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo>‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo>‖</mo></mrow><mn>1</mn></msub></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(9)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For (8), we use the upper bound (3) which yields:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{aligned} |P_{t}u_{0}(x)|^{2} & =\\left|\\int_{M}P_{t}(x,y)u_{0}(y)dy\\right|^{2}\\leq\\int_{M}P_{t}(x,y)^{2}dy\\int_{M}u_{0}^{2}(y)dy \\\\ & \\leq p_{2t}(x,x)\\|u_{0}\\|_{2}^{2}\\leq\\frac{C}{t^{3/2}}e^{-\\frac{(n-1)^{2}}{2}K_{1}t}\\|u_{0}\\|_{2}^{2}\\leq Ce^{-\\frac{(n-1)^{2}}{2}K_{1}t}\\|u_{0}\\|_{2}^{2}. \\end{aligned}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><msup><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mn>2</mn></msup></mtd><mtd><mrow><mphantom></mphantom><mo>=</mo><msup><mrow><mo>|</mo><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><mi>M</mi></msub></mstyle><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>y</mi></mrow></mrow></mrow><mo>|</mo></mrow><mn>2</mn></msup><mo>≤</mo><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><mi>M</mi></msub></mstyle><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>y</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><mi>M</mi></msub></mstyle><mrow><msubsup><mi>u</mi><mn>0</mn><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>y</mi></mrow></mrow></mrow></mrow></mrow></mrow></mtd></mtr><mtr><mtd></mtd><mtd><mrow><mrow><mphantom></mphantom><mo>≤</mo><mrow><msub><mi>p</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mrow><mo stretchy=\"false\">‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn><mn>2</mn></msubsup></mrow><mo>≤</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mi>C</mi><msup><mi>t</mi><mrow><mn>3</mn><mo>/</mo><mn>2</mn></mrow></msup></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>2</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mrow><mo stretchy=\"false\">‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn><mn>2</mn></msubsup></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>2</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msubsup><mrow><mo stretchy=\"false\">‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo stretchy=\"false\">‖</mo></mrow><mn>2</mn><mn>2</mn></msubsup></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Taking square roots on both sides proves (8). A similar argument works for (9): since "
+    },
+    {
+     "text": "u0∈L1(M)",
+     "latex": "u_{0}\\in L^{1}(M)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>u</mi><mn>0</mn></msub><mo>∈</mo><mrow><msup><mi>L</mi><mn>1</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ","
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "|P_{t}u(x)|=\\left|\\int_{M}P_{t}(x,y)u(y)dy\\right|\\leq\\left\\lVert u_0 \\right\\rVert_{1}\\sup_{y\\in M}P_{t}(x,y)\\leq\\frac{C}{t^{3/4}}e^{-\\frac{(n-1)^{2}}{4}K_{1}t}\\left\\lVert u_0 \\right\\rVert_{1}\\leq Ce^{-\\frac{(n-1)^{2}}{4}K_{1}t}\\left\\lVert u_0 \\right\\rVert_{1}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mo stretchy=\"false\">|</mo><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>u</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">|</mo></mrow><mo>=</mo><mrow><mo>|</mo><mrow><msub><mo lspace=\"0em\">∫</mo><mi>M</mi></msub><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>u</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>y</mi></mrow></mrow></mrow><mo>|</mo></mrow><mo>≤</mo><mrow><msub><mrow><mo>‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo>‖</mo></mrow><mn>1</mn></msub><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><munder><mo movablelimits=\"false\" rspace=\"0.167em\">sup</mo><mrow><mi>y</mi><mo>∈</mo><mi>M</mi></mrow></munder><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo>≤</mo><mrow><mfrac><mi>C</mi><msup><mi>t</mi><mrow><mn>3</mn><mo>/</mo><mn>4</mn></mrow></msup></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>4</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo>‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo>‖</mo></mrow><mn>1</mn></msub></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>4</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo>‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo>‖</mo></mrow><mn>1</mn></msub></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Using the Riesz-Thorin interpolation theorem (see for example [Fol84], Theorem 6.27) with (5) and (8) gives for "
+    },
+    {
+     "text": "u0∈Lr(M),2<r<+∞",
+     "latex": "u_{0}\\in L^{r}(M),2<r<+\\infty",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>u</mi><mn>0</mn></msub><mo>∈</mo><mrow><msup><mi>L</mi><mi>r</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>,</mo><mrow><mn>2</mn><mo>&lt;</mo><mi>r</mi><mo>&lt;</mo><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></mrow></mrow></math>"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\lvert P_tu_0(x) \\right\\rvert\\leq Ce^{-\\frac{(n-1)^{2}}{2r}K_{1}t}\\left\\lVert u_0 \\right\\rVert_{r}",
+   "mathml": "<math display=\"block\"><mrow><mrow><mo>|</mo><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>|</mo></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>r</mi></mrow></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo>‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo>‖</mo></mrow><mi>r</mi></msub></mrow></mrow></math>",
+   "label": "(10)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "for "
+    },
+    {
+     "text": "u0∈Lr(M),2≤r<+∞",
+     "latex": "u_{0}\\in L^{r}(M),2\\leq r<+\\infty",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>u</mi><mn>0</mn></msub><mo>∈</mo><mrow><msup><mi>L</mi><mi>r</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>,</mo><mrow><mn>2</mn><mo>≤</mo><mi>r</mi><mo>&lt;</mo><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ". Similarly, combining (9) and (8) gives"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\lvert P_tu_0(x) \\right\\rvert\\leq Ce^{-\\frac{(n-1)^{2}}{4}K_{1}t}\\left\\lVert u_0 \\right\\rVert_{r}",
+   "mathml": "<math display=\"block\"><mrow><mrow><mo>|</mo><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>|</mo></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>4</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo>‖</mo><msub><mi>u</mi><mn>0</mn></msub><mo>‖</mo></mrow><mi>r</mi></msub></mrow></mrow></math>",
+   "label": "(11)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "for every "
+    },
+    {
+     "text": "t>1",
+     "latex": "t>1",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>&gt;</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "u0∈Lr(M),1≤r≤2",
+     "latex": "u_{0}\\in L^{r}(M),1\\leq r\\leq 2",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>u</mi><mn>0</mn></msub><mo>∈</mo><mrow><msup><mi>L</mi><mi>r</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>,</mo><mrow><mn>1</mn><mo>≤</mo><mi>r</mi><mo>≤</mo><mn>2</mn></mrow></mrow></math>"
+    },
+    {
+     "text": ". From here, we see that the assumption "
+    },
+    {
+     "text": "u0∈Lr(M),2≤r<+∞",
+     "latex": "u_{0}\\in L^{r}(M),2\\leq r<+\\infty",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>u</mi><mn>0</mn></msub><mo>∈</mo><mrow><msup><mi>L</mi><mi>r</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>,</mo><mrow><mn>2</mn><mo>≤</mo><mi>r</mi><mo>&lt;</mo><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " with (5) and (10) gives us (6) with an elementary argument similar to the one made in [BCH+24], Corollary 2.13. Similarly, (7) follows from combining (5) with (11). This finishes the proof."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.2 Fractional Laplacian and Colored Noise"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Definition 5. ",
+     "bold": true
+    },
+    {
+     "text": "Suppose ",
+     "italic": true
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " is a Cartan-Hadamard manifold satisfying ",
+     "italic": true
+    },
+    {
+     "text": "secM≤−K1<0",
+     "latex": "\\sec_{M}\\leq-K_{1}<0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>sec</mi><mi>M</mi></msub><mo>≤</mo><mrow><mo>−</mo><msub><mi>K</mi><mn>1</mn></msub></mrow><mo>&lt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ". We define a family of kernels ",
+     "italic": true
+    },
+    {
+     "text": "{Gα}α>0",
+     "latex": "\\{G_{\\alpha}\\}_{\\alpha>0}",
+     "mathml": "<math display=\"inline\"><msub><mrow><mo stretchy=\"false\">{</mo><msub><mi>G</mi><mi>α</mi></msub><mo stretchy=\"false\">}</mo></mrow><mrow><mi>α</mi><mo>&gt;</mo><mn>0</mn></mrow></msub></math>"
+    },
+    {
+     "text": " by",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "G_{\\alpha}(x,y)=\\frac{1}{\\Gamma(\\alpha)}\\int_{0}^{+\\infty}t^{\\alpha-1}P_{t}(x,y)dt,\\quad x,y\\in M,x\\neq y.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mrow><msub><mi>G</mi><mi>α</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><mi mathvariant=\"normal\">Γ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>α</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup></mstyle><mrow><msup><mi>t</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>t</mi></mrow></mrow></mrow></mrow></mrow><mo rspace=\"1.167em\">,</mo><mi>x</mi><mo>,</mo><mrow><mi>y</mi><mo>∈</mo><mi>M</mi></mrow><mo>,</mo><mrow><mi>x</mi><mo>≠</mo><mi>y</mi></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(12)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Thanks to (3) the integral (12) is indeed convergent for every "
+    },
+    {
+     "text": "α>0",
+     "latex": "\\alpha>0",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " when "
+    },
+    {
+     "text": "x≠y",
+     "latex": "x\\neq y",
+     "mathml": "<math display=\"inline\"><mrow><mi>x</mi><mo>≠</mo><mi>y</mi></mrow></math>"
+    },
+    {
+     "text": ". Our situation is therefore quite different from the case of Euclidean space and Sub-Riemannian Heisenberg groups, as seen in [BOTW23]. When "
+    },
+    {
+     "text": "α≤n/2",
+     "latex": "\\alpha\\leq n/2",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>≤</mo><mrow><mi>n</mi><mo>/</mo><mn>2</mn></mrow></mrow></math>"
+    },
+    {
+     "text": " the integral (12) is divergent for "
+    },
+    {
+     "text": "x=y",
+     "latex": "x=y",
+     "mathml": "<math display=\"inline\"><mrow><mi>x</mi><mo>=</mo><mi>y</mi></mrow></math>"
+    },
+    {
+     "text": ". Indeed as will be seen in Lemma 18, for "
+    },
+    {
+     "text": "α<n/2",
+     "latex": "\\alpha<n/2",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&lt;</mo><mrow><mi>n</mi><mo>/</mo><mn>2</mn></mrow></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "Gα(x,y)",
+     "latex": "G_{\\alpha}(x,y)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>G</mi><mi>α</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " has a singularity of order "
+    },
+    {
+     "text": "1/d(x,y)n−2α",
+     "latex": "1/d(x,y)^{n-2\\alpha}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mn>1</mn><mo>/</mo><mi>d</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mrow><mi>n</mi><mo>−</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>α</mi></mrow></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " while for "
+    },
+    {
+     "text": "α=n/2",
+     "latex": "\\alpha=n/2",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>=</mo><mrow><mi>n</mi><mo>/</mo><mn>2</mn></mrow></mrow></math>"
+    },
+    {
+     "text": " the singularity has order "
+    },
+    {
+     "text": "|lnd(x,y)|",
+     "latex": "|\\ln d(x,y)|",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">|</mo><mrow><mi>ln</mi><mo lspace=\"0.167em\">⁡</mo><mrow><mi>d</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo stretchy=\"false\">|</mo></mrow></math>"
+    },
+    {
+     "text": ". When "
+    },
+    {
+     "text": "α>n/2",
+     "latex": "\\alpha>n/2",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&gt;</mo><mrow><mi>n</mi><mo>/</mo><mn>2</mn></mrow></mrow></math>"
+    },
+    {
+     "text": " the integral (12) is also convergent for "
+    },
+    {
+     "text": "x=y",
+     "latex": "x=y",
+     "mathml": "<math display=\"inline\"><mrow><mi>x</mi><mo>=</mo><mi>y</mi></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We note that "
+    },
+    {
+     "text": "Gα",
+     "latex": "G_{\\alpha}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mi>α</mi></msub></math>"
+    },
+    {
+     "text": " is the kernel of the operator "
+    },
+    {
+     "text": "(−Δ)−α",
+     "latex": "(-\\Delta)^{-\\alpha}",
+     "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mi mathvariant=\"normal\">Δ</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mi>α</mi></mrow></msup></math>"
+    },
+    {
+     "text": ", i.e. for any smooth and compactly supported "
+    },
+    {
+     "text": "f∈Cc∞(M)",
+     "latex": "f\\in C_{c}^{\\infty}(M)",
+     "mathml": "<math display=\"inline\"><mrow><mi>f</mi><mo>∈</mo><mrow><msubsup><mi>C</mi><mi>c</mi><mi mathvariant=\"normal\">∞</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ","
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "(-\\Delta)^{-\\alpha}f(x)=\\int_{M}f(y)G_{\\alpha}(x,y)dy.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mi mathvariant=\"normal\">Δ</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mi>α</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo rspace=\"0.111em\">=</mo><mrow><msub><mo>∫</mo><mi>M</mi></msub><mrow><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>G</mi><mi>α</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>y</mi></mrow></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We also note that "
+    },
+    {
+     "text": "α=0",
+     "latex": "\\alpha=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " corresponds to Dirac’s delta on the diagonal and for "
+    },
+    {
+     "text": "α=1",
+     "latex": "\\alpha=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " the correlation function is the Green’s function for the Laplace equation."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Definition 6 ",
+     "bold": true
+    },
+    {
+     "text": "(Sobolev Space "
+    },
+    {
+     "text": "𝒲−α(M)",
+     "latex": "\\mathcal{W}^{-\\alpha}(M)",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒲</mi><mrow><mo>−</mo><mi>α</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ")"
+    },
+    {
+     "text": ". ",
+     "bold": true
+    },
+    {
+     "text": "Suppose ",
+     "italic": true
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " is a Cartan-Hadamard manifold satisfying ",
+     "italic": true
+    },
+    {
+     "text": "secM≤−K1<0",
+     "latex": "\\sec_{M}\\leq-K_{1}<0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>sec</mi><mi>M</mi></msub><mo>≤</mo><mrow><mo>−</mo><msub><mi>K</mi><mn>1</mn></msub></mrow><mo>&lt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ". For ",
+     "italic": true
+    },
+    {
+     "text": "α>0",
+     "latex": "\\alpha>0",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", we define the Sobolev space ",
+     "italic": true
+    },
+    {
+     "text": "𝒲−α(M)",
+     "latex": "\\mathcal{W}^{-\\alpha}(M)",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒲</mi><mrow><mo>−</mo><mi>α</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " as the completion of ",
+     "italic": true
+    },
+    {
+     "text": "Cc∞(M)",
+     "latex": "C_{c}^{\\infty}(M)",
+     "mathml": "<math display=\"inline\"><mrow><msubsup><mi>C</mi><mi>c</mi><mi mathvariant=\"normal\">∞</mi></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " with respect to the inner product",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\left\\langle f,g\\right\\rangle_{\\mathcal{W}^{-\\alpha}(M)}=\\int_{M}\\int_{M}f(x)g(y)G_{2\\alpha}(x,y)dxdy=\\int_{M}\\left[(-\\Delta)^{-\\alpha}f\\right](x)\\left[(-\\Delta)^{-\\alpha}g\\right](x)dx,",
+   "mathml": "<math display=\"inline\"><mrow><mrow><msub><mrow><mo>⟨</mo><mrow><mi>f</mi><mo>,</mo><mi>g</mi></mrow><mo>⟩</mo></mrow><mrow><msup><mi>𝒲</mi><mrow><mo>−</mo><mi>α</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></msub><mo>=</mo><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><mi>M</mi></msub></mstyle><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><mi>M</mi></msub></mstyle><mrow><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>g</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>G</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>α</mi></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>x</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>y</mi></mrow></mrow></mrow></mrow><mo>=</mo><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><mi>M</mi></msub></mstyle><mrow><mrow><mo>[</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mi mathvariant=\"normal\">Δ</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mi>α</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>f</mi></mrow><mo>]</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>[</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mi mathvariant=\"normal\">Δ</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mi>α</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>g</mi></mrow><mo>]</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>x</mi></mrow></mrow></mrow></mrow><mo>,</mo></mrow></math>",
+   "label": "(13)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where the kernel ",
+     "italic": true
+    },
+    {
+     "text": "G2α",
+     "latex": "G_{2\\alpha}",
+     "mathml": "<math display=\"inline\"><msub><mi>G</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>α</mi></mrow></msub></math>"
+    },
+    {
+     "text": " is the family in Definition 5.",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Definition 7. ",
+     "bold": true
+    },
+    {
+     "text": "Consider ",
+     "italic": true
+    },
+    {
+     "text": "α>0",
+     "latex": "\\alpha>0",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " and the following Hilbert space of space-time functions:",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathcal{H}_{\\alpha}=L^{2}(\\mathbb{R}_{+},\\mathcal{W}^{-\\alpha}(M)),",
+   "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>ℋ</mi><mi>α</mi></msub><mo>=</mo><mrow><msup><mi>L</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>ℝ</mi><mo>+</mo></msub><mo>,</mo><mrow><msup><mi>𝒲</mi><mrow><mo>−</mo><mi>α</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>,</mo></mrow></math>",
+   "label": "(14)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where ",
+     "italic": true
+    },
+    {
+     "text": "𝒲−α(M)",
+     "latex": "\\mathcal{W}^{-\\alpha}(M)",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>𝒲</mi><mrow><mo>−</mo><mi>α</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is the Sobolev space introduced in Definition 6. On a complete probability space ",
+     "italic": true
+    },
+    {
+     "text": "(Ω,𝒢,𝐏)",
+     "latex": "(\\Omega,\\mathcal{G},\\mathbf{P})",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">Ω</mi><mo>,</mo><mi>𝒢</mi><mo>,</mo><mi>𝐏</mi><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": " we define a centered Gaussian family ",
+     "italic": true
+    },
+    {
+     "text": "{W(ϕ);ϕ∈ℋα}",
+     "latex": "\\{W(\\phi);\\phi\\in\\mathcal{H}_{\\alpha}\\}",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">{</mo><mrow><mrow><mi>W</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>ϕ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>;</mo><mrow><mi>ϕ</mi><mo>∈</mo><msub><mi>ℋ</mi><mi>α</mi></msub></mrow></mrow><mo stretchy=\"false\">}</mo></mrow></math>"
+    },
+    {
+     "text": ", whose covariance is given by",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{aligned} \\mathbf{E}\\left[W(\\varphi)W(\\psi)\\right]= & \\int_{\\mathbb{R}_{+}}\\ \\left\\langle\\varphi(t,\\cdot),\\psi(t,\\cdot)\\right\\rangle_{\\mathcal{W}^{-\\alpha}(M)}dt \\\\ = & \\int_{\\mathbb{R}_{+}}\\int_{M^{2}}\\varphi(t,x)\\psi(t,y)G_{2\\alpha}(x,y)dxdydt\\,, \\end{aligned}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><mrow><mi>𝐄</mi><mo>⁡</mo><mrow><mo>[</mo><mrow><mrow><mi>W</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>φ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>W</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>ψ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>]</mo></mrow></mrow><mo>=</mo><mphantom></mphantom></mrow></mtd><mtd><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><msub><mi>ℝ</mi><mo>+</mo></msub></msub></mstyle><mrow><msub><mrow><mo lspace=\"0.500em\">⟨</mo><mrow><mrow><mi>φ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo rspace=\"0em\">,</mo><mo lspace=\"0em\" rspace=\"0em\">⋅</mo><mo stretchy=\"false\">)</mo></mrow></mrow><mo>,</mo><mrow><mi>ψ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo rspace=\"0em\">,</mo><mo lspace=\"0em\" rspace=\"0em\">⋅</mo><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>⟩</mo></mrow><mrow><msup><mi>𝒲</mi><mrow><mo>−</mo><mi>α</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>t</mi></mrow></mrow></mrow></mtd></mtr><mtr><mtd><mo>=</mo></mtd><mtd><mrow><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><msub><mi>ℝ</mi><mo>+</mo></msub></msub></mstyle><mrow><mstyle displaystyle=\"true\"><msub><mo>∫</mo><msup><mi>M</mi><mn>2</mn></msup></msub></mstyle><mrow><mrow><mi>φ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>ψ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>G</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>α</mi></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>x</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>y</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>t</mi></mrow></mrow></mrow></mrow><mo lspace=\"0.170em\">,</mo></mrow></mtd></mtr></mtable></math>",
+   "label": "(15)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "for ",
+     "italic": true
+    },
+    {
+     "text": "φ",
+     "latex": "\\varphi",
+     "mathml": "<math display=\"inline\"><mi>φ</mi></math>"
+    },
+    {
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "ψ",
+     "latex": "\\psi",
+     "mathml": "<math display=\"inline\"><mi>ψ</mi></math>"
+    },
+    {
+     "text": " in ",
+     "italic": true
+    },
+    {
+     "text": "ℋα",
+     "latex": "\\mathcal{H}_{\\alpha}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℋ</mi><mi>α</mi></msub></math>"
+    },
+    {
+     "text": ". This family is called the fractional Gaussian fields on ",
+     "italic": true
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.3 "
+    },
+    {
+     "text": "L2",
+     "latex": "L^{2}",
+     "mathml": "<math display=\"inline\"><msup><mi>L</mi><mn>2</mn></msup></math>"
+    },
+    {
+     "text": " estimate for the fractional Laplacian of the heat kernel"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We will use the heat kernel bound to obtain upper estimates for "
+    },
+    {
+     "text": "‖−(Δ)−αPt(x,⋅)‖L2(M)",
+     "latex": "\\left\\lVert -(\\Delta)^{-\\alpha}P_t(x,\\cdot) \\right\\rVert_{L^{2}(M)}",
+     "mathml": "<math display=\"inline\"><msub><mrow><mo>‖</mo><mrow><mo>−</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">Δ</mi><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mi>α</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo rspace=\"0em\">,</mo><mo lspace=\"0em\" rspace=\"0em\">⋅</mo><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>‖</mo></mrow><mrow><msup><mi>L</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></msub></math>"
+    },
+    {
+     "text": " which plays a central role in our study."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Lemma 8. ",
+     "bold": true
+    },
+    {
+     "text": "Suppose ",
+     "italic": true
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " is a Cartan-Hadamard manifold satisfying ",
+     "italic": true
+    },
+    {
+     "text": "secM≤−K1<0",
+     "latex": "\\sec_{M}\\leq-K_{1}<0",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>sec</mi><mi>M</mi></msub><mo>≤</mo><mrow><mo>−</mo><msub><mi>K</mi><mn>1</mn></msub></mrow><mo>&lt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ". Let ",
+     "italic": true
+    },
+    {
+     "text": "α>0",
+     "latex": "\\alpha>0",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ". There exists ",
+     "italic": true
+    },
+    {
+     "text": "C=Cα,K1,n>0",
+     "latex": "C=C_{\\alpha,K_{1},n}>0",
+     "mathml": "<math display=\"inline\"><mrow><mi>C</mi><mo>=</mo><msub><mi>C</mi><mrow><mi>α</mi><mo>,</mo><msub><mi>K</mi><mn>1</mn></msub><mo>,</mo><mi>n</mi></mrow></msub><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " such that for every ",
+     "italic": true
+    },
+    {
+     "text": "t>0",
+     "latex": "t>0",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\sup_{x\\in M}\\left\\lVert (-\\Delta)^{-\\alpha}p_t(x,\\cdot) \\right\\rVert_{L^{2}(M)}\\leq\\begin{cases}Ce^{-\\frac{(n-1)^{2}}{4}K_{1}t}(1_{[0,1/2K_{1}]}(t)t^{\\alpha-\\frac{n}{4}}+1_{[1/2K_{1},+\\infty)}(t)(1+K_{1}t)^{-3/4})&\\alpha<\\frac{n}{4}\\\\\nCe^{-\\frac{(n-1)^{2}}{4}K_{1}t}(1_{[0,1/2K_{1}]}(t)|\\ln(t)|+1_{[1/2K_{1},+\\infty)}(t)(1+K_{1}t)^{-3/4})&\\alpha=\\frac{n}{4}\\\\\nCe^{-\\frac{(n-1)^{2}}{4}K_{1}t}(1_{[0,1/2K_{1}]}(t)+1_{[1/2K_{1},+\\infty)}(t)(1+K_{1}t)^{-3/4})&\\alpha>\\frac{n}{4}.\\end{cases}",
+   "mathml": "<math display=\"block\"><mrow><mrow><munder><mo movablelimits=\"false\">sup</mo><mrow><mi>x</mi><mo>∈</mo><mi>M</mi></mrow></munder><msub><mrow><mo lspace=\"0em\">‖</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mi mathvariant=\"normal\">Δ</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mi>α</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>p</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo rspace=\"0em\">,</mo><mo lspace=\"0em\" rspace=\"0em\">⋅</mo><mo stretchy=\"false\">)</mo></mrow></mrow><mo>‖</mo></mrow><mrow><msup><mi>L</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></msub></mrow><mo>≤</mo><mrow><mo>{</mo><mtable columnspacing=\"5pt\" displaystyle=\"true\" rowspacing=\"0pt\"><mtr><mtd columnalign=\"left\"><mrow><mi>C</mi><mi>e</mi><msup><mrow></mrow><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>4</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo stretchy=\"false\">(</mo><mn>1</mn><msub><mrow></mrow><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo>,</mo><mrow><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub></mrow><mo stretchy=\"false\">]</mo></mrow></msub><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo><mi>t</mi><msup><mrow></mrow><mrow><mi>α</mi><mo>−</mo><mfrac><mi>n</mi><mn>4</mn></mfrac></mrow></msup><mo>+</mo><mn>1</mn><msub><mrow></mrow><mrow><mo stretchy=\"false\">[</mo><mn>1</mn><mo>/</mo><mn>2</mn><mi>K</mi><msub><mrow></mrow><mn>1</mn></msub><mo rspace=\"0em\">,</mo><mo lspace=\"0em\">+</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></msub><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo><mo stretchy=\"false\">(</mo><mn>1</mn><mo>+</mo><mi>K</mi><msub><mrow></mrow><mn>1</mn></msub><mi>t</mi><mo stretchy=\"false\">)</mo><msup><mrow></mrow><mrow><mo>−</mo><mn>3</mn><mo>/</mo><mn>4</mn></mrow></msup><mo stretchy=\"false\">)</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mi>α</mi><mo>&lt;</mo><mstyle displaystyle=\"false\"><mfrac><mi>n</mi><mn>4</mn></mfrac></mstyle></mrow></mtd></mtr><mtr><mtd columnalign=\"left\"><mrow><mi>C</mi><mi>e</mi><msup><mrow></mrow><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>4</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo stretchy=\"false\">(</mo><mn>1</mn><msub><mrow></mrow><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo>,</mo><mrow><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub></mrow><mo stretchy=\"false\">]</mo></mrow></msub><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo><mo fence=\"false\" rspace=\"0.167em\" stretchy=\"false\">|</mo><mrow><mi>ln</mi><mo>⁡</mo><mrow><mo>(</mo><mi>t</mi><mo>)</mo></mrow></mrow><mo fence=\"false\" stretchy=\"false\">|</mo><mo lspace=\"0em\">+</mo><mn>1</mn><msub><mrow></mrow><mrow><mo stretchy=\"false\">[</mo><mn>1</mn><mo>/</mo><mn>2</mn><mi>K</mi><msub><mrow></mrow><mn>1</mn></msub><mo rspace=\"0em\">,</mo><mo lspace=\"0em\">+</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></msub><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo><mo stretchy=\"false\">(</mo><mn>1</mn><mo>+</mo><mi>K</mi><msub><mrow></mrow><mn>1</mn></msub><mi>t</mi><mo stretchy=\"false\">)</mo><msup><mrow></mrow><mrow><mo>−</mo><mn>3</mn><mo>/</mo><mn>4</mn></mrow></msup><mo stretchy=\"false\">)</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mi>α</mi><mo>=</mo><mstyle displaystyle=\"false\"><mfrac><mi>n</mi><mn>4</mn></mfrac></mstyle></mrow></mtd></mtr><mtr><mtd columnalign=\"left\"><mrow><mi>C</mi><mi>e</mi><msup><mrow></mrow><mrow><mo>−</mo><mrow><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>4</mn></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo stretchy=\"false\">(</mo><mn>1</mn><msub><mrow></mrow><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo>,</mo><mrow><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub></mrow><mo stretchy=\"false\">]</mo></mrow></msub><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo><mo>+</mo><mn>1</mn><msub><mrow></mrow><mrow><mo stretchy=\"false\">[</mo><mn>1</mn><mo>/</mo><mn>2</mn><mi>K</mi><msub><mrow></mrow><mn>1</mn></msub><mo rspace=\"0em\">,</mo><mo lspace=\"0em\">+</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></msub><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo><mo stretchy=\"false\">(</mo><mn>1</mn><mo>+</mo><mi>K</mi><msub><mrow></mrow><mn>1</mn></msub><mi>t</mi><mo stretchy=\"false\">)</mo><msup><mrow></mrow><mrow><mo>−</mo><mn>3</mn><mo>/</mo><mn>4</mn></mrow></msup><mo stretchy=\"false\">)</mo></mrow></mtd><mtd columnalign=\"left\"><mrow><mrow><mi>α</mi><mo>&gt;</mo><mstyle displaystyle=\"false\"><mfrac><mi>n</mi><mn>4</mn></mfrac></mstyle></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></mrow></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proof. ",
+     "italic": true
+    },
+    {
+     "text": "Applying Fubini to change the order of integration, the Minknowski integral inequality, the semigroup property of the heat kernel, and our heat kernel upper bound, we have"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{split}\\|(-\\Delta)^{-\\alpha}P_{t}(x,\\cdot)\\|_{L^{2}(M)}&\\leq\\frac{1}{\\Gamma(\\alpha)}\\int_{0}^{+\\infty}s^{\\alpha-1}P_{2(s+t)}(x,x)^{1/2}ds\\\\\n&\\leq C\\int_{0}^{+\\infty}s^{\\alpha-1}h(0,2K_{1}(t+s))^{1/2}ds\\\\\n&\\leq C\\int_{0}^{+\\infty}s^{\\alpha-1}(t+s)^{-n/4}(1+2K_{1}(t+s))^{\\frac{n-3}{4}}\\exp\\left(-K_{1}\\frac{(n-1)^{2}}{4}(t+s)\\right)ds\\\\\n&=Ce^{-bK_{1}t}\\int_{0}^{+\\infty}s^{\\alpha-1}e^{-bK_{1}s}[(2K_{1}(t+s))^{-n}(1+2K_{1}(t+s))^{n-3}]^{\\frac{1}{4}}ds,\\end{split}",
+   "mathml": "<math display=\"block\"><mtable columnspacing=\"0pt\" displaystyle=\"true\" rowspacing=\"0pt\"><mtr><mtd columnalign=\"right\"><msub><mrow><mo stretchy=\"false\">‖</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mi mathvariant=\"normal\">Δ</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mi>α</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo mathsize=\"0.700em\" rspace=\"0em\">,</mo><mo lspace=\"0em\" rspace=\"0em\">⋅</mo><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">‖</mo></mrow><mrow><msup><mi>L</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></msub></mtd><mtd columnalign=\"left\"><mrow><mphantom></mphantom><mo>≤</mo><mrow><mfrac><mn>1</mn><mrow><mi mathvariant=\"normal\">Γ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>α</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup><mrow><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>P</mi><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>s</mi><mo>+</mo><mi>t</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>s</mi></mrow></mrow></mrow></mrow></mrow></mtd></mtr><mtr><mtd></mtd><mtd columnalign=\"left\"><mrow><mphantom></mphantom><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup><mrow><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>h</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>t</mi><mo>+</mo><mi>s</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mn>1</mn><mo>/</mo><mn>2</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>s</mi></mrow></mrow></mrow></mrow></mrow></mtd></mtr><mtr><mtd></mtd><mtd columnalign=\"left\"><mrow><mo>≤</mo><mi>C</mi><mo>∫</mo><msub><mrow></mrow><mn>0</mn></msub><msup><mrow></mrow><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msup><mi>s</mi><msup><mrow></mrow><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo stretchy=\"false\">(</mo><mi>t</mi><mo>+</mo><mi>s</mi><mo stretchy=\"false\">)</mo><msup><mrow></mrow><mrow><mo>−</mo><mi>n</mi><mo>/</mo><mn>4</mn></mrow></msup><mo stretchy=\"false\">(</mo><mn>1</mn><mo>+</mo><mn>2</mn><mi>K</mi><msub><mrow></mrow><mn>1</mn></msub><mo stretchy=\"false\">(</mo><mi>t</mi><mo>+</mo><mi>s</mi><mo stretchy=\"false\">)</mo><mo rspace=\"0.167em\" stretchy=\"false\">)</mo><msup><mrow></mrow><mfrac><mrow><mi>n</mi><mo>−</mo><mn>3</mn></mrow><mn>4</mn></mfrac></msup><mi>exp</mi><mo>(</mo><mo lspace=\"0em\">−</mo><mi>K</mi><msub><mrow></mrow><mn>1</mn></msub><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>4</mn></mfrac><mo stretchy=\"false\">(</mo><mi>t</mi><mo>+</mo><mi>s</mi><mo stretchy=\"false\">)</mo><mo>)</mo><mi>d</mi><mi>s</mi></mrow></mtd></mtr><mtr><mtd></mtd><mtd columnalign=\"left\"><mrow><mrow><mphantom></mphantom><mo>=</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup><mrow><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">[</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>t</mi><mo>+</mo><mi>s</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mi>n</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>t</mi><mo>+</mo><mi>s</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>n</mi><mo>−</mo><mn>3</mn></mrow></msup></mrow><mo stretchy=\"false\">]</mo></mrow><mfrac><mn>1</mn><mn>4</mn></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">d</mo><mi>s</mi></mrow></mrow></mrow></mrow></mrow><mo>,</mo></mrow></mtd></mtr></mtable></math>",
+   "label": "(16)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "with "
+    },
+    {
+     "text": "b=(n−1)24",
+     "latex": "b=\\frac{(n-1)^{2}}{4}",
+     "mathml": "<math display=\"inline\"><mrow><mi>b</mi><mo>=</mo><mfrac><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup><mn>4</mn></mfrac></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "T=2K1(t+s)",
+     "latex": "T=2K_{1}(t+s)",
+     "mathml": "<math display=\"inline\"><mrow><mi>T</mi><mo>=</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>t</mi><mo>+</mo><mi>s</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " and where the second inequality used (3). Notice that "
+    },
+    {
+     "text": "T<1⇔s<12K1−t",
+     "latex": "T<1\\iff s<\\frac{1}{2K_{1}}-t",
+     "mathml": "<math display=\"inline\"><mrow><mi>T</mi><mo>&lt;</mo><mn>1</mn><mo stretchy=\"false\">⇔</mo><mrow><mi>s</mi><mo>&lt;</mo><mrow><mfrac><mn>1</mn><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub></mrow></mfrac><mo>−</mo><mi>t</mi></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": ". Continuing, we have"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{aligned} & Ce^{-bK_{1}t}\\int_{0}^{+\\infty}s^{\\alpha-1}e^{-bK_{1}s}[(1+T)^{-3}T^{-n}(1+T)^{n}]^{\\frac{1}{4}}ds \\\\ = & Ce^{-bK_{1}t}\\int_{0}^{+\\infty}s^{\\alpha-1}e^{-bK_{1}s}\\left[(1+T)^{-3}\\sum_{j=0}^{n}\\binom{n}{j}T^{j-n}\\right]^{\\frac{1}{4}}ds \\\\ \\leq & Ce^{-bK_{1}t}\\int_{0}^{+\\infty}s^{\\alpha-1}e^{-bK_{1}s}[n!(1+T)^{-3}\\max(T^{-n},1)]^{\\frac{1}{4}}ds \\\\ \\leq & Ce^{-bK_{1}t}\\left(\\int_{0}^{\\max(\\frac{1}{2K_{1}}-t),0)}s^{\\alpha-1}e^{-bK_{1}s}T^{-\\frac{n}{4}}ds+\\int_{\\max(\\frac{1}{2K_{1}}-t),0)}^{+\\infty}s^{\\alpha-1}e^{-bK_{1}s}(1+T)^{-\\frac{3}{4}}ds\\right) \\\\ = & Ce^{-bK_{1}t}\\left(1_{[0,\\frac{1}{2K_{1}})}(t)\\int_{0}^{+\\infty}s^{\\alpha-1}e^{-bK_{1}s}T^{-\\frac{n}{4}}ds+1_{[\\frac{1}{2K_{1}},+\\infty)}(t)\\int_{0}^{+\\infty}s^{\\alpha-1}e^{-bK_{1}s}(1+T)^{-\\frac{3}{4}}ds\\right). \\end{aligned}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd></mtd><mtd><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup></mstyle><mrow><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">[</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mi>T</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mn>3</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>T</mi><mrow><mo>−</mo><mi>n</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mi>T</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mi>n</mi></msup></mrow><mo stretchy=\"false\">]</mo></mrow><mfrac><mn>1</mn><mn>4</mn></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>s</mi></mrow></mrow></mrow></mrow></mtd></mtr><mtr><mtd><mo>=</mo></mtd><mtd><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup></mstyle><mrow><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo>[</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mi>T</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mn>3</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>j</mi><mo>=</mo><mn>0</mn></mrow><mi>n</mi></munderover></mstyle><mrow><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mi>n</mi><mi>j</mi></mfrac></mstyle><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>T</mi><mrow><mi>j</mi><mo>−</mo><mi>n</mi></mrow></msup></mrow></mrow></mrow><mo>]</mo></mrow><mfrac><mn>1</mn><mn>4</mn></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>s</mi></mrow></mrow></mrow></mrow></mtd></mtr><mtr><mtd><mo>≤</mo></mtd><mtd><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup></mstyle><mrow><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">[</mo><mrow><mrow><mi>n</mi><mo>!</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mi>T</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mn>3</mn></mrow></msup><mo lspace=\"0.167em\" rspace=\"0em\">​</mo><mrow><mi>max</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>T</mi><mrow><mo>−</mo><mi>n</mi></mrow></msup><mo>,</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo stretchy=\"false\">]</mo></mrow><mfrac><mn>1</mn><mn>4</mn></mfrac></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>s</mi></mrow></mrow></mrow></mrow></mtd></mtr><mtr><mtd><mo>≤</mo></mtd><mtd><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mn>0</mn><mrow><mo fence=\"true\" rspace=\"0em\">OPEN</mo><mrow><mrow><mi>max</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mfrac><mn>1</mn><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub></mrow></mfrac><mo>−</mo><mi>t</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>,</mo><mn>0</mn></mrow><mo stretchy=\"false\">)</mo></mrow></msubsup></mstyle><mrow><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>T</mi><mrow><mo>−</mo><mfrac><mi>n</mi><mn>4</mn></mfrac></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>s</mi></mrow></mrow></mrow><mo>+</mo><mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mrow><mo fence=\"true\" rspace=\"0em\">OPEN</mo><mrow><mrow><mi>max</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mfrac><mn>1</mn><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub></mrow></mfrac><mo>−</mo><mi>t</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>,</mo><mn>0</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup></mstyle><mrow><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mi>T</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mfrac><mn>3</mn><mn>4</mn></mfrac></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>s</mi></mrow></mrow></mrow></mrow><mo>)</mo></mrow></mrow></mtd></mtr><mtr><mtd><mo>=</mo></mtd><mtd><mrow><mi>C</mi><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow></msup><mrow><mo>(</mo><msub><mn>1</mn><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo>,</mo><mfrac><mn>1</mn><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub></mrow></mfrac><mo stretchy=\"false\">)</mo></mrow></msub><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup></mstyle><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow></mrow></msup><msup><mi>T</mi><mrow><mo>−</mo><mfrac><mi>n</mi><mn>4</mn></mfrac></mrow></msup><mi>d</mi><mi>s</mi><mo>+</mo><msub><mn>1</mn><mrow><mo stretchy=\"false\">[</mo><mfrac><mn>1</mn><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub></mrow></mfrac><mo rspace=\"0em\">,</mo><mo lspace=\"0em\">+</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></msub><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo stretchy=\"false\">)</mo></mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup></mstyle><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow></mrow></msup><msup><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo>+</mo><mi>T</mi><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mfrac><mn>3</mn><mn>4</mn></mfrac></mrow></msup><mi>d</mi><mi>s</mi><mo>)</mo></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For the first integral, we treat the case "
+    },
+    {
+     "text": "α<n4",
+     "latex": "\\alpha<\\frac{n}{4}",
+     "mathml": "<math display=\"inline\"><mrow><mi>α</mi><mo>&lt;</mo><mfrac><mi>n</mi><mn>4</mn></mfrac></mrow></math>"
+    },
+    {
+     "text": "; the other cases are similar or easier. Applying the substitution "
+    },
+    {
+     "text": "s=tu",
+     "latex": "s=tu",
+     "mathml": "<math display=\"inline\"><mrow><mi>s</mi><mo>=</mo><mrow><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>u</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " gives us"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\int_{0}^{+\\infty}s^{\\alpha-1}e^{-bK_{1}s}T^{-\\frac{n}{4}}ds\\leq Ct^{\\alpha-\\frac{n}{4}}\\int_{0}^{+\\infty}u^{\\alpha-1}(1+u)^{-\\frac{n}{4}}e^{-bK_{1}tu}du\\leq Ct^{\\alpha-\\frac{n}{4}}.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup></mstyle><mrow><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>T</mi><mrow><mo>−</mo><mfrac><mi>n</mi><mn>4</mn></mfrac></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>s</mi></mrow></mrow></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mi>α</mi><mo>−</mo><mfrac><mi>n</mi><mn>4</mn></mfrac></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup></mstyle><mrow><msup><mi>u</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mi>u</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mfrac><mi>n</mi><mn>4</mn></mfrac></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>u</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>u</mi></mrow></mrow></mrow></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mi>α</mi><mo>−</mo><mfrac><mi>n</mi><mn>4</mn></mfrac></mrow></msup></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For the second integral, applying "
+    },
+    {
+     "text": "(1,∞)",
+     "latex": "(1,\\infty)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo>,</mo><mi mathvariant=\"normal\">∞</mi><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": " Hölder with "
+    },
+    {
+     "text": "(1+T)−34=(1+2K1(t+s))−34≤(1+K1t)−34",
+     "latex": "(1+T)^{-\\frac{3}{4}}=(1+2K_{1}(t+s))^{-\\frac{3}{4}}\\leq(1+K_{1}t)^{-\\frac{3}{4}}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mi>T</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mfrac><mn>3</mn><mn>4</mn></mfrac></mrow></msup><mo>=</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>t</mi><mo>+</mo><mi>s</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mfrac><mn>3</mn><mn>4</mn></mfrac></mrow></msup><mo>≤</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mrow><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mfrac><mn>3</mn><mn>4</mn></mfrac></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " gives"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\int_{0}^{+\\infty}s^{\\alpha-1}e^{-bK_{1}s}(1+T)^{-\\frac{3}{4}}ds\\leq(1+K_{1}t)^{-\\frac{3}{4}}\\int_{0}^{+\\infty}s^{\\alpha-1}e^{-bK_{1}s}ds\\leq C(1+K_{1}t)^{-\\frac{3}{4}}.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup></mstyle><mrow><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mi>T</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mfrac><mn>3</mn><mn>4</mn></mfrac></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>s</mi></mrow></mrow></mrow><mo>≤</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mrow><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mfrac><mn>3</mn><mn>4</mn></mfrac></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><msubsup><mo>∫</mo><mn>0</mn><mrow><mo>+</mo><mi mathvariant=\"normal\">∞</mi></mrow></msubsup></mstyle><mrow><msup><mi>s</mi><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mrow><mi>b</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi></mrow></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>s</mi></mrow></mrow></mrow></mrow><mo>≤</mo><mrow><mi>C</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>+</mo><mrow><msub><mi>K</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mo>−</mo><mfrac><mn>3</mn><mn>4</mn></mfrac></mrow></msup></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This completes the proof."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "3 Well-posedness of the stochastic heat equation and upper bound for moments of the solution"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "On the Cartan-Hadamard manifold "
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " we consider the stochastic heat equation"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\partial_{t}u(t,x)=\\Delta u(t,x)+\\beta u(t,x)\\cdot W(t,x),\\quad u(0,x)=u_{0}(x).",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mrow><msub><mo>∂</mo><mi>t</mi></msub><mrow><mi>u</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>=</mo><mrow><mrow><mi mathvariant=\"normal\">Δ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>u</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mrow><mrow><mi>β</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>u</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo rspace=\"0.055em\" stretchy=\"false\">)</mo></mrow></mrow><mo rspace=\"0.222em\">⋅</mo><mrow><mi>W</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></mrow><mo rspace=\"1.167em\">,</mo><mrow><mrow><mi>u</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(17)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "β>0",
+     "latex": "\\beta>0",
+     "mathml": "<math display=\"inline\"><mrow><mi>β</mi><mo>&gt;</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": " is a parameter and "
+    },
+    {
+     "text": "W",
+     "latex": "W",
+     "mathml": "<math display=\"inline\"><mi>W</mi></math>"
+    },
+    {
+     "text": " is the fractional noise considered in the previous section. We consider solutions in the mild sense of Itô-Walsh, that is, one rewrites our equation of interest as"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "u(t,x)=J_{0}(t,x)+\\beta I(t,x),",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>u</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mrow><msub><mi>J</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mrow><mi>β</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>I</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow><mo>,</mo></mrow></math>",
+   "label": "(18)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "J0(t,x)=Ptu0(x)=∫MPt(x,y)u(0,y)𝑑y",
+     "latex": "J_{0}(t,x)=P_{t}u_{0}(x)=\\int_{M}P_{t}(x,y)u(0,y)dy",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>J</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo rspace=\"0.111em\">=</mo><mrow><msub><mo>∫</mo><mi>M</mi></msub><mrow><msub><mi>P</mi><mi>t</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>u</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mn>0</mn><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo rspace=\"0em\">𝑑</mo><mi>y</mi></mrow></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " is the solution to the homogeneous heat equation and "
+    },
+    {
+     "text": "I(t,x)",
+     "latex": "I(t,x)",
+     "mathml": "<math display=\"inline\"><mrow><mi>I</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is the Itô-Walsh the stochastic integral (see [Wal86] for a rigorous definition of this integral) given by"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "I(t,x)=\\int_{0}^{t}\\int_{M}P_{t-s}(x,y)u(s,y)W(ds,dy).",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>I</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo rspace=\"0.111em\">=</mo><mrow><msubsup><mo rspace=\"0em\">∫</mo><mn>0</mn><mi>t</mi></msubsup><mrow><msub><mo>∫</mo><mi>M</mi></msub><mrow><msub><mi>P</mi><mrow><mi>t</mi><mo>−</mo><mi>s</mi></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>u</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>s</mi><mo>,</mo><mi>y</mi><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>W</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mo lspace=\"0em\" rspace=\"0em\">𝑑</mo><mi>s</mi></mrow><mo>,</mo><mrow><mo lspace=\"0em\" rspace=\"0em\">𝑑</mo><mi>y</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(19)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A solution to (18) is then defined as below."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "3.1 Definition of Solution and Chaos Expansion"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Definition 9. ",
+     "bold": true
+    },
+    {
+     "text": "A process ",
+     "italic": true
+    },
+    {
+     "text": "u={u(t,x);(t,x)∈ℝ+×M}",
+     "latex": "u=\\{u(t,x);(t,x)\\in\\mathbb{R}_{+}\\times M\\}",
+     "mathml": "<math display=\"inline\"><mrow><mi>u</mi><mo>=</mo><mrow><mo stretchy=\"false\">{</mo><mrow><mrow><mi>u</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>;</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><mrow><msub><mi mathvariant=\"normal\">ℝ</mi><mo>+</mo></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>M</mi></mrow></mrow></mrow><mo stretchy=\"false\">}</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is called a random field solution of (17) in the Itô-Walsh sense [Wal86] if the following conditions are met:",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "1.",
+     "spans": [
+      {
+       "text": "u",
+       "latex": "u",
+       "mathml": "<math display=\"inline\"><mi>u</mi></math>"
+      },
+      {
+       "text": " is adapted;",
+       "italic": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "2.",
+     "spans": [
+      {
+       "text": "u",
+       "latex": "u",
+       "mathml": "<math display=\"inline\"><mi>u</mi></math>"
+      },
+      {
+       "text": " is jointly measurable with respect to ",
+       "italic": true
+      },
+      {
+       "text": "ℬ(ℝ+×M)⊗𝒢",
+       "latex": "\\mathcal{B}(\\mathbb{R}_{+}\\times M)\\otimes\\mathcal{G}",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mi>ℬ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>ℝ</mi><mo>+</mo></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>M</mi></mrow><mo rspace=\"0.055em\" stretchy=\"false\">)</mo></mrow></mrow><mo rspace=\"0.222em\">⊗</mo><mi>𝒢</mi></mrow></math>"
+      },
+      {
+       "text": ";",
+       "italic": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "3.",
+     "spans": [
+      {
+       "text": "𝐄(I(t,x)2)<∞",
+       "latex": "\\mathbf{E}(I(t,x)^{2})<\\infty",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mi>𝐄</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>I</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>&lt;</mo><mi mathvariant=\"normal\">∞</mi></mrow></math>"
+      },
+      {
+       "text": " for all ",
+       "italic": true
+      },
+      {
+       "text": "(t,x)∈ℝ+×M",
+       "latex": "(t,x)\\in\\mathbb{R}_{+}\\times M",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><mrow><msub><mi>ℝ</mi><mo>+</mo></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>M</mi></mrow></mrow></math>"
+      },
+      {
+       "text": ";",
+       "italic": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "4.",
+     "spans": [
+      {
+       "text": "The function ",
+       "italic": true
+      },
+      {
+       "text": "(t,x)→I(t,x)",
+       "latex": "(t,x)\\to I(t,x)",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mo stretchy=\"false\">→</mo><mrow><mi>I</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+      },
+      {
+       "text": " is continuous in ",
+       "italic": true
+      },
+      {
+       "text": "L2(Ω)",
+       "latex": "L^{2}(\\Omega)",
+       "mathml": "<math display=\"inline\"><mrow><msup><mi>L</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">Ω</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": ";",
+       "italic": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "5.",
+     "spans": [
+      {
+       "text": "u",
+       "latex": "u",
+       "mathml": "<math display=\"inline\"><mi>u</mi></math>"
+      },
+      {
+       "text": " satisfies (18) almost surely for all ",
+       "italic": true
+      },
+      {
+       "text": "(t,x)∈ℝ+×M",
+       "latex": "(t,x)\\in\\mathbb{R}_{+}\\times M",
+       "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><mrow><msub><mi>ℝ</mi><mo>+</mo></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>M</mi></mrow></mrow></math>"
+      },
+      {
+       "text": ".",
+       "italic": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We will use chaos expansions, the setting for which is given below. Let us first denote by "
+    },
+    {
+     "text": "ℋk",
+     "latex": "\\mathcal{H}_{k}",
+     "mathml": "<math display=\"inline\"><msub><mi>ℋ</mi><mi>k</mi></msub></math>"
+    },
+    {
+     "text": " the space"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathcal{H}_{k}=\\mathrm{Span}\\left(\\left\\{H_{k}(W_{\\alpha}(\\phi));\\phi\\in\\mathcal{H},\\|\\phi\\|_{\\mathcal{H}}=1\\right\\}\\right),",
+   "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>ℋ</mi><mi>k</mi></msub><mo>=</mo><mrow><mi>Span</mi><mo>⁡</mo><mrow><mo>(</mo><mrow><mo>{</mo><mrow><mrow><msub><mi>H</mi><mi>k</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><msub><mi>W</mi><mi>α</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>ϕ</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>;</mo><mrow><mi>ϕ</mi><mo>∈</mo><mi>ℋ</mi></mrow><mo>,</mo><mrow><msub><mrow><mo stretchy=\"false\">‖</mo><mi>ϕ</mi><mo stretchy=\"false\">‖</mo></mrow><mi>ℋ</mi></msub><mo>=</mo><mn>1</mn></mrow></mrow><mo>}</mo></mrow><mo>)</mo></mrow></mrow></mrow><mo>,</mo></mrow></math>",
+   "label": "(20)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "Wα",
+     "latex": "W_{\\alpha}",
+     "mathml": "<math display=\"inline\"><msub><mi>W</mi><mi>α</mi></msub></math>"
+    },
+    {
+     "text": " is the noise from Definition 7, Span means closure of the linear span in "
+    },
+    {
+     "text": "L2(Ω)",
+     "latex": "L^{2}(\\Omega)",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>L</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi mathvariant=\"normal\">Ω</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "Hk",
+     "latex": "H_{k}",
+     "mathml": "<math display=\"inline\"><msub><mi>H</mi><mi>k</mi></msub></math>"
+    },
+    {
+     "text": " designates the "
+    },
+    {
+     "text": "k",
+     "latex": "k",
+     "mathml": "<math display=\"inline\"><mi>k</mi></math>"
+    },
+    {
+     "text": "-th Hermite polynomial, and "
+    },
+    {
+     "text": "ℋ=ℋα",
+     "latex": "\\mathcal{H}=\\mathcal{H}_{\\alpha}",
+     "mathml": "<math display=\"inline\"><mrow><mi>ℋ</mi><mo>=</mo><msub><mi>ℋ</mi><mi>α</mi></msub></mrow></math>"
+    },
+    {
+     "text": " is the Hilbert space from (14). The space"
+    }
+   ]
+  }
+ ],
+ "furniture": [
+  "arXiv:2411.09614v2 [math.PR] 9 Jun 2025",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8"
+ ],
+ "license": "open",
+ "provenance": "latexml",
+ "notes": "arXiv 2411.09614v2 (probability; article, one column, printed contents), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Macros expanded: \\absolutevalue \\derivative \\evaluated \\norm \\partialderivative."
+}

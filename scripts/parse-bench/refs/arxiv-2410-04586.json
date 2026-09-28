@@ -1,0 +1,2669 @@
+{
+ "id": "arxiv-2410-04586",
+ "category": "math-tex",
+ "source": {
+  "pdf": ".bench/arxiv/2410.04586v2.pdf",
+  "url": "https://arxiv.org/abs/2410.04586v2"
+ },
+ "pages": [
+  1,
+  8
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "RATIONAL NORMAL CURVES IN WEIGHTED PROJECTIVE SPACE"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "CAITLIN M. DAVIS AND ALEKSANDRA SOBIESKA"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "",
+   "spans": [
+    {
+     "text": "2020 Mathematics Subject Classification. 13D02."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "ABSTRACT. This article aims to extend classical homological results about the rational normal curves to analogues in weighted projective spaces. Results include determinantality and nonstandard versions of quadratic generation and the Koszul property."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "1. Introduction",
+     "smallCaps": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This article aims to extend classical homological results about the rational normal curves to their weighted analogues. The rational normal curves provide a rich source of examples of many homological properties. In particular, the defining ideals of these curves are determinantal ([Eis05, Proposition 6.1]) with a quadratic Gröbner basis ([Stu, ERT94], [CDNR13, Theorem 3.1.1]), and their coordinate rings are Cohen-Macaulay and Koszul. We consider certain analogues of the rational normal curves in weighted projective spaces, and we show that (weighted variants of) all of these properties hold for these curves."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "There has been great interest in recent years in extending homological properties to the nonstandard graded and multigraded settings, where we use nonstandard graded to refer to rings with a nonstandard "
+    },
+    {
+     "text": "ℤ",
+     "latex": "\\mathbb{Z}",
+     "mathml": "<math display=\"inline\"><mi>ℤ</mi></math>"
+    },
+    {
+     "text": "-grading. Since the generalization by Maclagan-Smith of Castelnuovo-Mumford regularity to multigraded polynomial rings ([MS04]), there have been many results on multigraded regularity: [BC17, BHS21, BHS22, CH22, CN20, SVTW06]. There has also been much work on multigraded syzygies: [BE23, BE24a, BE24b, BES20, BKLY21, BS24, BCN22, Cob24, EES15, HNVT22, HS04, HSS06, SVT06, Yan21]. In particular, the generalization of the rational normal curve studied in this article comes from Brown and Erman in [BE23]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Despite this interest in the multigraded setting, few geometric examples have been examined thoroughly. Existing work concerning geometric examples focuses primarily on sets of points: [HNVT22, SVT06]. Part of what makes the rational normal curves so important in the literature is that they can be understood from so many different perspectives. They provide an important class of examples for understanding geometric, algebraic, and homological topics, and they are useful for testing out new definitions and conjectures. Our aim is to develop an analogous class of examples that could play a similar role for the nonstandard graded setting as that theory continues to expand. With this in mind, we will not focus on the most general possible class of analogues, but rather work to build a family that can be as fully understood as the classical rational normal curves. To be specific: the Brown-Erman construction embeds a smooth curve based on additional data "
+    },
+    {
+     "text": "(L,D,e)",
+     "latex": "(L,D,e)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mi>L</mi><mo>,</mo><mi>D</mi><mo>,</mo><mi>e</mi><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": " where "
+    },
+    {
+     "text": "L",
+     "latex": "L",
+     "mathml": "<math display=\"inline\"><mi>L</mi></math>"
+    },
+    {
+     "text": " is a line bundle, "
+    },
+    {
+     "text": "D",
+     "latex": "D",
+     "mathml": "<math display=\"inline\"><mi>D</mi></math>"
+    },
+    {
+     "text": " is a base locus divisor, and "
+    },
+    {
+     "text": "e",
+     "latex": "e",
+     "mathml": "<math display=\"inline\"><mi>e</mi></math>"
+    },
+    {
+     "text": " is a positive integer. In this article, we study closely the two-parameter family of rational curves where "
+    },
+    {
+     "text": "L=𝒪(d)",
+     "latex": "L={\\mathcal{O}}(d)",
+     "mathml": "<math display=\"inline\"><mrow><mi>L</mi><mo>=</mo><mrow><mi>𝒪</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>d</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " varies over all line bundles and "
+    },
+    {
+     "text": "e",
+     "latex": "e",
+     "mathml": "<math display=\"inline\"><mi>e</mi></math>"
+    },
+    {
+     "text": " varies over all positive integers, but where "
+    },
+    {
+     "text": "D",
+     "latex": "D",
+     "mathml": "<math display=\"inline\"><mi>D</mi></math>"
+    },
+    {
+     "text": " is always simply the point at infinity. The following example illustrates some of the properties which these curves share with the usual rational normal curves."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Example 1.1. ",
+     "bold": true
+    },
+    {
+     "text": "When "
+    },
+    {
+     "text": "d=3",
+     "latex": "d=3",
+     "mathml": "<math display=\"inline\"><mrow><mi>d</mi><mo>=</mo><mn>3</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "e=2",
+     "latex": "e=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>e</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ", the weighted rational curve (see Definition 2.1) is obtained by the map "
+    },
+    {
+     "text": "ψ:ℙ1↪ℙ(1,1,1,2,2)",
+     "latex": "\\psi:\\mathbb{P}^{1}\\hookrightarrow\\mathbb{P}(1,1,1,2,2)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ψ</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℙ</mi><mn>1</mn></msup><mo stretchy=\"false\">↪</mo><mrow><mi>ℙ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>2</mn><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " given by "
+    },
+    {
+     "text": "[s:t]↦[s3:s2t:st2:st5:t6]",
+     "latex": "[s:t]\\mapsto[s^{3}:s^{2}t:st^{2}:st^{5}:t^{6}]",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">[</mo><mi>s</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mi>t</mi><mo stretchy=\"false\">]</mo></mrow><mo stretchy=\"false\">↦</mo><mrow><mo stretchy=\"false\">[</mo><msup><mi>s</mi><mn>3</mn></msup><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><msup><mi>s</mi><mn>2</mn></msup><mi>t</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mi>s</mi><msup><mi>t</mi><mn>2</mn></msup><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mi>s</mi><msup><mi>t</mi><mn>5</mn></msup><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><msup><mi>t</mi><mn>6</mn></msup><mo stretchy=\"false\">]</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". Note that the coordinate ring "
+    },
+    {
+     "text": "R≅𝕜[s3,s2t,st2,st5,t6]",
+     "latex": "R\\cong\\mathbb{k}[s^{3},s^{2}t,st^{2},st^{5},t^{6}]",
+     "mathml": "<math display=\"inline\"><mrow><mi>R</mi><mo>≅</mo><mrow><mi>𝕜</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">[</mo><mrow><msup><mi>s</mi><mn>3</mn></msup><mo>,</mo><mrow><msup><mi>s</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mo>,</mo><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>2</mn></msup></mrow><mo>,</mo><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>5</mn></msup></mrow><mo>,</mo><msup><mi>t</mi><mn>6</mn></msup></mrow><mo stretchy=\"false\">]</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " is not normal; for example, "
+    },
+    {
+     "text": "st5st2=t3",
+     "latex": "\\frac{st^{5}}{st^{2}}=t^{3}",
+     "mathml": "<math display=\"inline\"><mrow><mfrac><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>5</mn></msup></mrow><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>2</mn></msup></mrow></mfrac><mo>=</mo><msup><mi>t</mi><mn>3</mn></msup></mrow></math>"
+    },
+    {
+     "text": " is integral, but is not in "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "However, this curve shares many other properties with the usual rational normal curve. For instance: "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is Cohen-Macaulay; the defining ideal "
+    },
+    {
+     "text": "I",
+     "latex": "I",
+     "mathml": "<math display=\"inline\"><mi>I</mi></math>"
+    },
+    {
+     "text": " is generated by the "
+    },
+    {
+     "text": "2×2",
+     "latex": "2\\times 2",
+     "mathml": "<math display=\"inline\"><mrow><mn>2</mn><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": " minors of"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{bmatrix}x_{0}&x_{1}&x_{2}^{2}&y_{0}\\\\\nx_{1}&x_{2}&y_{0}&y_{1}\\end{bmatrix};",
+   "mathml": "<math display=\"block\"><mrow><mrow><mo>[</mo><mtable columnspacing=\"5pt\" displaystyle=\"true\" rowspacing=\"0pt\"><mtr><mtd><msub><mi>x</mi><mn>0</mn></msub></mtd><mtd><msub><mi>x</mi><mn>1</mn></msub></mtd><mtd><msubsup><mi>x</mi><mn>2</mn><mn>2</mn></msubsup></mtd><mtd><msub><mi>y</mi><mn>0</mn></msub></mtd></mtr><mtr><mtd><msub><mi>x</mi><mn>1</mn></msub></mtd><mtd><msub><mi>x</mi><mn>2</mn></msub></mtd><mtd><msub><mi>y</mi><mn>0</mn></msub></mtd><mtd><msub><mi>y</mi><mn>1</mn></msub></mtd></mtr></mtable><mo>]</mo></mrow><mo>;</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "these generators are a Gröbner basis for "
+    },
+    {
+     "text": "I",
+     "latex": "I",
+     "mathml": "<math display=\"inline\"><mi>I</mi></math>"
+    },
+    {
+     "text": " with respect to some monomial order (see Section 4); and "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is resolved by an Eagon-Northcott complex."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In fact, the observations made in the example above hold for all weighted rational curves."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem A. ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "R=S/I",
+     "latex": "R=S/I",
+     "mathml": "<math display=\"inline\"><mrow><mi>R</mi><mo>=</mo><mrow><mi>S</mi><mo>/</mo><mi>I</mi></mrow></mrow></math>"
+    },
+    {
+     "text": " be the coordinate ring of the weighted rational curve of type ",
+     "italic": true
+    },
+    {
+     "text": "d,e",
+     "latex": "d,e",
+     "mathml": "<math display=\"inline\"><mrow><mi>d</mi><mo>,</mo><mi>e</mi></mrow></math>"
+    },
+    {
+     "text": ". Then we have the following:",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "(1)",
+     "spans": [
+      {
+       "text": "R",
+       "latex": "R",
+       "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+      },
+      {
+       "text": " is Cohen-Macaulay (Proposition 2.4)",
+       "italic": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "(2)",
+     "spans": [
+      {
+       "text": "I",
+       "latex": "I",
+       "mathml": "<math display=\"inline\"><mi>I</mi></math>"
+      },
+      {
+       "text": " is determinantal in the following sense: ",
+       "italic": true
+      },
+      {
+       "text": "I",
+       "latex": "I",
+       "mathml": "<math display=\"inline\"><mi>I</mi></math>"
+      },
+      {
+       "text": " is generated by the ",
+       "italic": true
+      },
+      {
+       "text": "2×2",
+       "latex": "2\\times 2",
+       "mathml": "<math display=\"inline\"><mrow><mn>2</mn><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mn>2</mn></mrow></math>"
+      },
+      {
+       "text": " minors of a ",
+       "italic": true
+      },
+      {
+       "text": "2×(d+e)",
+       "latex": "2\\times(d+e)",
+       "mathml": "<math display=\"inline\"><mrow><mn>2</mn><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+      },
+      {
+       "text": " matrix, almost all of whose entries are linear (See Theorem 3.1 for a more precise version.),",
+       "italic": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "(3)",
+     "spans": [
+      {
+       "text": "R",
+       "latex": "R",
+       "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+      },
+      {
+       "text": " is resolved by the Eagon-Northcott complex (Corollary 3.4), and",
+       "italic": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "(4)",
+     "spans": [
+      {
+       "text": "I",
+       "latex": "I",
+       "mathml": "<math display=\"inline\"><mi>I</mi></math>"
+      },
+      {
+       "text": " has an initial ideal of quadratic monomials (Theorem 4.1).",
+       "italic": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Note that (2) and (4) are the key points. Statement (3) follows from (2) and the observation that "
+    },
+    {
+     "text": "I",
+     "latex": "I",
+     "mathml": "<math display=\"inline\"><mi>I</mi></math>"
+    },
+    {
+     "text": " has the expected codimension for an ideal of minors. Statement (1) was first proven in [BE23] for curves of arbitrary genus, but our methods provide an alternate proof in genus 0 which more closely parallels the algebraic proofs for rational normal curves. Ongoing work of Banks–Ramkumar adds to these parallels by showing that these weighted rational curves are of minimal degree, just as in the classical setting (cf. [Eis07, p. 341])."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem A shows how weighted rational curves broadly behave as rational normal curves do, yet it conceals the fact that the internal details are quite different."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Example 1.2. ",
+     "bold": true
+    },
+    {
+     "text": "Consider the weighted rational curve with "
+    },
+    {
+     "text": "d=6",
+     "latex": "d=6",
+     "mathml": "<math display=\"inline\"><mrow><mi>d</mi><mo>=</mo><mn>6</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "e=2",
+     "latex": "e=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>e</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": " in light of Theorem A. This curve is given by "
+    },
+    {
+     "text": "ψ:ℙ1↪ℙ(1,1,1,1,1,1,2,2)",
+     "latex": "\\psi:\\mathbb{P}^{1}\\hookrightarrow\\mathbb{P}(1,1,1,1,1,1,2,2)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ψ</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℙ</mi><mn>1</mn></msup><mo stretchy=\"false\">↪</mo><mrow><mi>ℙ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>2</mn><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " where"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "[s:t]\\mapsto[s^{6}:s^{5}t:\\cdots:st^{5}:st^{11}:t^{12}].",
+   "mathml": "<math display=\"block\"><mrow><mrow><mo stretchy=\"false\">[</mo><mi>s</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mi>t</mi><mo stretchy=\"false\">]</mo></mrow><mo stretchy=\"false\">↦</mo><mrow><mo stretchy=\"false\">[</mo><msup><mi>s</mi><mn>6</mn></msup><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><msup><mi>s</mi><mn>5</mn></msup><mi>t</mi><mo lspace=\"0.278em\">:</mo><mo lspace=\"0.111em\">⋯</mo><mo rspace=\"0.278em\">:</mo><mi>s</mi><msup><mi>t</mi><mn>5</mn></msup><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mi>s</mi><msup><mi>t</mi><mn>11</mn></msup><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><msup><mi>t</mi><mn>12</mn></msup><mo stretchy=\"false\">]</mo></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem A(3) allows us to determine the Betti table of "
+    },
+    {
+     "text": "S/I",
+     "latex": "S/I",
+     "mathml": "<math display=\"inline\"><mrow><mi>S</mi><mo>/</mo><mi>I</mi></mrow></math>"
+    },
+    {
+     "text": " over "
+    },
+    {
+     "text": "S",
+     "latex": "S",
+     "mathml": "<math display=\"inline\"><mi>S</mi></math>"
+    },
+    {
+     "text": ":"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{matrix}&0&1&2&3&4&5&6\\\\\n0:&1&.&.&.&.&.&.\\\\\n1:&.&10&20&15&4&.&.\\\\\n2:&.&10&40&60&40&10&.\\\\\n3:&.&1&10&30&40&25&6\\end{matrix}",
+   "mathml": "<math display=\"block\"><mtable columnspacing=\"5pt\" displaystyle=\"true\" rowspacing=\"0pt\"><mtr><mtd></mtd><mtd><mn>0</mn></mtd><mtd><mn>1</mn></mtd><mtd><mn>2</mn></mtd><mtd><mn>3</mn></mtd><mtd><mn>4</mn></mtd><mtd><mn>5</mn></mtd><mtd><mn>6</mn></mtd></mtr><mtr><mtd><mrow><mn>0</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mn>1</mn></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd></mtr><mtr><mtd><mrow><mn>1</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mo>.</mo></mtd><mtd><mn>10</mn></mtd><mtd><mn>20</mn></mtd><mtd><mn>15</mn></mtd><mtd><mn>4</mn></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd></mtr><mtr><mtd><mrow><mn>2</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mo>.</mo></mtd><mtd><mn>10</mn></mtd><mtd><mn>40</mn></mtd><mtd><mn>60</mn></mtd><mtd><mn>40</mn></mtd><mtd><mn>10</mn></mtd><mtd><mo>.</mo></mtd></mtr><mtr><mtd><mrow><mn>3</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mo>.</mo></mtd><mtd><mn>1</mn></mtd><mtd><mn>10</mn></mtd><mtd><mn>30</mn></mtd><mtd><mn>40</mn></mtd><mtd><mn>25</mn></mtd><mtd><mn>6</mn></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In the above we follow the formatting used in "
+    },
+    {
+     "text": "Macaulay2",
+     "code": true
+    },
+    {
+     "text": ", so the entry in column "
+    },
+    {
+     "text": "i",
+     "latex": "i",
+     "mathml": "<math display=\"inline\"><mi>i</mi></math>"
+    },
+    {
+     "text": " and row "
+    },
+    {
+     "text": "j",
+     "latex": "j",
+     "mathml": "<math display=\"inline\"><mi>j</mi></math>"
+    },
+    {
+     "text": " is "
+    },
+    {
+     "text": "βi,i+j(R)",
+     "latex": "\\beta_{i,i+j}(R)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>β</mi><mrow><mi>i</mi><mo>,</mo><mrow><mi>i</mi><mo>+</mo><mi>j</mi></mrow></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>R</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " and a dot indicates an entry is zero. This Betti table exhibits “cancellation” not found in those of the usual rational normal curves. That is, syzygies of the same degree show up in multiple homological degrees. Said another way, one could not predict this Betti table entirely from the Hilbert function, which is a contrast with what happens for rational normal curves."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Another important property of the usual rational normal curve is Koszulness. The Koszul property, normally defined as "
+    },
+    {
+     "text": "regR(𝕜)=0",
+     "latex": "\\operatorname{reg}_{R}(\\mathbb{k})=0",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mi>reg</mi><mi>R</mi></msub><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝕜</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", does not hold for any nonstandard graded ring, and so does not hold for the coordinate ring "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " of a weighted rational curve. In fact, the differentials in the resolution of "
+    },
+    {
+     "text": "k",
+     "latex": "k",
+     "mathml": "<math display=\"inline\"><mi>k</mi></math>"
+    },
+    {
+     "text": " over "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " contain entries which are not linear combinations of the variables. In this sense, "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is even further from being classically Koszul than, say, a nonstandard graded polynomial ring. However, a closer examination of the resolution of "
+    },
+    {
+     "text": "𝕜",
+     "latex": "\\mathbb{k}",
+     "mathml": "<math display=\"inline\"><mi>𝕜</mi></math>"
+    },
+    {
+     "text": " over "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " reveals that "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is “not too far” from Koszul, and thus might have an analogous property."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Example 1.3. ",
+     "bold": true
+    },
+    {
+     "text": "When "
+    },
+    {
+     "text": "d=1",
+     "latex": "d=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>d</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "e=2",
+     "latex": "e=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>e</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ", the weighted rational curve is obtained by the map "
+    },
+    {
+     "text": "ψ:ℙ1↪ℙ(1,2,2)",
+     "latex": "\\psi:\\mathbb{P}^{1}\\hookrightarrow\\mathbb{P}(1,2,2)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ψ</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℙ</mi><mn>1</mn></msup><mo stretchy=\"false\">↪</mo><mrow><mi>ℙ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>2</mn><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " given by "
+    },
+    {
+     "text": "[s:t]↦[s:st:t2]",
+     "latex": "[s:t]\\mapsto[s:st:t^{2}]",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mo stretchy=\"false\">[</mo><mi>s</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mi>t</mi><mo stretchy=\"false\">]</mo></mrow><mo stretchy=\"false\">↦</mo><mrow><mo stretchy=\"false\">[</mo><mi>s</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mi>s</mi><mi>t</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><msup><mi>t</mi><mn>2</mn></msup><mo stretchy=\"false\">]</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". The first few columns of the Betti table of "
+    },
+    {
+     "text": "k",
+     "latex": "k",
+     "mathml": "<math display=\"inline\"><mi>k</mi></math>"
+    },
+    {
+     "text": " over the coordinate ring "
+    },
+    {
+     "text": "R=𝕜[s,st,t2]=𝕜[x0,y0,y1]/⟨y02−x02y1⟩",
+     "latex": "R=\\mathbb{k}[s,st,t^{2}]=\\mathbb{k}[x_{0},y_{0},y_{1}]/{\\langle y_{0}^{2}-x_{0}^{2}y_{1}\\rangle}",
+     "mathml": "<math display=\"inline\"><mrow><mi>R</mi><mo>=</mo><mrow><mi>𝕜</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">[</mo><mrow><mi>s</mi><mo>,</mo><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mo>,</mo><msup><mi>t</mi><mn>2</mn></msup></mrow><mo stretchy=\"false\">]</mo></mrow></mrow><mo>=</mo><mrow><mrow><mi>𝕜</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">[</mo><mrow><msub><mi>x</mi><mn>0</mn></msub><mo>,</mo><msub><mi>y</mi><mn>0</mn></msub><mo>,</mo><msub><mi>y</mi><mn>1</mn></msub></mrow><mo stretchy=\"false\">]</mo></mrow></mrow><mo>/</mo><mrow><mo stretchy=\"false\">⟨</mo><mrow><msubsup><mi>y</mi><mn>0</mn><mn>2</mn></msubsup><mo>−</mo><mrow><msubsup><mi>x</mi><mn>0</mn><mn>2</mn></msubsup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>y</mi><mn>1</mn></msub></mrow></mrow><mo stretchy=\"false\">⟩</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " are:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{matrix}&0&1&2&3&4\\\\\n0:&\\mathbf{1}&1&.&.&.\\\\\n1:&.&\\mathbf{2}&2&.&.\\\\\n2:&.&.&\\mathbf{2}&2&.\\\\\n3:&.&.&.&\\mathbf{2}&2\\\\\n4:&.&.&.&.&\\mathbf{2}\\end{matrix}",
+   "mathml": "<math display=\"block\"><mtable columnspacing=\"5pt\" displaystyle=\"true\" rowspacing=\"0pt\"><mtr><mtd></mtd><mtd><mn>0</mn></mtd><mtd><mn>1</mn></mtd><mtd><mn>2</mn></mtd><mtd><mn>3</mn></mtd><mtd><mn>4</mn></mtd></mtr><mtr><mtd><mrow><mn>0</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mn>𝟏</mn></mtd><mtd><mn>1</mn></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd></mtr><mtr><mtd><mrow><mn>1</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mo>.</mo></mtd><mtd><mn>𝟐</mn></mtd><mtd><mn>2</mn></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd></mtr><mtr><mtd><mrow><mn>2</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd><mtd><mn>𝟐</mn></mtd><mtd><mn>2</mn></mtd><mtd><mo>.</mo></mtd></mtr><mtr><mtd><mrow><mn>3</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd><mtd><mn>𝟐</mn></mtd><mtd><mn>2</mn></mtd></mtr><mtr><mtd><mrow><mn>4</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd><mtd><mn>𝟐</mn></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In Corollary 5.12, we describe some of the Betti numbers of "
+    },
+    {
+     "text": "𝕜",
+     "latex": "\\mathbb{k}",
+     "mathml": "<math display=\"inline\"><mi>𝕜</mi></math>"
+    },
+    {
+     "text": " over "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": ". In particular, we describe the linear strand and the “maximally twisted” strand (in bold in above example). We can see immediately that "
+    },
+    {
+     "text": "regR(𝕜)",
+     "latex": "\\operatorname{reg}_{R}(\\mathbb{k})",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>reg</mi><mi>R</mi></msub><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>𝕜</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is nonzero, so "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is not Koszul. Nonetheless, the resolution of "
+    },
+    {
+     "text": "𝕜",
+     "latex": "\\mathbb{k}",
+     "mathml": "<math display=\"inline\"><mi>𝕜</mi></math>"
+    },
+    {
+     "text": " over "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is in some sense “not too far” from linear:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "R\\xleftarrow{\\begin{bmatrix}x&y_{0}&y_{1}\\end{bmatrix}}R(-1)\\oplus R(-3)^{2}\\xleftarrow{\\begin{bmatrix}0&0&-y_{0}&-y_{1}\\\\\n-y_{0}&-y_{1}&x&0\\\\\nx^{2}&y_{0}&0&x\\end{bmatrix}}R(-3)^{2}\\oplus R(-4)^{2}\\leftarrow\\cdots",
+   "mathml": "<math display=\"block\"><mrow><mi>R</mi><mover accent=\"true\"><mo>←</mo><mrow><mo>[</mo><mtable columnspacing=\"5pt\" displaystyle=\"true\"><mtr><mtd><mi>x</mi></mtd><mtd><msub><mi>y</mi><mn>0</mn></msub></mtd><mtd><msub><mi>y</mi><mn>1</mn></msub></mtd></mtr></mtable><mo>]</mo></mrow></mover><mrow><mrow><mi>R</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>⊕</mo><mrow><mi>R</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mn>3</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></mrow></mrow><mover accent=\"true\"><mo>←</mo><mrow><mo>[</mo><mtable columnspacing=\"5pt\" displaystyle=\"true\" rowspacing=\"0pt\"><mtr><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mrow><mo>−</mo><msub><mi>y</mi><mn>0</mn></msub></mrow></mtd><mtd><mrow><mo>−</mo><msub><mi>y</mi><mn>1</mn></msub></mrow></mtd></mtr><mtr><mtd><mrow><mo>−</mo><msub><mi>y</mi><mn>0</mn></msub></mrow></mtd><mtd><mrow><mo>−</mo><msub><mi>y</mi><mn>1</mn></msub></mrow></mtd><mtd><mi>x</mi></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><msup><mi>x</mi><mn>2</mn></msup></mtd><mtd><msub><mi>y</mi><mn>0</mn></msub></mtd><mtd><mn>0</mn></mtd><mtd><mi>x</mi></mtd></mtr></mtable><mo>]</mo></mrow></mover><mrow><mrow><mi>R</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mn>3</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></mrow><mo>⊕</mo><mrow><mi>R</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mn>4</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></mrow></mrow><mo rspace=\"0.1389em\" stretchy=\"false\">←</mo><mo lspace=\"0.1389em\">⋯</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In Section 5, we show that "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " satisfies a generalized Koszul property, introduced by Herzog, Reiner, and Welker in [HRW98, Definition 5.1]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem B. ",
+     "bold": true
+    },
+    {
+     "text": "The coordinate ring ",
+     "italic": true
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " of a weighted rational curve is generalized Koszul, in the sense of [HRW98]. That is, ",
+     "italic": true
+    },
+    {
+     "text": "gr𝔪(R)",
+     "latex": "{\\operatorname{gr_{\\mathfrak{m}}}(R)}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>gr</mi><mi>𝔪</mi></msub><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>R</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " is Koszul in the usual sense (Theorem 5.1).",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem B and Theorem A(4) yield a positive answer to Question 7.9 in [BE23] in the case of weighted rational curves."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Taken together, Theorems A and B echo the following theme, which is often seen in the nonstandard graded and multigraded settings."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Philosophy 1.4. ",
+     "italic": true
+    },
+    {
+     "text": "In the study of nonstandard graded and multigraded syzygies, many classical results have multigraded analogues. However, finding these analogues can often require subtle deformations of the classical statements, techniques, or definitions. Key examples of this phenomenon can be found in [BES20], [MS04], and [BE24b]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "More specifically, we see how things change: in Theorem A(2), the linear matrix is replaced by one which is “almost” linear; in Theorem A(4), the Gröbner basis is no longer quadratic in the usual sense, but the initial terms remain quadratic; in Theorem B, classical Koszulness of "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is replaced by Koszulness of the associated graded ring. Since we will allow the case of weighted rational curves of type "
+    },
+    {
+     "text": "d,1",
+     "latex": "d,1",
+     "mathml": "<math display=\"inline\"><mrow><mi>d</mi><mo>,</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " (that is, usual rational normal curves), it is also worth noting both that these changes are meaningful only when "
+    },
+    {
+     "text": "e≠1",
+     "latex": "e\\neq 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>e</mi><mo>≠</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and that the proofs included here do apply to the usual rational normal curves."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This paper is organized as follows: In §2, we define the main object of study, the weighted rational curves. In §3, we prove that the defining ideal of each of these curves is determinantal. In §4, we establish that the generators of these ideals are in fact Gröbner bases with respect to a certain monomial order. In §5, we consider a nonstandard version of the Koszul property and show that it holds for the weighted rational curves."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Acknowledgments ",
+     "bold": true
+    },
+    {
+     "text": "The authors would like to thank Daniel Erman and Maya Banks for their helpful conversation and valuable insights. Most, if not all, computations were performed with the aid of Macaulay2 [GS]."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "2. Background",
+     "smallCaps": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "As a way to understand nice embeddings into weighted projective space, Brown and Erman [BE23] describe weighted analogues of linear series and of complete linear series. Their analogue of a complete linear series is a “log complete series” and it depends on three pieces of data: a line bundle "
+    },
+    {
+     "text": "L",
+     "latex": "L",
+     "mathml": "<math display=\"inline\"><mi>L</mi></math>"
+    },
+    {
+     "text": ", an effective divisor "
+    },
+    {
+     "text": "D",
+     "latex": "D",
+     "mathml": "<math display=\"inline\"><mi>D</mi></math>"
+    },
+    {
+     "text": ", and a positive integer "
+    },
+    {
+     "text": "e",
+     "latex": "e",
+     "mathml": "<math display=\"inline\"><mi>e</mi></math>"
+    },
+    {
+     "text": ". We refer the reader to Section 3 of their paper for details. As stated in the introduction, we will focus our attention on one specific case of their main definition in order to develop a deep understanding of a concrete class of examples in the nonstandard graded setting. Here we describe this special case: the case where "
+    },
+    {
+     "text": "D",
+     "latex": "D",
+     "mathml": "<math display=\"inline\"><mi>D</mi></math>"
+    },
+    {
+     "text": " is the point at infinity, which will be the only case of interest throughout this paper."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We first recall a compact notation for certain weighted projective spaces. We use exponents to indicate the number of weights of a particular degree. For example, we write "
+    },
+    {
+     "text": "ℙ(13,22)",
+     "latex": "\\mathbb{P}(1^{3},2^{2})",
+     "mathml": "<math display=\"inline\"><mrow><mi>ℙ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mn>1</mn><mn>3</mn></msup><mo>,</mo><msup><mn>2</mn><mn>2</mn></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " to denote the weighted projective space "
+    },
+    {
+     "text": "ℙ(1,1,1,2,2)",
+     "latex": "\\mathbb{P}(1,1,1,2,2)",
+     "mathml": "<math display=\"inline\"><mrow><mi>ℙ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>2</mn><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " from Example 1.1."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Definition 2.1. ",
+     "bold": true
+    },
+    {
+     "text": "Let "
+    },
+    {
+     "text": "Z=ℙ1",
+     "latex": "Z=\\mathbb{P}^{1}",
+     "mathml": "<math display=\"inline\"><mrow><mi>Z</mi><mo>=</mo><msup><mi>ℙ</mi><mn>1</mn></msup></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "D=[0:1]",
+     "latex": "D=[0:1]",
+     "mathml": "<math display=\"inline\"><mrow><mi>D</mi><mo>=</mo><mrow><mo stretchy=\"false\">[</mo><mn>0</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mn>1</mn><mo stretchy=\"false\">]</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "L=𝒪ℙ1(d)",
+     "latex": "L=\\mathcal{O}_{\\mathbb{P}^{1}}(d)",
+     "mathml": "<math display=\"inline\"><mrow><mi>L</mi><mo>=</mo><mrow><msub><mi>𝒪</mi><msup><mi>ℙ</mi><mn>1</mn></msup></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>d</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " for some "
+    },
+    {
+     "text": "d≥1",
+     "latex": "d\\geq 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>d</mi><mo>≥</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ". The corresponding log complete series for a fixed "
+    },
+    {
+     "text": "e≥1",
+     "latex": "e\\geq 1",
+     "mathml": "<math display=\"inline\"><mrow><mi>e</mi><mo>≥</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " is"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "W={\\langle s^{d},s^{d-1}t,\\ldots,st^{d-1},s^{e-1}t^{de-(e-1)},\\ldots st^{de-1},t^{de}\\rangle}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mi>W</mi><mo>=</mo><mrow><mo stretchy=\"false\">⟨</mo><mrow><msup><mi>s</mi><mi>d</mi></msup><mo>,</mo><mrow><msup><mi>s</mi><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>,</mo><mrow><msup><mi>s</mi><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>−</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></msup></mrow><mo>,</mo><mrow><mi mathvariant=\"normal\">…</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>,</mo><msup><mi>t</mi><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow></msup></mrow><mo stretchy=\"false\">⟩</mo></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This induces a closed immersion "
+    },
+    {
+     "text": "ψW:ℙ1↪ℙ(1d,ee)",
+     "latex": "\\psi_{W}\\colon\\mathbb{P}^{1}\\hookrightarrow\\mathbb{P}(1^{d},e^{e})",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ψ</mi><mi>W</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><msup><mi>ℙ</mi><mn>1</mn></msup><mo stretchy=\"false\">↪</mo><mrow><mi>ℙ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mn>1</mn><mi>d</mi></msup><mo>,</mo><msup><mi>e</mi><mi>e</mi></msup><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " given by"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\psi_{W}\\colon[s:t]\\mapsto[s^{d}:s^{d-1}t:\\ldots:st^{d-1}:s^{e-1}t^{de-(e-1)}:\\ldots:st^{de-1}:t^{de}].",
+   "mathml": "<math display=\"block\"><mrow><msub><mi>ψ</mi><mi>W</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mo stretchy=\"false\">[</mo><mi>s</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mi>t</mi><mo stretchy=\"false\">]</mo></mrow><mo stretchy=\"false\">↦</mo><mrow><mo stretchy=\"false\">[</mo><msup><mi>s</mi><mi>d</mi></msup><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><msup><mi>s</mi><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msup><mi>t</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mi mathvariant=\"normal\">…</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mi>s</mi><msup><mi>t</mi><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><msup><mi>s</mi><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow></msup><msup><mi>t</mi><mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>−</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></msup><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mi mathvariant=\"normal\">…</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mi>s</mi><msup><mi>t</mi><mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><msup><mi>t</mi><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow></msup><mo stretchy=\"false\">]</mo></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "For "
+    },
+    {
+     "text": "W",
+     "latex": "W",
+     "mathml": "<math display=\"inline\"><mi>W</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "ψW",
+     "latex": "\\psi_{W}",
+     "mathml": "<math display=\"inline\"><msub><mi>ψ</mi><mi>W</mi></msub></math>"
+    },
+    {
+     "text": " as above, we call the image "
+    },
+    {
+     "text": "ψW(ℙ1)",
+     "latex": "\\psi_{W}(\\mathbb{P}^{1})",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>ψ</mi><mi>W</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><msup><mi>ℙ</mi><mn>1</mn></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " the "
+    },
+    {
+     "text": "weighted rational curve",
+     "italic": true
+    },
+    {
+     "text": " of type "
+    },
+    {
+     "text": "(d,e)",
+     "latex": "(d,e)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mi>d</mi><mo>,</mo><mi>e</mi><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Note that in the case that "
+    },
+    {
+     "text": "e=1",
+     "latex": "e=1",
+     "mathml": "<math display=\"inline\"><mrow><mi>e</mi><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ", this recovers the usual rational normal curve of degree "
+    },
+    {
+     "text": "d",
+     "latex": "d",
+     "mathml": "<math display=\"inline\"><mi>d</mi></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Define "
+    },
+    {
+     "text": "S=𝕜[x0,…,xd−1,y0,…,ye−1]",
+     "latex": "S=\\mathbb{k}[x_{0},\\ldots,x_{d-1},y_{0},\\ldots,y_{e-1}]",
+     "mathml": "<math display=\"inline\"><mrow><mi>S</mi><mo>=</mo><mrow><mi>𝕜</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">[</mo><mrow><msub><mi>x</mi><mn>0</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>x</mi><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>,</mo><msub><mi>y</mi><mn>0</mn></msub><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><msub><mi>y</mi><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow></msub></mrow><mo stretchy=\"false\">]</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " with the weighted grading where "
+    },
+    {
+     "text": "deg(xi)=1",
+     "latex": "\\deg(x_{i})=1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>deg</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>x</mi><mi>i</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "deg(yi)=e",
+     "latex": "\\deg(y_{i})=e",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>deg</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msub><mi>y</mi><mi>i</mi></msub><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mi>e</mi></mrow></math>"
+    },
+    {
+     "text": ", so that it is the coordinate ring of "
+    },
+    {
+     "text": "ℙ(1d,ee)",
+     "latex": "\\mathbb{P}(1^{d},e^{e})",
+     "mathml": "<math display=\"inline\"><mrow><mi>ℙ</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><msup><mn>1</mn><mi>d</mi></msup><mo>,</mo><msup><mi>e</mi><mi>e</mi></msup><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". The immersion "
+    },
+    {
+     "text": "ψW",
+     "latex": "\\psi_{W}",
+     "mathml": "<math display=\"inline\"><msub><mi>ψ</mi><mi>W</mi></msub></math>"
+    },
+    {
+     "text": " induces a corresponding ring map "
+    },
+    {
+     "text": "φW:S→𝕜[s,t]",
+     "latex": "\\varphi_{W}:S\\rightarrow\\mathbb{k}[s,t]",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>φ</mi><mi>W</mi></msub><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mi>S</mi><mo stretchy=\"false\">→</mo><mrow><mi>𝕜</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">[</mo><mrow><mi>s</mi><mo>,</mo><mi>t</mi></mrow><mo stretchy=\"false\">]</mo></mrow></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " given by "
+    },
+    {
+     "text": "xi↦sd−iti",
+     "latex": "x_{i}\\mapsto s^{d-i}t^{i}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>x</mi><mi>i</mi></msub><mo stretchy=\"false\">↦</mo><mrow><msup><mi>s</mi><mrow><mi>d</mi><mo>−</mo><mi>i</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mi>i</mi></msup></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "yi↦se−1−ited−(e−1)+i",
+     "latex": "y_{i}\\mapsto s^{e-1-i}t^{ed-(e-1)+i}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>y</mi><mi>i</mi></msub><mo stretchy=\"false\">↦</mo><mrow><msup><mi>s</mi><mrow><mi>e</mi><mo>−</mo><mn>1</mn><mo>−</mo><mi>i</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mrow><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>d</mi></mrow><mo>−</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mi>i</mi></mrow></msup></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We will refer to the coordinate ring of the weighted rational curve as "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " and its defining ideal as "
+    },
+    {
+     "text": "I=kerφW",
+     "latex": "I=\\ker\\varphi_{W}",
+     "mathml": "<math display=\"inline\"><mrow><mi>I</mi><mo>=</mo><mrow><mi>ker</mi><mo lspace=\"0.167em\">⁡</mo><msub><mi>φ</mi><mi>W</mi></msub></mrow></mrow></math>"
+    },
+    {
+     "text": ", so that "
+    },
+    {
+     "text": "R=S/I",
+     "latex": "R=S/I",
+     "mathml": "<math display=\"inline\"><mrow><mi>R</mi><mo>=</mo><mrow><mi>S</mi><mo>/</mo><mi>I</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ". While "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "I",
+     "latex": "I",
+     "mathml": "<math display=\"inline\"><mi>I</mi></math>"
+    },
+    {
+     "text": " typically depend on "
+    },
+    {
+     "text": "W",
+     "latex": "W",
+     "mathml": "<math display=\"inline\"><mi>W</mi></math>"
+    },
+    {
+     "text": ", the choice of "
+    },
+    {
+     "text": "W",
+     "latex": "W",
+     "mathml": "<math display=\"inline\"><mi>W</mi></math>"
+    },
+    {
+     "text": " will be fixed throughout the paper, and so we omit this dependence from the notation."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Example 2.2. ",
+     "bold": true
+    },
+    {
+     "text": "Let "
+    },
+    {
+     "text": "d=3",
+     "latex": "d=3",
+     "mathml": "<math display=\"inline\"><mrow><mi>d</mi><mo>=</mo><mn>3</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "e=2",
+     "latex": "e=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>e</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ", as in Example 1.1. In this case, "
+    },
+    {
+     "text": "W=⟨s3,s2t,st2,st5,t6⟩",
+     "latex": "W=\\langle s^{3},s^{2}t,st^{2},st^{5},t^{6}\\rangle",
+     "mathml": "<math display=\"inline\"><mrow><mi>W</mi><mo>=</mo><mrow><mo stretchy=\"false\">⟨</mo><mrow><msup><mi>s</mi><mn>3</mn></msup><mo>,</mo><mrow><msup><mi>s</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mo>,</mo><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>2</mn></msup></mrow><mo>,</mo><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mn>5</mn></msup></mrow><mo>,</mo><msup><mi>t</mi><mn>6</mn></msup></mrow><mo stretchy=\"false\">⟩</mo></mrow></mrow></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The following observations follow easily from [BE23]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proposition 2.3. ",
+     "bold": true
+    },
+    {
+     "text": "[",
+     "italic": true
+    },
+    {
+     "text": "BE23"
+    },
+    {
+     "text": ", Remark 3.15] The coordinate ring ",
+     "italic": true
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " of a weighted rational curve of type ",
+     "italic": true
+    },
+    {
+     "text": "(d,e)",
+     "latex": "(d,e)",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">(</mo><mi>d</mi><mo>,</mo><mi>e</mi><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": " is not integrally closed for ",
+     "italic": true
+    },
+    {
+     "text": "e≥2",
+     "latex": "e\\geq 2",
+     "mathml": "<math display=\"inline\"><mrow><mi>e</mi><mo>≥</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proof. ",
+     "italic": true
+    },
+    {
+     "text": "The monomial "
+    },
+    {
+     "text": "td",
+     "latex": "t^{d}",
+     "mathml": "<math display=\"inline\"><msup><mi>t</mi><mi>d</mi></msup></math>"
+    },
+    {
+     "text": " is in the field of fractions of "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " since it can be written as"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "t^{d}=\\frac{s^{e-1}t^{de-(e-1)}}{(st^{d-1})^{e-1}}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><msup><mi>t</mi><mi>d</mi></msup><mo>=</mo><mfrac><mrow><msup><mi>s</mi><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>−</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></msup></mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow></msup></mfrac></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Furthermore, "
+    },
+    {
+     "text": "td",
+     "latex": "t^{d}",
+     "mathml": "<math display=\"inline\"><msup><mi>t</mi><mi>d</mi></msup></math>"
+    },
+    {
+     "text": " is integral over "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": ". In particular, it is a root of the monic polynomial "
+    },
+    {
+     "text": "Xe−tde",
+     "latex": "X^{e}-t^{de}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>X</mi><mi>e</mi></msup><mo>−</mo><msup><mi>t</mi><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow></msup></mrow></math>"
+    },
+    {
+     "text": ". However, "
+    },
+    {
+     "text": "td",
+     "latex": "t^{d}",
+     "mathml": "<math display=\"inline\"><msup><mi>t</mi><mi>d</mi></msup></math>"
+    },
+    {
+     "text": " is not in "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " since "
+    },
+    {
+     "text": "e≥2",
+     "latex": "e\\geq 2",
+     "mathml": "<math display=\"inline\"><mrow><mi>e</mi><mo>≥</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ", so "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is not integrally closed."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The above proposition implies that the weighted rational curve is not projectively normal in the usual sense. However, Brown and Erman also show that "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is “normally generated” in the sense of their Definition 3.13, which parallels Mumford’s definition ([Mum70]), which algebraically implies the following."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proposition 2.4. ",
+     "bold": true
+    },
+    {
+     "text": "[",
+     "italic": true
+    },
+    {
+     "text": "BE23"
+    },
+    {
+     "text": "] ",
+     "italic": true
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is Cohen-Macaulay.",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This is a combination of Remark 3.14(1) and Theorem 1.4 in [BE23]. We will offer an alternative proof of Cohen–Macaulayness in Corollary 3.5."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "3. Determinantality",
+     "smallCaps": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In this section, we show that the weighted rational curve is defined by the maximal minors of a certain matrix, as in the case of the usual rational normal curve. In the case of the rational normal curve, this is a classical result; see [Eis05, cf. Proposition 6.1] for a proof. In line with Philosophy 1.4, we will see how the classical result gets deformed: in the case of a (classical) rational normal curve of degree "
+    },
+    {
+     "text": "d",
+     "latex": "d",
+     "mathml": "<math display=\"inline\"><mi>d</mi></math>"
+    },
+    {
+     "text": ", the minors come from a "
+    },
+    {
+     "text": "2×d",
+     "latex": "2\\times d",
+     "mathml": "<math display=\"inline\"><mrow><mn>2</mn><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>d</mi></mrow></math>"
+    },
+    {
+     "text": " linear matrix; in the type "
+    },
+    {
+     "text": "d,e",
+     "latex": "d,e",
+     "mathml": "<math display=\"inline\"><mrow><mi>d</mi><mo>,</mo><mi>e</mi></mrow></math>"
+    },
+    {
+     "text": " weighted case, we have a "
+    },
+    {
+     "text": "2×(d+e−1)",
+     "latex": "2\\times(d+e-1)",
+     "mathml": "<math display=\"inline\"><mrow><mn>2</mn><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " matrix, all of whose entries are linear, with a single exception. To be precise, we prove the following theorem:"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 3.1. ",
+     "bold": true
+    },
+    {
+     "text": "Let ",
+     "italic": true
+    },
+    {
+     "text": "I2",
+     "latex": "I_{2}",
+     "mathml": "<math display=\"inline\"><msub><mi>I</mi><mn>2</mn></msub></math>"
+    },
+    {
+     "text": " be the ideal of ",
+     "italic": true
+    },
+    {
+     "text": "S",
+     "latex": "S",
+     "mathml": "<math display=\"inline\"><mi>S</mi></math>"
+    },
+    {
+     "text": " generated by the ",
+     "italic": true
+    },
+    {
+     "text": "2×2",
+     "latex": "2\\times 2",
+     "mathml": "<math display=\"inline\"><mrow><mn>2</mn><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": " minors of the following ",
+     "italic": true
+    },
+    {
+     "text": "2×(d+e−1𝐶𝐿𝑂𝑆𝐸",
+     "latex": "2\\times(d+e-1",
+     "mathml": "<math display=\"inline\"><mrow><mn>2</mn><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>1</mn></mrow><mo fence=\"true\" lspace=\"0em\">𝐶𝐿𝑂𝑆𝐸</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ") matrix:",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "M=\\begin{bmatrix}x_{0}&x_{1}&\\ldots&x_{d-2}&x_{d-1}^{e}&y_{0}&\\ldots&y_{e-2}\\\\\nx_{1}&x_{2}&\\ldots&x_{d-1}&y_{0}&y_{1}&\\ldots&y_{e-1}\\end{bmatrix}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mi>M</mi><mo>=</mo><mrow><mo>[</mo><mtable columnspacing=\"5pt\" displaystyle=\"true\" rowspacing=\"0pt\"><mtr><mtd><msub><mi>x</mi><mn>0</mn></msub></mtd><mtd><msub><mi>x</mi><mn>1</mn></msub></mtd><mtd><mi mathvariant=\"normal\">…</mi></mtd><mtd><msub><mi>x</mi><mrow><mi>d</mi><mo>−</mo><mn>2</mn></mrow></msub></mtd><mtd><msubsup><mi>x</mi><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mi>e</mi></msubsup></mtd><mtd><msub><mi>y</mi><mn>0</mn></msub></mtd><mtd><mi mathvariant=\"normal\">…</mi></mtd><mtd><msub><mi>y</mi><mrow><mi>e</mi><mo>−</mo><mn>2</mn></mrow></msub></mtd></mtr><mtr><mtd><msub><mi>x</mi><mn>1</mn></msub></mtd><mtd><msub><mi>x</mi><mn>2</mn></msub></mtd><mtd><mi mathvariant=\"normal\">…</mi></mtd><mtd><msub><mi>x</mi><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msub></mtd><mtd><msub><mi>y</mi><mn>0</mn></msub></mtd><mtd><msub><mi>y</mi><mn>1</mn></msub></mtd><mtd><mi mathvariant=\"normal\">…</mi></mtd><mtd><msub><mi>y</mi><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow></msub></mtd></mtr></mtable><mo>]</mo></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>",
+   "label": "(1)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Recall that ",
+     "italic": true
+    },
+    {
+     "text": "I",
+     "latex": "I",
+     "mathml": "<math display=\"inline\"><mi>I</mi></math>"
+    },
+    {
+     "text": " is the defining ideal of the weighted rational curve of type ",
+     "italic": true
+    },
+    {
+     "text": "d,e",
+     "latex": "d,e",
+     "mathml": "<math display=\"inline\"><mrow><mi>d</mi><mo>,</mo><mi>e</mi></mrow></math>"
+    },
+    {
+     "text": ". Then ",
+     "italic": true
+    },
+    {
+     "text": "I=I2",
+     "latex": "I=I_{2}",
+     "mathml": "<math display=\"inline\"><mrow><mi>I</mi><mo>=</mo><msub><mi>I</mi><mn>2</mn></msub></mrow></math>"
+    },
+    {
+     "text": ".",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Note that for any column of "
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": ", the ratio of the entries after applying "
+    },
+    {
+     "text": "φ",
+     "latex": "\\varphi",
+     "mathml": "<math display=\"inline\"><mi>φ</mi></math>"
+    },
+    {
+     "text": " (recall that "
+    },
+    {
+     "text": "φ",
+     "latex": "\\varphi",
+     "mathml": "<math display=\"inline\"><mi>φ</mi></math>"
+    },
+    {
+     "text": " was defined in Section 2) is "
+    },
+    {
+     "text": "ts",
+     "latex": "\\frac{t}{s}",
+     "mathml": "<math display=\"inline\"><mfrac><mi>t</mi><mi>s</mi></mfrac></math>"
+    },
+    {
+     "text": ". Thus, each minor of "
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": " maps to "
+    },
+    {
+     "text": "0",
+     "latex": "0",
+     "mathml": "<math display=\"inline\"><mn>0</mn></math>"
+    },
+    {
+     "text": " under "
+    },
+    {
+     "text": "φ",
+     "latex": "\\varphi",
+     "mathml": "<math display=\"inline\"><mi>φ</mi></math>"
+    },
+    {
+     "text": ", so we know that "
+    },
+    {
+     "text": "I2⊆I",
+     "latex": "I_{2}\\subseteq I",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>I</mi><mn>2</mn></msub><mo>⊆</mo><mi>I</mi></mrow></math>"
+    },
+    {
+     "text": ". To prove that these ideals are in fact equal, we will prove that the Hilbert series of "
+    },
+    {
+     "text": "S/I2",
+     "latex": "S/I_{2}",
+     "mathml": "<math display=\"inline\"><mrow><mi>S</mi><mo>/</mo><msub><mi>I</mi><mn>2</mn></msub></mrow></math>"
+    },
+    {
+     "text": " is equal to that of "
+    },
+    {
+     "text": "S/I",
+     "latex": "S/I",
+     "mathml": "<math display=\"inline\"><mrow><mi>S</mi><mo>/</mo><mi>I</mi></mrow></math>"
+    },
+    {
+     "text": ". This relies on the following two results."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proposition 3.2. ",
+     "bold": true
+    },
+    {
+     "text": "The Hilbert function and Hilbert series of ",
+     "italic": true
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " are",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "h_{R}(a)=da+1-a\\bmod e\\ \\text{ and }\\ HS_{R}(z)=\\frac{1+(d-1)(z+z^{2}+\\ldots+z^{e})+(e-1)z^{e}}{(1-z)(1-z^{e})}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msub><mi>h</mi><mi>R</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>a</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mrow><mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>a</mi></mrow><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>a</mi></mrow><mo>mod</mo><mrow><mi>e</mi><mo lspace=\"0.500em\" rspace=\"0em\">​</mo><mtext>&nbsp;and&nbsp;</mtext><mo lspace=\"0.500em\" rspace=\"0em\">​</mo><mi>H</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>S</mi><mi>R</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>=</mo><mfrac><mrow><mn>1</mn><mo>+</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>z</mi><mo>+</mo><msup><mi>z</mi><mn>2</mn></msup><mo>+</mo><mi mathvariant=\"normal\">…</mi><mo>+</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mi>e</mi></msup></mrow></mrow><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proposition 3.3. ",
+     "bold": true
+    },
+    {
+     "text": "The Hilbert series of ",
+     "italic": true
+    },
+    {
+     "text": "S/I2",
+     "latex": "S/I_{2}",
+     "mathml": "<math display=\"inline\"><mrow><mi>S</mi><mo>/</mo><msub><mi>I</mi><mn>2</mn></msub></mrow></math>"
+    },
+    {
+     "text": " is:",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "HS_{S/I_{2}}(z)=\\frac{1}{(1-z)^{d}(1-z^{e})^{e}}\\left(1+\\sum_{k=1}^{d+e-2}(-1)^{k}kz^{k+1}\\sum_{i=0}^{k+1}{{d-1}\\choose{k+1-i}}{e\\choose i}z^{i(e-1)}\\right).",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>H</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>S</mi><mrow><mi>S</mi><mo>/</mo><msub><mi>I</mi><mn>2</mn></msub></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mfrac><mn>1</mn><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mi>d</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mi>e</mi></msup></mrow></mfrac><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mn>1</mn><mo rspace=\"0.055em\">+</mo><mrow><munderover><mo movablelimits=\"false\" rspace=\"0em\">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></munderover><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mi>k</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>k</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><munderover><mo movablelimits=\"false\" rspace=\"0em\">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></munderover><mrow><mrow><mo>(</mo><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></mfrac><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mrow><mi>i</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></msup></mrow></mrow></mrow></mrow></mrow><mo>)</mo></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Before proving these two propositions, we will show how they combine to yield a proof of Theorem 3.1, the main result of this section. The difficulty lies in proving that the two Hilbert series above are, in fact, equal. In particular, as we observed in Example 1.2, the Hilbert series for "
+    },
+    {
+     "text": "S/I2",
+     "latex": "S/I_{2}",
+     "mathml": "<math display=\"inline\"><mrow><mi>S</mi><mo>/</mo><msub><mi>I</mi><mn>2</mn></msub></mrow></math>"
+    },
+    {
+     "text": " has redundancy which is obscured in that for "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proof of Theorem 3.1. ",
+     "italic": true
+    },
+    {
+     "text": "Since "
+    },
+    {
+     "text": "I2⊆I",
+     "latex": "I_{2}\\subseteq I",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>I</mi><mn>2</mn></msub><mo>⊆</mo><mi>I</mi></mrow></math>"
+    },
+    {
+     "text": ", there is a surjection "
+    },
+    {
+     "text": "S/I2↠R",
+     "latex": "S/I_{2}\\twoheadrightarrow R",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>S</mi><mo>/</mo><msub><mi>I</mi><mn>2</mn></msub></mrow><mo stretchy=\"false\">↠</mo><mi>R</mi></mrow></math>"
+    },
+    {
+     "text": ". If this map is an isomorphism in each degree, then it is an isomorphism of rings. To show this, we will argue that "
+    },
+    {
+     "text": "S/I",
+     "latex": "S/I",
+     "mathml": "<math display=\"inline\"><mrow><mi>S</mi><mo>/</mo><mi>I</mi></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "S/I2",
+     "latex": "S/I_{2}",
+     "mathml": "<math display=\"inline\"><mrow><mi>S</mi><mo>/</mo><msub><mi>I</mi><mn>2</mn></msub></mrow></math>"
+    },
+    {
+     "text": " have the same Hilbert series."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In the Hilbert series for "
+    },
+    {
+     "text": "S/I2",
+     "latex": "S/I_{2}",
+     "mathml": "<math display=\"inline\"><mrow><mi>S</mi><mo>/</mo><msub><mi>I</mi><mn>2</mn></msub></mrow></math>"
+    },
+    {
+     "text": ", we can rewrite the double sum by substituting in "
+    },
+    {
+     "text": "k+1−i+i−1",
+     "latex": "k+1-i+i-1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow><mo>+</mo><mi>i</mi></mrow><mo>−</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " for "
+    },
+    {
+     "text": "k",
+     "latex": "k",
+     "mathml": "<math display=\"inline\"><mi>k</mi></math>"
+    },
+    {
+     "text": ":"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\sum_{k=1}^{d+e-2}\\sum_{i=0}^{k+1}(-1)^{k}((k+1-i)+i-1)\\binom{{d-1}}{{k+1-i}}z^{k+1-i}\\binom{e}{i}(z^{e})^{i}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></munderover><mrow><munderover><mo lspace=\"0.167em\" movablelimits=\"false\" rspace=\"0em\">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></munderover><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mi>k</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mo>+</mo><mi>i</mi></mrow><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></mfrac><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><msup><mi>z</mi><mi>e</mi></msup><mo stretchy=\"false\">)</mo></mrow><mi>i</mi></msup></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Distributing over "
+    },
+    {
+     "text": "(k+1−i)+i−1",
+     "latex": "(k+1-i)+i-1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mo>+</mo><mi>i</mi></mrow><mo>−</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": " splits this sum into the following three pieces, each of which we will handle separately:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{aligned} HS_{S/I_{2}}(z)=\\frac{1}{(1-z)^{d}(1-z^{e})^{e}}\\Bigg(1 & +\\sum_{k=1}^{d+e-2}\\sum_{i=0}^{k+1}(-1)^{k}(k+1-i)\\binom{{d-1}}{{k+1-i}}z^{k+1-i}\\binom{e}{i}(z^{e})^{i} \\\\ & +\\sum_{k=1}^{d+e-2}\\sum_{i=0}^{k+1}(-1)^{k}i\\binom{d-1}{k+1-i}z^{k+1-i}\\binom{e}{i}(z^{e})^{i} \\\\ & +\\sum_{k=1}^{d+e-2}\\sum_{i=0}^{k+1}(-1)^{k+1}\\binom{d-1}{k+1-i}z^{k+1-i}\\binom{e}{i}(z^{e})^{i}\\Bigg). \\end{aligned}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><mrow><mi>H</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>S</mi><mrow><mi>S</mi><mo>/</mo><msub><mi>I</mi><mn>2</mn></msub></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mi>d</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mi>e</mi></msup></mrow></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo maxsize=\"2.600em\" minsize=\"2.600em\">(</mo><mn>1</mn><mo fence=\"true\" lspace=\"0em\">CLOSE</mo></mrow></mrow></mrow></mtd><mtd><mrow><mo>+</mo><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></munderover></mstyle><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></munderover></mstyle><msup><mrow><mo stretchy=\"false\">(</mo><mo lspace=\"0em\">−</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow><mi>k</mi></msup><mrow><mo stretchy=\"false\">(</mo><mi>k</mi><mo>+</mo><mn>1</mn><mo>−</mo><mi>i</mi><mo stretchy=\"false\">)</mo></mrow><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></mfrac></mstyle><mo>)</mo></mrow><msup><mi>z</mi><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></msup><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac></mstyle><mo>)</mo></mrow><msup><mrow><mo stretchy=\"false\">(</mo><msup><mi>z</mi><mi>e</mi></msup><mo stretchy=\"false\">)</mo></mrow><mi>i</mi></msup></mrow></mtd></mtr><mtr><mtd></mtd><mtd><mrow><mo>+</mo><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></munderover></mstyle><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></munderover></mstyle><msup><mrow><mo stretchy=\"false\">(</mo><mo lspace=\"0em\">−</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow><mi>k</mi></msup><mi>i</mi><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></mfrac></mstyle><mo>)</mo></mrow><msup><mi>z</mi><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></msup><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac></mstyle><mo>)</mo></mrow><msup><mrow><mo stretchy=\"false\">(</mo><msup><mi>z</mi><mi>e</mi></msup><mo stretchy=\"false\">)</mo></mrow><mi>i</mi></msup></mrow></mtd></mtr><mtr><mtd></mtd><mtd><mrow><mo>+</mo><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></munderover></mstyle><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></munderover></mstyle><msup><mrow><mo stretchy=\"false\">(</mo><mo lspace=\"0em\">−</mo><mn>1</mn><mo stretchy=\"false\">)</mo></mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></msup><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></mfrac></mstyle><mo>)</mo></mrow><msup><mi>z</mi><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></msup><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac></mstyle><mo>)</mo></mrow><msup><mrow><mo stretchy=\"false\">(</mo><msup><mi>z</mi><mi>e</mi></msup><mo stretchy=\"false\">)</mo></mrow><mi>i</mi></msup><mo maxsize=\"2.600em\" minsize=\"2.600em\">)</mo><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We will refer to the three sums as "
+    },
+    {
+     "text": "p1(z)",
+     "latex": "p_{1}(z)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>p</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "p2(z)",
+     "latex": "p_{2}(z)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>p</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "p3(z)",
+     "latex": "p_{3}(z)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>p</mi><mn>3</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", respectively. The first sum, "
+    },
+    {
+     "text": "p1(z)",
+     "latex": "p_{1}(z)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>p</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", can be handled as follows:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{aligned} p_{1}(z) & =\\sum_{k=1}^{d+e-2}\\sum_{i=0}^{k+1}(-1)^{k}(k+1-i)\\binom{{d-1}}{{k+1-i}}z^{k+1-i}\\binom{e}{i}(z^{e})^{i}. \\end{aligned}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><msub><mi>p</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mtd><mtd><mrow><mrow><mphantom></mphantom><mo>=</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></munderover></mstyle><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></munderover></mstyle><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mi>k</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></mfrac></mstyle><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac></mstyle><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><msup><mi>z</mi><mi>e</mi></msup><mo stretchy=\"false\">)</mo></mrow><mi>i</mi></msup></mrow></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "By the identity "
+    },
+    {
+     "text": "(k+1−i)(d−1k+1−i)=(d−1)(d−2k−i)",
+     "latex": "(k+1-i)\\binom{d-1}{k+1-i}=(d-1)\\binom{d-2}{k-i}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></mfrac><mo>)</mo></mrow></mrow><mo>=</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>2</mn></mrow><mrow><mi>k</mi><mo>−</mo><mi>i</mi></mrow></mfrac><mo>)</mo></mrow></mrow></mrow></math>"
+    },
+    {
+     "text": " and dropping the non-contributing "
+    },
+    {
+     "text": "i=k+1",
+     "latex": "i=k+1",
+     "mathml": "<math display=\"inline\"><mrow><mi>i</mi><mo>=</mo><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></mrow></math>"
+    },
+    {
+     "text": " term, this becomes:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "=(d-1)z\\sum_{k=1}^{d+e-2}\\sum_{i=0}^{k}(-1)^{k}\\binom{d-2}{k-i}z^{k-i}\\binom{e}{i}(z^{e})^{i}.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mphantom></mphantom><mo>=</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>z</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></munderover></mstyle><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mi>k</mi></munderover></mstyle><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mi>k</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>2</mn></mrow><mrow><mi>k</mi><mo>−</mo><mi>i</mi></mrow></mfrac></mstyle><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mrow><mi>k</mi><mo>−</mo><mi>i</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac></mstyle><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><msup><mi>z</mi><mi>e</mi></msup><mo stretchy=\"false\">)</mo></mrow><mi>i</mi></msup></mrow></mrow></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "By splitting "
+    },
+    {
+     "text": "(−1)k",
+     "latex": "(-1)^{k}",
+     "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mi>k</mi></msup></math>"
+    },
+    {
+     "text": " across "
+    },
+    {
+     "text": "zk−i",
+     "latex": "z^{k-i}",
+     "mathml": "<math display=\"inline\"><msup><mi>z</mi><mrow><mi>k</mi><mo>−</mo><mi>i</mi></mrow></msup></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "(ze)i",
+     "latex": "(z^{e})^{i}",
+     "mathml": "<math display=\"inline\"><msup><mrow><mo stretchy=\"false\">(</mo><msup><mi>z</mi><mi>e</mi></msup><mo stretchy=\"false\">)</mo></mrow><mi>i</mi></msup></math>"
+    },
+    {
+     "text": ", we obtain:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "=(d-1)z\\sum_{k=1}^{d+e-2}\\sum_{i=0}^{k}(-z)^{k-i}\\binom{d-2}{k-i}(-z^{e})^{i}\\binom{e}{i}.",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mphantom></mphantom><mo>=</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>z</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></munderover></mstyle><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mi>k</mi></munderover></mstyle><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>k</mi><mo>−</mo><mi>i</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>2</mn></mrow><mrow><mi>k</mi><mo>−</mo><mi>i</mi></mrow></mfrac></mstyle><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mi>i</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac></mstyle><mo>)</mo></mrow></mrow></mrow></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Finally, observe that, if the outer sum started at "
+    },
+    {
+     "text": "k=0",
+     "latex": "k=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>k</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", the double sum would be "
+    },
+    {
+     "text": "(1−z)d−2(1−ze)e",
+     "latex": "(1-z)^{d-2}(1-z^{e})^{e}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>d</mi><mo>−</mo><mn>2</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mi>e</mi></msup></mrow></math>"
+    },
+    {
+     "text": " on the nose. So the sum becomes:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "=(d-1)z\\left[(1-z)^{d-2}(1-z^{e})^{e}-1\\right].",
+   "mathml": "<math display=\"inline\"><mrow><mrow><mphantom></mphantom><mo>=</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>z</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>[</mo><mrow><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>d</mi><mo>−</mo><mn>2</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mi>e</mi></msup></mrow><mo>−</mo><mn>1</mn></mrow><mo>]</mo></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "By a similar argument (now using that "
+    },
+    {
+     "text": "OPENi(ei)=e(e−1i−1))",
+     "latex": "i\\binom{e}{i}=e\\binom{e-1}{i-1})",
+     "mathml": "<math display=\"inline\"><mrow><mo fence=\"true\" rspace=\"0em\">OPEN</mo><mrow><mrow><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac><mo>)</mo></mrow></mrow><mo>=</mo><mrow><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mfrac linethickness=\"0pt\"><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow><mrow><mi>i</mi><mo>−</mo><mn>1</mn></mrow></mfrac><mo>)</mo></mrow></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></math>"
+    },
+    {
+     "text": "), we can rewrite "
+    },
+    {
+     "text": "p2(z)",
+     "latex": "p_{2}(z)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>p</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ":"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{aligned} p_{2}(z) & =\\sum_{k=1}^{d+e-2}\\sum_{i=0}^{k+1}(-1)^{k}i\\binom{d-1}{k+1-i}z^{k+1-i}\\binom{e}{i}(z^{e})^{i} \\\\ & =ez^{e}\\sum_{k=1}^{d+e-2}\\sum_{i=0}^{k}(-z)^{k-i}\\binom{d-1}{k-i}(-z^{e})^{i}\\binom{e-1}{i} \\\\ & =ez^{e}\\left[(1-z)^{d-1}(1-z^{e})^{e-1}-1\\right]. \\end{aligned}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><msub><mi>p</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mtd><mtd><mrow><mphantom></mphantom><mo>=</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></munderover></mstyle><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></munderover></mstyle><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mi>k</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>i</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></mfrac></mstyle><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac></mstyle><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><msup><mi>z</mi><mi>e</mi></msup><mo stretchy=\"false\">)</mo></mrow><mi>i</mi></msup></mrow></mrow></mrow></mrow></mtd></mtr><mtr><mtd></mtd><mtd><mrow><mphantom></mphantom><mo>=</mo><mrow><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mi>e</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></munderover></mstyle><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mi>k</mi></munderover></mstyle><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>k</mi><mo>−</mo><mi>i</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mrow><mi>k</mi><mo>−</mo><mi>i</mi></mrow></mfrac></mstyle><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mi>i</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow><mi>i</mi></mfrac></mstyle><mo>)</mo></mrow></mrow></mrow></mrow></mrow></mrow></mtd></mtr><mtr><mtd></mtd><mtd><mrow><mrow><mphantom></mphantom><mo>=</mo><mrow><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mi>e</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>[</mo><mrow><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>−</mo><mn>1</mn></mrow><mo>]</mo></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Similarly, for "
+    },
+    {
+     "text": "p3(z)",
+     "latex": "p_{3}(z)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>p</mi><mn>3</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " we have:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{aligned} p_{3}(z) & =\\sum_{k=1}^{d+e-2}\\sum_{i=0}^{k+1}(-1)^{k+1}\\binom{d-1}{k+1-i}z^{k+1-i}\\binom{e}{i}(z^{e})^{i} \\\\ & =\\sum_{k=2}^{d+e-1}\\sum_{i=0}^{k}(-z)^{k-i}\\binom{d-1}{k-i}(-z^{e})^{i}\\binom{e}{i} \\\\ & =(1-z)^{d-1}(1-z^{e})^{e}-(1-(d-1)z-ez^{e}). \\end{aligned}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><msub><mi>p</mi><mn>3</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mtd><mtd><mrow><mphantom></mphantom><mo>=</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></munderover></mstyle><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></munderover></mstyle><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></mfrac></mstyle><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac></mstyle><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><msup><mi>z</mi><mi>e</mi></msup><mo stretchy=\"false\">)</mo></mrow><mi>i</mi></msup></mrow></mrow></mrow></mrow></mtd></mtr><mtr><mtd></mtd><mtd><mrow><mphantom></mphantom><mo>=</mo><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>2</mn></mrow><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>1</mn></mrow></munderover></mstyle><mrow><mstyle displaystyle=\"true\"><munderover><mo movablelimits=\"false\">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>0</mn></mrow><mi>k</mi></munderover></mstyle><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>k</mi><mo>−</mo><mi>i</mi></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mrow><mi>k</mi><mo>−</mo><mi>i</mi></mrow></mfrac></mstyle><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mi>i</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mstyle displaystyle=\"true\"><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac></mstyle><mo>)</mo></mrow></mrow></mrow></mrow></mrow></mtd></mtr><mtr><mtd></mtd><mtd><mrow><mrow><mphantom></mphantom><mo>=</mo><mrow><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mi>e</mi></msup></mrow><mo>−</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>z</mi></mrow><mo>−</mo><mrow><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mi>e</mi></msup></mrow></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Putting this together and canceling appropriately, we have"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{aligned} HS_{S/I_{2}}(z) & =\\frac{1}{(1-z)^{d}(1-z^{e})^{e}}\\left(1+p_{1}(z)+p_{2}(z)+p_{3}(z)\\right) \\\\ & =\\frac{(d-1)z(1-z)^{d-2}(1-z^{e})^{e}+ez^{e}(1-z)^{d-1}(1-z^{e})^{e-1}+(1-z)^{d-1}(1-z^{e})^{e}}{(1-z)^{d}(1-z^{e})^{e}} \\\\ & =\\frac{1+(d-1)(z+z^{2}+\\ldots+z^{e})+(e-1)z^{e}}{(1-z)(1-z^{e})}. \\end{aligned}",
+   "mathml": "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mtable><mtr><mtd><mrow><mi>H</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>S</mi><mrow><mi>S</mi><mo>/</mo><msub><mi>I</mi><mn>2</mn></msub></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mtd><mtd><mrow><mphantom></mphantom><mo>=</mo><mrow><mstyle displaystyle=\"true\"><mfrac><mn>1</mn><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mi>d</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mi>e</mi></msup></mrow></mfrac></mstyle><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mrow><mn>1</mn><mo>+</mo><mrow><msub><mi>p</mi><mn>1</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mrow><msub><mi>p</mi><mn>2</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mrow><msub><mi>p</mi><mn>3</mn></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow><mo>)</mo></mrow></mrow></mrow></mtd></mtr><mtr><mtd></mtd><mtd><mrow><mphantom></mphantom><mo>=</mo><mstyle displaystyle=\"true\"><mfrac><mrow><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>z</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>d</mi><mo>−</mo><mn>2</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mi>e</mi></msup></mrow><mo>+</mo><mrow><mi>e</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mi>e</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>+</mo><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mi>e</mi></msup></mrow></mrow><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mi>d</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mi>e</mi></msup></mrow></mfrac></mstyle></mrow></mtd></mtr><mtr><mtd></mtd><mtd><mrow><mrow><mphantom></mphantom><mo>=</mo><mstyle displaystyle=\"true\"><mfrac><mrow><mn>1</mn><mo>+</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>z</mi><mo>+</mo><msup><mi>z</mi><mn>2</mn></msup><mo>+</mo><mi mathvariant=\"normal\">…</mi><mo>+</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mi>e</mi></msup></mrow></mrow><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mi>e</mi></msup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mstyle></mrow><mo lspace=\"0em\">.</mo></mrow></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This is equal to "
+    },
+    {
+     "text": "HSS/I(z)",
+     "latex": "HS_{S/I}(z)",
+     "mathml": "<math display=\"inline\"><mrow><mi>H</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>S</mi><mrow><mi>S</mi><mo>/</mo><mi>I</mi></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ", completing the proof."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We delay the proofs of Propositions 3.2 and 3.3 to Subsection 3.2, and first give some corollaries."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "3.1. Corollaries ",
+     "bold": true
+    },
+    {
+     "text": "Theorem 3.1, together with the proof of Proposition 3.3, gives us the resolution of "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " over "
+    },
+    {
+     "text": "S",
+     "latex": "S",
+     "mathml": "<math display=\"inline\"><mi>S</mi></math>"
+    },
+    {
+     "text": ", and its graded Betti numbers."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Corollary 3.4. ",
+     "bold": true
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is resolved by the Eagon–Northcott complex for ",
+     "italic": true
+    },
+    {
+     "text": "M",
+     "latex": "M",
+     "mathml": "<math display=\"inline\"><mi>M</mi></math>"
+    },
+    {
+     "text": ", and its graded Betti numbers are",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\beta_{k,k+1+i(e-1)}(R)=k\\left(\\binom{d-1}{k+1-i}\\binom{e}{i}\\right)\\text{ for }i=0,\\ldots,k+1",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><msub><mi>β</mi><mrow><mi>k</mi><mo>,</mo><mrow><mi>k</mi><mo>+</mo><mn>1</mn><mo>+</mo><mrow><mi>i</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>R</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mrow><mrow><mi>k</mi><mo>⁡</mo><mrow><mo>(</mo><mrow><mrow><mo>(</mo><mfrac linethickness=\"0pt\"><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow><mrow><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>i</mi></mrow></mfrac><mo>)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo>(</mo><mfrac linethickness=\"0pt\"><mi>e</mi><mi>i</mi></mfrac><mo>)</mo></mrow></mrow><mo>)</mo></mrow></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mtext>&nbsp;for&nbsp;</mtext><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>i</mi></mrow><mo>=</mo><mn>0</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><mi>k</mi><mo>+</mo><mn>1</mn></mrow></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "and ",
+     "italic": true
+    },
+    {
+     "text": "0",
+     "latex": "0",
+     "mathml": "<math display=\"inline\"><mn>0</mn></math>"
+    },
+    {
+     "text": " otherwise, for all ",
+     "italic": true
+    },
+    {
+     "text": "k=1,…,d+e−2",
+     "latex": "k=1,\\ldots,d+e-2",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></mrow></math>"
+    },
+    {
+     "text": "..",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Theorem 3.1 also leads to an alternative proof that "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is Cohen-Macaulay."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Corollary 3.5. ",
+     "bold": true
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is Cohen–Macaulay.",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proof. ",
+     "italic": true
+    },
+    {
+     "text": "Because "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is a semigroup ring (see the proof of Proposition 3.2 for this perspective) where the semigroup has dimension "
+    },
+    {
+     "text": "2",
+     "latex": "2",
+     "mathml": "<math display=\"inline\"><mn>2</mn></math>"
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " also has dimension "
+    },
+    {
+     "text": "2",
+     "latex": "2",
+     "mathml": "<math display=\"inline\"><mn>2</mn></math>"
+    },
+    {
+     "text": ". This means that "
+    },
+    {
+     "text": "I",
+     "latex": "I",
+     "mathml": "<math display=\"inline\"><mi>I</mi></math>"
+    },
+    {
+     "text": " has codimension "
+    },
+    {
+     "text": "d+e−2",
+     "latex": "d+e-2",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ". By Corollary 3.4, the projective dimension of "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is also "
+    },
+    {
+     "text": "d+e−2",
+     "latex": "d+e-2",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>d</mi><mo>+</mo><mi>e</mi></mrow><mo>−</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ". Therefore, "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is Cohen-Macaulay."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Example 3.6. ",
+     "bold": true
+    },
+    {
+     "text": "As before, consider the weighted rational curve where "
+    },
+    {
+     "text": "d=3",
+     "latex": "d=3",
+     "mathml": "<math display=\"inline\"><mrow><mi>d</mi><mo>=</mo><mn>3</mn></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "e=2",
+     "latex": "e=2",
+     "mathml": "<math display=\"inline\"><mrow><mi>e</mi><mo>=</mo><mn>2</mn></mrow></math>"
+    },
+    {
+     "text": ". Recall (from Proposition 3.3) that the Hilbert series for "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " is given by:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "HS_{R}(z)=\\frac{1-z^{2}-4z^{3}+3z^{4}+4z^{5}-3z^{6}}{(1-z)^{3}(1-z^{2})^{2}}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>H</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>S</mi><mi>R</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mfrac><mrow><mrow><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mn>2</mn></msup><mo>−</mo><mrow><mn>4</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mn>3</mn></msup></mrow></mrow><mo>+</mo><mrow><mn>3</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mn>4</mn></msup></mrow><mo>+</mo><mrow><mn>4</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mn>5</mn></msup></mrow></mrow><mo>−</mo><mrow><mn>3</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mn>6</mn></msup></mrow></mrow><mrow><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mn>3</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mn>2</mn></msup></mrow><mo stretchy=\"false\">)</mo></mrow><mn>2</mn></msup></mrow></mfrac></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The Betti table for "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " over "
+    },
+    {
+     "text": "S",
+     "latex": "S",
+     "mathml": "<math display=\"inline\"><mi>S</mi></math>"
+    },
+    {
+     "text": " is given below:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\begin{matrix}&0&1&2&3\\\\\n0:&1&.&.&.\\\\\n1:&.&1&.&.\\\\\n2:&.&4&4&.\\\\\n3:&.&1&4&3\\end{matrix}",
+   "mathml": "<math display=\"block\"><mtable columnspacing=\"5pt\" displaystyle=\"true\" rowspacing=\"0pt\"><mtr><mtd></mtd><mtd><mn>0</mn></mtd><mtd><mn>1</mn></mtd><mtd><mn>2</mn></mtd><mtd><mn>3</mn></mtd></mtr><mtr><mtd><mrow><mn>0</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mn>1</mn></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd></mtr><mtr><mtd><mrow><mn>1</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mo>.</mo></mtd><mtd><mn>1</mn></mtd><mtd><mo>.</mo></mtd><mtd><mo>.</mo></mtd></mtr><mtr><mtd><mrow><mn>2</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mo>.</mo></mtd><mtd><mn>4</mn></mtd><mtd><mn>4</mn></mtd><mtd><mo>.</mo></mtd></mtr><mtr><mtd><mrow><mn>3</mn><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mphantom></mphantom></mrow></mtd><mtd><mo>.</mo></mtd><mtd><mn>1</mn></mtd><mtd><mn>4</mn></mtd><mtd><mn>3</mn></mtd></mtr></mtable></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Note that the Hilbert series does not entirely “predict” the Betti table. That is, there is cancellation: both "
+    },
+    {
+     "text": "β1,4(R)",
+     "latex": "\\beta_{1,4}(R)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>β</mi><mrow><mn>1</mn><mo>,</mo><mn>4</mn></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>R</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "β2,4(R)",
+     "latex": "\\beta_{2,4}(R)",
+     "mathml": "<math display=\"inline\"><mrow><msub><mi>β</mi><mrow><mn>2</mn><mo>,</mo><mn>4</mn></mrow></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>R</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " are nonzero, so both of these contribute – with opposite sign – to the "
+    },
+    {
+     "text": "3z4",
+     "latex": "3z^{4}",
+     "mathml": "<math display=\"inline\"><mrow><mn>3</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mn>4</mn></msup></mrow></math>"
+    },
+    {
+     "text": " term in the numerator of "
+    },
+    {
+     "text": "HSR(z)",
+     "latex": "HS_{R}(z)",
+     "mathml": "<math display=\"inline\"><mrow><mi>H</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>S</mi><mi>R</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow></math>"
+    },
+    {
+     "text": ". The reduced Hilbert series for "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " (from Proposition 3.2) is:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "HS_{R}(z)=\\frac{1+2z+3z^{3}}{(1-z)(1-z^{2})}.",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>H</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mi>S</mi><mi>R</mi></msub><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>z</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>=</mo><mfrac><mrow><mn>1</mn><mo>+</mo><mrow><mn>2</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>z</mi></mrow><mo>+</mo><mrow><mn>3</mn><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>z</mi><mn>3</mn></msup></mrow></mrow><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><mi>z</mi></mrow><mo stretchy=\"false\">)</mo></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>z</mi><mn>2</mn></msup></mrow><mo stretchy=\"false\">)</mo></mrow></mrow></mfrac></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "3.2. Proofs of Propositions 3.2 and 3.3"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Proof of Proposition 3.2. ",
+     "italic": true
+    },
+    {
+     "text": "We directly compute the size of the monomial basis for a given degree. It will be convenient to view "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " as the semigroup algebra"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\mathbb{k}[\\Lambda]=\\mathbb{k}[s^{d},s^{d-1}t,\\ldots,st^{d-1},s^{e-1}t^{de-e+1},s^{e-2}t^{de-e+2},\\ldots,st^{de-1},t^{de}].",
+   "mathml": "<math display=\"block\"><mrow><mrow><mrow><mi>𝕜</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">[</mo><mi mathvariant=\"normal\">Λ</mi><mo stretchy=\"false\">]</mo></mrow></mrow><mo>=</mo><mrow><mi>𝕜</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">[</mo><mrow><msup><mi>s</mi><mi>d</mi></msup><mo>,</mo><mrow><msup><mi>s</mi><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>t</mi></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mi>d</mi><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>,</mo><mrow><msup><mi>s</mi><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>−</mo><mi>e</mi></mrow><mo>+</mo><mn>1</mn></mrow></msup></mrow><mo>,</mo><mrow><msup><mi>s</mi><mrow><mi>e</mi><mo>−</mo><mn>2</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>−</mo><mi>e</mi></mrow><mo>+</mo><mn>2</mn></mrow></msup></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>,</mo><msup><mi>t</mi><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow></msup></mrow><mo stretchy=\"false\">]</mo></mrow></mrow></mrow><mo lspace=\"0em\">.</mo></mrow></math>"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Note that, by the usual normalization from the degree-"
+    },
+    {
+     "text": "d",
+     "latex": "d",
+     "mathml": "<math display=\"inline\"><mi>d</mi></math>"
+    },
+    {
+     "text": " Veronese map, monomials in "
+    },
+    {
+     "text": "𝕜[Λ]",
+     "latex": "\\mathbb{k}[\\Lambda]",
+     "mathml": "<math display=\"inline\"><mrow><mi>𝕜</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">[</mo><mi mathvariant=\"normal\">Λ</mi><mo stretchy=\"false\">]</mo></mrow></mrow></math>"
+    },
+    {
+     "text": " of total degree "
+    },
+    {
+     "text": "da",
+     "latex": "da",
+     "mathml": "<math display=\"inline\"><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>a</mi></mrow></math>"
+    },
+    {
+     "text": " correspond to monomials in "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " of degree "
+    },
+    {
+     "text": "a",
+     "latex": "a",
+     "mathml": "<math display=\"inline\"><mi>a</mi></math>"
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "By virtue of the monomials in the log complete series, every monomial "
+    },
+    {
+     "text": "sutk⋅de−u",
+     "latex": "s^{u}t^{k\\cdot de-u}",
+     "mathml": "<math display=\"inline\"><mrow><msup><mi>s</mi><mi>u</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mrow><mi>k</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">⋅</mo><mi>d</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>−</mo><mi>u</mi></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " is in "
+    },
+    {
+     "text": "R",
+     "latex": "R",
+     "mathml": "<math display=\"inline\"><mi>R</mi></math>"
+    },
+    {
+     "text": " as in the usual rational normal curve, so "
+    },
+    {
+     "text": "dim𝕜(R)qe=dqe+1",
+     "latex": "\\dim_{\\mathbb{k}}(R)_{qe}=dqe+1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mo>dim</mo><mi>𝕜</mi></msub><msub><mrow><mo lspace=\"0em\" stretchy=\"false\">(</mo><mi>R</mi><mo stretchy=\"false\">)</mo></mrow><mrow><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow></msub></mrow><mo>=</mo><mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>+</mo><mn>1</mn></mrow></mrow></math>"
+    },
+    {
+     "text": ". To compute "
+    },
+    {
+     "text": "dim𝕜Rqe+r",
+     "latex": "\\dim_{\\mathbb{k}}R_{qe+r}",
+     "mathml": "<math display=\"inline\"><mrow><msub><mo>dim</mo><mi>𝕜</mi></msub><msub><mi>R</mi><mrow><mrow><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>+</mo><mi>r</mi></mrow></msub></mrow></math>"
+    },
+    {
+     "text": " where "
+    },
+    {
+     "text": "1≤r≤e−1",
+     "latex": "1\\leq r\\leq e-1",
+     "mathml": "<math display=\"inline\"><mrow><mn>1</mn><mo>≤</mo><mi>r</mi><mo>≤</mo><mrow><mi>e</mi><mo>−</mo><mn>1</mn></mrow></mrow></math>"
+    },
+    {
+     "text": ", we can count how many missing monomials there are from the usual Veronese basis, which has size "
+    },
+    {
+     "text": "d(qe+r)+1",
+     "latex": "d(qe+r)+1",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>d</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mrow><mrow><mi>q</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>+</mo><mi>r</mi></mrow><mo stretchy=\"false\">)</mo></mrow></mrow><mo>+</mo><mn>1</mn></mrow></math>"
+    },
+    {
+     "text": ". It suffices to do this for "
+    },
+    {
+     "text": "q=0",
+     "latex": "q=0",
+     "mathml": "<math display=\"inline\"><mrow><mi>q</mi><mo>=</mo><mn>0</mn></mrow></math>"
+    },
+    {
+     "text": ", since monomials of larger degree can be written "
+    },
+    {
+     "text": "(sutkde−u)⋅sitℓd−i",
+     "latex": "(s^{u}t^{kde-u})\\cdot s^{i}t^{\\ell d-i}",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mrow><mo stretchy=\"false\">(</mo><mrow><msup><mi>s</mi><mi>u</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mi>k</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow><mo>−</mo><mi>u</mi></mrow></msup></mrow><mo rspace=\"0.055em\" stretchy=\"false\">)</mo></mrow><mo rspace=\"0.222em\">⋅</mo><msup><mi>s</mi><mi>i</mi></msup></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mi mathvariant=\"normal\">ℓ</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>d</mi></mrow><mo>−</mo><mi>i</mi></mrow></msup></mrow></math>"
+    },
+    {
+     "text": " where "
+    },
+    {
+     "text": "ℓ<e",
+     "latex": "\\ell<e",
+     "mathml": "<math display=\"inline\"><mrow><mi mathvariant=\"normal\">ℓ</mi><mo>&lt;</mo><mi>e</mi></mrow></math>"
+    },
+    {
+     "text": ", using the guaranteed monomials of total power "
+    },
+    {
+     "text": "k⋅de",
+     "latex": "k\\cdot de",
+     "mathml": "<math display=\"inline\"><mrow><mrow><mi>k</mi><mo lspace=\"0.222em\" rspace=\"0.222em\">⋅</mo><mi>d</mi></mrow><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>e</mi></mrow></math>"
+    },
+    {
+     "text": ". Now observe that there are "
+    },
+    {
+     "text": "r",
+     "latex": "r",
+     "mathml": "<math display=\"inline\"><mi>r</mi></math>"
+    },
+    {
+     "text": " monomials missing in "
+    },
+    {
+     "text": "Rr",
+     "latex": "R_{r}",
+     "mathml": "<math display=\"inline\"><msub><mi>R</mi><mi>r</mi></msub></math>"
+    },
+    {
+     "text": ": "
+    },
+    {
+     "text": "{trd,strd−1,s2trd−2,…,sr−1trd−r+1}",
+     "latex": "\\{t^{rd},st^{rd-1},s^{2}t^{rd-2},\\ldots,s^{r-1}t^{rd-r+1}\\}",
+     "mathml": "<math display=\"inline\"><mrow><mo stretchy=\"false\">{</mo><mrow><msup><mi>t</mi><mrow><mi>r</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>d</mi></mrow></msup><mo>,</mo><mrow><mi>s</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mi>r</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>d</mi></mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><mo>,</mo><mrow><msup><mi>s</mi><mn>2</mn></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mi>r</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>d</mi></mrow><mo>−</mo><mn>2</mn></mrow></msup></mrow><mo>,</mo><mi mathvariant=\"normal\">…</mi><mo>,</mo><mrow><msup><mi>s</mi><mrow><mi>r</mi><mo>−</mo><mn>1</mn></mrow></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><msup><mi>t</mi><mrow><mrow><mrow><mi>r</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>d</mi></mrow><mo>−</mo><mi>r</mi></mrow><mo>+</mo><mn>1</mn></mrow></msup></mrow></mrow><mo stretchy=\"false\">}</mo></mrow></math>"
+    },
+    {
+     "text": ". Therefore "
+    },
+    {
+     "text": "dim𝕜Ra=dim𝕜𝕜[Λ]da=da+1−amode",
+     "latex": "\\dim_{\\mathbb{k}}R_{a}=\\dim_{\\mathbb{k}}\\mathbb{k}[\\Lambda]_{da}=da+1-a\\bmod e",
+     "mathml": "<math display=\"inline\"><mrow><mrow><msub><mo>dim</mo><mi>𝕜</mi></msub><msub><mi>R</mi><mi>a</mi></msub></mrow><mo rspace=\"0.1389em\">=</mo><mrow><msub><mo lspace=\"0.1389em\" rspace=\"0.167em\">dim</mo><mi>𝕜</mi></msub><mrow><mi>𝕜</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><msub><mrow><mo stretchy=\"false\">[</mo><mi mathvariant=\"normal\">Λ</mi><mo stretchy=\"false\">]</mo></mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>a</mi></mrow></msub></mrow></mrow><mo>=</mo><mrow><mrow><mrow><mrow><mi>d</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>a</mi></mrow><mo>+</mo><mn>1</mn></mrow><mo>−</mo><mi>a</mi></mrow><mo>mod</mo><mi>e</mi></mrow></mrow></math>"
+    },
+    {
+     "text": ". One can find a more general version of such counts in [BE23, Proposition 6.3], where "
+    },
+    {
+     "text": "Q",
+     "latex": "Q",
+     "mathml": "<math display=\"inline\"><mi>Q</mi></math>"
+    },
+    {
+     "text": " denotes the “missing” monomials (though "
+    },
+    {
+     "text": "d",
+     "latex": "d",
+     "mathml": "<math display=\"inline\"><mi>d</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "e",
+     "latex": "e",
+     "mathml": "<math display=\"inline\"><mi>e</mi></math>"
+    },
+    {
+     "text": " must be suitably normalized)."
+    }
+   ]
+  }
+ ],
+ "furniture": [
+  "arXiv:2410.04586v2 [math.AC] 9 Jun 2025",
+  "1",
+  "2",
+  "CAITLIN M. DAVIS AND ALEKSANDRA SOBIESKA",
+  "RATIONAL NORMAL CURVES IN WEIGHTED PROJECTIVE SPACE",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8"
+ ],
+ "license": "open",
+ "provenance": "latexml",
+ "notes": "arXiv 2410.04586v2 (algebra and geometry; amsart, running heads), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Macros expanded: \\Sym \\mathbbm \\reg."
+}

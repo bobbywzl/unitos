@@ -1,0 +1,4139 @@
+{
+ "id": "arxiv-2609-29669",
+ "category": "paper",
+ "source": {
+  "pdf": ".bench/arxiv/2609.29669v1.pdf",
+  "url": "https://arxiv.org/abs/2609.29669v1"
+ },
+ "pages": [
+  1,
+  10
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "Do World Models Make Better Robots?"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A Survey of Evaluation Benchmarks for Predictive Embodied Intelligence"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "GAYTRI JENA∗, UC Berkeley, USA"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "KAPIL WANASKAR, San Jose State University, USA"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "VINIJA JAIN, Meta, USA"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "AMAN CHADHA, Apple, USA"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "VASU SHARMA, PocketFM, USA"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "AMITAVA DAS, Pragya Lab, BITS Pilani Goa, India"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "∗",
+   "spans": [
+    {
+     "text": "The authors contributed to this work independently of their roles and employment."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "",
+   "spans": [
+    {
+     "text": "Authors’ Contact Information: Gaytri Jena, UC Berkeley, Berkeley, CA, USA; Kapil Wanaskar, San Jose State University, USA; Vinija Jain, Meta, USA; Aman Chadha, Apple, USA; Vasu Sharma, PocketFM, USA; Amitava Das, Pragya Lab, BITS Pilani Goa, India."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Robot learning now advances along two tracks that rarely meet. On one side, direct Vision-Language-Action (VLA) policies map observations to actions and are scored by closed-loop task success. On the other, predictive and generative world models forecast future observations and are scored by open-loop prediction or generation quality. A natural question sits between them: does world modelling earn a measurable, closed-loop "
+    },
+    {
+     "text": "advantage",
+     "italic": true
+    },
+    {
+     "text": " over a direct policy, and for which robotic capabilities? We argue that the field cannot yet answer this question, and that the reason is a gap in how it is measured, not in the models themselves. World-model benchmarks score prediction without ever executing it, while task-success suites host a single policy and never build a world-model versus VLA contrast."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This survey maps the evaluation landscape around that gap. We catalogue 160 web-verified benchmarks spanning 2017 to 2026 and organise them by evaluation mode, robotic capability, and model family into four lanes: policy suites, embodied agents, world-model evaluation, and prediction-to-action bridges. Across the corpus, 138 of 160 benchmarks are model-agnostic and only 11 (7%) build an explicit VLA-versus-world-model contrast; counterfactual capability is almost entirely unmeasured, and only four benchmarks turn prediction into executed action. We contribute an operational taxonomy, a coverage comparison against the eight closest surveys (ours is the only one to cross capability with model family), an evaluation loop that isolates the advantage of prediction, and an actionable protocol of four advantage-aware metrics anchored on named testbeds. The organising claim is not that world models help or do not help, but that answering the question requires benchmarks built to ask it."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "CCS Concepts: • Computing methodologies → Robotic planning; Computer vision; Machine learning."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Additional Key Words and Phrases: robot learning, world models, evaluation, benchmarks, vision-language-action models, embodied AI, predictive models, survey"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "1 Introduction"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A robot can be taught to act in two broadly different ways. The first learns a "
+    },
+    {
+     "text": "direct policy",
+     "italic": true
+    },
+    {
+     "text": ": a function that maps an observation, and often a language instruction, straight to an action. Recent Vision-Language-Action (VLA) models are the prominent instance of this track, and they are judged by running them in an environment and counting task success, on suites such as LIBERO [91], CALVIN [101], RLBench [69], and ManiSkill2 [59]. The second track learns a "
+    },
+    {
+     "text": "world model",
+     "italic": true
+    },
+    {
+     "text": ": a predictor of future observations that a controller can plan against. This track spans latent-dynamics predictors (DreamerV3, TD-MPC2), action-conditioned video predictors (iVideoGPT, GR-2), and large generative video models (Sora, Cosmos, Genie), and it is judged not by acting but by the quality of what it predicts or generates, on suites such as VBench [68], EvalCrafter [92], and EWMBench [67]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Between these two tracks sits a question that neither is built to answer: does world modelling earn a measurable, closed-loop "
+    },
+    {
+     "text": "advantage",
+     "italic": true
+    },
+    {
+     "text": " over a direct policy, and for which robotic capabilities? Figure 1 poses that question with real benchmarks. On the left, closed-loop policy and embodied suites score success by executing a policy in the environment. On the right, open-loop world-model and video-generation suites score prediction or generation with no action taken. The axis down the centre, whether prediction buys a closed-loop advantage, is the one the field has not instrumented."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Fig. 1. "
+    },
+    {
+     "text": "Predict or Act?",
+     "bold": true
+    },
+    {
+     "text": " The survey’s organising question, posed with real benchmarks. "
+    },
+    {
+     "text": "Closed-loop",
+     "italic": true
+    },
+    {
+     "text": " (left): policy and embodied suites score task success by running a policy in the environment. "
+    },
+    {
+     "text": "Open-loop",
+     "italic": true
+    },
+    {
+     "text": " (right): world-model and video-generation benchmarks score prediction or generation quality with no action. The centre axis is the question neither pole answers, whether prediction earns a closed-loop advantage, built explicitly by only 11 of 160 benchmarks (Table 10). Every tile is a representative figure from the benchmark’s paper and links to it; per-tile provenance is in Table 13. Images © their respective authors, reproduced for scholarly review."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The gap is methodological rather than empirical. A world-model benchmark scores a rollout for realism or physical plausibility and then stops; it never closes the loop, so it cannot report whether the prediction would have helped a robot act. A task-success suite does close the loop, but it hosts a single policy and is deliberately model-agnostic, so it never contrasts a world-model policy against a direct VLA policy under one protocol. A benchmark that could answer the question must run "
+    },
+    {
+     "text": "both",
+     "italic": true
+    },
+    {
+     "text": " branches in one closed loop and report the per-capability gain (Section 4, Figure 10). Only a handful of recent “bridge” benchmarks attempt this, and none yet reports a capability-sliced VLA head-to-head."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This survey is therefore about "
+    },
+    {
+     "text": "evaluation",
+     "italic": true
+    },
+    {
+     "text": ", not about models. It maps the benchmark landscape that surrounds the question and asks which benchmarks could, in principle, establish an advantage of prediction. We catalogue 160 web-verified benchmarks spanning 2017 to 2026 and organise them by evaluation mode, robotic capability, and model family. The headline finding is stark: 138 of the 160 benchmarks are model-agnostic and only 11 (7%) build an explicit VLA-versus-world-model contrast, counterfactual capability is almost entirely unmeasured, and only four benchmarks turn prediction into executed action."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Contributions. ",
+     "bold": true
+    },
+    {
+     "text": "This survey offers the following."
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "An "
+      },
+      {
+       "text": "operational taxonomy",
+       "bold": true
+      },
+      {
+       "text": " of 160 robot-evaluation benchmarks across four evaluation lanes and twelve capability areas (Figure 7), with per-benchmark detail in Tables 3 and 10 and placement rules in Table 2."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "A "
+      },
+      {
+       "text": "profile of the corpus",
+       "bold": true
+      },
+      {
+       "text": " (Figures 4, 5, 6) and two galleries of the benchmarks’ own subject and results figures (Figures 8, 9), each panel provenance-tracked."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "A "
+      },
+      {
+       "text": "coverage comparison",
+       "bold": true
+      },
+      {
+       "text": " against the eight closest benchmark and evaluation surveys (Table 1): ours is the only one that crosses robotic capability with model family under a single protocol."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "A "
+      },
+      {
+       "text": "contrast-gap analysis",
+       "bold": true
+      },
+      {
+       "text": " (Section 4): an evaluation loop that isolates the advantage of prediction (Figure 10), a disambiguation of the overloaded term “world model” (Table 7), and a lane-by-lane account of why the contrast is missing (Table 8)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "An "
+      },
+      {
+       "text": "actionable protocol",
+       "bold": true
+      },
+      {
+       "text": " for advantage-aware evaluation: four measurable quantities with named testbeds (Table 9, Figure 11)."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The organising claim is deliberately modest. We do not argue that world models help, or that they do not. We argue that the question is currently unanswerable with the benchmarks the field has built, and we specify what a benchmark that could answer it would have to do."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "1.1 Related surveys and the empty cell"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Table 1 places the eight closest surveys and position papers against five axes that a survey of predictive embodied evaluation could organise around: ("
+    },
+    {
+     "text": "α",
+     "latex": "\\alpha",
+     "mathml": "<math display=\"inline\"><mi>α</mi></math>"
+    },
+    {
+     "text": ") evaluation mode, open- versus closed-loop, as the "
+    },
+    {
+     "text": "primary",
+     "italic": true
+    },
+    {
+     "text": " axis; ("
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi>β</mi></math>"
+    },
+    {
+     "text": ") robotic capability, such as hidden-state, counterfactual, long-horizon, and social; ("
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": ") a capability-by-model-family cross-tabulation, direct VLA against latent, action-conditioned, and generative world models under one protocol; ("
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi>δ</mi></math>"
+    },
+    {
+     "text": ") a behavioural advantage-of-prediction metric, which we "
+    },
+    {
+     "text": "assess",
+     "italic": true
+    },
+    {
+     "text": " in the literature rather than adopt; and ("
+    },
+    {
+     "text": "ε",
+     "latex": "\\varepsilon",
+     "mathml": "<math display=\"inline\"><mi>ε</mi></math>"
+    },
+    {
+     "text": ") a comprehensive benchmark catalogue. Existing surveys populate "
+    },
+    {
+     "text": "ε",
+     "latex": "\\varepsilon",
+     "mathml": "<math display=\"inline\"><mi>ε</mi></math>"
+    },
+    {
+     "text": " well and touch "
+    },
+    {
+     "text": "α",
+     "latex": "\\alpha",
+     "mathml": "<math display=\"inline\"><mi>α</mi></math>"
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi>β</mi></math>"
+    },
+    {
+     "text": " in passing, but the capability-by-family cross-tab "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " is absent everywhere, and the advantage metric "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi>δ</mi></math>"
+    },
+    {
+     "text": " is reached only partially, and only by a position paper [153], never by a survey. Figure 2 places these works on a timeline: two predate the recent world-model wave, and the rest cluster in the last two years, none of them crossing capability with family."
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "Table 1. "
+    },
+    {
+     "text": "Topical coverage of the closest benchmark/evaluation surveys versus ours. ",
+     "bold": true
+    },
+    {
+     "text": "✔ covered as an organising axis, "
+    },
+    {
+     "text": "~",
+     "bold": true
+    },
+    {
+     "text": " partial or mentioned in passing, ✘ absent. Axes: "
+    },
+    {
+     "text": "α",
+     "latex": "\\alpha",
+     "mathml": "<math display=\"inline\"><mi>α</mi></math>"
+    },
+    {
+     "text": " evaluation mode (open- vs closed-loop as the "
+    },
+    {
+     "text": "primary",
+     "italic": true
+    },
+    {
+     "text": " axis); "
+    },
+    {
+     "text": "β",
+     "latex": "\\beta",
+     "mathml": "<math display=\"inline\"><mi>β</mi></math>"
+    },
+    {
+     "text": " capability cuts (hidden-state, counterfactual, long-horizon, social); "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": " capability "
+    },
+    {
+     "text": "×",
+     "latex": "\\times",
+     "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+    },
+    {
+     "text": " model-family cross-tab (direct VLA vs latent / action-conditioned / generative world models under one protocol); "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi>δ</mi></math>"
+    },
+    {
+     "text": " behavioural advantage-of-prediction metric ("
+    },
+    {
+     "text": "assessed, not adopted",
+     "italic": true
+    },
+    {
+     "text": "; e.g. ACTION-ATLAS’s World Advantage Score); "
+    },
+    {
+     "text": "ε",
+     "latex": "\\varepsilon",
+     "mathml": "<math display=\"inline\"><mi>ε</mi></math>"
+    },
+    {
+     "text": " comprehensive benchmark catalogue. This survey is the only work that covers "
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi>δ</mi></math>"
+    },
+    {
+     "text": " is otherwise reached only "
+    },
+    {
+     "text": "partially",
+     "italic": true
+    },
+    {
+     "text": ", and only by a "
+    },
+    {
+     "text": "position",
+     "italic": true
+    },
+    {
+     "text": " paper [153], never by a survey. Venues: CoRL, IEEE TETCI; the remaining rows are arXiv or unrefereed preprints (Authorea, Preprints.org)."
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Survey",
+         "bold": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Venue",
+         "bold": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Yr",
+         "bold": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "α",
+         "latex": "\\alpha",
+         "mathml": "<math display=\"inline\"><mi mathsize=\"0.800em\">α</mi></math>"
+        },
+        {
+         "text": " mode"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "β",
+         "latex": "\\beta",
+         "mathml": "<math display=\"inline\"><mi mathsize=\"0.800em\">β</mi></math>"
+        },
+        {
+         "text": " cap."
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "γ",
+         "latex": "\\gamma",
+         "mathml": "<math display=\"inline\"><mi mathsize=\"0.800em\">γ</mi></math>"
+        },
+        {
+         "text": " family"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "δ",
+         "latex": "\\delta",
+         "mathml": "<math display=\"inline\"><mi mathsize=\"0.800em\">δ</mi></math>"
+        },
+        {
+         "text": " metric"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "ε",
+         "latex": "\\varepsilon",
+         "mathml": "<math display=\"inline\"><mi mathsize=\"0.800em\">ε</mi></math>"
+        },
+        {
+         "text": " catalog"
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Evaluation of Embodied AI [66]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Authorea"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2026"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "VLA Datasets & Bench. [142]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "arXiv"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2026"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Benchmark Construction [82]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "arXiv"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2026"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "RL Reproducibility [95]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "CoRL"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2020"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "World Models for Robots [65]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "arXiv"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2026"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Embodied World Models [125]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "preprint"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2026"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "WM Evaluation "
+        },
+        {
+         "text": "(pos.) ",
+         "italic": true
+        },
+        {
+         "text": "[153]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "arXiv"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2026"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Embodied AI: Simulators [42]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "TETCI"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2022"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Ours (this survey)",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2026"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Fig. 2. The closest benchmark/evaluation surveys as a timeline. Two predate the recent wave, an IEEE TETCI survey of embodied-AI simulators and tasks [42] and a CoRL survey of real-robot RL reproducibility [95] (amber = refereed venue); the rest are 2026 preprints on embodied evaluation, VLA data, and world models. None organises the robot-evaluation landscape by evaluation-mode "
+    },
+    {
+     "text": "×",
+     "latex": "\\times",
+     "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+    },
+    {
+     "text": " capability "
+    },
+    {
+     "text": "×",
+     "latex": "\\times",
+     "mathml": "<math display=\"inline\"><mo>×</mo></math>"
+    },
+    {
+     "text": " model-family; the sole work reaching the advantage-of-prediction axis is a "
+    },
+    {
+     "text": "position",
+     "italic": true
+    },
+    {
+     "text": " paper [153]. "
+    },
+    {
+     "text": "Ours",
+     "bold": true
+    },
+    {
+     "text": " ("
+    },
+    {
+     "text": "⋆",
+     "latex": "\\star",
+     "mathml": "<math display=\"inline\"><mo>⋆</mo></math>"
+    },
+    {
+     "text": ") fills that cell; per-axis coverage is in Table 1."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "2 Survey methodology and corpus"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.1 Scope, search, and verification"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The unit of this survey is the "
+    },
+    {
+     "text": "benchmark",
+     "italic": true
+    },
+    {
+     "text": ": an individually citeable evaluation artefact, a suite, a dataset paired with a scoring protocol, or an interactive environment with a task distribution, that measures robot, embodied-agent, or world-model behaviour. We deliberately exclude three neighbouring categories that a benchmark survey is often confused with: individual models and policies (the systems a benchmark scores), raw datasets with no scoring protocol, and pure simulators with no task distribution. Where a work contributes both a model and a benchmark, only its benchmark enters the corpus."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Candidates were gathered by parallel web search over arXiv, publisher venues, and project pages, using query strings built from the cross-product of the evaluation lanes (policy, embodied, world-model, bridge) with capability terms (manipulation, navigation, long-horizon, social, counterfactual, physical reasoning, generation quality) and with the terms "
+    },
+    {
+     "text": "benchmark",
+     "italic": true
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "evaluation",
+     "italic": true
+    },
+    {
+     "text": ", and "
+    },
+    {
+     "text": "suite",
+     "italic": true
+    },
+    {
+     "text": ". Every candidate was then web-verified against its arXiv or venue page for exact title, first author, year, and identifier; any candidate that could not be verified was dropped rather than recorded from memory, and entries were de-duplicated by both citation key and arXiv identifier. Figure 3 records the resulting funnel in the PRISMA 2020 style [108]; stages that were not logged as counts are marked as such rather than estimated. The procedure yields 160 web-verified benchmarks drawing on 164 references."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Fig. 3. "
+    },
+    {
+     "text": "Corpus construction",
+     "bold": true
+    },
+    {
+     "text": " in the PRISMA 2020 style [108]. The left column is the web-search stream behind the landscape corpus (Table 10): five thematic sweeps, de-duplicated by name and arXiv ID, screened to drop datasets and models, and metadata-verified by parallel audit agents. The right column is the venue-targeted and snowball search behind the closest surveys (Table 1). Both streams feed the included set. Candidates whose metadata could not be verified were discarded at harvest; their count was not logged, which we state rather than estimate."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.2 Placement, definitions, and the core-versus-appendix rule"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Each benchmark is placed on four axes: its evaluation "
+    },
+    {
+     "text": "lane",
+     "italic": true
+    },
+    {
+     "text": " (Section 3), the robotic "
+    },
+    {
+     "text": "capability",
+     "italic": true
+    },
+    {
+     "text": " it primarily stresses, its evaluation "
+    },
+    {
+     "text": "mode",
+     "italic": true
+    },
+    {
+     "text": " (open-loop prediction or generation quality, closed-loop task success, or a prediction-to-action bridge), and whether it builds a native VLA-versus-world-model "
+    },
+    {
+     "text": "contrast",
+     "italic": true
+    },
+    {
+     "text": " (explicit, partial, or model-agnostic). Table 2 states the operational definition used for each placement, so that boundary cases are resolved by a written rule rather than by taste; a benchmark counts as building a contrast, for example, only if a direct-policy and a world-model policy are run under one protocol and compared."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Because the full corpus is large, we split it. A benchmark enters the core taxonomy (Figure 7) when it is cleanly axis-placeable, distinct from its neighbours, and fully characterisable from its paper; the 86 representative benchmarks that meet all three sit in the taxonomy, and the complete set of 160 is catalogued in the landscape table (Table 10, Appendix A). Every count in the survey reconciles with that table."
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "Table 2. Operational definitions used to place each benchmark on the evaluation axes (§2). They resolve the ambiguous boundary cases: hosting a policy is not the same as "
+    },
+    {
+     "text": "building",
+     "italic": true
+    },
+    {
+     "text": " a VLA-vs-world-model contrast ("
+    },
+    {
+     "text": "γ",
+     "latex": "\\gamma",
+     "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+    },
+    {
+     "text": "), and an absolute success number is not an advantage-of-prediction measurement ("
+    },
+    {
+     "text": "δ",
+     "latex": "\\delta",
+     "mathml": "<math display=\"inline\"><mi>δ</mi></math>"
+    },
+    {
+     "text": ") without a matched baseline. open open-loop, closed closed-loop, bridge bridge."
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Construct",
+         "bold": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Counts (a benchmark has it if and only if…)",
+         "bold": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Does not count",
+         "bold": true
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Open-loop eval (open)",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "it scores prediction or generation "
+        },
+        {
+         "text": "quality",
+         "italic": true
+        },
+        {
+         "text": " on fixed inputs without executing the prediction in a feedback loop: video fidelity (FVD), physics or rollout consistency, or frame-level accuracy"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "any protocol where an action is executed and the environment responds; offline scoring of a policy’s success"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Closed-loop eval (closed)",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "success is measured by running a policy "
+        },
+        {
+         "text": "in",
+         "italic": true
+        },
+        {
+         "text": " the environment with state feedback and scoring task outcome: success rate, sub-goal completion, or reward under interaction"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "scoring a generated video or a static prediction; a metric computed without stepping the environment"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Bridge (bridge)",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "a prediction (imagined rollout, video, or latent plan) is "
+        },
+        {
+         "text": "converted into executed actions",
+         "italic": true
+        },
+        {
+         "text": " and scored on the resulting task success"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "a benchmark that stops at prediction quality; one that never turns a prediction into a control signal"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Native VLA-vs-WM contrast (",
+         "bold": true
+        },
+        {
+         "text": "γ",
+         "latex": "\\gamma",
+         "mathml": "<math display=\"inline\"><mi>γ</mi></math>"
+        },
+        {
+         "text": ")",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "the benchmark "
+        },
+        {
+         "text": "itself",
+         "italic": true
+        },
+        {
+         "text": " runs both a direct Vision-Language-Action policy and a world-model policy under one protocol and reports the head-to-head"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "a model-agnostic suite that merely "
+        },
+        {
+         "text": "hosts",
+         "italic": true
+        },
+        {
+         "text": " either family; a suite evaluated with only one family in the original paper"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Advantage-of-prediction (",
+         "bold": true
+        },
+        {
+         "text": "δ",
+         "latex": "\\delta",
+         "mathml": "<math display=\"inline\"><mi>δ</mi></math>"
+        },
+        {
+         "text": ")",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "a metric quantifies the closed-loop "
+        },
+        {
+         "text": "gain",
+         "italic": true
+        },
+        {
+         "text": " of a predictive policy over a matched direct-VLA baseline on the same tasks (assessed, not adopted)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "absolute success with no matched baseline; open-loop quality scores; a ranking that never isolates the predictive component"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2.3 The corpus at a glance"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Figures 4 and 5 profile the corpus, with all counts re-tallied directly from the catalogue rather than taken from any single paper. The 160 benchmarks divide by lane into 37 policy suites, 85 embodied-agent benchmarks, 34 world-model-evaluation benchmarks, and 4 prediction-to-action bridges, and by capability area into twelve clusters led by long-horizon planning (26), manipulation and dexterity (22), and generation quality (19). By evaluation mode, 113 score closed-loop task success, 43 score open-loop prediction or generation, and only 4 bridge the two. Publication years show the field’s shape clearly: a steady rise from 2 in 2017 to a peak of 36 in 2024, with the world-model-evaluation lane arriving almost entirely in the last three years (Figure 6). The single most consequential distribution is the contrast axis: 138 of 160 benchmarks are model-agnostic, 11 build a partial contrast, and 11 (7%) build one explicitly. That imbalance is the empirical core of the survey and is taken up in Section 4."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Fig. 4. "
+    },
+    {
+     "text": "The catalogued corpus at a glance.",
+     "bold": true
+    },
+    {
+     "text": " The survey maps 160 web-verified benchmarks across 4 evaluation lanes, spanning 2017–2026 and totalling 164 references; only 11 build an explicit Vision-Language-Action vs world-model contrast. The bars give benchmarks per capability area, with kindred clusters merged (dexterity into manipulation, vision-language navigation into navigation, theory-of-mind into hidden-state); the twelve areas sum to the 160 works of Table 10. Bars are coloured by the dominant lane of each area (teal policy, blue embodied, purple world-model)."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Fig. 5. "
+    },
+    {
+     "text": "Profile of the 160 catalogue benchmarks",
+     "bold": true
+    },
+    {
+     "text": " (Table 10), re-counted directly from the catalogue. (a) publication year, showing the 2023–2024 surge; (b) evaluation lane (embodied navigation dominates, then policy suites); (c) evaluation mode (closed-loop task success dominates, open-loop prediction is second, only four bridges reach action); (d) whether the benchmark builds a native Vision-Language-Action vs world-model contrast, the survey’s organising question: "
+    },
+    {
+     "text": "138 of 160 are model-agnostic",
+     "bold": true
+    },
+    {
+     "text": ", and only "
+    },
+    {
+     "text": "11 (7%)",
+     "bold": true
+    },
+    {
+     "text": " build the contrast explicitly. Counts are the exact column tallies of Table 10."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Fig. 6. "
+    },
+    {
+     "text": "The world-model-evaluation wave is recent.",
+     "bold": true
+    },
+    {
+     "text": " Per-year counts of closed-loop task-success benchmarks (green) and open-loop world-model / video-generation benchmarks (magenta) in the catalogue. Closed-loop suites dominate through 2024; in "
+    },
+    {
+     "text": "2025 open-loop evaluation overtakes them",
+     "bold": true
+    },
+    {
+     "text": " (13 vs 6) as the world-model-generation literature arrives. The four prediction-to-action bridges are newer still, all appearing in 2024 or later. Years are the benchmarks’ first-release years (2026 is partial and omitted); counts are the tallies of Table 10."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "3 A taxonomy of robot-evaluation benchmarks"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Figure 7 organises 86 representative benchmarks under a single root and four evaluation lanes. The lanes are ordered by how close their scoring sits to executed behaviour: from closed-loop policy suites (Section 3 §3.1) and embodied-agent benchmarks (§3.2), through open-loop world-model evaluation (§3.3), to the prediction-to-action bridges (§3.4) that alone turn prediction into action. Within each lane, benchmarks are grouped by the capability they stress. Table 3 gives a detailed comparison of a representative subset on year, venue, evaluation mode, and contrast, and Table 4 places one exemplar per lane against a common set of capability dimensions; neither lane’s exemplar builds the VLA-versus-world-model contrast that Section 4 isolates."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Fig. 7. "
+    },
+    {
+     "text": "A taxonomy of robot-evaluation benchmarks for predictive embodied intelligence",
+     "bold": true
+    },
+    {
+     "text": " (86 representative benchmarks of the 160 in Table 10). Each sub-family is one cell listing its benchmarks, each with a short statement of what it measures. Benchmarks are grouped by evaluation lane (§3.1–§3.4) and then by the capability they stress. The lanes run from closed-loop task-success suites to the "
+    },
+    {
+     "text": "bridge",
+     "italic": true
+    },
+    {
+     "text": " frontier (shaded), the only lane that turns prediction into executed action, which is the survey’s novelty axis. Full per-benchmark detail: Tables 3, 10."
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "Table 3. "
+    },
+    {
+     "text": "Detailed comparison of a representative 31 of the 160 benchmarks",
+     "bold": true
+    },
+    {
+     "text": " in the landscape (Table 10), grouped by evaluation lane. "
+    },
+    {
+     "text": "Eval",
+     "bold": true
+    },
+    {
+     "text": ": open open-loop prediction/generation quality, closed closed-loop task success, bridge prediction-to-action bridge. "
+    },
+    {
+     "text": "VLA vs WM",
+     "bold": true
+    },
+    {
+     "text": ": ✔ native direct-policy vs world-model contrast, "
+    },
+    {
+     "text": "~",
+     "bold": true
+    },
+    {
+     "text": " partial, "
+    },
+    {
+     "text": "–",
+     "bold": true
+    },
+    {
+     "text": " model-agnostic. Venues are web-verified; “arXiv” marks preprint-only works."
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Benchmark",
+         "bold": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Year",
+         "bold": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Venue",
+         "bold": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Eval",
+         "bold": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Capability",
+         "bold": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "VLA vs WM",
+         "bold": true
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "§3.1 Policy / manipulation suites ",
+         "bold": true
+        },
+        {
+         "text": "closed"
+        }
+       ],
+       "colspan": 6
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "CALVIN ",
+         "bold": true
+        },
+        {
+         "text": "[101]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2021"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "RA-L"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "long-horizon language"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "LIBERO ",
+         "bold": true
+        },
+        {
+         "text": "[91]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2023"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "NeurIPS D&B"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "short-horizon + transfer"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Meta-World ",
+         "bold": true
+        },
+        {
+         "text": "[152]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2020"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "CoRL"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "multi-task / meta-RL"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "ManiSkill2 ",
+         "bold": true
+        },
+        {
+         "text": "[59]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2023"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ICLR"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "generalizable skills"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "SIMPLER ",
+         "bold": true
+        },
+        {
+         "text": "[88]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2024"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "CoRL"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "generalization (real vs sim)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "THE COLOSSEUM ",
+         "bold": true
+        },
+        {
+         "text": "[113]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2024"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "RSS"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "generalization / robustness"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "RoboCasa ",
+         "bold": true
+        },
+        {
+         "text": "[105]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2024"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "RSS"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "long-horizon (data scaling)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "RoboArena ",
+         "bold": true
+        },
+        {
+         "text": "[4]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2025"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "CoRL"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "real-world generalization"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "GemBench ",
+         "bold": true
+        },
+        {
+         "text": "[54]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2024"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ICRA"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "generalization levels"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "VLABench ",
+         "bold": true
+        },
+        {
+         "text": "[160]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2025"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ICCV"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "long-horizon reasoning"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "§3.2 Embodied navigation, planning & social ",
+         "bold": true
+        },
+        {
+         "text": "closed"
+        }
+       ],
+       "colspan": 6
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Habitat 3.0 ",
+         "bold": true
+        },
+        {
+         "text": "[112]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2023"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ICLR"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "social / multi-agent"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "BEHAVIOR-1K ",
+         "bold": true
+        },
+        {
+         "text": "[85]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2024"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "CoRL"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "long-horizon household"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "ALFRED ",
+         "bold": true
+        },
+        {
+         "text": "[128]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2019"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "CVPR"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "long-horizon, partial-obs"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "TEACh ",
+         "bold": true
+        },
+        {
+         "text": "[107]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2021"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "AAAI"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "hidden-state (dialog)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "RoboTHOR ",
+         "bold": true
+        },
+        {
+         "text": "[38]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2020"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "CVPR"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "navigation / sim-to-real"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "SocNavBench ",
+         "bold": true
+        },
+        {
+         "text": "[14]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2021"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ACM THRI"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "social navigation"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "LIBERO-Mem ",
+         "bold": true
+        },
+        {
+         "text": "[36]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2025"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "AAAI"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "hidden-state / occlusion"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "VIMA-Bench ",
+         "bold": true
+        },
+        {
+         "text": "[75]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2023"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ICML"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "multimodal-prompt generalization"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "§3.3 World-model & video-generation evaluation ",
+         "bold": true
+        },
+        {
+         "text": "open"
+        }
+       ],
+       "colspan": 6
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "WorldModelBench ",
+         "bold": true
+        },
+        {
+         "text": "[86]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2025"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "arXiv"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "open"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "video-WM prediction quality"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Physics-IQ ",
+         "bold": true
+        },
+        {
+         "text": "[103]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2025"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "WACV"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "open"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "physical realism"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "VBench-2.0 ",
+         "bold": true
+        },
+        {
+         "text": "[161]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2025"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "arXiv"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "open"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "generation faithfulness"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "WorldScore ",
+         "bold": true
+        },
+        {
+         "text": "[41]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2025"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ICCV"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "open"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "world-gen quality"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "EWMBench ",
+         "bold": true
+        },
+        {
+         "text": "[67]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2025"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "arXiv"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "open"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "scene/motion/semantic quality"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "EVA-Bench ",
+         "bold": true
+        },
+        {
+         "text": "[33]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2024"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ICML"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "open"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "embodied video anticipation"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "WorldPrediction ",
+         "bold": true
+        },
+        {
+         "text": "[25]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2025"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "arXiv"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "open"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "counterfactual action recognition"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Physion ",
+         "bold": true
+        },
+        {
+         "text": "[12]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2021"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "NeurIPS D&B"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "open"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "physical prediction from vision"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Physion++ ",
+         "bold": true
+        },
+        {
+         "text": "[138]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2023"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "NeurIPS D&B"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "open"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "physical prediction with online property inference"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "–",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "§3.4 Bridges (prediction to action) ",
+         "bold": true
+        },
+        {
+         "text": "bridge"
+        }
+       ],
+       "colspan": 6
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "WorldSimBench ",
+         "bold": true
+        },
+        {
+         "text": "[115]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2024"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ICML"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "bridge"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "video-to-action consistency"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "World-in-World ",
+         "bold": true
+        },
+        {
+         "text": "[157]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2025"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "ICLR"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "bridge"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed-loop task success of WMs"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "RoboWM-Bench ",
+         "bold": true
+        },
+        {
+         "text": "[73]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2026"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "arXiv"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "bridge"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "prediction executability"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "WorldArena ",
+         "bold": true
+        },
+        {
+         "text": "[124]"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "2026"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "arXiv"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "bridge"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed-loop WM arena"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "caption": [
+    {
+     "text": "Table 4. Capability matrix, one representative benchmark per evaluation lane. No lane’s exemplar builds a native VLA-vs-world-model contrast: policy and embodied suites are model-agnostic (they "
+    },
+    {
+     "text": "host",
+     "italic": true
+    },
+    {
+     "text": " any policy), world-model suites score generation quality with no action, and the bridge exemplar reaches closed-loop success but reports only a partial contrast (“visual quality is not task success”). Counterfactual probing is absent throughout. ✔ yes, "
+    },
+    {
+     "text": "~",
+     "bold": true
+    },
+    {
+     "text": " partial, ✘ no, "
+    },
+    {
+     "text": "–",
+     "bold": true
+    },
+    {
+     "text": " n/a; open open-loop, closed closed-loop, bridge bridge."
+    }
+   ],
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Dimension",
+         "bold": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "LIBERO ",
+         "bold": true
+        },
+        {
+         "text": "[91]"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Habitat 3.0 ",
+         "bold": true
+        },
+        {
+         "text": "[112]"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "WorldModelBench ",
+         "bold": true
+        },
+        {
+         "text": "[86]"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "World-in-World ",
+         "bold": true
+        },
+        {
+         "text": "[157]"
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "policy suite",
+         "italic": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "embodied nav",
+         "italic": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "world-model eval",
+         "italic": true
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "bridge",
+         "italic": true
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "What it scores"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "task success"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "social-nav success"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "video-pred. quality"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed-loop WM success"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Evaluation mode"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "closed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "open"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "bridge"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Executes actions in a loop?"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Native VLA-vs-WM contrast?"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Capability stressed"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "short-horizon + transfer"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "social / multi-agent"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "physical realism"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "plan executability"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Per-capability slicing?"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Advantage-of-prediction metric?"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Real / sim / video"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "sim"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "sim"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "video"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "sim"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Counterfactual probing?"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✘"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Reusable leaderboard?"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "✔"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "~",
+         "bold": true
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The two galleries make the corpus concrete. Figure 8 collects the benchmarks’ own "
+    },
+    {
+     "text": "subject",
+     "italic": true
+    },
+    {
+     "text": " figures, the task and scene images that show what each benchmark depicts, grouped by lane rather than by embodiment. Figure 9 collects the "
+    },
+    {
+     "text": "results",
+     "italic": true
+    },
+    {
+     "text": " figures, the leaderboards, radar plots, and distributions that show what each benchmark reports. Every panel links to its source paper and is provenance-tracked (Tables 11, 12); benchmarks with no locatable figure are omitted, not fabricated."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "3.1 Policy suites"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The policy lane (37 benchmarks) scores a policy by executing it and counting task success. Its sub-families run from single- and dual-arm "
+    },
+    {
+     "text": "manipulation",
+     "italic": true
+    },
+    {
+     "text": " (§3.1.1: ARNOLD [56], PerAct [127], FMB [94], ManiSkill2 [59]), through "
+    },
+    {
+     "text": "generalization",
+     "italic": true
+    },
+    {
+     "text": " suites that vary objects, scenes, and sim-to-real gaps (§3.1.2: LIBERO [91], THE COLOSSEUM [113], SIMPLER [88], VIMA-Bench [75]), to "
+    },
+    {
+     "text": "dexterous",
+     "italic": true
+    },
+    {
+     "text": " hands (§3.1.4: Bi-DexHands [28], DexArt [9], UniDexGrasp [146]). These suites are the backbone of policy evaluation, and they are deliberately model-agnostic: they host whatever policy a user brings and are careful not to privilege one architecture. That neutrality is exactly why they cannot, on their own, answer whether"
+    }
+   ]
+  }
+ ],
+ "furniture": [
+  "arXiv:2609.29669v1 [cs.RO] 30 Aug 2026",
+  "1",
+  "2",
+  "Jena et al.",
+  "Do World Models Make Better Robots?",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "10"
+ ],
+ "license": "open",
+ "provenance": "latexml",
+ "notes": "arXiv 2609.29669v1 (robotics survey; ACM journal, one column, many tables), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words."
+}
