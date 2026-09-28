@@ -16,7 +16,7 @@ import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
 import { regionOf, unionBox } from "@/lib/parse/pdf/geometry";
-import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
+import { ATTACH_PUNCT_RE, spaceGap } from "@/lib/parse/pdf/lines";
 import { BULLET_RE } from "@/lib/parse/pdf/markers";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { braceLabelBoxes, hangingFamily, hangingGlyph } from "@/lib/parse/pdf/math/layout";
@@ -387,7 +387,7 @@ function joinRows(host: Line, rows: Line[], ctx: PageContext, orphans: Glyph[]):
       } else if (!cell.text.endsWith(" ") && prev !== null) {
         const gap = item.x - (prev.x + prev.w);
         const attach = ATTACH_PUNCT_RE.test(item.str) && gap < em * 0.7;
-        if ((k === 0 && (unit.row || prevRow)) || (gap > em * 0.12 && !attach)) cell.text += " ";
+        if ((k === 0 && (unit.row || prevRow)) || (gap > spaceGap(prev, item, em) && !attach)) cell.text += " ";
       }
       const start = cell.text.length;
       cell.text += item.str;
