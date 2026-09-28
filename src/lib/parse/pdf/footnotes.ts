@@ -30,8 +30,13 @@ const SYMBOL_LABEL_RE = new RegExp(`^(${SYMBOL}{1,4})`);
 const RAISED_LABEL_RE = new RegExp(`^[\\p{L}\\p{N}${SYMBOLS}]{1,4}$`, "u");
 /** A table row's first cell that is a note's label. */
 const CELL_LABEL_RE = new RegExp(`^(?:${SYMBOL}{1,4}|\\d{1,3}|\\p{L})$`, "u");
-/** A note symbol set level after a word ("testing***" in MMWR). */
-const LEVEL_SYMBOLS_RE = new RegExp(`(?<=[^\\s${SYMBOLS}])${SYMBOL}{1,4}(?!${SYMBOL})`, "g");
+/** Where a note symbol set level stands: after a word ("testing***" in
+    MMWR), or after a CJK character and a gap, as CJK text carries no
+    spaces (a Japanese author line read "知希 †"). */
+const AFTER_WORD = `(?:(?<=[^\\s${SYMBOLS}])|(?<=[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Hangul}]\\s))`;
+const LEVEL_SYMBOLS_RE = new RegExp(`${AFTER_WORD}${SYMBOL}{1,4}(?!${SYMBOL})`, "gu");
+/** A mark or a group of marks ("†,††"), which TeX sets as one formula. */
+const MARKS_RE = new RegExp(`^[\\s,${SYMBOLS}]+$`);
 /** A note symbol after a space, where lastIndex stands. */
 const SPACED_SYMBOLS_RE = new RegExp(`\\s{1,2}(${SYMBOL}{1,4})(?![${SYMBOLS}\\p{L}\\p{N}])`, "uy");
 /** A rule set as glyphs: SCOTUS draws its footnote rule as "——————". */
@@ -410,7 +415,7 @@ const isSymbols = (label: string) => [...label].every((ch) => SYMBOLS.includes(c
 function levelLabel(label: string): RegExp {
   const escaped = label.replaceAll("*", "\\*");
   return isSymbols(label)
-    ? new RegExp(`(?<=[^\\s${SYMBOLS}])${escaped}(?!${SYMBOL})`, "g")
+    ? new RegExp(`${AFTER_WORD}${escaped}(?!${SYMBOL})`, "gu")
     : new RegExp(`(?<=[\\p{Ll})\\]])${escaped}(?![\\p{L}\\p{N}])`, "gu");
 }
 
@@ -503,10 +508,11 @@ export function placeFootnotes(segments: Segment[], footnotes: Segment[]): Segme
     }
     let index = -1;
     if (found) {
-      // A mark read as a formula (TeX sets § and ¶ in a math font) is words
-      // again: the import puts a footnote's number only where words stand.
+      // A mark read as a formula (TeX sets § and ¶, and a group "†,††", in
+      // a math font) is words again: the import puts a footnote's number
+      // only where words stand.
       const { host, start, end } = found;
-      host.runs = host.runs?.map((r) => (r.zone && r.start < end && start < r.end && isSymbols(host.text.slice(r.start, r.end).trim()) ? { ...r, zone: undefined } : r));
+      host.runs = host.runs?.map((r) => (r.zone && r.start < end && start < r.end && MARKS_RE.test(host.text.slice(r.start, r.end)) ? { ...r, zone: undefined } : r));
       used.set(found.host, (used.get(found.host) ?? new Set<number>()).add(found.start));
       refs.set(found.host, [...(refs.get(found.host) ?? []), { start: found.start, end: found.end, note }]);
       index = segments.indexOf(found.host);

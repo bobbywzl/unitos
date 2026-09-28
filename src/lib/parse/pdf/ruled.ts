@@ -295,7 +295,7 @@ function isTableRegion(lines: Line[], width: number): boolean {
 // belongs to a column it covers half of, or that holds a quarter of it: a
 // head centered over a column of right-aligned numbers reaches past the
 // column's edge into the next.
-function phraseColumns(line: Line, bounds: number[]): { from: number; to: number; items: Item[] }[] {
+function phraseColumns(line: Line, bounds: number[], ruled: number[] = []): { from: number; to: number; items: Item[] }[] {
   const inner = bounds.slice(1, -1);
   const phrases: Item[][] = [];
   for (const it of line.items) {
@@ -305,11 +305,14 @@ function phraseColumns(line: Line, bounds: number[]): { from: number; to: number
     // A gap wider than a word space parts two heads of narrow columns when a
     // column edge lies in it ("Kitaev" and "complex fermion" 5 pt apart) or
     // the two sit over two columns (Word's "Capacity" and "Output (GWh)"
-    // 10 pt apart, the edge under "Output").
+    // 10 pt apart, the edge under "Output"). A column rule drawn through the
+    // gap parts them however narrow it is (arXiv 2504.02736 p. 9's heads,
+    // a cell each between rules 2 pt from their words).
     const edge =
       prev !== undefined &&
-      gap > line.size * 0.45 &&
-      (bounds.some((b) => b > prev.x + prev.w && b < it.x) || columnAt(centerOf(prev).x, inner) !== columnAt(centerOf(it).x, inner));
+      (ruled.some((x) => x > prev.x + prev.w - 0.5 && x < it.x + 0.5) ||
+        (gap > line.size * 0.45 &&
+          (bounds.some((b) => b > prev.x + prev.w && b < it.x) || columnAt(centerOf(prev).x, inner) !== columnAt(centerOf(it).x, inner))));
     if (prev && gap < line.size * 1.2 && !edge) last.push(it);
     else phrases.push([it]);
   }
@@ -610,7 +613,15 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
     drawn.filter((r) => r.x1 > it.x + it.w * 0.05 && r.x1 < it.x + it.w * 0.95 && r.y1 <= centerOf(it).y && r.y2 >= centerOf(it).y).map((r) => r.x1);
   const phrased = buildLines(region.items.flatMap(splitWide).flatMap((it) => splitAt(it, [...new Set(cuts(it))].sort((a, b) => a - b))), page);
   const full = region.rules.filter((r) => r.x2 - r.x1 >= width * 0.9).map((r) => r.y1);
-  const headerRule = full.find((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2);
+  // With no full rule under the head, a rule under its spanned columns alone
+  // parts it from the body when every line above it is the head's (a web
+  // table's border under "arXiv | PubMed" and not under the heads that span
+  // both head rows: synth-paper-html's Table I).
+  const under = region.rules
+    .filter((r) => r.x2 - r.x1 < width * 0.9 && phrased.filter((l) => l.y > r.y1).length >= 2 && phrased.filter((l) => l.y < r.y1).length >= 2)
+    .map((r) => r.y1)
+    .sort((a, b) => a - b)[0];
+  const headerRule = full.find((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2) ?? under;
   let head = headerRule === undefined ? [] : phrased.filter((l) => l.y > headerRule);
   let body = headerRule === undefined ? phrased : phrased.filter((l) => l.y < headerRule);
   // With no rule under the head, the lines at the top with no words in the
@@ -628,8 +639,11 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   // columns it covers, or the ones the partial rule under it spans.
   const partial = region.rules.filter((r) => r.x2 - r.x1 < width * 0.9);
   const headGroups: Line[][] = [];
+  // A head line over two phrases or more of the line under it is a row of
+  // its own ("arXiv" over "R-1 R-L"), not a wrapped head.
+  const spans = (upper: Line, lower: Line) => phrasesOf(upper).some((p) => phrasesOf(lower).filter((q) => q.x1 < p.x2 && q.x2 > p.x1).length >= 2);
   head.forEach((line, k) => {
-    const cut = k > 0 && partial.some((r) => r.y1 < head[k - 1].y && r.y1 > line.y);
+    const cut = k > 0 && (partial.some((r) => r.y1 < head[k - 1].y && r.y1 > line.y) || spans(head[k - 1], line));
     if (k === 0 || cut) headGroups.push([]);
     headGroups[headGroups.length - 1].push(line);
   });
@@ -659,7 +673,7 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
     const cellsOf = body.map((line) => cellsBySeparators(line, separators));
     const starts = regionRowStarts(body, cellsOf);
     const bodyRows = rowsOf(cellsOf, starts, columnCount);
-    spanValues(bodyRows, body, starts, separators);
+    spanValues(bodyRows, body, starts, separators, ruledAt);
     rows.push(...spanCenteredLabels(bodyRows, starts.map((k) => body[k].y), full));
   }
   return segment(rows, headerRows || (rows.length > 1 && boldHeaderRows(rows) > 0 ? 1 : 0), bounds);
@@ -692,24 +706,27 @@ function columnRules(region: TableRegion): Rule[] {
 // glyphs do not match its characters one to one stays whole.
 function splitWide(it: Item): Item[] {
   const glyphs = it.glyphs ?? [];
-  const at: number[] = [];
-  for (let i = 0; i < it.str.length; ) {
-    const ch = String.fromCodePoint(it.str.codePointAt(i) ?? 0);
-    if (ch.trim()) at.push(i);
-    i += ch.length;
-  }
-  if (glyphs.length < 2 || at.length !== glyphs.length) return [it];
+  const chars: number[] = [];
+  for (let i = 0; i < it.str.length; i += String.fromCodePoint(it.str.codePointAt(i) ?? 0).length) chars.push(i);
+  // The glyphs stand for the characters, or for the characters less the
+  // spaces (a browser's PDF draws its spaces, TeX's does not).
+  const drawn = chars.filter((i) => it.str[i].trim());
+  const mapped = glyphs.length === drawn.length ? drawn : glyphs.length === chars.length ? chars : null;
+  if (glyphs.length < 2 || !mapped) return [it];
+  const placed = mapped.map((i, k) => ({ i, g: glyphs[k] })).filter((p) => it.str[p.i].trim());
   const out: Item[] = [];
   let from = 0;
-  for (let k = 1; k <= glyphs.length; k++) {
+  for (let k = 1; k <= placed.length; k++) {
     const wide =
-      k < glyphs.length &&
-      glyphs[k].x - (glyphs[k - 1].x + glyphs[k - 1].w) > it.size * 0.8 &&
-      /\s/.test(it.str.slice(at[k - 1], at[k]));
-    if (k < glyphs.length && !wide) continue;
-    const [first, last] = [glyphs[from], glyphs[k - 1]];
-    const end = k < glyphs.length ? at[k] : it.str.length;
-    out.push({ ...it, str: it.str.slice(at[from], end).trimEnd(), x: first.x, w: last.x + last.w - first.x, glyphs: glyphs.slice(from, k) });
+      k < placed.length &&
+      placed[k].g.x - (placed[k - 1].g.x + placed[k - 1].g.w) > it.size * 0.8 &&
+      /\s/.test(it.str.slice(placed[k - 1].i, placed[k].i));
+    if (k < placed.length && !wide) continue;
+    const own = placed.slice(from, k);
+    const [first, last] = [own[0].g, own[own.length - 1].g];
+    const end = k < placed.length ? placed[k].i : it.str.length;
+    const inside = new Set(own.map((p) => p.g));
+    out.push({ ...it, str: it.str.slice(own[0].i, end).trimEnd(), x: first.x, w: last.x + last.w - first.x, glyphs: glyphs.filter((g, n) => inside.has(g) || (mapped[n] >= own[0].i && mapped[n] < end)) });
     from = k;
   }
   return out;
@@ -759,11 +776,14 @@ function headSeparators(head: Line[], body: Line[], separators: number[], box: B
 // phrase with a fifth of it or more on each side of a column's edge ("3.3 ·
 // 10^18" under both of Table 2's cost columns, arXiv 1706.03762). Its row is
 // read again without the edges it crosses. starts: each row's first line.
-function spanValues(rows: TableRow[], lines: Line[], starts: number[], separators: number[]) {
+function spanValues(rows: TableRow[], lines: Line[], starts: number[], separators: number[], ruled: number[] = []) {
   rows.forEach((row, r) => {
     const rowLines = lines.slice(starts[r], starts[r + 1] ?? lines.length);
+    // A column rule drawn is never crossed: the values on its sides are two.
     const crossed = new Set(
-      rowLines.flatMap((l) => phrasesOf(l)).flatMap((p) => separators.filter((x) => x - p.x1 >= (p.x2 - p.x1) * 0.2 && p.x2 - x >= (p.x2 - p.x1) * 0.2)),
+      rowLines
+        .flatMap((l) => phrasesOf(l))
+        .flatMap((p) => separators.filter((x) => !ruled.includes(x) && x - p.x1 >= (p.x2 - p.x1) * 0.2 && p.x2 - x >= (p.x2 - p.x1) * 0.2)),
     );
     if (crossed.size === 0) return;
     const kept = separators.filter((x) => !crossed.has(x));
@@ -891,18 +911,18 @@ function headerRow(lines: Line[], bounds: number[], built: Line[], rules: Rule[]
     const inside = body.flatMap((l) => l.items).filter((it) => centerOf(it).x > bounds[c] && centerOf(it).x < x);
     return inside.length > 0 ? (Math.min(...inside.map((it) => it.x)) + Math.max(...inside.map((it) => it.x + it.w))) / 2 : (bounds[c] + x) / 2;
   });
+  const drawnXs = [...new Set(cuts.map((r) => r.x1))];
+  const middleOf = (p: { items: Item[] }) => (p.items[0].x + p.items[p.items.length - 1].x + p.items[p.items.length - 1].w) / 2;
   for (const line of lines) {
-    const phrases = phraseColumns(line, bounds);
-    const middleOf = (p: { items: Item[] }) => (p.items[0].x + p.items[p.items.length - 1].x + p.items[p.items.length - 1].w) / 2;
-    // The column rules drawn through the line bound its cells when the line
-    // leaves out some the body draws: a head spans the columns between the
-    // two around it (PLOS's "Fig 2A, segment 1" over its "exp." and
-    // "theo."). A table ruled after its first column alone draws that rule
-    // through every row (arXiv 2302.12627's |l|ccc|): its heads are read by
-    // their words.
-    const drawnXs = [...new Set(cuts.map((r) => r.x1))];
+    // The column rules drawn through the line part its phrases, and bound
+    // its cells when the line leaves out some the body draws: a head spans
+    // the columns between the two around it (PLOS's "Fig 2A, segment 1"
+    // over its "exp." and "theo."). A table ruled after its first column
+    // alone draws that rule through every row (arXiv 2302.12627's
+    // |l|ccc|): its heads are read by their words.
     const crossing = cuts.filter((r) => r.y1 <= line.y + line.size * 0.3 && r.y2 >= line.y + line.size * 0.3).map((r) => r.x1);
     const through = drawnXs.some((x) => !crossing.includes(x)) ? crossing : [];
+    const phrases = phraseColumns(line, bounds, crossing);
     for (const phrase of phrases) {
       // A rule drawn under a head spans the columns the head does (a
       // booktabs \cmidrule): its ends say which, where a head centered

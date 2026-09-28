@@ -97,10 +97,12 @@ function isFigureDebris(s: Segment, ctx: PageContext): boolean {
   if ((s.lineSize ?? ctx.bodySize) < ctx.bodySize * 0.92) return true;
   const text = s.text.trim();
   if (text.length <= 12) return true;
-  // A panel title or axis label at body size: short, no sentence end.
+  // A panel title or axis label at body size: short, no sentence end. A
+  // Chinese or Japanese sentence ends with "。" (MIC white paper p9: a
+  // paragraph's last line over a caption read as its figure's).
   return (
     text.length <= 60 &&
-    !/[.!?:;,]$/.test(text) &&
+    !/[.!?:;,。．！？：；，、]$/.test(text) &&
     (s.lineSize ?? ctx.bodySize) <= ctx.bodySize * 1.05 &&
     !s.text.includes("\n")
   );
@@ -488,11 +490,15 @@ function drawingIn(drawing: Drawn, y1: number, y2: number, x1: number, x2: numbe
 // A clip paints nothing: Chromium clips a printed page's text to its column,
 // and every short paragraph over a caption read as a legend inside the
 // figure (synth-paper-html p1: "where x is the article … Fig. 1 shows the
-// whole model." went into Fig. 1's crop and left the text).
-function overlapsDrawing(box: Box, drawing: Drawn): boolean {
+// whole model." went into Fig. 1's crop and left the text). A drawing
+// around the caption as well is a frame or the page's white ground, no
+// figure over the caption (MIC white paper p2: a white box under the whole
+// text took the paragraph over a caption into its figure).
+function overlapsDrawing(box: Box, drawing: Drawn, cap: Box): boolean {
   return [...drawing.paths, ...drawing.images].some(
     (b) =>
       !("clip" in b && b.clip) &&
+      !(b.x1 <= cap.x1 && b.x2 >= cap.x2 && b.y1 <= cap.y1 && b.y2 >= cap.y2) &&
       b.x1 < box.x2 && b.x2 > box.x1 && b.y1 < box.y2 && b.y2 > box.y1 && (b.x2 - b.x1 > 2 || b.y2 - b.y1 > 2),
   );
 }
@@ -566,12 +572,17 @@ export function attachFigureRegions(
   const consumed = new Set<Segment>();
   // Each figure's panel captions and notes (Panel captions above), joined to
   // its caption once every graphic has its figure. Among the words a figure
-  // takes, a panel's caption opens with its letter or a note's lead and
-  // stands under a drawing.
+  // takes, a panel's caption opens with its letter and stands under a
+  // drawing; a note is the figure's wherever it stands (MIC white paper
+  // p13: a source line stood nearer the photo under it than the one over
+  // it, and the caption left it out).
   const panels = new Map<Segment, CaptionPart[]>();
   const addPanel = (figure: Segment, part: CaptionPart) => panels.set(figure, [...(panels.get(figure) ?? []), part]);
   const panelOf = (s: Segment): CaptionPart | null =>
-    s.box && (s.type === "PARAGRAPH" || s.type === "LIST" || s.type === "HEADING") && isSubCaption(s.text) && underDrawing(s.box, drawing)
+    s.box &&
+    (s.type === "PARAGRAPH" || s.type === "LIST" || s.type === "HEADING") &&
+    isSubCaption(s.text) &&
+    (NOTE_RE.test(s.text.trim()) || underDrawing(s.box, drawing))
       ? { text: s.text.replace(/\n/g, " "), runs: s.runs ?? [], box: s.box }
       : null;
   for (let c = 0; c < withMath.length; c++) {
@@ -606,7 +617,7 @@ export function attachFigureRegions(
         !(prev.type === "FIGURE" && prev.region) &&
         prev.type !== "EQUATION" &&
         (prev.text.length < 80 || oneLine) &&
-        overlapsDrawing(prev.box, drawing);
+        overlapsDrawing(prev.box, drawing, cap.box);
       // A line set just outside a graphic (a chart's ticks, its axis years,
       // its title above the plot: arXiv 2609.29669 p9 read them as headings)
       // is the graphic's too.
@@ -621,7 +632,7 @@ export function attachFigureRegions(
       const underGraphic =
         (prev.type === "PARAGRAPH" || prev.type === "SEPARATOR") &&
         prev.text.length <= 100 &&
-        !/[.!?:;]["”’)]?$/.test(prev.text.trim()) &&
+        !/[.!?:;。．！？：；]["”’)」』）]?$/.test(prev.text.trim()) &&
         graphics.some(
           (g) =>
             g.box.x1 < x2 &&
@@ -656,11 +667,45 @@ export function attachFigureRegions(
       // its axis labels.
       if (drawnAbove) box = unionBox(box, { ...drawnAbove, y1: Math.max(drawnAbove.y1, box.y1), y2: Math.min(drawnAbove.y2, box.y2) });
     } else {
-      // Below the caption: debris down to the next body segment.
+      // Below the caption: debris down to the next body segment. The
+      // figure's note or source is its last line, and under a drawing its
+      // words stand close: a line more than a row and a half below the
+      // drawing and the lines taken is the page's (MIC white paper: each
+      // chart ends with "（出典）…", and the sub-heading and the links under
+      // it went into the figure). The floor is the figure's lowest point so
+      // far: its graphics and the lines it took.
+      const capBottom = cap.box.y1;
+      const drawn = graphics.filter((g) => g.box.x1 < x2 && g.box.x2 > x1 && g.box.y2 <= capBottom + ctx.bodySize);
+      let floor = capBottom;
+      const reach = () => {
+        for (let grew = true; grew; ) {
+          grew = false;
+          for (const g of drawn) {
+            if (g.box.y1 >= floor || floor - g.box.y2 > rowGap * 1.5) continue;
+            floor = g.box.y1;
+            grew = true;
+          }
+        }
+      };
+      reach();
+      const onDrawing = floor < capBottom;
       let m = 0;
-      while (m < next.length && isFigureDebris(next[m], ctx)) m++;
+      let end: number | undefined;
+      while (m < next.length && isFigureDebris(next[m], ctx)) {
+        const s = next[m];
+        if (onDrawing && s.box && floor - s.box.y2 > rowGap * 1.5) break;
+        m++;
+        if (s.box && s.box.y1 < floor) {
+          floor = s.box.y1;
+          reach();
+        }
+        if (NOTE_RE.test(s.text.trim())) {
+          end = s.box ? s.box.y1 - ctx.bodySize * 0.2 : undefined;
+          break;
+        }
+      }
       const below = next[m];
-      const bottom = below?.box ? below.box.y2 + ctx.bodySize * 0.6 : pageBottom;
+      const bottom = end ?? (below?.box ? below.box.y2 + ctx.bodySize * 0.6 : pageBottom);
       const drawnBelow = drawingIn(drawing, bottom, cap.box.y1, x1, x2);
       if (m > 0 || cap.box.y1 - bottom > rowGap * 3 || drawnBelow) {
         box = { x1, x2, y1: bottom, y2: cap.box.y1 - ctx.bodySize * 0.2 };

@@ -260,7 +260,11 @@ function inline(src: Source, extra: RichMark[] = []): RichNode[] {
       if (atom.start === at) pieces.push({ node: atom.node });
       return;
     }
-    const marks = oneTextStyle([...extra, ...spans.filter((s) => s.start <= at && s.end >= next).map((s) => s.mark)]);
+    const own = spans.filter((s) => s.start <= at && s.end >= next).map((s) => s.mark);
+    // A code run takes no text style (a footnote's size): the page editor's
+    // code mark holds no other mark, and the text style took its place.
+    const code = own.some((m) => m.type === "code");
+    const marks = oneTextStyle([...extra, ...own].filter((m) => !code || m.type !== "textStyle"));
     pieces.push({ text: text.slice(at, next), marks });
   });
   return inlineNodes(pieces);
@@ -861,8 +865,20 @@ class Converter {
 
   private sourceOf(block: ParsedBlock, starts: PageStart[], style: DocStyle = this.styleOf(block)): Source {
     // The block's look where it differs from its style, then its runs'
-    // marks over it (a run's face or size over its block's).
-    const spans: Source["spans"] = this.lookMarks(block, style).map((mark) => ({ start: 0, end: block.text.length, mark }));
+    // marks over it (a run's face or size over its block's). A code run
+    // takes none of the block's look: the page editor's code mark holds no
+    // other mark, and the block's face took its place (a footnote's web
+    // address lost its code, real-jnlp-31-47).
+    const code = (block.styles ?? []).filter((s) => s.style === "code").sort((a, b) => a.start - b.start);
+    const spans: Source["spans"] = [];
+    for (const mark of this.lookMarks(block, style)) {
+      let at = 0;
+      for (const c of code) {
+        if (c.start > at) spans.push({ start: at, end: c.start, mark });
+        at = Math.max(at, c.end);
+      }
+      if (at < block.text.length) spans.push({ start: at, end: block.text.length, mark });
+    }
     const named = this.named(style);
     for (const s of block.styles ?? []) {
       const mark = styleMark(s.style, named);
@@ -897,7 +913,10 @@ class Converter {
       (meta !== undefined && alignOf(tokensOf(meta.html)) === "center") ||
       (heading !== undefined && alignOf(tokensOf(heading.html)) === "center");
     const attrs: Record<string, unknown> = { docStyle: "title" };
-    const align = this.input.titleAlign ?? (centered ? "center" : null);
+    // The parse's alignment when it read the title's look on the page (a
+    // title it read and set flush left stays so); else the page's centered
+    // masthead, byline, or first heading centers it.
+    const align = this.input.titleAlign ?? (this.input.titleFont ? null : centered ? "center" : null);
     if (align) attrs.textAlign = align;
     this.push(paragraphNode(this.titleContent(inline({ text: title, spans: [], starts })), attrs));
   }

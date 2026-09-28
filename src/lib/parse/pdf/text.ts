@@ -101,6 +101,9 @@ export function joinWrapped(target: { text: string; runs?: Run[] }, next: string
 
 /** A URL a text ends in: from "http(s)://" or "www." to its end. */
 const URL_END_RE = /(?:https?:\/\/|www\.)\S*$/;
+/** A URL a text opens with: a word of its own after a path or a URL
+    ("…/25/06" then "https://doi.org/…" in an ACM paper's front matter). */
+const URL_START_RE = /^(?:https?:\/\/|www\.)/;
 /** A URL's last character that a wrap leaves at a line's end with the URL
     going on: a path's slash, a hyphen, a query's "=" or "&". */
 const URL_OPEN_RE = /[/\-_=&?#%]$/;
@@ -123,8 +126,9 @@ function urlGoesOn(text: string, href: string | null, next: string, nextHref: st
   const head = (next.trimStart().split(/\s/, 1)[0] ?? "").replace(/[.,;:)\]]+$/, "");
   if (!head) return false;
   const joined = (url.slice(-16) + head.slice(0, 16)).toLowerCase();
-  if ([href, nextHref].some((link) => link?.toLowerCase().includes(joined))) return true;
-  if (href && nextHref !== href) return false;
+  // A scheme alone ("https://" then "www.…") goes on whatever the next word.
+  if ([href, nextHref].some((link) => link?.toLowerCase().includes(joined)) || /^(?:https?:\/\/|www\.)$/.test(url)) return true;
+  if ((href && nextHref !== href) || URL_START_RE.test(head)) return false;
   return URL_OPEN_RE.test(url) || URL_REST_RE.test(head);
 }
 
@@ -232,7 +236,7 @@ export function joinGroup(lines: Line[], proseJoin = false): { text: string; run
       // CJK wraps anywhere and carries no space; a URL wraps without one.
       if (CJK_CHAR_RE.test(lastChar) && CJK_CHAR_RE.test(firstChar)) sep = "";
       else if (url !== null) sep = url || CJK_CHAR_RE.test(firstChar) ? "" : " ";
-      else if (/^\S*(?:\/|\.[a-z]{2,4}\/)\S*$/.test(nextText.split(" ")[0]) && /\/\S*$/.test(prevText)) sep = "";
+      else if (/^\S*(?:\/|\.[a-z]{2,4}\/)\S*$/.test(nextText.split(" ")[0]) && /\/\S*$/.test(prevText) && !URL_START_RE.test(nextText)) sep = "";
       else if (lineEndHyphen(prevText, nextText) === "drop") {
         builder.dropTrailingChar();
         sep = "";

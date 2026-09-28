@@ -344,15 +344,27 @@ export function captionTable(table: Segment, text: string, html: string) {
   table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
 }
 
-// The size most of a run of text's characters are set in (Look.size).
+// The size most of a run of text's characters are set in (Look.size; small
+// capitals at their capitals' size: synth-paper-html's caption titles are
+// small capitals drawn 5 pt).
 function sizeOf(runs: Run[]): number | undefined {
   const count = new Map<number, number>();
-  for (const r of runs) if (r.look) count.set(r.look.size, (count.get(r.look.size) ?? 0) + r.end - r.start);
+  for (const r of runs) {
+    if (!r.look) continue;
+    const size = r.look.capitals ?? r.look.size;
+    count.set(size, (count.get(size) ?? 0) + r.end - r.start);
+  }
   return [...count].sort((a, b) => b[1] - a[1])[0]?.[0];
 }
 
+// IEEE sets "TABLE I" on a line of its own over the title in capitals: no
+// mark after the number (synth-paper-html's "TABLE I RESULTS ON THE
+// LONG-DOCUMENT BENCHMARKS").
+const IEEE_CAPTION_RE = /^TABLE\s+(?:\d+|[IVXL]+)\s+\p{Lu}/u;
+
 function isCaption(s: Segment): boolean {
-  return s.type === "PARAGRAPH" && !s.footnote && s.text.length <= 1200 && TABLE_CAPTION_RE.test(s.text.trim());
+  const text = s.text.trim();
+  return s.type === "PARAGRAPH" && !s.footnote && s.text.length <= 1200 && (TABLE_CAPTION_RE.test(text) || IEEE_CAPTION_RE.test(text));
 }
 
 // A caption the paragraph above a table kept as its last line, on the

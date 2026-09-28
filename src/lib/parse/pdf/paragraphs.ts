@@ -153,7 +153,7 @@ export function isCentered(lines: Line[], k: number, ctx: PageContext): boolean 
     const off = Math.abs(inset - (edge - line.xEnd));
     return (inset > line.size * 2 && off <= line.size) || (big && inset > line.size * 0.5 && off <= line.size * 0.25);
   };
-  return centeredTo(right) || (column !== undefined && column[1] > right && centeredTo(column[1])) || sharesMiddle(lines, k, ctx) || centeredStack(lines, k);
+  return centeredTo(right) || (column !== undefined && column[1] > right && centeredTo(column[1])) || sharesMiddle(lines, k, ctx);
 }
 
 // A stack of short lines, each read in a column of its own, that share
@@ -161,7 +161,8 @@ export function isCentered(lines: Line[], k: number, ctx: PageContext): boolean 
 // affiliation, city, address). Three lines or more, their middles within
 // half an em, each within three ems under the one before, starting at
 // different places; the grid's other cells come between them in reading
-// order (real-acm-damon25-3736236 p1).
+// order (real-acm-damon25-3736236 p1). Only the lines' alignment reads it:
+// as a centered line to join, it joined lines of different cells.
 function centeredStack(lines: Line[], k: number): boolean {
   const alone = (l: Line) => {
     const column = lineColumn(l);
@@ -253,7 +254,7 @@ function fillsColumn(lines: Line[], k: number, ctx: PageContext): boolean {
 export function lineAlign(lines: Line[], from: number, to: number, ctx: PageContext): "center" | "right" | "justify" | null {
   const group = lines.slice(from, to);
   if (group.length === 0 || group.some((l) => l.cells.length !== 1)) return null;
-  if (group.every((_, k) => isCentered(lines, from + k, ctx)) || centeredTitle(group, ctx)) return "center";
+  if (group.every((_, k) => isCentered(lines, from + k, ctx) || centeredStack(lines, from + k)) || centeredTitle(group, ctx)) return "center";
   const edges = group.map((_, k) => columnEdges(lines, from + k, ctx));
   const atRight = (l: Line, k: number) => edges[k].right > 0 && Math.abs(edges[k].right - l.xEnd) <= l.size * 0.33;
   // Flush right starts its lines anywhere but at the column's left edge: a
