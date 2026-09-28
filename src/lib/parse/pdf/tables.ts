@@ -1,5 +1,7 @@
-// Tables: which lines form a table run (findTableRuns, before segmentation),
-// and the rows and columns a run makes (tableFromRun).
+// Tables of text alone: which lines form a table run (findTableRuns, before
+// segmentation), and the rows and columns a run makes (tableFromRun). And
+// what every table shares: the cells of a line, a TABLE segment's html
+// (ruled.ts builds the tables a page's rules draw with them).
 
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
@@ -9,7 +11,8 @@ import type { Cell, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pd
 
 // ── Tables ──────────────────────────────────────────────────────────────────
 
-type TableRow = { cells: { text: string; runs: Run[] }[] };
+export type TableCell = { text: string; runs: Run[]; colspan?: number; rowspan?: number };
+export type TableRow = { cells: TableCell[] };
 
 function clusterColumns(lines: Line[]): number[] {
   const xs = lines.flatMap((l) => l.cells.map((c) => c.x)).sort((a, b) => a - b);
@@ -24,7 +27,7 @@ function clusterColumns(lines: Line[]): number[] {
 // Column separators as x positions no text crosses. A coverage scan instead of
 // x-start clustering: right-aligned number columns start at a different x on
 // every row, but nothing ever crosses the gutter between columns.
-function columnSeparators(run: Line[]): number[] {
+export function columnSeparators(run: Line[]): number[] {
   const minX = Math.min(...run.map((l) => l.x));
   const maxX = Math.max(...run.map((l) => l.xEnd));
   const step = 2;
@@ -67,46 +70,52 @@ function columnSeparators(run: Line[]): number[] {
   return separators;
 }
 
+// Items joined into one cell's text and style runs, a space where the gap
+// between two items reads as one.
+function cellOfItems(items: Item[], size: number): Cell {
+  const cell: Cell = { x: items[0]?.x ?? 0, text: "", runs: [] };
+  let prevEnd: number | null = null;
+  for (const item of items) {
+    const gap = prevEnd === null ? 0 : item.x - prevEnd;
+    if (prevEnd !== null && gap > size * 0.12 && !cell.text.endsWith(" ")) {
+      const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
+      if (!attach) cell.text += " ";
+    }
+    const start = cell.text.length;
+    cell.text += item.str;
+    const last = cell.runs[cell.runs.length - 1];
+    if (last && sameFlags(last, item) && start - last.end <= 1) {
+      last.end = cell.text.length;
+    } else {
+      cell.runs.push({
+        start,
+        end: cell.text.length,
+        bold: item.bold,
+        italic: item.italic,
+        mono: item.mono,
+        smallCaps: item.smallCaps,
+        href: item.href,
+        sup: item.sup,
+        sub: item.sub,
+      });
+    }
+    prevEnd = item.x + item.w;
+  }
+  return cell;
+}
+
 // Split one line's items at the separators. Items are pdf.js chunks, so a cell
 // boundary nearly always falls between items; assignment is by item center.
-function cellsBySeparators(line: Line, separators: number[]): Cell[] {
-  const size = line.size;
+export function cellsBySeparators(line: Line, separators: number[]): Cell[] {
   const buckets: Item[][] = Array.from({ length: separators.length + 1 }, () => []);
-  for (const item of line.items) {
-    const center = item.x + item.w / 2;
-    let idx = 0;
-    while (idx < separators.length && center > separators[idx]) idx++;
-    buckets[idx].push(item);
-  }
-  return buckets.map((bucket) => {
-    if (bucket.length === 0) return { x: 0, text: "", runs: [] };
-    const cell: Cell = { x: bucket[0].x, text: "", runs: [] };
-    let prevEnd: number | null = null;
-    for (const item of bucket) {
-      const gap = prevEnd === null ? 0 : item.x - prevEnd;
-      if (prevEnd !== null && gap > size * 0.12 && !cell.text.endsWith(" ")) {
-        const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
-        if (!attach) cell.text += " ";
-      }
-      const start = cell.text.length;
-      cell.text += item.str;
-      const last = cell.runs[cell.runs.length - 1];
-      if (last && sameFlags(last, item) && start - last.end <= 1) {
-        last.end = cell.text.length;
-      } else {
-        cell.runs.push({
-          start,
-          end: cell.text.length,
-          bold: item.bold,
-          italic: item.italic,
-          mono: item.mono,
-          href: item.href,
-        });
-      }
-      prevEnd = item.x + item.w;
-    }
-    return cell;
-  });
+  for (const item of line.items) buckets[columnAt(item.x + item.w / 2, separators)].push(item);
+  return buckets.map((bucket) => (bucket.length === 0 ? { x: 0, text: "", runs: [] } : cellOfItems(bucket, line.size)));
+}
+
+export function columnAt(x: number, separators: number[]): number {
+  let idx = 0;
+  while (idx < separators.length && x > separators[idx]) idx++;
+  return idx;
 }
 
 function cellHtml(text: string, runs: Run[]): string {
@@ -127,6 +136,9 @@ function cellHtml(text: string, runs: Run[]): string {
     const italic = covering.some((r) => r.italic);
     const mono = covering.some((r) => r.mono);
     let wrapped = segment;
+    // A raised or lowered run (a note mark, a unit's power) keeps its place.
+    if (covering.some((r) => r.sup)) wrapped = `<sup>${wrapped}</sup>`;
+    else if (covering.some((r) => r.sub)) wrapped = `<sub>${wrapped}</sub>`;
     if (mono) wrapped = `<code>${wrapped}</code>`;
     if (italic) wrapped = `<em>${wrapped}</em>`;
     if (bold) wrapped = `<strong>${wrapped}</strong>`;
@@ -135,23 +147,70 @@ function cellHtml(text: string, runs: Run[]): string {
   return html;
 }
 
-// One table out of a run of gap-aligned lines. Columns come from the coverage
-// scan; rows come from the run's vertical rhythm: with two gap sizes present,
-// the small gap is a wrapped cell line and the large one a row break; with one
-// gap size, every line is its own row.
-export function tableFromRun(run: Line[], leading: number): Segment {
-  const separators = columnSeparators(run);
-  const columnCount = separators.length + 1;
-  const page = run[0].page;
-  // No gutter runs the whole way down when the wide gaps sit at a different
-  // x on every line (an author line's names over an affiliation line). One
-  // column is no table: the lines are a paragraph (import compare loop
-  // finding: a paper's authors read as a two-row table).
-  if (columnCount < 2) {
-    const { text, runs } = joinGroup(run);
-    return { type: "PARAGRAPH", text, page, runs, ...geom(run) };
-  }
+// Text appended to a cell: a space between its lines.
+function appendToCell(target: TableCell, part: { text: string; runs: Run[] }) {
+  if (part.text.length === 0) return;
+  const builder = new TextBuilder();
+  builder.append({ text: target.text, runs: target.runs }, "");
+  builder.append(part, target.text.length > 0 ? " " : "");
+  target.text = builder.text;
+  target.runs = builder.runs;
+}
 
+// Fragmented figure text, not a real table: mostly tiny cells.
+function isFragmented(rows: TableRow[]): boolean {
+  const flat = rows.flatMap((r) => r.cells.map((c) => c.text.trim()).filter((t) => t.length > 0));
+  const shortCells = flat.filter((c) => c.length <= 2).length;
+  return flat.length > 0 && shortCells / flat.length > 0.6;
+}
+
+// The TABLE segment for rows of cells, the first headerRows of them header
+// rows. A header cell keeps its bold runs: the words are bold on the page,
+// and the import and the benchmark read bold from <strong>, not from <th>.
+// Every cell ends with an invisible separator (tab between cells, newline
+// between rows) so the table's DOM text equals block text exactly — text
+// anchors inside tables depend on this (SPEC.md §5). A merged cell is one
+// cell of its row, as the html draws it.
+export function tableSegment(rows: TableRow[], headerRows: number, page: number, where: Pick<Segment, "box" | "lineSize" | "mathShare">): Segment {
+  const rowHtml = (row: TableRow, tag: "td" | "th", rowIdx: number) =>
+    `<tr>${row.cells
+      .map((c, cellIdx) => {
+        const last = cellIdx === row.cells.length - 1;
+        const gap = last
+          ? rowIdx === rows.length - 1
+            ? ""
+            : '<span class="cell-gap">\n</span>'
+          : '<span class="cell-gap">\t</span>';
+        const spans = `${(c.colspan ?? 1) > 1 ? ` colspan="${c.colspan}"` : ""}${(c.rowspan ?? 1) > 1 ? ` rowspan="${c.rowspan}"` : ""}`;
+        return `<${tag}${spans}>${cellHtml(c.text, c.runs)}${gap}</${tag}>`;
+      })
+      .join("")}</tr>`;
+  const html =
+    "<table>" +
+    (headerRows > 0 ? `<thead>${rows.slice(0, headerRows).map((r, i) => rowHtml(r, "th", i)).join("")}</thead>` : "") +
+    `<tbody>${rows.slice(headerRows).map((r, i) => rowHtml(r, "td", headerRows + i)).join("")}</tbody>` +
+    "</table>";
+  const text = rows.map((r) => r.cells.map((c) => c.text).join("\t")).join("\n");
+  return { type: "TABLE", text, html, page, ...where };
+}
+
+// Leading rows whose words are bold: the header rows (never every row).
+export function boldHeaderRows(rows: TableRow[]): number {
+  let n = 0;
+  while (n < rows.length - 1) {
+    const cells = rows[n].cells;
+    const length = cells.reduce((sum, c) => sum + c.text.length, 0);
+    if (length === 0 || boldShare(cells.flatMap((c) => c.runs), length) <= 0.5) break;
+    n++;
+  }
+  return n;
+}
+
+// Row starts in a run of lines split into cells. Rows come from the run's
+// vertical rhythm: with two gap sizes present, the small gap is a wrapped
+// cell line and the large one a row break; with one gap size, every line is
+// its own row.
+function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] {
   const size = median(run.map((l) => l.size));
   const floor = size * 0.75; // below this, same visual band (badge baselines)
   const wrapCeiling = leading * size * 1.15; // a wrapped cell line sits at text leading
@@ -174,7 +233,6 @@ export function tableFromRun(run: Line[], leading: number): Segment {
   // — labels vertically centered beside taller cells, a header cell wrapped
   // beside its column headers — the vertical rhythm misleads: rows then come
   // from the anchors, split at the widest gap between consecutive anchors.
-  const cellsOf = run.map((line) => cellsBySeparators(line, separators));
   const hasFirst = cellsOf.map((cells) => cells[0].text.length > 0);
   const anchors: number[] = [];
   let lastFirst = -1;
@@ -214,71 +272,64 @@ export function tableFromRun(run: Line[], leading: number): Segment {
       rowStarts.push(widest);
     }
   } else {
+    // A line with a first-column label of its own is a row whatever the
+    // rhythm says: a statement sets its rows 14 pt apart and its groups 28
+    // pt apart, and the rhythm read every group as one row of wrapped cells
+    // (census class 3: Apple's statement of operations). Labels and values
+    // are short: cells as long as a line of prose are prose (a chart's
+    // labels beside a column of text), which the rhythm reads.
+    const short = (texts: string[]) => median(texts.map((t) => t.length)) <= 30;
+    const labels =
+      short(anchors.map((k) => cellsOf[k][0].text)) &&
+      short(anchors.flatMap((k) => cellsOf[k].slice(1).map((c) => c.text).filter((t) => t.length > 0)));
     run.forEach((line, k) => {
       if (k === 0) return;
       const gap = gapAt(k);
-      if (rowGapThreshold > 0 ? gap > rowGapThreshold : gap > floor) rowStarts.push(k);
+      if ((labels && anchors.includes(k)) || (rowGapThreshold > 0 ? gap > rowGapThreshold : gap > floor)) rowStarts.push(k);
     });
   }
+  return rowStarts;
+}
 
+// Lines split into cells, gathered into rows at the row starts.
+export function rowsOf(cellsOf: Cell[][], rowStarts: number[], columnCount: number): TableRow[] {
   const rows: TableRow[] = [];
-  run.forEach((line, k) => {
+  cellsOf.forEach((cells, k) => {
     if (rowStarts.includes(k) || rows.length === 0) {
       rows.push({ cells: Array.from({ length: columnCount }, () => ({ text: "", runs: [] })) });
     }
     const row = rows[rows.length - 1];
-    cellsOf[k].forEach((cell, idx) => {
-      if (cell.text.length === 0) return;
-      const target = row.cells[idx];
-      const builder = new TextBuilder();
-      builder.append({ text: target.text, runs: target.runs }, "");
-      builder.append({ text: cell.text, runs: cell.runs }, target.text.length > 0 ? " " : "");
-      target.text = builder.text;
-      target.runs = builder.runs;
-    });
+    cells.forEach((cell, idx) => appendToCell(row.cells[idx], cell));
   });
+  return rows;
+}
 
-  // Fragmented figure text, not a real table: mostly tiny cells.
-  const flat = rows.flatMap((r) => r.cells.map((c) => c.text.trim()).filter((t) => t.length > 0));
-  const shortCells = flat.filter((c) => c.length <= 2).length;
-  if (flat.length > 0 && shortCells / flat.length > 0.6) {
+// One table out of a run of gap-aligned lines. Columns come from the coverage
+// scan; rows from the run's rhythm (rowStartsOf).
+export function tableFromRun(run: Line[], leading: number): Segment {
+  const separators = columnSeparators(run);
+  const columnCount = separators.length + 1;
+  const page = run[0].page;
+  // No gutter runs the whole way down when the wide gaps sit at a different
+  // x on every line (an author line's names over an affiliation line). One
+  // column is no table: the lines are a paragraph (import compare loop
+  // finding: a paper's authors read as a two-row table).
+  if (columnCount < 2) {
+    const { text, runs } = joinGroup(run);
+    return { type: "PARAGRAPH", text, page, runs, ...geom(run) };
+  }
+  const cellsOf = run.map((line) => cellsBySeparators(line, separators));
+  const rows = rowsOf(cellsOf, rowStartsOf(run, cellsOf, leading), columnCount);
+  if (isFragmented(rows)) {
     const builder = new TextBuilder();
     for (const line of run) builder.append({ text: line.text.replace(/\t/g, " "), runs: line.runs }, " ");
     return { type: "FIGURE", text: builder.text, page, runs: builder.runs, ...geom(run) };
   }
-
-  const headerRow =
-    rows.length > 1 &&
-    boldShare(
-      rows[0].cells.flatMap((c) => c.runs),
-      rows[0].cells.reduce((n, c) => n + c.text.length, 0),
-    ) > 0.5;
-  // Header cells render bold on their own; strip bold runs so <th> holds no <strong>.
-  // Every cell ends with an invisible separator (tab between cells, newline
-  // between rows) so the table's DOM text equals block text exactly — text
-  // anchors inside tables depend on this (SPEC.md §5).
-  const rowHtml = (row: TableRow, tag: "td" | "th", rowIdx: number) =>
-    `<tr>${row.cells
-      .map((c, cellIdx) => {
-        const runs = tag === "th" ? c.runs.map((r) => ({ ...r, bold: false })) : c.runs;
-        const last = cellIdx === row.cells.length - 1;
-        const gap = last
-          ? rowIdx === rows.length - 1
-            ? ""
-            : '<span class="cell-gap">\n</span>'
-          : '<span class="cell-gap">\t</span>';
-        return `<${tag}>${cellHtml(c.text, runs)}${gap}</${tag}>`;
-      })
-      .join("")}</tr>`;
-  const bodyRows = headerRow ? rows.slice(1) : rows;
-  const html =
-    "<table>" +
-    (headerRow ? `<thead>${rowHtml(rows[0], "th", 0)}</thead>` : "") +
-    `<tbody>${bodyRows.map((r, i) => rowHtml(r, "td", (headerRow ? 1 : 0) + i)).join("")}</tbody>` +
-    "</table>";
-  const text = rows.map((r) => r.cells.map((c) => c.text).join("\t")).join("\n");
-  return { type: "TABLE", text, html, page, ...geom(run) };
+  const headerRows = rows.length > 1 && boldHeaderRows(rows) > 0 ? 1 : 0;
+  return tableSegment(rows, headerRows, page, geom(run));
 }
+
+// ── Tables of text alone ────────────────────────────────────────────────────
 
 // A label line: a short label at the page's left edge, then the entry's title
 // at the content column — "18:00  Check in", "2019  Engineer at X". Not a
@@ -353,7 +404,8 @@ export function isWrappedRowLine(line: Line, lines: Line[]): boolean {
 // multi-cell lines and the single-cell lines that continue a wrapped cell
 // (aligned with a column, or indented past the first column, or a first-column
 // line followed closely by more of the table), and grows backward over
-// wrapped header lines just above the first multi-cell line.
+// wrapped header lines just above the first multi-cell line. A ruled table's
+// line ends a run.
 export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
   const runOf = new Array<number>(lines.length).fill(-1);
   let runId = 0;
@@ -381,7 +433,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       const next = lines[j];
       const last = lines[members[members.length - 1]];
       const gap = last.y - next.y;
-      if (gap < 0 || gap > next.size * ctx.leading * 2.2) break;
+      if (next.table || gap < 0 || gap > next.size * ctx.leading * 2.2) break;
       // A wrapped row line can read as a label line (a short first cell at
       // the left edge, the rest under the last column); inside a run whose
       // columns it sits at, it is a row.
@@ -420,7 +472,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       ) {
         let y = next.y;
         for (let k = j + 1; k <= j + 2 && k < lines.length; k++) {
-          if (y - lines[k].y > lines[k].size * ctx.leading * 2.2) break;
+          if (lines[k].table || y - lines[k].y > lines[k].size * ctx.leading * 2.2) break;
           if (lineMathShare(lines[k]) >= 0.4) break;
           if (
             (lines[k].cells.length >= 2 && !isLabelLine(lines[k], ctx)) ||

@@ -187,7 +187,7 @@ const en = {
   // The import switch (lib/docs/import-switch.ts)
   imports: "Imports",
   importsDesc:
-    "On: a PDF judged an article, a web page, or a Markdown or text file that is added becomes an import and opens in the page editor. Off: it opens in the reader as blocks. Documents added before keep the form they were made in.",
+    "On: a PDF judged an article, a web page, a Markdown or text file, or a Word file that is added becomes an import and opens in the page editor. Off: it opens in the reader as blocks. Documents added before keep the form they were made in.",
   // Services (env status; moved here from Settings — operator concern, not reader)
   services: "Services",
   svcGlm: "GLM 5.3: the reader's tools, the assistant, Stitch, Merge with AI. GLM 5.3 Flash: the readings. Through the gateway alone; Kimi stands in without it",
@@ -606,7 +606,7 @@ const zh: Record<keyof typeof en, string> = {
   agoDays: "{n} 天前",
   imports: "导入",
   importsDesc:
-    "开启：新加入的判定为文章的 PDF、网页，或 Markdown 与文本文件成为导入，在页面编辑器中打开。关闭：它在阅读器中以块打开。之前加入的文档保持生成时的形式。",
+    "开启：新加入的判定为文章的 PDF、网页、Markdown 与文本文件，或 Word 文件成为导入，在页面编辑器中打开。关闭：它在阅读器中以块打开。之前加入的文档保持生成时的形式。",
   services: "服务",
   svcGlm: "GLM 5.3：阅读器工具、助手、Stitch、AI 合并。GLM 5.3 Flash：各项读取。只经过网关；没有网关时由 Kimi 代替",
   svcKimi: "Kimi K3：提取、带图片的调用，以及没有网关时的所有 GLM 调用",

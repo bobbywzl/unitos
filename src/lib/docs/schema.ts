@@ -74,6 +74,8 @@ export const RICH_MARK_TYPES = [
   "textStyle",
   "subscript",
   "superscript",
+  // An import's words set in small capitals (a theorem label, a defined term).
+  "smallCaps",
   // A suggestion's (components/docs/ext/suggest.ts): on words, and on a
   // whole block.
   "insertion",

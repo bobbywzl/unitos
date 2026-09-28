@@ -46,7 +46,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "VINIJA JAIN, Meta, USA"
+     "text": "VINIJA JAIN, "
+    },
+    {
+     "text": "Meta, USA",
+     "sup": true
     }
    ]
   },
@@ -54,7 +58,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "AMAN CHADHA, Apple, USA"
+     "text": "AMAN CHADHA, "
+    },
+    {
+     "text": "Apple, USA",
+     "sup": true
     }
    ]
   },
@@ -62,7 +70,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "VASU SHARMA, PocketFM, USA"
+     "text": "VASU SHARMA, "
+    },
+    {
+     "text": "PocketFM, USA",
+     "sup": true
     }
    ]
   },

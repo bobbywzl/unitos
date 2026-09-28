@@ -36,7 +36,11 @@
       "kind": "paragraph",
       "spans": [
         {
-          "text": "Third-quarter volume grew 8.4% year over year to 12.7 million parcels, and the cost per parcel fell for the fourth quarter in a row. Service improved in every region, although the Southwest remains below its on-time target.1"
+          "text": "Third-quarter volume grew 8.4% year over year to 12.7 million parcels, and the cost per parcel fell for the fourth quarter in a row. Service improved in every region, although the Southwest remains below its on-time target."
+        },
+        {
+          "text": "1",
+          "sup": true
         }
       ]
     },
@@ -666,7 +670,11 @@
             {
               "spans": [
                 {
-                  "text": "Loss of a top-ten account at contract renewal2"
+                  "text": "Loss of a top-ten account at contract renewal"
+                },
+                {
+                  "text": "2",
+                  "sup": true
                 }
               ]
             },

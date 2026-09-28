@@ -76,7 +76,14 @@
       "kind": "paragraph",
       "spans": [
         {
-          "text": "Sparse attention lowers the cost by letting each token attend to only some positions [2], [3]. The pattern matters: a window captures local context, and a few global tokens carry information across the whole document.1 This paper measures how far such a pattern goes on scientific text, where long-range references are common."
+          "text": "Sparse attention lowers the cost by letting each token attend to only some positions [2], [3]. The pattern matters: a window captures local context, and a few global tokens carry information across the whole document."
+        },
+        {
+          "text": "1",
+          "sup": true
+        },
+        {
+          "text": " This paper measures how far such a pattern goes on scientific text, where long-range references are common."
         }
       ],
       "indent": "first"
@@ -625,7 +632,11 @@
       "kind": "paragraph",
       "spans": [
         {
-          "text": "Table I compares the models on both benchmarks. The window-and-global model improves ROUGE-1 by 4.9 points on arXiv and 4.5 points on PubMed over dense attention truncated to 4,096 tokens, which it outperforms while reading four times as much text.2"
+          "text": "Table I compares the models on both benchmarks. The window-and-global model improves ROUGE-1 by 4.9 points on arXiv and 4.5 points on PubMed over dense attention truncated to 4,096 tokens, which it outperforms while reading four times as much text."
+        },
+        {
+          "text": "2",
+          "sup": true
         }
       ],
       "indent": "first"

@@ -1,6 +1,7 @@
 // Measures the modules share: the box, font size, and math share of lines, the
 // union of two boxes, a box as a region, and the median.
 
+import { charCount } from "@/lib/parse/pdf/glyphs";
 import type { Box, Line } from "@/lib/parse/pdf/types";
 import type { Region } from "@/lib/video/types";
 
@@ -31,7 +32,7 @@ export function unionBox(a: Box, b: Box): Box {
 
 // What a segment's lines say about it: extent, font size, math share.
 export function geom(lines: Line[]): { box: Box; lineSize: number; mathShare: number } {
-  const chars = lines.reduce((n, l) => n + l.text.replace(/\s/g, "").length, 0);
+  const chars = lines.reduce((n, l) => n + charCount(l.text), 0);
   const math = lines.reduce((n, l) => n + l.mathChars, 0);
   return {
     box: boxOf(lines),
@@ -42,7 +43,7 @@ export function geom(lines: Line[]): { box: Box; lineSize: number; mathShare: nu
 
 // Share of a line's glyphs set in math fonts.
 export function lineMathShare(line: Line): number {
-  const chars = line.text.replace(/\s/g, "").length;
+  const chars = charCount(line.text);
   return chars > 0 ? line.mathChars / chars : 0;
 }
 

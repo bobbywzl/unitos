@@ -13,6 +13,7 @@ import {
   hexStyle,
   isColorStyle,
   isHighlightStyle,
+  parsedStyleClass,
   sameSlot,
   type NamedColor,
   type TextStyle,
@@ -533,11 +534,12 @@ function decoratedHtml(text: string, spans: StyleSpan[]): string {
     const italic = spans.some((s) => s.style === "italic" && s.start <= from && s.end >= to);
     const underline = spans.some((s) => s.style === "underline" && s.start <= from && s.end >= to);
     const code = spans.some((s) => s.style === "code" && s.start <= from && s.end >= to);
+    const parsed = parsedStyleClass(spans.filter((s) => s.start <= from && s.end >= to).map((s) => s.style));
     // The later span wins where two colors or two highlights overlap.
     const color = spans.findLast((s) => isColorStyle(s.style) && s.start <= from && s.end >= to)?.style;
     const highlight = spans.findLast((s) => isHighlightStyle(s.style) && s.start <= from && s.end >= to)?.style;
     const named = color ? colorClass(color) : null;
-    const cls = `${bold ? "font-bold " : ""}${italic ? "italic " : ""}${underline ? "underline " : ""}${named ? `${named} ` : ""}${code ? "code-mark" : ""}`.trim();
+    const cls = `${bold ? "font-bold " : ""}${italic ? "italic " : ""}${underline ? "underline " : ""}${named ? `${named} ` : ""}${code ? "code-mark" : ""}${parsed}`.trim();
     const css = customCssText(color, highlight);
     const attrs = `${cls ? ` class="${cls}"` : ""}${css ? ` style="${css}"` : ""}`;
     html += attrs ? `<span${attrs}>${segment}</span>` : segment;

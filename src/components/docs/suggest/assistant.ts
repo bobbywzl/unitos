@@ -212,8 +212,8 @@ function range(doc: PMNode, blockId: string, start: number, end: number): { from
 }
 
 /** The words between two positions of a block, as the index reads them. An
-    offset inside a smart chip's label has no position of its own, so words
-    that cut through a label read otherwise here. */
+    offset inside a smart chip's label or an inline equation's TeX has no
+    position of its own, so words that cut through one read otherwise here. */
 const wordsIn = (doc: PMNode, from: number, to: number) => doc.slice(from, to).content.content.map(indexText).join("");
 
 /** The range holds an object striking would remove: a smart chip, a

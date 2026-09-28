@@ -1,12 +1,20 @@
 import type { Doc } from "./adapt";
 import { freeScores, type PdfText } from "./free";
-import { flatten, score, type Flat } from "./metrics";
+import type { GlyphScores } from "./glyphs";
+import { flatten, score, STYLES, type Flat } from "./metrics";
 import type { RefDoc } from "./model";
 
 // The detail report (--detail id): what a fix needs to see, printed to the
 // terminal only (a private document's words never go to a file here).
 
-type Input = { entry: { id: string; category: string }; ref?: RefDoc; docs?: { parse: Doc; import: Doc }; pdf?: PdfText; pages?: [number, number] };
+type Input = {
+  entry: { id: string; category: string };
+  ref?: RefDoc;
+  docs?: { parse: Doc; import: Doc };
+  pdf?: PdfText;
+  pages?: [number, number];
+  glyphs?: { parse: GlyphScores; import?: GlyphScores };
+};
 
 const clip = (text: string, n = 240) => {
   const t = text.replace(/\s+/g, " ").trim();
@@ -96,9 +104,21 @@ function referenceDetail(ref: RefDoc, candidate: Doc) {
     console.log(`  ${x.parts.length} merged: ${clip(c.units[x.cand].text, 160)}`);
   }
 
-  for (const style of ["bold", "italic"] as const) {
+  console.log("");
+  for (const style of STYLES) {
     const k = s.styles.counts[style];
-    console.log(`${style === "bold" ? "\nBold" : "Italic"}: F1 ${s.styles[style]?.toFixed(2) ?? "—"}; characters ${style} on both sides ${k.both}, only in the candidate ${k.candOnly}, only in the reference ${k.refOnly}.`);
+    if (s.styles.f1[style] === null && k.candOnly === 0) continue;
+    console.log(`${style}: F1 ${s.styles.f1[style]?.toFixed(2) ?? "— (the reference marks none)"}; characters so on both sides ${k.both}, only in the candidate ${k.candOnly}, only in the reference ${k.refOnly}.`);
+  }
+  const r2 = (x: number | null) => (x === null ? "—" : x.toFixed(2));
+  const roles = s.roles;
+  console.log(
+    `Roles: alignment ${r2(roles.align)}, indentation ${r2(roles.indent)}, captions ${r2(roles.captions)}, checkbox states ${r2(roles.checks)}, separators ${r2(roles.separators)}, quotations ${r2(roles.quotes)}, equation labels ${r2(s.math.labels.score)}.`,
+  );
+  if (s.notes) {
+    const n = s.notes;
+    console.log(`\nFootnotes: ${n.found} of ${n.ref} found, ${n.linked} of ${n.linkable} linked from the reference's mark, words F1 ${r2(n.words)}; ${n.extra} footnotes the reference does not have.`);
+    for (const m of n.misses.slice(0, 20)) console.log(`  ${m.why}: ${clip(blockText(r, m.ref), 100)}${m.cand >= 0 ? `  →  ${clip(blockText(c, m.cand), 60)}` : ""}`);
   }
 
   console.log(`\nFurniture: ${s.furniture.leaked} of ${s.furniture.strings} strings leak, ${s.furniture.leaks} times.`);
@@ -138,6 +158,11 @@ function referenceDetail(ref: RefDoc, candidate: Doc) {
     console.log(
       `\nMath: display ${s.math.display?.toFixed(2) ?? "—"} over ${s.math.equations} (${s.math.images} as images, ${s.math.plainDisplay} as words); inline ${s.math.inline?.toFixed(2) ?? "—"} over ${s.math.formulas} (${s.math.plainInline} as words).`,
     );
+    const { labels } = s.math;
+    if (labels.ref + labels.extra > 0) {
+      console.log(`  Equation labels: ${labels.right} of ${labels.ref} right, ${labels.extra} the reference does not print.`);
+      for (const m of labels.misses.slice(0, 20)) console.log(`    want ${m.want}, got ${m.got}`);
+    }
     const misses = [...s.math.misses].sort((a, b) => Number(b.display) - Number(a.display) || a.similarity - b.similarity);
     for (const m of misses.slice(0, 80)) {
       console.log(`  ${m.display ? "display" : "inline "} ${m.similarity.toFixed(2)}  want ${clip(m.want, 100)}`);
@@ -169,10 +194,23 @@ function freeDetail(pdf: PdfText, candidate: Doc) {
   for (const g of f.garbles.found.slice(0, 40)) console.log(`  ${g.kind}: "${g.match}" in … ${clip(g.text, 100)}`);
 }
 
+function glyphDetail(g: GlyphScores) {
+  console.log(`\nThe PDF's math glyphs: ${g.hazards} whose text layer string is not their symbol; symbols the candidate prints fewer times than the pages draw them: ${g.garbles}.`);
+  if (g.missing.length > 0) console.log(`  ${g.missing.map(([s, n]) => `${s}×${n}`).join("  ")}`);
+  console.log(`Equations shown as pictures (a region of TeX fonts with a math glyph): ${g.mathImages}.`);
+  console.log(`Display equations checked against the region's glyphs: ${g.passed} of ${g.checked} draw exactly its symbols at their script levels.`);
+  for (const f of g.fails.slice(0, 30)) {
+    console.log(`  ${clip(f.latex, 110)}`);
+    console.log(`    the glyphs have, the LaTeX not: ${f.missing.slice(0, 12).join(" ") || "—"}; the LaTeX has, the glyphs not: ${f.extra.slice(0, 12).join(" ") || "—"}`);
+  }
+}
+
 export function detailReport(r: Input, mode: "parse" | "import") {
   if (!r.docs) return;
   const candidate = r.docs[mode];
   console.log(`\n${r.entry.id} (${r.entry.category}) — the ${mode}${r.pages ? `, pages ${r.pages[0]}–${r.pages[1]}` : ", every page"}`);
   if (r.ref) referenceDetail(r.ref, candidate);
   if (r.pdf) freeDetail(r.pdf, candidate);
+  const glyphs = r.glyphs?.[mode];
+  if (glyphs) glyphDetail(glyphs);
 }

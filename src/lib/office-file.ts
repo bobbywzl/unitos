@@ -1,7 +1,7 @@
-// Slides and sheets uploads (SPEC.md §27): the file input's accept lists and
-// the file tests the document bar, the upload assistant, the Drive picker,
-// and the documents routes share. Client-safe: no parser imports. The
-// server never trusts these for stored bytes — sniffOfficeFile
+// Word, slides, and sheets uploads (SPEC.md §27, §30): the file input's
+// accept lists and the file tests the document bar, the upload assistant,
+// the Drive picker, and the documents routes share. Client-safe: no parser
+// imports. The server never trusts these for stored bytes — sniffOfficeFile
 // (lib/parse/office.ts) reads the format from the bytes.
 
 export type OfficeFormat = "slides" | "sheets";
@@ -24,6 +24,13 @@ const SHEETS_MIME_TYPES = new Set<string>([
 // The file input's accept list: the same formats.
 export const SLIDES_ACCEPT = `${SLIDES_MIME_TYPE},.pptx`;
 export const SHEETS_ACCEPT = `${SHEETS_MIME_TYPE},text/csv,text/tab-separated-values,.xlsx,.csv,.tsv`;
+
+export const WORD_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+export const WORD_ACCEPT = `${WORD_MIME_TYPE},.docx`;
+
+export function isWordFile(file: { type: string; name: string }): boolean {
+  return file.type === WORD_MIME_TYPE || /\.docx$/i.test(file.name);
+}
 
 export function isSlidesFile(file: { type: string; name: string }): boolean {
   return SLIDES_MIME_TYPES.has(file.type) || SLIDES_EXTENSIONS.test(file.name);

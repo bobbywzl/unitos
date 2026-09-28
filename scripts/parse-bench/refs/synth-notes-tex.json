@@ -257,7 +257,8 @@
           "italic": true
         },
         {
-          "text": "1"
+          "text": "1",
+          "sup": true
         }
       ],
       "indent": "first"
@@ -1875,7 +1876,11 @@
           "italic": true
         },
         {
-          "text": ":2"
+          "text": ":"
+        },
+        {
+          "text": "2",
+          "sup": true
         }
       ],
       "indent": "first"
@@ -2959,7 +2964,11 @@
           "latex": "\\pi"
         },
         {
-          "text": "-systems it is enough to check the generators.3"
+          "text": "-systems it is enough to check the generators."
+        },
+        {
+          "text": "3",
+          "sup": true
         }
       ],
       "indent": "first"

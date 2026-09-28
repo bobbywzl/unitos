@@ -22,14 +22,29 @@ export type CitationSpan = {
 };
 
 // One inline decoration span over block plain text. "code" marks monospace
-// runs (identifiers, badges) inside prose. Stored on Block.styles; quotedText
-// re-resolves the span after edits and re-parses, like every other anchor.
+// runs (identifiers, badges) inside prose. "smallCaps" marks words set in a
+// small-caps font (a theorem label, a legal defined term). "sub" and "sup"
+// mark lowered and raised runs outside math (H₂O, 10³, "1st", a footnote
+// mark). Stored on Block.styles; quotedText re-resolves the span after edits
+// and re-parses, like every other anchor.
 export type StyleSpan = {
   start: number;
   end: number;
-  style: "bold" | "italic" | "underline" | "code";
+  style: "bold" | "italic" | "underline" | "code" | "smallCaps" | "sub" | "sup";
   quotedText: string;
 };
+
+// One inline formula over block plain text: the text keeps the formula's
+// readable characters (σ(𝒜α)), latex is the formula (\sigma(\mathcal{A}_\alpha)).
+// A block document draws the text; an import turns the span into an inline
+// equation the page editor draws with KaTeX.
+export type MathSpan = { start: number; end: number; latex: string };
+
+// A footnote reference in block text: the footnote's label where the text
+// prints it, raised ("1", "*"), and the order of the footnote's block. A
+// block document keeps the label as words; an import turns it into the page
+// editor's footnote number.
+export type FootnoteRef = { start: number; end: number; targetOrder: number };
 
 // One link span in block text. Contents entries carry targetOrder (the target
 // heading's block order); hyperlinks from PDF link annotations carry href.
@@ -67,6 +82,17 @@ export type ParsedBlock = {
   citations?: CitationSpan[];
   styles?: StyleSpan[];
   links?: LinkSpan[];
+  // PDF blocks: the inline formulas over the block's text, in order, none
+  // overlapping. The import reads them; a block document stores the text only.
+  math?: MathSpan[];
+  // PDF blocks: a footnote, the words printed at a page's foot under a short
+  // rule, and its label as printed ("1", "*", "¶¶"; "" when it has none). A
+  // PARAGRAPH whose html is <p class="footnote"> and whose text opens with
+  // the label. It stands after the block that cites it; a table's notes
+  // stand after their table.
+  footnote?: { label: string };
+  // PDF blocks: the footnote references in the text, in order.
+  footnoteRefs?: FootnoteRef[];
   // URL blocks, in memory only: the id of the element the block came from
   // (its own id, or the id of a wrapper whose first block it is), the target
   // a contents entry's targetFragment resolves against. Stripped before save.

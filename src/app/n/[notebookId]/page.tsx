@@ -240,9 +240,9 @@ export default async function NotebookPage(props: {
     // its PDF's page labels (an import, or a copy of one: SPEC.md §30): only
     // the media its rich text names (figureMedia).
     let media: DocsMedia | null = null;
-    // An import (SPEC.md §30): rich text made from a PDF, a web page, or a
-    // Markdown or text file. The page editor draws its import line; Editing
-    // is off while a project another account owns holds it too.
+    // An import (SPEC.md §30): rich text made from a PDF, a web page, a
+    // Markdown or text file, or a Word file. The page editor draws its import
+    // line; Editing is off while a project another account owns holds it too.
     let imported: Imported | null = null;
     if (document.richText !== null) {
       const [figures, shared] = await Promise.all([
@@ -255,9 +255,13 @@ export default async function NotebookPage(props: {
       if (figures || pageLabels) media = { figures: figures ?? {}, pageLabels };
       if (document.importRev !== null) {
         const pdf = pdfIds.has(documentId);
+        // A stored file that opens a zip is a Word file: slides and sheets
+        // never open in the page editor.
+        const zip = document.fileData;
+        const word = zip !== null && zip[0] === 0x50 && zip[1] === 0x4b && zip[2] === 0x03 && zip[3] === 0x04;
         const lastPage = document.blocks.reduce((n, b) => Math.max(n, b.page ?? 0), 0);
         imported = {
-          kind: pdf ? "pdf" : document.fileHash !== null ? "markdown" : "url",
+          kind: pdf ? "pdf" : word ? "docx" : document.fileHash !== null ? "markdown" : "url",
           origin: document.sourceUrl?.replace(SPLIT_PART, "") ?? "",
           pages: pdf ? (pageLabels?.length ?? (lastPage || null)) : null,
           importRev: document.importRev,

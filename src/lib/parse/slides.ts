@@ -15,6 +15,7 @@ import {
   intAttr,
   modifyColor,
   num,
+  officeDocumentPath,
   parseTheme,
   parseXmlPart,
   partRels,
@@ -237,12 +238,6 @@ export async function parseSlides(
 
 function slideNumberOf(path: string): number {
   return Number(/slide(\d+)\.xml$/.exec(path)?.[1] ?? 0);
-}
-
-function officeDocumentPath(zip: OfficeZip): string | null {
-  const rels = partRels(zip, "");
-  const main = relsOfType(rels, "officeDocument")[0];
-  return main && !main.external ? main.target : null;
 }
 
 /** The document title from docProps/core.xml, when the file has one. */

@@ -9,7 +9,7 @@ export type Span = {
   text: string;
   latex?: string;
   mathml?: string; // presentation MathML when a source gives it (LaTeXML); compared before latex
-  bold?: true; italic?: true; underline?: true; code?: true; smallCaps?: true;
+  bold?: true; italic?: true; underline?: true; code?: true; smallCaps?: true; sub?: true; sup?: true;
   href?: string;
 };
 export type RefBlock =

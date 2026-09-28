@@ -205,6 +205,7 @@ function runStyle(marks: RichMark[] = []): IRunOptions {
     strike: has("strike") || undefined,
     subScript: has("subscript") || undefined,
     superScript: has("superscript") || undefined,
+    smallCaps: has("smallCaps") || undefined,
     color: wordColor(style.color),
     size: size ? size * 2 : undefined,
     font: has("code") ? "Courier New" : (face ?? undefined),

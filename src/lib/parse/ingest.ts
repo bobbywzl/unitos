@@ -35,6 +35,7 @@ import {
   type ParsedDocument,
 } from "@/lib/parse/types";
 import { parseMarkdownDocument } from "@/lib/parse/markdown-document";
+import { parseDocx } from "@/lib/parse/docx";
 import { sniffOfficeFile } from "@/lib/parse/office";
 // The routes load this module per request (see /api/documents), so the
 // sniff that decides a file's parser rides with it: jsdom must not load
@@ -203,8 +204,8 @@ async function saveDetail(
 }
 
 // ── Imports (SPEC.md §29) ───────────────────────────────────────────────────
-// A PDF judged an article, a web page, and a Markdown or text file become an
-// import: rich text that opens in the page editor. The converter
+// A PDF judged an article, a web page, a Markdown or text file, and a Word
+// file become an import: rich text that opens in the page editor. The converter
 // (lib/docs/import.ts) turns the parse's blocks into the rich text; the Block
 // rows are derived from it in the same transaction (lib/docs/sync.ts, bulk),
 // so the first save changes only the paragraph typed in.
@@ -583,7 +584,7 @@ export async function ingestPdf(
 }
 
 /** Are these bytes a PDF: the file starts with its magic. A stored file
-    that is not a PDF is a Markdown file. */
+    that is not a PDF is a Word file (sniffOfficeFile) or a Markdown file. */
 export function isPdfBytes(bytes: Uint8Array): boolean {
   return bytes.length >= 5 && String.fromCharCode(...bytes.slice(0, 5)) === "%PDF-";
 }
@@ -637,6 +638,47 @@ export async function ingestMarkdown(
           blocks,
           references: parsed.references,
         });
+  return { document, deduped: false };
+}
+
+// Word upload path (SPEC.md §30): a .docx parses into blocks from its own
+// structure (lib/parse/docx.ts), no model pass, and adds as a Markdown file
+// does: an import while the switch is on, pageless; else a block document.
+// Dedupe by fileHash; the bytes are kept for re-parse. Its pictures are
+// stored as images of the document, every one claimed by it (a picture in a
+// table cell is no figure object an import's claim would find).
+export async function ingestDocx(
+  bytes: Uint8Array<ArrayBuffer>,
+  filename: string,
+  onProgress?: OnIngestProgress,
+  opts: IngestOptions = {},
+  userId: string | null = null,
+) {
+  const fileHash = createHash("sha256").update(bytes).digest("hex");
+  const existing = await dedupeByHash(fileHash);
+  if (existing) return { document: existing, deduped: true };
+
+  onProgress?.("parse");
+  const store = slideImageStore(userId);
+  const pictures: { html: string }[] = [];
+  const parsed = await parseDocx(bytes, filename, {
+    storeImage: async (data, mimeType) => {
+      const url = await store(data, mimeType);
+      if (url) pictures.push({ html: `<img src="${url}">` });
+      return url;
+    },
+  });
+  const title = parsed.title ?? filename.replace(/\.docx$/i, "");
+  const blocks = parsed.blocks;
+  const converted = (await importPageEditorOn())
+    ? convertImport({ kind: "docx", title, titleFromOriginal: !parsed.titleFromFile, blocks })
+    : null;
+  onProgress?.("save", await saveDetail(blocks, { title, blockDocument: converted === "size" ? "size" : null }));
+  const document =
+    converted && converted !== "size"
+      ? await createImportedDocument({ title, sourceUrl: opts.sourceUrl, fileHash, fileData: bytes, converted, userId })
+      : await createDocumentWithBlocks({ title, sourceUrl: opts.sourceUrl, fileHash, fileData: bytes, blocks });
+  await claimCapturedImages(db, document.id, pictures);
   return { document, deduped: false };
 }
 
@@ -1044,6 +1086,12 @@ export async function reparseDocument(
       originalTitle = parsed.title;
       pageSize = parsed.pageSize;
       pageLabels = parsed.pageLabels;
+    } else if (sniffOfficeFile(bytes) === "docx") {
+      // A Word file: the same parse as on the add (lib/parse/docx.ts).
+      const parsed = await parseDocx(bytes, document.title, { storeImage: slideImageStore(userId) });
+      blocks = parsed.blocks;
+      kind = "docx";
+      originalTitle = parsed.titleFromFile ? null : parsed.title;
     } else {
       // A Markdown file: the same walk as on the add (lib/parse/markdown-document.ts).
       const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), document.title);

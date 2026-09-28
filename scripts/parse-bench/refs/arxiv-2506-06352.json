@@ -83,7 +83,14 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "With the rapid progress in artificial intelligence (AI) capabilities over the past several years, worries about catastrophic risks from advanced AI have become increasingly prominent.1 Many of these worries (though by no means all) focus on artificial "
+     "text": "With the rapid progress in artificial intelligence (AI) capabilities over the past several years, worries about catastrophic risks from advanced AI have become increasingly prominent."
+    },
+    {
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": " Many of these worries (though by no means all) focus on artificial "
     },
     {
      "text": "agents",
@@ -121,7 +128,14 @@
      "italic": true
     },
     {
-     "text": " to create increasingly agentic systems. For instance, present-day large language models (LLMs) aren’t particularly agentic on their own, but can be embedded within larger ‘‘language agent’’ systems that behave agentically: a human user supplies an objective in natural language, the LLM develops a plan to achieve that objective, and that plan is automatically implemented, with updates based on feedback from the environment.2 AI systems that can carry out complex plans autonomously can substitute for human labor, and perhaps eventually perform many tasks better than human workers, giving them potentially enormous economic value."
+     "text": " to create increasingly agentic systems. For instance, present-day large language models (LLMs) aren’t particularly agentic on their own, but can be embedded within larger ‘‘language agent’’ systems that behave agentically: a human user supplies an objective in natural language, the LLM develops a plan to achieve that objective, and that plan is automatically implemented, with updates based on feedback from the environment."
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": " AI systems that can carry out complex plans autonomously can substitute for human labor, and perhaps eventually perform many tasks better than human workers, giving them potentially enormous economic value."
     }
    ]
   },
@@ -153,7 +167,14 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Many researchers believe that aligning AI agents with human-level or greater capabilities will be extremely difficult, and that the creation of such agents therefore carries catastrophic risks.3 Two claims that often underlie these worries are that (i) there are some "
+     "text": "Many researchers believe that aligning AI agents with human-level or greater capabilities will be extremely difficult, and that the creation of such agents therefore carries catastrophic risks."
+    },
+    {
+     "text": "3",
+     "sup": true
+    },
+    {
+     "text": " Two claims that often underlie these worries are that (i) there are some "
     },
     {
      "text": "default tendencies",
@@ -227,7 +248,14 @@
      "italic": true
     },
     {
-     "text": ". If a powerful agent goes from wanting to maximize the number of paperclips in the world to wanting to minimize the number of paperclips, the result is likely to be fewer paperclips. So an instrumentally rational paperclip maximizer will, by default, want to prevent its final goals from being tampered with.4 Other proposed examples of convergent instrumental goals include resources, information, cognitive self-enhancement, and keeping one’s options open, among others."
+     "text": ". If a powerful agent goes from wanting to maximize the number of paperclips in the world to wanting to minimize the number of paperclips, the result is likely to be fewer paperclips. So an instrumentally rational paperclip maximizer will, by default, want to prevent its final goals from being tampered with."
+    },
+    {
+     "text": "4",
+     "sup": true
+    },
+    {
+     "text": " Other proposed examples of convergent instrumental goals include resources, information, cognitive self-enhancement, and keeping one’s options open, among others."
     }
    ]
   },
@@ -251,7 +279,11 @@
      "italic": true
     },
     {
-     "text": ". For instance, self-preservation is instrumentally valuable because if you’re alive, you have at least some power to pursue your goals, and if you’re dead, you don’t. Likewise, resources, information, and cognitive enhancement are all clearly ways of increasing an agent’s power to achieve its goals.5"
+     "text": ". For instance, self-preservation is instrumentally valuable because if you’re alive, you have at least some power to pursue your goals, and if you’re dead, you don’t. Likewise, resources, information, and cognitive enhancement are all clearly ways of increasing an agent’s power to achieve its goals."
+    },
+    {
+     "text": "5",
+     "sup": true
     }
    ]
   },
@@ -275,7 +307,21 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Though the concept of power plays little explicit role in Omohundro (2008) or Bostrom (2012), many subsequent researchers have identified it as a potential convergent instrumental goal.6 And the idea of power-seeking has figured centrally in recent worries about catastrophic risks from AI.7 For instance, Joseph Carlsmith writes: “[P]ower is extremely useful to accomplishing objectives—indeed, it is so almost by definition. So to the extent that an agent is engaging in unintended behavior in pursuit of problematic objectives, it will generally have incentives, other things equal, to gain and maintain forms of power in the process” (Carlsmith, 2022, p. 18)."
+     "text": "Though the concept of power plays little explicit role in Omohundro (2008) or Bostrom (2012), many subsequent researchers have identified it as a potential convergent instrumental goal."
+    },
+    {
+     "text": "6",
+     "sup": true
+    },
+    {
+     "text": " And the idea of power-seeking has figured centrally in recent worries about catastrophic risks from AI."
+    },
+    {
+     "text": "7",
+     "sup": true
+    },
+    {
+     "text": " For instance, Joseph Carlsmith writes: “[P]ower is extremely useful to accomplishing objectives—indeed, it is so almost by definition. So to the extent that an agent is engaging in unintended behavior in pursuit of problematic objectives, it will generally have incentives, other things equal, to gain and maintain forms of power in the process” (Carlsmith, 2022, p. 18)."
     }
    ]
   },
@@ -376,7 +422,14 @@
      "italic": true
     },
     {
-     "text": "empowered, and that this outcome would be intrinsically catastrophic.8 Or you might think that, if a superhuman AI agent successfully attains great power, it will likely also succeed in achieving its final goals, and it’s likely that those "
+     "text": "empowered, and that this outcome would be intrinsically catastrophic."
+    },
+    {
+     "text": "8",
+     "sup": true
+    },
+    {
+     "text": " Or you might think that, if a superhuman AI agent successfully attains great power, it will likely also succeed in achieving its final goals, and it’s likely that those "
     },
     {
      "text": "final",
@@ -415,7 +468,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Recently, though, some philosophers have pushed back on this story, and in particular on the initial premise that power is a convergent instrumental goal that agents have a default tendency to pursue. In particular, Gallow (2024) argues that there are some genuinely convergent instrumental goals, but doesn’t think that power-seeking is among them. And Thorstad (2024) examines some formal arguments for instrumentally convergent power-seeking from the reinforcement learning literature, and argues that they don’t show what they purport to show, and in particular don’t show anything that strongly supports worries about catastrophic AI risk.9"
+     "text": "Recently, though, some philosophers have pushed back on this story, and in particular on the initial premise that power is a convergent instrumental goal that agents have a default tendency to pursue. In particular, Gallow (2024) argues that there are some genuinely convergent instrumental goals, but doesn’t think that power-seeking is among them. And Thorstad (2024) examines some formal arguments for instrumentally convergent power-seeking from the reinforcement learning literature, and argues that they don’t show what they purport to show, and in particular don’t show anything that strongly supports worries about catastrophic AI risk."
+    },
+    {
+     "text": "9",
+     "sup": true
     }
    ]
   },
@@ -462,7 +519,14 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Nevertheless, it seems to me that there’s something importantly right about the idea that power is a convergent instrumental goal. My aim in this paper is to articulate that important kernel of truth, in a way that’s more precise than the informal presentations of the idea in Omohundro (2008), Bostrom (2012), and elsewhere, and more general than the power-seeking theorems in the reinforcement learning literature.10 On the other hand, I will also point out some potential limits on the predictive utility of this truth, that is, limits on how much it allows us to predict about the behavior of future artificial agents."
+     "text": "Nevertheless, it seems to me that there’s something importantly right about the idea that power is a convergent instrumental goal. My aim in this paper is to articulate that important kernel of truth, in a way that’s more precise than the informal presentations of the idea in Omohundro (2008), Bostrom (2012), and elsewhere, and more general than the power-seeking theorems in the reinforcement learning literature."
+    },
+    {
+     "text": "10",
+     "sup": true
+    },
+    {
+     "text": " On the other hand, I will also point out some potential limits on the predictive utility of this truth, that is, limits on how much it allows us to predict about the behavior of future artificial agents."
     }
    ]
   },
@@ -529,7 +593,14 @@
      "italic": true
     },
     {
-     "text": " be to defend the whole argument that power-seeking tendencies make advanced AI agents catastrophically risky. I’m not sure how much weight I ultimately give to that argument---in particular, it seems unclear at the moment whether aligning artificial agents in a way that reliably eliminates undesirable default tendencies will turn out to be a hard problem.11 My aim is just to partially vindicate one premise of that argument."
+     "text": " be to defend the whole argument that power-seeking tendencies make advanced AI agents catastrophically risky. I’m not sure how much weight I ultimately give to that argument---in particular, it seems unclear at the moment whether aligning artificial agents in a way that reliably eliminates undesirable default tendencies will turn out to be a hard problem."
+    },
+    {
+     "text": "11",
+     "sup": true
+    },
+    {
+     "text": " My aim is just to partially vindicate one premise of that argument."
     }
    ]
   },
@@ -819,7 +890,14 @@
      "italic": true
     },
     {
-     "text": ", and the standard such assumption in the relevant machine learning and AI safety literatures.12 Since we are assuming that the set of possible outcomes "
+     "text": ", and the standard such assumption in the relevant machine learning and AI safety literatures."
+    },
+    {
+     "text": "12",
+     "sup": true
+    },
+    {
+     "text": " Since we are assuming that the set of possible outcomes "
     },
     {
      "text": "O",

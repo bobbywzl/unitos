@@ -1,12 +1,44 @@
 // The parser's internal types: an Item is one pdf.js text item, a Line the
 // items on one baseline, a Segment a block before the passes across pages.
 
+import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
+import type { Grid } from "@/lib/parse/pdf/lattice";
 import type { ParsedBlock } from "@/lib/parse/types";
 
-export type Flags = { bold: boolean; italic: boolean; mono: boolean; href: string | null };
+// sup and sub: set smaller than its line and raised or lowered off the line's
+// baseline (a footnote reference, "1st", H₂O). The line decides (lines.ts
+// buildLine); a font says nothing of it.
+export type Flags = {
+  bold: boolean;
+  italic: boolean;
+  mono: boolean;
+  smallCaps: boolean;
+  href: string | null;
+  sup?: boolean;
+  sub?: boolean;
+  zone?: MathZone;
+};
+// An inline formula (math/zones.ts): its glyphs, the size of the text it
+// sits in, and its LaTeX once read. Items and runs inside it point to it;
+// ok when the LaTeX passed the check against the glyphs. open: it ends in a
+// relation or an operator, where TeX breaks a formula across lines.
+export type MathZone = { glyphs: Glyph[]; size: number; latex: string; ok: boolean; open: boolean };
 // math: the glyph comes from a math font (Computer Modern math and symbol
 // fonts, AMS fonts, Cambria Math, STIX) — display equations are made of them.
-export type Item = Flags & { str: string; x: number; y: number; w: number; size: number; math: boolean; font?: string };
+// glyphs: the item's glyphs from the page's drawing, in stream order (a
+// composed accent's glyph joins its letter's item); absent when the text
+// layer's origin matched no glyph.
+export type Item = Flags & {
+  str: string;
+  x: number;
+  y: number;
+  w: number;
+  size: number;
+  math: boolean;
+  font?: string;
+  glyphs?: Glyph[];
+  table?: TableRegion; // a ruled table's place in the text flow (ruled.ts takeTables)
+};
 export type Run = Flags & { start: number; end: number };
 export type Cell = { x: number; text: string; runs: Run[] };
 export type Line = {
@@ -23,10 +55,17 @@ export type Line = {
   mathChars: number; // glyphs from math fonts, for equation detection
   yMin: number; // lowest and highest glyph baselines in the line (a raised
   yMax: number; // superscript, a lowered limit): the line's vertical extent
+  display?: boolean; // a display equation's lines joined (math/display.ts)
+  table?: TableRegion; // a ruled table's place in reading order: no cells, no text
 };
 export type UriRegion = { href: string; x1: number; y1: number; x2: number; y2: number };
 // A box in PDF points: y1 the bottom edge, y2 the top edge (y grows upward).
 export type Box = { x1: number; y1: number; x2: number; y2: number };
+// A table the page's rules draw, taken out of the text flow before the
+// column split: its box, its text and the text's lines, the grid of a fully
+// ruled table (none when only horizontal rules bound it: rows and columns
+// come from the text), and the horizontal rules inside it.
+export type TableRegion = { box: Box; items: Item[]; lines: Line[]; grid: Grid | null; rules: Rule[] };
 
 // A page start inside a joined segment: where a later page's words begin in
 // the text. page is 0-based, like Segment.page.
@@ -62,4 +101,15 @@ export type PageContext = {
   // Framed boxes drawn on the page (a verbatim prompt, a literature entry):
   // the text inside sits at the frame's inset, which is not a list indent.
   frames: Box[];
+  // What the page draws: its glyphs, rules, filled boxes, images, and paths.
+  // Only a TeX page keeps its glyphs past the page loop (parsePdf).
+  drawing: PageDrawing;
+  // The page sets TeX's math fonts (math/display.ts isTexPage), and it is an
+  // OCR layer over a scan (paragraphs.ts isOcrLayer).
+  tex: boolean;
+  ocr: boolean;
 };
+
+// What a segment reader cut from a page's lines: its segments, and the index
+// of the first line it left.
+export type Step = { segments: Segment[]; next: number };

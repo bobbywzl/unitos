@@ -70,23 +70,57 @@ function pageStartsIn(node: RichNode): { at: number; node: RichNode }[] {
   return starts;
 }
 
-/** Plain text as inline nodes, with page starts put back at word offsets. */
-function inlineWithStarts(text: string, marks: RichMark[] | undefined, starts: { at: number; node: RichNode }[]): RichNode[] {
+/** The inline equations of a textblock, by their words in the paragraph
+    index ($TeX$, lib/docs/blocks.ts mathWords). */
+function formulasIn(node: RichNode): Map<string, RichNode> {
+  const formulas = new Map<string, RichNode>();
+  for (const child of node.content ?? []) {
+    const words = child.type === "inlineMath" ? inlineText(child) : "";
+    if (words) formulas.set(words, child);
+  }
+  return formulas;
+}
+
+/** Plain text as inline nodes, where the words of one of `formulas` are
+    that inline equation again. */
+function inlineWithFormulas(text: string, marks: RichMark[] | undefined, formulas: ReadonlyMap<string, RichNode>): RichNode[] {
+  const words = [...formulas.keys()].sort((a, b) => b.length - a.length);
+  const out: RichNode[] = [];
+  let from = 0;
+  for (let at = text.indexOf("$"); at >= 0 && words.length > 0; at = text.indexOf("$", Math.max(at + 1, from))) {
+    const hit = words.find((w) => text.startsWith(w, at));
+    if (!hit) continue;
+    out.push(...inlineNodes(text.slice(from, at), marks), formulas.get(hit)!);
+    from = at + hit.length;
+  }
+  out.push(...inlineNodes(text.slice(from), marks));
+  return out;
+}
+
+/** Plain text as inline nodes, with page starts put back at word offsets
+    and the formulas of `formulas` as inline equations. */
+function inlineWithStarts(
+  text: string,
+  marks: RichMark[] | undefined,
+  starts: { at: number; node: RichNode }[],
+  formulas: ReadonlyMap<string, RichNode>,
+): RichNode[] {
   const out: RichNode[] = [];
   let from = 0;
   for (const start of [...starts].sort((a, b) => a.at - b.at)) {
     const at = Math.max(from, Math.min(text.length, start.at));
-    out.push(...inlineNodes(text.slice(from, at), marks), start.node);
+    out.push(...inlineWithFormulas(text.slice(from, at), marks, formulas), start.node);
     from = at;
   }
-  out.push(...inlineNodes(text.slice(from), marks));
+  out.push(...inlineWithFormulas(text.slice(from), marks, formulas));
   return out;
 }
 
 /** The node's words replaced by `text`. The formatting of the first run
     carries over, so a bold paragraph rewritten stays bold. A page start
     stays: where the words before or after it are kept, beside them; inside
-    the words replaced, where the replacement ends. */
+    the words replaced, where the replacement ends. An inline equation whose
+    words ($TeX$) the new text holds stays an equation. */
 export function replaceBlockText(doc: RichNode, blockId: string, text: string): RichNode | null {
   const hit = findBlock(doc, blockId);
   if (!hit || hit.node.type === "image" || hit.node.type === "horizontalRule" || hit.node.type === "figure") return null;
@@ -104,7 +138,7 @@ export function replaceBlockText(doc: RichNode, blockId: string, text: string): 
   return spliceAt(doc, hit.path, (node) => [
     {
       ...node,
-      content: node.type === "codeBlock" ? (text ? [{ type: "text", text }] : []) : inlineWithStarts(text, firstMarks, starts),
+      content: node.type === "codeBlock" ? (text ? [{ type: "text", text }] : []) : inlineWithStarts(text, firstMarks, starts, formulasIn(hit.node)),
     },
   ]);
 }

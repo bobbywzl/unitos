@@ -113,7 +113,7 @@ function build(paper: Paper): Result {
   }
   const above = Math.min(nameLine?.y0 ?? Infinity, abstractLine?.y0 ?? Infinity);
   if (!Number.isFinite(above)) throw new Error(`${paper.id}: abstract not found on page 1`);
-  const authors: Built[] = authorLines(page1, below, above).map((text) => ({ block: { kind: "paragraph", spans: [{ text }] }, role: "front" }));
+  const authors: Built[] = authorLines(page1, below, above).map((spans) => ({ block: { kind: "paragraph", spans }, role: "front" }));
   log("author area:", authors.map((a) => textOf(a.block)));
 
   // What the class prints between the abstract and the first heading (keywords, classification, funding,

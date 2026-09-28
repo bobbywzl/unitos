@@ -22,7 +22,35 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Sarira Sahu1 ⋆, R. de J. Pacheco-Aké2 †, G. Sánchez-Colón2 ‡, D. I. Páez-Sánchez1 §,"
+     "text": "Sarira Sahu"
+    },
+    {
+     "text": "1 ⋆",
+     "sup": true
+    },
+    {
+     "text": ", R. de J. Pacheco-Aké"
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": " †, G. Sánchez-Colón"
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": " ‡, D. I. Páez-Sánchez"
+    },
+    {
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": " §,"
     }
    ]
   },
@@ -30,7 +58,21 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "A. U. Puga Oliveros1 ¶ Subhash Rajpoot3 ∥,"
+     "text": "A. U. Puga Oliveros"
+    },
+    {
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": " ¶ Subhash Rajpoot"
+    },
+    {
+     "text": "3",
+     "sup": true
+    },
+    {
+     "text": " ∥,"
     }
    ]
   },
@@ -38,7 +80,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "1Instituto de Ciencias Nucleares, Universidad Nacional Autónoma de México, Circuito Exterior S/N, C.U., A.P. 70-543,"
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": "Instituto de Ciencias Nucleares, Universidad Nacional Autónoma de México, Circuito Exterior S/N, C.U., A.P. 70-543,"
     }
    ]
   },
@@ -54,7 +100,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "2Departamento de Fı́sica Aplicada, Centro de Investigación y de Estudios Avanzados del IPN, Unidad Mérida. A.P. 73, Cordemex,"
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": "Departamento de Fı́sica Aplicada, Centro de Investigación y de Estudios Avanzados del IPN, Unidad Mérida. A.P. 73, Cordemex,"
     }
    ]
   },
@@ -70,7 +120,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "3Department of Physics and Astronomy, California State University, 1250 Bellflower Boulevard, Long Beach, CA 90840, USA."
+     "text": "3",
+     "sup": true
+    },
+    {
+     "text": "Department of Physics and Astronomy, California State University, 1250 Bellflower Boulevard, Long Beach, CA 90840, USA."
     }
    ]
   },

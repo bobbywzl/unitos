@@ -30,10 +30,27 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "许 为 *"
+     "text": "许 为 "
+    },
+    {
+     "text": "*",
+     "sup": true
     }
    ],
    "align": "center"
+  },
+  {
+   "kind": "footnote",
+   "label": "*",
+   "spans": [
+    {
+     "bold": true,
+     "text": "作者"
+    },
+    {
+     "text": "：许为，博士, 研究员; e-mail: weixu6@yahoo.com."
+    }
+   ]
   },
   {
    "kind": "paragraph",
@@ -195,19 +212,6 @@
     },
     {
      "text": " User centered design, intelligent human-computer interaction, joint cognitive systems, human factors engineering, human-machine collaboration, user intention recognition, human-machine co-driving"
-    }
-   ]
-  },
-  {
-   "kind": "footnote",
-   "label": "*",
-   "spans": [
-    {
-     "bold": true,
-     "text": "作者"
-    },
-    {
-     "text": "：许为，博士, 研究员; e-mail: weixu6@yahoo.com."
     }
    ]
   },

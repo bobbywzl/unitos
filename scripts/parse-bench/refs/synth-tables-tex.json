@@ -46,7 +46,11 @@
       "kind": "paragraph",
       "spans": [
         {
-          "text": "Kestrel Energy Group grew revenue by 9.2% in 2025, helped by higher output from the renewables fleet and a full year of the Millbrook uprate. Operating income rose 12.2% and net debt fell below USD 2 billion for the first time since 2019.1"
+          "text": "Kestrel Energy Group grew revenue by 9.2% in 2025, helped by higher output from the renewables fleet and a full year of the Millbrook uprate. Operating income rose 12.2% and net debt fell below USD 2 billion for the first time since 2019."
+        },
+        {
+          "text": "1",
+          "sup": true
         }
       ]
     },
@@ -3833,7 +3837,11 @@
       "kind": "paragraph",
       "spans": [
         {
-          "text": "These expectations assume normal weather and gas prices near the forward curve of December 2025.2"
+          "text": "These expectations assume normal weather and gas prices near the forward curve of December 2025."
+        },
+        {
+          "text": "2",
+          "sup": true
         }
       ]
     },

@@ -3,7 +3,9 @@
 // caps collapse; a wide gap starts a new cell.
 
 import { median } from "@/lib/parse/pdf/geometry";
-import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, sameFlags } from "@/lib/parse/pdf/glyphs";
+import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, charCount, sameFlags } from "@/lib/parse/pdf/glyphs";
+import { hangingBox } from "@/lib/parse/pdf/math/layout";
+import { splitZones } from "@/lib/parse/pdf/math/zones";
 import type { Cell, Item, Line, Run } from "@/lib/parse/pdf/types";
 
 export const ATTACH_PUNCT_RE = /^[.,;:!?)\]…%]/;
@@ -15,6 +17,9 @@ const NUMERIC_TOKEN_RE = /^[\d.,%$€£+−–-]+$/;
 // Inside one item: "A L P H A B E T" → "ALPHABET". Kickers and small-caps
 // labels carry their letter spacing as literal spaces in the string.
 function collapseSpacedStr(str: string): string {
+  // Three letters need two spaces: most strings have fewer.
+  const space = str.indexOf(" ");
+  if (space < 0 || str.indexOf(" ", space + 1) < 0) return str;
   const tokens = str.split(" ").filter((t) => t.length > 0);
   if (tokens.length < 3 || !tokens.every((t) => t.length === 1)) return str;
   return tokens.join("");
@@ -22,7 +27,7 @@ function collapseSpacedStr(str: string): string {
 
 // Across items: one glyph per item with small uniform gaps → merge into words.
 function mergeSpacedItems(items: Item[]): Item[] {
-  const singles = items.filter((i) => i.str.trim().length === 1).length;
+  const singles = items.filter((i) => charCount(i.str) === 1).length;
   if (singles < 6 || singles < items.length * 0.6) return items;
   const out: Item[] = [];
   for (const item of items) {
@@ -30,19 +35,76 @@ function mergeSpacedItems(items: Item[]): Item[] {
     const gap = last ? item.x - (last.x + last.w) : Infinity;
     if (
       last &&
-      last.str.length <= 2 &&
-      item.str.trim().length === 1 &&
+      [...last.str].length <= 2 &&
+      charCount(item.str) === 1 &&
       gap >= 0 &&
       gap < item.size * 0.45 &&
       sameFlags(last, item)
     ) {
       last.str += item.str;
       last.w = item.x + item.w - last.x;
+      if (last.glyphs && item.glyphs) last.glyphs = [...last.glyphs, ...item.glyphs];
     } else {
       out.push({ ...item });
     }
   }
   return out;
+}
+
+// ── Drop caps ───────────────────────────────────────────────────────────────
+
+// A drop cap: a paragraph's first letter (or two) set two lines tall or
+// more, its top level with the first line's, the lines beside it set in by
+// its width (IEEEtran's \IEEEPARstart, a CSS float). Grouped on its own
+// baseline it took the lines beside it for its scripts: their words ran
+// together out of order with no spaces, a heading at its size ("…on page
+// nine.Stheir key results…theyanswer…", synth-paper-html). It opens the
+// first word: it joins that word with no space, in the word's style
+// ("S" + "CIENTIFIC"), and the lines beside it start where the
+// paragraph's lines under it do.
+const DROP_CAP_RE = /^(?=\p{Lu})\p{Script=Latin}{1,2}$/u;
+
+// The items with each drop cap moved onto its paragraph's first line, and
+// the first item of each other line beside it with the x that line takes.
+function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: number }[] } {
+  let out = items;
+  const starts: { item: Item; x: number }[] = [];
+  for (const cap of items) {
+    if (cap.math || !DROP_CAP_RE.test(cap.str.trim())) continue;
+    const right = cap.x + cap.w;
+    const top = cap.y + cap.size * 0.7;
+    // Text at most half its size starting just right of it, from its top
+    // down to half its size under its baseline, by baseline: each line's
+    // first item.
+    const beside = items
+      .filter((i) => !i.math && i.size * 2 <= cap.size && i.y <= top && i.y >= cap.y - cap.size * 0.5 && i.x >= right - i.size * 0.5 && i.x <= right + i.size * 2.5)
+      .sort((a, b) => b.y - a.y);
+    const rows: Item[][] = [];
+    for (const i of beside) {
+      const row = rows[rows.length - 1];
+      if (row && Math.abs(row[0].y - i.y) < i.size * 0.3) row.push(i);
+      else rows.push([i]);
+    }
+    const firsts = rows.map((row) => row.reduce((a, b) => (b.x < a.x ? b : a)));
+    // The lines beside it follow one another at the text's leading.
+    let n = 1;
+    while (n < firsts.length && firsts[n - 1].y - firsts[n].y <= firsts[n].size * 1.6) n++;
+    const lines = firsts.slice(0, n);
+    const first = lines[0];
+    if (!first || Math.abs(first.y + first.size * 0.7 - top) > first.size * 0.5) continue;
+    if (lines.filter((l) => l.y >= cap.y - l.size * 0.5).length < 2) continue;
+    // Stretched to the first word, it takes no space before it.
+    const lead: Item = { ...cap, str: cap.str.trim(), y: first.y, size: first.size, w: first.x - cap.x, bold: first.bold, italic: first.italic, mono: first.mono, smallCaps: first.smallCaps, href: first.href, font: first.font };
+    out = out.map((i) => (i === cap ? lead : i));
+    // The paragraph's next line, under the lines beside it: where they
+    // would start without the cap (a CSS float stands in the first line's
+    // indent, and the lines beside it read as a list under it).
+    const last = lines[lines.length - 1];
+    const under = items.filter((i) => i.y < last.y - last.size * 0.5 && i.y >= last.y - last.size * 1.6 && i.x < last.x - last.size && i.x >= cap.x - cap.size);
+    const x = Math.min(cap.x, ...under.map((i) => i.x));
+    for (const item of lines.slice(1)) starts.push({ item, x });
+  }
+  return { items: out, starts };
 }
 
 // ── Line building ───────────────────────────────────────────────────────────
@@ -56,8 +118,15 @@ function composeAccents(items: Item[]): Item[] {
     const trailing = item.str.length > 1 ? SPACING_ACCENTS[item.str[item.str.length - 1]] : undefined;
     const after = items[k + 1];
     if (trailing && after && /^\p{L}/u.test(after.str) && after.x <= item.x + item.w + item.size * 0.3) {
-      out.push({ ...item, str: item.str.slice(0, -1) });
-      items[k + 1] = { ...after, str: (after.str[0] + trailing).normalize("NFC") + after.str.slice(1) };
+      // The accent's glyph, the item's last, goes with it.
+      const accent = item.glyphs?.at(-1);
+      const [letter, ...rest] = Array.from(after.str);
+      out.push({ ...item, str: item.str.slice(0, -1), glyphs: accent ? item.glyphs!.slice(0, -1) : item.glyphs });
+      items[k + 1] = {
+        ...after,
+        str: (letter + trailing).normalize("NFC") + rest.join(""),
+        glyphs: accent && after.glyphs ? [...after.glyphs, accent] : after.glyphs,
+      };
       continue;
     }
     const mark = item.str.length === 1 ? SPACING_ACCENTS[item.str] : undefined;
@@ -65,18 +134,24 @@ function composeAccents(items: Item[]): Item[] {
       // The letter under the accent: the glyph of a neighbor item that the
       // accent's center sits over — its first glyph, or with a wider item the
       // glyph at that offset (an accent over the last letter of "Kamilė" read
-      // as a stray dot: import compare loop finding).
+      // as a stray dot: import compare loop finding). Counted in characters,
+      // not UTF-16 units: a hat over 𝒮 went unplaced.
       const cx = item.x + item.w / 2;
       const glyphAt = (it: Item | undefined): number => {
-        if (it === undefined || it.str.length === 0 || it.w <= 0) return -1;
-        const advance = it.w / it.str.length;
+        const chars = it ? Array.from(it.str) : [];
+        if (it === undefined || chars.length === 0 || it.w <= 0) return -1;
+        const advance = it.w / chars.length;
         const idx = Math.floor((cx - it.x + advance * 0.15) / advance);
-        return idx >= 0 && idx < it.str.length && /\p{L}/u.test(it.str[idx]) ? idx : -1;
+        return idx >= 0 && idx < chars.length && /\p{L}/u.test(chars[idx]) ? idx : -1;
       };
-      const composedAt = (base: Item, idx: number): Item => ({
-        ...base,
-        str: base.str.slice(0, idx) + (base.str[idx] + mark).normalize("NFC") + base.str.slice(idx + 1),
-      });
+      const composedAt = (base: Item, idx: number): Item => {
+        const chars = Array.from(base.str);
+        return {
+          ...base,
+          str: chars.slice(0, idx).join("") + (chars[idx] + mark).normalize("NFC") + chars.slice(idx + 1).join(""),
+          glyphs: base.glyphs && item.glyphs ? [...base.glyphs, ...item.glyphs] : base.glyphs,
+        };
+      };
       const next = items[k + 1];
       const prev = out[out.length - 1];
       const nextIdx = glyphAt(next);
@@ -96,29 +171,71 @@ function composeAccents(items: Item[]): Item[] {
   return out;
 }
 
+const QED_RE = /^[□■∎]$/;
+
+// A cell boundary: a wide gap, or an em between two numbers — number
+// columns sit closer than the word gap rule allows (a table of Brier
+// scores read as one cell per row: import compare loop finding).
+function opensCell(prev: Item, item: Item, size: number): boolean {
+  const gap = item.x - (prev.x + prev.w);
+  const numeric = NUMERIC_TOKEN_RE.test(prev.str.trim()) && NUMERIC_TOKEN_RE.test(item.str.trim());
+  return gap > Math.max(8, size * 1.6) || (numeric && gap > size * 1.0);
+}
+
+// A glyph set smaller than its cell's text and raised or lowered off the
+// text's baseline is a superscript or a subscript. Footnote references sit
+// 0.27–0.49 em up at 0.58–0.82 of the text's size (SCOTUS, MMWR, Word,
+// arXiv), and LaTeX sets a footnote's own label at 0.875 of its words; TeX
+// subscripts sit 0.15–0.34 em down. The text size is the size
+// most characters are set in, so a drop cap leaves the words beside it
+// alone. A math font's glyphs belong to their formula.
+function markShifts(items: Item[]) {
+  const chars = new Map<number, number>();
+  for (const i of items) {
+    const key = Math.round(i.size * 10) / 10;
+    chars.set(key, (chars.get(key) ?? 0) + i.str.length);
+  }
+  const textSize = [...chars].sort((a, b) => b[1] - a[1])[0][0];
+  const baseline = median(items.filter((i) => Math.abs(i.size - textSize) <= textSize * 0.05).map((i) => i.y));
+  for (const item of items) {
+    const small = !item.math && item.size <= textSize * 0.9;
+    item.sup = small && item.y - baseline >= textSize * 0.15;
+    item.sub = small && baseline - item.y >= textSize * 0.1;
+  }
+}
+
 function buildLine(rawItems: Item[], page: number): Line {
-  const items = mergeSpacedItems(
+  const merged = mergeSpacedItems(
     composeAccents(
       rawItems
         .map((i) => ({ ...i, str: i.mono ? i.str : collapseSpacedStr(i.str) }))
         .sort((a, b) => a.x - b.x),
     ),
   );
-  const size = Math.max(...items.map((i) => i.size));
+  const size = Math.max(...merged.map((i) => i.size));
+  // Raises are read per cell: a table cell set smaller on its own baseline
+  // is no superscript of the cell beside it (a slide's table of primers read
+  // as runs of superscripts).
+  let from = 0;
+  const cellStarts: number[] = [];
+  for (let k = 1; k <= merged.length; k++) {
+    if (k < merged.length && !opensCell(merged[k - 1], merged[k], size)) continue;
+    markShifts(merged.slice(from, k));
+    cellStarts.push(from);
+    from = k;
+  }
+  // Inline formulas cut out of the items, cell by cell (math/zones.ts).
+  const items = splitZones(merged, cellStarts);
   const cells: Cell[] = [];
   let prevEnd: number | null = null;
   let prevItem: Item | null = null;
   for (const item of items) {
     const gap = prevEnd === null ? 0 : item.x - prevEnd;
-    // A cell boundary: a wide gap, or an em between two numbers — number
-    // columns sit closer than the word gap rule allows (a table of Brier
-    // scores read as one cell per row: import compare loop finding).
-    const numeric =
-      prevItem !== null &&
-      NUMERIC_TOKEN_RE.test(prevItem.str.trim()) &&
-      NUMERIC_TOKEN_RE.test(item.str.trim());
-    const wide =
-      prevEnd !== null && (gap > Math.max(8, size * 1.6) || (numeric && gap > size * 1.0));
+    // An end-of-proof mark set flush right closes the line's text, not a cell
+    // of its own (read by its code, □ turned "as claimed." and a running
+    // head into a table).
+    const proofEnd = item === items[items.length - 1] && QED_RE.test(item.str.trim());
+    const wide = prevItem !== null && !proofEnd && opensCell(prevItem, item, size);
     prevItem = item;
     let cell = cells[cells.length - 1];
     if (!cell || wide) {
@@ -141,7 +258,11 @@ function buildLine(rawItems: Item[], page: number): Line {
         bold: item.bold,
         italic: item.italic,
         mono: item.mono,
+        smallCaps: item.smallCaps,
         href: item.href,
+        sup: item.sup,
+        sub: item.sub,
+        zone: item.zone,
       });
     }
     prevEnd = item.x + item.w;
@@ -175,7 +296,10 @@ function buildLine(rawItems: Item[], page: number): Line {
   // with a superscript sat too high — its gap to the line above shrank and
   // its gap to the line below grew, splitting paragraphs and fusing others
   // (import compare loop finding).
-  const large = items.filter((i) => i.size >= size * 0.75);
+  // A big operator's or delimiter's origin is its top (math/layout.ts
+  // hangingBox): no baseline.
+  const onBase = items.filter((i) => !hangingBox(i));
+  const large = (onBase.length > 0 ? onBase : items).filter((i) => i.size >= size * 0.75);
   const ys = items.map((i) => i.y);
   return {
     cells,
@@ -188,14 +312,14 @@ function buildLine(rawItems: Item[], page: number): Line {
     size,
     page,
     firstWordWidth,
-    mathChars: items.reduce((n, i) => n + (i.math ? i.str.replace(/\s/g, "").length : 0), 0),
+    mathChars: items.reduce((n, i) => n + (i.math ? charCount(i.str) : 0), 0),
     yMin: Math.min(...ys),
     yMax: Math.max(...ys),
   };
 }
 
 export function buildLines(items: Item[], page: number): Line[] {
-  const sorted = items.filter((i) => i.str.trim().length > 0);
+  const { items: sorted, starts } = dropCaps(items.filter((i) => i.str.trim().length > 0));
   sorted.sort((a, b) => b.y - a.y || a.x - b.x);
   // A line is the items near one baseline. The anchor is the line's largest
   // item, the tolerance half its size: superscripts, subscripts, and sum
@@ -206,11 +330,36 @@ export function buildLines(items: Item[], page: number): Line[] {
   // lines exist, by the glyph's center (import compare loop finding: a
   // display integral appended to the paragraph above it, an inline radical
   // pulled into the equation above its sentence).
-  const operators = sorted.filter((i) => OPERATOR_GLYPH_RE.test(i.str.trim()));
+  // A TeX extension-font glyph (a sized delimiter too) and a radical hang
+  // from their origin by the depth the font's metrics give (math/layout.ts):
+  // their box says where they sit.
+  const boxes = new Map<Item, NonNullable<ReturnType<typeof hangingBox>>>();
+  for (const i of sorted) {
+    const box = hangingBox(i);
+    if (box) boxes.set(i, box);
+  }
+  const hangs = (i: Item) => boxes.has(i) || OPERATOR_GLYPH_RE.test(i.str.trim());
+  const operators = sorted.filter(hangs);
+  // A display operator's limits sit over its top and under its bottom: they
+  // stay with it, never with the prose line beside them (census class 1: a
+  // sum's upper limit ended the line above, its lower limit the line below).
+  // A glyph nearer the baseline of a line of full-size text, within a
+  // script's reach of it (an inline formula's subscript over a display), is
+  // that line's.
+  const limitOf = (item: Item, lines: { y: number; size: number }[]) =>
+    [...boxes].some(([op, box]) => {
+      if (!box.display || item.size >= op.size * 0.9) return false;
+      if (item.x >= op.x + op.w + op.size * 0.5 || item.x + item.w <= op.x - op.size * 0.5) return false;
+      const above = item.y >= box.top - item.size * 0.2 && item.y - box.top < op.size * 0.8;
+      const below = item.y <= box.bottom && box.bottom - item.y < op.size * 1.1;
+      if (!above && !below) return false;
+      const reach = above ? item.y - box.top : box.bottom - item.y;
+      return !lines.some((l) => l.size >= item.size / 0.8 && Math.abs(l.y - item.y) < Math.min(reach, l.size * 0.45));
+    });
   const grouped: Item[][] = [];
   const anchors: Item[] = [];
   for (const item of sorted) {
-    if (OPERATOR_GLYPH_RE.test(item.str.trim())) continue;
+    if (hangs(item)) continue;
     const last = grouped[grouped.length - 1];
     const anchor = anchors[anchors.length - 1];
     const tolerance = anchor ? Math.max(2, Math.max(anchor.size, item.size) * 0.5) : 0;
@@ -232,8 +381,8 @@ export function buildLines(items: Item[], page: number): Line[] {
   const stats = grouped.map((g) => {
     const size = Math.max(...g.map((i) => i.size));
     const large = g.filter((i) => i.size >= size * 0.75);
-    const chars = g.reduce((n, i) => n + i.str.replace(/\s/g, "").length, 0);
-    const mathChars = g.reduce((n, i) => n + (i.math ? i.str.replace(/\s/g, "").length : 0), 0);
+    const chars = g.reduce((n, i) => n + charCount(i.str), 0);
+    const mathChars = g.reduce((n, i) => n + (i.math ? charCount(i.str) : 0), 0);
     return {
       size,
       y: median(large.map((i) => i.y)),
@@ -241,6 +390,8 @@ export function buildLines(items: Item[], page: number): Line[] {
       x2: Math.max(...g.map((i) => i.x + i.w)),
       mathy: chars > 0 && mathChars >= chars * 0.3,
       prose: chars >= 20 && mathChars < chars * 0.5,
+      // A glyph of TeX's math fonts: a line of a formula, however short.
+      tex: g.some((i) => i.glyphs?.some((gl) => gl.family !== null && gl.family !== "ot1")),
     };
   });
   const moved: Item[][] = grouped.map(() => []);
@@ -263,6 +414,7 @@ export function buildLines(items: Item[], page: number): Line[] {
     for (const item of grouped[k]) {
       const glyph = item.str.trim();
       const accent = glyph.length === 1 && SPACING_ACCENTS[glyph] !== undefined;
+      if (limitOf(item, stats)) continue;
       // An accent belongs over a letter of about its own size: a line of
       // subscripts beside it is no candidate (import compare loop finding).
       const candidates = neighbors(k).filter(
@@ -271,8 +423,13 @@ export function buildLines(items: Item[], page: number): Line[] {
           gapTo(item, n) <= stats[n].size * 1.05 &&
           overlaps(item, n),
       );
-      const mathy = candidates.filter((n) => stats[n].mathy);
-      const pool = stats[k].mathy && mathy.length > 0 ? mathy : candidates.filter((n) => stats[n].prose || stats[n].mathy);
+      // A glyph of TeX's math fonts prefers a formula's line only when it
+      // is about as near as the nearest line: an inline sum's superscript is
+      // its own line's, not the formula line over it (synthetic notes p. 5).
+      const nearest = Math.min(...candidates.map((n) => gapTo(item, n)));
+      const tex = item.glyphs?.some((g) => g.family !== null && g.family !== "ot1") ?? false;
+      const mathy = candidates.filter((n) => stats[n].mathy && (!tex || gapTo(item, n) <= nearest * 1.5));
+      const pool = stats[k].mathy && mathy.length > 0 ? mathy : candidates.filter((n) => stats[n].prose || stats[n].mathy || stats[n].tex);
       if (pool.length === 0) continue;
       pool.sort((a, b) => cost(item, a) - cost(item, b));
       // The own-line check is for a glyph set small against its own line's
@@ -303,7 +460,8 @@ export function buildLines(items: Item[], page: number): Line[] {
   // stands alone for the equation region to take.
   const standalone: Item[][] = [];
   for (const op of operators) {
-    const center = op.y - op.size * 0.6;
+    const box = boxes.get(op);
+    const center = box ? (box.top + box.bottom) / 2 : op.y - op.size * 0.6;
     const near = (n: number, factor: number) =>
       Math.abs(center - stats[n].y) <= stats[n].size * factor &&
       op.x < stats[n].x2 + stats[n].size * 2 &&
@@ -314,15 +472,34 @@ export function buildLines(items: Item[], page: number): Line[] {
     const all = stats.map((_, n) => n).filter((n) => kept[n].length > 0);
     const mathy = all.filter((n) => stats[n].mathy && near(n, 1.5)).sort(byDistance);
     const prose = all.filter((n) => stats[n].prose && near(n, 1.05)).sort(byDistance);
-    const target = mathy[0] ?? prose[0];
+    // A glyph whose box the font's metrics give sits exactly: centered on
+    // its line's math axis, a quarter em over the baseline, whatever else
+    // the line holds (a list item's "2. ∑ m(ω) = 1" is neither prose nor an
+    // equation's line). Else the nearest line of an equation or of prose
+    // takes it (a sentence's inline sum is its own, never the display line
+    // under it). An estimated one goes to an equation's line first.
+    const axis = (n: number) => Math.abs(center - (stats[n].y + stats[n].size * 0.25));
+    const onAxis = box
+      ? all.filter((n) => stats[n].size >= op.size * 0.8 && axis(n) <= stats[n].size * 0.35 && near(n, 1.5)).sort((a, b) => axis(a) - axis(b))
+      : [];
+    const target = onAxis[0] ?? (box ? [...mathy, ...prose].sort(byDistance)[0] : (mathy[0] ?? prose[0]));
     if (target !== undefined) moved[target].push(op);
     else standalone.push([op]);
   }
   const regrouped = [...kept.map((g, k) => [...g, ...moved[k]]), ...standalone].filter((g) => g.length > 0);
   const baseline = (g: Item[]) => {
     const size = Math.max(...g.map((i) => i.size));
-    return median(g.filter((i) => i.size >= size * 0.75).map((i) => i.y));
+    const onBase = g.filter((i) => !boxes.has(i));
+    return median((onBase.length > 0 ? onBase : g).filter((i) => i.size >= size * 0.75).map((i) => i.y));
   };
   regrouped.sort((a, b) => baseline(b) - baseline(a));
-  return regrouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);
+  const lines = regrouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);
+  for (const { item, x } of starts) {
+    const line = lines.find((l) => l.x === item.x && Math.abs(l.y - item.y) < item.size * 0.3);
+    if (line) {
+      line.x = x;
+      line.cells[0].x = x;
+    }
+  }
+  return lines;
 }

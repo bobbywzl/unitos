@@ -75,13 +75,26 @@ export function hex6(value: unknown): string | null {
   return null;
 }
 
+/** The Block.styles name of a mark that is one there: subscript and
+    superscript read as sub and sup (lib/parse/types.ts StyleSpan). */
+const MARK_STYLES: Record<string, string> = {
+  bold: "bold",
+  italic: "italic",
+  underline: "underline",
+  code: "code",
+  smallCaps: "smallCaps",
+  subscript: "sub",
+  superscript: "sup",
+};
+
 /** The styles one run of text carries, in the Block.styles vocabulary
-    (lib/text-style.ts): bold, italic, underline, code, a color, a highlight. */
+    (lib/text-style.ts): bold, italic, underline, code, small caps, sub, sup,
+    a color, a highlight. */
 function runStyles(marks: RichMark[] | undefined): string[] {
   const out: string[] = [];
   for (const mark of marks ?? []) {
-    if (mark.type === "bold" || mark.type === "italic" || mark.type === "underline" || mark.type === "code") {
-      out.push(mark.type);
+    if (MARK_STYLES[mark.type]) {
+      out.push(MARK_STYLES[mark.type]);
     } else if (mark.type === "textStyle") {
       const color = hex6(mark.attrs?.color);
       if (color) out.push(`color:${color}`);
@@ -98,16 +111,27 @@ export const outOfIndex = (type: string, id: unknown): boolean =>
   type === "deletion" ? !isAssistantSuggestion(id) : type === "insertion" && isAssistantSuggestion(id);
 
 /** The words of one node as the paragraph index reads them: text as it is,
-    a line break (Shift+Enter) as "\n". Words a person's suggestion removes
-    or the assistant's adds, and the zero-width space that holds a suggested
+    a line break (Shift+Enter) as "\n", an inline equation as its TeX
+    between dollar signs. Words a person's suggestion removes or the
+    assistant's adds, and the zero-width space that holds a suggested
     paragraph break (components/docs/ext/suggest.ts), are no words. */
 export function inlineText(node: RichNode): string {
   if (node.marks?.some((m) => outOfIndex(m.type, m.attrs?.id))) return "";
   if (node.type === "text") return (node.text ?? "").replaceAll(ZWSP, "");
   if (node.type === "hardBreak") return "\n";
+  if (node.type === "inlineMath") return mathWords(node.attrs?.latex);
   // A smart chip's words are its label; other atoms add none.
   if (CHIP_NODE_TYPES.has(node.type)) return typeof node.attrs?.label === "string" ? node.attrs.label : "";
   return (node.content ?? []).map(inlineText).join("");
+}
+
+/** An inline equation's words: its TeX between dollar signs, on one line
+    ($\sigma(\mathcal{A}_\alpha)$), so every AI tool reads the formula. A
+    quote and an anchor take it whole (components/docs/layer/anchor.ts). An
+    empty equation, one being typed, has none. */
+export function mathWords(latex: unknown): string {
+  const tex = typeof latex === "string" ? latex.replace(/\s+/g, " ").trim() : "";
+  return tex ? `$${tex}$` : "";
 }
 
 /** Rich text as if the suggestions `which` picks by id (every one by
@@ -160,6 +184,9 @@ type Runs = {
   citations: CitationSpan[];
   /** The page starts inside the node: the words before each, and its page. */
   starts: { at: number; page: number }[];
+  /** The footnote numbers inside the node: the words before each, and its
+      footnote. */
+  numbers: { at: number; id: string }[];
 };
 
 function textblockRuns(node: RichNode): Runs {
@@ -169,6 +196,7 @@ function textblockRuns(node: RichNode): Runs {
   const links: LinkSpan[] = [];
   const citations: CitationSpan[] = [];
   const starts: Runs["starts"] = [];
+  const numbers: Runs["numbers"] = [];
   let link: { href: string; start: number } | null = null;
   let citation: { refId: string; start: number } | null = null;
   const closeLink = (at: number) => {
@@ -188,11 +216,16 @@ function textblockRuns(node: RichNode): Runs {
       if (page) starts.push({ at: text.length, page });
       return;
     }
+    if (child.type === "footnoteReference" && typeof child.attrs?.footnoteId === "string") {
+      numbers.push({ at: text.length, id: child.attrs.footnoteId });
+    }
     const piece = inlineText(child);
     // What adds no words (a removed word, a footnote's number) leaves the runs open.
     if (!piece) return;
     if (child.type !== "text") {
-      // A line break carries no style: every open run closes before it.
+      // A line break, a chip, or an inline equation carries no style (a
+      // save keeps no mark on it, lib/docs/schema.ts): every open run
+      // closes before it.
       for (const [style, start] of open) {
         if (text.length > start) styles.push({ start, end: text.length, style, quotedText: text.slice(start, text.length) });
       }
@@ -236,7 +269,7 @@ function textblockRuns(node: RichNode): Runs {
   }
   closeLink(text.length);
   closeCitation(text.length);
-  return { text, styles, links, citations, starts };
+  return { text, styles, links, citations, starts, numbers };
 }
 
 /** The last page that begins inside a node: its page starts, and the pages
@@ -292,6 +325,10 @@ export function deriveBlocks(doc: RichNode): DerivedBlock[] {
   // The PDF page the walk is on: the page of the last page start before it.
   let page: number | null = null;
   let tables = 0;
+  // The page each footnote's number stands on: the footnotes stand at the
+  // rich text's end, and their rows name that page, where the page editor
+  // draws them.
+  const numberPages = new Map<string, number | null>();
   const push = (ctx: Context, row: Pick<DerivedBlock, "id" | "type" | "text"> & Partial<DerivedBlock>) => {
     out.push({
       id: row.id,
@@ -361,11 +398,14 @@ export function deriveBlocks(doc: RichNode): DerivedBlock[] {
         push(ctx, { id, type: "EQUATION", text: latex });
         return;
       }
-      const { text, styles, links, citations, starts } = textblockRuns(node);
+      const { text, styles, links, citations, starts, numbers } = textblockRuns(node);
       // The row starts on the page of a page start before its first word.
       const first = starts[0];
       const startsOn = begins ?? (first && !text.slice(0, first.at).trim() ? first.page : null);
       const rowPage = startsOn ?? page;
+      for (const n of numbers) {
+        if (!numberPages.has(n.id)) numberPages.set(n.id, starts.findLast((s) => s.at <= n.at)?.page ?? rowPage);
+      }
       page = starts.at(-1)?.page ?? begins ?? page;
       if (node.type === "codeBlock") {
         push(ctx, { id, type: "CODE", text, page: rowPage });
@@ -393,6 +433,13 @@ export function deriveBlocks(doc: RichNode): DerivedBlock[] {
         citations,
         page: rowPage,
       });
+      return;
+    }
+    if (node.type === "footnote") {
+      const walked = page;
+      page = numberPages.get(String(node.attrs?.footnoteId)) ?? page;
+      for (const child of node.content ?? []) walk(child, ctx);
+      page = walked;
       return;
     }
     let next = ctx;

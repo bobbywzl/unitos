@@ -539,7 +539,7 @@ class Converter {
     // running heads are furniture; \thanks notes come from the PDF's page 1 (build.mts), marks and all
     if (el.matches(".ltx_role_runningtitle, .ltx_role_runningauthor, .ltx_role_supplement, .ltx_role_thanks, .ltx_note_frontmatter")) return;
     const mark = (el.querySelector(":scope > .ltx_note_mark")?.textContent ?? "").trim();
-    if (mark && !dropMark) spans.push({ text: mark });
+    if (mark && !dropMark) spans.push({ text: mark, sup: true });
     if (el.matches(".ltx_role_footnotemark")) return;
     const content = el.querySelector(":scope > .ltx_note_outer > .ltx_note_content");
     if (!content) return;
@@ -691,5 +691,7 @@ export function normalizeSpans(spans: Span[]): Span[] {
 }
 
 function sameStyle(a: Span, b: Span): boolean {
-  return a.bold === b.bold && a.italic === b.italic && a.underline === b.underline && a.code === b.code && a.smallCaps === b.smallCaps && a.href === b.href;
+  return (
+    a.bold === b.bold && a.italic === b.italic && a.underline === b.underline && a.code === b.code && a.smallCaps === b.smallCaps && a.sup === b.sup && a.href === b.href
+  );
 }

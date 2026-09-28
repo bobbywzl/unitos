@@ -39,10 +39,11 @@ function offsetInBlock(block: PMNode, blockPos: number, pos: number): number {
   return offset;
 }
 
-/** The position of an offset in a paragraph's words; inside a chip, after
-    it. Where the offset falls on what counts no words (a word the index
-    leaves out, a zero-width space), a start goes past it and an end stops
-    before it. */
+/** The position of an offset in a paragraph's words; inside a chip or an
+    inline equation (its TeX, lib/docs/blocks.ts mathWords), after it: a
+    passage never cuts one. Where the offset falls on what counts no words
+    (a word the index leaves out, a zero-width space), a start goes past it
+    and an end stops before it. */
 export function posInBlock(block: PMNode, blockPos: number, offset: number, end = false): number {
   let left = offset;
   let pos = blockPos + 1;
@@ -109,8 +110,8 @@ export function aroundPageStarts(doc: PMNode, from: number, to: number): [number
   return pieces;
 }
 
-/** Images, figure objects, and equations hold no words to quote: a passage
-    leaves them out. */
+/** Images, figure objects, and equations on their own line hold no words to
+    quote: a passage leaves them out. */
 const LEFT_OUT = new Set(["image", FIGURE, "blockMath"]);
 
 /** One segment per paragraph between two positions; whitespace takes none. */
@@ -143,10 +144,17 @@ function segmentsBetween(doc: PMNode, from: number, to: number): { segments: Pag
 }
 
 /** A DOM boundary as a position; the fallback when it is outside the text (a
-    drag that began in the page's margin). */
-function positionOf(view: EditorView, node: Node, offset: number, fallback: number): number {
+    drag that began in the page's margin). A boundary inside an inline
+    equation's drawing stands at its edge, a start before it and an end
+    after it: a passage takes the formula whole. */
+function positionOf(view: EditorView, node: Node, offset: number, fallback: number, end = false): number {
   if (!view.dom.contains(node)) return fallback;
   try {
+    const math = (node instanceof Element ? node : node.parentElement)?.closest(".docs-math:not([data-math-block])");
+    if (math && view.dom.contains(math)) {
+      const before = view.posAtDOM(math, 0);
+      return end ? before + (view.state.doc.nodeAt(before)?.nodeSize ?? 0) : before;
+    }
     return view.posAtDOM(node, offset);
   } catch {
     return fallback;
@@ -154,12 +162,15 @@ function positionOf(view: EditorView, node: Node, offset: number, fallback: numb
 }
 
 /** The passage a DOM range selects in the page editor; null when the range is
-    not in its text. */
+    not in its text. In Editing, a press on an inline equation selects it
+    and opens the equation box (insert/math.ts): that press edits the
+    formula and selects no passage. */
 export function pageSelectionOfRange(editor: Editor, range: Range) {
   const { view, state } = editor;
   if (!view.dom.contains(range.startContainer) && !view.dom.contains(range.endContainer)) return null;
+  if (editor.isEditable && (state.selection as { node?: PMNode }).node?.type.name === "inlineMath") return null;
   const from = positionOf(view, range.startContainer, range.startOffset, state.selection.from);
-  const to = positionOf(view, range.endContainer, range.endOffset, state.selection.to);
+  const to = positionOf(view, range.endContainer, range.endOffset, state.selection.to, true);
   return segmentsBetween(state.doc, Math.min(from, to), Math.max(from, to));
 }
 

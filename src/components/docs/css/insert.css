@@ -931,9 +931,10 @@ textarea.docs-field:focus {
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%);
   cursor: pointer;
 }
+/* No padding at the sides: an import glues a formula to its words
+   ("σ-algebra", "Aᶜ,"), and a gap there reads as a space. */
 .docs-prose .docs-math {
   display: inline-block;
-  padding: 0 2px;
   border-radius: 3px;
   cursor: pointer;
 }

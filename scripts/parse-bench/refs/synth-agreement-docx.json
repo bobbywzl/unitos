@@ -142,7 +142,11 @@
               "italic": true
             },
             {
-              "text": "” has the meaning given in Rule 501(a) of Regulation D under the Securities Act.1"
+              "text": "” has the meaning given in Rule 501(a) of Regulation D under the Securities Act."
+            },
+            {
+              "text": "1",
+              "sup": true
             }
           ]
         },

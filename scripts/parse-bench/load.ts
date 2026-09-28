@@ -25,6 +25,8 @@ const spanSchema = z.strictObject({
   underline: t,
   code: t,
   smallCaps: t,
+  sub: t,
+  sup: t,
   href: z.string().optional(),
 });
 const spans = z.array(spanSchema);
@@ -82,17 +84,23 @@ export const refDocSchema: z.ZodType<RefDoc> = z.strictObject({
 });
 
 /** One corpus document: the file the runner parses (a path under .bench/,
-    repo-relative), where it came from, and the pages scored (a reference's
-    own pages win). Several entries may share one file, each with its pages
-    and its reference. Unknown keys are ignored. */
+    repo-relative: the PDF when the entry names one, else the Word file),
+    where it came from, and the pages scored (a reference's own pages win).
+    Several entries may share one file, each with its pages and its
+    reference. ref: the reference to score against when it is another
+    entry's (a Word file scored against the reference of its PDF rendering).
+    Unknown keys are ignored. */
 const entrySchema = z.object({
   id: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   category: z.enum(CATEGORIES),
   pdf: z.string().optional(),
   docx: z.string().optional(),
   url: z.string().optional(),
+  ref: z.string().optional(),
   license: z.enum(LICENSES),
   pages: z.tuple([z.number().int().min(1), z.number().int().min(1)]).optional(),
+  // In the quick run (--quick): one document for each kind of fault, the fast ones.
+  quick: z.boolean().optional(),
 });
 export type CorpusEntry = z.infer<typeof entrySchema>;
 

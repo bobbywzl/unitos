@@ -47,15 +47,15 @@ import type { PageSetup, RichNode } from "@/lib/docs/schema";
 
 const FONTS_LINK_ID = "unitos-docs-fonts";
 
-/** An import (SPEC.md §29): a document made from a PDF, a web page, or a
-    Markdown or text file, as the page sends it. origin: the address, or ""
-    for an uploaded file; pages: a PDF's page count; importRev: the revision
-    the import or its last re-parse stored (a re-parse builds the page
-    editor anew); edited: changed since then (richTextRev > importRev);
-    shared: attached to a project another account owns, so Editing and
-    Suggesting are off. */
+/** An import (SPEC.md §29): a document made from a PDF, a web page, a
+    Markdown or text file, or a Word file, as the page sends it. origin: the
+    address, or "" for an uploaded file; pages: a PDF's page count;
+    importRev: the revision the import or its last re-parse stored (a
+    re-parse builds the page editor anew); edited: changed since then
+    (richTextRev > importRev); shared: attached to a project another account
+    owns, so Editing and Suggesting are off. */
 export type Imported = {
-  kind: "pdf" | "url" | "markdown";
+  kind: "pdf" | "url" | "markdown" | "docx";
   origin: string;
   pages: number | null;
   importRev: number;
@@ -103,8 +103,8 @@ function siteOf(address: string): string {
 }
 
 /** Where an import came from, after its title: "Imported from" the site, a
-    link to the page; a PDF and its page count; or a text file. Muted, the
-    accent on hover. */
+    link to the page; a PDF and its page count; a text file; or a Word file.
+    Muted, the accent on hover. */
 function ImportLine({ imported }: { imported: Imported }) {
   const t = useT();
   const parts: ReactNode[] = [];
@@ -133,6 +133,8 @@ function ImportLine({ imported }: { imported: Imported }) {
     parts.push(<span key="pdf">{n ? t("docsPage.importPdf", { n, s: n === 1 ? "" : "s" }) : "PDF"}</span>);
   } else if (imported.kind === "markdown" && !imported.origin) {
     parts.push(<span key="file">{t("docsPage.importTextFile")}</span>);
+  } else if (imported.kind === "docx" && !imported.origin) {
+    parts.push(<span key="file">{t("docsPage.importWordFile")}</span>);
   }
   // A narrow title row (a phone, a split pane, the tray beside a small
   // window) keeps its room for the title.

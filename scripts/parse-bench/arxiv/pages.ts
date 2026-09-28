@@ -4,6 +4,7 @@
  * form of heading numbers, caption tags, and capitals, and the page a block's words are on.
  */
 import { execFileSync } from "node:child_process";
+import type { Span } from "../model";
 
 export type Word = { text: string; x0: number; y0: number; x1: number; y1: number };
 export type Line = { words: Word[]; x0: number; y0: number; x1: number; y1: number; text: string; furniture?: true };
@@ -154,9 +155,11 @@ export function titleLines(page: Page, titleText: string): Line[] {
 /**
  * The author area: page 1's lines between the title and the abstract that start in the left half of the page,
  * or share a row with one that does (a figure's labels in the right column stay out). Lines of one row are one
- * paragraph; a line of only superscript marks joins the line after it.
+ * paragraph; a line of only superscript marks joins the line after it. Affiliation and note marks the page
+ * prints raised ("Ning,¹˒²", "¹Department of…") are sup spans: a word shorter than four fifths of its row's
+ * words, its foot above theirs.
  */
-export function authorLines(page: Page, below: number, above: number): string[] {
+export function authorLines(page: Page, below: number, above: number): Span[][] {
   const area = page.lines.filter((l) => !l.furniture && l.y0 >= below - 1 && l.y1 <= above + 1);
   const left = area.filter((l) => l.x0 < page.width / 2);
   const lines = area.filter((l) => left.some((k) => Math.abs(k.y0 - l.y0) < 2)).sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
@@ -166,18 +169,58 @@ export function authorLines(page: Page, below: number, above: number): string[] 
     if (row && Math.abs(row[0].y0 - line.y0) < 2) row.push(line);
     else rows.push([line]);
   }
-  const out: string[] = [];
-  let carry = "";
+  const out: Span[][] = [];
+  let carry: Span[] = [];
   for (const row of rows) {
     const text = row.map((l) => l.text).join(" ").replace(/\s+/g, " ").trim();
     if (/^[\d,*†‡§¶∗⋆\s]{1,6}$/.test(text)) {
-      carry += text;
+      carry = [...carry, { text, sup: true }];
       continue;
     }
-    out.push(carry + text);
-    carry = "";
+    out.push(tidy([...carry, ...rowSpans(row)]));
+    carry = [];
   }
   return out;
+}
+
+/** A row's words as spans, joined as joinWords joins them, the raised ones sup. */
+function rowSpans(row: Line[]): Span[] {
+  const words = row.flatMap((l) => l.words);
+  const heights = words.map((w) => w.y1 - w.y0).sort((a, b) => a - b);
+  const feet = words.map((w) => w.y1).sort((a, b) => a - b);
+  const height = heights[Math.floor(heights.length / 2)];
+  const foot = feet[Math.floor(feet.length / 2)];
+  const raised = (w: Word) => w.y1 - w.y0 < height * 0.8 && w.y1 < foot - height * 0.1;
+  const out: Span[] = [];
+  row.forEach((line, k) => {
+    const rotated = line.words.length > 1 && Math.abs(line.words[1].y0 - line.words[0].y0) > Math.abs(line.words[1].x0 - line.words[0].x0);
+    line.words.forEach((w, i) => {
+      const gap = i ? (rotated || w.x0 - line.words[i - 1].x1 > 0.8 ? " " : "") : k ? " " : "";
+      if (gap) out.push({ text: gap });
+      out.push(raised(w) ? { text: w.text, sup: true } : { text: w.text });
+    });
+  });
+  return out;
+}
+
+/** Spans with runs of one look joined, spaces collapsed, the ends trimmed. A
+    space between two raised words is raised with them ("1, 2"). */
+function tidy(spans: Span[]): Span[] {
+  const flagged = spans.map((s, i) => (s.text.trim() || !(spans[i - 1]?.sup && spans[i + 1]?.sup) ? s : { ...s, sup: true as const }));
+  const out: Span[] = [];
+  for (const span of flagged) {
+    const last = out.at(-1);
+    if (last && Boolean(last.sup) === Boolean(span.sup)) last.text += span.text;
+    else out.push({ ...span });
+  }
+  out.forEach((s, i) => {
+    s.text = s.text.replace(/\s+/g, " ");
+    if (i > 0 && out[i - 1].text.endsWith(" ") && s.text.startsWith(" ")) s.text = s.text.slice(1);
+  });
+  if (out[0]) out[0].text = out[0].text.trimStart();
+  const last = out.at(-1);
+  if (last) last.text = last.text.trimEnd();
+  return out.filter((s) => s.text);
 }
 
 /** A line's typical word height: its font size, near enough. */

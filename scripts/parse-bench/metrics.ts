@@ -1,5 +1,5 @@
 import { isMathText, type Doc, type DocBlock } from "./adapt";
-import { mathLeaves, mathTokens, sequenceSimilarity, textMathTokens } from "./math";
+import { mathLeaves, mathTokens, normLabel, sequenceSimilarity, textMathTokens } from "./math";
 import type { RefBlock, Span } from "./model";
 import { garblesOf, wordsOf, type Garble } from "./text";
 
@@ -7,7 +7,7 @@ import { garblesOf, wordsOf, type Garble } from "./text";
 // the adapters) scored word by word and block by block. Every metric is a
 // pure function of the two flat views and their word matching. One line each:
 //   text        word recall, precision, F1 over the two multisets of words (math out)
-//   order       share of matched words that stand in the reference's order
+//   order       share of matched words that stand in the reference's order (footnotes apart)
 //   furniture   share of furniture strings never at the candidate's edges more often than at the reference's
 //   blocks      F1 of reference blocks found with their kind and candidate blocks of the right kind
 //   paragraphs  1 − (units split + units merged) / reference units (a paragraph, a heading, a list item)
@@ -16,11 +16,14 @@ import { garblesOf, wordsOf, type Garble } from "./text";
 //   tables      F1 of table words in their cell, rows and columns mapped one to one (leaks both ways reported)
 //   math        mean of display and inline similarity of canonical forms (images and words read as math reported)
 //   garbles     1 − garbled glyphs past the reference's own over (5 + words / 100)
-//   styles      mean of bold and italic F1 over the characters of matched words
+//   styles      mean F1 of the styles the reference marks (bold, italic, underline, small caps, sub, sup)
+//   footnotes   mean of notes found, notes linked from their mark, and the notes' words F1
+//   roles       mean of alignment, indentation, and captions F1, checkbox states, separators and
+//               quotations found, and printed equation labels right
 
-/** The composite's weights: what each part of a perfect parse is worth out
-    of 100. A part that does not apply (no table on either side) drops out
-    and the rest share its weight. */
+/** The composite's weights: what each part of a perfect parse is worth. A
+    part that does not apply (no table on either side) drops out and the
+    rest share its weight; the composite is out of 100. */
 export const WEIGHTS = {
   text: 25, // word F1
   order: 10, // reading order
@@ -32,16 +35,19 @@ export const WEIGHTS = {
   tables: 10, // table words in their cell, F1
   math: 10, // display and inline math similarity
   garbles: 5, // no garbled glyph
-  styles: 5, // bold and italic F1
+  styles: 5, // style F1
+  footnotes: 5, // footnotes found, linked, and their words right
+  roles: 5, // alignment, indentation, captions, checkboxes, separators, quotations, equation labels
 } as const;
 export type Part = keyof typeof WEIGHTS;
 
-/** The reference-free composite's weights (free.ts), out of 100. */
+/** The reference-free composite's weights (free.ts); out of 100 over the parts that apply. */
 export const FREE_WEIGHTS = {
   coverage: 60, // word F1 against pdftotext
   furniture: 20, // furniture lines that never leak
   numbers: 10, // no line that is only a page number
-  garbles: 10, // no garbled glyph
+  garbles: 10, // no garbled glyph, by string and by the math font's code
+  math: 10, // display equations as LaTeX that draws the page's symbols (glyphs.ts)
 } as const;
 
 // ── The flat view ───────────────────────────────────────────────────────────
@@ -60,8 +66,16 @@ export type Unit = {
   /** Its words: [first, end) in the document's words. */
   first: number;
   end: number;
+  /** A candidate's footnote marks: where each stands in `text`, and the id of its note. */
+  marks: { at: number; end: number; id: string }[];
+  /** Its raised runs [start, end) in `text`: a reference's footnote marks are among them. */
+  raised: [number, number][];
 };
-export type Tok = { w: string; unit: number; start: number; end: number; bold: boolean; italic: boolean };
+/** The styles scored on the characters of matched words. */
+export const STYLES = ["bold", "italic", "underline", "smallCaps", "sub", "sup"] as const;
+export type Style = (typeof STYLES)[number];
+/** A word; `note`: a candidate's footnote mark or label (the page editor draws its own numbers there). */
+export type Tok = { w: string; unit: number; start: number; end: number; note?: true } & Record<Style, boolean>;
 /** A formula: display (a block of its own) or inline (in a unit, before word `at`). */
 export type MathItem = {
   block: number;
@@ -71,6 +85,8 @@ export type MathItem = {
   latex?: string;
   mathml?: string;
   label?: string;
+  /** An inline formula's plain reading, when its source gives one. */
+  text?: string;
   /** An equation shown as an image: the glyph text read from it. */
   image?: string;
 };
@@ -96,18 +112,19 @@ export function gridPlaces(rows: Row[]): { row: number; col: number }[][] {
   });
 }
 
-function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: { row?: number; col?: number; styled: boolean; breaks?: number[] }) {
+function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: { row?: number; col?: number; styled: boolean; breaks?: number[]; shift?: number }) {
   let text = "";
   const u = flat.units.length;
   const first = flat.toks.length;
-  const bold = new Uint8Array([...spans].reduce((n, s) => n + s.text.length, 0));
-  const italic = new Uint8Array(bold.length);
+  const length = spans.reduce((n, s) => n + s.text.length, 0);
+  const flags = Object.fromEntries(STYLES.map((style) => [style, new Uint8Array(length)])) as Record<Style, Uint8Array>;
+  const raised: [number, number][] = [];
   let stretch = 0;
   const flush = (to: number) => {
     for (const w of wordsOf(text.slice(stretch, to))) {
       const [start, end] = [w.start + stretch, w.end + stretch];
-      const share = (flags: Uint8Array) => flags.subarray(start, end).reduce((n, f) => n + f, 0) * 2 > end - start;
-      flat.toks.push({ w: w.w, unit: u, start, end, bold: share(bold), italic: share(italic) });
+      const share = (style: Style) => flags[style].subarray(start, end).reduce((n, f) => n + f, 0) * 2 > end - start;
+      flat.toks.push({ w: w.w, unit: u, start, end, ...(Object.fromEntries(STYLES.map((style) => [style, share(style)])) as Record<Style, boolean>) });
     }
   };
   for (const span of spans) {
@@ -115,15 +132,22 @@ function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: 
     text += span.text;
     if (span.latex !== undefined || span.mathml !== undefined) {
       flush(start);
-      flat.math.push({ block, unit: u, at: flat.toks.length, display: false, latex: span.latex, mathml: span.mathml });
+      flat.math.push({ block, unit: u, at: flat.toks.length, display: false, latex: span.latex, mathml: span.mathml, text: span.text });
       stretch = text.length;
       continue;
     }
-    if (span.bold) bold.fill(1, start, text.length);
-    if (span.italic) italic.fill(1, start, text.length);
+    for (const style of STYLES) if (span[style]) flags[style].fill(1, start, text.length);
+    if (span.sup && text.length > start) raised.push([start, text.length]);
   }
   flush(text.length);
-  flat.units.push({ block, index, row: opts.row ?? -1, col: opts.col ?? -1, text, breaks: opts.breaks ?? [], styled: opts.styled, first, end: flat.toks.length });
+  const shift = opts.shift ?? 0;
+  const marks = (flat.blocks[block].marks ?? []).filter((m) => m.unit === index).map(({ at, end, id }) => ({ at: at + shift, end: end + shift, id }));
+  // A footnote's own label (its first characters) and the marks linking to one.
+  for (let t = first; t < flat.toks.length; t++) {
+    const tok = flat.toks[t];
+    if (tok.start < shift || marks.some((m) => tok.start >= m.at && tok.end <= m.end)) tok.note = true;
+  }
+  flat.units.push({ block, index, row: opts.row ?? -1, col: opts.col ?? -1, text, breaks: opts.breaks ?? [], styled: opts.styled, first, end: flat.toks.length, marks, raised });
   flat.unitsOf[block].push(u);
 }
 
@@ -144,6 +168,7 @@ export function flatten(doc: Doc): Flat {
         return addUnit(flat, b, 0, [{ text: block.label ? `${block.label} ` : "" }, ...block.spans], {
           styled: true,
           breaks: breaks(0, block.label ? block.label.length + 1 : 0),
+          shift: block.label ? block.label.length + 1 : 0,
         });
       case "list":
         return block.items.forEach((item, i) => addUnit(flat, b, i, item.spans, { styled: true, breaks: breaks(i) }));
@@ -151,8 +176,9 @@ export function flatten(doc: Doc): Flat {
         if (block.caption) addUnit(flat, b, -1, block.caption, { styled: true });
         const places = gridPlaces(block.rows);
         let index = 0;
+        // A header cell's words are bold as the table sets them: the table metric scores the header.
         block.rows.forEach((row, r) =>
-          row.cells.forEach((cell, c) => addUnit(flat, b, index++, cell.spans, { row: places[r][c].row, col: places[r][c].col, styled: true })),
+          row.cells.forEach((cell, c) => addUnit(flat, b, index++, cell.spans, { row: places[r][c].row, col: places[r][c].col, styled: !cell.header })),
         );
         return;
       }
@@ -371,6 +397,7 @@ export function wordScores(ref: Flat, cand: Flat): WordScores {
       for (const ch of w.w) mathChars.set(ch, (mathChars.get(ch) ?? 0) + 1);
     }
   }
+  const noteBag = countOf(cand.toks.filter((t) => t.note).map((t) => t.w));
   let recallHits = 0;
   for (const [w, n] of refBag) recallHits += Math.min(n, candBag.get(w) ?? 0);
   let precisionHits = 0;
@@ -378,8 +405,10 @@ export function wordScores(ref: Flat, cand: Flat): WordScores {
     const prose = Math.min(n, refBag.get(w) ?? 0);
     const whole = Math.min(n - prose, mathBag.get(w) ?? 0);
     if (whole > 0) mathBag.set(w, (mathBag.get(w) ?? 0) - whole);
-    let rest = n - prose - whole;
-    precisionHits += prose + whole;
+    // A footnote number the page editor draws where the page prints a sign (¶¶, †) is no error of the words.
+    const noted = Math.min(n - prose - whole, noteBag.get(w) ?? 0);
+    let rest = n - prose - whole - noted;
+    precisionHits += prose + whole + noted;
     const chars = countOf(w);
     while (rest > 0 && [...w].length <= 4 && [...chars].every(([ch, c]) => (mathChars.get(ch) ?? 0) >= c)) {
       for (const [ch, c] of chars) mathChars.set(ch, (mathChars.get(ch) ?? 0) - c);
@@ -392,13 +421,20 @@ export function wordScores(ref: Flat, cand: Flat): WordScores {
   return { recall, precision, f1: f1Of(precision, recall), refWords: ref.toks.length, candWords: cand.toks.length };
 }
 
+const inNote = (flat: Flat, tok: number) => flat.blocks[flat.units[flat.toks[tok].unit].block].kind === "footnote";
+
 /** Reading order: the share of matched words that stand in the reference's
-    order (the longest run of matched words in order over all matched). */
-export function orderScore(al: Alignment): number | null {
+    order (the longest run of matched words in order over all matched).
+    With `notesApart`, a footnote's words on either side are left out: where
+    a note stands (the page's foot, after the paragraph that cites it, the
+    document's end) is the footnote metric's to judge. */
+export function orderScore(al: Alignment, notesApart?: { ref: Flat; cand: Flat }): number | null {
   const tails: number[] = [];
   let n = 0;
-  for (const j of al.aTo) {
+  for (let i = 0; i < al.aTo.length; i++) {
+    const j = al.aTo[i];
     if (j < 0) continue;
+    if (notesApart && (inNote(notesApart.ref, i) || inNote(notesApart.cand, j))) continue;
     n++;
     let lo = 0;
     let hi = tails.length;
@@ -418,12 +454,17 @@ export function orderScore(al: Alignment): number | null {
     apart from the words beside it ("A-2):" does not end with a page number
     "2"). A string next to another at an edge is at an edge too, so "12
     CHAPTER 1. RIVERS The words" holds both. Each place once, by its first
-    word. `cells: false` leaves table cells out. */
-export function furnitureMatches(flat: Flat, strings: string[][], cells = true): { unit: number; tok: number }[][] {
+    word. `cells: false` leaves table cells out; `marks: false` leaves out a
+    footnote's label, a raised mark, and a contents entry, whose page number
+    is its own (a candidate's: the reference's count as they stand, so a
+    parse that reads a note as a paragraph opening with its number leaks
+    nothing). */
+export function furnitureMatches(flat: Flat, strings: string[][], cells = true, marks = true): { unit: number; tok: number }[][] {
   const out = strings.map(() => new Map<string, { unit: number; tok: number }>());
   const gap = (text: string) => /^[\s\-–—]*$/.test(text);
   flat.units.forEach((unit, u) => {
     if (!cells && flat.blocks[unit.block].kind === "table") return;
+    if (!marks && flat.blocks[unit.block].role === "contents") return;
     const { first, end, text } = unit;
     if (end <= first) return;
     const toks = flat.toks;
@@ -441,7 +482,12 @@ export function furnitureMatches(flat: Flat, strings: string[][], cells = true):
       while (t >= first && toks[t].end > c) t--;
       if (t >= first && gap(text.slice(toks[t].end, c))) closes.add(t);
     }
-    const at = (t: number, words: string[]) => t >= first && t + words.length <= end && words.every((w, x) => toks[t + x].w === w);
+    // A footnote's label and a raised mark are no page number.
+    const block = flat.blocks[unit.block];
+    const label = !marks && block.kind === "footnote" && block.label ? block.label.length + 1 : 0;
+    const marked = (t: number) =>
+      !marks && (toks[t].start < label || unit.raised.some(([a, b]) => toks[t].start >= a && toks[t].end <= b) || unit.marks.some((m) => toks[t].start >= m.at && toks[t].end <= m.end));
+    const at = (t: number, words: string[]) => t >= first && t + words.length <= end && !marked(t) && words.every((w, x) => toks[t + x].w === w);
     for (let round = 0, grew = true; grew && round < 4; round++) {
       grew = false;
       strings.forEach((words, x) => {
@@ -479,8 +525,9 @@ export type FurnitureScores = {
 export function furnitureScores(furniture: string[], ref: Flat, cand: Flat): FurnitureScores {
   const strings = [...new Set(furniture.map((f) => f.trim()).filter((f) => wordsOf(f).length > 0))];
   const words = strings.map((f) => wordsOf(f).map((w) => w.w));
-  const inCand = furnitureMatches(cand, words);
-  const inRef = furnitureMatches(ref, words);
+  // A table cell may hold a number ("2 36", a fraction's parts): cells are the table metric's.
+  const inCand = furnitureMatches(cand, words, false, false);
+  const inRef = furnitureMatches(ref, words, false);
   let leaked = 0;
   let leaks = 0;
   const found: FurnitureScores["found"] = [];
@@ -507,7 +554,8 @@ export type BlockScores = {
 
 /** Blocks by kind: a reference block is found when its owner has its kind
     and holds half its matched words or more; a candidate block is right when
-    its main has its kind. Splits and merges are counted on units (a
+    its main has its kind and it is its main's owner (the other pieces of a
+    split paragraph are not right blocks). Splits and merges are counted on units (a
     paragraph, a heading, a list item; table cells are the table metric's):
     a split is a reference unit cut into several candidate units that are
     mostly its words; a merge is a candidate unit that holds most of several
@@ -531,7 +579,7 @@ export function blockScores(ref: Flat, cand: Flat, al: Alignment): BlockScores {
     counted++;
     kind(block.kind).cand++;
     const rb = al.main[cb];
-    if (rb < 0 || ref.blocks[rb].kind !== block.kind) return;
+    if (rb < 0 || ref.blocks[rb].kind !== block.kind || al.owner[rb] !== cb) return;
     if (hasWords(cand, cb) && ov(al, rb, cb) * 2 < al.candMatched[cb]) return;
     kind(block.kind).right++;
     right++;
@@ -617,6 +665,8 @@ export type ListScores = {
   found: number;
   atDepth: number;
   marked: number;
+  /** Reference checklist items, and those whose counterpart has a box in the same state. */
+  checks: { ref: number; right: number };
   recall: number | null;
   depth: number | null;
   markers: number | null;
@@ -624,7 +674,9 @@ export type ListScores = {
   misses: { unit: number; cand: number; why: string }[];
 };
 
-const bulletLike = (m: string) => /^[-*•▪◦‣●○■□·∙–—➢❖◆★➔✓✔❏]?$/.test(m);
+/** A bullet of any glyph: "o" is how a reference writes Word's hollow
+    Courier New bullet, which a parse reads as "◦". */
+const bulletLike = (m: string) => /^[-*•▪◦‣●○■□·∙–—➢❖◆★➔✓✔❏o]?$/.test(m);
 const sameMarker = (a: string, b: string) => (bulletLike(a) && bulletLike(b)) || a.replace(/\s/g, "") === b.replace(/\s/g, "");
 
 /** List items: an item is found when the candidate unit holding most of its
@@ -682,11 +734,14 @@ export function listScores(ref: Flat, cand: Flat, al: Alignment): ListScores {
   let items = 0;
   let atDepth = 0;
   let marked = 0;
+  const checks = { ref: 0, right: 0 };
   const misses: ListScores["misses"] = [];
   ref.units.forEach((unit, ru) => {
     const block = ref.blocks[unit.block];
     if (block.kind !== "list") return;
     items++;
+    const box = block.items[unit.index].checked;
+    if (box !== undefined) checks.ref++;
     const cu = itemTo.get(ru);
     if (cu === undefined) {
       const w = why.get(ru);
@@ -701,6 +756,7 @@ export function listScores(ref: Flat, cand: Flat, al: Alignment): ListScores {
     else misses.push({ unit: ru, cand: cu, why: `depth ${theirs.depth}, not ${mine.depth}` });
     if (sameMarker(mine.marker, theirs.marker)) marked++;
     else misses.push({ unit: ru, cand: cu, why: `marker "${theirs.marker}", not "${mine.marker}"` });
+    if (box !== undefined && theirs.checked === box) checks.right++;
   });
   const found = itemTo.size;
   const recall = share(found, items);
@@ -710,6 +766,7 @@ export function listScores(ref: Flat, cand: Flat, al: Alignment): ListScores {
     found,
     atDepth,
     marked,
+    checks,
     recall,
     depth,
     markers: found > 0 ? marked / found : null,
@@ -827,6 +884,10 @@ export type MathScores = {
   inline: number | null;
   equations: number;
   formulas: number;
+  /** Printed equation labels ("(1.2)"), compared apart from the formula:
+      reference labels on an equation with the same label, candidate labels
+      the reference does not print. */
+  labels: { ref: number; right: number; extra: number; score: number | null; misses: { want: string; got: string }[] };
   /** Reference equations the candidate shows as images. */
   images: number;
   /** Reference equations and inline formulas the candidate reads as plain words. */
@@ -852,13 +913,18 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
   const miss = (isDisplay: boolean, m: MathItem, got: string, similarity: number) => {
     if (similarity < 0.999) misses.push({ display: isDisplay, want: latexOf(m), got, similarity });
   };
-  const candMathOf = new Map<number, MathItem>();
-  for (const m of cand.math) if (m.display) candMathOf.set(m.block, m);
+  const labels: MathScores["labels"] = { ref: 0, right: 0, extra: 0, score: null, misses: [] };
   for (const m of ref.math) {
     const want = mathTokens(m, m.display);
     if (m.display) {
       const cb = al.owner[m.block];
       const other = cb >= 0 ? cand.blocks[cb] : null;
+      if (m.label) {
+        labels.ref++;
+        const theirs = other?.kind === "equation" ? (other.label ?? "") : "";
+        if (theirs && normLabel(theirs) === normLabel(m.label)) labels.right++;
+        else labels.misses.push({ want: m.label, got: other?.kind === "equation" ? theirs || "(no label)" : `(${other?.kind ?? "missing"})` });
+      }
       let sim = 0;
       let got = "(missing)";
       if (other?.kind === "equation") {
@@ -903,6 +969,13 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
     inline.push(sim);
     miss(false, m, got, sim);
   }
+  cand.blocks.forEach((block, cb) => {
+    if (block.kind !== "equation" || !block.label) return;
+    const rb = al.main[cb];
+    const mine = rb >= 0 ? ref.blocks[rb] : null;
+    if (mine?.kind !== "equation" || !mine.label) labels.extra++;
+  });
+  labels.score = labels.ref > 0 ? labels.right / labels.ref : null;
   const mean = (list: number[]) => (list.length > 0 ? list.reduce((a, b) => a + b, 0) / list.length : null);
   const d = mean(display);
   const i = mean(inline);
@@ -911,6 +984,7 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
     inline: i,
     equations: display.length,
     formulas: inline.length,
+    labels,
     images,
     plainDisplay,
     plainInline,
@@ -964,23 +1038,32 @@ export function garbleScores(ref: Flat, cand: Flat): GarbleScores {
 export type StyleScores = {
   bold: number | null;
   italic: number | null;
+  /** The mean of every style's F1 the reference marks (the composite's part). */
   score: number | null;
+  /** Each style's F1; null where the reference never marks it. */
+  f1: Record<Style, number | null>;
   /** Characters of matched words: styled on both sides, only in the candidate, only in the reference. */
-  counts: Record<"bold" | "italic", { both: number; candOnly: number; refOnly: number }>;
+  counts: Record<Style, { both: number; candOnly: number; refOnly: number }>;
 };
 
-/** Bold and italic: F1 over the characters of matched words, where both
-    words count for styles (not in a title, a heading, or code). A style the
-    reference never marks is not scored: its author did not mark it. */
+const meanOf = (list: (number | null)[]) => {
+  const known = list.filter((x): x is number => x !== null);
+  return known.length > 0 ? known.reduce((a, b) => a + b, 0) / known.length : null;
+};
+
+/** Bold, italic, underline, small caps, sub, and sup: F1 over the
+    characters of matched words, where both words count for styles (not in a
+    title, a heading, or code). A style the reference never marks is not
+    scored: its author did not mark it. */
 export function styleScores(ref: Flat, cand: Flat, al: Alignment): StyleScores {
-  const counts = { bold: { both: 0, candOnly: 0, refOnly: 0 }, italic: { both: 0, candOnly: 0, refOnly: 0 } };
+  const counts = Object.fromEntries(STYLES.map((style) => [style, { both: 0, candOnly: 0, refOnly: 0 }])) as StyleScores["counts"];
   al.aTo.forEach((j, i) => {
     if (j < 0) return;
     const r = ref.toks[i];
     const c = cand.toks[j];
     if (!ref.units[r.unit].styled || !cand.units[c.unit].styled) return;
     const weight = r.end - r.start;
-    for (const style of ["bold", "italic"] as const) {
+    for (const style of STYLES) {
       if (r[style] && c[style]) counts[style].both += weight;
       else if (c[style]) counts[style].candOnly += weight;
       else if (r[style]) counts[style].refOnly += weight;
@@ -988,11 +1071,192 @@ export function styleScores(ref: Flat, cand: Flat, al: Alignment): StyleScores {
   });
   const f = ({ both, candOnly, refOnly }: { both: number; candOnly: number; refOnly: number }) =>
     both + candOnly + refOnly > 0 ? (2 * both) / (2 * both + candOnly + refOnly) : null;
-  const marks = (style: "bold" | "italic") => ref.toks.some((t) => t[style] && ref.units[t.unit].styled);
-  const bold = marks("bold") ? f(counts.bold) : null;
-  const italic = marks("italic") ? f(counts.italic) : null;
-  const known = [bold, italic].filter((x): x is number => x !== null);
-  return { bold, italic, score: known.length > 0 ? known.reduce((a, b) => a + b, 0) / known.length : null, counts };
+  const marks = (style: Style) => ref.toks.some((t) => t[style] && ref.units[t.unit].styled);
+  const f1 = Object.fromEntries(STYLES.map((style) => [style, marks(style) ? f(counts[style]) : null])) as Record<Style, number | null>;
+  return { bold: f1.bold, italic: f1.italic, score: meanOf(STYLES.map((style) => f1[style])), f1, counts };
+}
+
+export type NoteScores = {
+  /** Reference footnotes; those found as a footnote holding half their words or more. */
+  ref: number;
+  found: number;
+  /** Reference footnotes whose mark the reference prints; those found and linked from a mark where the reference prints it. */
+  linkable: number;
+  linked: number;
+  /** The mean F1 of each reference footnote's words against its counterpart footnote (0 when not found). */
+  words: number | null;
+  /** Candidate footnotes that are no reference footnote. */
+  extra: number;
+  /** The mean of the share found, the share linked, and the words' F1. */
+  score: number | null;
+  misses: { ref: number; cand: number; why: string }[];
+};
+
+/** Each reference footnote's printed marks: the raised runs that read as
+    its label, before it in reading order and after the last footnote with
+    the same label (a note cited twice, "Shen*" and "Sherif*", has two). A
+    note whose mark the reference does not raise (an OCR layer that read the
+    mark as a quote sign) has none: it is not scored for its link. */
+function referenceMarks(ref: Flat): Map<number, { unit: number; at: number; end: number }[]> {
+  const out = new Map<number, { unit: number; at: number; end: number }[]>();
+  const after = new Map<string, number>();
+  ref.blocks.forEach((block, rb) => {
+    if (block.kind !== "footnote" || !block.label.trim()) return;
+    const label = block.label.trim();
+    const units = ref.unitsOf[rb];
+    const places: { unit: number; at: number; end: number }[] = [];
+    for (let u = after.get(label) ?? 0; u < (units[0] ?? ref.units.length); u++) {
+      const unit = ref.units[u];
+      if (ref.blocks[unit.block].kind === "footnote") continue;
+      // A raised run may hold several marks: "3, 4, ∗" (two affiliations and a note).
+      for (const [a, b] of unit.raised) {
+        for (const m of unit.text.slice(a, b).matchAll(/[^\s,]+/g)) if (m[0] === label) places.push({ unit: u, at: a + (m.index ?? 0), end: a + (m.index ?? 0) + label.length });
+      }
+    }
+    if (units.length > 0) after.set(label, units[units.length - 1] + 1);
+    if (places.length > 0) out.set(rb, places);
+  });
+  return out;
+}
+
+/** The word before a place in a unit's text, and the word after its end. */
+function neighbors(flat: Flat, u: number, at: number, end: number): { before: number; after: number } {
+  const unit = flat.units[u];
+  let before = -1;
+  let after = -1;
+  for (let t = unit.first; t < unit.end; t++) {
+    if (flat.toks[t].end <= at) before = t;
+    else if (flat.toks[t].start >= end && after < 0) after = t;
+  }
+  return { before, after };
+}
+
+/** Footnotes: a reference footnote is found when its counterpart is a
+    footnote holding half its matched words or more; linked when a mark that
+    links to that footnote stands where the reference prints its mark (the
+    words beside the two marks are matched words); its words scored as an F1
+    against the counterpart. */
+export function noteScores(ref: Flat, cand: Flat, al: Alignment): NoteScores | null {
+  const notes = ref.blocks.flatMap((block, rb) => (block.kind === "footnote" ? [rb] : []));
+  const extra = cand.blocks.filter((block, cb) => block.kind === "footnote" && ref.blocks[al.main[cb]]?.kind !== "footnote").length;
+  if (notes.length === 0) return null;
+  const printed = referenceMarks(ref);
+  const marksOf = new Map<string, { unit: number; at: number; end: number }[]>();
+  cand.units.forEach((unit, u) => {
+    for (const m of unit.marks) marksOf.set(m.id, [...(marksOf.get(m.id) ?? []), { unit: u, at: m.at, end: m.end }]);
+  });
+  const words = (flat: Flat, b: number) => flat.unitsOf[b].reduce((n, u) => n + flat.units[u].end - flat.units[u].first, 0);
+  let found = 0;
+  let linked = 0;
+  let linkable = 0;
+  let wordSum = 0;
+  const misses: NoteScores["misses"] = [];
+  for (const rb of notes) {
+    const cb = al.owner[rb];
+    const other = cb >= 0 ? cand.blocks[cb] : null;
+    const mark = printed.get(rb);
+    if (mark) linkable++;
+    if (other?.kind !== "footnote" || ov(al, rb, cb) * 2 < al.refMatched[rb]) {
+      misses.push({ ref: rb, cand: cb, why: other ? `read as ${other.kind}` : "not found" });
+      continue;
+    }
+    found++;
+    const shared = ov(al, rb, cb);
+    const [r, c] = [words(ref, rb), words(cand, cb)];
+    wordSum += r + c > 0 ? (2 * shared) / (r + c) : 1;
+    if (!mark) continue;
+    // Linked from any of the note's marks: the words beside the two marks
+    // match. Where neither word beside the reference's mark aligns (a formula
+    // before it, the paragraph's end after), the mark stands in the block's
+    // counterpart at the same place in its text.
+    const aligned = (t: number) => t >= 0 && al.aTo[t] >= 0;
+    const right = (marksOf.get(other.id ?? "") ?? []).some((m) =>
+      mark.some((place) => {
+        const want = neighbors(ref, place.unit, place.at, place.end);
+        const got = neighbors(cand, m.unit, m.at, m.end);
+        if ((got.before >= 0 && got.before === al.aTo[want.before]) || (got.after >= 0 && got.after === al.aTo[want.after])) return true;
+        if (aligned(want.before) || aligned(want.after)) return false;
+        const [ru, cu] = [ref.units[place.unit], cand.units[m.unit]];
+        return al.owner[ru.block] === cu.block && Math.abs(place.at / Math.max(1, ru.text.length) - m.at / Math.max(1, cu.text.length)) <= 0.1;
+      }),
+    );
+    if (right) linked++;
+    else misses.push({ ref: rb, cand: cb, why: marksOf.has(other.id ?? "") ? "its mark stands elsewhere" : "no mark links to it" });
+  }
+  const shareFound = found / notes.length;
+  const shareLinked = linkable > 0 ? linked / linkable : null;
+  const wordScore = wordSum / notes.length;
+  return { ref: notes.length, found, linkable, linked, words: wordScore, extra, score: meanOf([shareFound, shareLinked, wordScore]), misses };
+}
+
+export type RoleScores = {
+  /** Centered and right-aligned paragraphs: F1 of those aligned alike, where the reference aligns any. */
+  align: number | null;
+  /** First-line, hanging, and block indents of paragraphs: F1 of those indented alike, where the reference marks any. */
+  indent: number | null;
+  /** Caption words (a figure's, a table's) in a caption of the candidate: F1, where the reference has captions. */
+  captions: number | null;
+  /** Checklist items: the share of the reference's whose counterpart item has its box and state. */
+  checks: number | null;
+  /** Separators and quotations: the share of the reference's found with their kind. */
+  separators: number | null;
+  quotes: number | null;
+  /** The mean of the roles the reference has, printed equation labels among them (the composite's part). */
+  score: number | null;
+};
+
+/** F1 of a paragraph property both sides may set: a reference paragraph
+    with it is right when its counterpart paragraph has the same; a
+    candidate paragraph with it is right when its main reference paragraph
+    has the same. */
+function propertyF1(ref: Flat, cand: Flat, al: Alignment, of: (b: DocBlock) => string | undefined): number | null {
+  const refSet = ref.blocks.flatMap((block, rb) => (of(block) ? [rb] : []));
+  if (refSet.length === 0) return null;
+  const candSet = cand.blocks.flatMap((block, cb) => (of(block) && !al.caption[cb] ? [cb] : []));
+  const recall = refSet.filter((rb) => al.owner[rb] >= 0 && of(cand.blocks[al.owner[rb]]) === of(ref.blocks[rb])).length / refSet.length;
+  const precision = candSet.length > 0 ? candSet.filter((cb) => al.main[cb] >= 0 && of(ref.blocks[al.main[cb]]) === of(cand.blocks[cb])).length / candSet.length : 0;
+  return f1Of(precision, recall);
+}
+
+/** The roles and marks the page's layout carries: alignment, indentation,
+    captions, checkbox states, separators, quotations. */
+export function roleScores(ref: Flat, cand: Flat, al: Alignment, blocks: BlockScores, lists: ListScores, math: MathScores): RoleScores {
+  const paragraph = (key: "align" | "indent") => (b: DocBlock) => (b.kind === "paragraph" ? b[key] : undefined);
+  // Captions: a figure's caption unit, a table's (index -1), a caption paragraph.
+  const isCaption = (flat: Flat, u: number) => {
+    const unit = flat.units[u];
+    const block = flat.blocks[unit.block];
+    return block.kind === "figure" || (block.kind === "table" && unit.index === -1) || (block.kind === "paragraph" && block.role === "caption");
+  };
+  let refCaption = 0;
+  let hits = 0;
+  let candCaption = 0;
+  let candHits = 0;
+  ref.toks.forEach((t, i) => {
+    if (!isCaption(ref, t.unit)) return;
+    refCaption++;
+    const j = al.aTo[i];
+    if (j >= 0 && isCaption(cand, cand.toks[j].unit)) hits++;
+  });
+  cand.toks.forEach((t, j) => {
+    if (!isCaption(cand, t.unit)) return;
+    candCaption++;
+    const i = al.bTo[j];
+    if (i >= 0 && isCaption(ref, ref.toks[i].unit)) candHits++;
+  });
+  const kind = (k: string) => {
+    const x = blocks.byKind[k];
+    return x && x.ref > 0 ? x.found / x.ref : null;
+  };
+  const roles = {
+    align: propertyF1(ref, cand, al, paragraph("align")),
+    indent: propertyF1(ref, cand, al, paragraph("indent")),
+    captions: refCaption > 0 ? f1Of(candCaption > 0 ? candHits / candCaption : 0, hits / refCaption) : null,
+    checks: lists.checks.ref > 0 ? lists.checks.right / lists.checks.ref : null,
+    separators: kind("separator"),
+    quotes: kind("quote"),
+  };
+  return { ...roles, score: meanOf([...Object.values(roles), math.labels.score]) };
 }
 
 /** The composite: each applicable part's score (0–1) by its weight, out of 100. */
@@ -1023,6 +1287,8 @@ export type Scores = {
   math: MathScores;
   garbles: GarbleScores;
   styles: StyleScores;
+  notes: NoteScores | null;
+  roles: RoleScores;
 };
 
 /** A candidate scored against a reference: every metric and the composite. */
@@ -1031,7 +1297,7 @@ export function score(reference: Doc, furniture: string[], candidate: Doc): { sc
   const cand = flatten(candidate);
   const al = align(ref, cand);
   const words = wordScores(ref, cand);
-  const order = orderScore(al);
+  const order = orderScore(al, { ref, cand });
   const furn = furnitureScores(furniture, ref, cand);
   const blocks = blockScores(ref, cand, al);
   const headings = headingScores(ref, cand, al);
@@ -1040,6 +1306,8 @@ export function score(reference: Doc, furniture: string[], candidate: Doc): { sc
   const math = mathScores(ref, cand, al);
   const garbles = garbleScores(ref, cand);
   const styles = styleScores(ref, cand, al);
+  const notes = noteScores(ref, cand, al);
+  const roles = roleScores(ref, cand, al, blocks, lists, math);
   const parts: Record<Part, number | null> = {
     text: words.f1,
     order,
@@ -1052,7 +1320,24 @@ export function score(reference: Doc, furniture: string[], candidate: Doc): { sc
     math: math.score,
     garbles: garbles.score,
     styles: styles.score,
+    footnotes: notes?.score ?? null,
+    roles: roles.score,
   };
-  const scores: Scores = { composite: composite(parts), parts, words, order, furniture: furn, blocks, headings, lists, tables, math, garbles, styles };
+  const scores: Scores = {
+    composite: composite(parts),
+    parts,
+    words,
+    order,
+    furniture: furn,
+    blocks,
+    headings,
+    lists,
+    tables,
+    math,
+    garbles,
+    styles,
+    notes,
+    roles,
+  };
   return { scores, ref, cand, al };
 }

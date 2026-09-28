@@ -21,7 +21,7 @@ import { endSweep } from "@/lib/mark-sweep";
 import { OFFICE_CSS } from "@/lib/office-css";
 import { googleFontsUrl, parseFontList, webFontFamilies } from "@/lib/office-fonts";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
-import { colorClass, customCss, isColorStyle, isHighlightStyle, type TextStyle } from "@/lib/text-style";
+import { colorClass, customCss, isColorStyle, isHighlightStyle, parsedStyleClass, type TextStyle } from "@/lib/text-style";
 
 export const CHAIN_BUTTON =
   "link-chain mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800";
@@ -184,7 +184,8 @@ export type LayoutToken =
   | "contents"
   | "display"
   | "quote"
-  | "caption";
+  | "caption"
+  | "footnote";
 const LAYOUT_TOKENS = new Set<string>([
   "center",
   "kicker",
@@ -194,6 +195,7 @@ const LAYOUT_TOKENS = new Set<string>([
   "display",
   "quote",
   "caption",
+  "footnote",
 ]);
 
 export function layoutTokens(html: string | null): Set<LayoutToken> {
@@ -219,6 +221,8 @@ export function layoutClass(tokens: Set<LayoutToken>, base: string): string {
   if (tokens.has("display")) return `my-10 text-[28px] leading-[1.35]${center}`;
   if (tokens.has("quote")) return `my-5 border-l-2 border-sand-300 pl-4 text-sand-700${center}`;
   if (tokens.has("caption")) return `-mt-2 mb-6 text-[13px] leading-[1.6] text-sand-600${center}`;
+  // A footnote stands under the block that cites it, in small text.
+  if (tokens.has("footnote")) return `-mt-2 mb-3 text-[13px] leading-[1.6] text-sand-700${center}`;
   // The contents list: globals.css .reader-contents.
   if (tokens.has("contents")) return `reader-contents mt-0 mb-10${center}`;
   return `${base}${center}`;
@@ -252,11 +256,12 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
     const italic = covering.some((h) => h.kind === "style" && h.styleKind === "italic");
     const underlined = covering.some((h) => h.kind === "style" && h.styleKind === "underline");
     const code = covering.some((h) => h.kind === "style" && h.styleKind === "code");
+    const parsed = parsedStyleClass(covering.flatMap((h) => (h.kind === "style" && h.styleKind ? [h.styleKind] : [])));
     // The later span wins where two colors or two highlights overlap (lib/text-style.ts).
     const colored = covering.findLast((h) => h.kind === "style" && h.styleKind !== undefined && isColorStyle(h.styleKind))?.styleKind;
     const highlighted = covering.findLast((h) => h.kind === "style" && h.styleKind !== undefined && isHighlightStyle(h.styleKind))?.styleKind;
     const named = colored ? colorClass(colored) : null;
-    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}${named ? ` ${named}` : ""}${code ? " code-mark" : ""}`;
+    const editedClass = `${edited ? " edited-text" : ""}${bold ? " font-bold" : ""}${italic ? " italic" : ""}${underlined ? " underline" : ""}${named ? ` ${named}` : ""}${code ? " code-mark" : ""}${parsed}`;
     // A wheel color or a highlight is inline CSS on the words themselves.
     const custom = customCss(colored, highlighted);
     const inner = custom ? <span style={custom}>{segment}</span> : segment;

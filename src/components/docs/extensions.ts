@@ -1,4 +1,4 @@
-import { Extension, Node, mergeAttributes, type Editor } from "@tiptap/core";
+import { Extension, Mark, Node, mergeAttributes, type Editor } from "@tiptap/core";
 import { Plugin, PluginKey, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
 import StarterKit from "@tiptap/starter-kit";
@@ -238,6 +238,25 @@ const ParagraphFormat = Extension.create({
   },
 });
 
+/** Small capitals (SPEC.md §30): an import's words set in a small-caps font
+    (a theorem label, a legal defined term), drawn in the font's own small
+    capitals. Google Docs has no such format, so no command sets it; Clear
+    formatting takes it off. The style is inline on the span, so a copy into
+    Word, the web page download, and print keep it. */
+const SmallCaps = Mark.create({
+  name: "smallCaps",
+  parseHTML() {
+    const smallCaps = (value: string) => (/small-caps/.test(value) ? null : false);
+    return [
+      { style: "font-variant", getAttrs: smallCaps },
+      { style: "font-variant-caps", getAttrs: smallCaps },
+    ];
+  },
+  renderHTML() {
+    return ["span", { style: "font-variant: small-caps" }, 0];
+  },
+});
+
 /** A page break (Ctrl+Enter): the text after it starts on a new page. */
 const PageBreak = Node.create({
   name: "pageBreak",
@@ -393,6 +412,7 @@ export function docsExtensions(imported?: ImportedEditor) {
     TextAlign.configure({ types: ["heading", "paragraph"], alignments: ["left", "center", "right", "justify"] }),
     Subscript,
     Superscript,
+    SmallCaps,
     TaskList,
     TaskItem.configure({ nested: true }),
     TableKit.configure({ table: { resizable: true, cellMinWidth: 32 } }),

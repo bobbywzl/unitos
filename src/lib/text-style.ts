@@ -13,8 +13,12 @@ export type HighlightStyle = `highlight:${HexColor}`;
 export type TextColor = NamedColor | CustomColor;
 /** What the edit toolbar and the style route toggle. */
 export type ToggleStyle = "bold" | "italic" | "underline" | TextColor | HighlightStyle;
-/** Every stored style; "code" spans come from the parser (monospace runs). */
-export type TextStyle = ToggleStyle | "code";
+/** The styles only the parser writes: monospace runs, small caps, and
+    lowered and raised runs outside math (lib/parse/types.ts StyleSpan). */
+export const PARSED_STYLES = ["code", "smallCaps", "sub", "sup"] as const;
+export type ParsedStyle = (typeof PARSED_STYLES)[number];
+/** Every stored style. */
+export type TextStyle = ToggleStyle | ParsedStyle;
 
 const HEX = /^#[0-9a-f]{6}$/;
 const CUSTOM = /^(color|highlight):#[0-9a-f]{6}$/;
@@ -33,7 +37,15 @@ export function isToggleStyle(style: string): style is ToggleStyle {
 }
 
 export function isTextStyle(style: string): style is TextStyle {
-  return style === "code" || isToggleStyle(style);
+  return (PARSED_STYLES as readonly string[]).includes(style) || isToggleStyle(style);
+}
+
+/** The classes (globals.css) of the small-caps, sub, and sup styles among
+    the styles over a run of text, each after a space; "" for none. A run
+    both lowered and raised reads raised. */
+export function parsedStyleClass(styles: readonly string[]): string {
+  const raise = styles.includes("sup") ? " sup-mark" : styles.includes("sub") ? " sub-mark" : "";
+  return `${styles.includes("smallCaps") ? " small-caps-mark" : ""}${raise}`;
 }
 
 export function isColorStyle(style: string): boolean {

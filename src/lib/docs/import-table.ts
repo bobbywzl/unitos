@@ -18,7 +18,7 @@ export type Piece = { text: string; marks: RichMark[] } | { node: RichNode };
 // in the order the editor lists them, the citation mark after them. A text
 // node's marks in this order are the ones the editor writes on its first
 // save, so the rows derived from them stay the same.
-const MARK_ORDER = ["link", "textStyle", "bold", "code", "italic", "strike", "underline", "subscript", "superscript", "citation"];
+const MARK_ORDER = ["link", "textStyle", "bold", "code", "italic", "strike", "underline", "subscript", "superscript", "smallCaps", "citation"];
 const rank = (mark: RichMark) => {
   const at = MARK_ORDER.indexOf(mark.type);
   return at < 0 ? MARK_ORDER.length : at;

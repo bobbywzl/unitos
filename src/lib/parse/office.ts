@@ -3,11 +3,12 @@ import { JSDOM } from "jsdom";
 import { fontFamilyDeclaration } from "@/lib/office-fonts";
 
 // Office Open XML files (SPEC.md §27): the zip and XML reading the slides
-// parser (lib/parse/slides.ts) and the sheets parser (lib/parse/sheets.ts)
-// share. A .pptx and a .xlsx are zips of XML parts plus media; the parts
-// point at each other through relationship files (_rels/*.rels).
+// parser (lib/parse/slides.ts), the sheets parser (lib/parse/sheets.ts), and
+// the Word parser (lib/parse/docx.ts) share. A .pptx, a .xlsx, and a .docx
+// are zips of XML parts plus media; the parts point at each other through
+// relationship files (_rels/*.rels).
 
-export type OfficeKind = "pptx" | "xlsx";
+export type OfficeKind = "pptx" | "xlsx" | "docx";
 
 /** A zip's entries by path, every entry decompressed. */
 export type OfficeZip = Map<string, Uint8Array>;
@@ -21,7 +22,9 @@ export function isZipBytes(bytes: Uint8Array): boolean {
 
 /** Which Office file the bytes are, read from the zip's entry names, never
     from the file name: a presentation carries ppt/presentation.xml, a
-    workbook xl/workbook.xml. Null for anything else, a broken zip included. */
+    workbook xl/workbook.xml, a Word file word/document.xml (word/document2.xml
+    in some files Word saves from the web). Null for anything else, a broken
+    zip included. */
 export function sniffOfficeFile(bytes: Uint8Array): OfficeKind | null {
   if (!isZipBytes(bytes)) return null;
   const names = new Set<string>();
@@ -37,6 +40,7 @@ export function sniffOfficeFile(bytes: Uint8Array): OfficeKind | null {
   }
   if (names.has("ppt/presentation.xml")) return "pptx";
   if (names.has("xl/workbook.xml")) return "xlsx";
+  if (names.has("word/document.xml") || names.has("word/document2.xml")) return "docx";
   return null;
 }
 
@@ -190,6 +194,14 @@ export function resolvePartPath(dir: string, target: string): string {
 /** The relationships of a type, in the order the rels file lists them. */
 export function relsOfType(rels: Map<string, Relationship>, type: string): Relationship[] {
   return [...rels.values()].filter((r) => r.type === type);
+}
+
+/** The main part the package's own relationships name (ppt/presentation.xml,
+    word/document.xml), or null when they name none. */
+export function officeDocumentPath(zip: OfficeZip): string | null {
+  const rels = partRels(zip, "");
+  const main = relsOfType(rels, "officeDocument")[0];
+  return main && !main.external ? main.target : null;
 }
 
 // ── Text and markup ──────────────────────────────────────────────────────────

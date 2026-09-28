@@ -89,14 +89,45 @@ const WRAPPERS = new Set(["mrow", "mstyle", "mpadded", "menclose"]);
 
 type Canon = { tokens: string[]; leaves: string[] };
 
+// The letters of TeX's blackboard, script, and fraktur alphabets as the math
+// fonts' glyphs name them (math-fonts.ts): the Mathematical Alphanumeric
+// Symbols, and the Letterlike Symbols where Unicode had them first.
+const ALPHABETS: Record<string, { upper: number; lower: number; digit?: number; holes: Record<string, string> }> = {
+  "double-struck": { upper: 0x1d538, lower: 0x1d552, digit: 0x1d7d8, holes: { C: "ℂ", H: "ℍ", N: "ℕ", P: "ℙ", Q: "ℚ", R: "ℝ", Z: "ℤ" } },
+  script: { upper: 0x1d49c, lower: 0x1d4b6, holes: { B: "ℬ", E: "ℰ", F: "ℱ", H: "ℋ", I: "ℐ", L: "ℒ", M: "ℳ", R: "ℛ", e: "ℯ", g: "ℊ", o: "ℴ" } },
+  fraktur: { upper: 0x1d504, lower: 0x1d51e, holes: { C: "ℭ", H: "ℌ", I: "ℑ", R: "ℜ", Z: "ℨ" } },
+};
+
+/** A letter as its alphabet draws it: \mathbb{R} is ℝ, \mathcal{F} is ℱ.
+    Bold stays plain: TeX sets it in a text font the glyph checks do not read. */
+function mathLetter(ch: string, mathvariant: string | null): string {
+  const alphabet = mathvariant ? ALPHABETS[mathvariant] : undefined;
+  if (!alphabet) return ch;
+  if (alphabet.holes[ch]) return alphabet.holes[ch];
+  const cp = ch.codePointAt(0) ?? 0;
+  if (cp >= 0x41 && cp <= 0x5a) return String.fromCodePoint(alphabet.upper + cp - 0x41);
+  if (cp >= 0x61 && cp <= 0x7a) return String.fromCodePoint(alphabet.lower + cp - 0x61);
+  if (cp >= 0x30 && cp <= 0x39 && alphabet.digit) return String.fromCodePoint(alphabet.digit + cp - 0x30);
+  return ch;
+}
+
 function leaf(el: Element, out: Canon, accent: boolean) {
-  const variant = variantTag(el.getAttribute("mathvariant"));
+  const mathvariant = el.getAttribute("mathvariant");
+  const variant = variantTag(mathvariant);
   const text = el.textContent ?? "";
   for (const ch of text) {
     const token = charToken(ch, variant, accent);
     if (token) out.tokens.push(token);
   }
-  const reading = [...text].filter((c) => !INVISIBLE.test(c)).join("").normalize("NFKC");
+  // The glyphs a reader sees: a styled letter as its math letter, which the
+  // glyph checks count against the page's (words fold it back, NFKC).
+  const reading = [...text]
+    .filter((c) => !INVISIBLE.test(c))
+    .map((c) => {
+      const plain = c.normalize("NFKC");
+      return [...plain].length === 1 ? mathLetter(plain, mathvariant) : plain;
+    })
+    .join("");
   if (reading) out.leaves.push(reading);
 }
 
@@ -277,6 +308,42 @@ function canon(src: { latex?: string; mathml?: string }, display: boolean): Cano
   out ??= { tokens: [], leaves: [] };
   memo.set(key, out);
   return out;
+}
+
+/** A display formula's printed labels out of its LaTeX (the round 1 plan,
+    decision 4): `\tag{1.2}` draws "(1.2)" and `\tag*{1.2}` draws "1.2", at
+    the right margin, apart from the formula. The formula without them, and
+    the labels as printed; the formula as it is when a tag's braces do not
+    close. */
+export function splitTag(latex: string): { latex: string; label: string | null } {
+  const labels: string[] = [];
+  let out = "";
+  let from = 0;
+  const re = /\\tag(\*?)\s*\{/g;
+  for (let m = re.exec(latex); m; m = re.exec(latex)) {
+    let depth = 1;
+    let j = m.index + m[0].length;
+    for (; j < latex.length && depth > 0; j++) {
+      if (latex[j] === "\\") j++;
+      else if (latex[j] === "{") depth++;
+      else if (latex[j] === "}") depth--;
+    }
+    if (depth > 0) return { latex, label: null };
+    const arg = latex.slice(m.index + m[0].length, j - 1).trim();
+    labels.push(m[1] ? arg : `(${arg})`);
+    out += latex.slice(from, m.index);
+    from = re.lastIndex = j;
+  }
+  return labels.length > 0 ? { latex: (out + latex.slice(from)).trim(), label: labels.join(" ") } : { latex, label: null };
+}
+
+/** A label as the metrics compare it: NFKC, no spaces, a label's LaTeX
+    text commands unwrapped ("(A.\text{1})" is "(A.1)"). */
+export function normLabel(label: string): string {
+  return label
+    .replace(/\\(?:text|textup|textrm|mathrm|rm)\s*\{([^{}]*)\}/g, "$1")
+    .normalize("NFKC")
+    .replace(/\s+/g, "");
 }
 
 /** The canonical token sequence of a formula. */

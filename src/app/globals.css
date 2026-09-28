@@ -518,6 +518,24 @@ mark,
 .reader-table code {
   white-space: nowrap;
 }
+/* Words the document sets in small capitals (a theorem label, a defined
+   term), and lowered and raised runs outside math (H₂O, 10³, "1st", a
+   footnote mark): lib/parse/types.ts StyleSpan. Classes, never elements, so
+   the block's DOM text stays its stored text. */
+.small-caps-mark {
+  font-variant: small-caps;
+}
+.sub-mark,
+.sup-mark {
+  font-size: 0.75em;
+  line-height: 0;
+}
+.sub-mark {
+  vertical-align: sub;
+}
+.sup-mark {
+  vertical-align: super;
+}
 /* Invisible cell separators: they keep the table's DOM text equal to block
    text (tab between cells, newline between rows), so text anchors inside
    tables resolve. Zero-size, never visible, still selectable. */

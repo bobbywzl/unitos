@@ -11,7 +11,7 @@ import { type FinishPlan, warmImages } from "@/lib/finish";
 import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
 import { isImageFile } from "@/lib/handwritten/image";
 import { isMarkdownFile } from "@/lib/markdown-file";
-import { isSheetsFile, isSlidesFile } from "@/lib/office-file";
+import { isSheetsFile, isSlidesFile, isWordFile } from "@/lib/office-file";
 import { isMediaUrl, MAX_VIDEO_BYTES, MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
@@ -89,6 +89,7 @@ function uploadItemKindKey(item: UploadItem): TKey {
   if (isMediaFile(item.file)) return "panes.uploadItemMediaFile";
   if (isImageFile(item.file)) return "panes.uploadItemImage";
   if (isMarkdownFile(item.file)) return "panes.uploadItemMarkdown";
+  if (isWordFile(item.file)) return "panes.uploadItemWord";
   if (isSlidesFile(item.file)) return "panes.uploadItemSlides";
   if (isSheetsFile(item.file)) return "panes.uploadItemSheets";
   return "panes.uploadItemPdf";

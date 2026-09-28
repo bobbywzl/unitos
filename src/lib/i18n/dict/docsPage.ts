@@ -16,6 +16,7 @@ const en = {
   importedFrom: "Imported from {site}",
   importPdf: "PDF · {n} page{s}",
   importTextFile: "Text file",
+  importWordFile: "Word file",
   // Commands (Search the menus)
   pageSetup: "Page setup",
   showRuler: "Show ruler",
@@ -123,6 +124,7 @@ const zh: Record<keyof typeof en, string> = {
   importedFrom: "导入自 {site}",
   importPdf: "PDF · {n} 页",
   importTextFile: "文本文件",
+  importWordFile: "Word 文件",
   pageSetup: "页面设置",
   showRuler: "显示标尺",
   showOutline: "显示标签页和大纲",

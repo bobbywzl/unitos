@@ -6,25 +6,95 @@ import { sameFlags } from "@/lib/parse/pdf/glyphs";
 import type { Line, Run } from "@/lib/parse/pdf/types";
 import type { LinkSpan, StyleSpan } from "@/lib/parse/types";
 
-// Line-end hyphenation: the compounds a document writes with a hyphen inside a
-// line keep the hyphen when they wrap; any other wrapped hyphen was the
-// typesetter's and goes.
-let hyphenCompounds = new Set<string>();
 const CJK_CHAR_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303F\uFF00-\uFFEF]/u;
 
-// Reads the compounds from every page's lines. parsePdf calls it before any
-// page is segmented: joinGroup reads the set.
-export function collectHyphenCompounds(pages: Line[][]) {
-  hyphenCompounds = new Set<string>();
+// ── Line-end hyphens ────────────────────────────────────────────────────────
+
+// A hyphen at a line end is the typesetter's ("prob-" + "ability") or a
+// compound's ("self-" + "directed"), and the document's own words decide:
+// the compound written inside a line keeps it, the joined word written
+// elsewhere drops it. Then the parts: two words the document writes on
+// their own make a compound ("high-" + "potency"), two it never writes are
+// a word's syllables ("errone-" + "ously"). Between the two the producer
+// decides: TeX and InDesign break words, so most of their line ends join
+// into words written elsewhere; Word and Google Docs break none.
+const hyphenation = { words: new Set<string>(), compounds: new Set<string>(), breaksWords: false };
+// A word and a hyphen closing a text, a word opening one, and the words and
+// compounds inside it. Made once: every line of a book is read.
+const WORD_HYPHEN_END_RE = /(\p{L}+)-$/u;
+const LOWER_WORD_START_RE = /^(\p{Ll}+)/u;
+const LETTER_HYPHEN_END_RE = /\p{L}-$/u;
+const WORDS_RE = /\p{L}+/gu;
+const COMPOUNDS_RE = /(\p{L}+)-(\p{L}+)/gu;
+
+// Reads every page's words, compounds, and line ends. parsePdf calls it
+// before any page is segmented: the joins read it.
+export function collectHyphenation(pages: Line[][]) {
+  const words = new Set<string>();
+  const compounds = new Set<string>();
+  const ends: string[] = [];
   for (const lines of pages) {
-    for (const l of lines) {
-      for (const m of l.text.matchAll(/(\p{L}+)-(\p{L}+)/gu)) {
-        if (m.index !== undefined && m.index + m[0].length < l.text.length) {
-          hyphenCompounds.add(`${m[1]}-${m[2]}`.toLowerCase());
-        }
+    lines.forEach((line, i) => {
+      const text = line.text.trim();
+      const left = WORD_HYPHEN_END_RE.exec(text);
+      const right = LOWER_WORD_START_RE.exec(lines[i + 1]?.text.trim() ?? "");
+      if (left && right) ends.push((left[1] + right[1]).toLowerCase());
+      // A line's words, less the parts of a word it breaks: "dissent-" and
+      // "ing" twice in a document made "ing" a word.
+      const found = [...text.matchAll(WORDS_RE)];
+      const cut = i > 0 && LETTER_HYPHEN_END_RE.test(lines[i - 1].text.trim());
+      found.forEach((m, k) => {
+        if (!(k === 0 && cut) && !(k === found.length - 1 && left)) words.add(m[0].toLowerCase());
+      });
+      for (const m of text.matchAll(COMPOUNDS_RE)) {
+        if (m.index + m[0].length < text.length) compounds.add(`${m[1]}-${m[2]}`.toLowerCase());
       }
-    }
+    });
   }
+  const joined = ends.filter((w) => words.has(w)).length;
+  hyphenation.words = words;
+  hyphenation.compounds = compounds;
+  hyphenation.breaksWords = joined >= 2 && joined * 5 >= ends.length;
+}
+
+// What a line-end hyphen between two texts is: "drop" for the typesetter's,
+// "keep" for a compound's, null when the first text ends in no hyphen after
+// a word or the second starts with no letter ("COVID-" then "19").
+export function lineEndHyphen(before: string, after: string): "drop" | "keep" | null {
+  const left = WORD_HYPHEN_END_RE.exec(before.trimEnd());
+  const right = /^(\p{L}+)/u.exec(after.trimStart());
+  if (!left || !right) return null;
+  // A link wraps at its own hyphens ("…/nizoral-ketoconazole-").
+  if (/(?:https?:\/\/|www\.)\S*$/.test(before)) return "keep";
+  const [l, r] = [left[1].toLowerCase(), right[1].toLowerCase()];
+  // A document that writes both "world-model" and "worldmodel" keeps the
+  // hyphen: the compound inside a line is the stronger witness.
+  if (hyphenation.compounds.has(`${l}-${r}`)) return "keep";
+  if (hyphenation.words.has(l + r)) return "drop";
+  // An acronym ("AAR-" / "generated") or a name ("Anglo-" / "Saxon") joins
+  // as a compound; so does "σ-" / "algebra", below TeX's two letters
+  // before a break and three after it.
+  if (/^\p{Lu}{2,}$/u.test(left[1]) || /^\p{Lu}/u.test(right[1]) || l.length < 2 || r.length < 3) return "keep";
+  const [lw, rw] = [hyphenation.words.has(l), hyphenation.words.has(r)];
+  if (lw && rw) return "keep";
+  if (!lw && !rw) return "drop";
+  return hyphenation.breaksWords ? "drop" : "keep";
+}
+
+// Joins the second part of a paragraph cut by a page break or a float to
+// its first: the typesetter's hyphen goes, a compound's stays, and a space
+// separates words otherwise. Returns where the second part starts.
+export function joinWrapped(target: { text: string; runs?: Run[] }, next: string): number {
+  const hyphen = lineEndHyphen(target.text, next);
+  if (hyphen === "drop") {
+    target.text = target.text.slice(0, -1);
+    const cut = target.text.length;
+    target.runs = target.runs?.map((r) => ({ ...r, end: Math.min(r.end, cut) })).filter((r) => r.end > r.start);
+  }
+  const glue = hyphen !== null || (/[\p{L}\p{N}][-–]$/u.test(target.text) && /^[\p{L}\p{N}(]/u.test(next)) ? "" : " ";
+  const offset = target.text.length + glue.length;
+  target.text = target.text + glue + next;
+  return offset;
 }
 
 // ── Text assembly across lines ──────────────────────────────────────────────
@@ -50,7 +120,9 @@ export class TextBuilder {
       return;
     }
     let s: string = sep;
-    if (sep === " " && /[A-Za-z0-9][-–]$/.test(this.text) && /^[A-Za-z0-9(]/.test(part.text)) s = "";
+    // A kept wrap hyphen joins its compound without a space: "σ-" and
+    // "algebra" made "σ- algebra" while the test knew only ASCII letters.
+    if (sep === " " && /[\p{L}\p{N}][-–]$/u.test(this.text) && /^[\p{L}\p{N}(]/u.test(part.text)) s = "";
     const offset = this.text.length + s.length;
     this.text += s + part.text;
     for (const r of part.runs) {
@@ -128,18 +200,9 @@ export function joinGroup(lines: Line[], proseJoin = false): { text: string; run
       // CJK wraps anywhere and carries no space; a URL wraps without one.
       if (CJK_CHAR_RE.test(lastChar) && CJK_CHAR_RE.test(firstChar)) sep = "";
       else if (/https?:\/\/\S*$/.test(prevText) || /^\S*(?:\/|\.[a-z]{2,4}\/)\S*$/.test(nextText.split(" ")[0]) && /\/\S*$/.test(prevText)) sep = "";
-      else {
-        // A hyphen at the wrap: the typesetter's unless the document writes
-        // the compound with one inside a line.
-        const left = /(\p{L}+)-$/u.exec(prevText);
-        const right = /^(\p{Ll}+)/u.exec(nextText);
-        // An acronym before the hyphen ("AAR-" / "generated") is a compound,
-        // never a syllable break.
-        const acronym = left !== null && /^\p{Lu}{2,}$/u.test(left[1]);
-        if (left && right && !acronym && !hyphenCompounds.has(`${left[1]}-${right[1]}`.toLowerCase())) {
-          builder.dropTrailingChar();
-          sep = "";
-        }
+      else if (lineEndHyphen(prevText, nextText) === "drop") {
+        builder.dropTrailingChar();
+        sep = "";
       }
     }
     builder.append(lineAsPart(lines[i]), sep);
@@ -177,7 +240,7 @@ export function spansFromRuns(
   const links: LinkSpan[] = [];
   if (!runs || runs.length === 0) return { styles, links };
 
-  const collect = (flag: "bold" | "italic" | "mono"): { start: number; end: number }[] => {
+  const collect = (flag: "bold" | "italic" | "mono" | "smallCaps" | "sup" | "sub"): { start: number; end: number }[] => {
     const ranges: { start: number; end: number }[] = [];
     for (const r of runs) {
       if (!r[flag]) continue;
@@ -213,6 +276,9 @@ export function spansFromRuns(
     if (opts.skipMono && whole(range)) continue;
     push("code", range);
   }
+  for (const range of collect("smallCaps")) push("smallCaps", range);
+  for (const range of collect("sup")) push("sup", range);
+  for (const range of collect("sub")) push("sub", range);
   // Hyperlink regions from the PDF's link annotations.
   for (const r of runs) {
     if (!r.href) continue;

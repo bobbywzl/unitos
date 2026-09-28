@@ -408,6 +408,8 @@ const cleanSpan = (s: SpecSpan): Span => {
   if (s.underline) out.underline = true;
   if (s.code) out.code = true;
   if (s.smallCaps) out.smallCaps = true;
+  // A footnote's mark prints raised in every rendering.
+  if (s.footnote && s.text) out.sup = true;
   if (s.href) out.href = s.href;
   return out;
 };
@@ -418,7 +420,15 @@ function cleanSpans(list: SpecSpan[]): Span[] {
   for (const span of list.map(cleanSpan)) {
     const last = out[out.length - 1];
     const same = (a: Span, b2: Span) =>
-      !a.latex && !b2.latex && a.bold === b2.bold && a.italic === b2.italic && a.underline === b2.underline && a.code === b2.code && a.smallCaps === b2.smallCaps && a.href === b2.href;
+      !a.latex &&
+      !b2.latex &&
+      a.bold === b2.bold &&
+      a.italic === b2.italic &&
+      a.underline === b2.underline &&
+      a.code === b2.code &&
+      a.smallCaps === b2.smallCaps &&
+      a.sup === b2.sup &&
+      a.href === b2.href;
     if (last && same(last, span)) last.text += span.text;
     else if (span.text || span.latex) out.push(span);
   }

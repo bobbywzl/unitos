@@ -22,7 +22,25 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Adway Kumar Das,1 Anandamohan Ghosh,1 and Lea F. Santos2"
+     "text": "Adway Kumar Das,"
+    },
+    {
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": " Anandamohan Ghosh,"
+    },
+    {
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": " and Lea F. Santos"
+    },
+    {
+     "text": "2",
+     "sup": true
     }
    ]
   },
@@ -30,7 +48,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "1 Department of Physical Sciences, Indian Institute of Science Education and Research Kolkata, Mohanpur 741246, India"
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": " Department of Physical Sciences, Indian Institute of Science Education and Research Kolkata, Mohanpur 741246, India"
     }
    ]
   },
@@ -38,7 +60,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "2 Department of Physics, University of Connecticut, Storrs, Connecticut 06269, USA"
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": " Department of Physics, University of Connecticut, Storrs, Connecticut 06269, USA"
     }
    ]
   },
@@ -670,7 +696,14 @@
      "mathml": "<math display=\"inline\"><mi>β</mi></math>"
     },
     {
-     "text": " is the fitting parameter 2. For a random tridiagonal matrix ("
+     "text": " is the fitting parameter "
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": ". For a random tridiagonal matrix ("
     },
     {
      "text": "b=2",

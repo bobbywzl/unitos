@@ -26,7 +26,25 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Aashish Anantha Ramakrishnan1, Aadarsh Anantha Ramakrishnan2, Dongwon Lee1"
+     "text": "Aashish Anantha Ramakrishnan"
+    },
+    {
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": ", Aadarsh Anantha Ramakrishnan"
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": ", Dongwon Lee"
+    },
+    {
+     "text": "1",
+     "sup": true
     }
    ]
   },
@@ -34,7 +52,18 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "1 The Pennsylvania State University; 2National Institute of Technology, Tiruchirappalli"
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": " The Pennsylvania State University; "
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": "National Institute of Technology, Tiruchirappalli"
     }
    ]
   },
@@ -42,7 +71,18 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "1 {aza6352, dul13}@psu.edu, 2106121001@nitt.edu"
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": " {aza6352, dul13}@psu.edu, "
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": "106121001@nitt.edu"
     }
    ]
   },

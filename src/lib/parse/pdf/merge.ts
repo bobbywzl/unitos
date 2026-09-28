@@ -2,7 +2,8 @@
 // half on the next page, and the block keeps where each later page begins.
 
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
-import { BULLET_RE } from "@/lib/parse/pdf/segment";
+import { BULLET_RE, follows, readMarker } from "@/lib/parse/pdf/markers";
+import { joinWrapped } from "@/lib/parse/pdf/text";
 import type { PageBreak, Segment } from "@/lib/parse/pdf/types";
 
 // ── Cross-page merges ───────────────────────────────────────────────────────
@@ -13,6 +14,22 @@ export function shiftSpansInto(target: Segment, source: Segment, offset: number)
     ...(target.runs ?? []),
     ...source.runs.map((r) => ({ ...r, start: r.start + offset, end: r.end + offset })),
   ];
+}
+
+// A lone item joins a list across the page break only as one of its items:
+// no footnote, set where the list's items are, and its marker of the list's
+// family and next in its sequence (a line with no marker, a bulleted list's).
+// With the running head gone from between them, a one-line paragraph and a
+// footnote at a page's end joined the next page's list.
+function itemOfList(item: Segment, list: Segment, before: boolean): boolean {
+  if (item.footnote) return false;
+  if (item.box && list.box && Math.abs(item.box.x1 - list.box.x1) > (list.lineSize ?? 10) * 1.5) return false;
+  const lines = list.text.split("\n");
+  const next = readMarker({ text: (before ? lines[0] : lines[lines.length - 1]).trimStart(), runs: [] });
+  const own = readMarker({ text: item.text, runs: item.runs ?? [] });
+  if (!own) return next?.family === "bullet";
+  if (!next) return false;
+  return before ? follows(own, next) : follows(next, own);
 }
 
 function lastListNumber(text: string): number | null {
@@ -80,16 +97,19 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       segment.type === "PARAGRAPH" &&
       prev.type === "PARAGRAPH" &&
       !prev.listItem &&
-      /[\p{L}\d,;\-–—]$/u.test(prev.text) &&
+      // A letter may end in a mark: a hat over 𝒮 has no precomposed form.
+      /[\p{L}\p{M}\d,;\-–—]$/u.test(prev.text) &&
+      // A numbered heading read as a paragraph starts its own block: with
+      // the running head gone from between them, "6. Relations and arrows"
+      // joined the display above it (the synthetic formula sheet).
+      !/^\d+(?:\.\d+)*\.\s+\p{Lu}/u.test(segment.text) &&
       (/^[a-z($€£0-9"'“]/.test(segment.text) ||
         // "… the" | "AAR only stages": a paragraph that ends without a stop
         // is unfinished, whatever the case of the next page's first word.
-        (/\s\p{L}+$/u.test(prev.text) && prev.text.length > 60))
+        (/\s[\p{L}\p{M}]+$/u.test(prev.text) && prev.text.length > 60))
     ) {
-      const glue = /[A-Za-z0-9][-–]$/.test(prev.text) && /^[A-Za-z0-9(]/.test(segment.text) ? "" : " ";
-      const offset = prev.text.length + glue.length;
+      const offset = joinWrapped(prev, segment.text);
       prev.breaks = joinBreaks(prev, segment, offset);
-      prev.text = prev.text + glue + segment.text;
       shiftSpansInto(prev, segment, offset);
       continue;
     }
@@ -117,12 +137,15 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
     // the paragraph's leading words finish the item, and any "N." markers that
     // continue the numbering become items again. Checked before item-append so
     // a mid-sentence tail continues the item instead of becoming a new one.
+    // The tail starts where the list's lines start, never well right of them:
+    // a form's centered hint in parentheses under an item is its own line.
     if (
       segment.type === "PARAGRAPH" &&
       prev.type === "LIST" &&
       !prev.tocEntries &&
       !/[.!?…:]$/.test(prev.text.trim()) &&
-      /^[a-z($€£0-9"'“]/.test(segment.text)
+      /^[a-z($€£0-9"'“]/.test(segment.text) &&
+      !(segment.box && prev.box && segment.box.x1 > prev.box.x1 + (prev.lineSize ?? 10) * 3)
     ) {
       const lastNum = lastListNumber(prev.text);
       const offset = prev.text.length + 1;
@@ -149,7 +172,7 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
     }
 
     // A lone item cut off at the page end joins the LIST that follows.
-    if (segment.type === "LIST" && prev.type === "PARAGRAPH" && prev.listItem && !segment.tocEntries) {
+    if (segment.type === "LIST" && prev.type === "PARAGRAPH" && prev.listItem && !segment.tocEntries && itemOfList(prev, segment, true)) {
       const marker = BULLET_RE.test(prev.text) ? "" : "- ";
       const offset = marker.length;
       // The list now starts with the item's words, on the item's page; its
@@ -169,7 +192,7 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       out.push(segment);
       continue;
     }
-    if (segment.type === "PARAGRAPH" && segment.listItem && prev.type === "LIST" && !prev.tocEntries) {
+    if (segment.type === "PARAGRAPH" && segment.listItem && prev.type === "LIST" && !prev.tocEntries && itemOfList(segment, prev, false)) {
       const marker = BULLET_RE.test(segment.text) ? "" : "- ";
       const offset = prev.text.length + 1 + marker.length;
       // The page starts at the item's line, its marker included.

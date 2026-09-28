@@ -116,6 +116,20 @@ export async function POST(req: Request) {
     }
     filename = filename.replace(IMAGE_EXTENSIONS, "");
     pages = true;
+  } else if (parse.sniffOfficeFile(bytes) === "docx") {
+    // A Word file (SPEC.md §30): its own parser, no judgment, no model pass.
+    return progressResponse(async (onProgress) => {
+      try {
+        const { document, deduped } = await parse.ingestDocx(bytes, filename, onProgress, {}, user?.id ?? null);
+        await attachDocument(data.notebookId, document.id);
+        await bumpNotebook(data.notebookId);
+        if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
+        return { id: document.id, title: document.title, deduped };
+      } catch (err) {
+        console.error("Word ingest failed:", err);
+        throw new Error(describeIngestError(err, t, "pdf"));
+      }
+    });
   } else if (parse.sniffOfficeFile(bytes) !== null || (!parse.isZipBytes(bytes) && isSheetsFile({ type: "", name: filename }))) {
     // Slides and sheets (SPEC.md §27): a .pptx, a .xlsx, or a .csv/.tsv
     // parses with its own parser, no judgment, no model pass.

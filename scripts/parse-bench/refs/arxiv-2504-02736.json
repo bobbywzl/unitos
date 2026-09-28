@@ -22,7 +22,32 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Shang-Qiang Ning,1, 2 Yang Qi,3, 4, ∗ Chenjie Wang,5, † and Zheng-Cheng Gu1, ‡"
+     "text": "Shang-Qiang Ning,"
+    },
+    {
+     "text": "1, 2",
+     "sup": true
+    },
+    {
+     "text": " Yang Qi,"
+    },
+    {
+     "text": "3, 4, ∗",
+     "sup": true
+    },
+    {
+     "text": " Chenjie Wang,"
+    },
+    {
+     "text": "5, †",
+     "sup": true
+    },
+    {
+     "text": " and Zheng-Cheng Gu"
+    },
+    {
+     "text": "1, ‡",
+     "sup": true
     }
    ]
   },
@@ -30,7 +55,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "1 Department of Physics, The Chinese University of Hong Kong, Shatin, New Territories, Hong Kong, China"
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": " Department of Physics, The Chinese University of Hong Kong, Shatin, New Territories, Hong Kong, China"
     }
    ]
   },
@@ -38,7 +67,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "2 Department of Physics, The Hong Kong University of Science and Technology, Clear Water Bay, Kowloon, Hong Kong, China"
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": " Department of Physics, The Hong Kong University of Science and Technology, Clear Water Bay, Kowloon, Hong Kong, China"
     }
    ]
   },
@@ -46,7 +79,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "3 Center for Field Theory and Particle Physics, Department of Physics, Fudan University, Shanghai 200433, China"
+     "text": "3",
+     "sup": true
+    },
+    {
+     "text": " Center for Field Theory and Particle Physics, Department of Physics, Fudan University, Shanghai 200433, China"
     }
    ]
   },
@@ -54,7 +91,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "4 State Key Laboratory of Surface Physics, Fudan University, Shanghai 200433, China"
+     "text": "4",
+     "sup": true
+    },
+    {
+     "text": " State Key Laboratory of Surface Physics, Fudan University, Shanghai 200433, China"
     }
    ]
   },
@@ -62,7 +103,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "5 Department of Physics and HK Institute of Quantum Science & Technology,"
+     "text": "5",
+     "sup": true
+    },
+    {
+     "text": " Department of Physics and HK Institute of Quantum Science & Technology,"
     }
    ]
   },
@@ -3183,7 +3228,14 @@
      "mathml": "<math display=\"inline\"><mrow><msup><mi>ℳ</mi><mn>2</mn></msup><mo>=</mo><msub><mi>𝒫</mi><mi>f</mi></msub></mrow></math>"
     },
     {
-     "text": " must break as well 3. Additionally, in 3D where parity symmetry acts as reflection and two-fold rotation symmetries, we conclude that parity symmetry with "
+     "text": " must break as well "
+    },
+    {
+     "text": "3",
+     "sup": true
+    },
+    {
+     "text": ". Additionally, in 3D where parity symmetry acts as reflection and two-fold rotation symmetries, we conclude that parity symmetry with "
     },
     {
      "text": "P2=1",

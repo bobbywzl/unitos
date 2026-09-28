@@ -1,3 +1,4 @@
+import { NUMBER_PRESETS, listPreset } from "@/components/docs/toolbar/lists";
 import {
   DEFAULT_PAGE_SETUP,
   INDEXED_NODE_TYPES,
@@ -18,20 +19,21 @@ import {
   tableFromText,
   type Piece,
 } from "@/lib/docs/import-table";
-import type { PageStart, ParsedBlock } from "@/lib/parse/types";
+import type { PageStart, ParsedBlock, StyleSpan } from "@/lib/parse/types";
 import type { Region } from "@/lib/video/types";
 
-// The converter (SPEC.md §29): an import — a PDF, a web page, or a Markdown
-// or text file — becomes the page editor's rich text at import, one code path
-// for the three parses. The Block rows are then the paragraph index of this
-// rich text (lib/docs/blocks.ts deriveBlocks), never the parse's own rows, so
-// the first save changes only what the reader changed.
+// The converter (SPEC.md §29): an import — a PDF, a web page, a Markdown or
+// text file, or a Word file — becomes the page editor's rich text at import,
+// one code path for the four parses. The Block rows are then the paragraph
+// index of this rich text (lib/docs/blocks.ts deriveBlocks), never the
+// parse's own rows, so the first save changes only what the reader changed.
 //
 // What each parse block becomes:
 //   PARAGRAPH  a paragraph; "\n" a line break; its layout tokens the page
 //              editor's own formats: kicker and label small, caption small
 //              and centered, display large, meta the Subtitle, quote inside
-//              a blockquote, center and right the alignment
+//              a blockquote, center and right the alignment, an indent
+//              (first-line, hanging, block) the paragraph's indents
 //   HEADING    a heading of its level; one that repeats the title is the Title
 //   LIST       lists from the marker lines, nested two spaces a level, the
 //              markers drawn by the list (a Markdown task line a checklist
@@ -41,12 +43,21 @@ import type { Region } from "@/lib/video/types";
 //   CODE       a code block        EQUATION  an equation on its own line
 //   SEPARATOR  a horizontal line   FIGURE    a figure object, its media a
 //                                            FigureMedia row (the figures)
+// Inside the words, the parse's styles become marks (a lowered or raised run
+// subscript or superscript), and an inline formula becomes an inline
+// equation of its TeX in place of its readable characters.
+// A footnote (ParsedBlock.footnote) whose reference the parse found is the
+// page editor's own: its number in place of the label in the text, its words
+// in the footnotes at the document's end. One without a reference stays a
+// small paragraph where it stands, its label as words.
 // The title, when it came from the original, is a Title paragraph after the
 // kicker. A PDF opens in pages at its first page's size, with a page start
-// where each of its pages begins; a web page and a text file are pageless.
-// It loads with the parse chain only (import-table.ts reads html with jsdom).
+// where each of its pages begins; a web page, a text file, and a Word file
+// are pageless.
+// It loads with the parse chain and the page editor's list presets
+// (components/docs/toolbar/lists.ts); import-table.ts reads html with jsdom.
 
-export type ImportKind = "pdf" | "url" | "markdown";
+export type ImportKind = "pdf" | "url" | "markdown" | "docx";
 
 /** A figure object's media: its FigureMedia row takes mediaId as its id. */
 export type ImportFigure = {
@@ -79,9 +90,14 @@ export type ImportResult = {
   size: { nodes: number; json: number; rows: number };
 };
 
-/** Words, the marks over them (offsets into the words), and the page starts
-    inside them: where each page of the PDF begins (lib/parse/pdf). */
-type Source = { text: string; spans: { start: number; end: number; mark: RichMark }[]; starts: PageStart[] };
+/** Words, the marks over them (offsets into the words), the page starts
+    inside them (where each page of the PDF begins, lib/parse/pdf), and the
+    words the page editor holds as one inline node. */
+type Source = { text: string; spans: { start: number; end: number; mark: RichMark }[]; starts: PageStart[]; atoms?: Atom[] };
+/** Words the page editor holds as one inline node: an inline equation in
+    place of a formula's readable characters. The node takes the place of
+    start..end whole: no mark and no page start falls inside it. */
+type Atom = { start: number; end: number; node: RichNode };
 
 /** The space after a paragraph of the body, in points: Google Docs' "Add
     space after paragraph". Normal text has none, and an article without it
@@ -104,8 +120,19 @@ const TITLE_REACH = 12;
     geometry.ts pagelessWidth): a table fitted to it fits every column. */
 const PAGELESS_COLUMN_PX = 600;
 
-const ROLES = ["kicker", "meta", "label", "display", "quote", "caption"] as const;
+const ROLES = ["kicker", "meta", "label", "display", "quote", "caption", "footnote"] as const;
 type Role = (typeof ROLES)[number];
+
+// A paragraph's indent as the parse measured it (lib/parse/pdf: a class
+// token on its html), as the page editor's indents: one step, half an inch,
+// as Tab and Increase indent move a line. Under a hanging indent the first
+// line stands at the edge and the others a step in, as Docs stores it.
+const INDENT_TOKENS = ["indent-first", "indent-hanging", "indent-block"] as const;
+const INDENTS: Record<(typeof INDENT_TOKENS)[number], Record<string, number>> = {
+  "indent-first": { indentFirstLine: INDENT_PT },
+  "indent-hanging": { indentLeft: INDENT_PT, indentFirstLine: -INDENT_PT },
+  "indent-block": { indentLeft: INDENT_PT },
+};
 
 function tokensOf(html: string | undefined): string[] {
   const m = /^<[a-z][a-z0-9]*\b[^>]*\bclass="([^"]*)"/i.exec(html ?? "");
@@ -139,6 +166,8 @@ function sliceSource(src: Source, from: number, to: number, head = false): Sourc
     starts: src.starts
       .filter((p) => (p.offset >= from || head) && (p.offset < to || (end && p.offset <= to)))
       .map((p) => ({ offset: Math.max(0, p.offset - from), page: p.page })),
+    // An atom cut by the part's edge stays words.
+    atoms: src.atoms?.filter((a) => a.start >= from && a.end <= to).map((a) => ({ start: a.start - from, end: a.end - from, node: a.node })),
   };
 }
 
@@ -179,16 +208,23 @@ function splitLong(src: Source): Source[] {
 }
 
 /** The inline nodes of a source: its words cut where a mark begins or ends,
-    a page start where a page begins, `extra` marks on every word. */
+    a page start where a page begins, an atom's node in place of its words,
+    `extra` marks on every word. */
 function inline(src: Source, extra: RichMark[] = []): RichNode[] {
   const { text } = src;
   const clamp = (n: number) => Math.max(0, Math.min(text.length, n));
   const spans = src.spans.filter((s) => clamp(s.end) > clamp(s.start));
-  // Two page starts at one place: the later page's words begin there.
+  const atoms = (src.atoms ?? []).filter((a) => clamp(a.end) > clamp(a.start));
+  // Two page starts at one place: the later page's words begin there. A
+  // page that begins inside an atom begins at its start.
   const starts = new Map<number, number>();
-  for (const p of src.starts) starts.set(clamp(p.offset), Math.max(p.page, starts.get(clamp(p.offset)) ?? 0));
+  for (const p of src.starts) {
+    const at = clamp(p.offset);
+    const place = atoms.find((a) => a.start < at && at < a.end)?.start ?? at;
+    starts.set(place, Math.max(p.page, starts.get(place) ?? 0));
+  }
   const cuts = new Set<number>([0, text.length, ...starts.keys()]);
-  for (const s of spans) {
+  for (const s of [...spans, ...atoms]) {
     cuts.add(clamp(s.start));
     cuts.add(clamp(s.end));
   }
@@ -199,19 +235,72 @@ function inline(src: Source, extra: RichMark[] = []): RichNode[] {
     if (page !== undefined) pieces.push({ node: { type: "pageStart", attrs: { page } } });
     const next = points[k + 1];
     if (next === undefined || next === at) return;
+    // An atom's words are its node, placed once at its start; a mark's edge
+    // inside it cuts nothing.
+    const atom = atoms.find((a) => a.start <= at && at < a.end);
+    if (atom) {
+      if (atom.start === at) pieces.push({ node: atom.node });
+      return;
+    }
     const marks = [...extra, ...spans.filter((s) => s.start <= at && s.end >= next).map((s) => s.mark)];
     pieces.push({ text: text.slice(at, next), marks });
   });
   return inlineNodes(pieces);
 }
 
+/** The page editor's mark for each style of the parse (lib/parse/types.ts
+    StyleSpan): a lowered or raised run is Docs' subscript or superscript. */
+const STYLE_MARKS: Record<StyleSpan["style"], string> = {
+  bold: "bold",
+  italic: "italic",
+  underline: "underline",
+  code: "code",
+  smallCaps: "smallCaps",
+  sub: "subscript",
+  sup: "superscript",
+};
+
+/** A block's inline formulas (ParsedBlock.math) as inline equations, each in
+    place of its readable characters. A formula a save would not keep as an
+    equation (no TeX, or TeX past MAX_LATEX: an attribute's limit), or one
+    that overlaps the one before it, stays words. */
+function mathAtoms(block: ParsedBlock): Atom[] {
+  const atoms: Atom[] = [];
+  for (const m of [...(block.math ?? [])].sort((a, b) => a.start - b.start)) {
+    const latex = m.latex.trim();
+    if (!latex || latex.length > MAX_LATEX || m.start < (atoms.at(-1)?.end ?? 0) || m.end <= m.start || m.end > block.text.length) continue;
+    atoms.push({ start: m.start, end: m.end, node: { type: "inlineMath", attrs: { latex } } });
+  }
+  return atoms;
+}
+
 // ── Lists ───────────────────────────────────────────────────────────────────
 
-// A list line's marker, after its indent: "-" (a bullet), "N." or "N)", "(N)",
-// "(a)". Any other line start is words.
-const LIST_MARKER = /^(?:([-*•▪◦‣●·∙])|(\d{1,3})([.)])|\((\d{1,3})\)|\(([a-z])\))(?: +|$)/;
-// A Markdown task line's box, after its bullet (lib/parse/markdown-document.ts).
-const TASK_BOX = /^([☐☑]) /;
+// A list line's marker, after its indent, as the parse keeps it printed: a
+// bullet ("-", "•", "◦", "▪", "–", "➢", "✓"), a checklist box ("☐", and "☑"
+// or "☒" checked), or a counter: "1." "1)" "(1)" "1.1" "a." "a)" "(a)"
+// "A." "(A)" "i." "(i)" "I.", a number alone (an exercise's "15" or
+// "*15"), or a reference's number ("[12]"). Any other line start is words.
+const LIST_BULLET = /^[-*•▪◦‣●·∙○■□◆❖➢➤►✓✔–—](?: +|$)/;
+const LIST_BOX = /^([☐☑☒])(?: +|$)/;
+const LIST_LEGAL = /^(?:\d{1,3}\.)+(\d{1,3})\.?(?: +|$)/;
+const LIST_CITE = /^\[(\d{1,3})\](?: +|$)/;
+const LIST_COUNTER = /^(?:\(([a-zA-Z]{1,5}|\d{1,3})\)|([a-zA-Z]{1,5}|\d{1,3})(\)\.?|\.\)?))(?: +|$)/;
+const LIST_NUMBER = /^\*?(\d{1,3})(?: +|$)/;
+// A task line's box after its bullet (lib/parse/markdown-document.ts).
+const TASK_BOX = /^([☐☑☒]) /;
+// The page editor's preset for a counter's kind and its printed form
+// (components/docs/toolbar/lists.ts). A lower-case numeral has no preset of
+// its own at the first level: the upper-case numerals' preset counts the
+// same.
+const PRESETS: Record<string, Record<string, string>> = {
+  decimal: { ".": "", ")": "NUMBERED_DECIMAL_ALPHA_ROMAN_PARENS", "()": "NUMBERED_DECIMAL_ALPHA_ROMAN_TWO_PARENS", ".)": "NUMBERED_DECIMAL_ALPHA_ROMAN_PERIOD_PARENS" },
+  alpha: { ".": "NUMBERED_ALPHA_ROMAN_DECIMAL", ")": "NUMBERED_ALPHA_ROMAN_DECIMAL_PARENS", "()": "NUMBERED_ALPHA_ROMAN_DECIMAL_TWO_PARENS" },
+  upperAlpha: { ".": "NUMBERED_UPPERALPHA_ALPHA_ROMAN", ")": "NUMBERED_UPPERALPHA_ALPHA_ROMAN_PARENS", "()": "NUMBERED_UPPERALPHA_ALPHA_ROMAN_TWO_PARENS" },
+  roman: { ".": "NUMBERED_UPPERROMAN_UPPERALPHA_DECIMAL" },
+  upperRoman: { ".": "NUMBERED_UPPERROMAN_UPPERALPHA_DECIMAL" },
+};
+const ROMAN_NUMERAL = /^(x{0,3})(ix|iv|v?i{0,3})$/;
 
 type ListLine = {
   depth: number;
@@ -219,40 +308,157 @@ type ListLine = {
       "ordered:<preset>"; null when its start is no marker. */
   key: string | null;
   value: number;
+  /** A one-letter numeral ("(i)", "v.") read as a letter: the list it
+      continues when the letter follows on ("(h)" then "(i)"). */
+  letter?: { key: string; value: number };
   checked: boolean;
+  /** A counter as printed ("1.", "(a)", "2.3"), and whether it is a legal
+      number, for the preset that draws it (bestPreset). */
+  marker?: string;
+  legal?: boolean;
   /** The words after the marker; `whole` keeps the marker. */
   words: Source;
   whole: Source;
 };
 
+/** A counter's list key and value: "c" with ")" → the lower-case letters'
+    parenthesis preset and 3. */
+function counterKey(counter: string, form: string): { key: string; value: number } | null {
+  const shape = form === "()" || form === "." || form === ".)" ? form : ")";
+  const lower = counter.toLowerCase();
+  const numeral = ROMAN_NUMERAL.exec(lower);
+  const kind = /^\d+$/.test(counter)
+    ? "decimal"
+    : counter !== lower && counter !== counter.toUpperCase()
+      ? null
+      : numeral && lower.length > 0
+        ? counter === lower ? "roman" : "upperRoman"
+        : counter.length === 1
+          ? counter === lower ? "alpha" : "upperAlpha"
+          : null;
+  if (!kind) return null;
+  const value =
+    kind === "decimal" ? Number(counter)
+    : kind === "alpha" || kind === "upperAlpha" ? lower.charCodeAt(0) - 96
+    : numeral![1].length * 10 + ["", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix"].indexOf(numeral![2]);
+  const preset = PRESETS[kind][shape] ?? PRESETS[kind]["."];
+  return { key: preset ? `ordered:${preset}` : "ordered", value };
+}
+
 function listLine(line: Source): ListLine {
   const indent = /^ */.exec(line.text)?.[0].length ?? 0;
   const depth = Math.floor(indent / 2);
   const whole = sliceSource(line, indent, line.text.length, true);
-  const m = LIST_MARKER.exec(whole.text);
   const out: ListLine = { depth, key: null, value: 1, checked: false, words: whole, whole };
-  if (!m) return out;
-  let cut = m[0].length;
-  if (m[1]) {
+  const text = whole.text;
+  let m: RegExpExecArray | null;
+  let cut = 0;
+  if ((m = LIST_BOX.exec(text))) {
+    out.key = "task";
+    out.checked = m[1] !== "☐";
+    cut = m[0].length;
+  } else if ((m = LIST_BULLET.exec(text))) {
     out.key = "bullet";
-    const box = TASK_BOX.exec(whole.text.slice(cut));
+    cut = m[0].length;
+    const box = TASK_BOX.exec(text.slice(cut));
     if (box) {
       out.key = "task";
-      out.checked = box[1] === "☑";
+      out.checked = box[1] !== "☐";
       cut += box[0].length;
     }
-  } else if (m[2]) {
-    out.value = Number(m[2]);
-    out.key = m[3] === "." ? "ordered" : "ordered:NUMBERED_DECIMAL_ALPHA_ROMAN_PARENS";
-  } else if (m[4]) {
-    out.value = Number(m[4]);
-    out.key = "ordered:NUMBERED_DECIMAL_ALPHA_ROMAN_TWO_PARENS";
-  } else if (m[5]) {
-    out.value = m[5].charCodeAt(0) - 96;
-    out.key = "ordered:NUMBERED_ALPHA_ROMAN_DECIMAL_TWO_PARENS";
+  } else if ((m = LIST_LEGAL.exec(text))) {
+    out.key = "ordered:NUMBERED_DECIMAL_NESTED";
+    out.value = Number(m[1]);
+    out.legal = true;
+    cut = m[0].length;
+  } else if ((m = LIST_COUNTER.exec(text))) {
+    const counter = m[1] ?? m[2];
+    const form = m[1] !== undefined ? "()" : m[3] === ")." ? ")" : m[3];
+    const read = counterKey(counter, form);
+    if (!read) return out;
+    out.key = read.key;
+    out.value = read.value;
+    if (/^[ivx]$/i.test(counter)) {
+      const letter = counterKey(counter === counter.toLowerCase() ? "a" : "A", form);
+      if (letter) out.letter = { key: letter.key, value: counter.toLowerCase().charCodeAt(0) - 96 };
+    }
+    cut = m[0].length;
+  } else if ((m = LIST_NUMBER.exec(text)) || (m = LIST_CITE.exec(text))) {
+    // A number alone and a reference's number count as "1." does: Docs
+    // draws no other number.
+    out.key = "ordered";
+    out.value = Number(m[1]);
+    cut = m[0].length;
+  } else {
+    return out;
   }
+  if (m && out.key !== "bullet" && out.key !== "task") out.marker = m[0].trim();
   out.words = sliceSource(whole, cut, whole.text.length, true);
   return out;
+}
+
+// Every numbered preset the page editor draws.
+const ORDERED_STYLES: (string | null)[] = [
+  ...new Set([...NUMBER_PRESETS.map((p) => p.style), ...Object.values(PRESETS).flatMap((forms) => Object.values(forms).filter((s) => s !== ""))]),
+];
+
+function toRoman(n: number): string {
+  const parts: [number, string][] = [[100, "c"], [90, "xc"], [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]];
+  let out = "";
+  for (const [value, text] of parts) {
+    while (n >= value) {
+      out += text;
+      n -= value;
+    }
+  }
+  return out;
+}
+
+/** The marker a preset draws for item n at a level; a nested level's is
+    the number alone ("1." at the first level, "1.1." below it). */
+function drawn(style: string | null, depth: number, n: number): string {
+  const glyph = listPreset(true, style).levels[Math.min(depth, 8)];
+  if ("nested" in glyph) return depth === 0 ? `${n}.` : "nested";
+  if (!("counter" in glyph)) return glyph.bullet;
+  const counter =
+    glyph.counter === "decimal" ? String(n)
+    : glyph.counter === "decimal-leading-zero" ? String(n).padStart(2, "0")
+    : glyph.counter === "lower-alpha" ? String.fromCharCode(96 + n)
+    : glyph.counter === "upper-alpha" ? String.fromCharCode(64 + n)
+    : glyph.counter === "lower-roman" ? toRoman(n)
+    : toRoman(n).toUpperCase();
+  return `${glyph.before}${counter}${glyph.after}`;
+}
+
+/** A preset draws a line's counter as printed ("2.3" under "2." is the
+    nested preset's). */
+function draws(style: string | null, line: ListLine): boolean {
+  if (!line.marker) return false;
+  const values = [line.value, ...(line.letter ? [line.letter.value] : [])];
+  return values.some((n) => {
+    const mark = drawn(style, line.depth, n);
+    return mark === line.marker || (mark === "nested" && line.legal === true);
+  });
+}
+
+/** The outermost list's preset: of the presets that draw its first item as
+    its own preset does, the one that draws the most of its lines' counters
+    as printed. "1." over "1.1" and "1.2" takes Docs' nested numbering: the
+    default drew them "a." and "b.". */
+function bestPreset(current: string | null, lines: ListLine[]): string | null {
+  const first = drawn(current, 0, lines[0].value);
+  const count = (style: string | null) => lines.filter((l) => draws(style, l)).length;
+  let best = current;
+  let most = count(current);
+  for (const style of ORDERED_STYLES) {
+    if (drawn(style, 0, lines[0].value) !== first) continue;
+    const n = count(style);
+    if (n > most) {
+      best = style;
+      most = n;
+    }
+  }
+  return best;
 }
 
 function listNode(key: string, value: number, outermost: boolean): RichNode {
@@ -266,8 +472,14 @@ function listNode(key: string, value: number, outermost: boolean): RichNode {
 }
 
 /** The lists of the lines from `from` at `depth`: a line of another kind,
-    or a number that does not follow on, starts a new list. */
-function listsAt(lines: ListLine[], from: number, depth: number): { nodes: RichNode[]; next: number } {
+    or a number that does not follow on, starts a new list. `tops` collects
+    each outermost list and its first line. */
+function listsAt(
+  lines: ListLine[],
+  from: number,
+  depth: number,
+  tops?: { node: RichNode; from: number }[],
+): { nodes: RichNode[]; next: number } {
   const nodes: RichNode[] = [];
   let list: RichNode | null = null;
   let key: string | null = null;
@@ -275,14 +487,19 @@ function listsAt(lines: ListLine[], from: number, depth: number): { nodes: RichN
   let i = from;
   while (i < lines.length && lines[i].depth >= depth) {
     const line = lines[i];
-    const lineKey = line.key ?? "bullet";
+    // "(i)" after "(h)" is the ninth letter, not the first numeral.
+    const read: { key: string; value: number } | null =
+      line.letter && list && key === line.letter.key && line.letter.value === expected ? line.letter : null;
+    const lineKey: string = read?.key ?? line.key ?? "bullet";
+    const value = read?.value ?? line.value;
     const ordered = lineKey.startsWith("ordered");
-    if (!list || lineKey !== key || (ordered && line.value !== expected)) {
-      list = listNode(lineKey, line.value, depth === 0);
+    if (!list || lineKey !== key || (ordered && value !== expected)) {
+      list = listNode(lineKey, value, depth === 0);
       nodes.push(list);
+      tops?.push({ node: list, from: i });
       key = lineKey;
     }
-    expected = line.value + 1;
+    expected = value + 1;
     const sub = listsAt(lines, i + 1, depth + 1);
     const item: RichNode =
       lineKey === "task"
@@ -335,12 +552,40 @@ class Converter {
   private readonly pageSetup: PageSetup;
   /** The text column's width in px at 100%, the room a table fits in. */
   private readonly room: number;
+  /** The footnotes with a reference: each footnote block's id, the numbers
+      in place of each citing block's labels, and the footnotes' words. */
+  private readonly footnoteIds = new Map<number, string>();
+  private readonly numbers = new Map<ParsedBlock, Atom[]>();
+  private readonly footnotes = new Map<string, RichNode>();
 
   constructor(private readonly input: ImportInput) {
     this.paged = input.kind === "pdf" && input.blocks.some((b) => typeof b.page === "number");
     this.pageSetup = pageSetupFor(input);
     const { pageless, width, margins } = this.pageSetup;
     this.room = pageless ? PAGELESS_COLUMN_PX : ((width - margins.left - margins.right) * 96) / 72;
+    this.linkFootnotes();
+  }
+
+  /** Each reference (ParsedBlock.footnoteRefs) becomes the page editor's
+      footnote number in place of the label's characters, when it names a
+      footnote no reference before it named and stands in words the page
+      editor keeps as words (a paragraph's, a heading's, a list's, outside a
+      formula). A footnote no reference names stays a paragraph. */
+  private linkFootnotes() {
+    const { blocks } = this.input;
+    blocks.forEach((block) => {
+      if (!["PARAGRAPH", "HEADING", "LIST"].includes(block.type) || block.footnote || !block.text.trim()) return;
+      const atoms: Atom[] = [];
+      for (const ref of [...(block.footnoteRefs ?? [])].sort((a, b) => a.start - b.start)) {
+        const inWords = ref.start >= (atoms.at(-1)?.end ?? 0) && ref.end > ref.start && ref.end <= block.text.length;
+        const inMath = (block.math ?? []).some((m) => m.start < ref.end && ref.start < m.end);
+        if (!blocks[ref.targetOrder]?.footnote || this.footnoteIds.has(ref.targetOrder) || !inWords || inMath) continue;
+        const footnoteId = newBlockId();
+        this.footnoteIds.set(ref.targetOrder, footnoteId);
+        atoms.push({ start: ref.start, end: ref.end, node: { type: "footnoteReference", attrs: { footnoteId } } });
+      }
+      if (atoms.length > 0) this.numbers.set(block, atoms);
+    });
   }
 
   run(): ImportResult {
@@ -433,7 +678,8 @@ class Converter {
   private sourceOf(block: ParsedBlock, starts: PageStart[]): Source {
     const spans: Source["spans"] = [];
     for (const s of block.styles ?? []) {
-      if (["bold", "italic", "underline", "code"].includes(s.style)) spans.push({ start: s.start, end: s.end, mark: { type: s.style } });
+      const mark = STYLE_MARKS[s.style];
+      if (mark) spans.push({ start: s.start, end: s.end, mark: { type: mark } });
     }
     for (const l of block.links ?? []) {
       const href = (l.targetOrder !== undefined ? this.headingHref(l.targetOrder) : null) ?? keptHref(l.href);
@@ -442,7 +688,8 @@ class Converter {
     for (const c of block.citations ?? []) {
       if (/^[\w-]{1,64}$/.test(c.refId)) spans.push({ start: c.start, end: c.end, mark: { type: "citation", attrs: { refId: c.refId } } });
     }
-    return { text: block.text, spans, starts };
+    const atoms = [...mathAtoms(block), ...(this.numbers.get(block) ?? [])].sort((a, b) => a.start - b.start);
+    return { text: block.text, spans, starts, atoms };
   }
 
   private headingHref(order: number): string | null {
@@ -468,6 +715,10 @@ class Converter {
   }
 
   private block(block: ParsedBlock, index: number, isTitle: boolean) {
+    // A footnote with a reference takes no page start: it stands with the
+    // footnotes, and the words after it keep theirs.
+    const footnoteId = this.footnoteIds.get(index);
+    if (footnoteId !== undefined) return this.footnote(block, footnoteId);
     const starts = this.startsOf(block);
     switch (block.type) {
       case "HEADING":
@@ -490,6 +741,16 @@ class Converter {
     }
   }
 
+  /** A footnote's words without its label (the page editor draws the
+      number), for the footnotes at the document's end. */
+  private footnote(block: ParsedBlock, footnoteId: string) {
+    const label = block.footnote?.label ?? "";
+    const rest = block.text.startsWith(label) ? block.text.slice(label.length) : block.text;
+    const from = block.text.length - rest.trimStart().length;
+    const words = sliceSource(this.sourceOf(block, []), from, block.text.length);
+    this.footnotes.set(footnoteId, { type: "footnote", attrs: { footnoteId }, content: [paragraphNode(inline(words))] });
+  }
+
   private paragraph(block: ParsedBlock, index: number, starts: PageStart[]) {
     if (!block.text.trim()) return this.carry(starts);
     const tokens = tokensOf(block.html);
@@ -499,7 +760,10 @@ class Converter {
     if (align) attrs.textAlign = align;
     if (role === "meta") attrs.docStyle = "subtitle";
     else if (role !== "kicker") attrs.spaceAfter = PARAGRAPH_SPACE_PT;
-    const size = role === "kicker" || role === "label" || role === "caption" ? SMALL_SIZE : role === "display" ? DISPLAY_SIZE : null;
+    const indent = INDENT_TOKENS.find((k) => tokens.includes(k));
+    if (indent) Object.assign(attrs, INDENTS[indent]);
+    const size =
+      role === "kicker" || role === "label" || role === "caption" || role === "footnote" ? SMALL_SIZE : role === "display" ? DISPLAY_SIZE : null;
     const extra: RichMark[] = size ? [{ type: "textStyle", attrs: { fontSize: size } }] : [];
     const nodes = splitLong(this.sourceOf(block, starts)).map((part) => paragraphNode(inline(part, extra), attrs));
     this.place(index, nodes, role === "quote");
@@ -533,9 +797,10 @@ class Converter {
     }
     this.carry(waiting);
     if (lines.length === 0) return;
+    // A contents list: its class, or lines that link to headings, whatever
+    // their markers ("1 Introduction", "2.1 Background").
     const contents =
-      tokensOf(block.html).includes("contents") ||
-      (lines.every((l) => l.key === null) && (block.links ?? []).some((l) => l.targetOrder !== undefined));
+      tokensOf(block.html).includes("contents") || (block.links ?? []).some((l) => l.targetOrder !== undefined);
     let nodes: RichNode[];
     if (contents || lines.some((l) => l.key === null)) {
       // A contents list, or lines the page editor's lists cannot draw:
@@ -544,7 +809,19 @@ class Converter {
     } else {
       let depth = -1;
       for (const l of lines) depth = l.depth = Math.min(l.depth, depth + 1);
-      nodes = listsAt(lines, 0, 0).nodes;
+      const tops: { node: RichNode; from: number }[] = [];
+      nodes = listsAt(lines, 0, 0, tops).nodes;
+      tops.forEach((top, k) => {
+        if (top.node.type !== "orderedList") return;
+        const current = typeof top.node.attrs?.listStyle === "string" ? top.node.attrs.listStyle : null;
+        const style = bestPreset(current, lines.slice(top.from, tops[k + 1]?.from ?? lines.length));
+        if (style === current) return;
+        const attrs: Record<string, unknown> = { ...(top.node.attrs ?? {}) };
+        if (style) attrs.listStyle = style;
+        else delete attrs.listStyle;
+        if (Object.keys(attrs).length > 0) top.node.attrs = attrs;
+        else delete top.node.attrs;
+      });
     }
     const last = lastParagraph(nodes);
     if (last?.attrs) last.attrs.spaceAfter = PARAGRAPH_SPACE_PT;
@@ -651,6 +928,14 @@ class Converter {
     // editor adds none on open.
     const last = content.at(-1)?.type;
     if (!last || !["paragraph", "heading", "bulletList", "orderedList", "taskList"].includes(last)) content.push(paragraphNode([]));
+    // The footnotes stand in one block at the end, in their numbers' order,
+    // as the page editor keeps them (components/docs/insert/footnotes.ts).
+    const numbered = new Set<string>();
+    walk({ type: "doc", content }, (node) => {
+      if (node.type === "footnoteReference" && typeof node.attrs?.footnoteId === "string") numbered.add(node.attrs.footnoteId);
+    });
+    const notes = [...numbered].flatMap((id) => this.footnotes.get(id) ?? []);
+    if (notes.length > 0) content.push({ type: "footnotes", content: notes });
     const doc: RichNode = { type: "doc", content };
     dropLostLinks(doc);
     const richText = sanitizeRichText(doc) ?? doc;

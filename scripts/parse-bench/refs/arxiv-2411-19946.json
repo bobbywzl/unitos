@@ -29,7 +29,21 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Zhiqiang Shen* Ammar Sherif* Zeyuan Yin Shitong Shao"
+     "text": "Zhiqiang Shen"
+    },
+    {
+     "text": "*",
+     "sup": true
+    },
+    {
+     "text": " Ammar Sherif"
+    },
+    {
+     "text": "*",
+     "sup": true
+    },
+    {
+     "text": " Zeyuan Yin Shitong Shao"
     }
    ]
   },
@@ -286,7 +300,11 @@
      "mathml": "<math display=\"inline\"><mrow><msub><mi>T</mi><mn>2</mn></msub><mo>=</mo><mrow><msub><mi>T</mi><mn>1</mn></msub><mo>−</mo><mtext>RI</mtext></mrow></mrow></math>"
     },
     {
-     "text": "1) for the next set, and so forth. The iterations for the final batch are reduced to RI which is "
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": ") for the next set, and so forth. The iterations for the final batch are reduced to RI which is "
     },
     {
      "text": "1/j",
@@ -386,7 +404,14 @@
      "marker": "•",
      "spans": [
       {
-       "text": "We conducted extensive experiments and ablations on various datasets across different scales to prove the effectiveness of the proposed approach2."
+       "text": "We conducted extensive experiments and ablations on various datasets across different scales to prove the effectiveness of the proposed approach"
+      },
+      {
+       "text": "2",
+       "sup": true
+      },
+      {
+       "text": "."
       }
      ]
     }
