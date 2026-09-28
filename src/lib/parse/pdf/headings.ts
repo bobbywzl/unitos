@@ -140,20 +140,28 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
 
 // The end of a line's lead set bold or in small caps: its styled runs from
 // the line's start, through short runs of other glyphs between them (a
-// formula's letters in a bold title).
+// formula's letters in a bold title) and through a formula of any length
+// (amsbook's "1.1.1. The probability space (Ω, ℱ, P).": the formula is in
+// math fonts, and the lead read as a list item "1.").
 function styledLeadEnd(line: Line): number {
   let end = 0;
+  // Where the next run may start: the lead's end, or past the glyphs let
+  // through between two styled runs.
+  let from = 0;
   const runs = line.runs;
   for (let k = 0; k < runs.length; k++) {
     const r = runs[k];
-    if (line.text.slice(end, r.start).trim() !== "") break;
+    if (line.text.slice(from, r.start).trim() !== "") break;
     if (r.bold || r.smallCaps) {
-      end = r.end;
+      end = from = r.end;
       continue;
     }
-    const short = charCount(line.text.slice(r.start, r.end)) <= 3;
+    // Only between two styled runs: a clause whose number is set plain
+    // ("3.1 Accredited status.") is a list item, not a run-in heading.
+    const short = charCount(line.text.slice(r.start, r.end)) <= 3 || r.zone !== undefined;
     const styledAfter = runs[k + 1] !== undefined && (runs[k + 1].bold || runs[k + 1].smallCaps);
-    if (!short || !styledAfter) break;
+    if (end === 0 || !short || !styledAfter) break;
+    from = r.end;
   }
   return end;
 }

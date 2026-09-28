@@ -932,10 +932,13 @@ textarea.docs-field:focus {
   cursor: pointer;
 }
 /* No padding at the sides: an import glues a formula to its words
-   ("σ-algebra", "Aᶜ,"), and a gap there reads as a space. */
+   ("σ-algebra", "Aᶜ,"), and a gap there reads as a space. An inline block
+   takes its paragraph's first-line indent as its own: every formula in an
+   indented paragraph drew half an inch into its box. */
 .docs-prose .docs-math {
   display: inline-block;
   border-radius: 3px;
+  text-indent: 0;
   cursor: pointer;
 }
 .docs-prose .docs-math:hover,
@@ -1126,6 +1129,7 @@ textarea.docs-field:focus {
   position: relative;
   display: inline-block;
   max-width: 100%;
+  text-indent: 0;
   vertical-align: top;
   transform-origin: 50% 50%;
 }
