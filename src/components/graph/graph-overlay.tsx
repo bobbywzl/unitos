@@ -141,7 +141,8 @@ export function GraphOverlay({
 
   return (
     <div data-track-surface="sidebar" className="graph-overlay-in fixed inset-0 z-50 flex flex-col bg-paper">
-      <div className="flex items-center gap-3 border-b border-line px-5 py-3">
+      {/* The row wraps on a narrow screen, so the close button stays in view. */}
+      <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-3">
         <span className="font-display text-[18px]">{t("panes.graph")}</span>
         <span className="mr-auto text-[13px] text-sand-600">
           {t("panes.graphCounts", {
