@@ -457,40 +457,44 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     segments.splice(1, 1);
   }
 
+  // A slide deck: every page wider than tall, two or more of them (a slide
+  // program's 960 × 540, beamer's 364 × 272).
+  const slides = pageWidths.length >= 2 && pageWidths.every((w, p) => w > pageHeights[p]);
+
   // Front matter: on the first page, a heading between the title and the
   // abstract (its heading, or a paragraph that opens with it) names an
   // author or a place, and is a paragraph (a paper's authors, set large and
-  // bold, read as headings: arxiv-2506-06752).
-  const titleAt = segments.indexOf(titleOf(segments, bodySize) as Segment);
+  // bold, read as headings: arxiv-2506-06752). A title slide's headings
+  // under its title are its subtitle and credits (real-gslides-oer-5rs p2).
+  const deckTitle = slides ? titleSlideOf(segments, bodySize) : undefined;
+  const titleAt = segments.indexOf((deckTitle ?? titleOf(segments, bodySize)) as Segment);
   const abstractAt = segments.findIndex((s) => s.page === 0 && (s.type === "HEADING" || s.type === "PARAGRAPH") && ABSTRACT_RE.test(s.text));
-  if (titleAt >= 0 && abstractAt > titleAt) {
-    for (const s of segments.slice(titleAt + 1, abstractAt)) {
+  const frontEnd = deckTitle ? segments.findIndex((s, k) => k > titleAt && s.page !== deckTitle.page) : abstractAt;
+  if (titleAt >= 0 && (deckTitle !== undefined || abstractAt > titleAt)) {
+    for (const s of segments.slice(titleAt + 1, frontEnd < 0 ? segments.length : frontEnd)) {
       if (s.type !== "HEADING") continue;
       s.type = "PARAGRAPH";
       s.html = s.align ? `<p class="${s.align}"></p>` : undefined;
     }
   }
 
-  // A slide deck: every page wider than tall, two or more of them (a slide
-  // program's 960 × 540, beamer's 364 × 272).
-  const slides = pageWidths.length >= 2 && pageWidths.every((w, p) => w > pageHeights[p]);
   assignHeadingLevels(segments, bodySize, slides);
-
-  const title = titleOf(segments, bodySize)?.text ?? null;
 
   // The title's look and alignment (the import's Title), read before the
   // heading it came from leaves the blocks: the look of its largest letters
   // (a title that took the line under it as its scripts read as that
   // line's size).
-  const titleSegment = title ? segments.find((s) => s.page === 0 && s.type === "HEADING" && s.text === title) : undefined;
+  const titleSegment = deckTitle ?? titleOf(segments, bodySize);
+  const title = titleSegment?.text ?? null;
   const titleRuns = titleSegment?.runs?.filter((r) => (r.look?.size ?? 0) >= (titleSegment.rawSize ?? 0) - 0.5);
   const titleFont = titleSegment ? spansFromRuns(titleSegment.text, titleRuns?.length ? titleRuns : titleSegment.runs).font : undefined;
 
   // The reader shows the title above the blocks; the heading it came from
   // would show it twice, where it opens the document or stands under lines
-  // that are no heading (a journal's label over a paper's title).
+  // that are no heading (a journal's label over a paper's title), and on a
+  // deck's title slide.
   const titleHeading = titleSegment ? segments.indexOf(titleSegment) : -1;
-  if (titleHeading >= 0 && segments.slice(0, titleHeading).every((s) => s.type !== "HEADING")) segments.splice(titleHeading, 1);
+  if (titleHeading >= 0 && (deckTitle !== undefined || segments.slice(0, titleHeading).every((s) => s.type !== "HEADING"))) segments.splice(titleHeading, 1);
 
   // The segments are the blocks now, in their order: a contents entry links
   // to its heading by that order. Resolved before the title merge and the
@@ -545,10 +549,20 @@ type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabe
 // sets its title in two languages, one under the other at one size, has the
 // first for its title (a Japanese paper's English title a tenth of a point
 // larger took the title).
-function titleOf(segments: Segment[], bodySize: number): Segment | undefined {
-  const heads = segments.filter((s) => s.page === 0 && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4);
+function titleOf(segments: Segment[], bodySize: number, pages = 1): Segment | undefined {
+  const heads = segments.filter((s) => s.page < pages && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4);
   const top = Math.max(0, ...heads.map((s) => s.rawSize!));
   return heads.find((s) => s.rawSize! >= top * 0.97);
+}
+
+// A deck's title slide: one of its first three, its title set a fifth
+// larger than every heading of the other two (a deck may open with a slide
+// on how to use it: real-gslides-oer-5rs).
+function titleSlideOf(segments: Segment[], bodySize: number): Segment | undefined {
+  const title = titleOf(segments, bodySize, 3);
+  if (!title) return undefined;
+  const others = segments.filter((s) => s.page < 3 && s.page !== title.page && s.type === "HEADING" && s.rawSize !== undefined);
+  return others.every((s) => s.rawSize! * 1.2 <= title.rawSize!) ? title : undefined;
 }
 
 // An abstract's heading, or the paragraph it runs into ("Abstract—…",

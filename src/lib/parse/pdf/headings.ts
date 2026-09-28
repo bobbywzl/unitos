@@ -151,8 +151,14 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
   let j = i + 1;
   while (j < lines.length) {
     const next = lines[j];
+    // Centered on one another: the same middle, the next line set in from
+    // the column's edge, or set at the very same size where the next line
+    // is that edge: a title slide's widest line makes the column
+    // (real-gslides-oer-5rs p2: "OER, the 5Rs, and" over "Creative
+    // Commons" read as two headings).
     const centered =
-      Math.abs((next.x + next.xEnd) / 2 - (line.x + line.xEnd) / 2) <= 12 && next.x > ctx.columnLeft + 12;
+      Math.abs((next.x + next.xEnd) / 2 - (line.x + line.xEnd) / 2) <= 12 &&
+      (next.x > ctx.columnLeft + 12 || (!ocr && Math.abs(next.size - line.size) < 0.1));
     if (
       runOf[j] !== -1 ||
       next.cells.length !== 1 ||

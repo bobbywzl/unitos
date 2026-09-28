@@ -18,10 +18,15 @@ const isFloat = (s: Segment) =>
 // mid-sentence and the second opens lowercase or with a parenthesis ("…3D
 // fermionic TO" | "(fTO) characterized…", arxiv-2504-02736), or a column
 // break cuts a sentence before a capitalized word (the first ends in a
-// word, the second starts higher on the page and right of it).
+// word, the second starts higher on the page and right of it). A second
+// part that opens with no lowercase word, set at half the first's size or
+// less, is no part of it: a page's keywords line and the licence line at
+// its foot (real-jnlp-31-47-p1).
 function continuesOnPage(prev: Segment, next: Segment): boolean {
   if (prev.type !== "PARAGRAPH" || next.type !== "PARAGRAPH" || prev.page !== next.page) return false;
   if (prev.listItem || next.listItem || prev.text.includes("\n")) return false;
+  const sizes = prev.lineSize !== undefined && next.lineSize !== undefined ? [prev.lineSize, next.lineSize] : undefined;
+  if (sizes && !/^[a-z]/.test(next.text) && Math.abs(sizes[0] - sizes[1]) > Math.min(...sizes) * 0.5) return false;
   // Two links, each on its own line, are two paragraphs: a Google Docs
   // export's list of links read as one. "…available at" and a link still
   // join.

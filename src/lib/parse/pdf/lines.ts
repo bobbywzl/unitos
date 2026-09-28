@@ -26,9 +26,13 @@ function collapseSpacedStr(str: string): string {
 }
 
 // Across items: one glyph per item with small uniform gaps → merge into words.
+// A gap a quarter of the size past the letters' own spacing is a word space:
+// small capitals set one glyph per item, their letters touching, ran their
+// words together ("FRACTIONSANDROOTS", synth-math-html).
 function mergeSpacedItems(items: Item[]): Item[] {
   const singles = items.filter((i) => charCount(i.str) === 1).length;
   if (singles < 6 || singles < items.length * 0.6) return items;
+  const letterGap = median(items.slice(1).map((item, k) => item.x - (items[k].x + items[k].w)).filter((g) => g >= 0));
   const out: Item[] = [];
   for (const item of items) {
     const last = out[out.length - 1];
@@ -39,6 +43,7 @@ function mergeSpacedItems(items: Item[]): Item[] {
       charCount(item.str) === 1 &&
       gap >= 0 &&
       gap < item.size * 0.45 &&
+      (gap < letterGap + item.size * 0.25 || item.math || last.math) &&
       sameFlags(last, item)
     ) {
       last.str += item.str;
@@ -153,6 +158,14 @@ export function fitOcrItems(items: Item[]) {
 
 // ── Line building ───────────────────────────────────────────────────────────
 
+// A letter and its accent as one character. TeX sets an accented i on a
+// dotless ı (\'{\i}), which Unicode composes with no accent: "Domı́nguez"
+// read apart from "Domínguez" (arxiv-2503-22874).
+function withAccent(letter: string, mark: string): string {
+  const base = letter === "ı" ? "i" : letter === "ȷ" ? "j" : letter;
+  return (base + mark).normalize("NFC");
+}
+
 function composeAccents(items: Item[]): Item[] {
   const out: Item[] = [];
   for (let k = 0; k < items.length; k++) {
@@ -168,7 +181,7 @@ function composeAccents(items: Item[]): Item[] {
       out.push({ ...item, str: item.str.slice(0, -1), glyphs: accent ? item.glyphs!.slice(0, -1) : item.glyphs });
       items[k + 1] = {
         ...after,
-        str: (letter + trailing).normalize("NFC") + rest.join(""),
+        str: withAccent(letter, trailing) + rest.join(""),
         glyphs: accent && after.glyphs ? [...after.glyphs, accent] : after.glyphs,
       };
       continue;
@@ -192,7 +205,7 @@ function composeAccents(items: Item[]): Item[] {
         const chars = Array.from(base.str);
         return {
           ...base,
-          str: chars.slice(0, idx).join("") + (chars[idx] + mark).normalize("NFC") + chars.slice(idx + 1).join(""),
+          str: chars.slice(0, idx).join("") + withAccent(chars[idx], mark) + chars.slice(idx + 1).join(""),
           glyphs: base.glyphs && item.glyphs ? [...base.glyphs, ...item.glyphs] : base.glyphs,
         };
       };
@@ -225,6 +238,17 @@ const QED_RE = /^[□■∎]$/;
     size: the line's text size. */
 export function spaceGap(prev: Item, next: Item, size: number): number {
   return prev.size <= size * 0.85 && Math.abs(prev.y - next.y) >= size * 0.1 ? size * 0.2 : size * 0.12;
+}
+
+// Two runs of words a line apart that one line took, the later starting
+// left of the earlier's end: no gap tells their space. A form's title lines
+// beside its 24 pt number read "CertificationRequest"
+// (real-irs-fw9-2024-p1). A script stacked over another sits less than its
+// size apart, and a formula's letters make no word of four.
+function crossesBack(prev: Item, next: Item): boolean {
+  const size = Math.min(prev.size, next.size);
+  const words = (i: Item) => !i.math && /[A-Za-z]{4}/.test(i.str);
+  return next.x < prev.x + prev.w - size * 0.3 && Math.abs(prev.y - next.y) >= size * 0.95 && words(prev) && words(next);
 }
 
 // A cell boundary: a wide gap, or an em between two numbers — number
@@ -299,12 +323,13 @@ function buildLine(rawItems: Item[], page: number): Line {
     const proofEnd = item === items[items.length - 1] && QED_RE.test(item.str.trim());
     const wide = prevItem !== null && !proofEnd && opensCell(prevItem, item, size);
     const least = prevItem !== null ? spaceGap(prevItem, item, size) : size * 0.12;
+    const crossed = prevItem !== null && crossesBack(prevItem, item);
     prevItem = item;
     let cell = cells[cells.length - 1];
     if (!cell || wide) {
       cell = { x: item.x, text: "", runs: [] };
       cells.push(cell);
-    } else if (gap > least && !cell.text.endsWith(" ")) {
+    } else if ((gap > least || crossed) && !cell.text.endsWith(" ")) {
       // Punctuation that attaches left ("PRESS" chip then ".") takes no space.
       const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
       if (!attach) cell.text += " ";

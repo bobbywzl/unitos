@@ -404,6 +404,9 @@ export function isFirstLineIndent(lines: Line[], i: number, ctx: PageContext, ru
   );
 }
 
+// A float's label alone on its line: "TABLE I", "Figure 3.".
+const FLOAT_LABEL_RE = /^(?:fig\.?|figure|table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+)[.:]?$/i;
+
 // Paragraph group: vertically continuous same-size lines in one column.
 // A hanging indent (a reference entry, a glossary term) indents every
 // line after the first: the second line may step in by up to three ems
@@ -480,9 +483,24 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       sizesDiffer(next, prev, ctx) ||
       (next.x > prev.x + next.size * 1.1 && !hanging && !centered) ||
       (next.x < prev.x - next.size * 1.1 && !(group.length === 1 && firstLineIndent) && !centered) ||
-      next.size > body * (ctx.ocr ? 1.3 : 1.14) ||
+      // A line set larger than the body stands alone (no heading reader
+      // took it), unless it goes on a centered line of its own size: a
+      // title page's author line, set large and wrapped in two
+      // (real-jnlp-31-47-p1).
+      (next.size > body * (ctx.ocr ? 1.3 : 1.14) && !(centered && !ctx.ocr && Math.abs(next.size - prev.size) <= 0.5)) ||
       endsShort ||
       labelled ||
+      // A centered line under a shorter one whose room would have taken its
+      // first word, wider by as much on each side: the writer broke the
+      // line, and a paragraph starts (a title slide's credit lines, "David
+      // Wiley, Lumen Learning" over "This presentation is licensed CC BY",
+      // real-gslides-oer-5rs p2). An IEEE caption's label ("TABLE I") over
+      // its title is one caption.
+      (centered &&
+        !ctx.ocr &&
+        !FLOAT_LABEL_RE.test(prev.text.trim()) &&
+        next.xEnd - next.x > prev.xEnd - prev.x + next.firstWordWidth + next.size * 0.3 &&
+        Math.abs(prev.x - next.x - (next.xEnd - prev.xEnd)) <= next.size * 0.5) ||
       // Centered lines set wholly bold, each short of its column, are lines
       // of their own: a statement's company, title, and units lines ran
       // into one paragraph (real-sec-10k-goog-2024-p54).
