@@ -1,4 +1,6 @@
+import type { DocStyle } from "@/components/docs/extensions";
 import { BULLET_PRESETS, NUMBER_PRESETS, TYPED_PRESETS, lineLevel, sameLevel } from "@/components/docs/toolbar/lists";
+import { DEFAULT_STYLES, STYLE_ATTR, styleChanges, type NamedStyle } from "@/components/docs/toolbar/styles";
 import {
   DEFAULT_PAGE_SETUP,
   formatParts,
@@ -18,12 +20,13 @@ import {
   inlineNodes,
   keptHref,
   paragraphNode,
+  sized,
   tableFromHtml,
   tableFromText,
   type CellNotes,
   type Piece,
 } from "@/lib/docs/import-table";
-import type { PageStart, ParsedBlock, StyleSpan } from "@/lib/parse/types";
+import type { PageStart, ParsedBlock, StyleSpan, TextFont } from "@/lib/parse/types";
 import type { Region } from "@/lib/video/types";
 
 // The converter (SPEC.md §29): an import — a PDF, a web page, a Markdown or
@@ -48,8 +51,13 @@ import type { Region } from "@/lib/video/types";
 //   SEPARATOR  a horizontal line   FIGURE    a figure object, its media a
 //                                            FigureMedia row (the figures)
 // Inside the words, the parse's styles become marks (a lowered or raised run
-// subscript or superscript), and an inline formula becomes an inline
-// equation of its TeX in place of its readable characters.
+// subscript or superscript; a color, a highlight, a face, and a size the
+// text style), and an inline formula becomes an inline equation of its TeX
+// in place of its readable characters. The page's look (a PDF's, a Word
+// file's: ParsedBlock.font, bodyFont, titleFont) sets the named styles —
+// Normal text the body's face and size, the Title and each heading level
+// theirs — and a block or a run set otherwise carries a mark only where it
+// differs from its style.
 // A footnote (ParsedBlock.footnote) whose reference the parse found is the
 // page editor's own: its number in place of the label in the text, its words
 // in the footnotes at the document's end. One without a reference stays a
@@ -82,6 +90,11 @@ export type ImportInput = {
   blocks: ParsedBlock[];
   /** A PDF's first page, in points. */
   pageSize?: { width: number; height: number };
+  /** The page's look (a PDF's, a Word file's): the body's (Normal text),
+      and the title's with its alignment (the Title). */
+  bodyFont?: TextFont;
+  titleFont?: TextFont;
+  titleAlign?: "center" | "right";
 };
 
 export type ImportResult = {
@@ -143,8 +156,8 @@ function tokensOf(html: string | undefined): string[] {
   return m ? m[1].split(/\s+/).filter(Boolean) : [];
 }
 
-function alignOf(tokens: string[]): "center" | "right" | null {
-  return tokens.includes("center") ? "center" : tokens.includes("right") ? "right" : null;
+function alignOf(tokens: string[]): "center" | "right" | "justify" | null {
+  return tokens.includes("center") ? "center" : tokens.includes("right") ? "right" : tokens.includes("justify") ? "justify" : null;
 }
 
 function headingLevel(html: string | undefined): number {
@@ -246,7 +259,7 @@ function inline(src: Source, extra: RichMark[] = []): RichNode[] {
       if (atom.start === at) pieces.push({ node: atom.node });
       return;
     }
-    const marks = [...extra, ...spans.filter((s) => s.start <= at && s.end >= next).map((s) => s.mark)];
+    const marks = oneTextStyle([...extra, ...spans.filter((s) => s.start <= at && s.end >= next).map((s) => s.mark)]);
     pieces.push({ text: text.slice(at, next), marks });
   });
   return inlineNodes(pieces);
@@ -265,6 +278,68 @@ const STYLE_MARKS: Partial<Record<StyleSpan["style"], string>> = {
   sub: "subscript",
   sup: "superscript",
 };
+
+/** A run's text styles as the one the page editor holds: its face, size,
+    color, and highlight together, a later one over an earlier one (a run's
+    own color over its block's). */
+function oneTextStyle(marks: RichMark[]): RichMark[] {
+  const styles = marks.filter((m) => m.type === "textStyle");
+  if (styles.length < 2) return marks;
+  const attrs = Object.assign({}, ...styles.map((m) => m.attrs ?? {})) as Record<string, unknown>;
+  return [...marks.filter((m) => m.type !== "textStyle"), { type: "textStyle", attrs }];
+}
+
+/** The page editor's mark for a style of the parse: a plain style's mark,
+    or the text style's face, size, color, or highlight. A run's face and
+    size differ from its block's (the parse marks no other); a color the
+    block's named style gives already is none. */
+function styleMark(style: StyleSpan["style"], named: NamedStyle): RichMark | null {
+  const plain = STYLE_MARKS[style];
+  if (plain) return { type: plain };
+  const at = style.indexOf(":");
+  const [kind, value] = [style.slice(0, at), style.slice(at + 1)];
+  if (kind === "color") return value === named.color ? null : { type: "textStyle", attrs: { color: value } };
+  if (kind === "highlight") return { type: "textStyle", attrs: { backgroundColor: value } };
+  if (kind === "font") return { type: "textStyle", attrs: { fontFamily: value } };
+  if (kind === "size") return Number(value) > 0 ? { type: "textStyle", attrs: { fontSize: `${Number(value)}pt` } } : null;
+  return null;
+}
+
+/** The named styles an import's look sets, as "Update 'Heading 1' to match"
+    sets them (SPEC.md §29 Named styles): Normal text takes the body's face,
+    size, and color; the Title the title's look; each heading level the look
+    most of its headings' letters take (a document of 11 pt bold headings
+    drew them 20 pt regular). A face a style shares with Normal text is
+    Normal text's. The styles the page gives nothing keep Docs' defaults. */
+function styleLooks(input: ImportInput): Partial<Record<DocStyle, NamedStyle>> {
+  const looks: Partial<Record<DocStyle, NamedStyle>> = {};
+  const body = input.bodyFont;
+  if (body) looks.normal = { ...DEFAULT_STYLES.normal, font: body.family, size: body.size, color: body.color ?? "#000000" };
+  const normalFace = looks.normal?.font ?? DEFAULT_STYLES.normal.font;
+  const lookOf = (style: DocStyle, font: TextFont): NamedStyle => ({
+    ...DEFAULT_STYLES[style],
+    font: font.family === normalFace ? null : font.family,
+    size: font.size,
+    color: font.color ?? "#000000",
+    bold: font.bold === true,
+    italic: font.italic === true,
+  });
+  if (input.titleFont) looks.title = lookOf("title", input.titleFont);
+  const tally = new Map<DocStyle, Map<string, { font: TextFont; n: number }>>();
+  for (const b of input.blocks) {
+    if (b.type !== "HEADING" || !b.font) continue;
+    const style = `h${Math.min(6, Math.max(1, headingLevel(b.html)))}` as DocStyle;
+    const counts = tally.get(style) ?? new Map<string, { font: TextFont; n: number }>();
+    const key = JSON.stringify([b.font.family, b.font.size, b.font.color ?? "", b.font.bold === true, b.font.italic === true]);
+    counts.set(key, { font: b.font, n: (counts.get(key)?.n ?? 0) + b.text.length });
+    tally.set(style, counts);
+  }
+  for (const [style, counts] of tally) {
+    const top = [...counts.values()].sort((a, b) => b.n - a.n)[0];
+    looks[style] = lookOf(style, top.font);
+  }
+  return looks;
+}
 
 /** A block's inline formulas (ParsedBlock.math) as inline equations, each in
     place of its readable characters. A formula a save would not keep as an
@@ -571,8 +646,11 @@ class Converter {
       for when the title prints one (linkFootnotes). */
   private readonly titleNotes: RichNode[] = [];
   private titleMark = "";
+  /** The named styles the page's look sets (styleLooks). */
+  private readonly looks: Partial<Record<DocStyle, NamedStyle>>;
 
   constructor(private readonly input: ImportInput) {
+    this.looks = styleLooks(input);
     this.paged = input.kind === "pdf" && input.blocks.some((b) => typeof b.page === "number");
     this.pageSetup = pageSetupFor(input);
     const { pageless, width, margins } = this.pageSetup;
@@ -735,11 +813,43 @@ class Converter {
     return id;
   }
 
-  private sourceOf(block: ParsedBlock, starts: PageStart[]): Source {
-    const spans: Source["spans"] = [];
+  /** The named style a block's words take: a heading's level's, else
+      Normal text's. */
+  private styleOf(block: ParsedBlock): DocStyle {
+    return block.type === "HEADING" ? (`h${Math.min(6, Math.max(1, headingLevel(block.html)))}` as DocStyle) : "normal";
+  }
+
+  /** A named style as the import sets it, the face it leaves to Normal
+      text filled in. */
+  private named(style: DocStyle): NamedStyle {
+    const look = this.looks[style] ?? DEFAULT_STYLES[style];
+    return look.font ? look : { ...look, font: this.looks.normal?.font ?? DEFAULT_STYLES.normal.font };
+  }
+
+  /** The marks over all of a block's words where its look
+      (ParsedBlock.font) differs from its named style: its face and size (a
+      caption set small, a line in another face), and a heading's bold its
+      level's style lacks. Its color is its runs' own (a color span each). */
+  private lookMarks(block: ParsedBlock, style: DocStyle): RichMark[] {
+    const font = block.font;
+    if (!font) return [];
+    const named = this.named(style);
+    const attrs: Record<string, unknown> = {};
+    if (font.family !== named.font) attrs.fontFamily = font.family;
+    if (font.size !== named.size) attrs.fontSize = `${font.size}pt`;
+    const marks: RichMark[] = Object.keys(attrs).length > 0 ? [{ type: "textStyle", attrs }] : [];
+    if (block.type === "HEADING" && font.bold && !named.bold) marks.push({ type: "bold" });
+    return marks;
+  }
+
+  private sourceOf(block: ParsedBlock, starts: PageStart[], style: DocStyle = this.styleOf(block)): Source {
+    // The block's look where it differs from its style, then its runs'
+    // marks over it (a run's face or size over its block's).
+    const spans: Source["spans"] = this.lookMarks(block, style).map((mark) => ({ start: 0, end: block.text.length, mark }));
+    const named = this.named(style);
     for (const s of block.styles ?? []) {
-      const mark = STYLE_MARKS[s.style];
-      if (mark) spans.push({ start: s.start, end: s.end, mark: { type: mark } });
+      const mark = styleMark(s.style, named);
+      if (mark) spans.push({ start: s.start, end: s.end, mark });
     }
     for (const l of block.links ?? []) {
       const href = (l.targetOrder !== undefined ? this.headingHref(l.targetOrder) : null) ?? keptHref(l.href);
@@ -770,7 +880,8 @@ class Converter {
       (meta !== undefined && alignOf(tokensOf(meta.html)) === "center") ||
       (heading !== undefined && alignOf(tokensOf(heading.html)) === "center");
     const attrs: Record<string, unknown> = { docStyle: "title" };
-    if (centered) attrs.textAlign = "center";
+    const align = this.input.titleAlign ?? (centered ? "center" : null);
+    if (align) attrs.textAlign = align;
     this.push(paragraphNode(this.titleContent(inline({ text: title, spans: [], starts })), attrs));
   }
 
@@ -822,8 +933,13 @@ class Converter {
     else if (role !== "kicker") attrs.spaceAfter = PARAGRAPH_SPACE_PT;
     const indent = INDENT_TOKENS.find((k) => tokens.includes(k));
     if (indent) Object.assign(attrs, INDENTS[indent]);
+    // A role's size where the page gives none: a PDF's and a Word file's
+    // blocks carry their own (lookMarks).
     const size =
-      role === "kicker" || role === "label" || role === "caption" || role === "footnote" ? SMALL_SIZE : role === "display" ? DISPLAY_SIZE : null;
+      block.font ? null
+      : role === "kicker" || role === "label" || role === "caption" || role === "footnote" ? SMALL_SIZE
+      : role === "display" ? DISPLAY_SIZE
+      : null;
     const extra: RichMark[] = size ? [{ type: "textStyle", attrs: { fontSize: size } }] : [];
     const nodes = splitLong(this.sourceOf(block, starts)).map((part) => paragraphNode(inline(part, extra), attrs));
     this.place(index, nodes, role === "quote");
@@ -832,7 +948,7 @@ class Converter {
   private heading(block: ParsedBlock, index: number, starts: PageStart[], isTitle: boolean) {
     if (!block.text.trim()) return this.carry(starts);
     const align = alignOf(tokensOf(block.html));
-    const content = inline(this.sourceOf(block, starts));
+    const content = inline(this.sourceOf(block, starts, isTitle ? "title" : undefined));
     if (isTitle) {
       this.place(index, [paragraphNode(this.titleContent(content), align ? { docStyle: "title", textAlign: align } : { docStyle: "title" })]);
       return;
@@ -944,16 +1060,22 @@ class Converter {
       if (target !== undefined) this.footnoteIds.set(target, String(node.attrs?.footnoteId));
     });
     // A page start goes into the first cell of the row the page begins at.
+    // A table with a caption opens its text with the caption's line (the
+    // PDF and Word parses): a page start there opens the caption.
+    const captionLines = built.caption ? 1 : 0;
+    const captionStarts: RichNode[] = [];
     for (const p of starts) {
-      const row = block.text.slice(0, p.offset).split("\n").length - 1;
+      const line = block.text.slice(0, p.offset).split("\n").length - 1;
+      if (line < captionLines) {
+        captionStarts.push({ type: "pageStart", attrs: { page: p.page } });
+        continue;
+      }
+      const row = line - captionLines;
       const cell = built.rowStarts.slice(row).find((c) => c !== null) ?? built.rowStarts.find((c) => c !== null);
       if (cell) cell.content = [{ type: "pageStart", attrs: { page: p.page } }, ...(cell.content ?? [])];
     }
     const nodes: RichNode[] = [];
-    if (built.caption) {
-      const size: RichMark = { type: "textStyle", attrs: { fontSize: SMALL_SIZE } };
-      nodes.push(paragraphNode(inline({ text: built.caption, spans: [], starts: [] }, [size]), { textAlign: "center" }));
-    }
+    if (built.caption) nodes.push(paragraphNode([...captionStarts, ...built.caption.map((n) => sized(n, SMALL_SIZE))], { textAlign: "center" }));
     nodes.push(built.table);
     this.place(index, nodes);
   }
@@ -1048,7 +1170,14 @@ class Converter {
     });
     const notes = [...numbered].flatMap((id) => this.footnotes.get(id) ?? []);
     if (notes.length > 0) content.push({ type: "footnotes", content: notes });
-    const doc: RichNode = { type: "doc", content };
+    // The named styles the page's look set, stored as the page editor stores
+    // a style's changes (components/docs/toolbar/styles.ts).
+    const attrs: Record<string, unknown> = {};
+    for (const [style, look] of Object.entries(this.looks) as [DocStyle, NamedStyle][]) {
+      const changes = styleChanges(style, look);
+      if (Object.keys(changes).length > 0) attrs[STYLE_ATTR[style]] = JSON.stringify(changes);
+    }
+    const doc: RichNode = Object.keys(attrs).length > 0 ? { type: "doc", attrs, content } : { type: "doc", content };
     dropLostLinks(doc);
     const richText = sanitizeRichText(doc) ?? doc;
     const kept = new Set<string>();

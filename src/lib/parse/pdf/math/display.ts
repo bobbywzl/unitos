@@ -218,14 +218,10 @@ function inlineRow(line: Line, lines: Line[], kinds: LineKind[], fences: Box[]):
   return lines.some((t, n) => {
     if (kinds[n] !== "text" || Math.abs(t.y - line.y) > line.size * 1.6) return false;
     if (t.x > line.x + 1 || t.xEnd < line.xEnd - 1) return false;
-    // None of the text line's words under or over the row.
-    return !t.cells.some((c, i) => {
-      if (!/\p{L}{2,}/u.test(c.text)) return false;
-      const next = t.cells[i + 1]?.x ?? Infinity;
-      const items = t.items.filter((it) => it.x >= c.x - 0.5 && it.x < next);
-      const end = Math.max(c.x, ...items.map((it) => it.x + it.w));
-      return c.x < line.xEnd && end > line.x;
-    });
+    // None of the text line's words under or over the row: its words, not
+    // its cells, which reach over the formula they end in (an inline
+    // \dfrac's numerators joined the display over them, synth-math-html).
+    return !t.items.some((it) => !it.zone && /\p{L}{2,}/u.test(it.str) && it.x < line.xEnd && it.x + it.w > line.x);
   });
 }
 

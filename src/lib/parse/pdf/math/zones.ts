@@ -155,6 +155,15 @@ function charSpans(item: Item): [number, number][] {
   let i = 0;
   for (const g of item.glyphs ?? []) {
     const read = g.text ?? g.unicode.normalize("NFKC");
+    // A space glyph takes the string's space, or nothing: KaTeX sets a
+    // zero-width strut at a formula's first glyph, and it took the "(" of
+    // "(ω)" (synth-notes-html: the formula's text began a character late).
+    if (read !== "" && read.trim() === "") {
+      const end = /\s/.test(item.str[i] ?? "") ? i + 1 : i;
+      spans.push([i, end]);
+      i = end;
+      continue;
+    }
     if (read !== "") while (i < item.str.length && /\s/.test(item.str[i])) i++;
     let end: number;
     if (read !== "" && item.str.startsWith(read, i)) end = i + read.length;
@@ -209,7 +218,11 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
       out.push(...cellItems);
       continue;
     }
-    const glyphs = cellItems.flatMap((it) => it.glyphs ?? []).sort((a, b) => a.x - b.x || b.y - a.y);
+    // A space glyph is no word: it neither ends nor joins a formula.
+    const glyphs = cellItems
+      .flatMap((it) => it.glyphs ?? [])
+      .filter((g) => g.family !== null || g.unicode.trim() !== "")
+      .sort((a, b) => a.x - b.x || b.y - a.y);
     const zoneOf = new Map<Glyph, MathZone>();
     // An item with no glyphs is text a formula cannot run through.
     const breaks = cellItems.filter((it) => !it.glyphs?.length).map((it) => it.x);
@@ -229,11 +242,16 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
       const spans = charSpans(item);
       // A cut falls where the formula changes between two glyphs with text
       // between them; a glyph that reads as nothing (an accent composed on
-      // its letter, a composite's second half) stays with the one before.
+      // its letter, a composite's second half, a strut) stays with the one
+      // before it, or at the item's start with the first that reads.
+      const zones = glyphs.map((g) => zoneOf.get(g));
+      const reads = spans.map(([a, b]) => b > a);
+      const first = reads.indexOf(true);
+      for (let k = 0; k < glyphs.length; k++) if (!reads[k]) zones[k] = k < first ? zones[first] : zones[k - 1] ?? zones[k];
       let from = 0;
       for (let k = 1; k <= glyphs.length; k++) {
-        if (k < glyphs.length && (zoneOf.get(glyphs[k]) === zoneOf.get(glyphs[from]) || spans[k][0] === spans[from][0])) continue;
-        out.push(part(item, spans, from, k, zoneOf.get(glyphs[from])));
+        if (k < glyphs.length && (zones[k] === zones[from] || spans[k][0] === spans[from][0])) continue;
+        out.push(part(item, spans, from, k, zones[from]));
         from = k;
       }
     }

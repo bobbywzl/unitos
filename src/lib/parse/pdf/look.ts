@@ -17,6 +17,8 @@ import type { ParsedBlock, TextFont } from "@/lib/parse/types";
 export type FontObject = (id: string) => { name?: string; fallbackName?: string } | null | undefined;
 
 type Marks = { color?: string; highlight?: string; underline?: true; strike?: true };
+/** The link at a place on the page (index.ts). */
+type HrefAt = (x: number, y: number, w: number, size: number) => string | null;
 
 // One object per look, so runs compare looks by reference (glyphs.ts
 // sameFlags) and join where the look goes on.
@@ -158,15 +160,18 @@ function drawnMarks(glyphs: Glyph[], drawing: PageDrawing): Map<Glyph, Marks> {
   return out;
 }
 
-// A glyph's text color: its fill, unless ink, a link's blue, or too light
-// to read on the page — kept on a dark highlight (white words on a dark
-// label).
-function textColor(g: Glyph, item: Item, highlight: string | undefined): string | undefined {
+// A glyph's text color: its fill, unless ink, a link's blue (the glyph in a
+// link's area), or too light to read on the page — kept on a dark highlight
+// (white words on a dark label).
+function textColor(g: Glyph, hrefAt: HrefAt, highlight: string | undefined): string | undefined {
   const color = g.mode === 3 ? undefined : g.color;
-  if (!color || isInk(color) || (item.href && isBlue(color))) return undefined;
+  if (!color || isInk(color) || (isBlue(color) && hrefAt(g.x, g.y, g.w, g.size))) return undefined;
   if (luminance(color) > 0.8 && !(highlight && luminance(highlight) < 0.4)) return undefined;
   return color;
 }
+
+// The characters of a text that are no space.
+const letters = (text: string) => text.replace(/\s/g, "").length;
 
 // ── Items ───────────────────────────────────────────────────────────────────
 
@@ -180,8 +185,7 @@ const sameMarks = (a: Marks, b: Marks) =>
     part an item with its own link (Google Docs draws a highlighted phrase
     and the words after it as one run of one font). hrefAt: the link at a
     place (index.ts). */
-export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject, hrefAt: (x: number, y: number, w: number, size: number) => string | null) {
-  if (process.env.R2NOLOOK) return;
+export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject, hrefAt: HrefAt) {
   const faces = new Map<string, string>();
   const faceFor = (item: Item) => {
     if (item.math || !item.font || (item.glyphs?.length && item.glyphs.every((g) => g.mode === 3))) return "";
@@ -206,12 +210,15 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
   for (const item of items) {
     const face = faceFor(item);
     const size = half(item.size);
-    const glyphs = item.glyphs ?? [];
+    // The glyphs, when they spell the item's words: a text item may run on
+    // past its glyphs in the stream (Chrome draws a link's words apart from
+    // the words after them), and the glyphs' marks would paint the rest.
+    const glyphs = item.glyphs && letters(item.glyphs.map((g) => g.unicode).join("")) >= letters(item.str) * 0.9 ? item.glyphs : [];
     // Each glyph's marks; a space takes the marks of the glyph before it.
     const marks: Marks[] = [];
     glyphs.forEach((g, k) => {
       const d = drawn.get(g) ?? {};
-      const own: Marks = { ...d, color: textColor(g, item, d.highlight) };
+      const own: Marks = { ...d, color: textColor(g, hrefAt, d.highlight) };
       marks.push(g.unicode.trim() === "" && k > 0 ? marks[k - 1] : own);
     });
     const cuts = marks.flatMap((m, k) => (k > 0 && !sameMarks(m, marks[k - 1]) ? [k] : []));
@@ -232,7 +239,6 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
       out.push(item);
       continue;
     }
-    if (process.env.R2SPLIT) console.log("R2SPLIT", JSON.stringify(item.str), "→", parts.map((p) => JSON.stringify(p.str) + JSON.stringify(marks[glyphs.indexOf(p.glyphs![0])])).join(" | "));
     for (const part of parts) {
       part.look = lookOf(marks[glyphs.indexOf(part.glyphs![0])]);
       part.href = hrefAt(part.x, part.y, part.w, part.size);

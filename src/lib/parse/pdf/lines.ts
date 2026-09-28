@@ -3,7 +3,7 @@
 // caps collapse; a wide gap starts a new cell.
 
 import { median } from "@/lib/parse/pdf/geometry";
-import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, charCount, sameFlags } from "@/lib/parse/pdf/glyphs";
+import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, charCount, isUnicodeMathFont, sameFlags } from "@/lib/parse/pdf/glyphs";
 import { hangingBox } from "@/lib/parse/pdf/math/layout";
 import { splitZones } from "@/lib/parse/pdf/math/zones";
 import type { Cell, Item, Line, Run } from "@/lib/parse/pdf/types";
@@ -214,7 +214,15 @@ function buildLine(rawItems: Item[], page: number): Line {
         .sort((a, b) => a.x - b.x),
     ),
   );
-  const size = Math.max(...merged.map((i) => i.size));
+  // A line's size is its text's: KaTeX sets a formula 1.21 times its prose,
+  // so a sentence with inline math took the math's size and read as a
+  // heading (synth-paper-html: seven invented headings). A glyph of a math
+  // font set in Unicode counts only on a line with no other text.
+  const textSizes = merged.flatMap((i) => {
+    const text = i.glyphs?.filter((g) => !isUnicodeMathFont(g.base));
+    return !i.glyphs?.length || text?.length === i.glyphs.length ? [i.size] : (text ?? []).map((g) => g.size);
+  });
+  const size = Math.max(...(textSizes.length > 0 ? textSizes : merged.map((i) => i.size)));
   // Raises are read per cell: a table cell set smaller on its own baseline
   // is no superscript of the cell beside it (a slide's table of primers read
   // as runs of superscripts).

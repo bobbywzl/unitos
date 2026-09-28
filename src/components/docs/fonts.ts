@@ -20,6 +20,8 @@ const W2 = [400, 700];
 export const DOCS_FONTS: DocsFont[] = [
   { name: "Amatic SC", fallback: "cursive", web: true, weights: W2 },
   { name: "Arial", fallback: "Arimo, 'Liberation Sans', Helvetica, sans-serif", web: false, weights: W2 },
+  { name: "Calibri", fallback: "Carlito, sans-serif", web: false, weights: W2 },
+  { name: "Cambria", fallback: "Caladea, serif", web: false, weights: W2 },
   { name: "Caveat", fallback: "cursive", web: true, weights: [400, 500, 600, 700] },
   { name: "Comfortaa", fallback: "sans-serif", web: true, weights: [300, 400, 500, 600, 700] },
   { name: "Comic Sans MS", fallback: "'Comic Neue', 'Comic Sans', cursive", web: false, weights: W2 },
@@ -45,7 +47,14 @@ export const DOCS_FONTS: DocsFont[] = [
   { name: "Verdana", fallback: "'DejaVu Sans', sans-serif", web: false, weights: W2 },
 ];
 
-const BY_NAME = new Map(DOCS_FONTS.map((f) => [f.name.toLowerCase(), f]));
+// Faces an import names that the menu does not list: TeX's Computer Modern,
+// drawn by the computer's own copy or KaTeX's (the page editor loads KaTeX's
+// fonts for its equations), a serif for the letters KaTeX's lacks (ß, ø).
+const DRAWN_FONTS: DocsFont[] = [
+  { name: "Computer Modern", fallback: "'Latin Modern Roman', 'CMU Serif', KaTeX_Main, serif", web: false, weights: W2 },
+];
+
+const BY_NAME = new Map([...DOCS_FONTS, ...DRAWN_FONTS].map((f) => [f.name.toLowerCase(), f]));
 
 /** The generic family a Google Fonts category falls back to. */
 export function categoryFallback(category: string): string {
@@ -161,7 +170,7 @@ function familyQuery(name: string, weights: number[], text?: string): string {
 export function docsFontsUrl(): string {
   const faces = [
     ...DOCS_FONTS.filter((f) => f.web).map((f) => f.name),
-    ...["Arimo", "Tinos", "Cousine", "Comic Neue", "Gelasio", "Anton", "Fira Sans"],
+    ...["Arimo", "Tinos", "Cousine", "Carlito", "Caladea", "Comic Neue", "Gelasio", "Anton", "Fira Sans"],
   ].map((f) => familyQuery(f, W2));
   return `https://fonts.googleapis.com/css2?${faces.join("&")}&display=swap`;
 }

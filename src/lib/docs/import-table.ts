@@ -160,6 +160,8 @@ function collapsed(line: Inline[]): Piece[] {
     }
     if ("node" in item) {
       pieces.push(item);
+      // The words after a footnote's number or an equation keep their space.
+      spaced = false;
       continue;
     }
     let text = item.text.replaceAll(ZWSP, "").replace(/\s+/g, " ");
@@ -169,8 +171,58 @@ function collapsed(line: Inline[]): Piece[] {
     pieces.push({ text, marks: item.marks });
   }
   trimEnd();
-  // A line of nothing but line breaks has no words.
-  return pieces.some((p) => "text" in p && p.text) ? pieces : [];
+  // A line of nothing but line breaks has no words; an equation alone is one.
+  return pieces.some((p) => ("text" in p && p.text) || ("node" in p && p.node.type !== "hardBreak")) ? pieces : [];
+}
+
+// ── The look the parse writes ───────────────────────────────────────────────
+// The parse's table html (lib/parse/pdf/tables.ts, lib/parse/docx.ts) keeps
+// the page's look as a few style properties: a cell's fill, a paragraph's
+// alignment and indent, a run's color and highlight, the table's text size,
+// the columns' widths. The html is read as untrusted: a color is #rrggbb, a
+// length a number of points in range, an alignment center or right; any
+// other value is no look, and a table without them reads as before.
+
+/** The longest TeX an inline equation keeps: an attribute's limit (the
+    converter's MAX_LATEX, lib/docs/import.ts). */
+const MAX_LATEX = 2000;
+const HEX = /^#[0-9a-f]{6}$/;
+
+/** One property of an element's style attribute, lower case. */
+function styleOf(el: Element, name: string): string | null {
+  for (const part of (el.getAttribute("style") ?? "").split(";")) {
+    const at = part.indexOf(":");
+    if (at > 0 && part.slice(0, at).trim().toLowerCase() === name) return part.slice(at + 1).trim().toLowerCase();
+  }
+  return null;
+}
+
+function colorOf(el: Element, name: "color" | "background-color"): string | null {
+  const value = styleOf(el, name);
+  return value && HEX.test(value) ? value : null;
+}
+
+/** A length in points ("9pt"), within (0, max]. */
+function pointsOf(value: string | null, max: number): number | null {
+  const m = /^(\d{1,4}(?:\.\d{1,3})?)pt$/.exec(value ?? "");
+  const n = m ? Number(m[1]) : NaN;
+  return n > 0 && n <= max ? n : null;
+}
+
+/** A paragraph's alignment and left indent (points), from a <p> or a cell. */
+function paragraphAttrs(el: Element): Record<string, unknown> {
+  const attrs: Record<string, unknown> = {};
+  const align = styleOf(el, "text-align");
+  if (align === "center" || align === "right") attrs.textAlign = align;
+  const indent = pointsOf(`${el.getAttribute("data-indent-left") ?? ""}pt`, 288);
+  if (indent) attrs.indentLeft = Math.round(indent);
+  return attrs;
+}
+
+/** Marks with a text color or a highlight: one textStyle mark holds them. */
+function withTextStyle(marks: RichMark[], attrs: Record<string, unknown>): RichMark[] {
+  const style = marks.find((m) => m.type === "textStyle");
+  return [...marks.filter((m) => m !== style), { type: "textStyle", attrs: { ...style?.attrs, ...attrs } }];
 }
 
 /** The blocks of a cell (or of a list item inside it): a paragraph for each
@@ -180,6 +232,9 @@ class CellReader {
   readonly blocks: RichNode[] = [];
   private line: Inline[] = [];
 
+  /** attrs: the alignment and indent of the paragraphs read (a cell's own). */
+  constructor(private attrs: Record<string, unknown> = {}) {}
+
   read(el: Element, marks: RichMark[]) {
     for (const child of el.childNodes) this.node(child, marks);
   }
@@ -187,7 +242,7 @@ class CellReader {
   flush() {
     const content = inlineNodes(collapsed(this.line));
     this.line = [];
-    if (content.length > 0) this.blocks.push(paragraphNode(content));
+    if (content.length > 0) this.blocks.push(paragraphNode(content, this.attrs));
   }
 
   private node(node: Node, marks: RichMark[]) {
@@ -233,8 +288,23 @@ class CellReader {
     }
     if (BLOCK_TAGS.has(tag)) {
       this.flush();
+      const outer = this.attrs;
+      this.attrs = { ...outer, ...paragraphAttrs(el) };
       this.read(el, marks);
       this.flush();
+      this.attrs = outer;
+      return;
+    }
+    // An inline equation (the page editor's own html): its TeX; past an
+    // attribute's limit, its readable characters.
+    const latex = tag === "span" && el.getAttribute("data-type") === "inline-math" ? (el.getAttribute("data-latex") ?? "").trim() : "";
+    if (latex && latex.length <= MAX_LATEX) {
+      this.line.push({ node: { type: "inlineMath", attrs: { latex } } });
+      return;
+    }
+    const paint = tag === "span" ? { color: colorOf(el, "color"), backgroundColor: colorOf(el, "background-color") } : null;
+    if (paint && (paint.color || paint.backgroundColor)) {
+      this.read(el, withTextStyle(marks, Object.fromEntries(Object.entries(paint).filter(([, v]) => v))));
       return;
     }
     // A footnote's number where the cell cites it (placeNotes): the page
@@ -294,7 +364,7 @@ function cellBlocks(cell: Element): RichNode[] {
   // (lib/parse/dom-text.ts), so a cell's words are the parse's words.
   const clone = cell.cloneNode(true) as Element;
   separateBlocks(clone);
-  const reader = new CellReader();
+  const reader = new CellReader(paragraphAttrs(cell));
   reader.read(clone, []);
   reader.flush();
   return reader.blocks.length > 0 ? reader.blocks : [paragraphNode([])];
@@ -303,8 +373,9 @@ function cellBlocks(cell: Element): RichNode[] {
 // ── The table ───────────────────────────────────────────────────────────────
 
 export type ImportTable = {
-  /** A <caption> the table carries, drawn as a caption above the table. */
-  caption: string | null;
+  /** The words of a <caption> the table carries, with their marks: drawn
+      as a caption above the table. */
+  caption: RichNode[] | null;
   table: RichNode;
   /** The first paragraph of each row, in the order of the parse's text rows:
       where a page that begins at the row puts its page start. */
@@ -346,7 +417,7 @@ function gridRows(rows: { cells: { node: RichNode; colspan: number; rowspan: num
       const attrs: Record<string, unknown> = {};
       if (colspan > 1) attrs.colspan = colspan;
       if (rowspan > 1) attrs.rowspan = rowspan;
-      const node = Object.keys(attrs).length > 0 ? { ...cell.node, attrs } : cell.node;
+      const node = Object.keys(attrs).length > 0 ? { ...cell.node, attrs: { ...cell.node.attrs, ...attrs } } : cell.node;
       out[r].push({ node, col });
       col += colspan;
       width = Math.max(width, col);
@@ -501,14 +572,22 @@ function columnWidths(grid: GridCell[][], width: number, needs: Map<RichNode, Ne
     column past its longest word shares the room by how much more it wants;
     and when even the longest words do not fit, the text smaller, down to
     SMALLEST_PT, the way a paper sets a table smaller than its body. */
-function layoutColumns(grid: GridCell[][], width: number, room: number): { widths: number[]; pt: number } {
+function layoutColumns(grid: GridCell[][], width: number, room: number, look: TableLook): { widths: number[]; pt: number } {
   const needs = new Map(grid.flat().map((cell) => [cell.node, cellNeed(cell.node)]));
   const sum = (list: number[]) => list.reduce((a, b) => a + b, 0);
-  let pt = BODY_PT;
-  let { min, max } = columnWidths(grid, width, needs, 1);
+  // The page's own column widths, when the parse kept them, are what each
+  // column wants, never less than its longest word: an empty form column
+  // keeps its width on the page instead of shrinking to a sliver.
+  const page = look.columns?.length === width ? look.columns.map((w) => w * PX_PER_PT) : null;
+  const measure = (scale: number) => {
+    const w = columnWidths(grid, width, needs, scale);
+    return page ? { min: w.min, max: page.map((px, c) => Math.max(w.min[c], px)) } : w;
+  };
+  let pt = look.pt ?? BODY_PT;
+  let { min, max } = measure(pt / BODY_PT);
   while (sum(min) > room && pt > SMALLEST_PT) {
     pt -= 0.5;
-    ({ min, max } = columnWidths(grid, width, needs, pt / BODY_PT));
+    ({ min, max } = measure(pt / BODY_PT));
   }
   let widths: number[];
   if (sum(max) <= room) widths = max;
@@ -521,17 +600,22 @@ function layoutColumns(grid: GridCell[][], width: number, room: number): { width
 }
 
 /** Every text run of a table at a text size. */
-function sized(node: RichNode, size: string): RichNode {
+export function sized(node: RichNode, size: string): RichNode {
   if (node.type === "text") {
-    const marks = orderMarks([...(node.marks ?? []).filter((m) => m.type !== "textStyle"), { type: "textStyle", attrs: { fontSize: size } }]);
+    const marks = orderMarks(withTextStyle(node.marks ?? [], { fontSize: size }));
     return { ...node, marks };
   }
   return node.content ? { ...node, content: node.content.map((child) => sized(child, size)) } : node;
 }
 
+/** What the parse kept of a table's look: its text size (pt) and its
+    columns' widths on the page (pt). */
+type TableLook = { pt: number | null; columns: number[] | null };
+
 function tableNode(
   rows: { cells: { node: RichNode; colspan: number; rowspan: number }[]; pinned: boolean }[],
   room: number,
+  look: TableLook = { pt: null, columns: null },
 ): {
   table: RichNode;
   rowStarts: (RichNode | null)[];
@@ -542,12 +626,12 @@ function tableNode(
   // every cell of a column the same, so the editor's table map finds nothing
   // to fix.
   const width = Math.max(...laid.map((cells) => cells.reduce((end, c) => Math.max(end, c.col + Number(c.node.attrs?.colspan ?? 1)), 0)));
-  const { widths, pt } = layoutColumns(laid, width, room);
+  const { widths, pt } = layoutColumns(laid, width, room, look);
   const grid = laid.map((cells) =>
     cells.map((cell): GridCell => {
       const span = Number(cell.node.attrs?.colspan ?? 1);
       const node: RichNode = { ...cell.node, attrs: { ...cell.node.attrs, colwidth: widths.slice(cell.col, cell.col + span) } };
-      return { node: pt < BODY_PT ? sized(node, `${pt}pt`) : node, col: cell.col };
+      return { node: pt < BODY_PT || look.pt !== null ? sized(node, `${pt}pt`) : node, col: cell.col };
     }),
   );
   // Header rows repeat above the rows under them; a table of header rows
@@ -624,18 +708,35 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
   let pinning = true;
   const rows = trs.map((tr) => {
     pinning = pinning && tr.parentElement?.tagName.toLowerCase() === "thead";
-    const cells = cellsOf(tr).map((cell) => ({
-      node: { type: cell.tagName.toLowerCase() === "th" ? "tableHeader" : "tableCell", content: cellBlocks(cell) },
-      colspan: spanOf(cell, "colspan", widest),
-      rowspan: spanOf(cell, "rowspan", trs.length),
-    }));
+    const cells = cellsOf(tr).map((cell) => {
+      const fill = colorOf(cell, "background-color");
+      return {
+        node: { type: cell.tagName.toLowerCase() === "th" ? "tableHeader" : "tableCell", content: cellBlocks(cell), ...(fill ? { attrs: { backgroundColor: fill } } : {}) },
+        colspan: spanOf(cell, "colspan", widest),
+        rowspan: spanOf(cell, "rowspan", trs.length),
+      };
+    });
     return { cells, pinned: pinning };
   });
-  const built = tableNode(rows, room);
+  // The table's text size and its columns' widths on the page.
+  const cols = [...table.querySelectorAll(":scope > colgroup > col")].map((col) => pointsOf(styleOf(col, "width"), 2000));
+  const look: TableLook = {
+    pt: pointsOf(styleOf(table, "font-size"), 72),
+    columns: cols.length > 0 && cols.every((w) => w !== null) ? (cols as number[]) : null,
+  };
+  const built = tableNode(rows, room, look);
   if (!built) return null;
+  // The caption's words keep their marks: the paragraphs it holds, one line.
   const captionEl = [...table.children].find((c) => c.tagName.toLowerCase() === "caption");
-  const caption = captionEl ? normalizeText(captionEl.textContent ?? "").replaceAll(ZWSP, "") : "";
-  return { caption: caption || null, ...built };
+  const reader = new CellReader();
+  if (captionEl) {
+    const clone = captionEl.cloneNode(true) as Element;
+    separateBlocks(clone);
+    reader.read(clone, []);
+    reader.flush();
+  }
+  const caption = reader.blocks.filter((b) => b.type === "paragraph").flatMap((b, k) => [...(k > 0 ? [{ type: "text", text: " " }] : []), ...(b.content ?? [])]);
+  return { caption: caption.length > 0 ? caption : null, ...built };
 }
 
 /** A table from the parse's grid text (cells by tab, rows by line): for a

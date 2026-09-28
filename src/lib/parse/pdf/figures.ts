@@ -228,10 +228,16 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   const isPageText = (r: TextRun) => r.size >= textSize * 1.3 || r.chars >= 40;
   const runsIn = (box: Box) => runs.filter((r) => shareInside(r.box, box) >= 0.7);
   // A box that holds the page's text (a panel behind a quotation, a banner
-  // behind a paragraph): a background, never a graphic.
+  // behind a paragraph) or a caption's first words: a background, never a
+  // graphic. A chart's white ground can reach over the caption under it
+  // (arXiv 2502.02648 p7: FIG. 5's first line sat inside its chart).
   const holdsText = (box: Box) => {
     const inside = runsIn(box);
-    return inside.some(isPageText) || inside.filter((r) => r.chars >= 20).length >= 3;
+    return (
+      inside.some(isPageText) ||
+      inside.filter((r) => r.chars >= 20).length >= 3 ||
+      inside.some((r) => LABEL_START_RE.test(r.items.map((i) => i.str).join(" ")))
+    );
   };
 
   type Part = { box: Box; image: boolean; thin: boolean };
@@ -246,7 +252,10 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     if (raw.clip) continue;
     const box = onPage(raw);
     if (box.x2 < box.x1 || box.y2 < box.y1) continue;
-    const thin = Math.min(box.x2 - box.x1, box.y2 - box.y1) < 1.5;
+    // A rule is thin and long. A dot is a shape: a chart's markers are
+    // hundreds of them (arXiv 2502.02648: four charts read as rules, and
+    // their ticks and panel letters ran through the text).
+    const thin = Math.min(box.x2 - box.x1, box.y2 - box.y1) < 1.5 && Math.max(box.x2 - box.x1, box.y2 - box.y1) >= 1.5;
     if (!thin && box.x2 - box.x1 > textSize * 2 && box.y2 - box.y1 > textSize * 2 && holdsText(box)) continue;
     parts.push({ box, image: false, thin });
   }
@@ -332,17 +341,25 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     if (letters < 4 || letters < chars * 0.5) return [];
     const size = Math.max(...out.map((r) => r.size));
     const italic = out.reduce((n, r) => n + r.italic, 0) >= chars * 0.6;
-    // Centered: each line as far in from both edges, give or take, and one
-    // line clearly narrower than the graphic (a justified paragraph fills it).
+    // Centered: each line as far in from both edges, give or take a fifth
+    // of the two, and one line clearly narrower than the graphic (a
+    // justified paragraph fills it). A body line under a graphic flush with
+    // the column starts where the graphic does and ends short of it: it is
+    // no caption (a line under two pictures, set as the text around it,
+    // read as their caption).
     const margins = out.map((r) => [r.box.x1 - graphic.x1, graphic.x2 - r.box.x2, r.size]);
     const centered =
-      margins.every(([l, r, sz]) => l >= -sz * 0.5 && r >= -sz * 0.5 && Math.abs(l - r) <= Math.max(sz * 2, (graphic.x2 - graphic.x1) * 0.1)) &&
+      margins.every(([l, r, sz]) => l >= -sz * 0.5 && r >= -sz * 0.5 && Math.abs(l - r) <= Math.max(sz * 2, (l + r) * 0.2)) &&
       margins.some(([l, r, sz]) => l + r >= sz);
     return size < textSize * 0.95 || italic || centered ? out : [];
   };
 
   // Graphics on one row (a left and a right chart) are one figure, unless
-  // each has a caption of its own or text runs between them.
+  // each has a caption of its own, text runs between them, or the two
+  // together would take in the page's text that neither holds (arXiv
+  // 2411.19946 p13: a picture grid in one column and two charts in the
+  // other took the charts' caption, a heading, and every superscript of
+  // the column under the charts for the figure's labels).
   found.sort((a, b) => b.box.y2 - a.box.y2 || a.box.x1 - b.box.x1);
   const merged: Found[] = [];
   for (const { box, drawn } of found) {
@@ -353,6 +370,9 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       if (!(overlap > shorter * 0.5 && gap < pageWidth * 0.08)) return false;
       const between = { x1: Math.min(m.x2, box.x2), x2: Math.max(m.x1, box.x1), y1: Math.max(m.y1, box.y1), y2: Math.min(m.y2, box.y2) };
       if (between.x2 > between.x1 && runs.some((r) => shareInside(r.box, between) >= 0.5)) return false;
+      const union = unionBox(m, box);
+      const outside = (r: TextRun) => shareInside(r.box, m) < 0.7 && shareInside(r.box, box) < 0.7;
+      if (runs.some((r) => isPageText(r) && shareInside(r.box, union) >= 0.7 && outside(r))) return false;
       return captionOf(m).length === 0 || captionOf(box).length === 0;
     });
     if (near) {

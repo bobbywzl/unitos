@@ -1,5 +1,7 @@
 import { ommlLatex, ommlText } from "@/lib/parse/docx-math";
 import { texError } from "@/lib/katex";
+import { faceOf } from "@/lib/parse/pdf/faces";
+import { isInk, takeBodyFont } from "@/lib/parse/pdf/look";
 import {
   attr,
   child,
@@ -18,7 +20,8 @@ import {
   type OfficeZip,
   type Relationship,
 } from "@/lib/parse/office";
-import type { FootnoteRef, LinkSpan, MathSpan, ParsedBlock, ParsedDocument, StyleSpan } from "@/lib/parse/types";
+import type { FootnoteRef, LinkSpan, MathSpan, ParsedBlock, ParsedDocument, StyleSpan, TextFont } from "@/lib/parse/types";
+import type { HexColor } from "@/lib/text-style";
 
 // The Word parser: a .docx read part by part into blocks, the way a Markdown
 // file becomes blocks (SPEC.md §30: an import while the switch is on, else a
@@ -26,8 +29,11 @@ import type { FootnoteRef, LinkSpan, MathSpan, ParsedBlock, ParsedDocument, Styl
 // from the look of a page:
 //   - headings by their style (Heading 1–6, or a style whose outline level
 //     makes it one), the document's title by the Title style;
-//   - paragraphs with their runs: bold, italic, underline, small caps,
-//     raised and lowered runs, monospace runs as code, links;
+//   - paragraphs with their runs: bold, italic, underline, strikethrough,
+//     small caps, raised and lowered runs, monospace runs as code, links,
+//     and their look — face, size, color, highlight — as the PDF parse
+//     writes it (lib/parse/types.ts StyleSpan, ParsedBlock.font): the file
+//     says exactly what a PDF's drawing only shows;
 //   - lists from numbering.xml, each item's marker as Word draws it ("1.",
 //     "1.1", "(a)", "(i)", "•") at its level, two spaces a level, as the PDF
 //     parse writes them; a box or a marker typed before a tab is a list
@@ -211,17 +217,58 @@ type Look = {
   bold: boolean;
   italic: boolean;
   underline: boolean;
+  strike: boolean;
   smallCaps: boolean;
   vert: "sup" | "sub" | null;
   hidden: boolean;
   font: string;
   /** Half-points. */
   size: number;
+  /** The words' color and the highlight behind them (#rrggbb), null for
+      none: Word's highlight, else the run's shading, which Google Docs
+      writes for its highlights. */
+  color: HexColor | null;
+  highlight: HexColor | null;
+  shade: HexColor | null;
   /** Set in a monospace face the body is not set in: code. */
   code: boolean;
 };
 
-const PLAIN_LOOK: Look = { bold: false, italic: false, underline: false, smallCaps: false, vert: null, hidden: false, font: "", size: 20, code: false };
+const PLAIN_LOOK: Look = {
+  bold: false,
+  italic: false,
+  underline: false,
+  strike: false,
+  smallCaps: false,
+  vert: null,
+  hidden: false,
+  font: "",
+  size: 20,
+  color: null,
+  highlight: null,
+  shade: null,
+  code: false,
+};
+
+/** A color the file names, as #rrggbb: six hex digits and nothing else
+    ("auto", a theme's name, and a stray value are none). */
+function hexColor(value: string | null): HexColor | null {
+  return value && /^[0-9a-f]{6}$/i.test(value) ? `#${value.toLowerCase()}` : null;
+}
+
+// Word's highlight colors by name (w:highlight, ST_HighlightColor).
+const HIGHLIGHTS: Record<string, HexColor> = {
+  yellow: "#ffff00", green: "#00ff00", cyan: "#00ffff", magenta: "#ff00ff", blue: "#0000ff", red: "#ff0000",
+  darkBlue: "#000080", darkCyan: "#008080", darkGreen: "#008000", darkMagenta: "#800080", darkRed: "#800000",
+  darkYellow: "#808000", darkGray: "#808080", lightGray: "#c0c0c0", black: "#000000", white: "#ffffff",
+};
+
+/** A shading's color (w:shd): its fill, or its pattern color when the
+    pattern is solid; white is no color. */
+function shadeColor(shd: Element | null): HexColor | null {
+  const color = attr(shd, "val") === "solid" ? hexColor(attr(shd, "color")) : hexColor(attr(shd, "fill"));
+  return color === "#ffffff" ? null : color;
+}
 
 /** A look with one run-properties element applied over it. */
 function applyRPr(look: Look, rPr: Element | null, styles: Styles): Look {
@@ -237,6 +284,19 @@ function applyRPr(look: Look, rPr: Element | null, styles: Styles): Look {
         break;
       case "u":
         out.underline = flag(el) ?? out.underline;
+        break;
+      case "strike":
+      case "dstrike":
+        out.strike = flag(el) ?? out.strike;
+        break;
+      case "color":
+        out.color = hexColor(attr(el, "val"));
+        break;
+      case "highlight":
+        out.highlight = HIGHLIGHTS[attr(el, "val") ?? ""] ?? null;
+        break;
+      case "shd":
+        out.shade = shadeColor(el);
         break;
       case "smallCaps":
         out.smallCaps = flag(el) ?? out.smallCaps;
@@ -277,7 +337,7 @@ type ParaProps = {
   toc: number | null;
   numId: string | null;
   ilvl: number;
-  align: "center" | "right" | null;
+  align: "center" | "right" | "justify" | null;
   border: { top: boolean; bottom: boolean; left: boolean; right: boolean };
   /** The left indent in twips: the style's, or the paragraph's own. */
   left: number;
@@ -342,7 +402,7 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
   for (const layer of [styles.docPPr, ...table.map((s) => s.pPr), ...chain.map((s) => s.pPr), pPr]) {
     if (!layer) continue;
     const jc = attr(child(layer, "jc"), "val");
-    if (jc) out.align = jc === "center" ? "center" : jc === "right" || jc === "end" ? "right" : null;
+    if (jc) out.align = jc === "center" ? "center" : jc === "right" || jc === "end" ? "right" : jc === "both" || jc === "distribute" ? "justify" : null;
     const numPr = child(layer, "numPr");
     if (numPr) {
       const numId = attr(child(numPr, "numId"), "val");
@@ -610,11 +670,20 @@ class Line {
     const marks: Mark[] = [];
     if (look.bold) marks.push("bold");
     if (look.italic) marks.push("italic");
-    // A link's underline is the link's look, not emphasis.
+    // A link's underline and color are the link's look, not the words'.
     if (look.underline && !link) marks.push("underline");
+    if (look.strike) marks.push("strike");
     if (look.smallCaps) marks.push("smallCaps");
     if (look.vert) marks.push(look.vert);
     if (look.code) marks.push("code");
+    // Black and near-black are the page's ink, no color (lib/parse/pdf/look.ts).
+    if (look.color && !link && !isInk(look.color)) marks.push(`color:${look.color}`);
+    const highlight = look.highlight ?? look.shade;
+    if (highlight) marks.push(`highlight:${highlight}`);
+    // Every run's face and size: the block keeps them only where a run of
+    // words differs from the block's own look (lookOf).
+    if (look.font) marks.push(`font:${faceOf(look.font)}`);
+    marks.push(`size:${look.size / 2}`);
     for (const style of marks) {
       const last = this.marks.findLast((m) => m.style === style);
       if (last && last.end === start) last.end = end;
@@ -726,6 +795,78 @@ class Joined implements Words {
     this.notes.push(...moveSpans(words.notes, at));
     this.bookmarks.push(...words.bookmarks);
   }
+}
+
+// ── A block's look ──────────────────────────────────────────────────────────
+
+const LETTER = /[\p{L}\p{N}]/u;
+
+/** The look most of a block's letters take (ParsedBlock.font), as the PDF
+    parse reads a page's (lib/parse/pdf/text.ts): the face and the size of
+    the most letters (a raised or lowered run, code, and a formula aside),
+    bold and italic when most letters are, and the color most letters take.
+    The face and size marks then stay only over a run of words that differs
+    from it; a list's markers and a heading's number, no run's words, count
+    for nothing. */
+function lookOf(words: Words): { font?: TextFont; marks: Words["marks"] } {
+  const { text } = words;
+  const n = text.length;
+  const face: string[] = new Array<string>(n).fill("");
+  const size = new Float64Array(n);
+  const color: string[] = new Array<string>(n).fill("");
+  const on = { bold: new Uint8Array(n), italic: new Uint8Array(n), code: new Uint8Array(n), raised: new Uint8Array(n), math: new Uint8Array(n) };
+  for (const m of words.marks) {
+    const style = m.style;
+    for (let i = m.start; i < m.end; i++) {
+      if (style.startsWith("font:")) face[i] = style.slice(5);
+      else if (style.startsWith("size:")) size[i] = Number(style.slice(5));
+      else if (style.startsWith("color:")) color[i] = style.slice(6);
+      else if (style === "bold" || style === "italic" || style === "code") on[style][i] = 1;
+      else if (style === "sup" || style === "sub") on.raised[i] = 1;
+    }
+  }
+  for (const m of words.math) on.math.fill(1, m.start, m.end);
+  const counted = (i: number) => size[i] > 0 && !on.math[i] && LETTER.test(text[i]);
+  let prose = false;
+  for (let i = 0; i < n && !prose; i++) prose = counted(i) && !on.code[i];
+  const faces = new Map<string, number>();
+  const sizes = new Map<number, number>();
+  const colors = new Map<string, number>();
+  const tally = <K>(map: Map<K, number>, key: K) => map.set(key, (map.get(key) ?? 0) + 1);
+  let letters = 0;
+  let bold = 0;
+  let italic = 0;
+  for (let i = 0; i < n; i++) {
+    if (!counted(i)) continue;
+    letters++;
+    if (face[i] && (!prose || !on.code[i])) tally(faces, face[i]);
+    if (!on.raised[i]) tally(sizes, size[i]);
+    tally(colors, color[i]);
+    bold += on.bold[i];
+    italic += on.italic[i];
+  }
+  const top = <K>(map: Map<K, number>): K | undefined => [...map].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const family = top(faces);
+  const pt = top(sizes);
+  if (!family || pt === undefined) return { marks: words.marks.filter((m) => !m.style.startsWith("font:") && !m.style.startsWith("size:")) };
+  const hue = top(colors);
+  const font: TextFont = {
+    family,
+    size: pt,
+    ...(bold * 2 > letters ? { bold: true as const } : {}),
+    ...(italic * 2 > letters ? { italic: true as const } : {}),
+    ...(hue ? { color: hue } : {}),
+  };
+  const hasWords = (m: Span, aside: Uint8Array) => {
+    for (let i = m.start; i < m.end; i++) if (counted(i) && !aside[i]) return true;
+    return false;
+  };
+  const marks = words.marks.filter((m) => {
+    if (m.style.startsWith("font:")) return m.style.slice(5) !== family && hasWords(m, on.code);
+    if (m.style.startsWith("size:")) return Math.abs(Number(m.style.slice(5)) - pt) >= 0.5 && hasWords(m, on.raised);
+    return true;
+  });
+  return { font, marks };
 }
 
 // ── Inline html (table cells, captions) ─────────────────────────────────────
@@ -860,10 +1001,14 @@ class DocxReader {
   }
 
   /** A block of words with the spans the parse keeps. */
-  private textBlock(type: ParsedBlock["type"], words: Words, html?: string): ParsedBlock {
+  private textBlock(type: ParsedBlock["type"], words: Words, html?: string, opts: { headingBold?: boolean } = {}): ParsedBlock {
     const block: ParsedBlock = { type, text: words.text };
     if (html) block.html = html;
-    const styles: StyleSpan[] = words.marks.map((m) => ({ start: m.start, end: m.end, style: m.style, quotedText: words.text.slice(m.start, m.end) }));
+    const look = lookOf(words);
+    if (look.font) block.font = look.font;
+    // A heading's bold is the heading's look (its font), not emphasis.
+    const marks = opts.headingBold ? look.marks.filter((m) => m.style !== "bold") : look.marks;
+    const styles: StyleSpan[] = marks.map((m) => ({ start: m.start, end: m.end, style: m.style, quotedText: words.text.slice(m.start, m.end) }));
     if (styles.length > 0) block.styles = styles;
     const links: LinkSpan[] = [];
     for (const l of words.links) {
@@ -1080,8 +1225,7 @@ class DocxReader {
     const align = props.align ? ` class="${props.align}"` : "";
     if (props.heading !== null || props.role === "title") {
       const level = Math.min(6, props.heading ?? 1);
-      // A heading's bold is the heading's look, not emphasis.
-      const block = this.textBlock("HEADING", { ...words, marks: words.marks.filter((m) => m.style !== "bold") }, `<h${level}${align}>${escapeHtml(words.text)}</h${level}>`);
+      const block = this.textBlock("HEADING", words, `<h${level}${align}>${escapeHtml(words.text)}</h${level}>`, { headingBold: true });
       if (props.role === "title") this.titles.add(block);
       return block;
     }
@@ -1769,5 +1913,16 @@ export async function parseDocx(bytes: Uint8Array, filename: string, opts: DocxP
   }
 
   const own = titleBlock ? titleBlock.text.replace(/\s+/g, " ").trim() : null;
-  return { title: own ?? coreTitle(zip) ?? filename.replace(/\.docx$/i, ""), blocks, titleFromFile: own === null };
+  const parsed: DocxParse = { title: own ?? coreTitle(zip) ?? filename.replace(/\.docx$/i, ""), blocks, titleFromFile: own === null };
+  // The look the import's named styles take (decision 2 of the parse loop's
+  // round 2): Normal text is the look most of the body's words take, the
+  // PDF parse's rule (lib/parse/pdf/look.ts), and the Title the title
+  // paragraph's own.
+  const bodyFont = takeBodyFont(blocks);
+  if (bodyFont) parsed.bodyFont = bodyFont;
+  if (titleBlock?.font) parsed.titleFont = titleBlock.font;
+  const tokens = /^<[a-z0-9]+ class="([^"]*)"/.exec(titleBlock?.html ?? "")?.[1].split(" ") ?? [];
+  const titleAlign = tokens.find((t): t is "center" | "right" => t === "center" || t === "right");
+  if (titleAlign) parsed.titleAlign = titleAlign;
+  return parsed;
 }

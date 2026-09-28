@@ -229,20 +229,27 @@ function blockDocumentDetail(reason: BlockDocumentReason | null): string | undef
 // transaction, as long as a bulk save may take (lib/docs/sync.ts).
 const IMPORT_TX_MS = 120_000;
 
+/** The page's look an import's named styles take (a PDF's, a Word file's). */
+type PageLook = Pick<ParsedDocument, "bodyFont" | "titleFont" | "titleAlign">;
+const pageLook = (parsed: PageLook): PageLook => ({ bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign });
+
 /** A parse as an import: the rich text, the figure media, the page setup. */
 type Converted = { richText: RichNode; figures: ImportFigure[]; pageSetup: PageSetup };
 
 /** The parse's blocks as an import, or "size" when the size guard keeps
     them a block document. titleFromOriginal: the title came from the
     original (the PDF's title, the page's, the front matter's), so the
-    rich text opens with it in the Title style. */
-function convertImport(input: {
-  kind: ImportKind;
-  title: string;
-  titleFromOriginal: boolean;
-  blocks: ParsedBlock[];
-  pageSize?: { width: number; height: number };
-}): Converted | "size" {
+    rich text opens with it in the Title style. The page's look (a PDF's,
+    a Word file's) sets the named styles. */
+function convertImport(
+  input: {
+    kind: ImportKind;
+    title: string;
+    titleFromOriginal: boolean;
+    blocks: ParsedBlock[];
+    pageSize?: { width: number; height: number };
+  } & PageLook,
+): Converted | "size" {
   // Contents entries point at their headings' orders; the converter links
   // them to the headings' block ids.
   const out = richTextFromImport({ ...input, blocks: resolveContentsLinks(input.blocks) });
@@ -559,6 +566,7 @@ export async function ingestPdf(
         titleFromOriginal: Boolean(parsed.title),
         blocks,
         pageSize: parsed.pageSize,
+        ...pageLook(parsed),
       })
     : null;
   onProgress?.("save", blockDocumentDetail(converted === "size" ? "size" : null));
@@ -671,7 +679,7 @@ export async function ingestDocx(
   const title = parsed.title ?? filename.replace(/\.docx$/i, "");
   const blocks = parsed.blocks;
   const converted = (await importPageEditorOn())
-    ? convertImport({ kind: "docx", title, titleFromOriginal: !parsed.titleFromFile, blocks })
+    ? convertImport({ kind: "docx", title, titleFromOriginal: !parsed.titleFromFile, blocks, ...pageLook(parsed) })
     : null;
   onProgress?.("save", await saveDetail(blocks, { title, blockDocument: converted === "size" ? "size" : null }));
   const document =
@@ -1076,6 +1084,7 @@ export async function reparseDocument(
   let originalTitle: string | null;
   let pageSize: ParsedDocument["pageSize"];
   let pageLabels: ParsedDocument["pageLabels"];
+  let look: PageLook = {};
   if (document.fileData) {
     onProgress?.("parse");
     const bytes = new Uint8Array(document.fileData);
@@ -1086,12 +1095,14 @@ export async function reparseDocument(
       originalTitle = parsed.title;
       pageSize = parsed.pageSize;
       pageLabels = parsed.pageLabels;
+      look = pageLook(parsed);
     } else if (sniffOfficeFile(bytes) === "docx") {
       // A Word file: the same parse as on the add (lib/parse/docx.ts).
       const parsed = await parseDocx(bytes, document.title, { storeImage: slideImageStore(userId) });
       blocks = parsed.blocks;
       kind = "docx";
       originalTitle = parsed.titleFromFile ? null : parsed.title;
+      look = pageLook(parsed);
     } else {
       // A Markdown file: the same walk as on the add (lib/parse/markdown-document.ts).
       const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), document.title);
@@ -1141,6 +1152,7 @@ export async function reparseDocument(
           titleFromOriginal: Boolean(originalTitle),
           blocks,
           pageSize,
+          ...look,
         })
       : null;
   // The figure check rides with the save stage, as on an add: the document

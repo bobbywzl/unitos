@@ -34,6 +34,7 @@ import { getDocumentProxy } from "unpdf";
 import { pageNames, renderBlockLines } from "@/lib/derive/context";
 import { deriveBlocks, inlineText, mathWords, type DerivedBlock } from "@/lib/docs/blocks";
 import { richTextFromImport } from "@/lib/docs/import";
+import { levelMarker, lineLevel, listMarker } from "@/components/docs/toolbar/lists";
 import {
   INDEXED_NODE_TYPES,
   MAX_RICH_TEXT_CHARS,
@@ -232,10 +233,35 @@ function tokensOf(b: ParsedBlock): string[] {
 const MARKER = /^( *)(?:-|\d+\.) /;
 /** Any marker a list line may still carry, as the converter reads it
     (lib/docs/import.ts listLine): bullet glyphs, a checklist box, "1)",
-    "1.1", "(a)", "iv.", "(viii)", "a).", a number alone ("15", "*15"), a
-    reference's number ("[12]"). */
+    "1.1", "(a)", "iv.", "(viii)", "a).", "A-1.", a number alone ("15",
+    "*15"), a reference's number ("[12]"). The marker is the first group. */
 const ANY_MARKER =
-  /^\s*(?:[-*•▪◦‣●·∙○■□◆❖➢➤►✓✔–—](?:\s+[☐☑☒])?|[☐☑☒]|(?:\d{1,3}\.)+\d{1,3}\.?|\((?:[a-z]{1,5}|\d{1,3})\)|(?:[a-z]{1,5}|\d{1,3})(?:\)\.?|\.\)?)|\*?\d{1,3}|\[\d{1,3}\])\s+/i;
+  /^\s*([-*•▪◦‣●·∙○■□◆❖➢➤►✓✔–—](?:\s+[☐☑☒])?|[☐☑☒]|(?:\d{1,3}\.)+\d{1,3}\.?|\((?:[a-z]{1,5}|\d{1,3})\)|(?:[A-Z]{1,2}-)?(?:[a-z]{1,5}|\d{1,3})(?:\)\.?|\.\)?)|\*?\d{1,3}|\[\d{1,3}\])\s+/i;
+const LISTS = new Set(["bulletList", "orderedList", "taskList"]);
+
+/** Each list line of the rich text in reading order: its words, its depth,
+    and its marker as the page editor draws it (components/docs/toolbar/
+    lists.ts: the outermost list's levels and the line's numbers). */
+function drawnMarkers(doc: RichNode): { text: string; depth: number; marker: string }[] {
+  const out: { text: string; depth: number; marker: string }[] = [];
+  const visit = (list: RichNode, outer: RichNode, above: number[]) => {
+    const start = Number(list.attrs?.start ?? 1) || 1;
+    (list.content ?? []).forEach((item, i) => {
+      const numbers = [...above, start + i];
+      const [first, ...rest] = item.content ?? [];
+      const marker =
+        list.type === "taskList" ? (item.attrs?.checked === true ? "☑" : "☐")
+        : list.type === "orderedList" ? listMarker(outer, numbers)
+        : levelMarker(lineLevel(outer, numbers.length - 1, false), numbers);
+      out.push({ text: first ? inlineText(first) : "", depth: numbers.length - 1, marker });
+      for (const child of rest) if (LISTS.has(child.type)) visit(child, outer, numbers);
+    });
+  };
+  walk(doc, (n, path) => {
+    if (LISTS.has(n.type) && !path.some((p) => LISTS.has(p.type))) visit(n, n, []);
+  });
+  return out;
+}
 
 // ── Rich text walks ─────────────────────────────────────────────────────────
 
@@ -964,38 +990,71 @@ async function checkFixture(f: Fixture): Promise<Report> {
 
   // Every marker family the parse keeps as printed draws as its list: a box
   // a checklist item (☑ and ☒ ticked), "1.1" and "(i)" nested counters, a
-  // reference's "[1]" a number. A list whose second level is legal numbers
-  // takes the nested preset, which draws them.
+  // reference's "[1]" a number, each drawn as printed.
   if (f.name === "synthetic:pdf") {
-    const items: { text: string; type: string; depth: number; checked: boolean; style: unknown }[] = [];
-    walk(doc, (n, path) => {
-      if (n.type !== "listItem" && n.type !== "taskItem") return;
-      const lists = path.filter((p) => p.type === "bulletList" || p.type === "orderedList" || p.type === "taskList");
-      const first = (n.content ?? [])[0];
-      items.push({
-        text: first ? inlineText(first) : "",
-        type: lists[lists.length - 1]?.type ?? "",
-        depth: lists.length - 1,
-        checked: n.attrs?.checked === true,
-        style: lists[0]?.attrs?.listStyle ?? null,
-      });
-    });
-    const want: [string, string, number, boolean, string | null][] = [
-      ["an open box", "taskList", 0, false, null],
-      ["a ticked box", "taskList", 0, true, null],
-      ["first", "orderedList", 0, false, "NUMBERED_DECIMAL_NESTED"],
-      ["“Nested” legal", "orderedList", 1, false, "NUMBERED_DECIMAL_NESTED"],
-      ["a numeral", "orderedList", 2, false, "NUMBERED_DECIMAL_NESTED"],
-      ["its sibling", "orderedList", 2, false, "NUMBERED_DECIMAL_NESTED"],
-      ["second", "orderedList", 0, false, "NUMBERED_DECIMAL_NESTED"],
-      ["a first reference", "orderedList", 0, false, null],
-      ["a second reference", "orderedList", 0, false, null],
+    const items = drawnMarkers(doc);
+    const want: [string, number, string][] = [
+      ["an open box", 0, "☐"],
+      ["a ticked box", 0, "☑"],
+      ["first", 0, "1."],
+      ["“Nested” legal", 1, "1.1"],
+      ["a numeral", 2, "(i)"],
+      ["its sibling", 2, "(ii)"],
+      ["second", 0, "2."],
+      ["a first reference", 0, "[1]"],
+      ["a second reference", 0, "[2]"],
     ];
-    const wrong = want.filter(
-      ([text, type, depth, checked, style]) =>
-        !items.some((it) => it.text === text && it.type === type && it.depth === depth && it.checked === checked && it.style === style),
-    );
+    const wrong = want.filter(([text, depth, marker]) => !items.some((it) => it.text === text && it.depth === depth && it.marker === marker));
     check(wrong.length === 0, "every list marker family draws as its list", wrong.length ? `${wrong.length} of ${want.length}: ${wrong.map(([text]) => text).join(" | ")}` : `${want.length} lines`);
+  }
+
+  // Every list's markers draw as the parse prints them (round 2): a
+  // numbered line's marker as the page editor draws it is its printed
+  // counter ("(a)", "a).", "15", "[12]", "2.3.1" alike); a box is a box in
+  // its state; a bullet is a bullet, a PDF's printed glyph its own ("•" is
+  // any bullet; ◦ and ▪ are Google Docs' ○ and ■). A list the page editor
+  // cannot draw keeps its markers as words.
+  {
+    const drawn = drawnMarkers(doc);
+    const same: Record<string, string> = { "◦": "○", "▪": "■" };
+    let at = 0;
+    let lines = 0;
+    let asWords = 0;
+    const wrong: string[] = [];
+    for (const b of f.blocks) {
+      if (b.type !== "LIST" || tokensOf(b).includes("contents") || (b.links ?? []).some((l) => l.targetOrder !== undefined)) continue;
+      let offset = 0;
+      for (const line of b.text.split("\n")) {
+        const from = offset;
+        offset += line.length + 1;
+        const m = ANY_MARKER.exec(line);
+        const words = m ? norm(indexedText(b, from + m[0].length, from + line.length)) : "";
+        if (!m || !words) continue;
+        lines++;
+        const k = drawn.findIndex((d, j) => j >= at && j < at + 40 && norm(d.text) === words);
+        if (k < 0) {
+          asWords++;
+          continue;
+        }
+        at = k + 1;
+        const printed = m[1].replace(/\s+/g, " ");
+        const got = drawn[k].marker;
+        const box = /[☐☑☒]/.exec(printed)?.[0];
+        const ok = box
+          ? got === (box === "☐" ? "☐" : "☑")
+          : /^[-*•▪◦‣●·∙○■□◆❖➢➤►✓✔–—]$/.test(printed)
+            ? f.kind !== "pdf" || printed === "•" || got === (same[printed] ?? printed)
+            : got === printed;
+        if (!ok) wrong.push(`"${printed}" drawn "${got}" (${clip(words, 24)})`);
+      }
+    }
+    if (lines > 0) {
+      check(
+        wrong.length === 0,
+        "every list's markers draw as the parse prints them",
+        wrong.length ? `${wrong.length} of ${lines}: ${wrong.slice(0, 4).join(" | ")}` : `${lines - asWords} lines${asWords ? `; ${asWords} in lists drawn as paragraphs` : ""}`,
+      );
+    }
   }
 
   // Links to headings, and links out.

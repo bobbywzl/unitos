@@ -12,12 +12,20 @@ import type { Cell, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pd
 
 // ── Tables ──────────────────────────────────────────────────────────────────
 
+// A color the html may carry: the drawing's #rrggbb, nothing else.
+const HEX_RE = /^#[0-9a-f]{6}$/i;
+
 // A paragraph of a cell that holds more than one, over the cell's text
 // (which joins them with a space), and how its lines sit in the cell:
 // centered, flush right, or set in from the cell's left edge (points).
 export type CellParagraph = { start: number; end: number; align?: "center" | "right"; indent?: number };
-export type TableCell = { text: string; runs: Run[]; colspan?: number; rowspan?: number; paragraphs?: CellParagraph[] };
+// fill: the cell's shading (#rrggbb).
+export type TableCell = { text: string; runs: Run[]; colspan?: number; rowspan?: number; paragraphs?: CellParagraph[]; fill?: string };
 export type TableRow = { cells: TableCell[] };
+// What a table keeps of the page's look: its words' size and each column's
+// width on the page, in points (the import sets the table at that size and
+// its columns in those proportions: an empty form column keeps its width).
+export type TableLook = { size: number; columns: number[] };
 
 function clusterColumns(lines: Line[]): number[] {
   const xs = lines.flatMap((l) => l.cells.map((c) => c.x)).sort((a, b) => a - b);
@@ -157,7 +165,10 @@ function wordsHtml(text: string, runs: Run[], math: { start: number; end: number
     if (covering.some((r) => r.bold)) wrapped = `<strong>${wrapped}</strong>`;
     if (look?.underline) wrapped = `<u>${wrapped}</u>`;
     if (look?.strike) wrapped = `<s>${wrapped}</s>`;
-    const paint = [look?.color ? `color:${look.color}` : "", look?.highlight ? `background-color:${look.highlight}` : ""].filter(Boolean);
+    const paint = [
+      look?.color && HEX_RE.test(look.color) ? `color:${look.color}` : "",
+      look?.highlight && HEX_RE.test(look.highlight) ? `background-color:${look.highlight}` : "",
+    ].filter(Boolean);
     if (paint.length > 0) wrapped = `<span style="${paint.join(";")}">${wrapped}</span>`;
     html += wrapped;
   }
@@ -205,7 +216,13 @@ function isFragmented(rows: TableRow[]): boolean {
 // between rows) so the table's DOM text equals block text exactly — text
 // anchors inside tables depend on this (SPEC.md §5). A merged cell is one
 // cell of its row, as the html draws it.
-export function tableSegment(rows: TableRow[], headerRows: number, page: number, where: Pick<Segment, "box" | "lineSize" | "mathShare">): Segment {
+export function tableSegment(
+  rows: TableRow[],
+  headerRows: number,
+  page: number,
+  where: Pick<Segment, "box" | "lineSize" | "mathShare">,
+  look?: TableLook,
+): Segment {
   const rowHtml = (row: TableRow, tag: "td" | "th", rowIdx: number) =>
     `<tr>${row.cells
       .map((c, cellIdx) => {
@@ -216,11 +233,14 @@ export function tableSegment(rows: TableRow[], headerRows: number, page: number,
             : '<span class="cell-gap">\n</span>'
           : '<span class="cell-gap">\t</span>';
         const spans = `${(c.colspan ?? 1) > 1 ? ` colspan="${c.colspan}"` : ""}${(c.rowspan ?? 1) > 1 ? ` rowspan="${c.rowspan}"` : ""}`;
-        return `<${tag}${spans}>${cellHtml(c)}${gap}</${tag}>`;
+        const fill = c.fill && HEX_RE.test(c.fill) ? ` style="background-color:${c.fill}"` : "";
+        return `<${tag}${spans}${fill}>${cellHtml(c)}${gap}</${tag}>`;
       })
       .join("")}</tr>`;
+  const points = (n: number) => Math.round(n * 10) / 10;
   const html =
-    "<table>" +
+    (look ? `<table style="font-size:${points(look.size)}pt">` : "<table>") +
+    (look ? `<colgroup>${look.columns.map((w) => `<col style="width:${points(w)}pt">`).join("")}</colgroup>` : "") +
     (headerRows > 0 ? `<thead>${rows.slice(0, headerRows).map((r, i) => rowHtml(r, "th", i)).join("")}</thead>` : "") +
     `<tbody>${rows.slice(headerRows).map((r, i) => rowHtml(r, "td", headerRows + i)).join("")}</tbody>` +
     "</table>";

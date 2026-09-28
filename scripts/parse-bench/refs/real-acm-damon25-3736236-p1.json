@@ -1,0 +1,343 @@
+{
+ "id": "real-acm-damon25-3736236-p1",
+ "category": "paper",
+ "source": {
+  "pdf": ".bench/real/acm-damon25-3736236.pdf",
+  "url": "https://zenodo.org/records/23010655/files/3736227.3736236.pdf?download=1"
+ },
+ "pages": [
+  1,
+  1
+ ],
+ "license": "open",
+ "provenance": "hand",
+ "notes": "Krause, Kowalick, Pietrzyk, Habich, Lehner, 'De2Dup: Extended Deduplication for Multi-Tenant Databases', DaMoN '25 (ACM, doi:10.1145/3736227.3736236), CC BY 4.0, the ACM-published PDF as deposited on Zenodo; acmart sigconf (pdfTeX, Linux Libertine and Biolinum, Libertine math). Scored: page 1: a title with a raised '2', a grid of five centered author blocks (three over two; each block one centered paragraph, the name linked to its ORCID, an e-mail address cut at its own hyphen), the abstract (one justified block: no break shows where the source may start a second paragraph), CCS concepts as one '•' item with bold terms and an arrow, keywords, the ACM reference format (its label a line of its own), the CC BY badge (an image) and the permission lines under a rule at the foot of the left column, then the numbered section heading and a list of '(1)'/'(2)' items with hanging indents in the right column; many end-of-line hyphens to drop (tech-nique, iden-tifying, ap-plicability, mech-anism, Wolf-gang, shar-ing, sce-narios, develop-ment, ten-ants, accel-erate). The last paragraph continues on page 2: only its words on page 1 are here.",
+ "furniture": [],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "De",
+     "bold": true
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": "Dup: Extended Deduplication for Multi-Tenant Databases",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Alexander Krause",
+     "href": "https://orcid.org/0000-0002-2616-8739"
+    },
+    {
+     "text": " TU Dresden Dresden, Germany alexander.krause@tu-dresden.de"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Jannis Kowalick",
+     "href": "https://orcid.org/0009-0008-1308-5556"
+    },
+    {
+     "text": " TU Dresden Dresden, Germany jannis.kowalick@mailbox.tu-dresden.de"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Johannes Pietrzyk",
+     "href": "https://orcid.org/0000-0001-8734-9835"
+    },
+    {
+     "text": " TU Dresden Dresden, Germany johannes.pietrzyk@tu-dresden.de"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Dirk Habich",
+     "href": "https://orcid.org/0000-0002-8671-5466"
+    },
+    {
+     "text": " TU Dresden Dresden, Germany dirk.habich@tu-dresden.de"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Wolfgang Lehner",
+     "href": "https://orcid.org/0000-0001-8107-2775"
+    },
+    {
+     "text": " TU Dresden Dresden, Germany wolfgang.lehner@tu-dresden.de"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Abstract",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Content-based page sharing (de-duplication) is a heavily used technique to improve memory efficiency in virtualized systems by identifying and merging identical pages. For many years now, the Linux kernel has offered this de-duplication technique via the Kernel Samepage Merging (KSM) feature. Although KSM in general works well, it is not used in multi-tenant database systems even though multiple tenants often manage similar data. One reason is that pages must be binary identical, which is a severe restriction. Secondly, KSM is seemingly scheduled as a single-threaded process by the OS, independently of the database workload, which further limits its applicability for in-memory systems with terabytes of main memory. To overcome that, we propose an extended de-duplication mechanism called De"
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": "Dup for memory-centric multi-tenant database engines. De"
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": "Dup extends de-duplication with a delta mechanism to significantly boost the application, especially when pages are not binary identical. Moreover, our De"
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": "Dup mechanism allows to steer the search for duplicates and has low overhead as we are able to offload the complete execution to a modern on-chip accelerator for memory operations in an asynchronous manner on recent Intel server processors. In addition, De"
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": "Dup offers an efficient way for on-the-fly tenant-aware data reconstruction during scan operations."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "CCS Concepts",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Information systems",
+       "bold": true
+      },
+      {
+       "text": " → "
+      },
+      {
+       "text": "DBMS engine architectures",
+       "bold": true
+      },
+      {
+       "text": "; "
+      },
+      {
+       "text": "Data compression",
+       "bold": true
+      },
+      {
+       "text": "; "
+      },
+      {
+       "text": "Data scans",
+       "bold": true
+      },
+      {
+       "text": "."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Keywords",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Multi-Tenancy, De-Duplication, Data Access, Intel DSA"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "ACM Reference Format:",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Alexander Krause, Jannis Kowalick, Johannes Pietrzyk, Dirk Habich, and Wolfgang Lehner. 2025. De"
+    },
+    {
+     "text": "2",
+     "sup": true
+    },
+    {
+     "text": "Dup: Extended Deduplication for Multi-Tenant Databases. In "
+    },
+    {
+     "text": "21st International Workshop on Data Management on New Hardware (DaMoN ’25), June 22–27, 2025, Berlin, Germany.",
+     "italic": true
+    },
+    {
+     "text": " ACM, New York, NY, USA, 9 pages. "
+    },
+    {
+     "text": "https://doi.org/10.1145/3736227.3736236",
+     "href": "https://doi.org/10.1145/3736227.3736236"
+    }
+   ]
+  },
+  {
+   "kind": "figure"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This work is licensed under a Creative Commons Attribution 4.0 International License.",
+     "href": "https://creativecommons.org/licenses/by/4.0"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "DaMoN ’25, Berlin, Germany",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "© 2025 Copyright held by the owner/author(s)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "ACM ISBN 979-8-4007-1940-0/25/06"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "https://doi.org/10.1145/3736227.3736236",
+     "href": "https://doi.org/10.1145/3736227.3736236"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "1 Introduction",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Database management systems (DBMS) are the backbone of every larger software application and responsible for preserving ACID characteristics in combination with efficiency when it comes to highly transactional workloads and/or big data sets [7, 11, 16]. With the advent of the cloud specifically or the concept of virtualization in general, multiple databases are typically served by a single database instance. Depending on the deployment model, multiple databases will run in different virtual machines/containers, will be deployed at the level of different database engine processes, or will reside in different database schemes typically yielding the highest sharing potential of computing resources [9, 13]. Although different databases may reflect different schemes and thus serve different applications and user groups, there are two practically relevant scenarios where logically different databases are in fact not so different when it comes to the data they store:"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "(1)",
+     "spans": [
+      {
+       "text": "Database design and providing access to sample data sets are an integral part of every software development process of any arbitrary application. Slightly different versions of the same database exist from the very beginning in terms of different development databases for different development branches of the application, over typically multiple test databases (for functional tests, performance tests, etc.), and finally for the live operation. All databases share very much the same content and schema with slight variations in the schema (due to application development) or data (e.g., due to test goals)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "(2)",
+     "spans": [
+      {
+       "text": "Enterprise-scale applications may have isolated deployments for individual customers, typically consisting of different tenants. While the operational part of the database is individual for different tenants/customers, there is a large portion of common data, which is very similar in all deployments of the same application (e.g., pre-populated default data to accelerate customer on-boarding, currency information, country information, economic base data, etc.)"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Both scenarios may easily end up in dozens or even hundreds of slightly different variants of the very same database. In order to minimize the overall resource utilization, in particular memory resources, there is a great demand for De-Duplication (DeDup for short) to eliminate redundant data, i.e., keeping only a single version of the same data in a system without compromising the isolation"
+    }
+   ]
+  }
+ ]
+}

@@ -187,9 +187,12 @@ const HEADING_CLASSES = [
 // stores `<p class="kicker center">`, `<h2 class="center">`,
 // `<ol class="contents">` for a page's masthead, contents list, pull quote,
 // or caption; the reader lays the block out by them (SPEC.md §6). One token
-// decides a block's look, in the order below; center only aligns.
+// decides a block's look, in the order below; center, right, and justify
+// (a PDF's alignment) only align.
 export type LayoutToken =
   | "center"
+  | "right"
+  | "justify"
   | "kicker"
   | "meta"
   | "label"
@@ -200,6 +203,8 @@ export type LayoutToken =
   | "footnote";
 const LAYOUT_TOKENS = new Set<string>([
   "center",
+  "right",
+  "justify",
   "kicker",
   "meta",
   "label",
@@ -224,7 +229,7 @@ const MONO_LINE = "font-mono text-[12px] text-sand-600 uppercase";
 
 /** The block's classes for its layout tokens; base is the plain block's. */
 export function layoutClass(tokens: Set<LayoutToken>, base: string): string {
-  const center = tokens.has("center") ? " text-center" : "";
+  const center = tokens.has("center") ? " text-center" : tokens.has("right") ? " text-right" : tokens.has("justify") ? " text-justify" : "";
   if (tokens.has("kicker")) return `${MONO_LINE} tracking-[0.22em] mt-0 mb-4${center}`;
   if (tokens.has("meta")) return `${MONO_LINE} tracking-[0.14em] my-3${center}`;
   if (tokens.has("label")) {
