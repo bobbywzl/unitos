@@ -2,6 +2,7 @@
 // number, a citation label) with their depth, and indented bands whose gaps
 // split them into items (bullet glyphs are often vector art, not text).
 
+import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
 import { BULLET_RE, GLYPH_BULLET_RE, follows, isGlyphMarker, opensSequence, readMarker, type Marker } from "@/lib/parse/pdf/markers";
 import { isCentered, isFirstLineIndent, isIndented, opensWithLabel, proseEdge, pushedApart } from "@/lib/parse/pdf/paragraphs";
@@ -129,10 +130,12 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
   const line = lines[i];
   const items: Item[] = [itemOf(line, first)];
   // The column's right edge, where a wrapped line runs to: the prose lines
-  // around the list end there. With none near (a centered line), no line
-  // wraps.
+  // around the list end there, else the column the list was read in (a
+  // form's items, with no prose line near the first: an item's last word
+  // on its next line read as a paragraph of its own). A short centered
+  // line never reaches it.
   const prose = proseEdge(lines, i, i + 1);
-  const edge = prose > 0 ? Math.max(line.xEnd, prose) : Infinity;
+  const edge = prose > 0 ? Math.max(line.xEnd, prose) : (lineColumn(line)?.[1] ?? Infinity);
   let j = i + 1;
   while (j < lines.length) {
     const next = lines[j];
@@ -182,6 +185,9 @@ function isList(items: Item[], i: number, ctx: PageContext): boolean {
   if (!opensSequence(first.marker) && !continued && i > 0 && !(items.length >= 2 && follows(first.marker, items[1].marker))) return false;
   if (items.length >= 2) return true;
   if (first.marker.family === "box" && /[☐☑☒]/.test(first.lines[0].text.slice(first.marker.length))) return false;
+  // An asterisk alone is a note's symbol, not a bullet: the note under a
+  // table whose header carries an asterisk read as a list item and lost it.
+  if (first.marker.text === "*") return false;
   // A bullet glyph opens an item even alone (a slide's one bullet).
   if (isGlyphMarker(first.marker) || GLYPH_BULLET_RE.test(first.lines[0].text)) return true;
   // "A." and "I." open initials ("A. Vaswani") as often as items.
@@ -215,7 +221,9 @@ function depthsOf(items: Item[], size: number): number[] {
 }
 
 // The LIST text: one line per item, two spaces per depth, the marker as
-// printed (a bullet glyph becomes the list's own "-"), a space, the words.
+// printed, a space, the words. A bullet keeps its glyph ("–" for a Google
+// Docs dash list, "◦", "▪"), so the page editor draws the page's glyph at
+// each level; Word's Courier "o" is its hollow bullet.
 function listSegment(items: Item[], depths: number[]): Segment {
   const builder = new TextBuilder();
   items.forEach((item, k) => {
@@ -224,7 +232,8 @@ function listSegment(items: Item[], depths: number[]): Segment {
     const indent = "  ".repeat(depths[k]);
     const bullet = item.marker.family === "bullet";
     const cut = bullet ? item.marker.length : /^\s*/.exec(text)?.[0].length ?? 0;
-    const lead = indent + (bullet ? "- " : "");
+    const glyph = item.marker.text === "o" ? "◦" : item.marker.text;
+    const lead = indent + (bullet ? `${glyph} ` : "");
     builder.append(
       {
         text: lead + text.slice(cut),
@@ -332,15 +341,23 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
     const tail = items.shift()!;
     segments.push({ type: "PARAGRAPH", text: tail.text, page: line.page, runs: tail.runs, ...geom(tail.lines) });
   }
-  const glyphItem = items.length === 1 && GLYPH_BULLET_RE.test(items[0].text);
+  // Labels that end in a colon, one to a line with no marker, are a form's
+  // fields (a fill-in rule drawn after each): each is a paragraph, not an
+  // item of an invented list.
+  if (items.length >= 2 && items.every((item) => item.lines.length === 1 && !BULLET_RE.test(item.text) && /:$/.test(item.text.trim()))) {
+    const field = (item: (typeof items)[number]): Segment => ({ type: "PARAGRAPH", text: item.text, page: item.lines[0].page, runs: item.runs, ...geom(item.lines) });
+    return { segments: [...segments, ...items.map(field)], next: j };
+  }
+  const glyphItem = items.length === 1 && GLYPH_BULLET_RE.test(items[0].text) && !/^\s*\*/.test(items[0].text);
   if (items.length >= 2 || glyphItem) {
     const builder = new TextBuilder();
     for (const item of items) {
-      // A bullet glyph in the text becomes the list's own marker; a
-      // number stays (its value is content).
+      // A bullet glyph in the text stays as printed, a number stays (its
+      // value is content), and an item whose bullet the page draws as a
+      // shape (no glyph in the text) takes the plain "•".
       const glyph = GLYPH_BULLET_RE.exec(item.text);
       const cut = glyph ? glyph[0].length : 0;
-      const marker = BULLET_RE.test(item.text) && !glyph ? "" : "- ";
+      const marker = glyph ? `${glyph[0].trim()} ` : BULLET_RE.test(item.text) ? "" : "• ";
       builder.append(
         {
           text: marker + item.text.slice(cut),

@@ -10,6 +10,7 @@ import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { insertContext } from "@/components/docs/insert/context";
 import { isMac } from "@/components/docs/keys";
 import { viewingCopy } from "@/components/docs/page/download";
+import { levelStyle, listSheet, presetNamed } from "@/components/docs/toolbar/lists";
 import { blockText, runAutocorrect } from "@/components/docs/typing/autocorrect";
 import { wordAt } from "@/components/docs/typing/chars";
 import { findPlugin } from "@/components/docs/typing/find";
@@ -33,6 +34,7 @@ import { armPlainPaste, imageFiles, insertImageFiles, notePaste, pastedHtml, pla
 import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
 import { tracePlugin } from "@/components/docs/typing/trace";
 import { replaceWithChip, urlChipPlugin } from "@/components/docs/typing/url-chip";
+import { listLevelsOf } from "@/lib/docs/schema";
 
 // The page editor's typing (SPEC.md §29): Google Docs' keys, autocorrect,
 // paste, and find. It runs first (priority 1001), so its keys win over
@@ -48,14 +50,30 @@ const DocsTyping = Extension.create({
   addGlobalAttributes() {
     return [
       {
-        // A list's preset, as the Google Docs API names it (typing/lists.ts),
-        // on the outermost list. The toolbar area draws each preset's glyphs.
+        // The outermost list's preset, as the Google Docs API names it, or
+        // its own levels (toolbar/lists.ts): its inline style sets each
+        // level's bullet or number, which the list sheet draws (listSheet).
         types: ["bulletList", "orderedList", "taskList"],
         attributes: {
           listStyle: {
             default: null,
             parseHTML: (el) => el.getAttribute("data-list-style"),
-            renderHTML: (attrs) => (attrs.listStyle ? { "data-list-style": attrs.listStyle } : {}),
+            renderHTML: (attrs) => {
+              if (!attrs.listStyle) return {};
+              const preset = presetNamed(attrs.listStyle);
+              return preset ? { "data-list-style": attrs.listStyle, style: levelStyle(preset.levels) } : { "data-list-style": attrs.listStyle };
+            },
+          },
+          listLevels: {
+            default: null,
+            parseHTML: (el) => {
+              const levels = listLevelsOf(el.getAttribute("data-list-levels"));
+              return levels ? JSON.stringify(levels) : null;
+            },
+            renderHTML: (attrs) => {
+              const levels = listLevelsOf(attrs.listLevels);
+              return levels ? { "data-list-levels": attrs.listLevels, style: levelStyle(levels) } : {};
+            },
           },
         },
       },
@@ -172,6 +190,14 @@ const DocsTyping = Extension.create({
     const editor = this.editor;
     const plugin = new Plugin({
       key: typingKey,
+      // The lists' rules (toolbar/lists.ts listSheet), one sheet for every
+      // page editor.
+      view: () => {
+        const sheet = document.getElementById("docs-list-sheet") ?? document.head.appendChild(document.createElement("style"));
+        sheet.id = "docs-list-sheet";
+        sheet.textContent = listSheet(".docs-prose");
+        return {};
+      },
       props: {
         // Typed text goes in as one undo step with the typing around it;
         // then the autocorrect rules for the character run, each its own step.

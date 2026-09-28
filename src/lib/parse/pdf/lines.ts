@@ -3,7 +3,7 @@
 // caps collapse; a wide gap starts a new cell.
 
 import { median } from "@/lib/parse/pdf/geometry";
-import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, charCount, sameFlags } from "@/lib/parse/pdf/glyphs";
+import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, charCount, isUnicodeMathFont, sameFlags } from "@/lib/parse/pdf/glyphs";
 import { hangingBox } from "@/lib/parse/pdf/math/layout";
 import { splitZones } from "@/lib/parse/pdf/math/zones";
 import type { Cell, Item, Line, Run } from "@/lib/parse/pdf/types";
@@ -26,9 +26,13 @@ function collapseSpacedStr(str: string): string {
 }
 
 // Across items: one glyph per item with small uniform gaps → merge into words.
+// A gap a quarter of the size past the letters' own spacing is a word space:
+// small capitals set one glyph per item, their letters touching, ran their
+// words together ("FRACTIONSANDROOTS", synth-math-html).
 function mergeSpacedItems(items: Item[]): Item[] {
   const singles = items.filter((i) => charCount(i.str) === 1).length;
   if (singles < 6 || singles < items.length * 0.6) return items;
+  const letterGap = median(items.slice(1).map((item, k) => item.x - (items[k].x + items[k].w)).filter((g) => g >= 0));
   const out: Item[] = [];
   for (const item of items) {
     const last = out[out.length - 1];
@@ -39,6 +43,7 @@ function mergeSpacedItems(items: Item[]): Item[] {
       charCount(item.str) === 1 &&
       gap >= 0 &&
       gap < item.size * 0.45 &&
+      (gap < letterGap + item.size * 0.25 || item.math || last.math) &&
       sameFlags(last, item)
     ) {
       last.str += item.str;
@@ -93,8 +98,14 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     const first = lines[0];
     if (!first || Math.abs(first.y + first.size * 0.7 - top) > first.size * 0.5) continue;
     if (lines.filter((l) => l.y >= cap.y - l.size * 0.5).length < 2) continue;
-    // Stretched to the first word, it takes no space before it.
-    const lead: Item = { ...cap, str: cap.str.trim(), y: first.y, size: first.size, w: first.x - cap.x, bold: first.bold, italic: first.italic, mono: first.mono, smallCaps: first.smallCaps, href: first.href, font: first.font };
+    // Stretched to the first word, it takes no space before it, unless the
+    // page sets one: a letter that is a word of its own ("A", "I") stands a
+    // word space from the next word, a drop cap's first letter none
+    // (lettrine: "A" 3.6 pt from "long", "T" 0 pt from "he"). Its str then
+    // ends in the space. A float's lines all start at one x, the first line
+    // too, and say nothing: the letter joins.
+    const spaced = first.x - (cap.x + cap.w) >= first.size * 0.3 && lines.some((l) => Math.abs(l.x - first.x) > first.size * 0.1);
+    const lead: Item = { ...cap, str: cap.str.trim() + (spaced ? " " : ""), y: first.y, size: first.size, w: first.x - cap.x, bold: first.bold, italic: first.italic, mono: first.mono, smallCaps: first.smallCaps, href: first.href, font: first.font, look: first.look };
     out = out.map((i) => (i === cap ? lead : i));
     // The other lines beside it start where the paragraph's next line does,
     // or where the cap does when none follows: set in by its width, they
@@ -109,7 +120,51 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
   return { items: out, starts };
 }
 
+// ── OCR layers ──────────────────────────────────────────────────────────────
+
+/** An OCR layer's words as the scan shows them. A letter or two read out
+    of a picture, over four times the page's text size, is no word (a
+    rocket's drawing read as a 73 pt "i" took a chapter's title as its
+    scripts). From one word's start to the next on its line is the word's
+    width and a space (a quarter em): when the median ratio of that advance
+    to the text layer's width and a space is off by a tenth or more, each
+    word with a next one on its line takes that scale, a space short of the
+    next word (a justified line's spaces stretch, so the median runs high).
+    A line's last word keeps its width: the page's notes, set smaller than
+    its body at the same size, run past the column at the body's scale. */
+export function fitOcrItems(items: Item[]) {
+  const text = median(items.map((i) => i.size));
+  for (let k = items.length - 1; k >= 0; k--) if (charCount(items[k].str) <= 2 && items[k].size > text * 4) items.splice(k, 1);
+  const words = items.filter((i) => i.str.trim()).sort((a, b) => b.y - a.y || a.x - b.x);
+  const next = (k: number) => {
+    const [a, b] = [words[k], words[k + 1]];
+    return b && Math.abs(a.y - b.y) <= a.size * 0.2 && a.w > 0 ? b : undefined;
+  };
+  const ratios: number[] = [];
+  words.forEach((a, k) => {
+    const b = next(k);
+    // A column's gutter or a table's cell gap is no word space.
+    const ratio = b ? (b.x - a.x) / (a.w + a.size * 0.25) : 0;
+    if (ratio > 0.5 && ratio < 2.5) ratios.push(ratio);
+  });
+  if (ratios.length < 20) return;
+  const scale = median(ratios);
+  if (Math.abs(scale - 1) < 0.1) return;
+  words.forEach((a, k) => {
+    const b = next(k);
+    if (b && b.x - a.x < (a.w + a.size * 0.25) * 2.5) a.w = Math.max(a.w, Math.min(a.w * scale, b.x - a.x - a.size * 0.2));
+  });
+}
+
 // ── Line building ───────────────────────────────────────────────────────────
+
+// A letter and its accent as one character. TeX sets an accented i on a
+// dotless ı (\'{\i}), which Unicode composes with no accent: "Domı́nguez"
+// read apart from "Domínguez" (arxiv-2503-22874).
+function withAccent(letter: string, mark: string): string {
+  const base = letter === "ı" ? "i" : letter === "ȷ" ? "j" : letter;
+  return (base + mark).normalize("NFC");
+}
 
 function composeAccents(items: Item[]): Item[] {
   const out: Item[] = [];
@@ -126,7 +181,7 @@ function composeAccents(items: Item[]): Item[] {
       out.push({ ...item, str: item.str.slice(0, -1), glyphs: accent ? item.glyphs!.slice(0, -1) : item.glyphs });
       items[k + 1] = {
         ...after,
-        str: (letter + trailing).normalize("NFC") + rest.join(""),
+        str: withAccent(letter, trailing) + rest.join(""),
         glyphs: accent && after.glyphs ? [...after.glyphs, accent] : after.glyphs,
       };
       continue;
@@ -150,7 +205,7 @@ function composeAccents(items: Item[]): Item[] {
         const chars = Array.from(base.str);
         return {
           ...base,
-          str: chars.slice(0, idx).join("") + (chars[idx] + mark).normalize("NFC") + chars.slice(idx + 1).join(""),
+          str: chars.slice(0, idx).join("") + withAccent(chars[idx], mark) + chars.slice(idx + 1).join(""),
           glyphs: base.glyphs && item.glyphs ? [...base.glyphs, ...item.glyphs] : base.glyphs,
         };
       };
@@ -174,6 +229,27 @@ function composeAccents(items: Item[]): Item[] {
 }
 
 const QED_RE = /^[□■∎]$/;
+
+/** The least gap between two items of a line, in points, that reads as a
+    space: 0.12 of the line's size, or 0.2 after a script (an item set at
+    0.85 of the size or less, a tenth of the size or more off the next
+    item's baseline). TeX leaves \scriptspace (0.5 pt) after a script, and
+    a word space is 0.22 em or more, justified too: "hk(z)" read "hk (z)".
+    size: the line's text size. */
+export function spaceGap(prev: Item, next: Item, size: number): number {
+  return prev.size <= size * 0.85 && Math.abs(prev.y - next.y) >= size * 0.1 ? size * 0.2 : size * 0.12;
+}
+
+// Two runs of words a line apart that one line took, the later starting
+// left of the earlier's end: no gap tells their space. A form's title lines
+// beside its 24 pt number read "CertificationRequest"
+// (real-irs-fw9-2024-p1). A script stacked over another sits less than its
+// size apart, and a formula's letters make no word of four.
+function crossesBack(prev: Item, next: Item): boolean {
+  const size = Math.min(prev.size, next.size);
+  const words = (i: Item) => !i.math && /[A-Za-z]{4}/.test(i.str);
+  return next.x < prev.x + prev.w - size * 0.3 && Math.abs(prev.y - next.y) >= size * 0.95 && words(prev) && words(next);
+}
 
 // A cell boundary: a wide gap, or an em between two numbers — number
 // columns sit closer than the word gap rule allows (a table of Brier
@@ -214,7 +290,15 @@ function buildLine(rawItems: Item[], page: number): Line {
         .sort((a, b) => a.x - b.x),
     ),
   );
-  const size = Math.max(...merged.map((i) => i.size));
+  // A line's size is its text's: KaTeX sets a formula 1.21 times its prose,
+  // so a sentence with inline math took the math's size and read as a
+  // heading (synth-paper-html: seven invented headings). A glyph of a math
+  // font set in Unicode counts only on a line with no other text.
+  const textSizes = merged.flatMap((i) => {
+    const text = i.glyphs?.filter((g) => !isUnicodeMathFont(g.base));
+    return !i.glyphs?.length || text?.length === i.glyphs.length ? [i.size] : (text ?? []).map((g) => g.size);
+  });
+  const size = Math.max(...(textSizes.length > 0 ? textSizes : merged.map((i) => i.size)));
   // Raises are read per cell: a table cell set smaller on its own baseline
   // is no superscript of the cell beside it (a slide's table of primers read
   // as runs of superscripts).
@@ -238,12 +322,14 @@ function buildLine(rawItems: Item[], page: number): Line {
     // head into a table).
     const proofEnd = item === items[items.length - 1] && QED_RE.test(item.str.trim());
     const wide = prevItem !== null && !proofEnd && opensCell(prevItem, item, size);
+    const least = prevItem !== null ? spaceGap(prevItem, item, size) : size * 0.12;
+    const crossed = prevItem !== null && crossesBack(prevItem, item);
     prevItem = item;
     let cell = cells[cells.length - 1];
     if (!cell || wide) {
       cell = { x: item.x, text: "", runs: [] };
       cells.push(cell);
-    } else if (gap > size * 0.12 && !cell.text.endsWith(" ")) {
+    } else if ((gap > least || crossed) && !cell.text.endsWith(" ")) {
       // Punctuation that attaches left ("PRESS" chip then ".") takes no space.
       const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
       if (!attach) cell.text += " ";
@@ -265,6 +351,7 @@ function buildLine(rawItems: Item[], page: number): Line {
         sup: item.sup,
         sub: item.sub,
         zone: item.zone,
+        look: item.look,
       });
     }
     prevEnd = item.x + item.w;
@@ -443,6 +530,11 @@ export function buildLines(items: Item[], page: number): Line[] {
         ? grouped[k].some((i) => i !== item && i.size >= stats[k].size * 0.75)
         : item.size < stats[k].size * 0.75;
       if (hasBase && cost(item, pool[0]) >= gapTo(item, k)) continue;
+      // A group of prose is a line of its own, whatever its size against the
+      // line beside it: an 11 pt author line under a 24 pt title took the
+      // title's line as its scripts ("…DocumentsAda Lovelace",
+      // synth-paper-tex).
+      if (!hasBase && stats[k].prose) continue;
       moved[pool[0]].push(item);
       kept[k] = kept[k].filter((i) => i !== item);
     }

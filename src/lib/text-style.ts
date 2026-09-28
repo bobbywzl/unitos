@@ -13,9 +13,10 @@ export type HighlightStyle = `highlight:${HexColor}`;
 export type TextColor = NamedColor | CustomColor;
 /** What the edit toolbar and the style route toggle. */
 export type ToggleStyle = "bold" | "italic" | "underline" | TextColor | HighlightStyle;
-/** The styles only the parser writes: monospace runs, small caps, and
-    lowered and raised runs outside math (lib/parse/types.ts StyleSpan). */
-export const PARSED_STYLES = ["code", "smallCaps", "sub", "sup"] as const;
+/** The styles only the parser writes: monospace runs, small caps, struck
+    words (a PDF's rule through them), and lowered and raised runs outside
+    math (lib/parse/types.ts StyleSpan). */
+export const PARSED_STYLES = ["code", "smallCaps", "strike", "sub", "sup"] as const;
 export type ParsedStyle = (typeof PARSED_STYLES)[number];
 /** Every stored style. */
 export type TextStyle = ToggleStyle | ParsedStyle;
@@ -40,12 +41,12 @@ export function isTextStyle(style: string): style is TextStyle {
   return (PARSED_STYLES as readonly string[]).includes(style) || isToggleStyle(style);
 }
 
-/** The classes (globals.css) of the small-caps, sub, and sup styles among
-    the styles over a run of text, each after a space; "" for none. A run
-    both lowered and raised reads raised. */
+/** The classes of the small-caps, strikethrough, sub, and sup styles
+    among the styles over a run of text, each after a space; "" for none. A
+    run both lowered and raised reads raised. */
 export function parsedStyleClass(styles: readonly string[]): string {
   const raise = styles.includes("sup") ? " sup-mark" : styles.includes("sub") ? " sub-mark" : "";
-  return `${styles.includes("smallCaps") ? " small-caps-mark" : ""}${raise}`;
+  return `${styles.includes("smallCaps") ? " small-caps-mark" : ""}${styles.includes("strike") ? " line-through" : ""}${raise}`;
 }
 
 export function isColorStyle(style: string): boolean {

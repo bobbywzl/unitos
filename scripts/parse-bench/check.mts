@@ -1,6 +1,7 @@
 // The benchmark's own checks: each metric on tiny hand-built pairs, the
 // adapters on tiny parses and imports, and the math canonical form on pairs
 // that must and must not score 1. Run: npx tsx scripts/parse-bench/check.mts
+import { readFileSync } from "node:fs";
 import type { RichNode } from "@/lib/docs/schema";
 import type { ParsedBlock } from "@/lib/parse/types";
 import type { Glyph } from "@/lib/parse/pdf/drawing";
@@ -10,6 +11,7 @@ import { glyphScores, placeEquations, type PageGlyphs } from "./glyphs";
 import { mathTokens, sequenceSimilarity } from "./math";
 import { flatten, score, type Scores } from "./metrics";
 import type { RefBlock, Span } from "./model";
+import { CORPUS_PATH } from "./load";
 import { garblesOf, wordsOf } from "./text";
 
 let failed = 0;
@@ -100,10 +102,28 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     type: "doc",
     content: [paragraph("1. Channels and banks 12"), paragraph("2. Floods 14"), paragraph("3. Dams 17"), heading("1. Channels and banks"), paragraph("2. Floods"), heading("2. Floods"), heading("3. Dams")],
   });
+  const entries = unlinked.blocks[0];
   check(
-    "import: three paragraphs in a row that read like headings are contents entries; one alone is no entry",
-    unlinked.blocks.slice(0, 3).every((b) => b.role === "contents") && unlinked.blocks[4]?.role === undefined,
+    "import: three paragraphs in a row that read like headings are a contents list, their numbers the markers; one alone is no entry",
+    entries?.kind === "list" && entries.role === "contents" && entries.items.map((it) => it.marker).join(",") === "1.,2.,3." && unlinked.blocks[2]?.kind === "paragraph" && unlinked.blocks[2].role === undefined,
     JSON.stringify(unlinked.blocks.map((b) => b.role ?? b.kind)),
+  );
+  const linkedEntry = (text: string, indentLeft?: number): RichNode => ({
+    type: "paragraph",
+    ...(indentLeft ? { attrs: { indentLeft } } : {}),
+    content: [{ type: "text", text, marks: [{ type: "link", attrs: { href: "#heading=h1" } }] }],
+  });
+  const toc = fromImport({ type: "doc", content: [linkedEntry("2 Data"), linkedEntry("2.1 Delay variables", 36), linkedEntry("B Data cleaning")] }).blocks[0];
+  check(
+    "import: linked contents entries are one list: the section number the marker, the indent the depth",
+    toc?.kind === "list" && toc.items.map((it) => `${it.depth}${it.marker}:${it.spans.map((s) => s.text).join("")}`).join("|") === "02:Data|12.1:Delay variables|0B:Data cleaning",
+    JSON.stringify(toc),
+  );
+  const parsedToc = fromParse({ title: null, blocks: [{ type: "LIST", text: "C Estimation\n  C.1 Base regression", html: '<ol class="contents"></ol>', page: 1 }] }).blocks[0];
+  check(
+    "parse: a contents list's appendix letters are its markers",
+    parsedToc?.kind === "list" && parsedToc.items.map((it) => `${it.depth}${it.marker}`).join(",") === "0C,1C.1",
+    JSON.stringify(parsedToc),
   );
   const listed = fromParse({ title: null, blocks: [{ type: "LIST", text: "[Bil95] Billingsley, Probability and Measure.\n[Wil91] Williams, Probability with Martingales.", page: 1 }] }).blocks[0];
   check("parse: an author-year label is a list marker", listed?.kind === "list" && listed.items[0].marker === "[Bil95]" && listed.items[1].marker === "[Wil91]", JSON.stringify(listed));
@@ -129,6 +149,19 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("prose inside a table counts as a leak", s.tables.inside > 0 && (s.tables.precision ?? 1) < 1, `inside ${s.tables.inside}`);
 }
 {
+  // A table of formulas: no words in its cells, found by its place, each formula placed as a word is.
+  const f = (latex: string, text: string): Span => ({ text, latex });
+  const grid = (cells: Span[][]): RefBlock => ({ kind: "table", rows: cells.map((row) => ({ cells: row.map((span) => ({ spans: [span] })) })) });
+  const around = (table: RefBlock): RefBlock[] => [para("The two dice fall and the sum is counted."), table, para("Each sum has its own chance of showing.")];
+  const dice = around(grid([[f("k", "k"), f("2", "2"), f("3", "3")], [f("P(S=k)", "P(S=k)"), f("\\frac{1}{36}", "1/36"), f("\\frac{2}{36}", "2/36")]]));
+  const same = score({ blocks: dice }, [], { blocks: around(grid([[f("k", "k"), f("2", "2"), f("3", "3")], [f("P(S=k)", "P(S=k)"), f("\\frac{1}{36}", "1/36"), f("\\frac{2}{36}", "2/36")]])) }).scores;
+  check("tables: a table of formulas is found and its formulas in place score 1", near(same.tables.f1, 1) && same.blocks.byKind.table?.found === 1, `f1 ${same.tables.f1}, found ${same.blocks.byKind.table?.found}`);
+  const swapped = score({ blocks: dice }, [], { blocks: around(grid([[f("k", "k"), f("2", "2"), f("3", "3")], [f("P(S=k)", "P(S=k)"), f("\\frac{2}{36}", "2/36"), f("\\frac{1}{36}", "1/36")]])) }).scores;
+  check("tables: two formulas in each other's cells are out of place", (swapped.tables.f1 ?? 1) < 1 && (swapped.tables.f1 ?? 0) > 0.5, `f1 ${swapped.tables.f1}`);
+  const asWords = score({ blocks: dice }, [], { blocks: around(grid([[{ text: "k" }, { text: "2" }, { text: "3" }], [{ text: "P(S=k)" }, { text: "1/36" }, { text: "2/36" }]])) }).scores;
+  check("tables: a formula read as the same characters in its cell is in place", near(asWords.tables.recall, 1), `recall ${asWords.tables.recall}`);
+}
+{
   const s = run(edit((b) => b.splice(2, 2, b[3], b[2])));
   check("two paragraphs out of order lower reading order", (s.order ?? 1) < 1 && (s.order ?? 0) > 0.5, `order ${s.order?.toFixed(3)}`);
 }
@@ -143,6 +176,51 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("a list item at the wrong depth counts", s.lists.found === 2 && near(s.lists.depth, 0.5), `depth ${s.lists.depth}`);
   const flat = run(edit((b) => b.splice(5, 1, para("Gravel bars form where the current slows."), para("Sand settles behind every bar."))));
   check("list items read as paragraphs are not found", flat.lists.found === 0 && near(flat.lists.recall, 0));
+  const drawn = run(edit((b) => ((b[5] as Extract<RefBlock, { kind: "list" }>).items[0].marker = "a.")));
+  check(
+    "a list item drawn with another marker counts, by depth, and lowers the lists part",
+    near(drawn.lists.markers, 0.5) && drawn.lists.byDepth[0]?.marked === 0 && drawn.lists.byDepth[1]?.marked === 1 && near(drawn.parts.lists, 5 / 6),
+    `markers ${drawn.lists.markers}, lists ${drawn.parts.lists}, ${JSON.stringify(drawn.lists.byDepth)}`,
+  );
+}
+{
+  // An import's list in its own level formats (`listLevels` on the outermost list).
+  const levels = JSON.stringify([
+    { counter: "decimal", format: "%0." },
+    { counter: "lower-alpha", format: "%1)." },
+    ...Array.from({ length: 7 }, (_, k) => ({ counter: "decimal", format: `%${k + 2}.` })),
+  ]);
+  const item = (text: string, ...nested: RichNode[]): RichNode => ({ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text }] }, ...nested] });
+  const doc: RichNode = {
+    type: "doc",
+    content: [{ type: "orderedList", attrs: { listLevels: levels, start: 3 }, content: [item("Third step", { type: "orderedList", content: [item("First case"), item("Second case")] })] }],
+  };
+  const list = fromImport(doc).blocks[0];
+  check(
+    "import: a list's own level formats draw its markers",
+    list?.kind === "list" && list.items.map((it) => it.marker).join(",") === "3.,a).,b).",
+    list?.kind === "list" ? list.items.map((it) => it.marker).join(",") : JSON.stringify(list),
+  );
+}
+{
+  // An item's later paragraph (a centered label under the item's fill-in line) reads as its own paragraph,
+  // with its alignment, between two lists; the items after it keep their depth.
+  const line = (text: string, textAlign?: string): RichNode => ({ type: "paragraph", ...(textAlign ? { attrs: { textAlign } } : {}), content: [{ type: "text", text }] });
+  const item = (...content: RichNode[]): RichNode => ({ type: "listItem", content });
+  const doc: RichNode = {
+    type: "doc",
+    content: [{ type: "bulletList", content: [item(line("Birds"), { type: "bulletList", content: [item(line("Owls"), line("(kind)", "center")), item(line("Wrens"))] })] }],
+  };
+  const shape = fromImport(doc)
+    .blocks.map((b) =>
+      b.kind === "list"
+        ? `list ${b.items.map((it) => `${it.depth}:${it.spans.map((s) => s.text).join("")}`).join(" ")}`
+        : b.kind === "paragraph"
+          ? `paragraph/${b.align ?? "left"} ${b.spans.map((s) => s.text).join("")}`
+          : b.kind,
+    )
+    .join("; ");
+  check("import: an item's later paragraph reads as its own, and the items after it keep their depth", shape === "list 0:Birds 1:Owls; paragraph/center (kind); list 1:Wrens", shape);
 }
 {
   const s = run(edit((b) => (b[4] = { kind: "figure", mathImage: "∫ 1 0 f(x) dx = 1 (1.1)" })));
@@ -280,6 +358,21 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     (drawnOnly.words.recall ?? 1) < 1 && near(relabeled.words.f1, 1) && relabeled.notes?.linked === 2,
     `drawn recall ${drawnOnly.words.recall}; relabeled f1 ${relabeled.words.f1}, ${JSON.stringify(relabeled.notes)}`,
   );
+  // A note the page prints with no mark (a first page's acknowledgment): the
+  // page editor's number at the title's end is no word of the page.
+  const UNMARKED: RefBlock[] = [
+    { kind: "title", spans: [{ text: "Floods of 2025" }] },
+    { kind: "footnote", label: "", spans: [{ text: "The author thanks the gauge keepers of the upper basin." }] },
+  ];
+  const unmarked: RichNode = {
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { docStyle: "title" }, content: [{ type: "text", text: "Floods of 2025" }, { type: "footnoteReference", attrs: { footnoteId: "u" } }] },
+      { type: "footnotes", content: [note("u", "The author thanks the gauge keepers of the upper basin.")] },
+    ],
+  };
+  const noMark = score({ blocks: UNMARKED }, [], fromImport(unmarked, undefined, printedNotes(UNMARKED))).scores;
+  check("notes: a note the page prints with no mark draws no number into the import's words", near(noMark.words.f1, 1) && noMark.notes?.found === 1, `f1 ${noMark.words.f1}, ${JSON.stringify(noMark.notes)}`);
   // A note cited twice ("Shen∗", "Sherif∗"): a mark at either citation links it.
   const TWICE: RefBlock[] = [
     { kind: "paragraph", spans: [{ text: "Lin Shen" }, { text: "∗", sup: true }, { text: " and Omar Sherif" }, { text: "∗", sup: true }, { text: " wrote the survey of the basin." }] },
@@ -332,6 +425,23 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   const item: DocBlock = { kind: "list", items: [{ depth: 1, marker: "-", spans: [{ text: "Sand settles behind every bar." }] }] };
   const word = freeScores(wordPdf, flatten({ blocks: [item, para("THE RIVER COMPARED WITH LAKES")] })).coverage;
   check("free: a hollow bullet's o and a hyphen in capitals are no missing words", near(word.recall, 1) && near(word.precision, 1), `recall ${word.recall}, precision ${word.precision}`);
+  // A Word file's contents list, built from its headings where LibreOffice's PDF leaves the field empty.
+  const contents: DocBlock = { kind: "list", role: "contents", items: [{ depth: 0, marker: "1", spans: [{ text: "Dam wall readings" }] }] };
+  const withContents = flatten({ blocks: [item, para("THE RIVER COMPARED WITH LAKES"), contents] });
+  const asWord = freeScores(wordPdf, withContents, undefined, true).coverage;
+  const asPdf = freeScores(wordPdf, withContents).coverage;
+  check("free: a Word file's contents list is no extra word; a PDF's is", near(asWord.precision, 1) && (asPdf.precision ?? 1) < 1, `word ${asWord.precision}, pdf ${asPdf.precision}`);
+  const blindPdf: PdfText = { ...pdf, raw: [["small"]], lines: [] };
+  const blind = freeScores(blindPdf, flatten({ blocks: [para("Words the text layer reads none of on this page.")] })).coverage;
+  check("free: a text layer that reads fewer than half the candidate's words scores no coverage", blind.blind && blind.f1 === null && blind.recall === null, JSON.stringify(blind));
+  // A table cell's word with its raised note mark, which the text layer reads apart.
+  const markPdf: PdfText = { ...pdf, raw: [["Storage 2", "The yard grew."]], lines: [] };
+  const cell: DocBlock = { kind: "table", rows: [{ cells: [{ spans: [{ text: "Storage" }, { text: "2", sup: true }] }] }] };
+  const marked = freeScores(markPdf, flatten({ blocks: [cell, para("The yard grew.")] })).coverage;
+  check("free: a word and its raised mark count whether the text layer joins them or not", near(marked.recall, 1) && near(marked.precision, 1), `recall ${marked.recall}, precision ${marked.precision}`);
+  // A page number printed with a period ("54."): the candidate's line of it is a page-number line.
+  const numbered = freeScores({ ...pdf, raw: [["The yard grew."]], lines: [] }, flatten({ blocks: [para("The yard grew."), para("54.")] }));
+  check("free: a line that is a page number and a period counts as a page-number line", numbered.numberLines.count === 1, `count ${numbered.numberLines.count}`);
 }
 {
   const ROLE_REF: RefBlock[] = [
@@ -373,6 +483,182 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   };
   const i = score({ blocks: ROLE_REF.slice(0, 2) }, [], fromImport(indented)).scores;
   check("roles: an import's first-line indent and small caps score 1", near(i.roles.indent, 1) && near(i.styles.f1.smallCaps, 1) && near(i.roles.align, 1), `${JSON.stringify(i.roles)} smallCaps ${i.styles.f1.smallCaps}`);
+}
+
+// ── The page's look: styles, alignment, fonts ──────────────────────────────
+
+{
+  // Strikethrough, a text color, a highlight; a link's underline and color are the link's.
+  const LOOK_REF: RefBlock[] = [
+    {
+      kind: "paragraph",
+      spans: [
+        { text: "The gauge read " },
+        { text: "four meters", strike: true },
+        { text: " five meters at dawn, " },
+        { text: "above the flood line", color: "#cc0000" },
+        { text: ", and the " },
+        { text: "levee held", highlight: "#ffff00" },
+        { text: " through the night. See the " },
+        { text: "river report", href: "https://example.com/river" },
+        { text: " for the hourly readings." },
+      ],
+    },
+  ];
+  const look = (spans: Span[]) => score({ blocks: LOOK_REF }, [], { blocks: [{ kind: "paragraph", spans }] }).scores.styles;
+  const same = look((LOOK_REF[0] as { spans: Span[] }).spans.map((s) => (s.href ? { ...s, underline: true, color: "#1155cc" } : s)));
+  check(
+    "styles: strike, color, and highlight score 1; a link's underline and blue are no style",
+    near(same.f1.strike, 1) && near(same.f1.color, 1) && near(same.f1.highlight, 1) && same.f1.underline === null,
+    JSON.stringify(same.f1),
+  );
+  const off = look(
+    (LOOK_REF[0] as { spans: Span[] }).spans.map((s) => (s.strike ? { text: s.text } : s.color ? { ...s, color: "#0000cc" } : s.highlight ? { ...s, highlight: "#fde047" } : s)),
+  );
+  check(
+    "styles: a lost strike scores 0, a red read as blue and a yellow read as a paler yellow are wrong",
+    near(off.f1.strike, 0) && near(off.f1.color, 0) && near(off.f1.highlight, 0),
+    JSON.stringify(off.f1),
+  );
+  // A paragraph set gray as a whole: its gray is the block's color, which the fonts metric scores, whether
+  // the words carry it (the reference, an import's marks) or the block's font does (a parse).
+  const GRAY_REF: RefBlock[] = [{ kind: "paragraph", spans: [{ text: "Prepared in March from the gauge log.", color: "#595959" }], font: { shape: "sans", size: 9, color: "#595959" } }];
+  const grayCand: DocBlock[] = [{ kind: "paragraph", spans: [{ text: "Prepared in March from the gauge log." }], font: { shape: "sans", size: 9, color: "#595959" } }];
+  const gray = score({ blocks: GRAY_REF, fonts: { body: { shape: "sans", size: 10.5 } } }, [], { blocks: grayCand }).scores.styles;
+  check("styles: a block's own color on its words is no colored run", gray.f1.color === null, JSON.stringify(gray.f1));
+  const parsed = fromParse({
+    title: null,
+    blocks: [
+      {
+        type: "PARAGRAPH",
+        text: "old new red marked",
+        page: 1,
+        styles: [
+          { start: 0, end: 3, style: "strike", quotedText: "old" },
+          { start: 8, end: 11, style: "color:#cc0000", quotedText: "red" },
+          { start: 12, end: 18, style: "highlight:#ffff00", quotedText: "marked" },
+          { start: 4, end: 7, style: "color:#1a1a1a", quotedText: "new" },
+        ],
+      },
+    ],
+  }).blocks[0];
+  const got = parsed.kind === "paragraph" ? parsed.spans.map((s) => `${s.text.trim()}${s.strike ? "~" : ""}${s.color ?? ""}${s.highlight ? `^${s.highlight}` : ""}`).join("|") : "";
+  check("parse: strike, color, and highlight styles are read; near-black is no color", got === "old~|new|red#cc0000||marked^#ffff00", got);
+  const imported = fromImport({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "old", marks: [{ type: "strike" }] },
+          { type: "text", text: " red", marks: [{ type: "textStyle", attrs: { color: "#CC0000" } }] },
+          { type: "text", text: " marked", marks: [{ type: "textStyle", attrs: { backgroundColor: "rgb(255, 255, 0)" } }] },
+        ],
+      },
+    ],
+  }).blocks[0];
+  const read = imported.kind === "paragraph" ? imported.spans.map((s) => `${s.text.trim()}${s.strike ? "~" : ""}${s.color ?? ""}${s.highlight ? `^${s.highlight}` : ""}`).join("|") : "";
+  check("import: the strike mark, a text color, and a background color are read", read === "old~|red#cc0000|marked^#ffff00", read);
+}
+{
+  // Alignment: titles, headings, and paragraphs; justified only where a wrap shows it.
+  const long = "The channel widens below the second bend, where the current slows and drops the gravel it carried from the hills.";
+  const ALIGN_REF: RefBlock[] = [
+    { kind: "title", spans: [{ text: "River notes" }], align: "center" },
+    { kind: "paragraph", spans: [{ text: "Summer survey" }], align: "center" },
+    { kind: "paragraph", spans: [{ text: long }], align: "justify" },
+    { kind: "paragraph", spans: [{ text: "A short line of the same column." }], align: "justify" },
+  ];
+  const run = (blocks: DocBlock[], ref = ALIGN_REF) => score({ blocks: ref }, [], { blocks }).scores.roles.align;
+  const right: DocBlock[] = [
+    { kind: "title", spans: [{ text: "River notes" }], align: "center" },
+    { kind: "heading", level: 2, spans: [{ text: "Summer survey" }], align: "center" },
+    { kind: "paragraph", spans: [{ text: long }], align: "justify" },
+    { kind: "paragraph", spans: [{ text: "A short line of the same column." }] },
+  ];
+  check("roles: a centered title and a centered line read as a heading keep their alignment; a short line may drop justify", near(run(right), 1), `align ${run(right)}`);
+  const flat = right.map((b) => ("align" in b ? { ...b, align: undefined } : b)) as DocBlock[];
+  check("roles: a lost center and a lost justify count", near(run(flat), 0), `align ${run(flat)}`);
+  const misses = score({ blocks: ALIGN_REF }, [], { blocks: flat }).scores.roles.misses.align.map((m) => `${m.ref}→${m.cand}`);
+  check("roles: the detail lists each block aligned wrong", misses.join(",") === "center→left,center→left,justify→left", misses.join(","));
+  const unjustified = ALIGN_REF.map((b) => (b.kind === "paragraph" && b.align === "justify" ? { ...b, align: undefined } : b)) as RefBlock[];
+  check("roles: justify is not scored where the reference justifies nothing", near(run(right, unjustified), 1), `align ${run(right, unjustified)}`);
+  const heading = fromParse({ title: "River notes", titleAlign: "center", blocks: [{ type: "HEADING", text: "Summer survey", html: '<h2 class="center">Summer survey</h2>', page: 1 }] }).blocks;
+  check("parse: the title's and a heading's alignment are read", heading[0].kind === "title" && heading[0].align === "center" && heading[1].kind === "heading" && heading[1].align === "center", JSON.stringify(heading));
+}
+{
+  // Headings: an invented heading counts against them.
+  const s = run(edit((b) => (b[8] = { kind: "heading", level: 2, spans: (b[8] as { spans: Span[] }).spans })));
+  check("headings: a paragraph read as a heading lowers the heading score", s.headings.cand === 3 && s.headings.right === 2 && (s.parts.headings ?? 1) < 1, `${s.headings.right} of ${s.headings.cand}, score ${s.parts.headings}`);
+}
+{
+  // Fonts: each role's shape, size (the body's in points, the others' as a ratio to the body), bold, and color.
+  const serif = (size: number, bold = false, color?: string) => ({ shape: "serif" as const, size, ...(bold ? { bold: true as const } : {}), ...(color ? { color } : {}) });
+  const sans = (size: number, bold = false) => ({ shape: "sans" as const, size, ...(bold ? { bold: true as const } : {}) });
+  const FONT_REF: Doc = {
+    fonts: { body: serif(10), title: serif(20, true), h2: serif(12, true, "#1f3864"), caption: serif(8), footnote: serif(8) },
+    blocks: [
+      { kind: "title", spans: [{ text: "Notes on river flow" }] },
+      { kind: "heading", level: 2, spans: [{ text: "Channels and banks" }] },
+      { kind: "paragraph", spans: [{ text: "A channel carries water from its source to its mouth, and its banks shape the flow." }] },
+      { kind: "paragraph", spans: [{ text: "The author line of the survey" }], font: serif(11) },
+      { kind: "figure", caption: [{ text: "Figure 1: The gauge at the upper bridge." }] },
+      { kind: "footnote", label: "1", spans: [{ text: "Measured at dawn in the dry season." }] },
+    ],
+  };
+  const fonts = (cand: Doc) => score(FONT_REF, [], cand).scores.fonts;
+  const same: Doc = structuredClone(FONT_REF);
+  same.blocks.forEach((b) => {
+    const role = b.kind === "title" ? "title" : b.kind === "heading" ? "h2" : b.kind === "figure" ? "caption" : b.kind === "footnote" ? "footnote" : "body";
+    if ("font" in b && b.font) return;
+    Object.assign(b, { font: FONT_REF.fonts?.[role] });
+  });
+  const exact = fonts(same);
+  check("fonts: every role's font right scores 1", near(exact?.score ?? 0, 1), JSON.stringify(exact?.roles));
+  // The same page drawn a tenth larger throughout: the ratios hold, the body's size does not.
+  const scaled: Doc = structuredClone(same);
+  scaled.blocks.forEach((b) => "font" in b && b.font && (b.font = { ...b.font, size: b.font.size * 1.25 }));
+  const big = fonts(scaled);
+  check("fonts: a body a quarter larger is wrong, every other role's ratio right", near(big?.roles.body?.size ?? -1, 0) && near(big?.roles.h2?.size ?? -1, 1) && near(big?.roles.title?.size ?? -1, 1), JSON.stringify(big?.roles));
+  const shapes: Doc = structuredClone(same);
+  shapes.blocks.forEach((b) => "font" in b && b.font && (b.font = sans(b.font.size, Boolean(b.font.bold))));
+  const wrongShape = fonts(shapes);
+  check("fonts: sans where the page sets serif is wrong in every role, and the heading's color is lost", near(wrongShape?.shape ?? -1, 0) && near(wrongShape?.roles.h2?.color ?? -1, 0), JSON.stringify(wrongShape?.roles));
+  const unknown: Doc = { blocks: FONT_REF.blocks.map((b) => ({ ...b, font: undefined })) as DocBlock[] };
+  const none = fonts(unknown);
+  check("fonts: a candidate that says no font scores 0", near(none?.score ?? -1, 0) && none?.roles.body?.known === 0, JSON.stringify(none?.roles));
+  // A hand reference marks a bold paragraph on its words, not with a font: the paragraph's font is the body's, bold.
+  const BOLD_REF: Doc = { fonts: { body: serif(10) }, blocks: [{ kind: "paragraph", spans: [{ text: "Vision: a gauge on every bridge by spring.", bold: true }] }] };
+  const boldPara = score(BOLD_REF, [], { blocks: [{ kind: "paragraph", spans: [{ text: "Vision: a gauge on every bridge by spring.", bold: true }], font: serif(10, true) }] }).scores.fonts;
+  check("fonts: a reference block bold in its words and with no font of its own wants its role's font, bold", near(boldPara?.roles.body?.bold ?? -1, 1), JSON.stringify(boldPara?.roles));
+  const noFonts = score({ blocks: FONT_REF.blocks }, [], same).scores;
+  check("fonts: a reference without fonts leaves the part unscored", noFonts.fonts === null && noFonts.parts.fonts === null);
+  // The import: named styles and marks as drawn.
+  const styles = { namedStyleNormal: JSON.stringify({ font: "Times New Roman", size: 10 }), namedStyleH2: JSON.stringify({ size: 12, bold: true, color: "#1f3864" }) };
+  const doc: RichNode = {
+    type: "doc",
+    attrs: styles,
+    content: [
+      { type: "heading", attrs: { level: 2, textAlign: "center" }, content: [{ type: "text", text: "Channels and banks" }] },
+      { type: "paragraph", attrs: { textAlign: "justify" }, content: [{ type: "text", text: "A channel carries water from its source to its mouth, and its banks shape the flow." }] },
+      { type: "paragraph", content: [{ type: "text", text: "Small print", marks: [{ type: "textStyle", attrs: { fontSize: "8pt", fontFamily: "Courier New" } }] }] },
+    ],
+  };
+  const drawn = fromImport(doc);
+  const faces = drawn.blocks.map((b) => ("font" in b && b.font ? `${b.font.shape} ${b.font.size}${b.font.bold ? " bold" : ""}${b.font.color ? ` ${b.font.color}` : ""}` : "?")).join(" | ");
+  check(
+    "import: a block's font is its named style under its marks, its alignment its own",
+    faces === "serif 12 bold #1f3864 | serif 10 | mono 8" && drawn.fonts?.body.size === 10 && drawn.blocks[0].kind === "heading" && drawn.blocks[0].align === "center" && drawn.blocks[1].kind === "paragraph" && drawn.blocks[1].align === "justify",
+    `${faces}; body ${JSON.stringify(drawn.fonts?.body)}`,
+  );
+  const parsedFonts = fromParse({
+    title: "Notes on river flow",
+    titleFont: { family: "Times New Roman", size: 20, bold: true },
+    bodyFont: { family: "Times New Roman", size: 10 },
+    blocks: [{ type: "PARAGRAPH", text: "A channel carries water.", page: 1, font: { family: "Courier New", size: 9, color: "#CC0000" } }],
+  });
+  const parsedFaces = parsedFonts.blocks.map((b) => ("font" in b && b.font ? `${b.font.shape} ${b.font.size}${b.font.bold ? " bold" : ""}${b.font.color ? ` ${b.font.color}` : ""}` : "?")).join(" | ");
+  check("parse: the title's, the body's, and a block's fonts are read by shape", parsedFaces === "serif 20 bold | mono 9 #cc0000" && parsedFonts.fonts?.body.shape === "serif", parsedFaces);
 }
 
 // ── Glyph checks ────────────────────────────────────────────────────────────
@@ -436,6 +722,7 @@ check("words: a CJK character is a word", wordsOf("河流学 is fun").map((w) =>
 check("words: Kangxi radicals read as ideographs", wordsOf("⼀").map((w) => w.w).join("") === "一");
 const garbleKinds = (t: string) => garblesOf(t).map((g) => g.kind);
 check("garbles: CMSY leftovers are found", garbleKinds("n6= m, ω7→ X(ω), A =⇒ B").length === 3);
+check("garbles: a 6 after a relation is a number (a fraction read flat)", garbleKinds("z = x − μ σ = 6 = 1.5").length === 0, garbleKinds("z = x − μ σ = 6 = 1.5").join(","));
 check("garbles: real math and dates are not", garbleKinds("x+6=0, a 7-day week, 2016=2016").length === 0, garbleKinds("x+6=0, a 7-day week, 2016=2016").join(", "));
 check("garbles: control and private-use characters are found", garbleKinds("a\u0001b  �").length === 3);
 
@@ -501,6 +788,109 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   check("parse: a figure of math is an equation image", page2.blocks[3].kind === "figure" && page2.blocks[3].mathImage !== undefined);
   const withBreak = fromParse({ title: null, blocks: [blocks[1]] });
   check("parse: a page start inside a block is a break", withBreak.blocks[0].breaks?.[0]?.at === 19);
+  const cells = fromParse({
+    title: null,
+    blocks: [
+      {
+        type: "TABLE",
+        text: "Table 1: Flows\nCost\tE = mc2",
+        html: '<table><caption>Table 1: Flows<span class="cell-gap">\n</span></caption><tbody><tr><td>1.0·10<sup>20</sup> H<sub>2</sub>O<span class="cell-gap">\t</span></td><td><span data-type="inline-math" data-latex="E = mc^2">E = mc2</span></td></tr></tbody></table>',
+        page: 1,
+      },
+    ],
+  }).blocks[0];
+  const flags = cells.kind === "table" ? cells.rows[0].cells[0].spans.map((s) => `${s.text}${s.sup ? "^" : ""}${s.sub ? "_" : ""}`).join("|") : "";
+  const formula = cells.kind === "table" ? cells.rows[0].cells[1].spans[0] : undefined;
+  check(
+    "parse: a cell keeps its sup and sub, an inline formula its TeX, and the table its caption",
+    flags === "1.0·10|20^| H|2_|O" && formula?.latex === "E = mc^2" && formula.text === "E = mc2" && cells.kind === "table" && cells.caption?.[0]?.text.startsWith("Table 1: Flows") === true,
+    `${flags} ${JSON.stringify(formula)}`,
+  );
+}
+{
+  // The converter's table caption: a centered 9 pt paragraph right before the table.
+  const small = (text: string) => ({ type: "text", text, marks: [{ type: "textStyle", attrs: { fontSize: "9pt" } }] });
+  const doc: RichNode = {
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { textAlign: "center" }, content: [small("Table 1: River flows")] },
+      { type: "table", content: [{ type: "tableRow", content: [{ type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "Q" }] }] }] }] },
+      { type: "paragraph", content: [small("* All flows are in cubic meters a second.")] },
+    ],
+  };
+  const read = fromImport(doc).blocks;
+  check(
+    "import: a centered 9 pt paragraph right before a table is its caption",
+    read[0]?.kind === "table" && read[0].caption?.map((s) => s.text).join("") === "Table 1: River flows",
+    JSON.stringify(read[0]),
+  );
+  check(
+    "import: a small paragraph opening with a note symbol is a footnote",
+    read[1]?.kind === "footnote" && read[1].label === "*" && read[1].spans.map((s) => s.text).join("") === "All flows are in cubic meters a second.",
+    JSON.stringify(read[1]),
+  );
+}
+{
+  // A table cell's colored, highlighted, and struck words (a Word table's cell html).
+  const html = '<table><tr><td><span style="color:#00b050"><strong>A</strong></span> grade</td><td><span style="background-color:#ffff00">late</span> <s>old</s></td></tr></table>';
+  const table = fromParse({ title: null, blocks: [{ type: "TABLE", text: "A grade\tlate old", html, page: 1 }] }).blocks[0];
+  const cells = table?.kind === "table" ? table.rows[0].cells.map((c) => c.spans.map((x) => `${x.text.trim()}${x.color ?? ""}${x.highlight ? `^${x.highlight}` : ""}${x.strike ? "~" : ""}`).filter((t) => t).join("|")).join(" / ") : "";
+  check("parse: a table cell's color, highlight, and strikethrough are read", cells === "A#00b050|grade / late^#ffff00|old~", cells);
+}
+{
+  // A table that runs onto the next page: its text opens with the caption's line, so row r is line r + 1; the
+  // caption is on its own line's page.
+  const text = "Table 3: Unary commands\nBackslash\tbslash\nColon\tcolon";
+  const html = "<table><caption>Table 3: Unary commands</caption><tr><td>Backslash</td><td>bslash</td></tr><tr><td>Colon</td><td>colon</td></tr></table>";
+  const second = fromParse({ title: null, blocks: [{ type: "TABLE", text, html, page: 1, pageStarts: [{ offset: text.indexOf("Backslash"), page: 2 }] }] }, [2, 2]).blocks[0];
+  const got = second?.kind === "table" ? `${second.caption ? "caption " : ""}${second.rows.map((r) => r.cells[0].spans.map((x) => x.text).join("")).join(",")}` : JSON.stringify(second);
+  check("parse: a table's rows on a page past its caption's are judged by their own lines, the caption by its own", got === "Backslash,Colon", got);
+}
+{
+  // An affiliation under the authors opens with a raised number in a small size, as an unlinked footnote does:
+  // it is a note only once the body has begun. A note symbol the converter set as a formula is the label.
+  const small = (text: string, raised = false) => ({ type: "text", text, marks: [{ type: "textStyle", attrs: { fontSize: "8pt" } }, ...(raised ? [{ type: "superscript" }] : [])] });
+  const body = "The river rose through the night and the gauge at the upper dam read above the flood line for six hours, so the crews opened the spillway and walked the levee from the dam to the bridge until the water fell again.";
+  const doc: RichNode = {
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [small("1", true), small("Institute of River Studies, Lakeside.")] },
+      { type: "paragraph", content: [{ type: "text", text: body }] },
+      { type: "paragraph", content: [small("2", true), small(" Readings are hourly.")] },
+      { type: "paragraph", content: [{ type: "inlineMath", attrs: { latex: "\\ddagger" } }, small(" Contact the gauge office.")] },
+    ],
+  };
+  const shape = fromImport(doc).blocks.map((b) => (b.kind === "footnote" ? `footnote ${b.label}` : b.kind)).join(", ");
+  check("import: an affiliation before the body is no footnote; notes after it are, a formula's symbol their label", shape === "paragraph, paragraph, footnote 2, footnote ‡", shape);
+}
+{
+  // A caption at the body's own size (a page set in 9 pt) still captions its table; a centered small line
+  // under a title, far from any table, is a paragraph.
+  const sized = (text: string) => ({ type: "text", text, marks: [{ type: "textStyle", attrs: { fontSize: "9pt" } }] });
+  const table: RichNode = { type: "table", content: [{ type: "tableRow", content: [{ type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "Q" }] }] }] }] };
+  const doc: RichNode = {
+    type: "doc",
+    attrs: { namedStyleNormal: JSON.stringify({ font: "Times New Roman", size: 9 }) },
+    content: [
+      { type: "paragraph", attrs: { textAlign: "center" }, content: [sized("for the year of the survey")] },
+      { type: "paragraph", content: [{ type: "text", text: "The gauge log runs from March." }] },
+      { type: "paragraph", attrs: { textAlign: "center" }, content: [sized("Fig. 3. The upper gauge.")] },
+      { type: "paragraph", content: [{ type: "text", text: "The lake rose in April." }] },
+      { type: "paragraph", attrs: { textAlign: "center" }, content: [sized("Table 2: Lake levels")] },
+      table,
+      { type: "paragraph", attrs: { textAlign: "center" }, content: [{ type: "text", text: "(In thousands of liters)", marks: [{ type: "textStyle", attrs: { fontSize: "10pt" } }] }] },
+      table,
+    ],
+  };
+  const read = fromImport(doc).blocks;
+  const shape = read
+    .map((b) => `${b.kind}${b.kind === "paragraph" && b.role ? `/${b.role}` : ""}${b.kind === "paragraph" && b.align ? `/${b.align}` : ""}${b.kind === "table" && b.caption ? `+caption` : ""}`)
+    .join(" ");
+  check(
+    "import: a line right before a table is its caption with a caption's label or a size under the body's; elsewhere only with its label",
+    shape === "paragraph/center paragraph paragraph/caption/center paragraph table+caption paragraph/center table",
+    shape,
+  );
 }
 {
   const doc: RichNode = {
@@ -548,6 +938,13 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     first.kind === "paragraph" && first.spans.map((s) => s.text).join("") === "page two begins" && first.spans[0].italic === true,
     first.kind === "paragraph" ? first.spans.map((s) => s.text).join("") : first.kind,
   );
+}
+
+{
+  // The repository is public: the committed corpus list names none of the owner's files (load.ts).
+  const listed = JSON.parse(readFileSync(CORPUS_PATH, "utf8")) as { id: string; license?: string; pdf?: string; docx?: string }[];
+  const owner = listed.filter((e) => e.license === "private" || [e.pdf, e.docx].some((f) => f?.startsWith(".bench/private/")));
+  check("corpus.json names none of the owner's files", owner.length === 0, `${owner.length} entries`);
 }
 
 console.log(failed === 0 ? "\nAll checks pass." : `\n${failed} checks fail.`);

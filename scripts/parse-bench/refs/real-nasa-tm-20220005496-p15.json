@@ -1,0 +1,285 @@
+{
+ "id": "real-nasa-tm-20220005496-p15",
+ "category": "report",
+ "source": {
+  "pdf": ".bench/real/nasa-tm-20220005496-word.pdf",
+  "url": "https://ntrs.nasa.gov/api/citations/20220005496/downloads/TM_Application_RotorDisk_V3.pdf"
+ },
+ "pages": [
+  15,
+  16
+ ],
+ "license": "public-domain",
+ "provenance": "hand",
+ "notes": "Jasim U. Ahmad, 'Application of Rotor Disk Model in the Overflow CFD Code', NASA technical memorandum 20220005496 (NTRS: public use permitted), saved as PDF by Microsoft Word; Cambria text, equations in Word's math (Cambria Math, whose letters are Unicode math italics: 𝜃, 𝑽 bold italic, ℝ). Scored: pages 15-16 (printed 10-11): display equations set left of centre with their numbers at a tab stop on the right ((2)-(8): the label apart from the LaTeX), sub- and superscripts, a bold vector V, a dot accent (β̇ is β with U+0307), 'sin'/'cos' typed as italic letters in (2)-(3) and upright 'sin' in (6), φ (U+1D711, \\varphi) and ϕ (U+1D719, \\phi) kept apart, inline formulas inside sentences, paragraphs with Word's half-inch first-line indent, a paragraph running across the page break, 'right-handed' and 'non-conventional' hyphens kept at line ends. The source's typos ('eqautions', 'compoents') stay. Page numbers are furniture.",
+ "furniture": [
+  "10",
+  "11"
+ ],
+ "blocks": [
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "vectors. The radial component points toward the blade tip, and the normal component points in the direction of the positive lift. The chordwise component is determined such that the orientation vectors form a right-handed system. The direction of the chordwise component depends on the direction of the rotor rotation. For counterclockwise rotation, the chordwise vector points toward the leading edge of the blade and for clockwise rotation, the vector points toward the trailing edge."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The blade motions computed by CAMRAD II are interfaced with OVERFLOW through motion variables. The various blade angles, such as flapping, collective and cyclic control angles, and lead-lag angles are defined in motion variables that are used in computing the source terms in the flow solver. These angles used in computing blade element and rotor orientations are shown below. The lead-lag effects are not included here for now."
+    }
+   ],
+   "indent": "first"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Blade feathering motion (considering only first harmonics) is given by"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\theta = \\theta_{0} + \\theta_{1s} sin\\psi + \\theta_{1c} cos\\psi + \\phi_{\\tau}",
+   "label": "(2)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "ϕτ",
+     "latex": "\\phi_{\\tau}"
+    },
+    {
+     "text": " is the angle due to the torsional deformation."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Flapping motion of simple harmonics is written as"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\beta = \\beta_{0} + \\beta_{1s} sin\\psi + \\beta_{1c} cos\\psi",
+   "label": "(3)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The collective and cyclical motions are swashplate control for conventional helicopters. For non-conventional rotorcraft, such as small electrically powered fixed pitch multicopter vehicles, the thrust changes are achieved by changing the rotor speed using an Electrical Speed Controller (ESC). In the loosely coupled framework, the speed control prediction by CAMRAD II is implemented through the same motion variables as in the OVERFLOW code."
+    }
+   ],
+   "indent": "first"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Figure 6 shows an idealized transformation of an articulated rotor for a typical helicopter. CAMRADII computes details of all the transformation of hinges and links. Following the hinge rotations, the orientation vectors are rotated by the blade azimuth angle. A series of transformations are needed for computing blade element forces and velocities that are related to the source term evaluation in computational or inertial frame "
+    },
+    {
+     "text": "{Icfd: XYZ}",
+     "latex": "\\{I_{cfd}: XYZ\\}"
+    },
+    {
+     "text": ". Attached to the rotor hub is the non-rotating hub plane coordinate "
+    },
+    {
+     "text": "{H: xHyHzH}",
+     "latex": "\\{H: x^{H} y^{H} z^{H}\\}"
+    },
+    {
+     "text": " and rotating hub frame "
+    },
+    {
+     "text": "{Hr: xryrzr}",
+     "latex": "\\{H_{r}: x^{r} y^{r} z^{r}\\}"
+    },
+    {
+     "text": " and the blade element is attached to rotating frame "
+    },
+    {
+     "text": "{E: xeyeze}",
+     "latex": "\\{E: x^{e} y^{e} z^{e}\\}"
+    },
+    {
+     "text": ". The detailed description of these transformations can be found in many references [1-4, 7]. Instead here, the eqautions for various transformed components are given in Eq. (4-8). Equations (4) shows the velocity compoents in the non-rotating frame coordinate "
+    },
+    {
+     "text": "{H: xHyHzH}",
+     "latex": "\\{H: x^{H} y^{H} z^{H}\\}"
+    },
+    {
+     "text": ". This equation as transformed to BET rotating frame "
+    },
+    {
+     "text": "{E: xeyeze}",
+     "latex": "\\{E: x^{e} y^{e} z^{e}\\}"
+    },
+    {
+     "text": ", is shown in Eq. (5-6). The induced angle and the effective angles of attack are shown in Eq. (7-8). Knowing local Mach number at {E}, and effective angles, lift and drags are computed using the airfoil tables. After computing blade element properties, namely "
+    },
+    {
+     "text": "V∈{E}",
+     "latex": "V \\in \\{E\\}"
+    },
+    {
+     "text": " where "
+    },
+    {
+     "text": "V∈ℝ3",
+     "latex": "V \\in \\mathbb{R}^{3}"
+    },
+    {
+     "text": ", inverse transformations are used to compute source terms "
+    },
+    {
+     "text": "S∈{XYZ}",
+     "latex": "S \\in \\{XYZ\\}"
+    },
+    {
+     "text": "."
+    }
+   ],
+   "indent": "first"
+  },
+  {
+   "kind": "equation",
+   "latex": "\\boldsymbol{V}_{non-rotating} = [T]_{I} V_{cfd}",
+   "label": "(4)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "where "
+    },
+    {
+     "text": "Vnon−rotating",
+     "latex": "\\boldsymbol{V}_{non-rotating}"
+    },
+    {
+     "text": " represent radial, tangential, and axial components, "
+    },
+    {
+     "text": "[T]IH",
+     "latex": "[T]_{IH}"
+    },
+    {
+     "text": " is the transformation matrix."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The blade-fixed rotating components are given as:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\boldsymbol{V}_{BET} = [T]_{H} [T]_{E} \\boldsymbol{V}_{non-rotating}",
+   "label": "(5)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "from which normal component is"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "v_{n} = v_{ncfd} - kr\\dot{\\beta} - v_{r} \\sin\\beta",
+   "label": "(6)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "here "
+    },
+    {
+     "text": "k= 1",
+     "latex": "k = 1"
+    },
+    {
+     "text": " for counterclockwise rotating rotor, "
+    },
+    {
+     "text": "k= −1",
+     "latex": "k = -1"
+    },
+    {
+     "text": " for clockwise rotating rotor."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "These velocity components and angles are shown in a blade element diagram of Figure 7 for a forward flight."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Induced angle "
+    },
+    {
+     "text": "φ",
+     "latex": "\\varphi"
+    },
+    {
+     "text": " is given as"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\varphi = atan2(v_{n}, v_{t})",
+   "label": "(7)"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "vt",
+     "latex": "v_{t}"
+    },
+    {
+     "text": " is the tangential component from eq. (5)"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Effective angle of attack to be used with airfoil table is given by"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\alpha_{e} = \\theta + \\varphi",
+   "label": "(8)"
+  }
+ ]
+}

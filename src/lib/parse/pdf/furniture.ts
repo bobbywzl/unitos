@@ -4,8 +4,8 @@
 // size, and weight of furniture on other pages. parsePdf drops them before
 // segmentation.
 //
-// A fixed band (the top and bottom 8.5% of the page) missed most heads: the
-// owner's notes and Grinstead–Snell set them 13% down, the Supreme Court's
+// A fixed band (the top and bottom 8.5% of the page) missed most heads: a
+// book of lecture notes and Grinstead–Snell set them 13% down, the Supreme Court's
 // slip opinions 15% and 18.5% down in two rows, a scanned book's foot sits
 // 83% down (census class 4). So each page's own first and last rows are the
 // candidates, and a candidate drops only on evidence from other pages.
@@ -230,13 +230,24 @@ function rowsOf(lines: Line[], page: number, height: number): Row[] {
         ? edges.filter((t) => /^\d{1,4}$/.test(t)).map(Number)
         : [];
     const key = keyOf(text);
+    // The size most of the row's characters are set in: a head's number set
+    // larger than its words (a 12.8 pt "1" in the 8.5 pt head "第 1 節 …",
+    // cjk-mic-whitepaper-r06-1-2-1) leaves the row at its words' size.
+    const bySize = new Map<number, number>();
+    for (const l of lines) {
+      for (const i of l.items) {
+        const size = Math.round(i.size * 10) / 10;
+        bySize.set(size, (bySize.get(size) ?? 0) + i.str.trim().length);
+      }
+    }
+    const size = bySize.size > 0 ? [...bySize].reduce((a, b) => (b[1] > a[1] ? b : a))[0] : longest.size;
     return {
       page,
       lines,
       y: group[0].y,
       top: height - group[0].y,
       bottom: group[0].y,
-      size: longest.size,
+      size,
       bold,
       text,
       words: tokens.length,
@@ -323,12 +334,17 @@ function candidatesOf(rows: Row[], lead: number): Candidate[] {
 
 // ── Comparing rows ──────────────────────────────────────────────────────────
 
-// The same words, digits aside. OCR spells a foot differently on each page
-// ("CHALLENGE TO APOLLO", "CHALLENGE TO _POLLO", "CHRLLENGE TO APOLLO"):
-// letters within a fifth, and every word of four letters or more close to
-// one of the other's, so two captions that differ in one word stay apart.
+// The same words, digits aside, in any order: facing pages set a head's
+// parts in mirror order ("第 1 節 <title>" on one, "<title> 第 1 節" on the
+// next, cjk-mic-whitepaper-r06-1-2-1). OCR spells a foot differently on
+// each page ("CHALLENGE TO APOLLO", "CHALLENGE TO _POLLO", "CHRLLENGE TO
+// APOLLO"): letters within a fifth, and every word of four letters or more
+// close to one of the other's, so two captions that differ in one word
+// stay apart.
 function sameWords(a: Row, b: Row): boolean {
   if (a.key === b.key) return true;
+  const words = (key: string) => key.split(" ").sort().join(" ");
+  if (words(a.key) === words(b.key)) return true;
   const n = Math.min(a.letters.length, b.letters.length);
   if (n < 10 || editDistance(a.letters, b.letters, Math.floor(n * 0.2)) > Math.floor(n * 0.2)) return false;
   const near = (w: string, list: string[]) => list.some((v) => editDistance(w, v, Math.floor(w.length / 3)) <= Math.floor(w.length / 3));

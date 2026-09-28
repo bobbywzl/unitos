@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import "@/lib/pdf-runtime";
-import { extractText } from "unpdf";
+import { PDF_CMAPS } from "@/lib/pdf-runtime";
+import { extractText, getDocumentProxy } from "unpdf";
 import { z } from "zod";
 import { capFileName, capFileText, FILE_MAX_BYTES, MEDIA_MAX_BYTES } from "@/lib/assistant/attachments";
 import { mediaAttachmentText } from "@/lib/assistant/media";
@@ -75,7 +75,12 @@ export async function POST(req: Request) {
       let text: string;
       try {
         // pdf.js transfers (detaches) the buffer it receives — parse a copy.
-        text = (await extractText(new Uint8Array(bytes), { mergePages: true })).text;
+        const pdf = await getDocumentProxy(new Uint8Array(bytes), PDF_CMAPS);
+        try {
+          text = (await extractText(pdf, { mergePages: true })).text;
+        } finally {
+          await pdf.loadingTask.destroy();
+        }
       } catch (err) {
         console.error("[assistant] attach-drive: PDF unreadable:", err);
         return NextResponse.json({ error: t("api.attachmentUnreadable") }, { status: 422 });

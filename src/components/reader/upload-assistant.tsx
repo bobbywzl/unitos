@@ -416,7 +416,7 @@ export function UploadAssistant({
       return t("panes.fileTooLarge", { name: file.name, mb: 200 });
     }
     if (
-      (kind === "pdf" || kind === "slides-file" || kind === "sheets-file") &&
+      (kind === "pdf" || kind === "docx-file" || kind === "slides-file" || kind === "sheets-file") &&
       file.sizeBytes !== null &&
       file.sizeBytes > MAX_PDF_BYTES
     ) {

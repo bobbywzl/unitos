@@ -7,14 +7,15 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Browser } from "playwright-core";
+import type { Font, FontRole } from "../model";
 import { picturePdf, picturePng } from "./pictures";
 import { SOURCE_DATE_EPOCH } from "./stamp";
-import { tableGrid, type Group, type HeadingLevel, type Leaf, type RenderBlock, type Slot, type SpecCell, type SpecSpan, type TableLayout } from "./spec";
+import { leafFont, tableGrid, type Group, type HeadingLevel, type Leaf, type LeafLook, type RenderBlock, type Role, type Slot, type SpecCell, type SpecSpan, type TableLayout } from "./spec";
 
 export type TexLayout = {
   documentClass: string;
   classOptions?: string;
-  /** No ToUnicode maps, as in the owner's notes: a parser reads glyph names, and math glyphs garble. */
+  /** No ToUnicode maps, as in many pdfLaTeX files: a parser reads glyph names, and math glyphs garble. */
   noToUnicode?: true;
   /** Packages and settings after \documentclass. */
   preamble: string;
@@ -33,7 +34,38 @@ export type TexLayout = {
   captionJoin?: string;
   /** The page's head and foot bands in points from the top and bottom edges: what prints there is furniture. */
   bands: { top: number; bottom: number };
+  /** The fonts the class sets, as pdflatex prints them (read from the PDF with PyMuPDF): the body's, the
+      title's, each heading level's, captions', footnotes', and a front-matter paragraph's by its role (a role
+      not named takes the body's). */
+  fonts: { body: Font } & Partial<Record<Exclude<FontRole, "body"> | Role, Font>>;
+  /** The heading levels the class centers (IEEEtran's and amsart's sections, amsbook's chapters and sections). */
+  centered: HeadingLevel[];
+  /** The class justifies its paragraphs (every class here but beamer, which sets them ragged right). */
+  justified: boolean;
 };
+
+/** Each leaf's font and alignment as the class sets them: the title centered, a heading as `centered` says, a
+    paragraph as the spec aligns it or else justified when the class justifies. */
+export function texLooks(layout: TexLayout, leaves: Leaf[]): LeafLook[] {
+  const f = layout.fonts;
+  return leaves.map(({ block }): LeafLook => {
+    const role =
+      block.kind === "title" ? f.title
+      : block.kind === "heading" ? f[`h${block.level}`]
+      : block.kind === "paragraph" ? ((block.role ? f[block.role] : undefined) ?? f.body)
+      : block.kind === "list" ? f.body
+      : block.kind === "footnote" ? f.footnote
+      : block.kind === "table" || block.kind === "figure" ? f.caption
+      : undefined;
+    const align =
+      block.kind === "title" ? "center"
+      : block.kind === "heading" ? (!block.runIn && layout.centered.includes(block.level) ? "center" : undefined)
+      : block.kind === "paragraph" ? (block.align ?? (layout.justified ? "justify" : undefined))
+      : undefined;
+    const font = leafFont(role, block);
+    return { ...(font ? { font } : {}), ...(align ? { align } : {}) };
+  });
+}
 
 // ---------------------------------------------------------------- text
 
@@ -67,6 +99,7 @@ function texSpans(spans: SpecSpan[], base: Base = {}, marks: "footnote" | "thank
         return `\\footnote[${s.text}]{${texSpans(s.footnote)}}`;
       }
       if (s.latex) return `$${s.latex}$`;
+      if (s.strike || s.color || s.highlight) throw new Error(`“${s.text}”: LaTeX renderings print no strikethrough, color, or highlight`);
       if (s.dropCap) return `\\IEEEPARstart{${texEscape(s.text[0])}}{${texEscape(s.text.slice(1))}}`;
       let out = s.code ? `\\texttt{${codeEscape(s.text)}}` : texEscape(s.text);
       if (s.smallCaps && !base.smallCaps) out = `\\textsc{${out}}`;
@@ -319,6 +352,8 @@ export function texSource(layout: TexLayout, leaves: Leaf[], figures: string[]):
       case "separator":
         out.push("\n\\noindent\\rule{\\linewidth}{0.4pt}\n");
         break;
+      case "contents":
+        throw new Error("a contents field is a Word rendering's alone");
       case "pagebreak":
         out.push("\\clearpage");
         break;

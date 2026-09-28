@@ -1,0 +1,407 @@
+{
+ "id": "real-invoice-govuk-p1",
+ "category": "form",
+ "source": {
+  "pdf": ".bench/real/invoice-govuk-plugin-grant.pdf",
+  "url": "https://assets.publishing.service.gov.uk/media/62a21964d3bf7f036750b0d2/plug-in-vehicle-grant-portal-sample-invoice.pdf"
+ },
+ "pages": [
+  1,
+  1
+ ],
+ "license": "open",
+ "provenance": "hand",
+ "notes": "UK Office for Zero Emission Vehicles, plug-in vehicle grant sample invoice (GOV.UK, Open Government Licence v3.0), made in Word (Acrobat PDFMaker 21). Scored: the office's logo (an image: its words are not text), the title, a lead-in paragraph, a '•' list with wrapped items, then the invoice inside a drawn frame (a lone box, not a table): the two address labels side by side (a borderless row), and one Word table whose rows change their column grid (five cells for the order details, four for the lines: two tables here), green header rows, a light-green subtotal row, empty cells, a raised note mark (Vehicle Discount¹, its note not on the page). The big grey 'Sample' set diagonally across the page is a watermark: furniture, never text.",
+ "furniture": [
+  "Sample"
+ ],
+ "blocks": [
+  {
+   "kind": "figure"
+  },
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "Sample invoice"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This is an example invoice. Your systems and invoice structure may be different. However, it is essential that any invoice shows:"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "headed paper that includes retailer information, name and address, VAT number and company registration number, finance/lease details if applicable and end customer/business details"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "the baseline price itemised to show the VAT, number plates, less any discount offered to the customer"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "the grant amount shown separately"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Invoice to:"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Deliver to:"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Order No.:"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Order Date:"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Salesperson:"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Delivery Date:"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Tax Point:"
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Vehicle: [Vehicle Model] VIN No.: Engine No.:"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Trim: Key No.:"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": [
+        {
+         "text": "Registration Registration Date:"
+        }
+       ]
+      },
+      {
+       "spans": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Description"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Value"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Vat (@20%)"
+        }
+       ],
+       "header": true
+      },
+      {
+       "spans": [
+        {
+         "text": "Total (inc VAT)"
+        }
+       ],
+       "header": true
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Vehicle price"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "£34,075"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "First Licence Plates"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "£23.63"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Vehicle Discount"
+        },
+        {
+         "text": "1",
+         "sup": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "-£2,000"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Subtotal:"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "£32,098.63"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "£6,419.73"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "£38,518.36"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Plug in Small Van Grant (@ 35% of baseline price of vehicle (capped at £2500) (purchase price: £38,518.36)"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "-£2,500"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "-"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "-£2,500"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Subtotal:"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "-"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "£6,419.73"
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "£36,018.36"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Summary Invoice total: £36,018.36 Part payment received: £5,000"
+        }
+       ]
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      },
+      {
+       "spans": []
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

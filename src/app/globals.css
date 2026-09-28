@@ -1126,7 +1126,7 @@ ellipse.anchor-flash {
    body keeps the app's sans, and the headings, the title, and the title's
    editor (document-title.tsx) leave the display face for the same sans.
    Unlayered like the heading rule above, so it wins over it. */
-.reader-prose[data-font="sans"] :is(h1, h2, h3),
+.reader-prose[data-font="sans"] :is(h1, h2, h3, h4, h5, h6),
 .reader-prose[data-font="sans"] .reader-title-editor {
   font-family: var(--font-figtree), system-ui, sans-serif;
   font-weight: 600;

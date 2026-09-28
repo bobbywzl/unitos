@@ -1,4 +1,5 @@
 import type { BlockType } from "@prisma/client";
+import type { CustomColor, HighlightStyle } from "@/lib/text-style";
 import type { Region } from "@/lib/video/types";
 
 // One entry in the document's reference list. Formal entries come from the
@@ -25,14 +26,37 @@ export type CitationSpan = {
 // runs (identifiers, badges) inside prose. "smallCaps" marks words set in a
 // small-caps font (a theorem label, a legal defined term). "sub" and "sup"
 // mark lowered and raised runs outside math (H₂O, 10³, "1st", a footnote
-// mark). Stored on Block.styles; quotedText re-resolves the span after edits
-// and re-parses, like every other anchor.
+// mark). A PDF's drawing gives "underline" (a rule under the run's
+// baseline), "strike" (a rule through its middle), "color:#rrggbb" (its
+// glyphs' fill; black, near-black, and a link's blue are none), and
+// "highlight:#rrggbb" (a filled box behind it), in the vocabulary of
+// lib/text-style.ts. "font:<face>" and "size:<points>" mark a run set in
+// another face or size than its block's (ParsedBlock.font). Stored on
+// Block.styles; quotedText re-resolves the span after edits and re-parses,
+// like every other anchor.
 export type StyleSpan = {
   start: number;
   end: number;
-  style: "bold" | "italic" | "underline" | "code" | "smallCaps" | "sub" | "sup";
+  style:
+    | "bold"
+    | "italic"
+    | "underline"
+    | "strike"
+    | "code"
+    | "smallCaps"
+    | "sub"
+    | "sup"
+    | CustomColor
+    | HighlightStyle
+    | `font:${string}`
+    | `size:${number}`;
   quotedText: string;
 };
+
+// The look of words as the page sets them (a PDF parse): the face as the
+// page editor names it (lib/parse/pdf/faces.ts), the size in points to a
+// half point, bold, italic, and the color (#rrggbb; none for black).
+export type TextFont = { family: string; size: number; bold?: true; italic?: true; color?: string };
 
 // One inline formula over block plain text: the text keeps the formula's
 // readable characters (σ(𝒜α)), latex is the formula (\sigma(\mathcal{A}_\alpha)).
@@ -93,6 +117,15 @@ export type ParsedBlock = {
   footnote?: { label: string };
   // PDF blocks: the footnote references in the text, in order.
   footnoteRefs?: FootnoteRef[];
+  // PDF text blocks: the look most of the block's characters take. The
+  // import reads it for the named styles, and for a block set in another
+  // face, size, or color than its named style.
+  font?: TextFont;
+  // PDF text blocks: the space between the block and the next text block in
+  // its column on the same page, beyond the text's line pitch, in points (a
+  // blank line, a Word paragraph's space after); absent where a figure, a
+  // table, or the page's end follows. The import's space after.
+  spaceAfter?: number;
   // URL blocks, in memory only: the id of the element the block came from
   // (its own id, or the id of a wrapper whose first block it is), the target
   // a contents entry's targetFragment resolves against. Stripped before save.
@@ -138,6 +171,12 @@ export type ParsedDocument = {
   // only when the PDF names its pages otherwise than 1..n. A page the PDF
   // leaves unnamed reads as its number. Stored on Document.pageLabels.
   pageLabels?: string[];
+  // PDF parses: the body's look (the import's Normal text), and the title's
+  // look and alignment when the title came from the page (the import's
+  // Title).
+  bodyFont?: TextFont;
+  titleFont?: TextFont;
+  titleAlign?: "center" | "right";
 };
 
 /** Document.references as stored Json → typed entries. Defensive: bad rows drop. */
@@ -263,7 +302,25 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     blocks, linked to their marks; small caps, sub, and sup are styles;
 //     reading order is a recursive XY-cut; list markers are read by family;
 //     a drop cap joins its word. A Word file parses from its own structure.
+// 21: the parse loop's round 2 (SPEC.md §30, §31) — PDF: the page's look
+//     travels: each block's font (face, size, weight, color), the body's and
+//     the title's font and the title's alignment, and a run in another face,
+//     size, or color; underline, strikethrough, highlight, and text color
+//     come from the drawing; a line centered, flush right, or justified says
+//     so. Math set in KaTeX's fonts or an OpenType math font reads as TeX, as
+//     TeX's own fonts do; an array keeps its rules, and a label over a
+//     relation or under a brace joins its formula. A table's header cell
+//     spans the columns under it, a cell keeps its scripts, styles, and
+//     formulas, and a caption keeps its face and size. A figure's caption
+//     takes its panels' captions and its note or source line. A scan's
+//     footnotes, author notes, title notes, and notes in table cells link to
+//     their marks. Headings go to level six, a slide ranks its own sizes,
+//     running heads may mirror on facing pages, and an OCR layer's widths are
+//     fitted. A CID font reads through pdf.js's CMaps (Japanese, Chinese).
+//     The import draws the page's list markers at every level. Word: the
+//     same look, space after paragraphs, notes in table cells, and a contents
+//     field built from its headings.
 // Slides and sheets (SPEC.md §27) parse with their own parsers
 // (lib/parse/slides.ts, lib/parse/sheets.ts) and re-parse only on request:
 // they carry no version of their own.
-export const PARSER_VERSION = 20;
+export const PARSER_VERSION = 21;

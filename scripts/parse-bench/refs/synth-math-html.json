@@ -11,7 +11,8 @@
         {
           "text": "A SHEET OF FORMULAS"
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -32,7 +33,12 @@
         {
           "text": " This sheet sets each formula twice: once inline, in a sentence, and once as a numbered display. The formulas grow from single symbols to nested structures, so a parser can be scored on how far it gets."
         }
-      ]
+      ],
+      "align": "justify",
+      "font": {
+        "shape": "serif",
+        "size": 10
+      }
     },
     {
       "kind": "heading",
@@ -42,7 +48,8 @@
           "text": "1. Scripts and accents",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -252,7 +259,8 @@
           "text": "2. Fractions and roots",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -422,7 +430,8 @@
           "text": "3. Big operators",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -632,7 +641,8 @@
           "text": "4. Delimiters",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -782,7 +792,8 @@
           "text": "5. Fonts",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -992,7 +1003,8 @@
           "text": "6. Relations and arrows",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -1182,7 +1194,8 @@
           "text": "7. Matrices, cases, and arrays",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -1312,7 +1325,8 @@
           "text": "8. Harder combinations",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -1526,6 +1540,21 @@
     "7",
     "8"
   ],
+  "fonts": {
+    "body": {
+      "shape": "serif",
+      "size": 11
+    },
+    "title": {
+      "shape": "serif",
+      "size": 17,
+      "bold": true
+    },
+    "h2": {
+      "shape": "serif",
+      "size": 11
+    }
+  },
   "license": "open",
   "provenance": "generated",
   "notes": "Each formula stands twice: inline in a paragraph and as a display labeled (n). Every latex string renders in KaTeX as written."

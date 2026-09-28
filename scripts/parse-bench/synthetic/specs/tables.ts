@@ -166,6 +166,17 @@ export const tables: Spec = {
       smallCaps: "keep",
       float: "H",
       bands: { top: 66, bottom: 56 },
+      // article's 10pt sizes in Latin Modern as pdflatex prints them.
+      fonts: {
+        body: { shape: "serif", size: 9.96 },
+        title: { shape: "serif", size: 17.22, bold: true },
+        subtitle: { shape: "serif", size: 14.35 },
+        h2: { shape: "serif", size: 14.35, bold: true },
+        caption: { shape: "serif", size: 9.96 },
+        footnote: { shape: "serif", size: 7.97 },
+      },
+      centered: [],
+      justified: true,
     },
     // The same report made in Word: Table 3's header row repeats on each page (Word's repeat header row).
     docx: {

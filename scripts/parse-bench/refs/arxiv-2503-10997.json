@@ -26,21 +26,24 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Aashish Anantha Ramakrishnan"
+     "text": "Aashish Anantha Ramakrishnan",
+     "bold": true
     },
     {
      "text": "1",
      "sup": true
     },
     {
-     "text": ", Aadarsh Anantha Ramakrishnan"
+     "text": ", Aadarsh Anantha Ramakrishnan",
+     "bold": true
     },
     {
      "text": "2",
      "sup": true
     },
     {
-     "text": ", Dongwon Lee"
+     "text": ", Dongwon Lee",
+     "bold": true
     },
     {
      "text": "1",
@@ -2357,5 +2360,5 @@
  ],
  "license": "open",
  "provenance": "latexml",
- "notes": "arXiv 2503.10997v2 (natural language processing; ACL, two columns), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words."
+ "notes": "arXiv 2503.10997v2 (natural language processing; ACL, two columns), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. The author names are set bold on the page (the PDF's font is a bold face); round 2 marks them, by hand: the builder reads the author area from pdftotext, which gives no weight."
 }

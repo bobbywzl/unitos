@@ -333,8 +333,10 @@ function printedText(doc: Doc): string {
   return parts.join("\n");
 }
 
-/** Look-alikes a reader takes for one symbol: not a misreading. */
-const LOOKALIKE: Record<string, string> = { "‖": "∥", "∆": "Δ", "-": "−", "*": "∗", "⋅": "·", "~": "∼", "'": "′", "∣": "|", "〈": "⟨", "〉": "⟩" };
+/** Look-alikes a reader takes for one symbol: not a misreading. The script
+    l is an l: a formula's leaves fold it (NFKC), so a drawn ℓ counted as
+    missing whenever its formula was read. */
+const LOOKALIKE: Record<string, string> = { "‖": "∥", "∆": "Δ", "-": "−", "*": "∗", "⋅": "·", "~": "∼", "'": "′", "∣": "|", "〈": "⟨", "〉": "⟩", "ℓ": "l" };
 
 function classOf(ch: string): string {
   if (ch === "↦" || ch === "⟼") return MAPSTO;

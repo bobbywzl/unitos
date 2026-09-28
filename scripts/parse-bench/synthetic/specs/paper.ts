@@ -171,6 +171,19 @@ export const paper: Spec = {
       smallCaps: "upper",
       float: "!t",
       bands: { top: 50, bottom: 40 },
+      // IEEEtran's journal sizes as pdflatex prints them in Times (NimbusRomNo9L).
+      fonts: {
+        body: { shape: "serif", size: 9.96 },
+        title: { shape: "serif", size: 23.91 },
+        author: { shape: "serif", size: 10.96 },
+        h2: { shape: "serif", size: 9.96 },
+        h3: { shape: "serif", size: 9.96 },
+        h4: { shape: "serif", size: 9.96 },
+        caption: { shape: "serif", size: 7.97 },
+        footnote: { shape: "serif", size: 7.97 },
+      },
+      centered: [2],
+      justified: true,
     },
     // The same paper printed from HTML in two CSS columns: the front matter and Table I span both columns,
     // small caps are synthesized by Chromium (the text layer keeps the letters' case), math is KaTeX.

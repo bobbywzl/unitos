@@ -11,7 +11,7 @@
  ],
  "license": "open",
  "provenance": "hand",
- "notes": "许为 (XU Wei), 六论以用户为中心的设计：智能人机交互的人因工程途径 (User Centered Design (VI): Human Factors Engineering Approaches for Intelligent Human-Computer Interaction), arXiv:2111.04880, CC BY 4.0. A Chinese paper made in Word (SimSun, DengXian, Times): a Chinese title, an English title, a numbered list of research points, bold labels opening the abstract, keywords and classification lines (SimSun drawn as synthetic bold: the font name says regular), an English abstract, a footnote, numbered section headings, Chinese paragraphs that wrap with no spaces. The arXiv stamp in the left margin is furniture.",
+ "notes": "许为 (XU Wei), 六论以用户为中心的设计：智能人机交互的人因工程途径 (User Centered Design (VI): Human Factors Engineering Approaches for Intelligent Human-Computer Interaction), arXiv:2111.04880, CC BY 4.0. A Chinese paper made in Word (SimSun, DengXian, Times): a Chinese title, an English title, a numbered list of research points, bold labels opening the abstract, keywords and classification lines (SimSun drawn as synthetic bold: the font name says regular), an English abstract, a footnote, numbered section headings, Chinese paragraphs that wrap with no spaces. The arXiv stamp in the left margin is furniture. Alignment (round 2, measured with PyMuPDF): blocks 0, 9, 12 are centered: each line's middle lies within 4 pt of its column's middle and both its ends stand more than 8 pt inside the column's margins (a column's margin is where three or more of its lines end, or its furthest line end).",
  "furniture": [
   "1",
   "2",
@@ -24,7 +24,8 @@
     {
      "text": "六论以用户为中心的设计：智能人机交互的人因工程途径"
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "paragraph",
@@ -165,7 +166,8 @@
     {
      "text": "User Centered Design（VI）：Human Factors Engineering Approaches for Intelligent Human-Computer Interaction"
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "paragraph",
@@ -193,7 +195,8 @@
     {
      "text": "Abstract"
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "paragraph",

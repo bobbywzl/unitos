@@ -1,0 +1,97 @@
+{
+ "id": "real-mic-whitepaper-r06-1-2-1-p1",
+ "category": "cjk",
+ "source": {
+  "pdf": ".bench/real/cjk-mic-whitepaper-r06-1-2-1.pdf",
+  "url": "https://www.soumu.go.jp/johotsusintokei/whitepaper/ja/r06/pdf/n1210000.pdf"
+ },
+ "pages": [
+  1,
+  1
+ ],
+ "license": "open",
+ "provenance": "hand",
+ "notes": "Ministry of Internal Affairs and Communications (総務省), 令和6年版 情報通信白書 (White Paper on Information and Communications in Japan 2024), part I chapter 2 section 1, as the ministry serves it chapter by chapter; the site's terms: 公共データ利用規約 (第1.0版), compatible with CC BY 4.0 (the figures credit their own sources). Made with InDesign through Switch: Japanese set in UD Reimin, UD Shin Go, Shin Go, and Gothic BBB (Adobe-Japan1 CID fonts), numbers in Helvetica Neue. Scored: page 1 (printed 14): the chapter banner (the title), the section bar (h1, white on blue), a circled-number heading (h2) and two numbered subheads (h3), Japanese paragraphs whose lines join with no space, a figure (an image) whose caption stands above it with a bold white-on-red label and whose credit line stands under it, and a paragraph continuing on page 2 (only its words on page 1 here). A vertical tab in the left margin (第2章 and the chapter's name, set one character per line), the running foot (令和6年版 情報通信白書 第Ⅰ部), and the page number are furniture. With pdf.js's CMaps missing, the section bar and the numbered heading drop out of the parse.",
+ "furniture": [
+  "14",
+  "令和6年版　情報通信白書　第Ⅰ部",
+  "第2章",
+  "情報通信が果たした役割と課題"
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "第2章 情報通信が果たした役割と課題"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "第1節 震災関連情報の収集と発信"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "1 震災関連情報はどのように収集・集約されたか"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "1 避難所情報の集約"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "今般の能登半島地震では、道路の寸断により奥能登へのアクセスルートが一部遮断する事態となり、指定避難所以外の自主避難や孤立集落が多数発生していたうえ、市町職員らも被災したため、避難所状況を正確に把握することが困難であった。そこで、石川県は、市町のほか自衛隊や災害派遣医療チーム（DMAT）などが収集した避難所情報を一元集約するためのプラットフォームを構築し、1月14日から稼働、同17日から各避難所情報にIDを割り振り、他システムと連携する本格運用を開始した（図表Ⅰ-2-1-1）。これにより、避難所情報の正確な把握が可能となり、避難所の物資調達を要望に応じて送るプル型支援への移行が可能となった。"
+    }
+   ],
+   "indent": "first"
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "図表Ⅰ-2-1-1",
+     "bold": true
+    },
+    {
+     "text": " 避難所データ集約・可視化アプリケーションのイメージ （出典）石川県 知事記者会見資料（2024年1月13日）"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "2 Suicaを活用した避難者情報の把握"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "石川県は1次避難所に来る避難者らにそれぞれIDが付与されたSuicaを配布し、氏名・住所、生年月日、連絡先などの個人情報をひも付けてシステムに登録した。避難者が避難所を訪れたり、物資を受け取ったりする際に、避難所に設置のカードリーダーに配布したSuicaを読み込ませることで、避難者情報とニーズの正確な把握が可能となり、要請に基づいて物資を避難所に届けるプル型の物資支援を促進した（図表Ⅰ-2-1-2）。なお、これまでデジタル庁では、避難所の避難者情報把握のためにマイナンバーカードを活用する実証を推進していたものの、今般の震災ではカード"
+    }
+   ],
+   "indent": "first"
+  }
+ ]
+}

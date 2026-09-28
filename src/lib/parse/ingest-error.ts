@@ -8,7 +8,7 @@ import { FetchPageError } from "@/lib/parse/fetch-page";
 export function describeIngestError(
   err: unknown,
   t: TFunc,
-  kind: "url" | "pdf" | "reparse",
+  kind: "url" | "pdf" | "file" | "reparse",
 ): string {
   if (err instanceof FetchPageError) return describeFetchError(err, t);
   const name = err instanceof Error ? err.name : "";
@@ -22,12 +22,16 @@ export function describeIngestError(
   if (/overloaded|rate.?limit|too many requests|\b529\b/.test(text)) return t("api.modelBusy");
   if (/invalid x-api-key|authentication_error|api key/.test(text)) return t("api.modelKeyInvalid");
   if (/timed out|timeouterror|aborterror/.test(text)) return t("api.ingestTimedOut");
+  // A Word file, slides, sheets, or a Markdown file is "this file", never
+  // "this PDF".
   const lead =
     kind === "url"
       ? "api.urlIngestFailedReason"
       : kind === "pdf"
         ? "api.pdfParseFailedReason"
-        : "api.reparseFailedReason";
+        : kind === "file"
+          ? "api.fileParseFailedReason"
+          : "api.reparseFailedReason";
   return t(lead, { reason: message });
 }
 

@@ -1,10 +1,11 @@
 /**
- * Meeting notes laid out the way a Google Docs PDF export looks (the owner's notes are one): Arial, a title,
- * headings, bold runs, links, yellow highlights, bullets whose glyph changes with depth (● ○ ■), a checklist, a
+ * Meeting notes laid out the way a Google Docs PDF export looks: Arial, a title,
+ * headings, bold runs, links, yellow highlights, a red run, a struck-through run, an underlined date, bullets whose
+ * glyph changes with depth (● ○ ■), a checklist, a
  * table, a horizontal rule, a diagram drawn in SVG whose box labels and arrow labels are text in the PDF, and a
  * paragraph in Chinese. No header or footer, as in an export.
  */
-import { b, figure, h, highlight, hr, hrow, li, li1, li2, link, list, p, row, table, task, title, type Spec, type SpecBlock } from "../spec";
+import { b, colored, figure, h, highlight, hr, hrow, li, li1, li2, link, list, p, row, strike, table, task, title, u, type Spec, type SpecBlock } from "../spec";
 
 const blocks: SpecBlock[] = [
   title("Project Aurora: Weekly Notes"),
@@ -17,7 +18,9 @@ const blocks: SpecBlock[] = [
     ...highlight("#ffff00", b("99.2%")),
     ", above the ",
     ...link("https://example.com/aurora/slo", "service-level objective"),
-    " of 99%. The main complaint in feedback was slow sync on hotel and airport Wi-Fi, which the offline mode below addresses.",
+    " of 99%. The main complaint in feedback was ",
+    ...colored("#cc0000", "slow sync on hotel and airport Wi-Fi"),
+    ", which the offline mode below addresses.",
   ),
   h(1, "Decisions"),
   list(
@@ -26,13 +29,13 @@ const blocks: SpecBlock[] = [
     li2("■", "The older edit stays in version history for 30 days"),
     li1("○", "The app shows a banner while it is offline"),
     li("●", "Move the Android 15 fix ahead of the settings redesign"),
-    li("●", "Keep the weekly beta build on ", b("Thursdays"), " until launch"),
+    li("●", "Keep the weekly beta build on ", ...strike("Tuesdays"), " ", b("Thursdays"), " until launch"),
   ),
   h(1, "Action items"),
   list(
     task(true, "Draft the release notes for 2.4 (Lena)"),
     task(false, "Fix the login loop on Android 15 (Marco)"),
-    task(false, "Book the design review for October 2 (Priya)"),
+    task(false, "Book the design review for ", ...u("October 2"), " (Priya)"),
     task(false, "Add sync timing to the beta dashboard (Wei)"),
   ),
   h(1, "Metrics"),

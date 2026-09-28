@@ -6,9 +6,9 @@ import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
 import { charCount } from "@/lib/parse/pdf/glyphs";
 import { BULLET_RE, isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
-import { isCentered, readParagraph } from "@/lib/parse/pdf/paragraphs";
-import { boldShare, escapeHtml, joinGroup, startsWithBoldLead } from "@/lib/parse/pdf/text";
-import type { Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
+import { isCentered, lineAlign, readParagraph } from "@/lib/parse/pdf/paragraphs";
+import { boldShare, escapeHtml, fillsMargin, joinGroup, lineAsPart, startsWithBoldLead } from "@/lib/parse/pdf/text";
+import type { Item, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 
 // Numbered heading: the number must close with "." or ")" or dot into a
 // sub-number — "3.1 Results" and "1. Summary" match, "23 advertisers" does not.
@@ -19,7 +19,13 @@ export const HEADING_NUM_STRICT_RE = /^(\d{1,2}((\.\d{1,2})+\.?|[.)])?|[A-Z](\.\
 export const LETTER_HEADING_RE = /^[A-Z]\s+[\p{Lu}]/u;
 // The number of a heading and its depth: "3" → 1, "3.2" → 2, "A.1" → 2.
 const HEADING_NUMBER_RE = /^(\d{1,2}|[A-Z])((?:\.\d{1,2})*)\.?[.)]?\s/;
+// A Japanese or Chinese document numbers its chapters "第2章" and its
+// sections "第1節", over the numbered parts "1", "2" (a white paper's
+// section and its first part read at one level).
+const CJK_PART_RE = /^第\s*[0-9０-９一二三四五六七八九十百]+\s*([章編部節])/;
 function headingDepth(text: string): number | null {
+  const cjk = CJK_PART_RE.exec(text);
+  if (cjk) return cjk[1] === "節" ? 0 : -1;
   const m = HEADING_NUMBER_RE.exec(text);
   if (!m) return null;
   return 1 + (m[2].match(/\./g)?.length ?? 0);
@@ -27,6 +33,21 @@ function headingDepth(text: string): number | null {
 // A run-in heading's lead: a number with a sub-number, words, a period
 // ("3.2.1. Two examples.").
 const RUN_IN_RE = /^(?:\d{1,2}|[A-Z])(?:\.\d{1,2})+\.?\s+\S.*\.$/u;
+// IEEE's fourth level: a number with a parenthesis and a title in italics
+// closed by a colon, run into its paragraph ("1) Implementation: The
+// pattern needs…"). It read as a list item that took the paragraph.
+const IEEE_RUN_IN_RE = /^\d{1,2}\)\s+\S.*:$/u;
+
+// The end of a line's lead set in italics from the line's start, marker
+// and all: IEEE sets "1) Implementation:" in one italic run.
+function italicLeadEnd(line: Line): number {
+  let end = 0;
+  for (const r of line.runs) {
+    if (!r.italic || line.text.slice(end, r.start).trim() !== "") break;
+    end = r.end;
+  }
+  return end;
+}
 
 // Share of a line's characters set bold or in small caps: a heading's look.
 function styledShare(line: Line): number {
@@ -53,7 +74,7 @@ function headingOf(run: Line[], raw: string, rawRuns: Run[]): Segment {
     type: "HEADING",
     text,
     page: run[0].page,
-    rawSize: run[0].size,
+    rawSize: Math.max(...run.map((l) => l.size)),
     runs,
     headingNum: m ? Number(m[1]) : undefined,
     ...geom(run),
@@ -67,14 +88,23 @@ function headingOf(run: Line[], raw: string, rawRuns: Run[]): Segment {
 // section's label and title, short bold lines set apart, or a part's
 // numeral alone.
 export function readHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
-  return (
+  const step =
     largeHeading(lines, i, ctx, runOf) ??
     runInHeading(lines, i, ctx, runOf) ??
     numberedHeading(lines, i, ctx, runOf) ??
     sectionHeading(lines, i, ctx) ??
+    capsHeading(lines, i, ctx) ??
+    abstractHeading(lines, i, ctx) ??
     boldHeading(lines, i, ctx, runOf) ??
-    partHeading(lines, i, ctx)
-  );
+    partHeading(lines, i, ctx);
+  // A heading of its own lines keeps where it stands: centered or flush
+  // right in its column (a run-in lead's is its paragraph's).
+  const [heading] = step?.segments ?? [];
+  if (step && step.segments.length === 1 && heading.type === "HEADING") {
+    const align = lineAlign(lines, i, step.next, ctx);
+    if (align === "center" || align === "right") heading.align = align;
+  }
+  return step;
 }
 
 // A part's numeral or letter alone on a centered line, set apart above and
@@ -94,6 +124,15 @@ function partHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
 // A line set large by a math glyph (an integral sign with its limit) is
 // part of an equation, not a heading, and a bulleted line is an item (a
 // slide's bullets, set larger than the deck's body, read as headings).
+// A date on a line of its own ("March 15, 2023", "15 March 2023", "September
+// 2026", "2023-03-15"): a cover sets it under the title at the title's size
+// and weight, and it read as the title's second line.
+const MONTH = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?";
+export const DATE_RE = new RegExp(
+  `^(?:${MONTH}\\s+(?:\\d{1,2}(?:st|nd|rd|th)?,?\\s+)?\\d{4}|\\d{1,2}(?:st|nd|rd|th)?\\s+${MONTH},?\\s+\\d{4}|\\d{4}-\\d{2}-\\d{2})$`,
+  "i",
+);
+
 function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
   const line = lines[i];
   if (line.cells.length !== 1 || line.size <= ctx.bodySize * 1.14 || lineMathShare(line) >= 0.5) return null;
@@ -112,18 +151,52 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
   let j = i + 1;
   while (j < lines.length) {
     const next = lines[j];
+    // Centered on one another: the same middle, the next line set in from
+    // the column's edge, or set at the very same size where the next line
+    // is that edge: a title slide's widest line makes the column
+    // (real-gslides-oer-5rs p2: "OER, the 5Rs, and" over "Creative
+    // Commons" read as two headings).
     const centered =
-      Math.abs((next.x + next.xEnd) / 2 - (line.x + line.xEnd) / 2) <= 12 && next.x > ctx.columnLeft + 12;
+      Math.abs((next.x + next.xEnd) / 2 - (line.x + line.xEnd) / 2) <= 12 &&
+      (next.x > ctx.columnLeft + 12 || (!ocr && Math.abs(next.size - line.size) < 0.1));
     if (
       runOf[j] !== -1 ||
       next.cells.length !== 1 ||
       Math.abs(next.size - line.size) > (ocr ? line.size * 0.2 : 0.5) ||
       run[run.length - 1].y - next.y > line.size * 1.7 ||
-      (Math.abs(next.x - line.x) > 12 && !centered)
+      (Math.abs(next.x - line.x) > 12 && !centered) ||
+      DATE_RE.test(next.text.trim())
     )
       break;
     run.push(next);
     j++;
+  }
+  // A chapter's label over its title, set smaller and centered with it, is
+  // one heading with it ("CHAPTER Two" over "FIRST STEPS", a scanned book).
+  const title = lines[j];
+  if (
+    run.length === 1 &&
+    title !== undefined &&
+    runOf[j] === -1 &&
+    LABEL_RE.test(line.text.trim()) &&
+    title.cells.length === 1 &&
+    title.size > line.size * 1.1 &&
+    line.y - title.y <= title.size * 2.2 &&
+    Math.abs((title.x + title.xEnd) / 2 - (line.x + line.xEnd) / 2) <= line.size * 2
+  ) {
+    run.push(title);
+    j++;
+  }
+  // Four lines or more at one left edge that each end short of the
+  // longest while the next line's first word would fit are a block of
+  // lines, not a heading: an author list set large read as one six-line
+  // heading (arxiv-2609-29669). Each line is a paragraph. A centered
+  // title's lines end short too.
+  const edge = Math.max(...run.map((l) => l.xEnd));
+  const flush = run.every((l) => Math.abs(l.x - line.x) <= line.size * 0.5);
+  if (run.length >= 4 && flush && run.slice(0, -1).every((l, k) => !fillsMargin(l, run[k + 1], edge))) {
+    const one = (l: Line): Segment => ({ type: "PARAGRAPH", ...lineAsPart(l), page: l.page, ...geom([l]) });
+    return { segments: run.map(one), next: j };
   }
   const { text, runs } = joinGroup(run);
   const flat = text.replace(/\n/g, " ");
@@ -131,8 +204,9 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
   // A quotation set large, in its quote marks, is a quote (a slide's 20 pt
   // quotation read as a heading).
   const quoted = /^[“"‘]/.test(flat.trim()) && /(?:[”"’][.!?]?|[.!?][”"’])$/.test(flat.trim());
-  if (prose || quoted || [...flat.trim()].length <= 1) {
-    const html = quoted ? { html: '<p class="quote"></p>' } : {};
+  if (prose || quoted || [...flat.trim()].length <= 1 || DATE_RE.test(flat.trim())) {
+    const tokens = [quoted ? "quote" : "", lineAlign(lines, i, j, ctx) === "center" ? "center" : ""].filter(Boolean);
+    const html = tokens.length > 0 ? { html: `<p class="${tokens.join(" ")}"></p>` } : {};
     return { segments: [{ type: "PARAGRAPH", text: flat, ...html, page: line.page, runs, ...geom(run) }], next: j };
   }
   return { segments: [headingOf(run, flat, runs)], next: j };
@@ -141,8 +215,8 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
 // The end of a line's lead set bold or in small caps: its styled runs from
 // the line's start, through short runs of other glyphs between them (a
 // formula's letters in a bold title) and through a formula of any length
-// (amsbook's "1.1.1. The probability space (Ω, ℱ, P).": the formula is in
-// math fonts, and the lead read as a list item "1.").
+// (an amsbook subsection lead "1.1.1. A title with a formula.": the
+// formula is in math fonts, and the lead read as a list item "1.").
 function styledLeadEnd(line: Line): number {
   let end = 0;
   // Where the next run may start: the lead's end, or past the glyphs let
@@ -173,9 +247,12 @@ function styledLeadEnd(line: Line): number {
 function runInHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
   const line = lines[i];
   if (line.cells.length !== 1 || line.size > ctx.bodySize * 1.14) return null;
-  const end = styledLeadEnd(line);
+  const styled = styledLeadEnd(line);
+  const italic = italicLeadEnd(line);
+  const ieee = IEEE_RUN_IN_RE.test(line.text.slice(0, italic).trim());
+  const end = ieee ? italic : styled;
   const lead = line.text.slice(0, end).trim();
-  if (!RUN_IN_RE.test(lead) || [...lead].length > 120) return null;
+  if (!(ieee || RUN_IN_RE.test(lead)) || [...lead].length > 120) return null;
   const heading = headingOf([line], lead, line.runs.filter((r) => r.start < end).map((r) => ({ ...r, end: Math.min(r.end, lead.length) })));
   const rest = line.text.slice(end);
   const cut = end + (rest.length - rest.trimStart().length);
@@ -188,36 +265,120 @@ function runInHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
   return { segments: [heading, ...paragraph.segments], next: paragraph.next };
 }
 
-// IEEE's section headings: a roman numeral and a title in capitals ("II.
-// RELATED WORK"), and a letter and a title in italics ("A. Efficient
-// attention"), each on a line of its own over its section's first
-// paragraph. They read as a paragraph, and as a list item that took the
-// section's first paragraph.
+// IEEE's and APS's (REVTeX) section headings: a roman numeral and a title
+// in capitals ("II. RELATED WORK"), a letter and a title in italics or, in
+// a centered line, bold ("A. Efficient attention"), and REVTeX's third
+// level, a number and a title centered in italics ("1. Density of
+// states"), each on a line of its own over its section's first paragraph.
+// REVTeX sets them a size under the body's (8.97 pt over 9.96 pt). They
+// read as a paragraph, and as a list item that took the section's first
+// paragraph.
 const ROMAN_SECTION_RE = /^[IVX]{1,5}\.\s+\p{Lu}/u;
 const LETTER_SECTION_RE = /^[A-Z]\.\s+\p{Lu}/u;
+const NUMBER_SECTION_RE = /^\d{1,2}\.\s+\p{Lu}/u;
 
-function italicShare(line: Line): number {
-  let italic = 0;
-  for (const r of line.runs) if (r.italic) italic += r.end - r.start;
-  return line.text.length > 0 ? italic / line.text.length : 0;
+// Share of a line's characters, its formulas aside, whose item passes a
+// test: a heading's formula is set in math italic, not in the heading's
+// style ("1. Time for the beginning of the ramp for BRM: tdip").
+function textShare(line: Line, test: (item: Item) => boolean): number {
+  let all = 0;
+  let hit = 0;
+  for (const item of line.items) {
+    if (item.math) continue;
+    const n = charCount(item.str);
+    all += n;
+    if (test(item)) hit += n;
+  }
+  return all > 0 ? hit / all : 0;
+}
+
+// Nothing sits right above the line: no line, a paragraph gap (1.3 leading),
+// or the line above in reading order closed another column, so this one
+// opens its column (IEEE's "III. METHOD" atop the right column read as a
+// paragraph).
+function apartAbove(above: Line | undefined, line: Line, ctx: PageContext): boolean {
+  return !above || above.y - line.y < line.size * 0.5 || above.y - line.y > line.size * ctx.leading * 1.3;
+}
+
+// Nothing sits right under the line: a gap past 1.15 leading, or the next
+// line in reading order opens another column.
+function apartBelow(line: Line, below: Line, ctx: PageContext): boolean {
+  return line.y - below.y < line.size * 0.5 || line.y - below.y > line.size * ctx.leading * 1.15;
 }
 
 function sectionHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
   const line = lines[i];
   const text = line.text.trim();
   if (line.cells.length !== 1 || [...text].length > 80 || /[.,;:]$/.test(text)) return null;
-  if (line.size < ctx.bodySize * 0.9 || line.size > ctx.bodySize * 1.14) return null;
-  const roman = ROMAN_SECTION_RE.test(text) && capsShare(text) >= 0.9;
-  const lettered = LETTER_SECTION_RE.test(text) && italicShare(line) > 0.9;
-  if (!roman && !lettered) return null;
-  // Set apart above, or over a paragraph's indented first line.
+  if (line.size < ctx.bodySize * 0.85 || line.size > ctx.bodySize * 1.14) return null;
+  const centered = isCentered(lines, i, ctx);
+  const italic = (l: Line) => textShare(l, (item) => item.italic) > 0.9;
+  const bold = (l: Line) => textShare(l, (item) => item.bold) > 0.9;
+  const caps = (l: Line) => capsShare(l.text) >= 0.9;
+  const look =
+    ROMAN_SECTION_RE.test(text) && caps(line) ? caps
+    : LETTER_SECTION_RE.test(text) && italic(line) ? italic
+    : LETTER_SECTION_RE.test(text) && centered && bold(line) ? bold
+    : NUMBER_SECTION_RE.test(text) && centered && (italic(line) || bold(line)) ? (italic(line) ? italic : bold)
+    : null;
+  if (!look) return null;
+  // A centered title wraps onto centered lines of its size and look ("IV.
+  // LONG-RANGE SPECTRAL STATISTICS OF" over "BRM").
+  const run: Line[] = [line];
+  let j = i + 1;
+  while (centered && j < lines.length && run.length < 3) {
+    const next = lines[j];
+    const gap = run[run.length - 1].y - next.y;
+    if (next.cells.length !== 1 || Math.abs(next.size - line.size) > 0.5 || gap <= 0 || gap > line.size * ctx.leading * 1.3) break;
+    if (!look(next) || !isCentered(lines, j, ctx) || NUMBER_SECTION_RE.test(next.text) || LETTER_SECTION_RE.test(next.text)) break;
+    run.push(next);
+    j++;
+  }
+  // Set apart above, or over a paragraph's indented first line; a centered
+  // title set apart below. A page may end under the title: a printed web
+  // page set "IV. EXPERIMENTS" last on its page, its section on the next.
+  const last = run[run.length - 1];
   const above = lines[i - 1];
+  const below = lines[j];
+  if (!below) return apartAbove(above, line, ctx) ? heading(run, j) : null;
+  const opens = below.x > line.x + line.size * 0.8 && below.x < line.x + line.size * 3 && textShare(below, (item) => item.italic) < 0.5;
+  if (!apartAbove(above, line, ctx) && !opens && !(centered && apartBelow(last, below, ctx))) return null;
+  return heading(run, j);
+}
+
+// One heading of a run of lines, wrapped lines joined with spaces.
+function heading(run: Line[], next: number): Step {
+  const { text, runs } = joinGroup(run);
+  return { segments: [headingOf(run, text.replace(/\n/g, " "), runs)], next };
+}
+
+// An unnumbered title in capitals on a line of its own, centered in its
+// column and set apart above and below: IEEE's "ACKNOWLEDGMENT" and
+// "REFERENCES", a 1913 bulletin's "INTRODUCTION." (a scan's text layer
+// has no bold to tell it by). A line of names ("DONALD J. TRUMP,
+// PETITIONER v.", "ADA L. MERCER": an initial) and a chapter's label over
+// its title ("CHAPTER 2") stay paragraphs.
+const INITIAL_RE = /(?:^|\s)\p{Lu}\.(?=\s|$)/u;
+const LABEL_RE = /^(?:chapter|part|book|appendix|section|lecture)\s+\S+$/i;
+function capsHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
+  const line = lines[i];
+  const text = line.text.trim();
+  const letters = text.replace(/[^\p{L}]/gu, "").length;
+  if (line.cells.length !== 1 || letters < 3 || [...text].length > 60 || capsShare(text) < 0.9) return null;
+  if (line.size < ctx.bodySize * 0.85 || line.size > ctx.bodySize * (ctx.ocr ? 1.3 : 1.14)) return null;
+  if (/[,;:]$/.test(text) || INITIAL_RE.test(text) || LABEL_RE.test(text) || CAPTION_RE.test(text)) return null;
   const below = lines[i + 1];
-  if (!below) return null;
-  const gapAbove = !above || above.y - line.y > line.size * ctx.leading * 1.3;
-  const opens = below.x > line.x + line.size * 0.8 && below.x < line.x + line.size * 3 && italicShare(below) < 0.5;
-  if (!gapAbove && !opens) return null;
-  return { segments: [headingOf([line], line.text, line.runs)], next: i + 1 };
+  if (!below || !isCentered(lines, i, ctx) || !apartAbove(lines[i - 1], line, ctx) || !apartBelow(line, below, ctx)) return null;
+  return { segments: [headingOf([line], text, line.runs)], next: i + 1 };
+}
+
+// "Abstract" alone on its line, in any weight: a paper's abstract heading
+// (LIPIcs sets it closer to its text than a section's gap and read as a
+// paragraph, arxiv-2506-06752).
+function abstractHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
+  const line = lines[i];
+  if (line.cells.length !== 1 || !/^abstract[.:]?$/i.test(line.text.trim()) || line.size < ctx.bodySize * 0.85) return null;
+  return { segments: [headingOf([line], line.text.trim(), line.runs)], next: i + 1 };
 }
 
 // Numbered heading at body size: "3.1 Results" — short, isolated, and
@@ -352,9 +513,8 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   const last = run[run.length - 1];
   const above = lines[i - 1];
   const below = lines[j];
-  const leading = line.size * ctx.leading;
-  const gapAbove = !above || above.y - line.y > leading * 1.3;
-  const gapBelow = !below || last.y - below.y > leading * 1.15;
+  const gapAbove = apartAbove(above, line, ctx);
+  const gapBelow = !below || apartBelow(last, below, ctx);
   // Stacked headings: a title-like line of another size right above (itself
   // set apart) or right below. A labelled line needs its gaps: a paragraph's
   // bold lead under a section heading ("Mosaic splicing pattern. Mosaic
@@ -369,7 +529,11 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   const bodyBelow = below !== undefined && styledShare(below) < 0.5;
   const small = line.size < ctx.bodySize * 0.98;
   if (small && !(headingAbove && bodyBelow) && !(gapAbove && headingBelow)) return null;
-  if (!((gapAbove || headingAbove) && (gapBelow || headingBelow || (headingAbove && bodyBelow)) && below)) return null;
+  // A centered title set apart above needs no gap under it: a statement's
+  // title sits 12.8 pt over its units line ("CONDENSED CONSOLIDATED
+  // STATEMENTS OF OPERATIONS (Unaudited)" read as a paragraph).
+  const centeredTitle = title && centered && gapAbove;
+  if (!below || !(centeredTitle || ((gapAbove || headingAbove) && (gapBelow || headingBelow || (headingAbove && bodyBelow))))) return null;
   const { text: joined, runs } = joinGroup(run);
   return { segments: [headingOf(run, joined.replace(/\n/g, " "), runs)], next: j };
 }
@@ -380,22 +544,34 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
 // ratio to body earns (a modest largest heading starts at h2), each smaller
 // cluster steps one level down, floor h3. Numbered headings take their level
 // from the numbering's depth, counted from the document's shallowest number
-// ("2.1" is a section where chapters number "2"); an unnumbered heading the
-// size of numbered ones ("Abstract", "References") takes their level.
-export function assignHeadingLevels(segments: Segment[], bodySize: number) {
-  const sizes: number[] = [];
-  for (const s of segments) {
-    if (s.type !== "HEADING" || s.rawSize === undefined) continue;
-    if (!sizes.some((v) => Math.abs(v - s.rawSize!) < v * 0.05)) sizes.push(s.rawSize);
-  }
-  sizes.sort((a, b) => b - a);
+// ("2.1" is a section where chapters number "2"), down to h6 (IEEE's "1)"
+// under "A." under "III." is h4); an unnumbered heading the size of numbered
+// ones ("Abstract", "References") takes their level. A slide deck ranks each
+// slide apart: a slide fits its title to its box, so one deck's titles run
+// from 20 to 40 pt, and a slide's subheadings ("Mission" under "OSDR Mission
+// and Vision") read at its title's level. There a slide's biggest heading is
+// h2 and a smaller one h3.
+// A paper's unnumbered parts stand at its sections' level whatever their
+// size: LIPIcs sets "Abstract" smaller than its numbered sections.
+const PART_RE = /^(?:abstract|acknowledge?ments?|references|bibliography|appendix|appendices|contents|conclusions?)$/i;
+
+export function assignHeadingLevels(segments: Segment[], bodySize: number, slides = false) {
+  const clusters = (list: Segment[]) => {
+    const sizes: number[] = [];
+    for (const s of list) {
+      if (s.type !== "HEADING" || s.rawSize === undefined) continue;
+      if (!sizes.some((v) => Math.abs(v - s.rawSize!) < v * 0.05)) sizes.push(s.rawSize);
+    }
+    return sizes.sort((a, b) => b - a);
+  };
+  const sizes = clusters(segments);
   const topRatio = sizes.length > 0 ? sizes[0] / bodySize : 1;
   const base = topRatio > 1.5 ? 1 : topRatio > 1.18 ? 2 : 3;
   // Numbered headings take their level from the numbering's depth ("3" one
   // step under the title, "3.2" the next), so a 12pt section and a 12pt-bold
   // subsection do not land in one bucket.
   const numberedBase = sizes.length > 1 && base === 1 ? 2 : base;
-  const clusterOf = (s: Segment) => sizes.findIndex((v) => s.rawSize !== undefined && Math.abs(v - s.rawSize) < v * 0.05);
+  const clusterOf = (s: Segment, list = sizes) => list.findIndex((v) => s.rawSize !== undefined && Math.abs(v - s.rawSize) < v * 0.05);
   // Where sections number in roman numerals ("II. RELATED WORK"), letters
   // number their subsections and arabic numbers the parts under those.
   const roman = segments.some((s) => s.type === "HEADING" && ROMAN_SECTION_RE.test(s.text));
@@ -406,29 +582,54 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number) {
     : /^\d{1,2}[.)]\s/.test(text) ? 3
     : headingDepth(text);
   const depths = segments.map((s) => (s.type === "HEADING" ? depthOf(s.text) : null));
+  // A numbering that starts again at each level ("1" under "1", a Japanese
+  // white paper's parts under its "第1節" section) sets its levels apart by
+  // size: at one depth, each smaller size is one level deeper.
+  const bySize = new Map<number, number[]>();
+  const restarts = segments.some((s) => s.type === "HEADING" && CJK_PART_RE.test(s.text));
+  segments.forEach((s, k) => {
+    const depth = depths[k];
+    if (!restarts || depth === null || s.rawSize === undefined) return;
+    const list = bySize.get(depth) ?? [];
+    if (!list.some((v) => Math.abs(v - s.rawSize!) < v * 0.1)) list.push(s.rawSize);
+    bySize.set(depth, list.sort((a, b) => b - a));
+  });
+  segments.forEach((s, k) => {
+    const depth = depths[k];
+    if (!restarts || depth === null || s.rawSize === undefined) return;
+    depths[k] = depth + Math.max(0, bySize.get(depth)!.findIndex((v) => Math.abs(v - s.rawSize!) < v * 0.1));
+  });
   const minDepth = Math.min(...depths.filter((d): d is number => d !== null));
-  // The level most numbered headings of each size take.
+  // The level most numbered headings of each size take, a paper's parts
+  // voting as its sections: "CCS Concepts" and "Keywords", set the size of
+  // "Abstract", stand at its level.
+  const part = (s: Segment) => s.type === "HEADING" && Number.isFinite(minDepth) && PART_RE.test(s.text.trim());
   const votes = new Map<number, Map<number, number>>();
   segments.forEach((s, k) => {
     const depth = depths[k];
-    if (depth === null) return;
-    const level = numberedBase + depth - minDepth;
+    if (depth === null && !part(s)) return;
+    const level = depth === null ? numberedBase : numberedBase + depth - minDepth;
     const row = votes.get(clusterOf(s)) ?? new Map<number, number>();
     row.set(level, (row.get(level) ?? 0) + 1);
     votes.set(clusterOf(s), row);
   });
+  // Each slide's heading sizes, biggest first.
+  const slideSizes = new Map<number, number[]>();
+  if (slides) {
+    for (const s of segments) if (s.type === "HEADING" && !slideSizes.has(s.page)) slideSizes.set(s.page, clusters(segments.filter((t) => t.page === s.page)));
+  }
   segments.forEach((s, k) => {
     if (s.type !== "HEADING") return;
     const idx = clusterOf(s);
     const depth = depths[k];
     const sized = votes.get(idx);
     const level =
-      depth !== null
-        ? numberedBase + depth - minDepth
-        : sized
-          ? [...sized].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]
-          : base + Math.max(0, idx);
-    const capped = Math.min(3, Math.max(1, level));
-    s.html = `<h${capped}>${escapeHtml(s.text)}</h${capped}>`;
+      slides ? Math.min(3, 2 + Math.max(0, clusterOf(s, slideSizes.get(s.page) ?? [])))
+      : depth !== null ? numberedBase + depth - minDepth
+      : part(s) ? numberedBase
+      : sized ? [...sized].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]
+      : Math.min(3, base + Math.max(0, idx));
+    const capped = Math.min(6, Math.max(1, level));
+    s.html = `<h${capped}${s.align ? ` class="${s.align}"` : ""}>${escapeHtml(s.text)}</h${capped}>`;
   });
 }

@@ -200,6 +200,7 @@ const en = {
     "Images this large need Unitos Premium. After the trial, images up to 5 MB drop.",
   pdfTooLarge: "PDF is larger than 50 MB",
   pdfParseFailedReason: "Could not read this PDF. {reason}",
+  fileParseFailedReason: "Could not read this file. {reason}",
   urlIngestFailedReason: "Could not ingest this URL. {reason}",
   pdfEncrypted: "This PDF is password-protected. Remove the password and upload it again.",
   pdfDamaged: "This PDF could not be opened. The file may be damaged, or not a PDF.",
@@ -247,7 +248,7 @@ const en = {
   driveTokenMissing: "Missing Google Drive authorization",
   driveTokenExpired: "Your Google Drive access expired. Try again.",
   driveUnsupportedType:
-    "This Drive file type isn't supported. Pick a PDF, Google Doc, Sheet, Slide, Drawing, video, or audio file.",
+    "This Drive file type isn't supported. Pick a PDF, Word file, Google Doc, Sheet, Slide, Drawing, video, or audio file.",
   driveExportTooLarge:
     "This Google Doc, Sheet, Slide, or Drawing is larger than Drive's 10 MB export limit",
   driveFetchFailed: "This Drive file did not load. It may be private, removed, or no longer accessible.",
@@ -504,6 +505,7 @@ const zh: Record<keyof typeof en, string> = {
   imageNeedsPremium: "这么大的图片需要 Unitos Premium。试用结束后可拖入最大 5 MB 的图片。",
   pdfTooLarge: "PDF 超过 50 MB",
   pdfParseFailedReason: "无法读取此 PDF。{reason}",
+  fileParseFailedReason: "无法读取此文件。{reason}",
   urlIngestFailedReason: "无法导入此 URL。{reason}",
   pdfEncrypted: "此 PDF 有密码保护。请去掉密码后重新上传。",
   pdfDamaged: "此 PDF 无法打开。文件可能已损坏，或不是 PDF。",
@@ -545,7 +547,7 @@ const zh: Record<keyof typeof en, string> = {
   driveTokenMissing: "缺少 Google Drive 授权",
   driveTokenExpired: "Google Drive 访问已过期。请重试。",
   driveUnsupportedType:
-    "此 Drive 文件类型暂不支持。请选择 PDF、Google 文档、表格、幻灯片、绘图、视频或音频文件。",
+    "此 Drive 文件类型暂不支持。请选择 PDF、Word 文件、Google 文档、表格、幻灯片、绘图、视频或音频文件。",
   driveExportTooLarge: "此 Google 文档/表格/幻灯片/绘图超过 Drive 10 MB 的导出限制",
   driveFetchFailed: "这个 Drive 文件无法加载。文件可能已设为私密、被删除，或已无法访问。",
   driveSaid: "Google Drive 返回：{message}",

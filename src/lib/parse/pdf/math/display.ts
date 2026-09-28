@@ -14,13 +14,15 @@
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
+import { sameFlags } from "@/lib/parse/pdf/glyphs";
 import { regionOf, unionBox } from "@/lib/parse/pdf/geometry";
+import { ATTACH_PUNCT_RE, spaceGap } from "@/lib/parse/pdf/lines";
 import { BULLET_RE } from "@/lib/parse/pdf/markers";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
-import { hangingBox, hangingFamily } from "@/lib/parse/pdf/math/layout";
+import { braceLabelBoxes, hangingFamily, hangingGlyph } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
-import { balanced, orphanGlyphs } from "@/lib/parse/pdf/math/zones";
-import type { Box, Cell, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
+import { balanced, orphanGlyphs, paintsRule, resolveZone } from "@/lib/parse/pdf/math/zones";
+import type { Box, Cell, Item, Line, MathZone, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
 // A numbered display equation: "… = softmax(QKᵀ/√d)V   (1)". Its words are
 // roman (function names), so the math share alone misses it.
@@ -171,10 +173,19 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
 // entry); or a line of the display it sits close under or over, inside the
 // display's width (an array's row). A page's first or last line is held by
 // the first two only: a page number under a formula is no part of it.
-function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean): boolean {
+function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces: Glyph[]): boolean {
   const x1 = frag.x;
   const x2 = frag.xEnd;
   const em = frag.size;
+  // A brace's label: the brace's pieces lie between it and a line of the
+  // display, across its middle (the text layer may hold no item for them:
+  // synth-math-tex (65) lost its "n times").
+  const middle = (x1 + x2) / 2;
+  const braced = near.some((l) => {
+    const tips = braces.filter((g) => g.y > Math.min(l.y, frag.y) && g.y < Math.max(l.y, frag.y));
+    return tips.length >= 2 && middle > Math.min(...tips.map((g) => g.x)) && middle < Math.max(...tips.map((g) => g.x + g.w));
+  });
+  if (braced) return true;
   // A bar just over or under it with a line of the display past the bar: a
   // fraction's part. The display's own line may sit between (a denominator
   // on the page's last line, its bar at the axis over the formula's
@@ -187,15 +198,16 @@ function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean): boole
     if (!up && !down) continue;
     if (near.some((l) => (up ? l.y > r.y1 : l.y < r.y1) && Math.abs(l.y - r.y1) < Math.max(em, l.size) * 1.6)) return true;
   }
-  for (const l of near) {
-    for (const item of l.items) {
-      const box = hangingBox(item);
-      if (!box) continue;
-      const on = item.x < x2 + em && item.x + item.w > x1 - em;
-      const close = frag.y - box.top < em * 1.3 && box.bottom - frag.y < em * 1.6;
-      const beside = frag.y <= box.top && frag.y >= box.bottom;
-      if ((on && close) || beside) return true;
-    }
+  // Glyph by glyph: a text item may hold a relation and the operator after
+  // it ("=∑"), and the limit under the operator stayed out of the display
+  // (synth-math-tex (70)).
+  for (const g of near.flatMap((l) => l.items.flatMap((item) => item.glyphs ?? []))) {
+    const box = hangingGlyph(g);
+    if (!box) continue;
+    const on = g.x < x2 + em && g.x + g.w > x1 - em;
+    const close = frag.y - box.top < em * 1.3 && box.bottom - frag.y < em * 1.6;
+    const beside = frag.y <= box.top && frag.y >= box.bottom;
+    if ((on && close) || beside) return true;
   }
   if (edge) return false;
   const left = Math.min(...near.map((l) => l.x));
@@ -205,49 +217,242 @@ function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean): boole
 
 // A row of a formula set inside a text line (an inline matrix, cases, an
 // array): it sits between the tall delimiters the text line holds, or
-// within a line height and a half of the text line, beside its words.
-function inlineRow(line: Line, lines: Line[], kinds: LineKind[], fences: Box[]): boolean {
-  const inFence = fences.some(
-    (f) =>
-      line.y <= f.y2 &&
-      line.y >= f.y1 &&
-      ((line.x >= f.x2 - 1 && line.x - f.x2 < line.size * 3) || (line.xEnd <= f.x1 + 1 && f.x1 - line.xEnd < line.size * 3)) &&
-      lines.some((t, n) => kinds[n] === "text" && t.y <= f.y2 && t.y >= f.y1 && t.x <= f.x1 && t.xEnd >= f.x2),
-  );
-  if (inFence) return true;
-  return lines.some((t, n) => {
-    if (kinds[n] !== "text" || Math.abs(t.y - line.y) > line.size * 1.6) return false;
-    if (t.x > line.x + 1 || t.xEnd < line.xEnd - 1) return false;
-    // None of the text line's words under or over the row.
-    return !t.cells.some((c, i) => {
-      if (!/\p{L}{2,}/u.test(c.text)) return false;
-      const next = t.cells[i + 1]?.x ?? Infinity;
-      const items = t.items.filter((it) => it.x >= c.x - 0.5 && it.x < next);
-      const end = Math.max(c.x, ...items.map((it) => it.x + it.w));
-      return c.x < line.xEnd && end > line.x;
-    });
+// beside its words closer to it than the next line of text would (a
+// paragraph's last line, all math, under a line that starts with a
+// formula is no row of it; nor is a display's first row under a sentence
+// that ends in a formula, arXiv 2410.04586 p. 3). The text line it
+// belongs to, or null. join: the text line takes the row into its
+// formula, so more must hold: the row holds no words in a text font (a
+// table's caption over its rules joined the table's place,
+// synth-paper-html), and the text line has words (a table's or a
+// figure's place in the text is none).
+function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[], pitch: number, join: boolean, braces: Glyph[]): Line | null {
+  // A label under an underbrace or over an overbrace of a text line's
+  // formula ("n times"), words and all: the formula read without it was
+  // wrong. The brace's pieces lie between the two lines, across the
+  // label's middle (the text layer may hold no item for them), and the
+  // text line reaches over that middle: the other column's line beside a
+  // display is no host (arXiv 2411.19946 p. 4: display (6) and its labels
+  // ran into the left column's paragraph).
+  const middle = (line.x + line.xEnd) / 2;
+  const braced = lines.find((t, n) => {
+    if (kinds[n] !== "text" || Math.abs(t.y - line.y) > line.size * 2.5 || t.x > middle || t.xEnd < middle) return false;
+    const tips = braces.filter((g) => g.y > Math.min(line.y, t.y) && g.y < Math.max(line.y, t.y));
+    return tips.length >= 2 && middle > Math.min(...tips.map((g) => g.x)) && middle < Math.max(...tips.map((g) => g.x + g.w));
   });
+  if (braced) return braced;
+  if (join && line.items.some((i) => !i.zone && (i.str.match(/\p{L}{2,}/gu) ?? []).some((w) => !MATH_WORDS.has(w.toLowerCase())))) return null;
+  const text = (t: Line, n: number) => kinds[n] === "text" && (!join || (!t.table && t.text.trim() !== ""));
+  for (const f of fences) {
+    if (line.y > f.y2 || line.y < f.y1) continue;
+    if (!((line.x >= f.x2 - 1 && line.x - f.x2 < line.size * 3) || (line.xEnd <= f.x1 + 1 && f.x1 - line.xEnd < line.size * 3))) continue;
+    const host = lines.find((t, n) => text(t, n) && t.y <= f.y2 && t.y >= f.y1 && t.x <= f.x1 && t.xEnd >= f.x2);
+    if (host) return host;
+  }
+  // A label stacked over a relation of the text line under it (an L with
+  // its exponent over an arrow): small glyphs whose baseline stands half
+  // an em to an em over the relation's, over its width. It is that line's;
+  // taken for a row of the line over it, it glued onto its formula.
+  const center = (line.x + line.xEnd) / 2;
+  const under = lines.find(
+    (t, n) =>
+      text(t, n) &&
+      t.y < line.y &&
+      line.items.every((i) => i.size <= t.size * 0.85) &&
+      t.items.some((i) =>
+        (i.glyphs ?? []).some((g) => {
+          if (g.family === null || g.size < t.size * 0.9 || mathGlyph(g.family, g.code)?.cls !== "rel") return false;
+          const rise = (line.y - g.y) / g.size;
+          return rise > 0.4 && rise < 1 && center > g.x - g.size * 0.1 && center < g.x + g.w + g.size * 0.1;
+        }),
+      ),
+  );
+  if (under) return under;
+  const hosts = lines.filter((t, n) => {
+    if (!text(t, n) || Math.abs(t.y - line.y) > Math.min(line.size * 1.6, pitch * 0.9)) return false;
+    if (t.x > line.x + 1 || t.xEnd < line.xEnd - 1) return false;
+    // None of the text line's words under or over the row: its words, not
+    // its cells, which reach over the formula they end in (an inline
+    // \dfrac's numerators joined the display over them, synth-math-html).
+    return !t.items.some((it) => !it.zone && /\p{L}{2,}/u.test(it.str) && it.x < line.xEnd && it.x + it.w > line.x);
+  });
+  return hosts.sort((a, b) => Math.abs(a.y - line.y) - Math.abs(b.y - line.y))[0] ?? null;
+}
+
+// The rows of a formula set inside a text line (an inline matrix, cases,
+// an aligned pair, fractions side by side) stand over and under it as
+// lines of their own: they read as paragraphs, or as headings at KaTeX's
+// math size (synth-math-html), and the text line kept a bare bracket
+// ("A matrix in parentheses: ( )."). They join the text line's formula:
+// its glyphs and theirs are laid out and checked as one formula, which
+// keeps its characters as text when it fails, the rows in reading order.
+// The lines in their order, null for a row that joined.
+function joinInlineRows(lines: Line[], hosts: (Line | null)[], ctx: PageContext): (Line | null)[] {
+  // A row line may hold the rows of two formulas, or two labels over two
+  // arrows ("q" and "r" over the arrows of one sentence): parts two ems
+  // apart are rows of their own, so the words between stay text.
+  const parts = (row: Line): Line[] => {
+    const groups: Item[][] = [];
+    for (const item of [...row.items].sort((a, b) => a.x - b.x)) {
+      const last = groups[groups.length - 1];
+      if (last && item.x - Math.max(...last.map((i) => i.x + i.w)) < row.size * 2) last.push(item);
+      else groups.push([item]);
+    }
+    if (groups.length === 1) return [row];
+    return groups.map((items) => ({ ...row, items, x: items[0].x, xEnd: Math.max(...items.map((i) => i.x + i.w)), mathChars: items.reduce((sum, i) => sum + i.str.replace(/\s/g, "").length, 0) }));
+  };
+  const rowsOf = new Map<Line, Line[]>();
+  lines.forEach((l, n) => {
+    const host = hosts[n];
+    if (host) rowsOf.set(host, [...(rowsOf.get(host) ?? []), ...parts(l)]);
+  });
+  if (rowsOf.size === 0) return [...lines];
+  const orphans = orphanGlyphs(lines, ctx.drawing);
+  const joined = new Map<Line, Line>();
+  const kept = new Set<Line>();
+  for (const [host, rows] of rowsOf) {
+    // A text line cut into cells by a gap the rows do not fill is two
+    // columns' lines or a table's row, no sentence: its rows stay lines (a
+    // two-column page's lines read as a table, arXiv 2502.02648 p. 11). A
+    // run-in head's quad is no such gap.
+    const x1 = Math.min(...rows.map((r) => r.x));
+    const x2 = Math.max(...rows.map((r) => r.xEnd));
+    const apart = host.cells.slice(1).some((c) => {
+      const from = Math.max(-Infinity, ...host.items.filter((i) => i.x < c.x - 0.5).map((i) => i.x + i.w));
+      return c.x - from > host.size * 1.5 && (x2 < from || x1 > c.x);
+    });
+    if (apart) {
+      kept.add(host);
+      continue;
+    }
+    // One formula to each run of rows that overlap in x.
+    const groups: Line[][] = [];
+    for (const row of [...rows].sort((a, b) => a.x - b.x)) {
+      const last = groups[groups.length - 1];
+      if (last && row.x < Math.max(...last.map((r) => r.xEnd))) last.push(row);
+      else groups.push([row]);
+    }
+    let line = host;
+    for (const group of groups) line = joinRows(line, group, ctx, orphans);
+    joined.set(host, line);
+  }
+  // A row stays a line of its own when its text line kept its rows.
+  return lines.map((l, n) => (hosts[n] && !kept.has(hosts[n]) ? null : (joined.get(l) ?? l)));
+}
+
+// A text line with the rows of one formula joined into it (joinInlineRows).
+function joinRows(host: Line, rows: Line[], ctx: PageContext, orphans: Glyph[]): Line {
+  const em = host.size;
+  const x1 = Math.min(...rows.map((r) => r.x));
+  const x2 = Math.max(...rows.map((r) => r.xEnd));
+  // The text line's formulas the rows stand in or beside (a matrix's
+  // brackets, "|x| = {" before cases), and whatever it holds between them.
+  const zones = new Set(host.items.filter((i) => i.zone && i.x < x2 + em * 0.6 && i.x + i.w > x1 - em * 0.6).map((i) => i.zone!));
+  const own = host.items.filter((i) => (i.zone ? zones.has(i.zone) : i.x + i.w / 2 > x1 && i.x + i.w / 2 < x2));
+  const glyphs = [...[...zones].flatMap((z) => z.glyphs), ...[...own.filter((i) => !i.zone), ...rows.flatMap((r) => r.items)].flatMap((i) => i.glyphs ?? [])];
+  const zone: MathZone = {
+    glyphs: [...new Set(glyphs)].filter((g) => g.family !== null || g.unicode.trim() !== ""),
+    size: [...zones][0]?.size ?? em,
+    latex: "",
+    ok: false,
+    open: false,
+  };
+  if (zone.glyphs.length > 0) resolveZone(zone, ctx.drawing, orphans);
+  const mine = (i: Item): Item => ({ ...i, zone, sup: false, sub: false });
+  // Reading order: the text line's words before the formula, its part
+  // left of the rows, the rows from the top (the text line's part among
+  // them at its place), its part right of them, the words after.
+  const rest = host.items.filter((i) => !own.includes(i));
+  const center = (i: Item) => i.x + i.w / 2;
+  const middle: { y: number; items: Item[] }[] = [...rows.map((r) => ({ y: r.y, items: r.items })), { y: host.y, items: own.filter((i) => center(i) >= x1 && center(i) <= x2) }];
+  const formulaX = Math.min(x1, ...own.map((i) => i.x));
+  // A row is set off by a space on each side.
+  const sequence: { items: Item[]; row: boolean }[] = [
+    { items: [...rest.filter((i) => i.x < formulaX), ...own.filter((i) => center(i) < x1).map(mine)], row: false },
+    ...middle
+      .filter((u) => u.items.length > 0)
+      .sort((a, b) => b.y - a.y)
+      .map((u) => ({ items: u.items.map(mine), row: true })),
+    { items: [...own.filter((i) => center(i) > x2).map(mine), ...rest.filter((i) => i.x >= formulaX)], row: false },
+  ];
+  // A cell of the text line starts where it started; one inside the
+  // formula closes (the rows' gap had cut "( )" into two cells).
+  const starts = new Set(host.cells.slice(1).map((c) => c.x));
+  const cells: Cell[] = [];
+  let prev: Item | null = null;
+  let prevRow = false;
+  for (const unit of sequence) {
+    for (const [k, item] of unit.items.entries()) {
+      let cell = cells[cells.length - 1];
+      if (!cell || (item.zone !== zone && starts.has(item.x) && prev !== null)) {
+        cell = { x: item.x, text: "", runs: [] };
+        cells.push(cell);
+      } else if (!cell.text.endsWith(" ") && prev !== null) {
+        const gap = item.x - (prev.x + prev.w);
+        const attach = ATTACH_PUNCT_RE.test(item.str) && gap < em * 0.7;
+        if ((k === 0 && (unit.row || prevRow)) || (gap > spaceGap(prev, item, em) && !attach)) cell.text += " ";
+      }
+      const start = cell.text.length;
+      cell.text += item.str;
+      const last = cell.runs[cell.runs.length - 1];
+      if (last && sameFlags(last, item) && start - last.end <= 1) last.end = cell.text.length;
+      else {
+        const { bold, italic, mono, smallCaps, href, sup, sub, look } = item;
+        cell.runs.push({ start, end: cell.text.length, bold, italic, mono, smallCaps, href, sup, sub, zone: item.zone, look });
+      }
+      prev = item;
+    }
+    if (unit.items.length > 0) prevRow = unit.row;
+  }
+  let text = "";
+  const runs: Run[] = [];
+  for (const [n, cell] of cells.entries()) {
+    cell.text = cell.text.trimEnd();
+    cell.runs = cell.runs.map((r) => ({ ...r, end: Math.min(r.end, cell.text.length) })).filter((r) => r.end > r.start);
+    if (n > 0) text += "\t";
+    const offset = text.length;
+    text += cell.text;
+    for (const r of cell.runs) runs.push({ ...r, start: r.start + offset, end: r.end + offset });
+  }
+  return {
+    ...host,
+    cells,
+    text,
+    runs,
+    items: sequence.flatMap((u) => u.items).sort((a, b) => a.x - b.x),
+    x: Math.min(host.x, x1),
+    xEnd: Math.max(host.xEnd, x2),
+    mathChars: host.mathChars + rows.reduce((sum, r) => sum + r.mathChars, 0),
+    yMin: Math.min(host.yMin, ...rows.map((r) => r.yMin)),
+    yMax: Math.max(host.yMax, ...rows.map((r) => r.yMax)),
+  };
 }
 
 // The page's tall delimiters: the extension font's delimiter glyphs, their
 // pieces stacked in one column joined, taller than a line. Read from the
 // drawing: a text item may hold a piece and the digits after it, and the
 // text layer may drop a piece ("(1." over an unread piece in a matrix of
-// correlations, arXiv 2302.12627 p. 23).
+// correlations, arXiv 2302.12627 p. 23). KaTeX draws its tallest ones as
+// pictures: a narrow path as tall (a matrix of three rows lost its top
+// row, synth-math-html). Only on a page KaTeX set: a figure's strokes are
+// no delimiters (arXiv 2411.19946 p. 1).
 function fencesOf(ctx: PageContext): Box[] {
+  const katex = ctx.drawing.glyphs.some((g) => g.base.startsWith("KaTeX_"));
+  const drawn = katex ? ctx.drawing.paths.filter((p) => !p.clip && p.y2 - p.y1 > ctx.bodySize * 1.5 && p.x2 - p.x1 < Math.min(ctx.bodySize, (p.y2 - p.y1) * 0.35)) : [];
   const columns: Box[] = [];
   for (const g of ctx.drawing.glyphs) {
     const entry = g.family === "omx" ? mathGlyph("omx", g.code) : null;
     if (!entry || (entry.cls !== "open" && entry.cls !== "close" && !entry.piece)) continue;
-    const top = g.y + entry.box[0] * g.size;
-    const bottom = g.y - entry.box[1] * g.size;
+    const [height, depth] = g.box ?? entry.box;
+    const top = g.y + height * g.size;
+    const bottom = g.y - depth * g.size;
     const found = columns.find((c) => Math.abs(c.x1 - g.x) < 1 && top >= c.y1 - g.size && bottom <= c.y2 + g.size);
     if (found) {
       found.y1 = Math.min(found.y1, bottom);
       found.y2 = Math.max(found.y2, top);
     } else columns.push({ x1: g.x, x2: g.x + g.w, y1: bottom, y2: top });
   }
-  return columns.filter((c) => c.y2 - c.y1 > ctx.bodySize * 1.5);
+  return [...columns.filter((c) => c.y2 - c.y1 > ctx.bodySize * 1.5), ...drawn.map(({ x1, y1, x2, y2 }) => ({ x1, y1, x2, y2 }))];
 }
 
 // The edges of a line's column: where the prose lines near it that share
@@ -271,20 +476,18 @@ function columnOf(lines: Line[], n: number, ctx: PageContext): { left: number; r
     fraction bar among them; a math line alone is a display when it is
     centered, or set in with space over or under it. One label to a
     display: a second starts the next. */
-export function displayLines(lines: Line[], ctx: PageContext): Line[] {
-  if (!ctx.tex) return lines;
-  const columns = lines.map((l, n) => columnOf(lines, n, ctx));
+export function displayLines(input: Line[], ctx: PageContext): Line[] {
+  if (!ctx.tex) return input;
   const fences = fencesOf(ctx);
   const fenced = (l: Line) => fences.some((f) => l.y <= f.y2 && l.y >= f.y1 && f.x1 < l.xEnd + l.size * 2 && f.x2 > l.x - l.size * 2);
-  const kinds = lines.map((l, n) => kindOf(l, ctx, columns[n], fenced(l)));
-  // The rows of an inline structure are the text line's, not a display.
+  const kinds0 = input.map((l, n) => kindOf(l, ctx, columnOf(input, n, ctx), fenced(l)));
   // A table's rows are no display: three cells or more, two of them
   // measured values or marks, with no tall delimiters around them (a
   // matrix's rows have them). Simulation tables with a formula in each row
   // label read as one display (arXiv 2302.12627 p. 23).
-  for (let n = 0; n < lines.length; n++) {
-    const l = lines[n];
-    if (kinds[n] === "text" || kinds[n] === "label") continue;
+  for (let n = 0; n < input.length; n++) {
+    const l = input[n];
+    if (kinds0[n] === "text" || kinds0[n] === "label") continue;
     const cells = l.cells.filter((c) => c.text.trim());
     // A value is set at the text's size: a column of superscripts over a
     // display ("2   2   (1 − z₁²)w₁²", arXiv 2506.08494 p. 2) is no row.
@@ -296,10 +499,19 @@ export function displayLines(lines: Line[], ctx: PageContext): Line[] {
     // table's digits and dots are a display's matrix (arXiv 2410.04586 p. 3).
     const numbers = cells.filter((c) => /^[-−+]?\d+[.,]\d+%?(\s*\([\d.,]+\))?$|^\d+\s*\([\d.,]+\)$|^[✓✗]+$/.test(c.text.trim()) && full(c)).length;
     const table = cells.length >= 3 && numbers >= 2;
-    if (table && !fenced(l)) kinds[n] = "text";
+    if (table && !fenced(l)) kinds0[n] = "text";
   }
-  const inline = lines.map((l, n) => kinds[n] !== "text" && kinds[n] !== "label" && inlineRow(l, lines, kinds, fences));
-  for (let n = 0; n < lines.length; n++) if (inline[n]) kinds[n] = "text";
+  // The rows of an inline structure are the text line's, not a display:
+  // they join its formula, or stay lines of text.
+  const pitch0 = ctx.bodySize * ctx.leading;
+  const braces = ctx.drawing.glyphs.filter((g) => g.family === "omx" && /^hbrace-/.test(mathGlyph("omx", g.code)?.piece ?? ""));
+  const row = input.map((l, n) => kinds0[n] !== "text" && kinds0[n] !== "label" && inlineHost(l, input, kinds0, fences, pitch0, false, braces) !== null);
+  const hosts = input.map((l, n) => (row[n] ? inlineHost(l, input, kinds0, fences, pitch0, true, braces) : null));
+  for (let n = 0; n < input.length; n++) if (row[n]) kinds0[n] = "text";
+  const joined = joinInlineRows(input, hosts, ctx);
+  const lines = joined.filter((l): l is Line => l !== null);
+  const kinds = kinds0.filter((_, n) => joined[n] !== null);
+  const columns = lines.map((l, n) => columnOf(lines, n, ctx));
   // A fraction's part set in words ("TeV" under "E_γ"): a short text line a
   // bar holds to a line of math beside it.
   const rules0 = ctx.drawing.rules;
@@ -343,8 +555,10 @@ export function displayLines(lines: Line[], ctx: PageContext): Line[] {
       const reach = kinds[j] === "label" && QED_RE.test(next.text.trim()) ? 2.6 : 1.6;
       // A limit over the next row's sum stands a little farther from the
       // row above (a display of several rows, each with its sums).
-      const limit = kinds[j] === "fragment" && prev.y - next.y <= size * 2.2 && attached(next, around(next, band), rules, edge(next));
-      if ((prev.y - next.y > size * reach && !limit) || prev.y < next.y) break;
+      const limit = kinds[j] === "fragment" && prev.y - next.y <= size * 2.2 && attached(next, around(next, band), rules, edge(next), braces);
+      // Rows a tall delimiter holds are one display, however far apart.
+      const held = fences.some((f) => [prev, next].every((l) => l.y >= f.y1 && l.y <= f.y2 && l.x >= f.x2 - 1 && l.x - f.x2 < l.size * 3));
+      if ((prev.y - next.y > size * reach && !limit && !held) || prev.y < next.y) break;
       // A display's lines sit side by side at most a few ems apart (a
       // fraction's numerator beside a big operator); a label at the margin
       // stands farther.
@@ -357,12 +571,12 @@ export function displayLines(lines: Line[], ctx: PageContext): Line[] {
       // aligned row's lone "=" over its fraction's denominator).
       const after = lines[j + 1];
       const between = after !== undefined && kinds[j + 1] === "math" && next.y - after.y <= size * 1.6 && next.y < prev.y;
-      if (kinds[j] === "fragment" && !between && !attached(next, around(next, band), rules, edge(next))) break;
+      if (kinds[j] === "fragment" && !between && !attached(next, around(next, band), rules, edge(next), braces)) break;
       labels += label;
       band.push(next);
     }
     // A fragment that opened the band holds only if the band holds it.
-    while (band.length > 1 && kinds[lines.indexOf(band[0])] === "fragment" && !attached(band[0], around(band[0], band), rules, edge(band[0]))) {
+    while (band.length > 1 && kinds[lines.indexOf(band[0])] === "fragment" && !attached(band[0], around(band[0], band), rules, edge(band[0]), braces)) {
       out.push(band.shift()!);
       k++;
     }
@@ -534,9 +748,23 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
   // an overline an em over the top one, an underline under the lowest.
   const low = Math.min(...glyphs.map((g) => g.y)) - size * 0.5;
   const high = Math.max(...glyphs.map((g) => g.y)) + size;
-  const rules = ctx.drawing.rules.filter((r) => r.dir === "h" && r.x1 >= line.x - 2 && r.x2 <= line.xEnd + 2 && r.y1 >= low && r.y1 <= high);
+  // A vertical rule inside is an array's column line, and its \hline
+  // runs past the cells by their padding; the paths on it are a radical's
+  // sign or a picture of an accent or a tall delimiter (KaTeX draws them
+  // so).
+  const columns = ctx.drawing.rules.filter((r) => r.dir === "v" && r.x1 > line.x && r.x1 < line.xEnd && r.y1 >= low - size && r.y2 <= high + size);
+  const pad = columns.length > 0 ? Math.max(2, size * 0.6) : 2;
+  const rules = [...ctx.drawing.rules.filter((r) => r.dir === "h" && r.x1 >= line.x - pad && r.x2 <= line.xEnd + pad && r.y1 >= low && r.y1 <= high), ...columns];
+  const paths = ctx.drawing.paths.filter(
+    (b) =>
+      !b.clip &&
+      b.x1 >= line.x - size * 1.5 &&
+      b.x1 < line.xEnd + size * 0.6 &&
+      ((b.y1 >= low - size && b.y2 <= high + size) || (b.x2 - b.x1 < size * 0.6 && b.y2 > low && b.y1 < high)) &&
+      !paintsRule(b, ctx.drawing.rules),
+  );
   try {
-    const { latex, check } = layoutLatex(glyphs, rules, { display: true, size });
+    const { latex, check, atoms } = layoutLatex(glyphs, rules, { display: true, size }, paths);
     // A display cut in two (its operators and an opening bracket on one line,
     // the rest on the next) passes the check on what it has: its brackets
     // do not close.
@@ -547,10 +775,12 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
     let box: Box = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
     for (const g of all) {
       const entry = g.family ? mathGlyph(g.family, g.code) : null;
-      const [height, depth] = entry?.box ?? [0.7, 0.2];
+      const [height, depth] = g.box ?? entry?.box ?? [0.7, 0.2];
       box = unionBox(box, { x1: g.x, x2: g.x + Math.max(g.w, 0), y1: g.y - depth * g.size, y2: g.y + height * g.size });
     }
-    for (const r of rules) box = unionBox(box, { x1: r.x1, x2: r.x2, y1: r.y1 - r.thickness, y2: r.y1 + r.thickness });
+    for (const r of rules) box = unionBox(box, { x1: r.x1, x2: r.x2, y1: r.y1 - r.thickness, y2: r.y2 + r.thickness });
+    // A radical's sign drawn as a path: from where it starts.
+    for (const b of paths) box = unionBox(box, { x1: b.x1, x2: Math.min(b.x2, box.x2), y1: b.y1, y2: b.y2 });
     // Every glyph drawn inside the formula is the formula's: one another
     // line took (a superscript read into the text line beside the display)
     // would be missing from the LaTeX.
@@ -563,9 +793,26 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
     const edges = rules.filter((r) => r.y1 - box.y1 < size * 0.35);
     const past = (g: Glyph) => edges.some((r) => g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2 && g.y < r.y1 && r.y1 - g.y < size * 1.3);
     const own = new Set(all);
+    const labels = braceLabelBoxes(atoms);
+    // A glyph of TeX's fonts within an em past the right edge, on the
+    // formula's rows, is a part the formula lost: in four displays of arXiv
+    // 2506.08494 (pp. 4–7) the closing norm and its subscript stood past the
+    // line's last glyph, and each passed without them.
+    const beyond = (g: Glyph) => g.family !== null && !g.hidden && g.x + g.w / 2 >= box.x2 && g.x < box.x2 + size && g.y > box.y1 && g.y < box.y2;
+    // So is a brace within an em under or over it that it did not read, with
+    // the brace's label: display (6) of arXiv 2411.19946 p. 4 sets three
+    // braces one under another, and passed with the first alone.
+    const brace = (g: Glyph) =>
+      g.family === "omx" &&
+      /^hbrace-/.test(mathGlyph("omx", g.code)?.piece ?? "") &&
+      g.x + g.w / 2 > box.x1 &&
+      g.x + g.w / 2 < box.x2 &&
+      g.y > box.y1 - size &&
+      g.y < box.y2 + size;
     const stray = ctx.drawing.glyphs.some((g) => {
       if (own.has(g) || (g.family === null && g.unicode.trim() === "")) return false;
-      if (past(g)) return true;
+      if (past(g) || beyond(g) || brace(g)) return true;
+      if (labels.some((b) => g.x + g.w / 2 > b.x1 && g.x + g.w / 2 < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
       if (g.x + g.w / 2 <= box.x1 || g.x + g.w / 2 >= box.x2) return false;
       const hangs = g.family === null && !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]$/u.test(g.unicode);
       return g.y > box.y1 && g.y < box.y2 + (hangs ? g.size : 0);
@@ -643,7 +890,17 @@ export function displayEquations(
     const size = s.lineSize ?? ctx.bodySize;
     return c !== null && Number.isFinite(c.right) && s.box!.x1 > c.left + size * 0.5 && Math.abs((s.box!.x1 + s.box!.x2) / 2 - (c.left + c.right) / 2) < size * 1.5;
   };
-  const labeled = (s: Segment) => LABEL_RE.test(s.text.trim().split(/\s+/).pop() ?? "");
+  // A printed label ends the display's text, or one of its lines: a matrix
+  // sets its label beside its middle row (nps-thesis-2020-shevock (35)).
+  const labeled = (s: Segment) =>
+    LABEL_RE.test(s.text.trim().split(/\s+/).pop() ?? "") ||
+    lines.some((l) => l.y >= s.box!.y1 && l.y <= s.box!.y2 && l.x >= s.box!.x1 - 0.5 && l.xEnd <= s.box!.x2 + 0.5 && unlabeled(l).label !== null);
+  // A missed display's rows the page set apart are its own: blocks all in
+  // math against it, their boxes touching (Word's 9×9 matrices (31), (32),
+  // and (35) of nps-thesis-2020-shevock were half a crop and half a
+  // paragraph of bracket pieces). They join its crop, never tangle it.
+  const row = (s: Segment) => missed !== undefined && formulaPart(s, 0) && (s.mathShare ?? 0) >= 0.9;
+  const against = (a: Segment, b: Segment) => a.box!.y1 - b.box!.y2 < em * 0.5;
   // The page's glyphs no line reads, once for all its displays.
   let orphans: Glyph[] | null = null;
   const out: Segment[] = [];
@@ -667,12 +924,14 @@ export function displayEquations(
     // it: on a TeX page, a part the display's lines left out (a denominator
     // in words) is still in the picture.
     if (!equation) {
-      while (
-        m < segments.length &&
-        ((!tex && isMathSegment(segments[m], ctx)) || isMissed(segments[m]) || part(segments[m])) &&
-        !(tex && displayOf(segments[m])) &&
-        near(segments[m - 1], segments[m])
-      ) {
+      // Once a row joined, only a block against the last joins: the rows
+      // touch, and the next display stands a skip apart.
+      let rows = false;
+      while (m < segments.length && !(tex && displayOf(segments[m]))) {
+        const s = segments[m];
+        const loose: boolean = !rows && ((!tex && isMathSegment(s, ctx)) || isMissed(s) || part(s)) && near(segments[m - 1], s);
+        if (!loose && !(row(s) && against(segments[m - 1], s))) break;
+        rows ||= !loose;
         m++;
       }
       if (missed && ((!centered(segments[k]) && !segments.slice(k, m).some(labeled)) || segments[m]?.type === "TABLE")) {
@@ -680,8 +939,12 @@ export function displayEquations(
         k++;
         continue;
       }
-      // Backward over equation-shaped lines already pushed.
-      while (out.length > 0 && part(out[out.length - 1]) && near(out[out.length - 1], segments[start])) {
+      // Backward over equation-shaped lines and rows already pushed.
+      while (out.length > 0) {
+        const s = out[out.length - 1];
+        const loose: boolean = !rows && part(s) && near(s, segments[start]);
+        if (!loose && !(row(s) && against(s, segments[start]))) break;
+        rows ||= !loose;
         start = segments.indexOf(out.pop()!);
       }
     }

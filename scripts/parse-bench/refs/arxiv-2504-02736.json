@@ -52,6 +52,33 @@
    ]
   },
   {
+   "kind": "footnote",
+   "label": "∗",
+   "spans": [
+    {
+     "text": "qiyang@fudan.edu.cn"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "†",
+   "spans": [
+    {
+     "text": "cjwang@hku.hk"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "‡",
+   "spans": [
+    {
+     "text": "zcgu@phy.cuhk.edu.hk"
+    }
+   ]
+  },
+  {
    "kind": "paragraph",
    "spans": [
     {

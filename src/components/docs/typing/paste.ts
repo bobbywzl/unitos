@@ -4,7 +4,9 @@ import { NodeSelection, TextSelection, type Transaction } from "@tiptap/pm/state
 import { insertPoint } from "@tiptap/pm/transform";
 import type { EditorView } from "@tiptap/pm/view";
 import { insertT, toast } from "@/components/docs/insert/context";
+import { listFormat } from "@/components/docs/toolbar/lists";
 import { fragmentToMarkdown, markdownToHtml } from "@/components/docs/typing/markdown";
+import { LIST_COUNTERS, type ListCounter, type ListLevel } from "@/lib/docs/schema";
 import { uploadImage } from "@/lib/images";
 
 // Paste in the page editor (SPEC.md §29, typing), as Google Docs pastes:
@@ -122,14 +124,38 @@ function docsChecklists(root: DocumentFragment): void {
   });
 }
 
+/** A Google Docs list keeps the counters its clipboard carries: each line's
+    list-style-type at its aria-level (upper-alpha, lower-roman, square) is
+    that level's, and the outermost list takes the preset that draws them,
+    else them as its own levels (toolbar/lists.ts listFormat). The words
+    around a number ("(a)") are not on the clipboard: a level reads "a.". */
+function docsListFormats(root: DocumentFragment): void {
+  const bullets: Record<string, string> = { disc: "●", circle: "○", square: "■" };
+  for (const list of root.querySelectorAll<HTMLElement>("ol, ul")) {
+    if (list.parentElement?.closest("ol, ul") || list.getAttribute("data-type") === "taskList") continue;
+    const seen: (ListLevel | undefined)[] = [];
+    for (const li of list.querySelectorAll<HTMLElement>("li[aria-level]")) {
+      const k = Number(li.getAttribute("aria-level")) - 1;
+      const type = li.style.listStyleType;
+      if (!Number.isInteger(k) || k < 0 || k > 8 || seen[k]) continue;
+      if ((LIST_COUNTERS as readonly string[]).includes(type)) seen[k] = { counter: type as ListCounter, format: `%${k}.` };
+      else if (bullets[type]) seen[k] = { bullet: bullets[type] };
+    }
+    const format = listFormat(list.tagName === "OL" ? "orderedList" : "bulletList", seen);
+    if (format && "listStyle" in format) list.setAttribute("data-list-style", format.listStyle);
+    else if (format) list.setAttribute("data-list-levels", format.listLevels);
+  }
+}
+
 /** Pasted HTML as the page editor keeps it: Word's lists, Google Docs'
-    checklists, its paragraph and text formats (above), and its pictures
-    copied into Unitos (copyImages). */
+    lists and checklists, its paragraph and text formats (above), and its
+    pictures copied into Unitos (copyImages). */
 export function pastedHtml(editor: Editor, html: string): string {
   const box = document.createElement("template");
   box.innerHTML = html;
   wordLists(box.content);
   docsChecklists(box.content);
+  docsListFormats(box.content);
   // The browser reads each color: a see-through one is drawn over the white
   // page; none, a keyword, or a color outside sRGB is null.
   const probe = document.body.appendChild(document.createElement("i"));

@@ -127,7 +127,7 @@ export async function POST(req: Request) {
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("Word ingest failed:", err);
-        throw new Error(describeIngestError(err, t, "pdf"));
+        throw new Error(describeIngestError(err, t, "file"));
       }
     });
   } else if (parse.sniffOfficeFile(bytes) !== null || (!parse.isZipBytes(bytes) && isSheetsFile({ type: "", name: filename }))) {
@@ -151,7 +151,7 @@ export async function POST(req: Request) {
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("Slides/sheets ingest failed:", err);
-        throw new Error(describeIngestError(err, t, "pdf"));
+        throw new Error(describeIngestError(err, t, "file"));
       }
     });
   } else if (isMarkdownFile({ type: "", name: filename })) {
@@ -164,7 +164,7 @@ export async function POST(req: Request) {
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("Markdown ingest failed:", err);
-        throw new Error(describeIngestError(err, t, "pdf"));
+        throw new Error(describeIngestError(err, t, "file"));
       }
     });
   } else if (!parse.isPdfBytes(bytes)) {

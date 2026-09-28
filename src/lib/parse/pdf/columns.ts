@@ -51,19 +51,25 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
   const split = depth < 3 ? findSplit(items, graphics, page, pageWidth) : null;
   if (!split) return leaf(items, graphics, lines);
   const out: Piece[] = [];
+  let aboveWhole = false;
   for (const band of split.bands) {
     // A band where neither side is prose (a wide table's rows, a form under
     // two columns of text) reads in one pass, so its rows stay whole. A
     // band of a line or two a side (between an overfull line and a float)
-    // is columns still.
+    // is columns still, unless the band above it was read in one pass: then
+    // it holds the table's last rows (arXiv 2411.19946 p. 12: read apart,
+    // the right half of a table's last row left the table and ran into the
+    // paragraph under it).
+    const fewest: number = aboveWhole ? 1 : 3;
     const left = buildLines(band.left.items, page);
-    const right = left.length >= 3 ? buildLines(band.right.items, page) : [];
-    const whole = left.length >= 3 && right.length >= 3 && !isProse(left, 1) && !isProse(right, 1);
+    const right = left.length >= fewest ? buildLines(band.right.items, page) : [];
+    const whole = left.length >= fewest && right.length >= fewest && !isProse(left, 1) && !isProse(right, 1);
     if (whole) out.push(...leaf([...band.left.items, ...band.right.items], [...band.left.graphics, ...band.right.graphics]));
     else {
       out.push(...readRegion(band.left.items, band.left.graphics, page, pageWidth, depth + 1, left));
-      out.push(...readRegion(band.right.items, band.right.graphics, page, pageWidth, depth + 1, left.length >= 3 ? right : undefined));
+      out.push(...readRegion(band.right.items, band.right.graphics, page, pageWidth, depth + 1, left.length >= fewest ? right : undefined));
     }
+    aboveWhole = whole;
     if (band.separator) out.push(band.separator);
   }
   return out;
@@ -126,8 +132,10 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   const g = best.g;
 
   // Rows that span the gutter: the items that cross it, the items on either
-  // side of it with no more than a word's gap between them (a full-width
-  // caption whose word gap fell on the gutter was read as two halves), and
+  // side of it with no more than a word's gap between them, up to 1.2 em (a
+  // full-width caption whose word gap fell on the gutter was read as two
+  // halves; REVTeX sets "FIG. 2." 0.86 em from its words, arXiv 2502.02648;
+  // a two-column gutter is 1.4 em or more), and
   // the items that run on from those along their baseline (a line of word
   // items has one word over the gutter and the rest on either side).
   const byY = [...items].sort((a, b) => a.y - b.y);
@@ -146,7 +154,7 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
       const item = byY[k];
       const size = Math.max(s.size, item.size);
       const gap = Math.max(item.x - (s.x + s.w), s.x - (item.x + item.w));
-      if (item !== s && Math.abs(item.y - s.y) < size * 0.5 && gap < size * 0.8) out.push(item);
+      if (item !== s && Math.abs(item.y - s.y) < size * 0.5 && gap < size * 1.2) out.push(item);
     }
     return out;
   };

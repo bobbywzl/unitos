@@ -169,6 +169,8 @@ function referenceText(leaves: Leaf[]) {
         break;
       case "separator":
       case "pagebreak":
+      // A contents field no one updated prints no entries.
+      case "contents":
         break;
     }
   }

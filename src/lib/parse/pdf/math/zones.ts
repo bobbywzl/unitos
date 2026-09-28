@@ -8,10 +8,12 @@
 // ride through line joins and merges as runs, and its LaTeX comes once the
 // page's rules are known (resolveZones).
 
-import type { Glyph, PageDrawing } from "@/lib/parse/pdf/drawing";
+import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
+import { isUnicodeMathFont } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
+import { braceLabelBoxes, type Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
-import type { Item, Line, MathZone, Run } from "@/lib/parse/pdf/types";
+import type { Box, Item, Line, MathZone, Run } from "@/lib/parse/pdf/types";
 import type { MathSpan } from "@/lib/parse/types";
 
 type Kind = "math" | "attach" | "text";
@@ -25,10 +27,14 @@ const OPNAMES = new Set([
   "arg", "Pr", "limsup", "liminf", "mod",
 ]);
 
-// A glyph only math sets: a math family's, or the text font's upright
-// capital Greek (Γ … Ω, codes 0–10: "ω ∈ Ω" ended the formula at the Ω, read
-// as a word).
-const isMathGlyph = (g: Glyph) => (g.family !== null && MATH_FAMILIES.has(g.family)) || (g.family === "ot1" && g.code <= 0x0a);
+// A glyph only math sets: a math family's, the text font's upright capital
+// Greek (Γ … Ω, codes 0–10: "ω ∈ Ω" ended the formula at the Ω, read as a
+// word), or any glyph of a math font set in Unicode — KaTeX's fonts and
+// OpenType math fonts set nothing but formulas, their digits and roman
+// letters too (synth-math-html's \dfrac{1}{2} had no glyph to start a
+// formula, and \text{if } cut its formula in two).
+const isMathGlyph = (g: Glyph) =>
+  (g.family !== null && MATH_FAMILIES.has(g.family)) || (g.family === "ot1" && (g.code <= 0x0a || isUnicodeMathFont(g.base)));
 
 function kind(g: Glyph, size: number): Kind {
   if (isMathGlyph(g)) return "math";
@@ -111,7 +117,9 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       const after = glyphs[j];
       const afterGap = after ? gapOf(glyphs[j - 1], after) : Infinity;
       const nextMath = after !== undefined && kinds[j] !== "text";
-      const opname = OPNAMES.has(word) && (cur.length > 0 || nextMath);
+      // \liminf and \limsup set "inf" and "sup" a thin space after "lim".
+      const limit = word === "lim" && afterGap < 0.3 * size && /^(inf|sup)/.test(glyphs.slice(j, j + 3).map((x) => x.unicode).join(""));
+      const opname = (OPNAMES.has(word) && (cur.length > 0 || nextMath)) || limit;
       // "Var(" or "sgn x" set tight: a name; "sets:" is a word and its colon.
       const opens = after !== undefined && (kinds[j] === "math" || after.unicode === "(");
       // A bold letter stands a relation's space from its neighbors
@@ -149,6 +157,15 @@ function charSpans(item: Item): [number, number][] {
   let i = 0;
   for (const g of item.glyphs ?? []) {
     const read = g.text ?? g.unicode.normalize("NFKC");
+    // A space glyph takes the string's space, or nothing: KaTeX sets a
+    // zero-width strut at a formula's first glyph, and it took the "(" of
+    // "(ω)" (synth-notes-html: the formula's text began a character late).
+    if (read !== "" && read.trim() === "") {
+      const end = /\s/.test(item.str[i] ?? "") ? i + 1 : i;
+      spans.push([i, end]);
+      i = end;
+      continue;
+    }
     if (read !== "") while (i < item.str.length && /\s/.test(item.str[i])) i++;
     let end: number;
     if (read !== "" && item.str.startsWith(read, i)) end = i + read.length;
@@ -203,7 +220,11 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
       out.push(...cellItems);
       continue;
     }
-    const glyphs = cellItems.flatMap((it) => it.glyphs ?? []).sort((a, b) => a.x - b.x || b.y - a.y);
+    // A space glyph is no word: it neither ends nor joins a formula.
+    const glyphs = cellItems
+      .flatMap((it) => it.glyphs ?? [])
+      .filter((g) => g.family !== null || g.unicode.trim() !== "")
+      .sort((a, b) => a.x - b.x || b.y - a.y);
     const zoneOf = new Map<Glyph, MathZone>();
     // An item with no glyphs is text a formula cannot run through.
     const breaks = cellItems.filter((it) => !it.glyphs?.length).map((it) => it.x);
@@ -223,11 +244,16 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
       const spans = charSpans(item);
       // A cut falls where the formula changes between two glyphs with text
       // between them; a glyph that reads as nothing (an accent composed on
-      // its letter, a composite's second half) stays with the one before.
+      // its letter, a composite's second half, a strut) stays with the one
+      // before it, or at the item's start with the first that reads.
+      const zones = glyphs.map((g) => zoneOf.get(g));
+      const reads = spans.map(([a, b]) => b > a);
+      const first = reads.indexOf(true);
+      for (let k = 0; k < glyphs.length; k++) if (!reads[k]) zones[k] = k < first ? zones[first] : zones[k - 1] ?? zones[k];
       let from = 0;
       for (let k = 1; k <= glyphs.length; k++) {
-        if (k < glyphs.length && (zoneOf.get(glyphs[k]) === zoneOf.get(glyphs[from]) || spans[k][0] === spans[from][0])) continue;
-        out.push(part(item, spans, from, k, zoneOf.get(glyphs[from])));
+        if (k < glyphs.length && (zones[k] === zones[from] || spans[k][0] === spans[from][0])) continue;
+        out.push(part(item, spans, from, k, zones[from]));
         from = k;
       }
     }
@@ -267,38 +293,113 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
       if (!zone || seen.has(zone)) continue;
       seen.add(zone);
       orphans ??= orphanGlyphs(lines, drawing);
-      const x1 = Math.min(...zone.glyphs.map((g) => g.x));
-      const x2 = Math.max(...zone.glyphs.map((g) => g.x + g.w));
-      const low = Math.min(...zone.glyphs.map((g) => g.y));
-      const high = Math.max(...zone.glyphs.map((g) => g.y));
-      const on = (g: Glyph) => g.x + g.w / 2 > x1 && g.x + g.w / 2 < x2 && g.y > low - zone.size * 0.6 && g.y < high + zone.size * 1.2;
-      const extra = orphans.filter(on);
-      for (const g of extra) orphans.splice(orphans.indexOf(g), 1);
-      const glyphs = [...zone.glyphs, ...extra];
-      // The rules inside it: a fraction bar, a radical's or an overline's
-      // bar over its glyphs. A bar with the formula's glyphs over it only
-      // is a display's fraction bar under its numerator's line (arXiv
-      // 2506.08494 p. 2 read it as \underline).
-      const near = drawing.rules.filter(
-        (r) =>
-          r.dir === "h" &&
-          r.x1 >= x1 - 1 &&
-          r.x2 <= x2 + 1 &&
-          r.y1 > low - zone.size &&
-          r.y1 < high + zone.size &&
-          glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2),
-      );
-      try {
-        const { latex, check, atoms } = layoutLatex(glyphs, near, { display: false, size: zone.size });
-        zone.latex = latex;
-        zone.ok = check.ok;
-        const last = atoms.filter((a) => a.size >= zone.size * 0.85).sort((a, b) => b.x2 - a.x2)[0];
-        zone.open = last !== undefined && (last.cls === "rel" || last.cls === "bin" || last.cls === "punct");
-      } catch {
-        zone.ok = false;
-      }
+      resolveZone(zone, drawing, orphans);
     }
   }
+}
+
+/** One zone's LaTeX and check (resolveZones). orphans: the page's glyphs
+    no item reads; the zone takes those that sit on it. */
+export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph[]) {
+  const x1 = Math.min(...zone.glyphs.map((g) => g.x));
+  const x2 = Math.max(...zone.glyphs.map((g) => g.x + g.w));
+  const low = Math.min(...zone.glyphs.map((g) => g.y));
+  const high = Math.max(...zone.glyphs.map((g) => g.y));
+  // The size the formula is set at: its line's text size, or its own
+  // largest glyph's where that is larger — KaTeX sets math a fifth
+  // larger than its prose (a radical's bar over a 13 pt digit in 11 pt
+  // prose), and a display's cell holds more scripts than base glyphs
+  // (a_{ij} read its scripts at the base's level).
+  const em = Math.max(zone.size, ...zone.glyphs.map((g) => g.size));
+  const on = (g: Glyph) => g.x + g.w / 2 > x1 && g.x + g.w / 2 < x2 && g.y > low - em * 0.6 && g.y < high + em * 1.2;
+  const extra = orphans.filter(on);
+  for (const g of extra) orphans.splice(orphans.indexOf(g), 1);
+  const glyphs = [...zone.glyphs, ...extra];
+  // The rules inside it: a fraction bar, a radical's or an overline's
+  // bar over its glyphs. A bar with the formula's glyphs over it only
+  // is a display's fraction bar under its numerator's line (arXiv
+  // 2506.08494 p. 2 read it as \underline).
+  // A vertical rule inside it is an array's column line: the layout
+  // reads it with the array's rows, and an \hline that runs past the
+  // cells by their padding. Without one, a rule past the glyphs is none
+  // of theirs (a fraction bar over the next formula read as an overline,
+  // arXiv 2502.02648 p. 11).
+  const columns = drawing.rules.filter((r) => r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low - em && r.y2 < high + em * 1.2);
+  const pad = columns.length > 0 ? em * 0.6 : 1;
+  const near = [
+    ...drawing.rules.filter(
+      (r) =>
+        r.dir === "h" &&
+        r.x1 >= x1 - pad &&
+        r.x2 <= x2 + pad &&
+        r.y1 > low - em &&
+        r.y1 < high + em &&
+        glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2),
+    ),
+    ...columns,
+  ];
+  // The paths drawn on it: a radical's sign, a picture of an accent or
+  // a tall delimiter (KaTeX draws them so), which may start an em left
+  // of the glyphs, or just right of them (a closing delimiter), and run
+  // past them (the rows it holds that the formula lacks).
+  const paths = drawing.paths.filter(
+    (b) =>
+      !b.clip &&
+      b.x1 >= x1 - em * 1.5 &&
+      b.x1 < x2 + em * 0.6 &&
+      ((b.y1 > low - em * 2 && b.y2 < high + em * 2) || (b.x2 - b.x1 < em * 0.6 && b.y2 > low && b.y1 < high + em)) &&
+      !paintsRule(b, drawing.rules),
+  );
+  try {
+    const { latex, check, atoms } = layoutLatex(glyphs, near, { display: false, size: em }, paths);
+    zone.latex = latex;
+    // Every glyph drawn inside the formula is the formula's: a script
+    // another line took is missing from the LaTeX, which still passes
+    // the check (synth-math-html: a numerator's x^k read as x).
+    zone.ok = check.ok && !strayInside(atoms, new Set(glyphs), drawing.glyphs);
+    const last = atoms.filter((a) => a.size >= zone.size * 0.85).sort((a, b) => b.x2 - a.x2)[0];
+    zone.open = last !== undefined && (last.cls === "rel" || last.cls === "bin" || last.cls === "punct");
+  } catch {
+    zone.ok = false;
+  }
+}
+
+/** A path that paints one of the page's rules (a fraction bar filled as a
+    thin box, an array's column line stroked) is that rule, read with it or
+    not at all. */
+export function paintsRule(b: Box, rules: Rule[]): boolean {
+  return rules.some((r) =>
+    r.dir === "v"
+      ? Math.abs((b.x1 + b.x2) / 2 - r.x1) < r.thickness + 1 && b.x2 - b.x1 < r.thickness + 2 && Math.abs(b.y1 - r.y1) < 1 && Math.abs(b.y2 - r.y2) < 1
+      : Math.abs(b.x1 - r.x1) < 1 && Math.abs((b.y1 + b.y2) / 2 - r.y1) < r.thickness + 1 && b.y2 - b.y1 < r.thickness + 2,
+  );
+}
+
+/** A glyph of the page drawn inside the formula's atoms' box — its origin
+    inside — that is not the formula's own (spaces aside); one where a
+    brace's label stands (layout.ts braceLabelBoxes); or a small one that
+    starts just past its right end, over its baseline: the end of a script
+    the formula lost (a closing bracket of an exponent, synth-notes-tex; an
+    exponent, arXiv 2411.09614 p. 15). It counts from its start: a script
+    stacked on the formula's last one starts inside the formula and stays
+    text beside it. Counted from its center, a wide one (the + over the i
+    of 𝒪ᵢ⁺) failed the 𝒪ᵢ± formulas of springer-bmb-01377. */
+function strayInside(atoms: Atom[], own: Set<Glyph>, page: Glyph[]): boolean {
+  if (atoms.length === 0) return false;
+  const em = Math.max(...atoms.map((a) => a.size));
+  const x1 = Math.min(...atoms.map((a) => a.x1)) + em * 0.05;
+  const x2 = Math.max(...atoms.map((a) => a.x2)) - em * 0.05;
+  const y1 = Math.min(...atoms.map((a) => a.bottom));
+  const y2 = Math.max(...atoms.map((a) => a.top));
+  const base = Math.min(...atoms.filter((a) => a.size >= em * 0.9).map((a) => a.yb));
+  const labels = braceLabelBoxes(atoms);
+  return page.some((g) => {
+    if (own.has(g) || g.hidden || g.unicode.trim() === "") return false;
+    const cx = g.x + g.w / 2;
+    if (cx > x1 && cx < x2 && g.y > y1 && g.y < y2) return true;
+    if (labels.some((b) => cx > b.x1 && cx < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
+    return g.size < em * 0.8 && g.x >= x2 && g.x < x2 + em * 0.3 && g.y > base + em * 0.2 && g.y < y2;
+  });
 }
 
 /** A block's inline formulas: the runs of one formula that passed the

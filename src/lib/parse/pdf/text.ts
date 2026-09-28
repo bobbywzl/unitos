@@ -4,7 +4,7 @@
 
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
 import type { Line, Run } from "@/lib/parse/pdf/types";
-import type { LinkSpan, StyleSpan } from "@/lib/parse/types";
+import type { LinkSpan, StyleSpan, TextFont } from "@/lib/parse/types";
 
 const CJK_CHAR_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303F\uFF00-\uFFEF]/u;
 
@@ -95,6 +95,41 @@ export function joinWrapped(target: { text: string; runs?: Run[] }, next: string
   const offset = target.text.length + glue.length;
   target.text = target.text + glue + next;
   return offset;
+}
+
+// ── Links that wrap ─────────────────────────────────────────────────────────
+
+/** A URL a text ends in: from "http(s)://" or "www." to its end. */
+const URL_END_RE = /(?:https?:\/\/|www\.)\S*$/;
+/** A URL a text opens with: a word of its own after a path or a URL
+    ("…/25/06" then "https://doi.org/…" in an ACM paper's front matter). */
+const URL_START_RE = /^(?:https?:\/\/|www\.)/;
+/** A URL's last character that a wrap leaves at a line's end with the URL
+    going on: a path's slash, a hyphen, a query's "=" or "&". */
+const URL_OPEN_RE = /[/\-_=&?#%]$/;
+/** A first word that reads as the rest of a URL: a path, a query, a dot
+    between letters or digits, or letters and digits mixed ("k3AzU"). */
+const URL_REST_RE = /[/?=&%#_~]|[\p{L}\p{N}]\.[\p{L}\p{N}]|\p{L}\p{N}|\p{N}\p{L}/u;
+
+/** Whether a URL that ends a text goes on in the next line's first word;
+    null when the text ends in no URL. The link's address is the strongest
+    witness: the address on either side holds the words on both sides of
+    the wrap, or the next line's first word is no part of the link. With no
+    link, the URL goes on when it ends open (a slash, a hyphen) or the next
+    word reads as a URL's rest. A long link read a space at each wrap after
+    its first line ("…choices/ whats-medicare", a Google Docs export's
+    links), and a URL at a line's end glued the next line's word
+    ("…dt09_147.asp(accessed", "…charter.pdf2. CDC."). */
+function urlGoesOn(text: string, href: string | null, next: string, nextHref: string | null): boolean | null {
+  const url = URL_END_RE.exec(text.slice(-2000))?.[0];
+  if (!url) return null;
+  const head = (next.trimStart().split(/\s/, 1)[0] ?? "").replace(/[.,;:)\]]+$/, "");
+  if (!head) return false;
+  const joined = (url.slice(-16) + head.slice(0, 16)).toLowerCase();
+  // A scheme alone ("https://" then "www.…") goes on whatever the next word.
+  if ([href, nextHref].some((link) => link?.toLowerCase().includes(joined)) || /^(?:https?:\/\/|www\.)$/.test(url)) return true;
+  if ((href && nextHref !== href) || URL_START_RE.test(head)) return false;
+  return URL_OPEN_RE.test(url) || URL_REST_RE.test(head);
 }
 
 // ── Text assembly across lines ──────────────────────────────────────────────
@@ -197,9 +232,11 @@ export function joinGroup(lines: Line[], proseJoin = false): { text: string; run
     if (sep === " ") {
       const lastChar = prevText[prevText.length - 1] ?? "";
       const firstChar = nextText[0] ?? "";
+      const url = urlGoesOn(builder.text, builder.runs.at(-1)?.href ?? null, nextText, lines[i].runs[0]?.href ?? null);
       // CJK wraps anywhere and carries no space; a URL wraps without one.
       if (CJK_CHAR_RE.test(lastChar) && CJK_CHAR_RE.test(firstChar)) sep = "";
-      else if (/https?:\/\/\S*$/.test(prevText) || /^\S*(?:\/|\.[a-z]{2,4}\/)\S*$/.test(nextText.split(" ")[0]) && /\/\S*$/.test(prevText)) sep = "";
+      else if (url !== null) sep = url || CJK_CHAR_RE.test(firstChar) ? "" : " ";
+      else if (/^\S*(?:\/|\.[a-z]{2,4}\/)\S*$/.test(nextText.split(" ")[0]) && /\/\S*$/.test(prevText) && !URL_START_RE.test(nextText)) sep = "";
       else if (lineEndHyphen(prevText, nextText) === "drop") {
         builder.dropTrailingChar();
         sep = "";
@@ -231,28 +268,69 @@ export function isMonoLine(line: Line): boolean {
 
 // ── Style and link spans out of runs ────────────────────────────────────────
 
+const WORD_RE = /[\p{L}\p{N}]/u;
+
+// The look most of a block's letters take (ParsedBlock.font): the face and
+// the size of the most letters (a formula's glyphs, a footnote mark, and a
+// code run aside), bold and italic when most letters are, and the color
+// most letters take. None when no run has a look (look.ts).
+function blockFont(text: string, runs: Run[]): TextFont | undefined {
+  const letters = (r: Run) => {
+    let n = 0;
+    for (const ch of text.slice(r.start, r.end)) if (WORD_RE.test(ch)) n++;
+    return n;
+  };
+  const counted = runs.filter((r) => r.look && !r.zone).map((r) => ({ r, n: letters(r) }));
+  const top = <T>(value: (r: Run) => T | undefined): T | undefined => {
+    const counts = new Map<T, number>();
+    for (const { r, n } of counted) {
+      const v = value(r);
+      if (v !== undefined && n > 0) counts.set(v, (counts.get(v) ?? 0) + n);
+    }
+    return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  };
+  const prose = counted.some(({ r, n }) => n > 0 && !r.mono && r.look?.face);
+  const family = top((r) => (r.look?.face && (!prose || !r.mono) ? r.look.face : undefined));
+  // Small capitals count at their capitals' size (look.ts drawnSmallCaps).
+  const size = top((r) => (r.sup || r.sub ? undefined : (r.look?.capitals ?? r.look?.size)));
+  if (!family || size === undefined) return undefined;
+  const all = counted.reduce((sum, { n }) => sum + n, 0);
+  const share = (flag: (r: Run) => boolean | undefined) => counted.reduce((sum, { r, n }) => sum + (flag(r) ? n : 0), 0) / all;
+  const color = top((r) => r.look?.color ?? "");
+  return {
+    family,
+    size,
+    ...(share((r) => r.bold) > 0.5 ? { bold: true as const } : {}),
+    ...(share((r) => r.italic) > 0.5 ? { italic: true as const } : {}),
+    ...(color ? { color } : {}),
+  };
+}
+
 export function spansFromRuns(
   text: string,
   runs: Run[] | undefined,
   opts: { skipBold?: boolean; skipMono?: boolean } = {},
-): { styles: StyleSpan[]; links: LinkSpan[] } {
+): { styles: StyleSpan[]; links: LinkSpan[]; font?: TextFont } {
   const styles: StyleSpan[] = [];
   const links: LinkSpan[] = [];
   if (!runs || runs.length === 0) return { styles, links };
 
-  const collect = (flag: "bold" | "italic" | "mono" | "smallCaps" | "sup" | "sub"): { start: number; end: number }[] => {
-    const ranges: { start: number; end: number }[] = [];
+  // The ranges of runs that share a value, joined across a space between them.
+  const collect = (value: (r: Run) => string | null | undefined): { start: number; end: number; value: string }[] => {
+    const ranges: { start: number; end: number; value: string }[] = [];
     for (const r of runs) {
-      if (!r[flag]) continue;
+      const v = value(r);
+      if (!v) continue;
       const last = ranges[ranges.length - 1];
-      if (last && r.start - last.end <= 1 && text.slice(last.end, r.start).trim() === "") {
+      if (last && last.value === v && r.start - last.end <= 1 && text.slice(last.end, r.start).trim() === "") {
         last.end = r.end;
       } else {
-        ranges.push({ start: r.start, end: r.end });
+        ranges.push({ start: r.start, end: r.end, value: v });
       }
     }
     return ranges;
   };
+  const flag = (name: "bold" | "italic" | "mono" | "smallCaps" | "sup" | "sub") => (r: Run) => (r[name] ? "on" : null);
   const trim = (range: { start: number; end: number }): { start: number; end: number } => {
     let { start, end } = range;
     while (start < end && /\s/.test(text[start])) start++;
@@ -267,18 +345,37 @@ export function spansFromRuns(
     if (end <= start) return;
     styles.push({ start, end, style, quotedText: text.slice(start, end) });
   };
-  for (const range of collect("bold")) {
+  for (const range of collect(flag("bold"))) {
     if (opts.skipBold && whole(range)) continue;
     push("bold", range);
   }
-  for (const range of collect("italic")) push("italic", range);
-  for (const range of collect("mono")) {
+  for (const range of collect(flag("italic"))) push("italic", range);
+  for (const range of collect(flag("mono"))) {
     if (opts.skipMono && whole(range)) continue;
     push("code", range);
   }
-  for (const range of collect("smallCaps")) push("smallCaps", range);
-  for (const range of collect("sup")) push("sup", range);
-  for (const range of collect("sub")) push("sub", range);
+  for (const range of collect(flag("smallCaps"))) push("smallCaps", range);
+  for (const range of collect(flag("sup"))) push("sup", range);
+  for (const range of collect(flag("sub"))) push("sub", range);
+  // What the drawing marks (look.ts). A code run keeps the code's look: a
+  // color or a highlight on it would take its code mark in the import.
+  for (const range of collect((r) => (r.look?.underline ? "on" : null))) push("underline", range);
+  for (const range of collect((r) => (r.look?.strike ? "on" : null))) push("strike", range);
+  for (const range of collect((r) => (r.mono ? null : r.look?.color))) push(`color:${range.value}` as StyleSpan["style"], range);
+  for (const range of collect((r) => (r.mono ? null : r.look?.highlight))) push(`highlight:${range.value}` as StyleSpan["style"], range);
+  // A run of words in another face or size than its block's. A formula,
+  // a script, and a code run have their own; a symbol in another font (a
+  // checkbox in MS Gothic) is no run of words.
+  const font = blockFont(text, runs);
+  if (font) {
+    const words = (r: Run) => !r.mono && !r.zone && WORD_RE.test(text.slice(r.start, r.end));
+    for (const range of collect((r) => (words(r) && r.look?.face && r.look.face !== font.family ? r.look.face : null))) {
+      push(`font:${range.value}`, range);
+    }
+    for (const range of collect((r) => (words(r) && !r.sup && !r.sub && r.look && Math.abs(r.look.size - font.size) >= 0.5 ? String(r.look.size) : null))) {
+      push(`size:${Number(range.value)}`, range);
+    }
+  }
   // Hyperlink regions from the PDF's link annotations.
   for (const r of runs) {
     if (!r.href) continue;
@@ -291,7 +388,7 @@ export function spansFromRuns(
       if (end > start) links.push({ start, end, quotedText: text.slice(start, end), href: r.href });
     }
   }
-  return { styles, links };
+  return font ? { styles, links, font } : { styles, links };
 }
 
 export function escapeHtml(s: string): string {

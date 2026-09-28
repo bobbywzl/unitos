@@ -127,8 +127,9 @@ export function blockStyle(node: PMNode): DocStyle {
   return docStyle === "title" || docStyle === "subtitle" ? docStyle : "normal";
 }
 
-/** A style's stored changes: the fields that differ from the default. */
-function diff(style: DocStyle, value: NamedStyle): StyleChanges {
+/** A style's stored changes: the fields that differ from the default. An
+    import's named styles are stored so too (lib/docs/import.ts). */
+export function styleChanges(style: DocStyle, value: NamedStyle): StyleChanges {
   const d = DEFAULT_STYLES[style];
   const out: StyleChanges = {};
   if (value.font !== null && value.font !== (style === "normal" ? d.font : null)) out.font = value.font;
@@ -269,7 +270,7 @@ function styleAtCaret(state: EditorState, style: DocStyle): NamedStyle {
 export function updateStyleToMatch(editor: Editor, style: DocStyle): void {
   const { state } = editor;
   const next = styleAtCaret(state, style);
-  const tr = setStyleChanges(state.tr, style, diff(style, next));
+  const tr = setStyleChanges(state.tr, style, styleChanges(style, next));
   const $from = state.selection.$from;
   const block = $from.parent;
   if (block.isTextblock && blockStyle(block) === style) {

@@ -1,14 +1,14 @@
 import type { Doc } from "./adapt";
 import { freeScores, type PdfText } from "./free";
 import type { GlyphScores } from "./glyphs";
-import { flatten, score, STYLES, type Flat } from "./metrics";
-import type { RefDoc } from "./model";
+import { flatten, SCORED, score, type Flat } from "./metrics";
+import type { Font, RefDoc } from "./model";
 
 // The detail report (--detail id): what a fix needs to see, printed to the
 // terminal only (a private document's words never go to a file here).
 
 type Input = {
-  entry: { id: string; category: string };
+  entry: { id: string; category: string; pdf?: string; docx?: string };
   ref?: RefDoc;
   docs?: { parse: Doc; import: Doc };
   pdf?: PdfText;
@@ -54,8 +54,11 @@ function surplus(a: Flat, b: Flat, n = 20): string {
   return out.map(([w, k]) => `${w}×${k}`).join("  ") || "(none)";
 }
 
+/** A font as the detail prints it: "serif 10pt bold #1f3864". */
+const fontText = (f: Font | null) => (f ? [f.shape, `${f.size}pt`, f.bold ? "bold" : "", f.color ?? ""].filter(Boolean).join(" ") : "(none)");
+
 function referenceDetail(ref: RefDoc, candidate: Doc) {
-  const { scores: s, ref: r, cand: c, al } = score({ blocks: ref.blocks }, ref.furniture, candidate);
+  const { scores: s, ref: r, cand: c, al } = score({ blocks: ref.blocks, fonts: ref.fonts }, ref.furniture, candidate);
   console.log(`\nComposite ${s.composite.toFixed(1)}. Parts: ${Object.entries(s.parts).map(([k, v]) => `${k} ${v === null ? "—" : v.toFixed(2)}`).join(", ")}`);
   console.log(`Words: recall ${pct(s.words.recall)}, precision ${pct(s.words.precision)} (${s.words.refWords} reference, ${s.words.candWords} candidate); reading order ${pct(s.order)}`);
   console.log(`  Missing most: ${surplus(r, c)}`);
@@ -105,7 +108,7 @@ function referenceDetail(ref: RefDoc, candidate: Doc) {
   }
 
   console.log("");
-  for (const style of STYLES) {
+  for (const style of SCORED) {
     const k = s.styles.counts[style];
     if (s.styles.f1[style] === null && k.candOnly === 0) continue;
     console.log(`${style}: F1 ${s.styles.f1[style]?.toFixed(2) ?? "— (the reference marks none)"}; characters so on both sides ${k.both}, only in the candidate ${k.candOnly}, only in the reference ${k.refOnly}.`);
@@ -115,6 +118,19 @@ function referenceDetail(ref: RefDoc, candidate: Doc) {
   console.log(
     `Roles: alignment ${r2(roles.align)}, indentation ${r2(roles.indent)}, captions ${r2(roles.captions)}, checkbox states ${r2(roles.checks)}, separators ${r2(roles.separators)}, quotations ${r2(roles.quotes)}, equation labels ${r2(s.math.labels.score)}.`,
   );
+  for (const [name, misses] of [["alignment", roles.misses.align], ["indentation", roles.misses.indent]] as const) {
+    if (misses.length === 0) continue;
+    console.log(`  ${name} wrong (${misses.length}; the reference's → the candidate's):`);
+    for (const miss of misses.slice(0, 10)) console.log(`    ${miss.ref} → ${miss.cand}: ${miss.text}`);
+  }
+  if (s.fonts) {
+    const f = s.fonts;
+    console.log(`\nFonts: shape ${r2(f.shape)}, size ${r2(f.size)}, bold ${r2(f.bold)}, color ${r2(f.color)} (the reference's body: ${fontText(ref.fonts?.body ?? null)}).`);
+    for (const [role, x] of Object.entries(f.roles)) {
+      console.log(`  ${role.padEnd(8)} ${x.known} of ${x.blocks} blocks say their font; right: shape ${x.shape}, size ${x.size}, bold ${x.bold}, color ${x.color}`);
+    }
+    for (const m of f.misses.slice(0, 20)) console.log(`  ${m.role} ${m.why}: want ${fontText(m.want)}, got ${fontText(m.got)}  (${clip(blockText(r, m.ref), 60)})`);
+  }
   if (s.notes) {
     const n = s.notes;
     console.log(`\nFootnotes: ${n.found} of ${n.ref} found, ${n.linked} of ${n.linkable} linked from the reference's mark, words F1 ${r2(n.words)}; ${n.extra} footnotes the reference does not have.`);
@@ -136,13 +152,18 @@ function referenceDetail(ref: RefDoc, candidate: Doc) {
   }
   if (s.garbles.found.length > 60) console.log(`  … and ${s.garbles.found.length - 60} more`);
 
-  if (s.headings.ref > 0) {
-    console.log(`\nHeadings: ${s.headings.atLevel} of ${s.headings.ref} at their level (level shift ${s.headings.shift}).`);
+  if (s.headings.ref > 0 || s.headings.cand > 0) {
+    console.log(`\nHeadings: ${s.headings.atLevel} of ${s.headings.ref} at their level (level shift ${s.headings.shift}); ${s.headings.right} of the candidate's ${s.headings.cand} are one of them.`);
     for (const m of s.headings.misses) console.log(`  ${kindOf(r, m.ref)} "${clip(blockText(r, m.ref), 80)}" → ${kindOf(c, m.cand)} "${clip(blockText(c, m.cand), 80)}"`);
+    for (const cb of s.headings.invented.slice(0, 20)) {
+      const rb = al.main[cb];
+      console.log(`  invented ${kindOf(c, cb)} "${clip(blockText(c, cb), 80)}"${rb >= 0 ? ` (the reference's ${kindOf(r, rb)})` : ""}`);
+    }
   }
 
   if (s.lists.items > 0) {
     console.log(`\nList items: ${s.lists.found} of ${s.lists.items} found, ${s.lists.atDepth} at their depth, ${s.lists.marked} with their marker.`);
+    console.log(`  Markers by depth: ${s.lists.byDepth.map((level, depth) => `${depth}: ${level.marked} of ${level.found}`).join(", ") || "—"}.`);
     for (const m of s.lists.misses.slice(0, 40)) {
       console.log(`  ${m.why}: ${clip(r.units[m.unit].text, 100)}${m.cand >= 0 ? `  →  ${clip(c.units[m.cand].text, 60)}` : ""}`);
     }
@@ -172,11 +193,15 @@ function referenceDetail(ref: RefDoc, candidate: Doc) {
   }
 }
 
-function freeDetail(pdf: PdfText, candidate: Doc) {
+function freeDetail(pdf: PdfText, candidate: Doc, word: boolean) {
   const c = flatten(candidate);
-  const f = freeScores(pdf, c);
+  const f = freeScores(pdf, c, undefined, word);
   console.log(`\nWithout a reference: composite ${f.composite.toFixed(1)}.`);
-  console.log(`Coverage against pdftotext: recall ${pct(f.coverage.recall)}, precision ${pct(f.coverage.precision)} (${f.coverage.expected} words expected, ${f.coverage.words} in the candidate).`);
+  console.log(
+    f.coverage.blind
+      ? `Coverage against pdftotext: not scored, the text layer reads blind (${f.coverage.expected} words, under half of the candidate's ${f.coverage.words}).`
+      : `Coverage against pdftotext: recall ${pct(f.coverage.recall)}, precision ${pct(f.coverage.precision)} (${f.coverage.expected} words expected, ${f.coverage.words} in the candidate).`,
+  );
   const list = (words: [string, number][]) => words.map(([w, n]) => `${w}×${n}`).join("  ") || "(none)";
   console.log(`  Missing most: ${list(f.coverage.missing)}`);
   console.log(`  Extra most:   ${list(f.coverage.extra)}`);
@@ -210,7 +235,7 @@ export function detailReport(r: Input, mode: "parse" | "import") {
   const candidate = r.docs[mode];
   console.log(`\n${r.entry.id} (${r.entry.category}) — the ${mode}${r.pages ? `, pages ${r.pages[0]}–${r.pages[1]}` : ", every page"}`);
   if (r.ref) referenceDetail(r.ref, candidate);
-  if (r.pdf) freeDetail(r.pdf, candidate);
+  if (r.pdf) freeDetail(r.pdf, candidate, !r.entry.pdf && Boolean(r.entry.docx));
   const glyphs = r.glyphs?.[mode];
   if (glyphs) glyphDetail(glyphs);
 }
