@@ -40,6 +40,7 @@ const SKIPPED: Record<ServerSkip, TKey> = {
   object: "api.suggestSkipFigure",
   limit: "api.suggestSkipLimit",
   unreadable: "api.suggestSkipUnreadable",
+  tex: "api.suggestSkipTex",
 };
 
 /** A document with rich text as the suggestions read it: its paragraph index

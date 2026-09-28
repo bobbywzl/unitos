@@ -74,11 +74,10 @@
   }
 }
 
-/* The card column (layer/comment-card.tsx CardColumn): fixed over the pane
-   and the notes tray beside it, under the title row and the toolbar, so a
-   card never covers the text for want of room. Its inside moves with the
-   pane's scroll on the pane's scroll timeline, off the main thread;
-   --docs-scroll is the pane's scroll range. Without scroll timelines the
+/* The card column (layer/comment-card.tsx CardColumn): fixed over the pane,
+   never over the notes tray beside it, under the title row and the toolbar.
+   Its inside moves with the pane's scroll on the pane's scroll timeline,
+   off the main thread; --docs-scroll is the pane's scroll range. Without scroll timelines the
    suggestion layer moves it. The end stretches the pane to the lowest
    card.
    The pane's fade-in (globals.css .content-in) filling for good would keep

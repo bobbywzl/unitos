@@ -18,8 +18,9 @@ export type SuggestStyle = "normal" | "title" | "subtitle" | "h1" | "h2" | "h3" 
 /** A format that goes on or off words. */
 export type SuggestMarkFormat = "bold" | "italic" | "underline" | "strikethrough";
 /** A format that sets a value on words: the link's address ("" takes the
-    link off), the text color (#rrggbb), the font's name, the size in points. */
-export type SuggestValueFormat = "link" | "color" | "font" | "size";
+    link off), the text color and the highlight color (#rrggbb), the font's
+    name, the size in points. */
+export type SuggestValueFormat = "link" | "color" | "highlight_color" | "font" | "size";
 export type SuggestFormat = SuggestMarkFormat | SuggestValueFormat;
 export type SuggestAlignment = "left" | "center" | "right" | "justify";
 export type ResolvedOp =
@@ -30,9 +31,17 @@ export type ResolvedOp =
   | { i: number; op: "insert_blocks"; afterBlockId: string | null; markdown: string; why: string }
   | { i: number; op: "remove_blocks"; blockIds: string[]; base: string[]; why: string }
   | { i: number; op: "set_style"; blockId: string; style: SuggestStyle; baseStyle: SuggestStyle; why: string }
-  | { i: number; op: "set_alignment"; blockId: string; alignment: SuggestAlignment; why: string };
+  | { i: number; op: "set_alignment"; blockId: string; alignment: SuggestAlignment; why: string }
+  // A table's rows and columns, each named by one of its cells' blockId.
+  | { i: number; op: "insert_row"; blockId: string; where: "above" | "below"; cells: string[]; why: string }
+  | { i: number; op: "remove_row"; blockId: string; why: string }
+  | { i: number; op: "move_row"; blockId: string; toBlockId: string; where: "above" | "below"; why: string }
+  | { i: number; op: "insert_column"; blockId: string; where: "left" | "right"; cells: string[]; why: string }
+  | { i: number; op: "remove_column"; blockId: string; why: string }
+  // A footnote whose number goes right after the words find (at `end`).
+  | { i: number; op: "insert_footnote"; blockId: string; start: number; end: number; find: string; text: string; why: string };
 /** Why an op did not land. The page shows each reason in the reader's language. */
-export type SkipReason = "outside" | "notFound" | "ambiguous" | "overlap" | "notText" | "changed" | "object" | "limit" | "unreadable";
+export type SkipReason = "outside" | "notFound" | "ambiguous" | "overlap" | "notText" | "changed" | "object" | "limit" | "unreadable" | "tex";
 export type SuggestResult = { ops: ResolvedOp[]; warnings: string[]; summary: string };
 export type SuggestEvent =
   | { stage: "read" }

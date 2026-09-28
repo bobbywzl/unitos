@@ -14,6 +14,7 @@ import {
 import { withoutSuggestions } from "@/lib/docs/blocks";
 import { INDEXED_NODE_TYPES, SUGGESTION_MARK_TYPES, suggestionAuthor, ZWSP, type RichNode } from "@/lib/docs/schema";
 import { SUGGEST_MAX_OPS, SUGGEST_WINDOW_CHARS, SUGGEST_WINDOW_ROWS } from "@/lib/derive/config";
+import { texError } from "@/lib/katex";
 
 // The assistant's suggestions on the server (SPEC.md §29): the ops the model
 // answers with, checked against the paragraph index and the stored rich text
@@ -27,7 +28,9 @@ const find = z.string().min(1).max(2_000);
 const markdown = z.string().min(1).max(20_000);
 const STYLES = ["normal", "title", "subtitle", "h1", "h2", "h3", "h4", "h5", "h6", "bulleted", "numbered", "checklist"] as const satisfies readonly SuggestStyle[];
 const MARK_FORMATS = ["bold", "italic", "underline", "strikethrough"] as const satisfies readonly SuggestMarkFormat[];
-const VALUE_FORMATS = ["link", "color", "font", "size"] as const satisfies readonly SuggestValueFormat[];
+const VALUE_FORMATS = ["link", "color", "highlight_color", "font", "size"] as const satisfies readonly SuggestValueFormat[];
+// A new row's or column's words, one string per cell.
+const cells = z.array(z.string().max(2_000)).max(50).default([]);
 const ALIGNMENTS = ["left", "center", "right", "justify"] as const satisfies readonly SuggestAlignment[];
 const suggestOpSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("replace_words"), blockId: id, find, text: z.string().max(4_000), format: z.enum(MARK_FORMATS).optional(), why }),
@@ -45,6 +48,12 @@ const suggestOpSchema = z.discriminatedUnion("op", [
     why,
   }),
   z.object({ op: z.literal("set_alignment"), blockId: id, alignment: z.enum(ALIGNMENTS), why }),
+  z.object({ op: z.literal("insert_row"), blockId: id, where: z.enum(["above", "below"]), cells, why }),
+  z.object({ op: z.literal("remove_row"), blockId: id, why }),
+  z.object({ op: z.literal("move_row"), blockId: id, toBlockId: id, where: z.enum(["above", "below"]), why }),
+  z.object({ op: z.literal("insert_column"), blockId: id, where: z.enum(["left", "right"]), cells, why }),
+  z.object({ op: z.literal("remove_column"), blockId: id, why }),
+  z.object({ op: z.literal("insert_footnote"), blockId: id, find, text: z.string().trim().min(1).max(4_000), why }),
 ]);
 type SuggestOp = z.infer<typeof suggestOpSchema>;
 
@@ -56,7 +65,7 @@ function formatValue(format: SuggestFormat, value: string | number | undefined):
   if ((MARK_FORMATS as readonly string[]).includes(format)) return undefined;
   const v = String(value ?? "").trim();
   if (format === "link") return v === "" || /^(https?:\/\/|mailto:|tel:|#|\/)\S*$/i.test(v) ? v : null;
-  if (format === "color") return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v) ? v.toLowerCase() : null;
+  if (format === "color" || format === "highlight_color") return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v) ? v.toLowerCase() : null;
   if (format === "font") return /^[\p{L}\p{M}\p{N}_ ,'"\-.]{1,120}$/u.test(v) ? v : null;
   const points = v.replace(/\s*pt$/i, "");
   return /^\d{1,3}(\.\d{1,2})?$/.test(points) && Number(points) >= 1 ? points : null;
@@ -345,11 +354,33 @@ export function resolveOps(
   const order = new Map(rows.map((r, k) => [r.id, k]));
   const spans = new Map(scope.kind === "words" ? scope.segments.map((s) => [s.blockId, s]) : []);
   const inScope = new Set(scope.kind === "words" ? spans.keys() : scope.blockIds);
-  // A figure is no words: an op that changes one, or its caption, is
-  // skipped. New blocks may follow one.
+  // A figure is no words: an op that removes or replaces one is skipped;
+  // its caption is its words (rewrite_block). New blocks may follow one.
   const figure = (blockId: string) => rows[order.get(blockId) ?? -1]?.type === "FIGURE";
+  // A table cell's paragraph in the scope: the row or column it names.
+  const cell = (blockId: string): number | ServerSkip => {
+    const k = order.get(blockId);
+    if (k === undefined || !inScope.has(blockId)) return "outside";
+    return places.get(blockId)?.where === "cell" ? k : "notText";
+  };
 
   const resolve = (op: SuggestOp, i: number): Resolved | ServerSkip | null => {
+    if (op.op === "insert_row" || op.op === "insert_column" || op.op === "remove_row" || op.op === "remove_column") {
+      const k = cell(op.blockId);
+      if (typeof k === "string") return k;
+      const claim: Claim = { kind: "rows", rows: [k] };
+      if (op.op === "remove_row" || op.op === "remove_column") return { op: { i, op: op.op, blockId: op.blockId, why: op.why }, claim, chars: 0 };
+      const words = op.cells.map((c) => c.replace(/\s+/g, " ").trim());
+      return { op: { i, op: op.op, blockId: op.blockId, where: op.where, cells: words, why: op.why } as ResolvedOp, claim, chars: words.join("").length };
+    }
+    if (op.op === "move_row") {
+      const [k, to] = [cell(op.blockId), cell(op.toBlockId)];
+      if (typeof k === "string") return k;
+      if (typeof to === "string") return to;
+      // Rows of one table.
+      if (places.get(op.blockId)?.group !== places.get(op.toBlockId)?.group) return "notText";
+      return { op: { i, op: op.op, blockId: op.blockId, toBlockId: op.toBlockId, where: op.where, why: op.why }, claim: { kind: "rows", rows: [k, to] }, chars: 0 };
+    }
     if (op.op === "insert_blocks") {
       let after = -1;
       if (op.afterBlockId === null) {
@@ -391,6 +422,17 @@ export function resolveOps(
       if (!md) return "notText";
       return { op: { i, op: op.op, blockIds, base, markdown: md, why: op.why }, claim, chars: md.length };
     }
+    // An equation's words are its TeX, a figure's its caption: rewrite_block
+    // changes them. The TeX must render.
+    if (op.op === "rewrite_block" && (rows[order.get(op.blockId) ?? -1]?.type === "EQUATION" || figure(op.blockId))) {
+      const k = order.get(op.blockId)!;
+      const row = rows[k];
+      if (!inScope.has(row.id)) return "outside";
+      const text = op.text.trim();
+      if (row.type === "EQUATION" && texError(text) !== null) return "tex";
+      if (!text || text === row.text.trim()) return null;
+      return { op: { i, op: op.op, blockId: row.id, base: row.text, text, why: op.why }, claim: { kind: "rows", rows: [k] }, chars: text.length };
+    }
     if (figure(op.blockId)) return "object";
     const k = order.get(op.blockId);
     if (k === undefined || !inScope.has(op.blockId)) return "outside";
@@ -414,8 +456,9 @@ export function resolveOps(
       if (op.text.trim() === row.text.trim()) return null;
       return { op: { i, op: op.op, blockId: row.id, base: row.text, text: op.text, why: op.why }, claim: { kind: "rows", rows: [k] }, chars: op.text.length };
     }
-    // Code takes no formatting.
-    if (op.op === "format_words" && row.type === "CODE") return "notText";
+    // Code takes no formatting and no footnote; a footnote holds none.
+    if ((op.op === "format_words" || op.op === "insert_footnote") && row.type === "CODE") return "notText";
+    if (op.op === "insert_footnote" && place.where === "footnote") return "notText";
     // A word op: `find` once in the selected words, or once in the block.
     const span = spans.get(row.id) ?? { start: 0, end: row.text.length };
     const hit = once(row.text.slice(span.start, span.end), op.find);
@@ -425,11 +468,18 @@ export function resolveOps(
     const end = span.start + hit.end;
     const found = row.text.slice(start, end);
     const claim: Claim = { kind: "words", row: k, from: start, to: end };
+    if (op.op === "insert_footnote") {
+      // The number goes right after the words.
+      return { op: { i, op: op.op, blockId: row.id, start, end, find: found, text: op.text, why: op.why }, claim: { kind: "words", row: k, from: end, to: end }, chars: op.text.length };
+    }
     if (op.op === "format_words") {
       const value = formatValue(op.format, op.value);
       if (value === null) return "unreadable";
       return { op: { i, op: op.op, blockId: row.id, start, end, find: found, format: op.format, ...(value === undefined ? {} : { value }), why: op.why }, claim, chars: 0 };
     }
+    // An inline equation stands in the words as $TeX$: its new TeX must render.
+    const tex = (s: string) => /^\$[^$]+\$$/.test(s.trim());
+    if (tex(found) && tex(op.text) && texError(op.text.trim().slice(1, -1)) !== null) return "tex";
     // The same words in a new format are a format change.
     if (found === op.text) {
       return op.format ? { op: { i, op: "format_words", blockId: row.id, start, end, find: found, format: op.format, why: op.why }, claim, chars: 0 } : null;
