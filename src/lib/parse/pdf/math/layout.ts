@@ -604,9 +604,11 @@ function ruledArray(atoms: Atom[], rules: Rule[]): Atom[] {
   // column's (an em and a half): the formula's other atoms stand apart.
   const rx1 = Math.min(...vr.map((r) => r.x1));
   const rx2 = Math.max(...vr.map((r) => r.x1));
-  let lo = band.findIndex((a) => a.x2 > rx1);
-  let hi = band.length - 1 - [...band].reverse().findIndex((a) => a.x1 < rx2);
-  if (lo < 0 || hi >= band.length || hi < lo) return atoms;
+  const left = band.filter((a) => cx(a) < rx1);
+  const right = band.filter((a) => cx(a) > rx2);
+  if (left.length === 0 && right.length === 0) return atoms;
+  let lo = band.indexOf(left[left.length - 1] ?? right[0]);
+  let hi = band.indexOf(right[0] ?? left[left.length - 1]);
   while (lo > 0 && band[lo].x1 - band[lo - 1].x2 < 1.5 * em) lo--;
   while (hi < band.length - 1 && band[hi + 1].x1 - band[hi].x2 < 1.5 * em) hi++;
   const content = band.slice(lo, hi + 1);
