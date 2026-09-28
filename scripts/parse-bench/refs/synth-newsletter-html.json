@@ -1,0 +1,243 @@
+{
+  "id": "synth-newsletter-html",
+  "category": "newsletter",
+  "source": {
+    "pdf": ".bench/synthetic/synth-newsletter-html.pdf"
+  },
+  "blocks": [
+    {
+      "kind": "title",
+      "spans": [
+        {
+          "text": "The Riverside Ledger"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "News from the Riverside Community Garden · Autumn 2026 · Issue 14"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "Harvest festival draws a record crowd"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "By Tomás Reyes",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "More than 900 neighbors came to the garden on September 13 for the eighth harvest festival, almost twice last year’s count. Volunteers weighed 1,340 pounds of produce at the market table, and the soup kitchen on Alder Street took home everything that was left at closing."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The busiest stall was the seed library, where children traded bean seeds for stickers. “We grew more food this year than in the garden’s first five years combined,” said coordinator Joan Whitfield. She credited the new drip lines on the east beds, which kept the tomatoes alive through a dry August."
+        }
+      ]
+    },
+    {
+      "kind": "figure",
+      "caption": [
+        {
+          "text": "Volunteers sort winter squash at the market table."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The festival also raised $4,210 for next year’s greenhouse. The board will choose a builder in November and hopes to plant the first seedlings in March."
+        }
+      ]
+    },
+    {
+      "kind": "quote",
+      "spans": [
+        {
+          "text": "“We grew more food this year than in the garden’s first five years combined.”"
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "New rain gardens cut runoff"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "By Dana Okonkwo",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Two rain gardens planted along the north fence in May are now soaking up the runoff that used to flood the tool shed. Each garden is a shallow basin of native plants, deep-rooted asters, sedges, and swamp milkweed, that holds water after a storm and lets it sink into the ground over a day or two."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "City engineers measured the flow at the storm drain on Pine Street after the heavy rain of August 21. It carried about 40% less water than after a storm of the same size last year. The city has offered to fund two more basins if the garden’s volunteers will maintain them."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "Dates to remember"
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "October 12:",
+              "bold": true
+            },
+            {
+              "text": " Seed swap, 10 a.m. to noon"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "October 26:",
+              "bold": true
+            },
+            {
+              "text": " Bulb planting and cider, 1 p.m."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "November 9:",
+              "bold": true
+            },
+            {
+              "text": " Annual meeting and board election, 7 p.m."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "November 16:",
+              "bold": true
+            },
+            {
+              "text": " Garden closes for the winter"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "From the compost desk"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "By Ruth Albers",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Our three compost bays turned out 6 cubic yards of finished compost this season. The trick, as always, is balance: roughly two parts brown material, such as dry leaves and straw, to one part green material, such as kitchen scraps and fresh clippings. Too much green and the pile smells; too much brown and it barely heats up."
+        }
+      ]
+    },
+    {
+      "kind": "figure",
+      "caption": [
+        {
+          "text": "The new three-bay compost system, built from reclaimed pallets."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Please keep meat, dairy, and oily food out of the bins. They attract rats, and the neighbors on Birch Lane have noticed. Coffee grounds, eggshells, and tea leaves are all welcome."
+        }
+      ]
+    },
+    {
+      "kind": "quote",
+      "spans": [
+        {
+          "text": "“The garden is the only place in the city where I know every neighbor by name.” — a note left in the suggestion box",
+          "italic": true
+        }
+      ]
+    }
+  ],
+  "furniture": [
+    "The Riverside Ledger · Autumn 2026",
+    "Page 1",
+    "Page 2"
+  ],
+  "license": "open",
+  "provenance": "generated",
+  "notes": "The pull quote repeats a sentence of its article, as pull quotes do; both stand in the reference. The photos are pixels with no words. The sidebar's list sits inside the second column."
+}

@@ -1,0 +1,426 @@
+{
+  "id": "synth-slides-tex",
+  "category": "slides",
+  "source": {
+    "pdf": ".bench/synthetic/synth-slides-tex.pdf"
+  },
+  "blocks": [
+    {
+      "kind": "title",
+      "spans": [
+        {
+          "text": "Sparse Attention for Long Scientific Documents",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Reading a whole paper at once"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Ada Lovelace"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Analytical Engines Ltd."
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "September 2026"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "Why long documents are hard"
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "A scientific article runs to 5,000–20,000 tokens"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "Dense attention compares every pair of tokens"
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "Memory grows with the square of the length"
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "A 16k input needs 64 times the memory of a 2k input"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "Most systems cut the input to the first 4,096 tokens"
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "The results section is often cut off"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "The pattern"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Token "
+        },
+        {
+          "text": "i",
+          "latex": "i"
+        },
+        {
+          "text": " attends to a window and to a few global tokens:"
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathcal{N}(i)=\\{j:|i-j|\\le w\\}\\cup\\mathcal{G}"
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "Window: local context, "
+            },
+            {
+              "text": "w=256",
+              "latex": "w=256"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "Global tokens: 64 positions that see everything"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "Cost grows linearly with the length"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "The model in one picture"
+        }
+      ]
+    },
+    {
+      "kind": "figure"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "Results"
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Model"
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "arXiv R-1"
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "PubMed R-1"
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Dense, 4k tokens"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "41.2"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "42.8"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Sliding window"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "43.5"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "44.9"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Window and global",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "46.1",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "47.3",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The gain holds on both benchmarks and saturates near 64 global tokens."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "It fits in a few lines"
+        }
+      ]
+    },
+    {
+      "kind": "code",
+      "text": "mask = band(n, window)\nmask[global_idx, :] = True\nmask[:, global_idx] = True\nscores[~mask] = float(\"-inf\")"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "What we learned"
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "1.",
+          "spans": [
+            {
+              "text": "Local context carries most of the signal"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "2.",
+          "spans": [
+            {
+              "text": "A few global tokens recover the long-range links"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "3.",
+          "spans": [
+            {
+              "text": "Truncation, not model size, was the bottleneck"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Next: documents with tables and equations.",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "Questions?"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Slides and code: "
+        },
+        {
+          "text": "example.org/sparse-attention",
+          "href": "https://example.org/sparse-attention"
+        }
+      ],
+      "align": "center"
+    }
+  ],
+  "furniture": [
+    "A. Lovelace (Analytical Engines)",
+    "Sparse Attention",
+    "September 2026",
+    "2/8",
+    "3/8",
+    "4/8",
+    "5/8",
+    "6/8",
+    "7/8",
+    "8/8"
+  ],
+  "license": "open",
+  "provenance": "generated",
+  "notes": "One page per slide. The slide title is a level 2 heading. The theme draws the bullets as shapes, so a bullet list has no marker in the text layer; the reference names the marker •. The footline on every slide is furniture."
+}

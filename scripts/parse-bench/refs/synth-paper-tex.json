@@ -1,0 +1,995 @@
+{
+  "id": "synth-paper-tex",
+  "category": "paper",
+  "source": {
+    "pdf": ".bench/synthetic/synth-paper-tex.pdf"
+  },
+  "blocks": [
+    {
+      "kind": "title",
+      "spans": [
+        {
+          "text": "Sparse Attention for Long Scientific Documents"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Ada Lovelace, Charles Babbage, and Mary Somerville"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "footnote",
+      "label": "",
+      "spans": [
+        {
+          "text": "Manuscript received June 1, 2026; revised August 3, 2026."
+        }
+      ]
+    },
+    {
+      "kind": "footnote",
+      "label": "",
+      "spans": [
+        {
+          "text": "A. Lovelace and C. Babbage are with the Department of Computing, Analytical Engines Ltd., London, UK (e-mail: ada@example.org)."
+        }
+      ]
+    },
+    {
+      "kind": "footnote",
+      "label": "",
+      "spans": [
+        {
+          "text": "M. Somerville is with the School of Mathematics, Northfield University, Northfield, UK."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Abstract—",
+          "bold": true,
+          "italic": true
+        },
+        {
+          "text": "Transformers read long documents slowly because attention compares every pair of tokens. We study a sparse pattern in which each token attends to a window of its neighbors and to a small set of global tokens. On two benchmarks of scientific articles the model matches or exceeds dense attention while using a quarter of the memory, and an ablation shows that 64 global tokens capture most of the gain.",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Index Terms—",
+          "bold": true,
+          "italic": true
+        },
+        {
+          "text": "Attention, long documents, sparsity, summarization, transformers.",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "I. "
+        },
+        {
+          "text": "INTRODUCTION",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "SCIENTIFIC articles run to thousands of tokens, and their key results often sit far from the questions they answer. A model that summarizes an article has to connect a claim in the abstract with the table that supports it on page nine. Dense attention [1] does this directly, but its cost grows with the square of the length, so most systems truncate the input to a few thousand tokens."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Sparse attention lowers the cost by letting each token attend to only some positions [2], [3]. The pattern matters: a window captures local context, and a few global tokens carry information across the whole document.1 This paper measures how far such a pattern goes on scientific text, where long-range references are common."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "footnote",
+      "label": "1",
+      "spans": [
+        {
+          "text": "Code and trained models will be released with the camera-ready version."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Our contributions are threefold. First, we describe a window-and-global pattern with a simple implementation. Second, we evaluate it on two benchmarks of long articles. Third, we show which parts of the pattern account for the gain."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "II. "
+        },
+        {
+          "text": "RELATED WORK",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "A. Efficient attention",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Several families of methods reduce the cost of attention. Kernel methods approximate the softmax with random features, low-rank methods project the keys to a shorter sequence, and sparse methods restrict the pairs that interact [2]–[4]. We follow the last family, since it keeps exact attention within the chosen pairs."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "B. Long-document summarization",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Benchmarks built from arXiv and PubMed articles pair each paper with its abstract [5]. Their inputs average more than 5,000 tokens, which makes them a natural test for long-context models."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "III. "
+        },
+        {
+          "text": "METHOD",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Given queries "
+        },
+        {
+          "text": "Q",
+          "latex": "Q"
+        },
+        {
+          "text": ", keys "
+        },
+        {
+          "text": "K",
+          "latex": "K"
+        },
+        {
+          "text": ", and values "
+        },
+        {
+          "text": "V",
+          "latex": "V"
+        },
+        {
+          "text": " for a sequence of length "
+        },
+        {
+          "text": "n",
+          "latex": "n"
+        },
+        {
+          "text": ", dense attention computes"
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "equation",
+      "latex": "\\operatorname{Attn}(Q,K,V)=\\operatorname{softmax}\\left(\\frac{QK^{\\top}}{\\sqrt{d}}\\right)V,",
+      "label": "(1)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "where "
+        },
+        {
+          "text": "d",
+          "latex": "d"
+        },
+        {
+          "text": " is the head dimension. Sparse attention replaces the score matrix with"
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "S_{ij}=\\begin{cases}q_i^{\\top}k_j/\\sqrt{d}, & j\\in\\mathcal{N}(i),\\\\ -\\infty, & \\text{otherwise},\\end{cases}",
+      "label": "(2)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "so that token "
+        },
+        {
+          "text": "i",
+          "latex": "i"
+        },
+        {
+          "text": " attends only to its neighborhood"
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathcal{N}(i)=\\{j:|i-j|\\le w\\}\\cup\\mathcal{G},",
+      "label": "(3)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "a window of half-width "
+        },
+        {
+          "text": "w",
+          "latex": "w"
+        },
+        {
+          "text": " together with the set "
+        },
+        {
+          "text": "G",
+          "latex": "\\mathcal{G}"
+        },
+        {
+          "text": " of global positions. Global tokens attend to every position in both directions."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 4,
+      "spans": [
+        {
+          "text": "1) Implementation:",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The pattern needs no custom kernel. Listing 1 builds the mask from a band and a set of global rows and columns, and applies it before the softmax."
+        }
+      ]
+    },
+    {
+      "kind": "code",
+      "text": "def sparse_attention(q, k, v, window, global_idx):\n    scores = q @ k.T / q.shape[-1] ** 0.5\n    mask = band(len(q), window)\n    mask[global_idx, :] = True\n    mask[:, global_idx] = True\n    scores[~mask] = float(\"-inf\")\n    return softmax(scores) @ v"
+    },
+    {
+      "kind": "heading",
+      "level": 4,
+      "spans": [
+        {
+          "text": "2) Training objective:",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "We train with the usual token-level cross-entropy,"
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathcal{L}=-\\sum_{t=1}^{T}\\log p_\\theta(y_t\\mid y_{<t},x),",
+      "label": "(4)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "where "
+        },
+        {
+          "text": "x",
+          "latex": "x"
+        },
+        {
+          "text": " is the article and "
+        },
+        {
+          "text": "y",
+          "latex": "y"
+        },
+        {
+          "text": " its abstract. Fig. 1 shows the whole model."
+        }
+      ]
+    },
+    {
+      "kind": "figure",
+      "caption": [
+        {
+          "text": "Fig. 1. Overview of the model. Global tokens attend to every position; all other tokens attend within a window."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "IV. "
+        },
+        {
+          "text": "EXPERIMENTS",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "A. Setup",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "We train all models for 100,000 steps with a batch of 32 articles, a learning rate of "
+        },
+        {
+          "text": "3×10−4",
+          "latex": "3\\times 10^{-4}"
+        },
+        {
+          "text": ", and inputs truncated to 16,384 tokens. The window has half-width "
+        },
+        {
+          "text": "w=256",
+          "latex": "w=256"
+        },
+        {
+          "text": " and there are 64 global tokens unless stated otherwise."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "table",
+      "caption": [
+        {
+          "text": "TABLE I "
+        },
+        {
+          "text": "RESULTS ON THE LONG-DOCUMENT BENCHMARKS",
+          "smallCaps": true
+        }
+      ],
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Model"
+                }
+              ],
+              "header": true,
+              "rowspan": 2
+            },
+            {
+              "spans": [
+                {
+                  "text": "Parameters"
+                }
+              ],
+              "header": true,
+              "rowspan": 2
+            },
+            {
+              "spans": [
+                {
+                  "text": "arXiv"
+                }
+              ],
+              "header": true,
+              "colspan": 2
+            },
+            {
+              "spans": [
+                {
+                  "text": "PubMed"
+                }
+              ],
+              "header": true,
+              "colspan": 2
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "R-1"
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "R-L"
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "R-1"
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "R-L"
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Dense, 4k tokens"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "140M"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "41.2"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "36.9"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "42.8"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "38.1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Sliding window"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "140M"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "43.5"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "38.8"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "44.9"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "40.2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Window and global (ours)"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "142M"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "46.1",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "41.7",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "47.3",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "42.9",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "B. Results",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Table I compares the models on both benchmarks. The window-and-global model improves ROUGE-1 by 4.9 points on arXiv and 4.5 points on PubMed over dense attention truncated to 4,096 tokens, which it outperforms while reading four times as much text.2"
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "footnote",
+      "label": "2",
+      "spans": [
+        {
+          "text": "ROUGE-1 and ROUGE-L are computed with stemming and without stop-word removal."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Table II varies the number of global tokens. The gain saturates near 64 tokens, while memory keeps growing, so we use 64 in all other experiments."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "table",
+      "caption": [
+        {
+          "text": "TABLE II "
+        },
+        {
+          "text": "ABLATION OF THE GLOBAL TOKENS ON ARXIV",
+          "smallCaps": true
+        }
+      ],
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Global tokens"
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "R-1"
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Memory (GB)"
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "0"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "43.5"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "11.2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "16"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "45.0"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "11.4"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "64"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "46.1"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "11.9"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "256"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "46.2"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "13.8"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "V. "
+        },
+        {
+          "text": "CONCLUSION",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A window of local attention and a few global tokens are enough to read long scientific articles. The pattern is easy to implement, fits in the memory of a single accelerator, and beats dense attention on truncated inputs. Future work will test it on documents with tables and equations, where references across pages are denser still."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "ACKNOWLEDGMENT",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The authors thank the reviewers for their comments."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "REFERENCES",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "[1]",
+          "spans": [
+            {
+              "text": "A. Vaswani "
+            },
+            {
+              "text": "et al.",
+              "italic": true
+            },
+            {
+              "text": ", “Attention is all you need,” in "
+            },
+            {
+              "text": "Proc. Adv. Neural Inf. Process. Syst.",
+              "italic": true
+            },
+            {
+              "text": ", 2017, pp. 5998–6008."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "[2]",
+          "spans": [
+            {
+              "text": "R. Child, S. Gray, A. Radford, and I. Sutskever, “Generating long sequences with sparse transformers,” 2019, "
+            },
+            {
+              "text": "arXiv:1904.10509",
+              "italic": true
+            },
+            {
+              "text": "."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "[3]",
+          "spans": [
+            {
+              "text": "I. Beltagy, M. E. Peters, and A. Cohan, “Longformer: The long-document transformer,” 2020, "
+            },
+            {
+              "text": "arXiv:2004.05150",
+              "italic": true
+            },
+            {
+              "text": "."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "[4]",
+          "spans": [
+            {
+              "text": "M. Zaheer "
+            },
+            {
+              "text": "et al.",
+              "italic": true
+            },
+            {
+              "text": ", “Big Bird: Transformers for longer sequences,” in "
+            },
+            {
+              "text": "Proc. Adv. Neural Inf. Process. Syst.",
+              "italic": true
+            },
+            {
+              "text": ", 2020, pp. 17283–17297."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "[5]",
+          "spans": [
+            {
+              "text": "A. Cohan "
+            },
+            {
+              "text": "et al.",
+              "italic": true
+            },
+            {
+              "text": ", “A discourse-aware attention model for abstractive summarization of long documents,” in "
+            },
+            {
+              "text": "Proc. NAACL-HLT",
+              "italic": true
+            },
+            {
+              "text": ", 2018, pp. 615–621."
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "furniture": [
+    "JOURNAL OF SYNTHETIC BENCHMARKS, VOL. 3, NO. 2, SEPTEMBER 2026",
+    "1",
+    "2"
+  ],
+  "license": "open",
+  "provenance": "generated",
+  "notes": "In LaTeX, IEEEtran's small caps are Times capitals scaled down, so the text layer and the reference hold capitals; in HTML they keep their letters' case. The affiliations are footnotes with no mark (label \"\"). The paragraph after I. INTRODUCTION opens with a drop cap. Table I spans both columns."
+}

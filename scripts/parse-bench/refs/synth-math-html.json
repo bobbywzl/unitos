@@ -1,0 +1,1532 @@
+{
+  "id": "synth-math-html",
+  "category": "math-tex",
+  "source": {
+    "pdf": ".bench/synthetic/synth-math-html.pdf"
+  },
+  "blocks": [
+    {
+      "kind": "title",
+      "spans": [
+        {
+          "text": "A SHEET OF FORMULAS"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "ADA L. MERCER"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Abstract.",
+          "smallCaps": true
+        },
+        {
+          "text": " This sheet sets each formula twice: once inline, in a sentence, and once as a numbered display. The formulas grow from single symbols to nested structures, so a parser can be scored on how far it gets."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "1. Scripts and accents",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The square "
+        },
+        {
+          "text": "x2",
+          "latex": "x^2"
+        },
+        {
+          "text": " has one superscript."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "x^2",
+      "label": "(1)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A matrix entry "
+        },
+        {
+          "text": "aij",
+          "latex": "a_{ij}"
+        },
+        {
+          "text": " has a two-letter subscript."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "a_{ij}",
+      "label": "(2)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The term "
+        },
+        {
+          "text": "xi2",
+          "latex": "x_i^2"
+        },
+        {
+          "text": " stacks a subscript under a superscript."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "x_i^2",
+      "label": "(3)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Euler’s identity "
+        },
+        {
+          "text": "eiπ+1=0",
+          "latex": "e^{i\\pi}+1=0"
+        },
+        {
+          "text": " has a superscript of two symbols."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "e^{i\\pi}+1=0",
+      "label": "(4)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The isotope "
+        },
+        {
+          "text": "614C",
+          "latex": "{}^{14}_{6}\\mathrm{C}"
+        },
+        {
+          "text": " puts its scripts before the letter."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "{}^{14}_{6}\\mathrm{C}",
+      "label": "(5)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Three accents: "
+        },
+        {
+          "text": "x̂+ȳ+z̃",
+          "latex": "\\hat{x}+\\bar{y}+\\tilde{z}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\hat{x}+\\bar{y}+\\tilde{z}",
+      "label": "(6)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A vector and two time derivatives: "
+        },
+        {
+          "text": "v⃗⋅ẋ+ÿ",
+          "latex": "\\vec{v}\\cdot\\dot{x}+\\ddot{y}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\vec{v}\\cdot\\dot{x}+\\ddot{y}",
+      "label": "(7)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Wide accents stretch over their argument: "
+        },
+        {
+          "text": "AB^+z+w‾",
+          "latex": "\\widehat{AB}+\\overline{z+w}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\widehat{AB}+\\overline{z+w}",
+      "label": "(8)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Primes are superscripts too: "
+        },
+        {
+          "text": "f′(x)+f′′(x)",
+          "latex": "f'(x)+f''(x)"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "f'(x)+f''(x)",
+      "label": "(9)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A tower of exponents: "
+        },
+        {
+          "text": "xyz",
+          "latex": "x^{y^{z}}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "x^{y^{z}}",
+      "label": "(10)"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "2. Fractions and roots",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The simplest fraction is "
+        },
+        {
+          "text": "12",
+          "latex": "\\frac{1}{2}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\frac{1}{2}",
+      "label": "(11)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A fraction of sums: "
+        },
+        {
+          "text": "a+bc−d",
+          "latex": "\\frac{a+b}{c-d}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\frac{a+b}{c-d}",
+      "label": "(12)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Text-style and display-style fractions side by side: "
+        },
+        {
+          "text": "12 12",
+          "latex": "\\tfrac{1}{2}\\,\\dfrac{1}{2}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\tfrac{1}{2}\\,\\dfrac{1}{2}",
+      "label": "(13)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The square root "
+        },
+        {
+          "text": "2",
+          "latex": "\\sqrt{2}"
+        },
+        {
+          "text": " is irrational."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\sqrt{2}",
+      "label": "(14)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A cube root of a sum: "
+        },
+        {
+          "text": "x2+y23",
+          "latex": "\\sqrt[3]{x^2+y^2}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\sqrt[3]{x^2+y^2}",
+      "label": "(15)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A continued fraction: "
+        },
+        {
+          "text": "11+1x",
+          "latex": "\\frac{1}{1+\\frac{1}{x}}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\frac{1}{1+\\frac{1}{x}}",
+      "label": "(16)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The binomial coefficient "
+        },
+        {
+          "text": "(nk)=n!k! (n−k)!",
+          "latex": "\\binom{n}{k}=\\frac{n!}{k!\\,(n-k)!}"
+        },
+        {
+          "text": " counts subsets."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\binom{n}{k}=\\frac{n!}{k!\\,(n-k)!}",
+      "label": "(17)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Laplace’s equation in the plane: "
+        },
+        {
+          "text": "∂2u∂x2+∂2u∂y2=0",
+          "latex": "\\frac{\\partial^2 u}{\\partial x^2}+\\frac{\\partial^2 u}{\\partial y^2}=0"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\frac{\\partial^2 u}{\\partial x^2}+\\frac{\\partial^2 u}{\\partial y^2}=0",
+      "label": "(18)"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "3. Big operators",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Gauss’s sum "
+        },
+        {
+          "text": "∑i=1ni=n(n+1)2",
+          "latex": "\\sum_{i=1}^{n} i=\\frac{n(n+1)}{2}"
+        },
+        {
+          "text": " has limits under and over the sigma."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\sum_{i=1}^{n} i=\\frac{n(n+1)}{2}",
+      "label": "(19)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Euler’s product "
+        },
+        {
+          "text": "∏p prime11−p−s",
+          "latex": "\\prod_{p\\text{ prime}}\\frac{1}{1-p^{-s}}"
+        },
+        {
+          "text": " runs over the primes."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\prod_{p\\text{ prime}}\\frac{1}{1-p^{-s}}",
+      "label": "(20)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A definite integral: "
+        },
+        {
+          "text": "∫01x2 dx=13",
+          "latex": "\\int_0^1 x^2\\,dx=\\frac{1}{3}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\int_0^1 x^2\\,dx=\\frac{1}{3}",
+      "label": "(21)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The Gaussian integral "
+        },
+        {
+          "text": "∫−∞∞e−x2 dx=π",
+          "latex": "\\int_{-\\infty}^{\\infty}e^{-x^2}\\,dx=\\sqrt{\\pi}"
+        },
+        {
+          "text": " has infinite limits."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\int_{-\\infty}^{\\infty}e^{-x^2}\\,dx=\\sqrt{\\pi}",
+      "label": "(22)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A double integral over a region: "
+        },
+        {
+          "text": "∬Df(x,y) dx dy",
+          "latex": "\\iint_{D}f(x,y)\\,dx\\,dy"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\iint_{D}f(x,y)\\,dx\\,dy",
+      "label": "(23)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A contour integral: "
+        },
+        {
+          "text": "∮γdzz=2πi",
+          "latex": "\\oint_{\\gamma}\\frac{dz}{z}=2\\pi i"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\oint_{\\gamma}\\frac{dz}{z}=2\\pi i",
+      "label": "(24)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A union and an intersection: "
+        },
+        {
+          "text": "⋃n≥1An⊆⋂kBk",
+          "latex": "\\bigcup_{n\\ge 1}A_n\\subseteq\\bigcap_{k}B_k"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\bigcup_{n\\ge 1}A_n\\subseteq\\bigcap_{k}B_k",
+      "label": "(25)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The limit "
+        },
+        {
+          "text": "limn→∞(1+1n)n=e",
+          "latex": "\\lim_{n\\to\\infty}\\left(1+\\frac{1}{n}\\right)^n=e"
+        },
+        {
+          "text": " defines the number e."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\lim_{n\\to\\infty}\\left(1+\\frac{1}{n}\\right)^n=e",
+      "label": "(26)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The upper limit of a sequence: "
+        },
+        {
+          "text": "lim supn→∞an",
+          "latex": "\\limsup_{n\\to\\infty}a_n"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\limsup_{n\\to\\infty}a_n",
+      "label": "(27)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A maximum over an index range: "
+        },
+        {
+          "text": "max1≤i≤n∣xi∣",
+          "latex": "\\max_{1\\le i\\le n}|x_i|"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\max_{1\\le i\\le n}|x_i|",
+      "label": "(28)"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "4. Delimiters",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Parentheses that grow with a fraction: "
+        },
+        {
+          "text": "(ab)",
+          "latex": "\\left(\\frac{a}{b}\\right)"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\left(\\frac{a}{b}\\right)",
+      "label": "(29)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A half-open interval: "
+        },
+        {
+          "text": "[0,1)",
+          "latex": "\\left[0,1\\right)"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\left[0,1\\right)",
+      "label": "(30)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A set in braces: "
+        },
+        {
+          "text": "{x∈R:x>0}",
+          "latex": "\\left\\{x\\in\\mathbb{R}:x>0\\right\\}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\left\\{x\\in\\mathbb{R}:x>0\\right\\}",
+      "label": "(31)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "An absolute value and a norm: "
+        },
+        {
+          "text": "∣x∣+∥v∥",
+          "latex": "\\left|x\\right|+\\left\\|v\\right\\|"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\left|x\\right|+\\left\\|v\\right\\|",
+      "label": "(32)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "An inner product in angle brackets: "
+        },
+        {
+          "text": "⟨u,v⟩",
+          "latex": "\\langle u,v\\rangle"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\langle u,v\\rangle",
+      "label": "(33)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The floor and the ceiling: "
+        },
+        {
+          "text": "⌊x⌋+⌈y⌉",
+          "latex": "\\lfloor x\\rfloor+\\lceil y\\rceil"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\lfloor x\\rfloor+\\lceil y\\rceil",
+      "label": "(34)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A delimiter sized by hand: "
+        },
+        {
+          "text": "(a+b)2",
+          "latex": "\\bigl(a+b\\bigr)^2"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\bigl(a+b\\bigr)^2",
+      "label": "(35)"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "5. Fonts",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Blackboard bold names a space: "
+        },
+        {
+          "text": "Rn",
+          "latex": "\\mathbb{R}^n"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathbb{R}^n",
+      "label": "(36)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A calligraphic letter names a family of sets: "
+        },
+        {
+          "text": "F⊆2Ω",
+          "latex": "\\mathcal{F}\\subseteq 2^{\\Omega}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathcal{F}\\subseteq 2^{\\Omega}",
+      "label": "(37)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A bold letter names an operator: "
+        },
+        {
+          "text": "E[X]",
+          "latex": "\\mathbf{E}[X]"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathbf{E}[X]",
+      "label": "(38)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A Fraktur letter names a Lie algebra: "
+        },
+        {
+          "text": "g",
+          "latex": "\\mathfrak{g}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathfrak{g}",
+      "label": "(39)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A script letter: "
+        },
+        {
+          "text": "L",
+          "latex": "\\mathscr{L}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathscr{L}",
+      "label": "(40)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "An upright differential: "
+        },
+        {
+          "text": "dx",
+          "latex": "\\mathrm{d}x"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathrm{d}x",
+      "label": "(41)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "An operator name: "
+        },
+        {
+          "text": "Var(X)",
+          "latex": "\\operatorname{Var}(X)"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\operatorname{Var}(X)",
+      "label": "(42)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A bold Greek letter: "
+        },
+        {
+          "text": "α",
+          "latex": "\\boldsymbol{\\alpha}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\boldsymbol{\\alpha}",
+      "label": "(43)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A sans-serif letter: "
+        },
+        {
+          "text": "A",
+          "latex": "\\mathsf{A}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathsf{A}",
+      "label": "(44)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Words inside a formula: "
+        },
+        {
+          "text": "if x>0",
+          "latex": "\\text{if }x>0"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\text{if }x>0",
+      "label": "(45)"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "6. Relations and arrows",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Four comparisons in a row: "
+        },
+        {
+          "text": "a≤b≥c≠d",
+          "latex": "a\\le b\\ge c\\ne d"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "a\\le b\\ge c\\ne d",
+      "label": "(46)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A function written by its rule: "
+        },
+        {
+          "text": "x↦f(x)",
+          "latex": "x\\mapsto f(x)"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "x\\mapsto f(x)",
+      "label": "(47)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "An implication and an equivalence: "
+        },
+        {
+          "text": "A⟹B ⟺ C",
+          "latex": "A\\Longrightarrow B\\iff C"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "A\\Longrightarrow B\\iff C",
+      "label": "(48)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A map between sets: "
+        },
+        {
+          "text": "f:X→Y",
+          "latex": "f:X\\to Y"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "f:X\\to Y",
+      "label": "(49)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A congruence: "
+        },
+        {
+          "text": "a≡b(modn)",
+          "latex": "a\\equiv b\\pmod{n}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "a\\equiv b\\pmod{n}",
+      "label": "(50)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Three kinds of nearness: "
+        },
+        {
+          "text": "x≈y∼z≃w",
+          "latex": "x\\approx y\\sim z\\simeq w"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "x\\approx y\\sim z\\simeq w",
+      "label": "(51)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A proper subset: "
+        },
+        {
+          "text": "A⊊B",
+          "latex": "A\\subsetneq B"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "A\\subsetneq B",
+      "label": "(52)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Quantifiers: "
+        },
+        {
+          "text": "∀ε>0 ∃δ>0",
+          "latex": "\\forall\\varepsilon>0\\ \\exists\\delta>0"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\forall\\varepsilon>0\\ \\exists\\delta>0",
+      "label": "(53)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The curl of a field: "
+        },
+        {
+          "text": "∇×F",
+          "latex": "\\nabla\\times\\mathbf{F}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\nabla\\times\\mathbf{F}",
+      "label": "(54)"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "7. Matrices, cases, and arrays",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A matrix in parentheses: "
+        },
+        {
+          "text": "(abcd)",
+          "latex": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
+      "label": "(55)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The identity in brackets: "
+        },
+        {
+          "text": "[1001]",
+          "latex": "\\begin{bmatrix}1&0\\\\0&1\\end{bmatrix}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\begin{bmatrix}1&0\\\\0&1\\end{bmatrix}",
+      "label": "(56)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A determinant: "
+        },
+        {
+          "text": "∣abcd∣=ad−bc",
+          "latex": "\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}=ad-bc"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}=ad-bc",
+      "label": "(57)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A function by cases: "
+        },
+        {
+          "text": "∣x∣={x,x≥0,−x,x<0",
+          "latex": "|x|=\\begin{cases}x,&x\\ge 0,\\\\-x,&x<0\\end{cases}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "|x|=\\begin{cases}x,&x\\ge 0,\\\\-x,&x<0\\end{cases}",
+      "label": "(58)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A general matrix with dots: "
+        },
+        {
+          "text": "(a11⋯a1n⋮⋱⋮am1⋯amn)",
+          "latex": "\\begin{pmatrix}a_{11}&\\cdots&a_{1n}\\\\\\vdots&\\ddots&\\vdots\\\\a_{m1}&\\cdots&a_{mn}\\end{pmatrix}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\begin{pmatrix}a_{11}&\\cdots&a_{1n}\\\\\\vdots&\\ddots&\\vdots\\\\a_{m1}&\\cdots&a_{mn}\\end{pmatrix}",
+      "label": "(59)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "An array with a rule: "
+        },
+        {
+          "text": "xf(x)01",
+          "latex": "\\begin{array}{c|c}x&f(x)\\\\\\hline 0&1\\end{array}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\begin{array}{c|c}x&f(x)\\\\\\hline 0&1\\end{array}",
+      "label": "(60)"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "8. Harder combinations",
+          "smallCaps": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Two aligned lines: "
+        },
+        {
+          "text": "(a+b)2=a2+2ab+b2≥4ab",
+          "latex": "\\begin{aligned}(a+b)^2&=a^2+2ab+b^2\\\\&\\ge 4ab\\end{aligned}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\begin{aligned}(a+b)^2&=a^2+2ab+b^2\\\\&\\ge 4ab\\end{aligned}",
+      "label": "(61)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Chebyshev’s bound for a mean: "
+        },
+        {
+          "text": "P(∣Snn−μ∣>ε)≤σ2nε2",
+          "latex": "\\mathbf{P}\\left(\\left|\\frac{S_n}{n}-\\mu\\right|>\\varepsilon\\right)\\le\\frac{\\sigma^2}{n\\varepsilon^2}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathbf{P}\\left(\\left|\\frac{S_n}{n}-\\mu\\right|>\\varepsilon\\right)\\le\\frac{\\sigma^2}{n\\varepsilon^2}",
+      "label": "(62)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The zeta function as a sum and a product: "
+        },
+        {
+          "text": "ζ(s)=∑n=1∞1ns=∏p11−p−s",
+          "latex": "\\zeta(s)=\\sum_{n=1}^{\\infty}\\frac{1}{n^s}=\\prod_{p}\\frac{1}{1-p^{-s}}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\zeta(s)=\\sum_{n=1}^{\\infty}\\frac{1}{n^s}=\\prod_{p}\\frac{1}{1-p^{-s}}",
+      "label": "(63)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The Fourier transform: "
+        },
+        {
+          "text": "f̂(ξ)=∫Rf(x) e−2πixξ dx",
+          "latex": "\\hat{f}(\\xi)=\\int_{\\mathbb{R}}f(x)\\,e^{-2\\pi i x\\xi}\\,dx"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\hat{f}(\\xi)=\\int_{\\mathbb{R}}f(x)\\,e^{-2\\pi i x\\xi}\\,dx",
+      "label": "(64)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A brace under a sum: "
+        },
+        {
+          "text": "1+1+⋯+1⏟n times=n",
+          "latex": "\\underbrace{1+1+\\cdots+1}_{n\\text{ times}}=n"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\underbrace{1+1+\\cdots+1}_{n\\text{ times}}=n",
+      "label": "(65)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A brace over a sum: "
+        },
+        {
+          "text": "a+⋯+a⏞k",
+          "latex": "\\overbrace{a+\\cdots+a}^{k}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\overbrace{a+\\cdots+a}^{k}",
+      "label": "(66)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The sample standard deviation: "
+        },
+        {
+          "text": "∑i=1n(xi−x̄)2n−1",
+          "latex": "\\sqrt{\\frac{\\sum_{i=1}^n(x_i-\\bar{x})^2}{n-1}}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\sqrt{\\frac{\\sum_{i=1}^n(x_i-\\bar{x})^2}{n-1}}",
+      "label": "(67)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A derivative of an integral with moving limits: "
+        },
+        {
+          "text": "ddt∫a(t)b(t)f(x,t) dx",
+          "latex": "\\frac{d}{dt}\\int_{a(t)}^{b(t)}f(x,t)\\,dx"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\frac{d}{dt}\\int_{a(t)}^{b(t)}f(x,t)\\,dx",
+      "label": "(68)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Kolmogorov’s maximal inequality: "
+        },
+        {
+          "text": "Pr[ maxk≤n∣Sk∣≥λ]≤ESn2λ2",
+          "latex": "\\Pr\\Bigl[\\,\\max_{k\\le n}|S_k|\\ge\\lambda\\Bigr]\\le\\frac{\\mathbf{E}S_n^2}{\\lambda^2}"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\Pr\\Bigl[\\,\\max_{k\\le n}|S_k|\\ge\\lambda\\Bigr]\\le\\frac{\\mathbf{E}S_n^2}{\\lambda^2}",
+      "label": "(69)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The exponential series: "
+        },
+        {
+          "text": "ex=∑k=0∞xkk!=1+x+x22!+⋯",
+          "latex": "e^{x}=\\sum_{k=0}^{\\infty}\\frac{x^k}{k!}=1+x+\\frac{x^2}{2!}+\\cdots"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "e^{x}=\\sum_{k=0}^{\\infty}\\frac{x^k}{k!}=1+x+\\frac{x^2}{2!}+\\cdots",
+      "label": "(70)"
+    }
+  ],
+  "furniture": [
+    "A sheet of formulas",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8"
+  ],
+  "license": "open",
+  "provenance": "generated",
+  "notes": "Each formula stands twice: inline in a paragraph and as a display labeled (n). Every latex string renders in KaTeX as written."
+}

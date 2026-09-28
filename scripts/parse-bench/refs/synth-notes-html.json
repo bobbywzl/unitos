@@ -1,0 +1,3817 @@
+{
+  "id": "synth-notes-html",
+  "category": "math-tex",
+  "source": {
+    "pdf": ".bench/synthetic/synth-notes-html.pdf"
+  },
+  "blocks": [
+    {
+      "kind": "title",
+      "spans": [
+        {
+          "text": "Probability and Measure",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Lecture notes for a first graduate course"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Ada L. Mercer"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Department of Statistics, Northfield University"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Fall 2026"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "CHAPTER 2"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "Random variables and expectation",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "This chapter builds the objects that probability theory studies on top of the measure theory of Chapter 1. Section 2.1 introduces random variables as measurable functions and describes them through their laws and distribution functions. Section 2.2 defines the expectation as a Lebesgue integral, first for simple functions and then by monotone limits, and Section 2.3 collects the inequalities that control expectations and the spaces "
+        },
+        {
+          "text": "Lp",
+          "latex": "L^p"
+        },
+        {
+          "text": " they lead to."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Throughout the chapter "
+        },
+        {
+          "text": "(Ω,F,P)",
+          "latex": "(\\Omega,\\mathcal{F},\\mathbf{P})"
+        },
+        {
+          "text": " denotes a probability space, and we use the conventions "
+        },
+        {
+          "text": "inf∅=∞",
+          "latex": "\\inf\\emptyset=\\infty"
+        },
+        {
+          "text": " and "
+        },
+        {
+          "text": "0⋅∞=0",
+          "latex": "0\\cdot\\infty=0"
+        },
+        {
+          "text": ". Unless we say otherwise, equalities and inequalities between random variables hold for every "
+        },
+        {
+          "text": "ω∈Ω",
+          "latex": "\\omega\\in\\Omega"
+        },
+        {
+          "text": "; when they hold outside a set of probability zero we add the words “almost surely”, or a.s. for short."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "2.1. Random variables and their distribution",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A random variable is a numerical quantity whose value is decided by the outcome of an experiment. To compute the probability that it falls in an interval, the set of outcomes that make it do so has to be an event. This single requirement is the whole definition."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "2.1.1. Measurable maps.",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "We state the requirement for maps between two measurable spaces, since the same notion covers random vectors, random sequences, and random functions."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Definition 2.1.1.",
+          "smallCaps": true
+        },
+        {
+          "text": " Let ",
+          "italic": true
+        },
+        {
+          "text": "(S,S)",
+          "latex": "(S,\\mathcal{S})"
+        },
+        {
+          "text": " and ",
+          "italic": true
+        },
+        {
+          "text": "(T,T)",
+          "latex": "(T,\\mathcal{T})"
+        },
+        {
+          "text": " be measurable spaces. A map ",
+          "italic": true
+        },
+        {
+          "text": "f:S→T",
+          "latex": "f:S\\to T"
+        },
+        {
+          "text": " is ",
+          "italic": true
+        },
+        {
+          "text": "measurable"
+        },
+        {
+          "text": " if ",
+          "italic": true
+        },
+        {
+          "text": "f−1(B)∈S",
+          "latex": "f^{-1}(B)\\in\\mathcal{S}"
+        },
+        {
+          "text": " for every ",
+          "italic": true
+        },
+        {
+          "text": "B∈T",
+          "latex": "B\\in\\mathcal{T}"
+        },
+        {
+          "text": ". A ",
+          "italic": true
+        },
+        {
+          "text": "random variable"
+        },
+        {
+          "text": " is a measurable map ",
+          "italic": true
+        },
+        {
+          "text": "X:(Ω,F)→(R,B)",
+          "latex": "X:(\\Omega,\\mathcal{F})\\to(\\mathbb{R},\\mathcal{B})"
+        },
+        {
+          "text": ", where ",
+          "italic": true
+        },
+        {
+          "text": "B",
+          "latex": "\\mathcal{B}"
+        },
+        {
+          "text": " is the Borel ",
+          "italic": true
+        },
+        {
+          "text": "σ",
+          "latex": "\\sigma"
+        },
+        {
+          "text": "-algebra of ",
+          "italic": true
+        },
+        {
+          "text": "R",
+          "latex": "\\mathbb{R}"
+        },
+        {
+          "text": ".",
+          "italic": true
+        },
+        {
+          "text": "1"
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Remark.",
+          "smallCaps": true
+        },
+        {
+          "text": " Since the intervals "
+        },
+        {
+          "text": "(−∞,x]",
+          "latex": "(-\\infty,x]"
+        },
+        {
+          "text": " generate "
+        },
+        {
+          "text": "B",
+          "latex": "\\mathcal{B}"
+        },
+        {
+          "text": ", a function "
+        },
+        {
+          "text": "X:Ω→R",
+          "latex": "X:\\Omega\\to\\mathbb{R}"
+        },
+        {
+          "text": " is a random variable as soon as "
+        },
+        {
+          "text": "{ω:X(ω)≤x}∈F",
+          "latex": "\\{\\omega:X(\\omega)\\le x\\}\\in\\mathcal{F}"
+        },
+        {
+          "text": " for every "
+        },
+        {
+          "text": "x∈R",
+          "latex": "x\\in\\mathbb{R}"
+        },
+        {
+          "text": ". Checking this one family of events is usually far easier than checking every Borel set."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Exercise 2.1.2.",
+          "smallCaps": true
+        },
+        {
+          "text": " Let ",
+          "italic": true
+        },
+        {
+          "text": "X,Y",
+          "latex": "X,Y"
+        },
+        {
+          "text": " be random variables on ",
+          "italic": true
+        },
+        {
+          "text": "(Ω,F)",
+          "latex": "(\\Omega,\\mathcal{F})"
+        },
+        {
+          "text": " and let ",
+          "italic": true
+        },
+        {
+          "text": "c∈R",
+          "latex": "c\\in\\mathbb{R}"
+        },
+        {
+          "text": ". Show that the following are random variables.",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "(a)",
+          "spans": [
+            {
+              "text": "Sums and products."
+            },
+            {
+              "text": " ",
+              "italic": true
+            },
+            {
+              "text": "X+Y",
+              "latex": "X+Y"
+            },
+            {
+              "text": ", ",
+              "italic": true
+            },
+            {
+              "text": "cX",
+              "latex": "cX"
+            },
+            {
+              "text": " and ",
+              "italic": true
+            },
+            {
+              "text": "XY",
+              "latex": "XY"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(b)",
+          "spans": [
+            {
+              "text": "Maxima and minima."
+            },
+            {
+              "text": " ",
+              "italic": true
+            },
+            {
+              "text": "X∨Y=max(X,Y)",
+              "latex": "X\\vee Y=\\max(X,Y)"
+            },
+            {
+              "text": " and ",
+              "italic": true
+            },
+            {
+              "text": "X∧Y=min(X,Y)",
+              "latex": "X\\wedge Y=\\min(X,Y)"
+            },
+            {
+              "text": ", and in particular the positive part ",
+              "italic": true
+            },
+            {
+              "text": "X+=X∨0",
+              "latex": "X^+=X\\vee 0"
+            },
+            {
+              "text": " and the negative part ",
+              "italic": true
+            },
+            {
+              "text": "X−=(−X)∨0",
+              "latex": "X^-=(-X)\\vee 0"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(c)",
+          "spans": [
+            {
+              "text": "Limits."
+            },
+            {
+              "text": " For a sequence ",
+              "italic": true
+            },
+            {
+              "text": "X1,X2,…",
+              "latex": "X_1,X_2,\\ldots"
+            },
+            {
+              "text": " of random variables, the functions",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "(i)",
+          "spans": [
+            {
+              "text": "supnXn",
+              "latex": "\\sup_n X_n"
+            },
+            {
+              "text": " and ",
+              "italic": true
+            },
+            {
+              "text": "infnXn",
+              "latex": "\\inf_n X_n"
+            },
+            {
+              "text": ", when they are finite everywhere;",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "(ii)",
+          "spans": [
+            {
+              "text": "lim supn→∞Xn",
+              "latex": "\\limsup_{n\\to\\infty}X_n"
+            },
+            {
+              "text": " and ",
+              "italic": true
+            },
+            {
+              "text": "lim infn→∞Xn",
+              "latex": "\\liminf_{n\\to\\infty}X_n"
+            },
+            {
+              "text": ", under the same condition.",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(d)",
+          "spans": [
+            {
+              "text": "Compositions."
+            },
+            {
+              "text": " ",
+              "italic": true
+            },
+            {
+              "text": "g(X)",
+              "latex": "g(X)"
+            },
+            {
+              "text": " for every Borel function ",
+              "italic": true
+            },
+            {
+              "text": "g:R→R",
+              "latex": "g:\\mathbb{R}\\to\\mathbb{R}"
+            },
+            {
+              "text": ", that is, for every ",
+              "italic": true
+            },
+            {
+              "text": "g",
+              "latex": "g"
+            },
+            {
+              "text": " with ",
+              "italic": true
+            },
+            {
+              "text": "g−1(B)∈B",
+              "latex": "g^{-1}(B)\\in\\mathcal{B}"
+            },
+            {
+              "text": " for all ",
+              "italic": true
+            },
+            {
+              "text": "B∈B",
+              "latex": "B\\in\\mathcal{B}"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Hint: "
+        },
+        {
+          "text": "For (a) write ",
+          "italic": true
+        },
+        {
+          "text": "{X+Y<x}",
+          "latex": "\\{X+Y<x\\}"
+        },
+        {
+          "text": " as a countable union, over the rationals ",
+          "italic": true
+        },
+        {
+          "text": "q",
+          "latex": "q"
+        },
+        {
+          "text": ", of the events ",
+          "italic": true
+        },
+        {
+          "text": "{X<q}∩{Y<x−q}",
+          "latex": "\\{X<q\\}\\cap\\{Y<x-q\\}"
+        },
+        {
+          "text": ".",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Example 2.1.3.",
+          "smallCaps": true
+        },
+        {
+          "text": " The simplest random variables take finitely many values. For an event ",
+          "italic": true
+        },
+        {
+          "text": "A∈F",
+          "latex": "A\\in\\mathcal{F}"
+        },
+        {
+          "text": " the ",
+          "italic": true
+        },
+        {
+          "text": "indicator"
+        },
+        {
+          "text": " ",
+          "italic": true
+        },
+        {
+          "text": "IA",
+          "latex": "I_A"
+        },
+        {
+          "text": " equals ",
+          "italic": true
+        },
+        {
+          "text": "1",
+          "latex": "1"
+        },
+        {
+          "text": " on ",
+          "italic": true
+        },
+        {
+          "text": "A",
+          "latex": "A"
+        },
+        {
+          "text": " and ",
+          "italic": true
+        },
+        {
+          "text": "0",
+          "latex": "0"
+        },
+        {
+          "text": " off ",
+          "italic": true
+        },
+        {
+          "text": "A",
+          "latex": "A"
+        },
+        {
+          "text": ", and a ",
+          "italic": true
+        },
+        {
+          "text": "simple function"
+        },
+        {
+          "text": " is a finite combination",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "equation",
+      "latex": "X(\\omega)=\\sum_{k=1}^{n}c_k I_{A_k}(\\omega),\\qquad c_k\\in\\mathbb{R},\\ A_k\\in\\mathcal{F}.",
+      "label": "(2.1)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Every simple function is a random variable, since ",
+          "italic": true
+        },
+        {
+          "text": "{X≤x}",
+          "latex": "\\{X\\le x\\}"
+        },
+        {
+          "text": " is a finite union of intersections of the sets ",
+          "italic": true
+        },
+        {
+          "text": "Ak",
+          "latex": "A_k"
+        },
+        {
+          "text": " and their complements. We may and shall assume that the sets ",
+          "italic": true
+        },
+        {
+          "text": "Ak",
+          "latex": "A_k"
+        },
+        {
+          "text": " are disjoint and the values ",
+          "italic": true
+        },
+        {
+          "text": "ck",
+          "latex": "c_k"
+        },
+        {
+          "text": " distinct.",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Simple functions approximate every non-negative random variable from below, and this is how the expectation will be built in Section 2.2."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Proposition 2.1.4.",
+          "smallCaps": true
+        },
+        {
+          "text": " For every random variable ",
+          "italic": true
+        },
+        {
+          "text": "X≥0",
+          "latex": "X\\ge 0"
+        },
+        {
+          "text": " there are simple functions ",
+          "italic": true
+        },
+        {
+          "text": "0≤X1≤X2≤⋯",
+          "latex": "0\\le X_1\\le X_2\\le\\cdots"
+        },
+        {
+          "text": " with ",
+          "italic": true
+        },
+        {
+          "text": "Xn(ω)↑X(ω)",
+          "latex": "X_n(\\omega)\\uparrow X(\\omega)"
+        },
+        {
+          "text": " for every ",
+          "italic": true
+        },
+        {
+          "text": "ω∈Ω",
+          "latex": "\\omega\\in\\Omega"
+        },
+        {
+          "text": ". One choice is",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "equation",
+      "latex": "X_n=\\sum_{k=1}^{n2^n}\\frac{k-1}{2^n}\\,I_{\\{(k-1)2^{-n}\\le X<k2^{-n}\\}}+n\\,I_{\\{X\\ge n\\}}.",
+      "label": "(2.2)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Proof.",
+          "smallCaps": true
+        },
+        {
+          "text": " Each "
+        },
+        {
+          "text": "Xn",
+          "latex": "X_n"
+        },
+        {
+          "text": " is simple, and "
+        },
+        {
+          "text": "Xn≤X",
+          "latex": "X_n\\le X"
+        },
+        {
+          "text": " by construction. Passing from "
+        },
+        {
+          "text": "n",
+          "latex": "n"
+        },
+        {
+          "text": " to "
+        },
+        {
+          "text": "n+1",
+          "latex": "n+1"
+        },
+        {
+          "text": " halves every dyadic interval, so "
+        },
+        {
+          "text": "Xn≤Xn+1",
+          "latex": "X_n\\le X_{n+1}"
+        },
+        {
+          "text": ". Finally, if "
+        },
+        {
+          "text": "X(ω)<n",
+          "latex": "X(\\omega)<n"
+        },
+        {
+          "text": " then "
+        },
+        {
+          "text": "0≤X(ω)−Xn(ω)<2−n",
+          "latex": "0\\le X(\\omega)-X_n(\\omega)<2^{-n}"
+        },
+        {
+          "text": ", which gives the convergence. □"
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "2.1.2. Laws and distribution functions.",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A random variable carries the probability measure from "
+        },
+        {
+          "text": "Ω",
+          "latex": "\\Omega"
+        },
+        {
+          "text": " to the real line, and most questions about one random variable concern only the measure it carries."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Definition 2.1.5.",
+          "smallCaps": true
+        },
+        {
+          "text": " The ",
+          "italic": true
+        },
+        {
+          "text": "law"
+        },
+        {
+          "text": " of a random variable ",
+          "italic": true
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " is the probability measure ",
+          "italic": true
+        },
+        {
+          "text": "PX=P∘X−1",
+          "latex": "\\mathcal{P}_X=\\mathbf{P}\\circ X^{-1}"
+        },
+        {
+          "text": " on ",
+          "italic": true
+        },
+        {
+          "text": "(R,B)",
+          "latex": "(\\mathbb{R},\\mathcal{B})"
+        },
+        {
+          "text": ", that is, ",
+          "italic": true
+        },
+        {
+          "text": "PX(B)=P(X∈B)",
+          "latex": "\\mathcal{P}_X(B)=\\mathbf{P}(X\\in B)"
+        },
+        {
+          "text": ". Its ",
+          "italic": true
+        },
+        {
+          "text": "distribution function"
+        },
+        {
+          "text": " is ",
+          "italic": true
+        },
+        {
+          "text": "FX(x)=P(X≤x)",
+          "latex": "F_X(x)=\\mathbf{P}(X\\le x)"
+        },
+        {
+          "text": ". Two random variables with the same law are ",
+          "italic": true
+        },
+        {
+          "text": "identically distributed"
+        },
+        {
+          "text": ", and we write ",
+          "italic": true
+        },
+        {
+          "text": "X=dY",
+          "latex": "X\\overset{d}{=}Y"
+        },
+        {
+          "text": ".",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Theorem 2.1.6.",
+          "smallCaps": true
+        },
+        {
+          "text": " A function ",
+          "italic": true
+        },
+        {
+          "text": "F:R→[0,1]",
+          "latex": "F:\\mathbb{R}\\to[0,1]"
+        },
+        {
+          "text": " is the distribution function of some random variable if and only if",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "(a)",
+          "spans": [
+            {
+              "text": "F",
+              "latex": "F"
+            },
+            {
+              "text": " is non-decreasing,",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(b)",
+          "spans": [
+            {
+              "text": "F",
+              "latex": "F"
+            },
+            {
+              "text": " is right-continuous, that is, ",
+              "italic": true
+            },
+            {
+              "text": "F(x+h)→F(x)",
+              "latex": "F(x+h)\\to F(x)"
+            },
+            {
+              "text": " as ",
+              "italic": true
+            },
+            {
+              "text": "h↓0",
+              "latex": "h\\downarrow 0"
+            },
+            {
+              "text": ",",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(c)",
+          "spans": [
+            {
+              "text": "limx→−∞F(x)=0",
+              "latex": "\\lim_{x\\to-\\infty}F(x)=0"
+            },
+            {
+              "text": " and ",
+              "italic": true
+            },
+            {
+              "text": "limx→∞F(x)=1",
+              "latex": "\\lim_{x\\to\\infty}F(x)=1"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Necessity follows from the continuity of probability measures along monotone sequences of events. For sufficiency one takes "
+        },
+        {
+          "text": "X(ω)=sup{y:F(y)<ω}",
+          "latex": "X(\\omega)=\\sup\\{y:F(y)<\\omega\\}"
+        },
+        {
+          "text": " on the probability space "
+        },
+        {
+          "text": "((0,1),B(0,1),U)",
+          "latex": "((0,1),\\mathcal{B}_{(0,1)},U)"
+        },
+        {
+          "text": ", where "
+        },
+        {
+          "text": "U",
+          "latex": "U"
+        },
+        {
+          "text": " is the uniform measure; see ["
+        },
+        {
+          "text": "Dur19",
+          "bold": true
+        },
+        {
+          "text": ", Theorem 1.2.2]."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Example 2.1.7.",
+          "smallCaps": true
+        },
+        {
+          "text": " A coin that shows heads with probability ",
+          "italic": true
+        },
+        {
+          "text": "p∈(0,1)",
+          "latex": "p\\in(0,1)"
+        },
+        {
+          "text": " gives the ",
+          "italic": true
+        },
+        {
+          "text": "Bernoulli"
+        },
+        {
+          "text": " random variable ",
+          "italic": true
+        },
+        {
+          "text": "X=IH",
+          "latex": "X=I_H"
+        },
+        {
+          "text": ", whose distribution function is",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "equation",
+      "latex": "F_X(x)=\\begin{cases}0, & x<0,\\\\ 1-p, & 0\\le x<1,\\\\ 1, & x\\ge 1.\\end{cases}",
+      "label": "(2.3)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "It jumps by ",
+          "italic": true
+        },
+        {
+          "text": "1−p",
+          "latex": "1-p"
+        },
+        {
+          "text": " at ",
+          "italic": true
+        },
+        {
+          "text": "0",
+          "latex": "0"
+        },
+        {
+          "text": " and by ",
+          "italic": true
+        },
+        {
+          "text": "p",
+          "latex": "p"
+        },
+        {
+          "text": " at ",
+          "italic": true
+        },
+        {
+          "text": "1",
+          "latex": "1"
+        },
+        {
+          "text": ", and it is constant elsewhere.",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Remark.",
+          "smallCaps": true
+        },
+        {
+          "text": " A distribution function has at most countably many jumps, since fewer than "
+        },
+        {
+          "text": "k",
+          "latex": "k"
+        },
+        {
+          "text": " of its jumps exceed "
+        },
+        {
+          "text": "1/k",
+          "latex": "1/k"
+        },
+        {
+          "text": ". The law gives each jump point "
+        },
+        {
+          "text": "x",
+          "latex": "x"
+        },
+        {
+          "text": " the mass "
+        },
+        {
+          "text": "F(x)−F(x−)",
+          "latex": "F(x)-F(x^-)"
+        },
+        {
+          "text": ", where "
+        },
+        {
+          "text": "F(x−)=limy↑xF(y)",
+          "latex": "F(x^-)=\\lim_{y\\uparrow x}F(y)"
+        },
+        {
+          "text": ", and gives no mass to any other single point."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "In statistics the law is unknown and is estimated from a sample. For independent observations "
+        },
+        {
+          "text": "X1,…,Xn",
+          "latex": "X_1,\\ldots,X_n"
+        },
+        {
+          "text": " with distribution function "
+        },
+        {
+          "text": "F",
+          "latex": "F"
+        },
+        {
+          "text": ", the empirical distribution function "
+        },
+        {
+          "text": "F̂n(x)=1n∑i=1nI{Xi≤x}",
+          "latex": "\\widehat{F}_n(x)=\\frac{1}{n}\\sum_{i=1}^{n}I_{\\{X_i\\le x\\}}"
+        },
+        {
+          "text": " estimates "
+        },
+        {
+          "text": "F",
+          "latex": "F"
+        },
+        {
+          "text": ", and the sample mean "
+        },
+        {
+          "text": "X̄n",
+          "latex": "\\bar{X}_n"
+        },
+        {
+          "text": " estimates the mean; Section 2.4 makes independence precise."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Exercise 2.1.8.",
+          "smallCaps": true
+        },
+        {
+          "text": " Let ",
+          "italic": true
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " have distribution function ",
+          "italic": true
+        },
+        {
+          "text": "F",
+          "latex": "F"
+        },
+        {
+          "text": ". Find the distribution functions of ",
+          "italic": true
+        },
+        {
+          "text": "aX+b",
+          "latex": "aX+b"
+        },
+        {
+          "text": " for ",
+          "italic": true
+        },
+        {
+          "text": "a>0",
+          "latex": "a>0"
+        },
+        {
+          "text": ", of ",
+          "italic": true
+        },
+        {
+          "text": "X2",
+          "latex": "X^2"
+        },
+        {
+          "text": ", and of ",
+          "italic": true
+        },
+        {
+          "text": "eX",
+          "latex": "e^{X}"
+        },
+        {
+          "text": ", and express ",
+          "italic": true
+        },
+        {
+          "text": "P(a<X<b)",
+          "latex": "\\mathbf{P}(a<X<b)"
+        },
+        {
+          "text": " and ",
+          "italic": true
+        },
+        {
+          "text": "P(X=x)",
+          "latex": "\\mathbf{P}(X=x)"
+        },
+        {
+          "text": " in terms of ",
+          "italic": true
+        },
+        {
+          "text": "F",
+          "latex": "F"
+        },
+        {
+          "text": ".",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "2.2. Expectation",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The expectation of a random variable is its average value, weighted by probability. For a simple function the weights are explicit, and every other case is reduced to this one by approximation, following the construction of the Lebesgue integral."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "2.2.1. Simple functions.",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Let "
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " be a simple function, written as in (2.1) with disjoint sets "
+        },
+        {
+          "text": "Ak",
+          "latex": "A_k"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Definition 2.2.1.",
+          "smallCaps": true
+        },
+        {
+          "text": " The ",
+          "italic": true
+        },
+        {
+          "text": "expectation"
+        },
+        {
+          "text": " of the simple function ",
+          "italic": true
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " in (2.1) is ",
+          "italic": true
+        },
+        {
+          "text": "EX=∑k=1nck P(Ak)",
+          "latex": "\\mathbf{E}X=\\sum_{k=1}^{n}c_k\\,\\mathbf{P}(A_k)"
+        },
+        {
+          "text": ".",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The value does not depend on how "
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " is written, and two facts follow at once from the definition: for simple functions "
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " and "
+        },
+        {
+          "text": "Y",
+          "latex": "Y"
+        },
+        {
+          "text": " and real numbers "
+        },
+        {
+          "text": "a,b",
+          "latex": "a,b"
+        },
+        {
+          "text": ","
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "equation",
+      "latex": "\\begin{aligned}\\mathbf{E}[aX+bY]&=a\\,\\mathbf{E}X+b\\,\\mathbf{E}Y,\\\\ X\\le Y&\\Longrightarrow\\mathbf{E}X\\le\\mathbf{E}Y.\\end{aligned}",
+      "label": "(2.4)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The first is "
+        },
+        {
+          "text": "linearity",
+          "italic": true
+        },
+        {
+          "text": " and the second "
+        },
+        {
+          "text": "monotonicity",
+          "italic": true
+        },
+        {
+          "text": "; both carry over to every integrable random variable."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "2.2.2. Monotone limits.",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "For a random variable "
+        },
+        {
+          "text": "X≥0",
+          "latex": "X\\ge 0"
+        },
+        {
+          "text": " we approximate "
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " from below by simple functions and define"
+        }
+      ]
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathbf{E}X=\\sup\\{\\mathbf{E}Y:\\ Y\\text{ simple},\\ 0\\le Y\\le X\\}\\in[0,\\infty].",
+      "label": "(2.5)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "For a general "
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " we set "
+        },
+        {
+          "text": "EX=EX+−EX−",
+          "latex": "\\mathbf{E}X=\\mathbf{E}X^+-\\mathbf{E}X^-"
+        },
+        {
+          "text": " whenever at least one of the two terms is finite, and we call "
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " "
+        },
+        {
+          "text": "integrable",
+          "italic": true
+        },
+        {
+          "text": " when both are, that is, when "
+        },
+        {
+          "text": "E∣X∣<∞",
+          "latex": "\\mathbf{E}|X|<\\infty"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Theorem 2.2.2.",
+          "smallCaps": true
+        },
+        {
+          "text": " (Monotone convergence)"
+        },
+        {
+          "text": " If ",
+          "italic": true
+        },
+        {
+          "text": "0≤Xn↑X",
+          "latex": "0\\le X_n\\uparrow X"
+        },
+        {
+          "text": " then ",
+          "italic": true
+        },
+        {
+          "text": "EXn↑EX",
+          "latex": "\\mathbf{E}X_n\\uparrow\\mathbf{E}X"
+        },
+        {
+          "text": ".",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Exercise 2.2.3.",
+          "smallCaps": true
+        },
+        {
+          "text": " Use Theorem 2.2.2 and the simple functions of Proposition 2.1.4 to prove the following.",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "(a)",
+          "spans": [
+            {
+              "text": "Linearity and monotonicity (2.4) hold for all integrable ",
+              "italic": true
+            },
+            {
+              "text": "X",
+              "latex": "X"
+            },
+            {
+              "text": " and ",
+              "italic": true
+            },
+            {
+              "text": "Y",
+              "latex": "Y"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(b)",
+          "spans": [
+            {
+              "text": "Fatou’s lemma."
+            },
+            {
+              "text": " If ",
+              "italic": true
+            },
+            {
+              "text": "Xn≥0",
+              "latex": "X_n\\ge 0"
+            },
+            {
+              "text": " then ",
+              "italic": true
+            },
+            {
+              "text": "E[lim infnXn]≤lim infnEXn",
+              "latex": "\\mathbf{E}[\\liminf_n X_n]\\le\\liminf_n\\mathbf{E}X_n"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(c)",
+          "spans": [
+            {
+              "text": "Dominated convergence."
+            },
+            {
+              "text": " If ",
+              "italic": true
+            },
+            {
+              "text": "Xn→X",
+              "latex": "X_n\\to X"
+            },
+            {
+              "text": " and ",
+              "italic": true
+            },
+            {
+              "text": "∣Xn∣≤Y",
+              "latex": "|X_n|\\le Y"
+            },
+            {
+              "text": " for an integrable ",
+              "italic": true
+            },
+            {
+              "text": "Y",
+              "latex": "Y"
+            },
+            {
+              "text": ", then ",
+              "italic": true
+            },
+            {
+              "text": "EXn→EX",
+              "latex": "\\mathbf{E}X_n\\to\\mathbf{E}X"
+            },
+            {
+              "text": " and in fact ",
+              "italic": true
+            },
+            {
+              "text": "E∣Xn−X∣→0",
+              "latex": "\\mathbf{E}|X_n-X|\\to 0"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(d)",
+          "spans": [
+            {
+              "text": "If ",
+              "italic": true
+            },
+            {
+              "text": "Xn≥0",
+              "latex": "X_n\\ge 0"
+            },
+            {
+              "text": " then ",
+              "italic": true
+            },
+            {
+              "text": "E∑n=1∞Xn=∑n=1∞EXn",
+              "latex": "\\mathbf{E}\\sum_{n=1}^{\\infty}X_n=\\sum_{n=1}^{\\infty}\\mathbf{E}X_n"
+            },
+            {
+              "text": ", whether or not the sums are finite.",
+              "italic": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Example 2.2.4.",
+          "smallCaps": true
+        },
+        {
+          "text": " A random variable ",
+          "italic": true
+        },
+        {
+          "text": "N",
+          "latex": "N"
+        },
+        {
+          "text": " with ",
+          "italic": true
+        },
+        {
+          "text": "P(N=k)=e−λλk/k!",
+          "latex": "\\mathbf{P}(N=k)=e^{-\\lambda}\\lambda^k/k!"
+        },
+        {
+          "text": " for ",
+          "italic": true
+        },
+        {
+          "text": "k=0,1,2,…",
+          "latex": "k=0,1,2,\\ldots"
+        },
+        {
+          "text": " has the ",
+          "italic": true
+        },
+        {
+          "text": "Poisson"
+        },
+        {
+          "text": " law with parameter ",
+          "italic": true
+        },
+        {
+          "text": "λ>0",
+          "latex": "\\lambda>0"
+        },
+        {
+          "text": ". By Exercise 2.2.3(d),",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathbf{E}N=\\sum_{k=0}^{\\infty}k\\,\\frac{e^{-\\lambda}\\lambda^k}{k!}=\\lambda e^{-\\lambda}\\sum_{k=1}^{\\infty}\\frac{\\lambda^{k-1}}{(k-1)!}=\\lambda.",
+      "label": "(2.6)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The same computation with ",
+          "italic": true
+        },
+        {
+          "text": "k(k−1)",
+          "latex": "k(k-1)"
+        },
+        {
+          "text": " in place of ",
+          "italic": true
+        },
+        {
+          "text": "k",
+          "latex": "k"
+        },
+        {
+          "text": " gives ",
+          "italic": true
+        },
+        {
+          "text": "E[N(N−1)]=λ2",
+          "latex": "\\mathbf{E}[N(N-1)]=\\lambda^2"
+        },
+        {
+          "text": ".",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The expectation of a function of "
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " depends only on the law of "
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": ". This is the "
+        },
+        {
+          "text": "change of variables formula",
+          "italic": true
+        },
+        {
+          "text": ":2"
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathbf{E}\\,g(X)=\\int_{\\mathbb{R}}g(x)\\,d\\mathcal{P}_X(x)=\\int_{-\\infty}^{\\infty}g(x)f_X(x)\\,dx,",
+      "label": "(2.7)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "where the second equality holds when the law of "
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " has a density "
+        },
+        {
+          "text": "fX",
+          "latex": "f_X"
+        },
+        {
+          "text": ", that is, when "
+        },
+        {
+          "text": "FX(x)=∫−∞xfX(y) dy",
+          "latex": "F_X(x)=\\int_{-\\infty}^{x}f_X(y)\\,dy"
+        },
+        {
+          "text": " for every "
+        },
+        {
+          "text": "x",
+          "latex": "x"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Remark.",
+          "smallCaps": true
+        },
+        {
+          "text": " For a random vector "
+        },
+        {
+          "text": "X=(X1,X2)",
+          "latex": "\\mathbf{X}=(X_1,X_2)"
+        },
+        {
+          "text": " with "
+        },
+        {
+          "text": "EXi2<∞",
+          "latex": "\\mathbf{E}X_i^2<\\infty"
+        },
+        {
+          "text": " the same formula gives the "
+        },
+        {
+          "text": "covariance matrix",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "equation",
+      "latex": "\\Sigma=\\begin{pmatrix}\\operatorname{Var}X_1 & \\operatorname{Cov}(X_1,X_2)\\\\ \\operatorname{Cov}(X_2,X_1) & \\operatorname{Var}X_2\\end{pmatrix},\\qquad\\operatorname{Cov}(X,Y)=\\mathbf{E}[(X-\\mathbf{E}X)(Y-\\mathbf{E}Y)],"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "which is symmetric and non-negative definite, since "
+        },
+        {
+          "text": "a⊤Σa=Var(a1X1+a2X2)≥0",
+          "latex": "a^{\\top}\\Sigma a=\\operatorname{Var}(a_1X_1+a_2X_2)\\ge 0"
+        },
+        {
+          "text": " for every "
+        },
+        {
+          "text": "a∈R2",
+          "latex": "a\\in\\mathbb{R}^2"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "2.3. Inequalities and ",
+          "bold": true
+        },
+        {
+          "text": "Lp",
+          "latex": "L^p"
+        },
+        {
+          "text": " spaces",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Many limit theorems reduce to bounds on tail probabilities and on moments. This section collects the inequalities used most often."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "2.3.1. Markov and Chebyshev.",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The first bound needs nothing but monotonicity."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Proposition 2.3.1.",
+          "smallCaps": true
+        },
+        {
+          "text": " (Markov’s inequality)"
+        },
+        {
+          "text": " For a random variable ",
+          "italic": true
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " and ",
+          "italic": true
+        },
+        {
+          "text": "a>0",
+          "latex": "a>0"
+        },
+        {
+          "text": ", ",
+          "italic": true
+        },
+        {
+          "text": "P(∣X∣≥a)≤E∣X∣/a",
+          "latex": "\\mathbf{P}(|X|\\ge a)\\le\\mathbf{E}|X|/a"
+        },
+        {
+          "text": ".",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Proof.",
+          "smallCaps": true
+        },
+        {
+          "text": " Since "
+        },
+        {
+          "text": "a I{∣X∣≥a}≤∣X∣",
+          "latex": "a\\,I_{\\{|X|\\ge a\\}}\\le|X|"
+        },
+        {
+          "text": ", monotonicity gives "
+        },
+        {
+          "text": "a P(∣X∣≥a)≤E∣X∣",
+          "latex": "a\\,\\mathbf{P}(|X|\\ge a)\\le\\mathbf{E}|X|"
+        },
+        {
+          "text": ". □"
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Applied to "
+        },
+        {
+          "text": "(X−EX)2",
+          "latex": "(X-\\mathbf{E}X)^2"
+        },
+        {
+          "text": " it gives "
+        },
+        {
+          "text": "Chebyshev’s inequality",
+          "italic": true
+        },
+        {
+          "text": " "
+        },
+        {
+          "text": "P(∣X−EX∣≥a)≤Var(X)/a2",
+          "latex": "\\mathbf{P}(|X-\\mathbf{E}X|\\ge a)\\le\\operatorname{Var}(X)/a^2"
+        },
+        {
+          "text": ", and applied to "
+        },
+        {
+          "text": "etX",
+          "latex": "e^{tX}"
+        },
+        {
+          "text": " it gives the exponential bound "
+        },
+        {
+          "text": "P(X≥a)≤e−ta EetX",
+          "latex": "\\mathbf{P}(X\\ge a)\\le e^{-ta}\\,\\mathbf{E}e^{tX}"
+        },
+        {
+          "text": " for every "
+        },
+        {
+          "text": "t>0",
+          "latex": "t>0"
+        },
+        {
+          "text": "."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Exercise 2.3.2.",
+          "smallCaps": true
+        },
+        {
+          "text": " Let ",
+          "italic": true
+        },
+        {
+          "text": "X1,…,Xn",
+          "latex": "X_1,\\ldots,X_n"
+        },
+        {
+          "text": " be random variables with ",
+          "italic": true
+        },
+        {
+          "text": "EXi=0",
+          "latex": "\\mathbf{E}X_i=0"
+        },
+        {
+          "text": " and ",
+          "italic": true
+        },
+        {
+          "text": "EXi2=σ2",
+          "latex": "\\mathbf{E}X_i^2=\\sigma^2"
+        },
+        {
+          "text": ", uncorrelated in pairs, and let ",
+          "italic": true
+        },
+        {
+          "text": "Sn=X1+⋯+Xn",
+          "latex": "S_n=X_1+\\cdots+X_n"
+        },
+        {
+          "text": ".",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "(a)",
+          "spans": [
+            {
+              "text": "Show that ",
+              "italic": true
+            },
+            {
+              "text": "Var(Sn)=nσ2",
+              "latex": "\\operatorname{Var}(S_n)=n\\sigma^2"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(b)",
+          "spans": [
+            {
+              "text": "Deduce the weak law of large numbers: ",
+              "italic": true
+            },
+            {
+              "text": "P(∣Sn/n∣≥ϵ)≤σ2/(nϵ2)→0",
+              "latex": "\\mathbf{P}(|S_n/n|\\ge\\epsilon)\\le\\sigma^2/(n\\epsilon^2)\\to 0"
+            },
+            {
+              "text": " for every ",
+              "italic": true
+            },
+            {
+              "text": "ϵ>0",
+              "latex": "\\epsilon>0"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(c)",
+          "spans": [
+            {
+              "text": "Suppose in addition that the ",
+              "italic": true
+            },
+            {
+              "text": "Xi",
+              "latex": "X_i"
+            },
+            {
+              "text": " are independent, symmetric, and bounded by ",
+              "italic": true
+            },
+            {
+              "text": "1",
+              "latex": "1"
+            },
+            {
+              "text": ". Using the exponential bound with a well chosen ",
+              "italic": true
+            },
+            {
+              "text": "t",
+              "latex": "t"
+            },
+            {
+              "text": ", show that",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "(i)",
+          "spans": [
+            {
+              "text": "EetXi≤cosht≤et2/2",
+              "latex": "\\mathbf{E}e^{tX_i}\\le\\cosh t\\le e^{t^2/2}"
+            },
+            {
+              "text": " for every ",
+              "italic": true
+            },
+            {
+              "text": "t>0",
+              "latex": "t>0"
+            },
+            {
+              "text": ", and",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "(ii)",
+          "spans": [
+            {
+              "text": "P(Sn≥a)≤e−a2/(2n)",
+              "latex": "\\mathbf{P}(S_n\\ge a)\\le e^{-a^2/(2n)}"
+            },
+            {
+              "text": " for every ",
+              "italic": true
+            },
+            {
+              "text": "a>0",
+              "latex": "a>0"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "2.3.2. Jensen, Hölder and Minkowski.",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A function "
+        },
+        {
+          "text": "φ:R→R",
+          "latex": "\\varphi:\\mathbb{R}\\to\\mathbb{R}"
+        },
+        {
+          "text": " is "
+        },
+        {
+          "text": "convex",
+          "italic": true
+        },
+        {
+          "text": " if "
+        },
+        {
+          "text": "φ(θx+(1−θ)y)≤θφ(x)+(1−θ)φ(y)",
+          "latex": "\\varphi(\\theta x+(1-\\theta)y)\\le\\theta\\varphi(x)+(1-\\theta)\\varphi(y)"
+        },
+        {
+          "text": " for all "
+        },
+        {
+          "text": "x,y",
+          "latex": "x,y"
+        },
+        {
+          "text": " and "
+        },
+        {
+          "text": "θ∈[0,1]",
+          "latex": "\\theta\\in[0,1]"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Theorem 2.3.3.",
+          "smallCaps": true
+        },
+        {
+          "text": " (Jensen’s inequality)"
+        },
+        {
+          "text": " If ",
+          "italic": true
+        },
+        {
+          "text": "φ",
+          "latex": "\\varphi"
+        },
+        {
+          "text": " is convex and both ",
+          "italic": true
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " and ",
+          "italic": true
+        },
+        {
+          "text": "φ(X)",
+          "latex": "\\varphi(X)"
+        },
+        {
+          "text": " are integrable, then",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "equation",
+      "latex": "\\varphi(\\mathbf{E}X)\\le\\mathbf{E}\\varphi(X).",
+      "label": "(2.8)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Definition 2.3.4.",
+          "smallCaps": true
+        },
+        {
+          "text": " For ",
+          "italic": true
+        },
+        {
+          "text": "p∈[1,∞)",
+          "latex": "p\\in[1,\\infty)"
+        },
+        {
+          "text": " let ",
+          "italic": true
+        },
+        {
+          "text": "∥X∥p=(E∣X∣p)1/p",
+          "latex": "\\|X\\|_p=(\\mathbf{E}|X|^p)^{1/p}"
+        },
+        {
+          "text": ", and let ",
+          "italic": true
+        },
+        {
+          "text": "Lp",
+          "latex": "L^p"
+        },
+        {
+          "text": " denote the space of random variables with ",
+          "italic": true
+        },
+        {
+          "text": "∥X∥p<∞",
+          "latex": "\\|X\\|_p<\\infty"
+        },
+        {
+          "text": ", two of them identified when they are equal a.s. We also set ",
+          "italic": true
+        },
+        {
+          "text": "∥X∥∞=inf{c:P(∣X∣>c)=0}",
+          "latex": "\\|X\\|_\\infty=\\inf\\{c:\\mathbf{P}(|X|>c)=0\\}"
+        },
+        {
+          "text": ".",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "With these norms the classical inequalities of analysis read as follows. Their proofs are the same as for finite sums, and we leave them to the reader (see ["
+        },
+        {
+          "text": "Bil95",
+          "bold": true
+        },
+        {
+          "text": ", Section 5] for details)."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathbf{E}|XY|\\le\\|X\\|_p\\|Y\\|_q\\quad\\text{for }\\tfrac{1}{p}+\\tfrac{1}{q}=1,\\qquad\\|X+Y\\|_p\\le\\|X\\|_p+\\|Y\\|_p.",
+      "label": "(2.9)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The first is "
+        },
+        {
+          "text": "Hölder’s inequality",
+          "italic": true
+        },
+        {
+          "text": " and the second "
+        },
+        {
+          "text": "Minkowski’s inequality",
+          "italic": true
+        },
+        {
+          "text": ". Taking "
+        },
+        {
+          "text": "Y=1",
+          "latex": "Y=1"
+        },
+        {
+          "text": " in the first shows that "
+        },
+        {
+          "text": "∥X∥p",
+          "latex": "\\|X\\|_p"
+        },
+        {
+          "text": " is non-decreasing in "
+        },
+        {
+          "text": "p",
+          "latex": "p"
+        },
+        {
+          "text": ", so that "
+        },
+        {
+          "text": "Lq⊆Lp",
+          "latex": "L^q\\subseteq L^p"
+        },
+        {
+          "text": " whenever "
+        },
+        {
+          "text": "p≤q",
+          "latex": "p\\le q"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Exercise 2.3.5.",
+          "smallCaps": true
+        },
+        {
+          "text": " Let ",
+          "italic": true
+        },
+        {
+          "text": "X≥0",
+          "latex": "X\\ge 0"
+        },
+        {
+          "text": " be a random variable.",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "(a)",
+          "spans": [
+            {
+              "text": "Show that ",
+              "italic": true
+            },
+            {
+              "text": "EX=∫0∞P(X>t) dt",
+              "latex": "\\mathbf{E}X=\\int_0^\\infty\\mathbf{P}(X>t)\\,dt"
+            },
+            {
+              "text": ". More generally, show that for every ",
+              "italic": true
+            },
+            {
+              "text": "p>0",
+              "latex": "p>0"
+            },
+            {
+              "text": " the moment ",
+              "italic": true
+            },
+            {
+              "text": "EXp",
+              "latex": "\\mathbf{E}X^p"
+            },
+            {
+              "text": " equals ",
+              "italic": true
+            },
+            {
+              "text": "∫0∞p tp−1P(X>t) dt",
+              "latex": "\\int_0^\\infty p\\,t^{p-1}\\mathbf{P}(X>t)\\,dt"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(b)",
+          "spans": [
+            {
+              "text": "Deduce that ",
+              "italic": true
+            },
+            {
+              "text": "EX<∞",
+              "latex": "\\mathbf{E}X<\\infty"
+            },
+            {
+              "text": " if and only if ",
+              "italic": true
+            },
+            {
+              "text": "∑n≥1P(X≥n)<∞",
+              "latex": "\\sum_{n\\ge 1}\\mathbf{P}(X\\ge n)<\\infty"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(c)",
+          "spans": [
+            {
+              "text": "Show that if ",
+              "italic": true
+            },
+            {
+              "text": "∥X∥∞<∞",
+              "latex": "\\|X\\|_\\infty<\\infty"
+            },
+            {
+              "text": " then ",
+              "italic": true
+            },
+            {
+              "text": "∥X∥p→∥X∥∞",
+              "latex": "\\|X\\|_p\\to\\|X\\|_\\infty"
+            },
+            {
+              "text": " as ",
+              "italic": true
+            },
+            {
+              "text": "p→∞",
+              "latex": "p\\to\\infty"
+            },
+            {
+              "text": ", and that the limit is ",
+              "italic": true
+            },
+            {
+              "text": "∞",
+              "latex": "\\infty"
+            },
+            {
+              "text": " otherwise.",
+              "italic": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Hint: "
+        },
+        {
+          "text": "For (a) write ",
+          "italic": true
+        },
+        {
+          "text": "X=∫0∞I{X>t} dt",
+          "latex": "X=\\int_0^\\infty I_{\\{X>t\\}}\\,dt"
+        },
+        {
+          "text": " and interchange the expectation and the integral.",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Remark.",
+          "smallCaps": true
+        },
+        {
+          "text": " The space "
+        },
+        {
+          "text": "L2",
+          "latex": "L^2"
+        },
+        {
+          "text": " is special: "
+        },
+        {
+          "text": "⟨X,Y⟩=EXY",
+          "latex": "\\langle X,Y\\rangle=\\mathbf{E}XY"
+        },
+        {
+          "text": " is an inner product on it, and "
+        },
+        {
+          "text": "L2",
+          "latex": "L^2"
+        },
+        {
+          "text": " is a Hilbert space. Orthogonal projection onto a closed subspace of "
+        },
+        {
+          "text": "L2",
+          "latex": "L^2"
+        },
+        {
+          "text": " is the starting point for conditional expectation in Chapter 4, following ["
+        },
+        {
+          "text": "Wil91",
+          "bold": true
+        },
+        {
+          "text": ", Chapter 9]."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "2.4. Independence",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Independence is what separates probability theory from the rest of measure theory. It lets us compute the law of a sum from the laws of its terms, and it is the assumption behind every limit theorem in the chapters that follow. We define it first for events and "
+        },
+        {
+          "text": "σ",
+          "latex": "\\sigma"
+        },
+        {
+          "text": "-algebras, and then for random variables."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Definition 2.4.1.",
+          "smallCaps": true
+        },
+        {
+          "text": " Events ",
+          "italic": true
+        },
+        {
+          "text": "A1,…,An∈F",
+          "latex": "A_1,\\ldots,A_n\\in\\mathcal{F}"
+        },
+        {
+          "text": " are ",
+          "italic": true
+        },
+        {
+          "text": "independent"
+        },
+        {
+          "text": " if",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathbf{P}\\Bigl(\\bigcap_{i\\in I}A_i\\Bigr)=\\prod_{i\\in I}\\mathbf{P}(A_i)\\qquad\\text{for every }I\\subseteq\\{1,\\ldots,n\\}.",
+      "label": "(2.10)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Sub-",
+          "italic": true
+        },
+        {
+          "text": "σ",
+          "latex": "\\sigma"
+        },
+        {
+          "text": "-algebras ",
+          "italic": true
+        },
+        {
+          "text": "G1,…,Gn",
+          "latex": "\\mathcal{G}_1,\\ldots,\\mathcal{G}_n"
+        },
+        {
+          "text": " of ",
+          "italic": true
+        },
+        {
+          "text": "F",
+          "latex": "\\mathcal{F}"
+        },
+        {
+          "text": " are independent if (2.10) holds whenever ",
+          "italic": true
+        },
+        {
+          "text": "Ai∈Gi",
+          "latex": "A_i\\in\\mathcal{G}_i"
+        },
+        {
+          "text": " for each ",
+          "italic": true
+        },
+        {
+          "text": "i",
+          "latex": "i"
+        },
+        {
+          "text": ", and random variables are independent when the ",
+          "italic": true
+        },
+        {
+          "text": "σ",
+          "latex": "\\sigma"
+        },
+        {
+          "text": "-algebras ",
+          "italic": true
+        },
+        {
+          "text": "σ(Xi)={Xi−1(B):B∈B}",
+          "latex": "\\sigma(X_i)=\\{X_i^{-1}(B):B\\in\\mathcal{B}\\}"
+        },
+        {
+          "text": " they generate are.",
+          "italic": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Pairwise independence does not imply independence. Toss two fair coins and let "
+        },
+        {
+          "text": "A",
+          "latex": "A"
+        },
+        {
+          "text": " be the event that the first shows heads, "
+        },
+        {
+          "text": "B",
+          "latex": "B"
+        },
+        {
+          "text": " that the second shows heads, and "
+        },
+        {
+          "text": "C",
+          "latex": "C"
+        },
+        {
+          "text": " that the two coins agree. Any two of these events are independent, each having probability "
+        },
+        {
+          "text": "12",
+          "latex": "\\tfrac12"
+        },
+        {
+          "text": " and each pair meeting with probability "
+        },
+        {
+          "text": "14",
+          "latex": "\\tfrac14"
+        },
+        {
+          "text": ", but "
+        },
+        {
+          "text": "P(A∩B∩C)=14≠18",
+          "latex": "\\mathbf{P}(A\\cap B\\cap C)=\\tfrac14\\neq\\tfrac18"
+        },
+        {
+          "text": ". Checking (2.10) for every subset "
+        },
+        {
+          "text": "I",
+          "latex": "I"
+        },
+        {
+          "text": ", and not only for pairs, is therefore essential, although for "
+        },
+        {
+          "text": "σ",
+          "latex": "\\sigma"
+        },
+        {
+          "text": "-algebras generated by "
+        },
+        {
+          "text": "π",
+          "latex": "\\pi"
+        },
+        {
+          "text": "-systems it is enough to check the generators.3"
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Example 2.4.2.",
+          "smallCaps": true
+        },
+        {
+          "text": " Roll two fair dice and let ",
+          "italic": true
+        },
+        {
+          "text": "S",
+          "latex": "S"
+        },
+        {
+          "text": " be the sum of the faces. The law of ",
+          "italic": true
+        },
+        {
+          "text": "S",
+          "latex": "S"
+        },
+        {
+          "text": " is given by the following table.",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "table",
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "k",
+                  "latex": "k"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2",
+                  "latex": "2"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "3",
+                  "latex": "3"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "4",
+                  "latex": "4"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "5",
+                  "latex": "5"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "6",
+                  "latex": "6"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "7",
+                  "latex": "7"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "8",
+                  "latex": "8"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "9",
+                  "latex": "9"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "10",
+                  "latex": "10"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "11",
+                  "latex": "11"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "12",
+                  "latex": "12"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "P(S=k)",
+                  "latex": "\\mathbf{P}(S=k)"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "136",
+                  "latex": "\\frac{1}{36}"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "236",
+                  "latex": "\\frac{2}{36}"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "336",
+                  "latex": "\\frac{3}{36}"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "436",
+                  "latex": "\\frac{4}{36}"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "536",
+                  "latex": "\\frac{5}{36}"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "636",
+                  "latex": "\\frac{6}{36}"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "536",
+                  "latex": "\\frac{5}{36}"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "436",
+                  "latex": "\\frac{4}{36}"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "336",
+                  "latex": "\\frac{3}{36}"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "236",
+                  "latex": "\\frac{2}{36}"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "136",
+                  "latex": "\\frac{1}{36}"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Each entry counts the pairs of faces with the given sum and divides by the 36 equally likely pairs; the independence of the two dice is what makes the pairs equally likely."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Proposition 2.4.3.",
+          "smallCaps": true
+        },
+        {
+          "text": " If ",
+          "italic": true
+        },
+        {
+          "text": "X",
+          "latex": "X"
+        },
+        {
+          "text": " and ",
+          "italic": true
+        },
+        {
+          "text": "Y",
+          "latex": "Y"
+        },
+        {
+          "text": " are independent and integrable, then ",
+          "italic": true
+        },
+        {
+          "text": "XY",
+          "latex": "XY"
+        },
+        {
+          "text": " is integrable and ",
+          "italic": true
+        },
+        {
+          "text": "E[XY]=EX EY",
+          "latex": "\\mathbf{E}[XY]=\\mathbf{E}X\\,\\mathbf{E}Y"
+        },
+        {
+          "text": ".",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Proof.",
+          "smallCaps": true
+        },
+        {
+          "text": " For indicators "
+        },
+        {
+          "text": "X=IA",
+          "latex": "X=I_A"
+        },
+        {
+          "text": " and "
+        },
+        {
+          "text": "Y=IB",
+          "latex": "Y=I_B"
+        },
+        {
+          "text": " the identity is "
+        },
+        {
+          "text": "P(A∩B)=P(A)P(B)",
+          "latex": "\\mathbf{P}(A\\cap B)=\\mathbf{P}(A)\\mathbf{P}(B)"
+        },
+        {
+          "text": ". Linearity extends it to simple functions, monotone convergence to non-negative random variables, and the decomposition "
+        },
+        {
+          "text": "X=X+−X−",
+          "latex": "X=X^+-X^-"
+        },
+        {
+          "text": " to the integrable case. □"
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Exercise 2.4.4.",
+          "smallCaps": true
+        },
+        {
+          "text": " Let ",
+          "italic": true
+        },
+        {
+          "text": "X1,X2,…",
+          "latex": "X_1,X_2,\\ldots"
+        },
+        {
+          "text": " be independent random variables with the same law, and let ",
+          "italic": true
+        },
+        {
+          "text": "Mn=max(X1,…,Xn)",
+          "latex": "M_n=\\max(X_1,\\ldots,X_n)"
+        },
+        {
+          "text": ".",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "(a)",
+          "spans": [
+            {
+              "text": "Show that ",
+              "italic": true
+            },
+            {
+              "text": "P(Mn≤x)=F(x)n",
+              "latex": "\\mathbf{P}(M_n\\le x)=F(x)^n"
+            },
+            {
+              "text": ", where ",
+              "italic": true
+            },
+            {
+              "text": "F",
+              "latex": "F"
+            },
+            {
+              "text": " is the common distribution function.",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(b)",
+          "spans": [
+            {
+              "text": "When the law is exponential with parameter ",
+              "italic": true
+            },
+            {
+              "text": "1",
+              "latex": "1"
+            },
+            {
+              "text": ", so that ",
+              "italic": true
+            },
+            {
+              "text": "F(x)=1−e−x",
+              "latex": "F(x)=1-e^{-x}"
+            },
+            {
+              "text": " for ",
+              "italic": true
+            },
+            {
+              "text": "x≥0",
+              "latex": "x\\ge 0"
+            },
+            {
+              "text": ", show that",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "(i)",
+          "spans": [
+            {
+              "text": "P(Mn−logn≤x)→exp(−e−x)",
+              "latex": "\\mathbf{P}(M_n-\\log n\\le x)\\to\\exp(-e^{-x})"
+            },
+            {
+              "text": " for every real ",
+              "italic": true
+            },
+            {
+              "text": "x",
+              "latex": "x"
+            },
+            {
+              "text": ";",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "(ii)",
+          "spans": [
+            {
+              "text": "Mn/logn→1",
+              "latex": "M_n/\\log n\\to 1"
+            },
+            {
+              "text": " in probability;",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "(iii)",
+          "spans": [
+            {
+              "text": "EMn=∑k=1n1/k",
+              "latex": "\\mathbf{E}M_n=\\sum_{k=1}^{n}1/k"
+            },
+            {
+              "text": ", so that ",
+              "italic": true
+            },
+            {
+              "text": "EMn−logn",
+              "latex": "\\mathbf{E}M_n-\\log n"
+            },
+            {
+              "text": " converges.",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(c)",
+          "spans": [
+            {
+              "text": "Explain why independence is needed in part (a) but not in the definition of ",
+              "italic": true
+            },
+            {
+              "text": "Mn",
+              "latex": "M_n"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The next result is the main tool for showing that an event happens only finitely often. Its first half needs no independence at all, which makes it one of the most used facts in the subject."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Theorem 2.4.5.",
+          "smallCaps": true
+        },
+        {
+          "text": " (Borel–Cantelli lemmas)"
+        },
+        {
+          "text": " Let ",
+          "italic": true
+        },
+        {
+          "text": "A1,A2,…",
+          "latex": "A_1,A_2,\\ldots"
+        },
+        {
+          "text": " be events. The event that infinitely many of them occur is ",
+          "italic": true
+        },
+        {
+          "text": "lim supnAn=⋂m≥1⋃n≥mAn",
+          "latex": "\\limsup_n A_n=\\bigcap_{m\\ge 1}\\bigcup_{n\\ge m}A_n"
+        },
+        {
+          "text": ".",
+          "italic": true
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "(a)",
+          "spans": [
+            {
+              "text": "If ",
+              "italic": true
+            },
+            {
+              "text": "∑nP(An)<∞",
+              "latex": "\\sum_{n}\\mathbf{P}(A_n)<\\infty"
+            },
+            {
+              "text": " then ",
+              "italic": true
+            },
+            {
+              "text": "P(lim supnAn)=0",
+              "latex": "\\mathbf{P}(\\limsup_n A_n)=0"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(b)",
+          "spans": [
+            {
+              "text": "If the events are independent and ",
+              "italic": true
+            },
+            {
+              "text": "∑nP(An)=∞",
+              "latex": "\\sum_{n}\\mathbf{P}(A_n)=\\infty"
+            },
+            {
+              "text": " then ",
+              "italic": true
+            },
+            {
+              "text": "P(lim supnAn)=1",
+              "latex": "\\mathbf{P}(\\limsup_n A_n)=1"
+            },
+            {
+              "text": ".",
+              "italic": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Proof.",
+          "smallCaps": true
+        },
+        {
+          "text": " For (a), let "
+        },
+        {
+          "text": "N=∑nIAn",
+          "latex": "N=\\sum_n I_{A_n}"
+        },
+        {
+          "text": " count the events that occur. By Exercise 2.2.3(d), "
+        },
+        {
+          "text": "EN=∑nP(An)<∞",
+          "latex": "\\mathbf{E}N=\\sum_n\\mathbf{P}(A_n)<\\infty"
+        },
+        {
+          "text": ", so "
+        },
+        {
+          "text": "N<∞",
+          "latex": "N<\\infty"
+        },
+        {
+          "text": " a.s. For (b), independence and the bound "
+        },
+        {
+          "text": "1−x≤e−x",
+          "latex": "1-x\\le e^{-x}"
+        },
+        {
+          "text": " give"
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "equation",
+      "latex": "\\mathbf{P}\\Bigl(\\bigcap_{n=m}^{M}A_n^c\\Bigr)=\\prod_{n=m}^{M}\\bigl(1-\\mathbf{P}(A_n)\\bigr)\\le\\exp\\Bigl(-\\sum_{n=m}^{M}\\mathbf{P}(A_n)\\Bigr)\\longrightarrow 0",
+      "label": "(2.11)"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "as "
+        },
+        {
+          "text": "M→∞",
+          "latex": "M\\to\\infty"
+        },
+        {
+          "text": ", for every "
+        },
+        {
+          "text": "m",
+          "latex": "m"
+        },
+        {
+          "text": ". Hence "
+        },
+        {
+          "text": "P(⋃n≥mAn)=1",
+          "latex": "\\mathbf{P}(\\bigcup_{n\\ge m}A_n)=1"
+        },
+        {
+          "text": " for every "
+        },
+        {
+          "text": "m",
+          "latex": "m"
+        },
+        {
+          "text": ", and the intersection over "
+        },
+        {
+          "text": "m",
+          "latex": "m"
+        },
+        {
+          "text": " has probability one as well. □"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "As an application, let "
+        },
+        {
+          "text": "X1,X2,…",
+          "latex": "X_1,X_2,\\ldots"
+        },
+        {
+          "text": " be independent with the exponential law of Exercise 2.4.4. Since "
+        },
+        {
+          "text": "P(Xn>clogn)=n−c",
+          "latex": "\\mathbf{P}(X_n>c\\log n)=n^{-c}"
+        },
+        {
+          "text": ", the series "
+        },
+        {
+          "text": "∑nn−c",
+          "latex": "\\sum_n n^{-c}"
+        },
+        {
+          "text": " converges exactly when "
+        },
+        {
+          "text": "c>1",
+          "latex": "c>1"
+        },
+        {
+          "text": ", and the two lemmas together show that "
+        },
+        {
+          "text": "lim supnXn/logn=1",
+          "latex": "\\limsup_n X_n/\\log n=1"
+        },
+        {
+          "text": " almost surely. Results of this kind, which pin down the size of the largest fluctuations of a sequence, are the subject of the law of the iterated logarithm; see ["
+        },
+        {
+          "text": "Dur19",
+          "bold": true
+        },
+        {
+          "text": ", Section 8.5]."
+        }
+      ],
+      "indent": "first"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "Bibliography",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "[Bil95]",
+          "spans": [
+            {
+              "text": "P. Billingsley, "
+            },
+            {
+              "text": "Probability and measure",
+              "italic": true
+            },
+            {
+              "text": ", third ed., John Wiley & Sons, New York, 1995."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "[Dur19]",
+          "spans": [
+            {
+              "text": "R. Durrett, "
+            },
+            {
+              "text": "Probability: theory and examples",
+              "italic": true
+            },
+            {
+              "text": ", fifth ed., Cambridge University Press, Cambridge, 2019."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "[Wil91]",
+          "spans": [
+            {
+              "text": "D. Williams, "
+            },
+            {
+              "text": "Probability with martingales",
+              "italic": true
+            },
+            {
+              "text": ", Cambridge University Press, Cambridge, 1991."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "footnote",
+      "label": "1",
+      "spans": [
+        {
+          "text": "Some authors call any measurable map into a general space a random variable. We keep the name for real-valued maps and speak of random elements otherwise."
+        }
+      ]
+    },
+    {
+      "kind": "footnote",
+      "label": "2",
+      "spans": [
+        {
+          "text": "It is the probabilistic form of the substitution rule of calculus; see ["
+        },
+        {
+          "text": "Wil91",
+          "bold": true
+        },
+        {
+          "text": ", Section 6.12]."
+        }
+      ]
+    },
+    {
+      "kind": "footnote",
+      "label": "3",
+      "spans": [
+        {
+          "text": "This is a consequence of Dynkin’s "
+        },
+        {
+          "text": "π",
+          "latex": "\\pi"
+        },
+        {
+          "text": "-"
+        },
+        {
+          "text": "λ",
+          "latex": "\\lambda"
+        },
+        {
+          "text": " theorem; see ["
+        },
+        {
+          "text": "Bil95",
+          "bold": true
+        },
+        {
+          "text": ", Theorem 3.2]."
+        }
+      ]
+    }
+  ],
+  "furniture": [
+    "2",
+    "2. RANDOM VARIABLES AND EXPECTATION",
+    "PROBABILITY AND MEASURE",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9"
+  ],
+  "license": "open",
+  "provenance": "generated",
+  "notes": "The chapter's “CHAPTER 2” line is its own centered paragraph above the level 1 heading. A run-in heading is a heading block; the rest of its line is the next paragraph. A proof ends with the box □. In LaTeX a footnote block stands after the block with its mark (the mark is part of that block's text); in HTML the footnotes stand at the end."
+}

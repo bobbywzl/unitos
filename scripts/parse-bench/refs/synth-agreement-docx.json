@@ -1,0 +1,850 @@
+{
+  "id": "synth-agreement-docx",
+  "category": "legal",
+  "source": {
+    "pdf": ".bench/synthetic/synth-agreement-docx.pdf",
+    "docx": ".bench/synthetic/synth-agreement-docx.docx"
+  },
+  "blocks": [
+    {
+      "kind": "title",
+      "spans": [
+        {
+          "text": "SUBSCRIPTION AGREEMENT",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Harbor Point Capital Fund II, L.P.",
+          "bold": true
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "(a Delaware limited partnership)"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "This Subscription Agreement (this “"
+        },
+        {
+          "text": "Agreement",
+          "bold": true,
+          "italic": true
+        },
+        {
+          "text": "”) is entered into as of the date set forth on the signature page by and between Harbor Point Capital Fund II, L.P., a Delaware limited partnership (the “"
+        },
+        {
+          "text": "Partnership",
+          "bold": true,
+          "italic": true
+        },
+        {
+          "text": "”), and the undersigned subscriber (the “"
+        },
+        {
+          "text": "Subscriber",
+          "bold": true,
+          "italic": true
+        },
+        {
+          "text": "”)."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "Recitals",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "WHEREAS, the Partnership is offering limited partnership interests to a limited number of investors in a private placement exempt from registration under the Securities Act of 1933, as amended (the “"
+        },
+        {
+          "text": "Securities Act",
+          "bold": true,
+          "italic": true
+        },
+        {
+          "text": "”);"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "WHEREAS, the Subscriber wishes to subscribe for an interest in the Partnership on the terms and subject to the conditions of this Agreement and the Partnership’s limited partnership agreement (the “"
+        },
+        {
+          "text": "Partnership Agreement",
+          "bold": true,
+          "italic": true
+        },
+        {
+          "text": "”);"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "NOW, THEREFORE, in consideration of the mutual covenants set forth below, the parties agree as follows:"
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "1.",
+          "spans": [
+            {
+              "text": "Definitions",
+              "bold": true
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "1.1",
+          "spans": [
+            {
+              "text": "“"
+            },
+            {
+              "text": "Accredited Investor",
+              "bold": true,
+              "italic": true
+            },
+            {
+              "text": "” has the meaning given in Rule 501(a) of Regulation D under the Securities Act.1"
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "1.2",
+          "spans": [
+            {
+              "text": "“"
+            },
+            {
+              "text": "Capital Commitment",
+              "bold": true,
+              "italic": true
+            },
+            {
+              "text": "” means the amount set forth on the Subscriber’s signature page, as it may be reduced by the General Partner under Section 2.3."
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "1.3",
+          "spans": [
+            {
+              "text": "“"
+            },
+            {
+              "text": "General Partner",
+              "bold": true,
+              "italic": true
+            },
+            {
+              "text": "” means Harbor Point GP II, LLC, a Delaware limited liability company, or any successor general partner of the Partnership."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "2.",
+          "spans": [
+            {
+              "text": "Subscription",
+              "bold": true
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "2.1",
+          "spans": [
+            {
+              "text": "Subject to the terms of this Agreement, the Subscriber irrevocably subscribes for a limited partnership interest in the Partnership (the “"
+            },
+            {
+              "text": "Interest",
+              "bold": true,
+              "italic": true
+            },
+            {
+              "text": "”) in the amount of its Capital Commitment."
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "2.2",
+          "spans": [
+            {
+              "text": "The Subscriber shall pay its Capital Commitment in installments upon receipt of drawdown notices from the General Partner, each of which shall:"
+            }
+          ]
+        },
+        {
+          "depth": 2,
+          "marker": "(a)",
+          "spans": [
+            {
+              "text": "specify the amount to be paid and the date on which payment is due, which shall be at least ten (10) business days after the date of the notice;"
+            }
+          ]
+        },
+        {
+          "depth": 2,
+          "marker": "(b)",
+          "spans": [
+            {
+              "text": "state the purpose of the drawdown, including:"
+            }
+          ]
+        },
+        {
+          "depth": 3,
+          "marker": "(i)",
+          "spans": [
+            {
+              "text": "the investment or expense to which the drawdown relates; and"
+            }
+          ]
+        },
+        {
+          "depth": 3,
+          "marker": "(ii)",
+          "spans": [
+            {
+              "text": "the Subscriber’s pro rata share of the drawdown, expressed as a percentage of its Capital Commitment; and"
+            }
+          ]
+        },
+        {
+          "depth": 2,
+          "marker": "(c)",
+          "spans": [
+            {
+              "text": "include wire instructions for the Partnership’s account."
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "2.3",
+          "spans": [
+            {
+              "text": "The General Partner may accept or reject this subscription, in whole or in part, in its sole discretion. If the subscription is rejected in part, the Capital Commitment shall be reduced accordingly."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "3.",
+          "spans": [
+            {
+              "text": "Representations and Warranties of the Subscriber",
+              "bold": true
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "3.1",
+          "spans": [
+            {
+              "text": "Accredited status.",
+              "bold": true
+            },
+            {
+              "text": " The Subscriber is an Accredited Investor and has completed the Investor Questionnaire attached to this Agreement truthfully and completely."
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "3.2",
+          "spans": [
+            {
+              "text": "Investment intent.",
+              "bold": true
+            },
+            {
+              "text": " The Subscriber is acquiring the Interest for its own account, for investment purposes only, and not with a view to any resale or distribution of the Interest."
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "3.3",
+          "spans": [
+            {
+              "text": "Risk.",
+              "bold": true
+            },
+            {
+              "text": " The Subscriber understands that an investment in the Partnership involves a high degree of risk, including the risk of losing the entire investment, and that the Interest is not freely transferable."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "4.",
+          "spans": [
+            {
+              "text": "Miscellaneous",
+              "bold": true
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "4.1",
+          "spans": [
+            {
+              "text": "Governing law.",
+              "bold": true
+            },
+            {
+              "text": " This Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of laws rules."
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "4.2",
+          "spans": [
+            {
+              "text": "Counterparts.",
+              "bold": true
+            },
+            {
+              "text": " This Agreement may be executed in counterparts, each of which shall be deemed an original and all of which together shall constitute one instrument."
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "4.3",
+          "spans": [
+            {
+              "text": "Notices.",
+              "bold": true
+            },
+            {
+              "text": " All notices under this Agreement shall be in writing and delivered to the addresses set forth on the signature page."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "footnote",
+      "label": "1",
+      "spans": [
+        {
+          "text": "17 C.F.R. § 230.501(a)."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "Subscriber Information",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Print or type. Attach additional pages if necessary."
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Name of Subscriber",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Address",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Taxpayer Identification Number",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Telephone",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "E-mail",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "Investor Questionnaire",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Please complete each part. Check every box that applies."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "Part A. Type of Subscriber",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "☐",
+          "spans": [
+            {
+              "text": "Individual"
+            }
+          ],
+          "checked": false
+        },
+        {
+          "depth": 0,
+          "marker": "☑",
+          "spans": [
+            {
+              "text": "Limited liability company"
+            }
+          ],
+          "checked": true
+        },
+        {
+          "depth": 0,
+          "marker": "☐",
+          "spans": [
+            {
+              "text": "Corporation"
+            }
+          ],
+          "checked": false
+        },
+        {
+          "depth": 0,
+          "marker": "☐",
+          "spans": [
+            {
+              "text": "Trust"
+            }
+          ],
+          "checked": false
+        },
+        {
+          "depth": 0,
+          "marker": "☐",
+          "spans": [
+            {
+              "text": "Other (specify): ______________"
+            }
+          ],
+          "checked": false
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "Part B. Questions",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Question 1.",
+          "bold": true
+        },
+        {
+          "text": " How did the Subscriber learn of the Partnership?"
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "(a)",
+          "spans": [
+            {
+              "text": "Through an existing relationship with the General Partner"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(b)",
+          "spans": [
+            {
+              "text": "Through a placement agent"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(c)",
+          "spans": [
+            {
+              "text": "Through a financial advisor"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "(d)",
+          "spans": [
+            {
+              "text": "Other: ______________________"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Question 2.",
+          "bold": true
+        },
+        {
+          "text": " Is the Subscriber a “benefit plan investor” as defined in Section 3(42) of ERISA?"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "☐ Yes ☒ No"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Question 3.",
+          "bold": true
+        },
+        {
+          "text": " What is the source of the funds for the Capital Commitment? Check all that apply."
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "☑",
+          "spans": [
+            {
+              "text": "Operating income"
+            }
+          ],
+          "checked": true
+        },
+        {
+          "depth": 0,
+          "marker": "☐",
+          "spans": [
+            {
+              "text": "Sale of assets"
+            }
+          ],
+          "checked": false
+        },
+        {
+          "depth": 0,
+          "marker": "☑",
+          "spans": [
+            {
+              "text": "Capital contributions of members"
+            }
+          ],
+          "checked": true
+        },
+        {
+          "depth": 0,
+          "marker": "☐",
+          "spans": [
+            {
+              "text": "Loan proceeds"
+            }
+          ],
+          "checked": false
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "Signature Page",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "IN WITNESS WHEREOF, the Subscriber has executed this Agreement as of the date set forth below."
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "SUBSCRIBER",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "ACCEPTED: HARBOR POINT CAPITAL FUND II, L.P.",
+                  "bold": true
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "By: ______________________"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "By: Harbor Point GP II, LLC, its General Partner"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Name: ____________________"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "By: ______________________"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Title: _____________________"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Name: Margaret Okafor"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Date: _____________________"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Title: Managing Member"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Capital Commitment: $______________"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Date: ______________________"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "furniture": [
+    "Page 1 of 4",
+    "Harbor Point Capital Fund II, L.P.",
+    "Subscription Agreement",
+    "Page 2 of 4",
+    "Page 3 of 4",
+    "Page 4 of 4"
+  ],
+  "license": "open",
+  "provenance": "generated",
+  "notes": "In Word the clause numbers are Word numbering, so a parser reads them from the PDF's text only; in HTML they are text. The signature block is a table without lines; its first row is a header row. Blank lines to fill in are underscores. The footnote stands at the page's foot in Word and at the end in HTML."
+}

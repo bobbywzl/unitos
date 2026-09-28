@@ -1,0 +1,3862 @@
+{
+  "id": "synth-tables-tex",
+  "category": "financial",
+  "source": {
+    "pdf": ".bench/synthetic/synth-tables-tex.pdf"
+  },
+  "blocks": [
+    {
+      "kind": "title",
+      "spans": [
+        {
+          "text": "2025 Annual Financial Report",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Kestrel Energy Group"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "For the year ended December 31, 2025"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "1. Financial highlights",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Kestrel Energy Group grew revenue by 9.2% in 2025, helped by higher output from the renewables fleet and a full year of the Millbrook uprate. Operating income rose 12.2% and net debt fell below USD 2 billion for the first time since 2019.1"
+        }
+      ]
+    },
+    {
+      "kind": "footnote",
+      "label": "1",
+      "spans": [
+        {
+          "text": "All amounts are in millions of US dollars unless stated otherwise. Totals may not add because of rounding."
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "caption": [
+        {
+          "text": "Table 1. Financial highlights"
+        }
+      ],
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Measure",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "2025",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "2024",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Change",
+                  "bold": true
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Revenue"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "4,812.6"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "4,405.3"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "9.2%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Operating income"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "731.4"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "652.0"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "12.2%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Net income"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "498.7"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "441.9"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "12.9%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Earnings per share (USD)"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "3.12"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2.76"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "13.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Free cash flow"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "612.3"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "540.8"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "13.2%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Net debt"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,905.0"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,118.4"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(10.1)%"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "2. Consolidated income statement",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The income statement below follows the presentation of prior years. Notes refer to the notes to the consolidated financial statements, which are published separately."
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "caption": [
+        {
+          "text": "Table 2. Consolidated income statement (USD millions)"
+        }
+      ],
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Line item",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Note",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "2025",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "2024",
+                  "bold": true
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Revenue",
+                  "italic": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": []
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Electricity generation"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "4"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,104.7"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,982.3"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Gas distribution"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "4"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,188.2"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,140.9"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Renewables"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "5"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "902.4"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "741.6"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Retail energy services"
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "571.9"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "498.2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Other"
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "45.4"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "42.3"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Total revenue",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "4,812.6",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "4,405.3",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Operating expenses",
+                  "italic": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": []
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Fuel and purchased power"
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "(1,893.5)"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(1,712.1)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Operations and maintenance"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "6"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(1,204.8)"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(1,133.7)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Depreciation and amortization"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "7"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(742.3)"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(702.9)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Taxes other than income taxes"
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "(198.6)"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(187.4)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Impairment charges"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "8"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(42.0)"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(17.2)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Total operating expenses",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "(4,081.2)",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(3,753.3)",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Operating income",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "731.4",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "652.0",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Other income and expense",
+                  "italic": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": []
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Interest expense"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "9"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(187.6)"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(201.3)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Interest income"
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "21.8"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "14.6"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Equity earnings of affiliates"
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "64.2"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "58.7"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Other, net"
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "(3.1)"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "7.4"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Income before income taxes",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "626.7",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "531.4",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Income tax expense"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "10"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(128.0)"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "(89.5)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Net income",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "498.7",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "441.9",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Attributable to shareholders"
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "486.1"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "430.2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Attributable to non-controlling interests"
+                }
+              ]
+            },
+            {
+              "spans": []
+            },
+            {
+              "spans": [
+                {
+                  "text": "12.6"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "11.7"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "3. Generation fleet",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Table 3 lists every plant the group operated at the end of 2025, with its nameplate capacity, its output for the year, and its capacity factor, the ratio of actual output to the output at full capacity all year."
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "caption": [
+        {
+          "text": "Table 3. Generation by plant, 2025"
+        }
+      ],
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Plant",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Region",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Technology",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Capacity (MW)",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Output (GWh)",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Capacity factor",
+                  "bold": true
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Aldergrove"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "North"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Gas"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "820"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "3,520"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "49.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Bellhaven"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "North"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "310"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "842"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "31.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Cairnfield"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "North"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Hydro"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "145"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "508"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "40.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Dunmore"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "North"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Solar"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "96"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "193"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "23.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Eastwick"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "North"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Gas"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "640"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,971"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "53.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Fernhill"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "North"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "275"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "843"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "35.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Glenrock"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "North"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Hydro"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "210"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "809"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "44.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Harrowgate"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "North"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Battery"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "60"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "32"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "6.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Inverleigh"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "North"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "198"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "538"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "31.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Juniper Flats"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "North"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Solar"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "150"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "289"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "22.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Kestrel Point"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "North"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Gas"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "910"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "4,145"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "52.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Larchmont"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "North"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Hydro"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "88"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "324"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "42.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Millbrook"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Central"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Nuclear"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,180"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "9,613"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "93.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Northgate"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Central"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Gas"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "705"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "3,397"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "55.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Oakridge"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Central"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Solar"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "220"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "385"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "20.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Pinecrest"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Central"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "340"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "923"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "31.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Quarry Hill"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Central"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Gas"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "455"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,033"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "51.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Redwater"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Central"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Hydro"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "132"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "474"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "41.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Stonebridge"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Central"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Solar"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "185"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "389"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "24.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Thornbury"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Central"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "260"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "797"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "35.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Upton Vale"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Central"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Battery"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "80"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "84"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "12.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Valemount"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Central"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Gas"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "590"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,533"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "49.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Westfield"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Central"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Solar"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "240"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "442"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "21.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Yarrow Creek"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Central"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "290"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "813"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "32.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Ashby Downs"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "South"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Solar"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "310"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "625"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "23.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Brackenridge"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "South"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Gas"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "760"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "3,529"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "53.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Coldspring"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "South"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "225"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "690"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "35.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Deerfield"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "South"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Solar"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "180"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "410"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "26.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Elmstead"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "South"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Hydro"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "120"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "399"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "38.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Foxhollow"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "South"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Gas"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "530"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,321"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "50.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Greystone"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "South"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Nuclear"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,040"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "8,199"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "90.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Hollins Bay"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "South"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "355"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,026"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "33.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Ironbridge"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "South"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Battery"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "100"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "88"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "10.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Jasper Mill"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "South"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Solar"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "205"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "449"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "25.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Kingsmere"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "South"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Gas"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "680"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "3,276"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "55.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Lowther"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "South"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "190"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "499"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "30.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Marshgate"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "West"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "410"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,113"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "31.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Newhaven"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "West"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Solar"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "265"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "511"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "22.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Orchard Lane"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "West"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Gas"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "520"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,369"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "52.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Pembury"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "West"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Hydro"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "175"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "644"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "42.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Ravensworth"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "West"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "380"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,165"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "35.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Saltmarsh"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "West"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Solar"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "140"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "319"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "26.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Tidewell"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "West"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Battery"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "90"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "47"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "6.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Underwood"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "West"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Gas"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "615"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,694"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "50.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Westerly"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "West"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "230"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "645"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "32.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Whinfell"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "West"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Hydro"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "160"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "575"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "41.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Yewbarrow"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "West"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Solar"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "125"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "263"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "24.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Zennor Head"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "West"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Wind"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "305"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "935"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "35.0%"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Capacity factors for batteries measure energy discharged. The Millbrook and Greystone nuclear units ran above 88% for the third year in a row."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "4. Segment results",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The group reports four segments. Corporate costs and eliminations between segments are not allocated."
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "caption": [
+        {
+          "text": "Table 4. Revenue and operating income by segment (USD millions)"
+        }
+      ],
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Segment",
+                  "bold": true
+                }
+              ],
+              "header": true,
+              "rowspan": 2
+            },
+            {
+              "spans": [
+                {
+                  "text": "Revenue",
+                  "bold": true
+                }
+              ],
+              "header": true,
+              "colspan": 2
+            },
+            {
+              "spans": [
+                {
+                  "text": "Operating income",
+                  "bold": true
+                }
+              ],
+              "header": true,
+              "colspan": 2
+            },
+            {
+              "spans": [
+                {
+                  "text": "Margin 2025",
+                  "bold": true
+                }
+              ],
+              "header": true,
+              "rowspan": 2
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "2025",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "2024",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "2025",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "2024",
+                  "bold": true
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Generation"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,104.7"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,982.3"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "402.6"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "371.9"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "19.1%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Networks"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,188.2"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,140.9"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "231.5"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "226.0"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "19.5%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Renewables"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "902.4"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "741.6"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "168.9"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "121.4"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "18.7%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Retail"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "571.9"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "498.2"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "34.8"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "27.6"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "6.1%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Corporate and eliminations"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "45.4"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "42.3"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "not allocated",
+                  "italic": true
+                }
+              ],
+              "colspan": 3
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Total",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "4,812.6",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "4,405.3",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "731.4",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "652.0",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "15.2%",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "5. Outlook",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "For 2026 the group expects:"
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "revenue growth of 4% to 6%, with renewables output up about 15%;"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "capital spending of USD 1.1 billion, two thirds of it on wind and solar;"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "net debt of USD 1.8 billion to USD 2.0 billion at year end."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "These expectations assume normal weather and gas prices near the forward curve of December 2025.2"
+        }
+      ]
+    },
+    {
+      "kind": "footnote",
+      "label": "2",
+      "spans": [
+        {
+          "text": "The forward curve is the average of the monthly Henry Hub futures settlement prices on December 31, 2025."
+        }
+      ]
+    }
+  ],
+  "furniture": [
+    "Kestrel Energy Group",
+    "2025 Annual Financial Report",
+    "Page 1 of 4",
+    "Page 2 of 4",
+    "Page 3 of 4",
+    "Page 4 of 4",
+    "Continued on next page"
+  ],
+  "license": "open",
+  "provenance": "generated",
+  "notes": "Table 3 runs across pages: its header row repeats at the top of each page (and in LaTeX “Continued on next page” closes each broken part); the reference holds the header once. Negative numbers are in parentheses."
+}

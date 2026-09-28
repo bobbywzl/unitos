@@ -1,0 +1,790 @@
+{
+  "id": "synth-report-docx",
+  "category": "word",
+  "source": {
+    "pdf": ".bench/synthetic/synth-report-docx.pdf",
+    "docx": ".bench/synthetic/synth-report-docx.docx"
+  },
+  "blocks": [
+    {
+      "kind": "title",
+      "spans": [
+        {
+          "text": "Q3 2026 Operations Review"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Northwind Logistics · Operations Analytics · October 2026"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "1. Executive summary"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Third-quarter volume grew 8.4% year over year to 12.7 million parcels, and the cost per parcel fell for the fourth quarter in a row. Service improved in every region, although the Southwest remains below its on-time target.1"
+        }
+      ]
+    },
+    {
+      "kind": "footnote",
+      "label": "1",
+      "spans": [
+        {
+          "text": "All figures are unaudited and exclude the Freightline subsidiary acquired in August 2026."
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "Volume:",
+              "bold": true
+            },
+            {
+              "text": " 12.7 million parcels, up 8.4% from Q3 2025"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "On-time delivery:",
+              "bold": true
+            },
+            {
+              "text": " 96.1%, up from 94.8% in Q2"
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "o",
+          "spans": [
+            {
+              "text": "Northeast region: 97.3%, the best result since 2021"
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "o",
+          "spans": [
+            {
+              "text": "Southwest region: 94.2%, still below the 95% target"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "Cost per parcel:",
+              "bold": true
+            },
+            {
+              "text": " $3.42, down 2.6% from Q2"
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "o",
+          "spans": [
+            {
+              "text": "Fuel: down 4.1% on lower diesel prices"
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "o",
+          "spans": [
+            {
+              "text": "Labor: up 1.2% after the July wage adjustment"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The rest of this review covers regional results, costs, and the risks for the fourth quarter."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "2. Regional performance"
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "2.1 Volume and service levels"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Every region grew its volume. The Southeast grew fastest, at 8.9%, helped by two new retail accounts that started shipping in July. Table 1 compares the third quarters of 2025 and 2026."
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "caption": [
+        {
+          "text": "Table 1. Volume and on-time delivery by region"
+        }
+      ],
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Region",
+                  "bold": true
+                }
+              ],
+              "header": true,
+              "rowspan": 2
+            },
+            {
+              "spans": [
+                {
+                  "text": "Volume (thousands)",
+                  "bold": true
+                }
+              ],
+              "header": true,
+              "colspan": 2
+            },
+            {
+              "spans": [
+                {
+                  "text": "On-time delivery",
+                  "bold": true
+                }
+              ],
+              "header": true,
+              "colspan": 2
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Q3 2025",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Q3 2026",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Q3 2025",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Q3 2026",
+                  "bold": true
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Northeast"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "3,412"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "3,705"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "95.9%"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "97.3%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Southeast"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,980"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "3,244"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "94.1%"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "96.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Midwest"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,655"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,861"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "95.2%"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "96.4%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Southwest"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,701"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,893"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "93.0%"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "94.2%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Total",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "11,748",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "12,703",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "94.6%",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "96.1%",
+                  "bold": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "2.2 Costs"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The cost per parcel fell to $3.42. Fuel and linehaul savings more than offset higher labor costs, as Figure 1 shows."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "2.2.1 Fuel"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Diesel averaged $3.71 per gallon in the quarter, 6% below Q2. The fuel surcharge passed most of the saving to customers, so the net effect on margin was small."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "2.2.2 Labor"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Hourly wages rose 3.5% on July 1. Overtime hours fell 11% as the new Columbus hub absorbed peak volume that had previously been handled at Indianapolis."
+        }
+      ]
+    },
+    {
+      "kind": "figure",
+      "caption": [
+        {
+          "text": "Figure 1. Cost per parcel, Q4 2025 to Q3 2026 (USD)"
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "3. Risks and next steps"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Three risks could affect the fourth quarter. The register below lists each with its owner."
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "caption": [
+        {
+          "text": "Table 2. Risk register for Q4 2026"
+        }
+      ],
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Risk",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Likelihood",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Impact",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Owner",
+                  "bold": true
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Operational risks",
+                  "italic": true
+                }
+              ],
+              "colspan": 4
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Peak-season volume exceeds hub capacity"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Medium"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "High"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "J. Alvarez"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Driver shortage in the Southwest"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "High"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Medium"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "R. Chen"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Commercial risks",
+                  "italic": true
+                }
+              ],
+              "colspan": 4
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Loss of a top-ten account at contract renewal2"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Low"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "High"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "S. Patel"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "footnote",
+      "label": "2",
+      "spans": [
+        {
+          "text": "Two of the top ten contracts renew in November."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The operations team will take the following steps before the peak season:"
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "1.",
+          "spans": [
+            {
+              "text": "Open the temporary sort center in Phoenix by November 3."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "2.",
+          "spans": [
+            {
+              "text": "Hire 140 seasonal drivers, 60 of them for the Southwest."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "3.",
+          "spans": [
+            {
+              "text": "Review the capacity plan weekly from October 20, with daily reviews in December."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "Appendix: Definitions"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "On-time delivery",
+          "bold": true
+        },
+        {
+          "text": " is the share of parcels delivered by the date promised at the time of shipment."
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Cost per parcel",
+          "bold": true
+        },
+        {
+          "text": " is total operating cost, excluding depreciation, divided by the number of parcels delivered."
+        }
+      ]
+    }
+  ],
+  "furniture": [
+    "CONFIDENTIAL",
+    "1",
+    "Q3 2026 Operations Review",
+    "2"
+  ],
+  "license": "open",
+  "provenance": "generated",
+  "notes": "Word's bullets are text glyphs (• and o). The second table's shaded rows that span all four columns name groups of risks."
+}

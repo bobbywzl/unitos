@@ -1,0 +1,488 @@
+{
+  "id": "synth-gdocs-docx",
+  "category": "notes",
+  "source": {
+    "pdf": ".bench/synthetic/synth-gdocs-docx.pdf",
+    "docx": ".bench/synthetic/synth-gdocs-docx.docx"
+  },
+  "blocks": [
+    {
+      "kind": "title",
+      "spans": [
+        {
+          "text": "Project Aurora: Weekly Notes"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Week of September 21, 2026 · Owner: "
+        },
+        {
+          "text": "Lena Ortiz",
+          "href": "https://example.com/people/lena-ortiz"
+        },
+        {
+          "text": " · Attendees: Marco, Priya, Wei, Sam"
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "Summary"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The beta opened to "
+        },
+        {
+          "text": "1,200 users",
+          "bold": true
+        },
+        {
+          "text": " on Tuesday. Crash-free sessions reached "
+        },
+        {
+          "text": "99.2%",
+          "bold": true
+        },
+        {
+          "text": ", above the "
+        },
+        {
+          "text": "service-level objective",
+          "href": "https://example.com/aurora/slo"
+        },
+        {
+          "text": " of 99%. The main complaint in feedback was slow sync on hotel and airport Wi-Fi, which the offline mode below addresses."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "Decisions"
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "●",
+          "spans": [
+            {
+              "text": "Ship the offline mode in release 2.4"
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "○",
+          "spans": [
+            {
+              "text": "Sync conflicts resolve to the newest edit"
+            }
+          ]
+        },
+        {
+          "depth": 2,
+          "marker": "■",
+          "spans": [
+            {
+              "text": "The older edit stays in version history for 30 days"
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "○",
+          "spans": [
+            {
+              "text": "The app shows a banner while it is offline"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "●",
+          "spans": [
+            {
+              "text": "Move the Android 15 fix ahead of the settings redesign"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "●",
+          "spans": [
+            {
+              "text": "Keep the weekly beta build on "
+            },
+            {
+              "text": "Thursdays",
+              "bold": true
+            },
+            {
+              "text": " until launch"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "Action items"
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "☑",
+          "spans": [
+            {
+              "text": "Draft the release notes for 2.4 (Lena)"
+            }
+          ],
+          "checked": true
+        },
+        {
+          "depth": 0,
+          "marker": "☐",
+          "spans": [
+            {
+              "text": "Fix the login loop on Android 15 (Marco)"
+            }
+          ],
+          "checked": false
+        },
+        {
+          "depth": 0,
+          "marker": "☐",
+          "spans": [
+            {
+              "text": "Book the design review for October 2 (Priya)"
+            }
+          ],
+          "checked": false
+        },
+        {
+          "depth": 0,
+          "marker": "☐",
+          "spans": [
+            {
+              "text": "Add sync timing to the beta dashboard (Wei)"
+            }
+          ],
+          "checked": false
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "Metrics"
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Metric",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Last week",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "This week",
+                  "bold": true
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Target",
+                  "bold": true
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Crash-free sessions"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "98.7%"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "99.2%"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "99.0%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Median sync time"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "4.8 s"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "3.1 s"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2.0 s"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Weekly active users"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "860"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,140"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,000"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Support tickets"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "37"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "22"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "25"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Median sync time is still above target. Wei will add a breakdown by network type so we can see whether the slow cases are all on public Wi-Fi."
+        }
+      ]
+    },
+    {
+      "kind": "separator"
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "Architecture"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The diagram shows how an edit travels from one device to the others. The "
+        },
+        {
+          "text": "sync service",
+          "bold": true
+        },
+        {
+          "text": " is the only part that talks to the database."
+        }
+      ]
+    },
+    {
+      "kind": "figure"
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "Notes from the Shanghai office"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "上海团队本周完成了离线模式的测试，发现了三个同步问题，其中两个已经修复。下周将重点测试弱网环境下的冲突处理，并整理一份测试报告。"
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "Links"
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "●",
+          "spans": [
+            {
+              "text": "Beta dashboard",
+              "href": "https://example.com/aurora/beta-dashboard"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "●",
+          "spans": [
+            {
+              "text": "Crash reports",
+              "href": "https://example.com/aurora/crashes"
+            },
+            {
+              "text": " (filtered to release 2.3)"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "●",
+          "spans": [
+            {
+              "text": "Design review agenda",
+              "href": "https://example.com/aurora/design-review"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "furniture": [],
+  "license": "open",
+  "provenance": "generated",
+  "notes": "Bullet glyphs change with depth (● ○ ■) and are text in the PDF. In HTML the diagram's box and arrow labels are text in the PDF but belong to the figure; in Word the diagram is a picture. The Chinese paragraph is set in WenQuanYi Zen Hei."
+}
