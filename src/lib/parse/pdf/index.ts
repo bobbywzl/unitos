@@ -7,7 +7,7 @@ import { itemGlyphs, readDrawing, type FontLookup, type Glyph, type PageDrawing 
 import { attachFigureRegions, pageGraphics, type Graphic } from "@/lib/parse/pdf/figures";
 import { cutFootnotes, placeFootnotes } from "@/lib/parse/pdf/footnotes";
 import { dropFurniture } from "@/lib/parse/pdf/furniture";
-import { median } from "@/lib/parse/pdf/geometry";
+import { median, unionBox } from "@/lib/parse/pdf/geometry";
 import {
   CONTROL_CHARS_RE,
   fontFlags,
@@ -453,6 +453,7 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     const offset = segments[0].text.length + 1;
     segments[0].text = `${segments[0].text} ${segments[1].text}`;
     shiftSpansInto(segments[0], segments[1], offset);
+    if (segments[0].box && segments[1].box) segments[0].box = unionBox(segments[0].box, segments[1].box);
     segments.splice(1, 1);
   }
 
@@ -536,16 +537,16 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
 
 type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign">;
 
-// The title: the biggest heading on the first page. A title is set larger
-// than the body text; a body-size bold heading on the first page ("Problem
-// 1: …") is the first section, not the title.
+// The title: the first of the biggest headings on the first page. A title
+// is set larger than the body text; a body-size bold heading on the first
+// page ("Problem 1: …") is the first section, not the title. A paper that
+// sets its title in two languages, one under the other at one size, has the
+// first for its title (a Japanese paper's English title a tenth of a point
+// larger took the title).
 function titleOf(segments: Segment[], bodySize: number): Segment | undefined {
-  let title: Segment | undefined;
-  for (const s of segments) {
-    if (s.page !== 0 || s.type !== "HEADING" || s.rawSize === undefined) continue;
-    if (s.rawSize > (title?.rawSize ?? 0) && s.rawSize >= bodySize * 1.14 && s.text.length > 4) title = s;
-  }
-  return title;
+  const heads = segments.filter((s) => s.page === 0 && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4);
+  const top = Math.max(0, ...heads.map((s) => s.rawSize!));
+  return heads.find((s) => s.rawSize! >= top * 0.97);
 }
 
 // An abstract's heading, or the paragraph it runs into ("Abstract—…",

@@ -358,12 +358,21 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
     // word would have fit, so the break was the writer's. In a document with
     // no space between paragraphs it is the only sign (a Google Docs
     // export's paragraphs and a report's table notes read as one before).
+    // With no sentence's end, the line stops short by an em more than that
+    // word: a note's dated lines ("2013: …" under "2011-2012: …") and a
+    // paper's author lines ran together.
+    const roomy = prev.xEnd + prev.size * 1.28 + next.firstWordWidth < sentenceEdge;
     const endsShort =
       !centered &&
       sentenceEdge > 0 &&
-      prevTerminal &&
+      (prevTerminal || roomy) &&
       !fillsMargin(prev, next, sentenceEdge) &&
       OPENS_SENTENCE_RE.test(next.text);
+    // A line that opens with a raised label (an affiliation's "1Department
+    // of Physics…", a note's "²") starts a paragraph of its own: the
+    // affiliations of arxiv-2504-02736 ran into one.
+    const first = next.runs[0];
+    const labelled = first !== undefined && first.start === 0 && first.sup === true && /^[\d*∗†‡§¶‖,\s]+$/u.test(next.text.slice(0, first.end));
     // A hanging indent (a reference entry, a glossary term): the second
     // line steps in by one to three ems under a first line that wrapped —
     // it ran to the margin, or broke mid-sentence.
@@ -400,8 +409,10 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       (next.x < prev.x - next.size * 1.1 && !(group.length === 1 && firstLineIndent) && !centered) ||
       next.size > body * (ctx.ocr ? 1.3 : 1.14) ||
       endsShort ||
+      labelled ||
       TOC_LABEL_RE.test(next.text.trim()) ||
-      (isIndented(next, ctx) && !isIndented(prev, ctx) && !hanging && !centered) ||
+      // A line stretched into cells tells no indent of its own.
+      (isIndented(next, ctx) && prev.cells.length === 1 && !isIndented(prev, ctx) && !hanging && !centered) ||
       // An equation's line and a text line never share a paragraph: the
       // label under an underbrace joined the formula and diluted its math
       // share below the equation threshold (import compare loop finding).
