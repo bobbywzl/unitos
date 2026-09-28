@@ -72,6 +72,7 @@ import { linkScanRunsLeft } from "@/lib/connect";
 import { isTextStyle, type TextStyle } from "@/lib/text-style";
 import { coreBlocks } from "@/lib/anchors/layer";
 import { READING_LINE_PX, type BlockPosition } from "@/lib/reading-position";
+import { storedPdfPages } from "@/lib/pdf-pages";
 
 export const dynamic = "force-dynamic";
 
@@ -260,10 +261,14 @@ export default async function NotebookPage(props: {
         const zip = document.fileData;
         const word = zip !== null && zip[0] === 0x50 && zip[1] === 0x4b && zip[2] === 0x03 && zip[3] === 0x04;
         const lastPage = document.blocks.reduce((n, b) => Math.max(n, b.page ?? 0), 0);
+        // A PDF's pages the reader chose at the add (SPEC.md §15), and the
+        // PDF's page count with them.
+        const chosen = pdf ? storedPdfPages(document) : null;
         imported = {
           kind: pdf ? "pdf" : word ? "docx" : document.fileHash !== null ? "markdown" : "url",
           origin: document.sourceUrl?.replace(SPLIT_PART, "") ?? "",
-          pages: pdf ? (pageLabels?.length ?? (lastPage || null)) : null,
+          pages: pdf ? (chosen?.count ?? pageLabels?.length ?? (lastPage || null)) : null,
+          pdfPages: chosen?.ranges ?? null,
           importRev: document.importRev,
           edited: editedSinceImport(document),
           shared,

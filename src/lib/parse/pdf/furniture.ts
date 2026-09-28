@@ -48,8 +48,11 @@ const LONE_NUMBER_RE = /^[-–—\s]*(?:(?:page|p\.)\s*)?(\d{1,4}|[ivxlc]{1,7})(
 // A long table's foot on each page it breaks at (LaTeX longtable, Word).
 const CONTINUED_RE = /^\(?continued (?:on (?:the )?next page|overleaf)\)?\.?$/i;
 
-export function findFurniture(pages: Line[][], pageHeights: number[]): FurnitureDrop[] {
-  const rows = pages.map((lines, p) => rowsOf(lines, p, pageHeights[p]));
+// pageNumbers: each page's 0-based number in the PDF, where the pages are
+// not all of it (a parse of the pages the reader chose, parsePdf); a page
+// number counts with these.
+export function findFurniture(pages: Line[][], pageHeights: number[], pageNumbers?: number[]): FurnitureDrop[] {
+  const rows = pages.map((lines, p) => rowsOf(lines, pageNumbers?.[p] ?? p, pageHeights[p]));
   const { lead, bodySize } = measures(pages, rows);
   const candidates = rows.flatMap((pageRows) => candidatesOf(pageRows, lead));
   const strong = candidates.filter((c) => c.strong);
@@ -181,15 +184,15 @@ export function findFurniture(pages: Line[][], pageHeights: number[]): Furniture
     const h = pageHeights[p];
     for (const line of lines) {
       if (gone.has(line) || !/^\d{1,4}$/.test(line.text) || (line.y >= h * 0.08 && line.y <= h * 0.92)) continue;
-      drops.push({ page: p, line, why: "band" });
+      drops.push({ page: pageNumbers?.[p] ?? p, line, why: "band" });
     }
   }
   return drops;
 }
 
 // The pages' lines without their furniture.
-export function dropFurniture(pages: Line[][], pageHeights: number[]): Line[][] {
-  const gone = new Set(findFurniture(pages, pageHeights).map((d) => d.line));
+export function dropFurniture(pages: Line[][], pageHeights: number[], pageNumbers?: number[]): Line[][] {
+  const gone = new Set(findFurniture(pages, pageHeights, pageNumbers).map((d) => d.line));
   return pages.map((lines) => lines.filter((l) => !gone.has(l)));
 }
 

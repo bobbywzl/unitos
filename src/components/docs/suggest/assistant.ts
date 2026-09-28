@@ -1,7 +1,7 @@
 import { suggestChangesKey } from "@handlewithcare/prosemirror-suggest-changes";
 import { CommandManager, createNodeFromContent, type ChainedCommands, type Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
-import type { Fragment, Node as PMNode } from "@tiptap/pm/model";
+import type { Fragment, Mark, Node as PMNode } from "@tiptap/pm/model";
 import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { isSuggestionMark, newId, readSuggestions, settle, suggest } from "@/components/docs/ext/suggest";
 import { aroundPageStarts, FIGURE, findBlock, findIndexed, PAGE_START, posInBlock } from "@/components/docs/layer/anchor";
@@ -9,7 +9,7 @@ import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { isList, isListItem } from "@/components/docs/typing/lists";
 import { markdownToHtml } from "@/components/docs/typing/markdown";
 import { diffSegments } from "@/lib/anchors/remap";
-import type { ResolvedOp, SkipReason, SuggestFormat, SuggestStyle } from "@/lib/docs/assistant-suggestions";
+import type { ResolvedOp, SkipReason, SuggestFormat, SuggestMarkFormat, SuggestStyle } from "@/lib/docs/assistant-suggestions";
 import { inlineText, outOfIndex } from "@/lib/docs/blocks";
 import { suggestionAuthor, type RichNode } from "@/lib/docs/schema";
 import { blockPlaces } from "@/lib/docs/suggest-ops";
@@ -47,7 +47,9 @@ export function applyAssistantOps(editor: Editor, ops: readonly ResolvedOp[], au
   // suggestions as not made), which no op of this landing changes.
   let places: ReturnType<typeof blockPlaces> | null = null;
   const styleOf = (blockId: string) => (places ??= blockPlaces(tr.doc.toJSON() as RichNode)).get(blockId)?.style;
-  for (const op of ops) {
+  // A style change lands after the other ops: a line it makes a list line
+  // still takes the words changed in it.
+  for (const op of [...ops.filter((o) => o.op !== "set_style"), ...ops.filter((o) => o.op === "set_style")]) {
     const reason = land(editor, tr, op, author, made, styleOf);
     if (reason) skipped.push({ i: op.i, reason });
   }
@@ -86,15 +88,17 @@ function land(
   // new op on them takes their place. Another person's stack, as the
   // assistant's for someone else do. A style change on the blocks around
   // gives way only to a new style, and meets only a new style: a line this
-  // landing made a heading still takes a word fixed in it.
-  const clear = (from: number, to: number, style = false): SkipReason | null => {
+  // landing made a heading still takes a word fixed in it. An alignment is
+  // a block's change of its own, and gives way only to a new alignment.
+  const clear = (from: number, to: number, kind: "words" | "style" | "alignment" = "words"): SkipReason | null => {
     const earlier = new Set<string>();
     let meets = false;
+    const counts = (node: PMNode, mark: Mark) =>
+      node.isInline || mark.type.name !== "modification" || (kind !== "words" && (mark.attrs.attrName === "textAlign") === (kind === "alignment"));
     tr.doc.nodesBetween(from, to, (node) => {
       for (const mark of node.marks) {
         const id = String(mark.attrs.id);
-        if (!isSuggestionMark(mark) || suggestionAuthor(id) !== author) continue;
-        if (!(node.isInline || style || mark.type.name !== "modification")) continue;
+        if (!isSuggestionMark(mark) || suggestionAuthor(id) !== author || !counts(node, mark)) continue;
         if (made.includes(id)) meets = true;
         else earlier.add(id);
       }
@@ -119,13 +123,15 @@ function land(
       if (at === null || !place) return "changed";
       let reason = clear(place.from, place.to);
       if (reason) return reason;
-      for (const s of stretches(base, op.text)) {
+      // New words in a format of their own replace the words whole.
+      const format = op.op === "replace_words" ? op.format : undefined;
+      for (const s of format ? [{ start: 0, end: base.length, text: op.text }] : stretches(base, op.text)) {
         reason =
           commit((state) => {
             const r = range(state.doc, op.blockId, at + s.start, at + s.end);
             if (!r) return "changed";
             const whole = !holdsObject(state.doc, r.from, r.to) && wordsIn(state.doc, r.from, r.to) === base.slice(s.start, s.end);
-            return whole ? replaceText(state.tr, r.from, r.to, s.text) : "object";
+            return whole ? replaceText(state.tr, r.from, r.to, s.text, format) : "object";
           }) ?? reason;
       }
       return reason;
@@ -143,8 +149,7 @@ function land(
           if (wordsIn(state.doc, r.from, r.to) !== op.find) return "object";
           // The words take the format; a page start among them keeps its own.
           const edit = state.tr;
-          const mark = state.schema.marks[MARKS[op.format]].create();
-          for (const [from, to] of aroundPageStarts(state.doc, r.from, r.to)) edit.addMark(from, to, mark);
+          for (const [from, to] of aroundPageStarts(state.doc, r.from, r.to)) formatWords(edit, from, to, op.format, op.value);
           return edit;
         })
       );
@@ -176,11 +181,26 @@ function land(
         })
       );
     }
+    case "set_alignment": {
+      const block = findBlock(tr.doc, op.blockId);
+      if (!block) return "changed";
+      return (
+        clear(block.pos, block.pos + 1, "alignment") ??
+        commit((state) => {
+          const found = findBlock(state.doc, op.blockId);
+          if (!found) return "changed";
+          // The toolbar's own command, on this block.
+          const edit = state.tr.setSelection(TextSelection.create(state.doc, found.pos + 1));
+          new CommandManager({ editor, state }).createChain(edit).setTextAlign(op.alignment).run();
+          return edit;
+        })
+      );
+    }
     case "set_style": {
       const block = findBlock(tr.doc, op.blockId);
       if (!block || styleOf(op.blockId) !== op.baseStyle) return "changed";
       return (
-        clear(block.pos, block.pos + 1, true) ??
+        clear(block.pos, block.pos + 1, "style") ??
         commit((state) => {
           const found = findBlock(state.doc, op.blockId);
           if (!found) return "changed";
@@ -267,21 +287,47 @@ function stretches(base: string, text: string): Stretch[] {
     the new words take the marks where they start. A page start in the
     range stays where it stands: the words after it go, and the new words
     take the place of the words before it. */
-function replaceText(tr: Transaction, from: number, to: number, text: string): Transaction {
+function replaceText(tr: Transaction, from: number, to: number, text: string, format?: SuggestMarkFormat): Transaction {
   const [head, ...rest] = aroundPageStarts(tr.doc, from, to);
   // The last first, so the positions before them hold.
   for (const [a, b] of rest.reverse()) tr.delete(a, b);
   const [start, end] = head ?? [from, from];
   if (!text) return end > start ? tr.delete(start, end) : tr;
   const $from = tr.doc.resolve(start);
-  const marks = (start === end ? $from.marks() : $from.marksAcross(tr.doc.resolve(end))) ?? [];
   const { schema } = tr.doc.type;
+  const kept = (start === end ? $from.marks() : $from.marksAcross(tr.doc.resolve(end))) ?? [];
+  const marks = format ? schema.marks[MARKS[format]].create().addToSet(kept) : kept;
   const lines = $from.parent.type.spec.code ? [text] : text.split("\n");
   const nodes = lines.flatMap((line, i) => [...(i ? [schema.nodes.hardBreak.create()] : []), ...(line ? [schema.text(line, marks)] : [])]);
   return tr.replaceWith(start, end, nodes);
 }
 
-const MARKS: Record<SuggestFormat, string> = { bold: "bold", italic: "italic", underline: "underline", strikethrough: "strike" };
+const MARKS: Record<SuggestMarkFormat, string> = { bold: "bold", italic: "italic", underline: "underline", strikethrough: "strike" };
+// The text style attribute each value format sets, as the toolbar sets it.
+const TEXT_STYLE: Record<"color" | "font" | "size", string> = { color: "color", font: "fontFamily", size: "fontSize" };
+
+/** A format on from..to: a mark on (bold, italic, underline, strikethrough),
+    a link to `value` ("" takes the link off), or a text style value (the
+    color, the font, the size in points) set beside the words' other text
+    styles, as the toolbar sets them. */
+function formatWords(tr: Transaction, from: number, to: number, format: SuggestFormat, value = ""): void {
+  const { marks } = tr.doc.type.schema;
+  if (format === "link") {
+    if (value) tr.addMark(from, to, marks.link.create({ href: value }));
+    else tr.removeMark(from, to, marks.link);
+    return;
+  }
+  if (format === "color" || format === "font" || format === "size") {
+    const attrs = { [TEXT_STYLE[format]]: format === "size" ? `${value}pt` : value };
+    tr.doc.nodesBetween(from, to, (node, pos) => {
+      if (!node.isText) return;
+      const current = marks.textStyle.isInSet(node.marks)?.attrs ?? {};
+      tr.addMark(Math.max(from, pos), Math.min(to, pos + node.nodeSize), marks.textStyle.create({ ...current, ...attrs }));
+    });
+    return;
+  }
+  tr.addMark(from, to, marks[MARKS[format]].create());
+}
 
 /** Markdown as the page editor's blocks, parsed as Paste from Markdown
     parses it. */

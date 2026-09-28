@@ -43,14 +43,15 @@ export type SuggestCtx = {
 };
 
 const OP_LINES = [
-  '- replace_words {blockId, find, text, why}: change words inside one block. find: the block\'s words exactly as written, long enough to occur once in it. text: the words that take their place; "" deletes them.',
+  '- replace_words {blockId, find, text, format?, why}: change words inside one block. find: the block\'s words exactly as written, long enough to occur once in it. text: the words that take their place; "" deletes them. format: bold, italic, underline, or strikethrough, when the new words take one.',
   "- rewrite_block {blockId, text, why}: one block's words written anew, whole, plain, one paragraph with no blank line. Use it when most of a block changes. The block keeps its style.",
   "- replace_blocks {blockIds, markdown, why}: consecutive blocks replaced by new blocks. Use it to turn a paragraph into a list, split one, join two, or reorder them.",
   "- insert_blocks {afterBlockId, markdown, why}: new blocks after a block; afterBlockId null puts them at the document's start.",
   "- remove_blocks {blockIds, why}: consecutive blocks deleted whole.",
   "- set_style {blockId, style, why}: normal, title, subtitle, h1 to h6, bulleted, numbered, checklist.",
-  "- format_words {blockId, find, format, why}: bold, italic, underline, or strikethrough on exact words.",
-  "markdown: # to ###### headings, - bulleted lines, 1. numbered lines, - [ ] checklist lines, **bold**, *italic*, [text](url). No images, no tables.",
+  "- set_alignment {blockId, alignment, why}: left, center, right, or justify.",
+  '- format_words {blockId, find, format, value?, why}: a format on exact words: bold, italic, underline, or strikethrough; link, value the address ("" takes the link off); color, value #rrggbb; font, value the font\'s name; size, value the size in points.',
+  "markdown: # to ###### headings, - bulleted lines, 1. numbered lines, - [ ] checklist lines, **bold**, *italic*, [text](url), a new table as | cell | lines under a | --- | line. No images.",
 ];
 
 function scopeLines(scope: SuggestCtx["scope"]): string[] {

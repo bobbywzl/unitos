@@ -90,6 +90,10 @@ export type ImportInput = {
   blocks: ParsedBlock[];
   /** A PDF's first page, in points. */
   pageSize?: { width: number; height: number };
+  /** The PDF's page the import begins at: 1, or the first page the reader
+      chose (SPEC.md §15). The Title's page start, the title's own
+      footnotes, and a heading that repeats the title stand on it. */
+  firstPage?: number;
   /** The page's look (a PDF's, a Word file's): the body's (Normal text),
       and the title's with its alignment (the Title). */
   bodyFont?: TextFont;
@@ -688,9 +692,10 @@ class Converter {
     // their numbers stand at the Title's end, the mark's in place of it.
     const title = this.input.titleFromOriginal ? (this.input.title ?? "").replace(/\s+/g, " ").trim() : "";
     if (this.input.kind !== "pdf" || !title) return;
+    const first = this.input.firstPage ?? 1;
     const loose = blocks
       .map((block, index) => ({ label: block.footnote?.label.trim(), index }))
-      .filter(({ label, index }) => label !== undefined && (blocks[index].page ?? 1) <= 1 && !this.footnoteIds.has(index) && blocks[index].text.trim());
+      .filter(({ label, index }) => label !== undefined && (blocks[index].page ?? first) <= first && !this.footnoteIds.has(index) && blocks[index].text.trim());
     const marked = loose.find(({ label }) => label && title.endsWith(label) && /[\p{L})\].,:;!?]$/u.test(title.slice(0, -label.length)));
     if (marked) this.titleMark = marked.label ?? "";
     for (const { index } of [...(marked ? [marked] : []), ...loose.filter(({ label }) => label === "")]) {
@@ -733,10 +738,11 @@ class Converter {
     const title = this.input.titleFromOriginal ? (this.input.title ?? "").replace(/\s+/g, " ").trim() : "";
     // A heading among the first blocks that repeats the title is the Title,
     // where it stands; else the Title comes first, after the kicker.
+    const first = this.input.firstPage ?? 1;
     const repeat = title
       ? blocks
           .slice(0, TITLE_REACH)
-          .findIndex((b) => b.type === "HEADING" && sameWords(b.text, title) && (!this.paged || (b.page ?? 1) <= 1))
+          .findIndex((b) => b.type === "HEADING" && sameWords(b.text, title) && (!this.paged || (b.page ?? first) <= first))
       : -1;
     let lead = 0;
     while (lead < blocks.length && blocks[lead].type === "PARAGRAPH" && tokensOf(blocks[lead].html).includes("kicker")) lead++;
@@ -903,9 +909,10 @@ class Converter {
   // ── Blocks ──
 
   private title(title: string, blocks: ParsedBlock[]) {
-    // A PDF's title stands on its first page.
-    const starts: PageStart[] = this.paged && this.page < 1 ? [{ offset: 0, page: 1 }] : [];
-    if (starts.length > 0) this.page = 1;
+    // A PDF's title stands on the import's first page.
+    const first = this.input.firstPage ?? 1;
+    const starts: PageStart[] = this.paged && this.page < first ? [{ offset: 0, page: first }] : [];
+    if (starts.length > 0) this.page = first;
     const meta = blocks.slice(0, TITLE_REACH).find((b) => b.type === "PARAGRAPH" && tokensOf(b.html).includes("meta"));
     const heading = blocks.find((b) => b.type === "HEADING");
     const centered =

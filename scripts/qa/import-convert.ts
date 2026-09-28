@@ -18,11 +18,13 @@
 // Nothing is stored.
 //
 // Usage:
-//   npx tsx --tsconfig tsconfig.json scripts/qa/import-convert.ts [--offline] [--json <file>] [--verbose] [source …]
+//   npx tsx --tsconfig tsconfig.json scripts/qa/import-convert.ts [--offline] [--json <file>] [--verbose] [--pages <45-60,70>] [source …]
 // A source is a web page's or a PDF's URL, a .pdf, .md, or .txt path, or
 // synthetic:pdf, synthetic:url, synthetic:markdown (fixtures built below).
 // With no source: the sources in scripts/qa/import-compare-sources.txt,
 // every scripts/eval/fixtures/*.md, and the three synthetic fixtures.
+// --pages parses each PDF's chosen pages alone, as an add with the Pages
+// field set does (SPEC.md §15): its page starts name the PDF's own pages.
 // --offline skips URLs. A web page is the walk's parse without the model
 // passes, which is what the add stores under the model mock. The exit code
 // is 1 when a check fails; a NOTE never fails the run.
@@ -48,6 +50,7 @@ import { MARKDOWN_EXTENSIONS } from "@/lib/markdown-file";
 import { fetchPage } from "@/lib/parse/fetch-page";
 import { parseMarkdownDocument } from "@/lib/parse/markdown-document";
 import { parsePdf } from "@/lib/parse/pdf";
+import { rangePages, readPageRanges } from "@/lib/pdf-pages";
 import { pruneReferences } from "@/lib/parse/references";
 import type { DocumentReference, ParsedBlock, TextFont } from "@/lib/parse/types";
 import { parseHtmlContent, resolveContentsLinks } from "@/lib/parse/url";
@@ -100,7 +103,11 @@ const offline = argv.includes("--offline");
 const verbose = argv.includes("--verbose");
 const jsonAt = argv.indexOf("--json");
 const jsonOut = jsonAt >= 0 ? argv[jsonAt + 1] : null;
-const named = argv.filter((a, i) => !a.startsWith("--") && !(jsonAt >= 0 && i === jsonAt + 1));
+const pagesAt = argv.indexOf("--pages");
+const pagesArg = pagesAt >= 0 ? readPageRanges(argv[pagesAt + 1] ?? "", null) : null;
+if (pagesArg && "error" in pagesArg) throw new Error(`--pages: ${pagesArg.error}`);
+const chosenPages = pagesArg && "ranges" in pagesArg && pagesArg.ranges ? rangePages(pagesArg.ranges) : undefined;
+const named = argv.filter((a, i) => !a.startsWith("--") && !(jsonAt >= 0 && i === jsonAt + 1) && !(pagesAt >= 0 && i === pagesAt + 1));
 
 function defaultSources(): string[] {
   const list = join(ROOT, "scripts/qa/import-compare-sources.txt");
@@ -746,6 +753,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
         titleFromOriginal: f.titleFromOriginal,
         blocks: f.blocks,
         ...(f.pageSize ? { pageSize: f.pageSize } : {}),
+        ...(f.kind === "pdf" && chosenPages ? { firstPage: chosenPages[0] } : {}),
         bodyFont: f.bodyFont,
         titleFont: f.titleFont,
         titleAlign: f.titleAlign,
@@ -1545,10 +1553,10 @@ async function pdfFixture(name: string, bytes: Uint8Array): Promise<Fixture> {
     bodyFont?: TextFont;
     titleFont?: TextFont;
     titleAlign?: "center" | "right";
-  } = await parsePdf(new Uint8Array(bytes));
+  } = await parsePdf(new Uint8Array(bytes), { pages: chosenPages });
   const parseMs = performance.now() - t0;
   return {
-    name,
+    name: chosenPages ? `${name} (pages ${argv[pagesAt + 1]})` : name,
     kind: "pdf",
     title: parsed.title ?? name.replace(/\.pdf$/i, ""),
     titleFromOriginal: parsed.title !== null,

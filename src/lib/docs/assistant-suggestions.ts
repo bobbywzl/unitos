@@ -15,15 +15,22 @@ export const askerOf = (author: string): string => (isAssistantAuthor(author) ? 
 export const isAssistantSuggestion = (id: unknown): boolean => isAssistantAuthor(suggestionAuthor(id));
 
 export type SuggestStyle = "normal" | "title" | "subtitle" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "bulleted" | "numbered" | "checklist";
-export type SuggestFormat = "bold" | "italic" | "underline" | "strikethrough";
+/** A format that goes on or off words. */
+export type SuggestMarkFormat = "bold" | "italic" | "underline" | "strikethrough";
+/** A format that sets a value on words: the link's address ("" takes the
+    link off), the text color (#rrggbb), the font's name, the size in points. */
+export type SuggestValueFormat = "link" | "color" | "font" | "size";
+export type SuggestFormat = SuggestMarkFormat | SuggestValueFormat;
+export type SuggestAlignment = "left" | "center" | "right" | "justify";
 export type ResolvedOp =
-  | { i: number; op: "replace_words"; blockId: string; start: number; end: number; find: string; text: string; why: string }
-  | { i: number; op: "format_words"; blockId: string; start: number; end: number; find: string; format: SuggestFormat; why: string }
+  | { i: number; op: "replace_words"; blockId: string; start: number; end: number; find: string; text: string; format?: SuggestMarkFormat; why: string }
+  | { i: number; op: "format_words"; blockId: string; start: number; end: number; find: string; format: SuggestFormat; value?: string; why: string }
   | { i: number; op: "rewrite_block"; blockId: string; base: string; text: string; why: string }
   | { i: number; op: "replace_blocks"; blockIds: string[]; base: string[]; markdown: string; why: string }
   | { i: number; op: "insert_blocks"; afterBlockId: string | null; markdown: string; why: string }
   | { i: number; op: "remove_blocks"; blockIds: string[]; base: string[]; why: string }
-  | { i: number; op: "set_style"; blockId: string; style: SuggestStyle; baseStyle: SuggestStyle; why: string };
+  | { i: number; op: "set_style"; blockId: string; style: SuggestStyle; baseStyle: SuggestStyle; why: string }
+  | { i: number; op: "set_alignment"; blockId: string; alignment: SuggestAlignment; why: string };
 /** Why an op did not land. The page shows each reason in the reader's language. */
 export type SkipReason = "outside" | "notFound" | "ambiguous" | "overlap" | "notText" | "changed" | "object" | "limit" | "unreadable";
 export type SuggestResult = { ops: ResolvedOp[]; warnings: string[]; summary: string };

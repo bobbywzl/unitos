@@ -5,7 +5,11 @@ import {
   isAssistantSuggestion,
   type ResolvedOp,
   type SkipReason,
+  type SuggestAlignment,
+  type SuggestFormat,
+  type SuggestMarkFormat,
   type SuggestStyle,
+  type SuggestValueFormat,
 } from "@/lib/docs/assistant-suggestions";
 import { withoutSuggestions } from "@/lib/docs/blocks";
 import { INDEXED_NODE_TYPES, SUGGESTION_MARK_TYPES, suggestionAuthor, ZWSP, type RichNode } from "@/lib/docs/schema";
@@ -22,16 +26,41 @@ const why = z.string().min(1).max(WHY_MAX);
 const find = z.string().min(1).max(2_000);
 const markdown = z.string().min(1).max(20_000);
 const STYLES = ["normal", "title", "subtitle", "h1", "h2", "h3", "h4", "h5", "h6", "bulleted", "numbered", "checklist"] as const satisfies readonly SuggestStyle[];
+const MARK_FORMATS = ["bold", "italic", "underline", "strikethrough"] as const satisfies readonly SuggestMarkFormat[];
+const VALUE_FORMATS = ["link", "color", "font", "size"] as const satisfies readonly SuggestValueFormat[];
+const ALIGNMENTS = ["left", "center", "right", "justify"] as const satisfies readonly SuggestAlignment[];
 const suggestOpSchema = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("replace_words"), blockId: id, find, text: z.string().max(4_000), why }),
+  z.object({ op: z.literal("replace_words"), blockId: id, find, text: z.string().max(4_000), format: z.enum(MARK_FORMATS).optional(), why }),
   z.object({ op: z.literal("rewrite_block"), blockId: id, text: z.string().max(20_000), why }),
   z.object({ op: z.literal("replace_blocks"), blockIds: z.array(id).min(1).max(40), markdown, why }),
   z.object({ op: z.literal("insert_blocks"), afterBlockId: id.nullable(), markdown, why }),
   z.object({ op: z.literal("remove_blocks"), blockIds: z.array(id).min(1).max(40), why }),
   z.object({ op: z.literal("set_style"), blockId: id, style: z.enum(STYLES), why }),
-  z.object({ op: z.literal("format_words"), blockId: id, find, format: z.enum(["bold", "italic", "underline", "strikethrough"]), why }),
+  z.object({
+    op: z.literal("format_words"),
+    blockId: id,
+    find,
+    format: z.enum([...MARK_FORMATS, ...VALUE_FORMATS]),
+    value: z.union([z.string().max(2_000), z.number()]).optional(),
+    why,
+  }),
+  z.object({ op: z.literal("set_alignment"), blockId: id, alignment: z.enum(ALIGNMENTS), why }),
 ]);
 type SuggestOp = z.infer<typeof suggestOpSchema>;
+
+/** A value format's value as the page sets it: an address (http, https,
+    mailto, tel, or one of the document's own; "" takes the link off), a
+    color as #rgb or #rrggbb, a font's name, a size in points (12, "12pt");
+    null when it is none of these. A format that goes on or off takes none. */
+function formatValue(format: SuggestFormat, value: string | number | undefined): string | null | undefined {
+  if ((MARK_FORMATS as readonly string[]).includes(format)) return undefined;
+  const v = String(value ?? "").trim();
+  if (format === "link") return v === "" || /^(https?:\/\/|mailto:|tel:|#|\/)\S*$/i.test(v) ? v : null;
+  if (format === "color") return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v) ? v.toLowerCase() : null;
+  if (format === "font") return /^[\p{L}\p{M}\p{N}_ ,'"\-.]{1,120}$/u.test(v) ? v : null;
+  const points = v.replace(/\s*pt$/i, "");
+  return /^\d{1,3}(\.\d{1,2})?$/.test(points) && Number(points) >= 1 ? points : null;
+}
 
 /** Words cut to `max` characters, with an ellipsis. */
 const clip = (text: string, max: number): string => (text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`);
@@ -251,11 +280,11 @@ export function assistantSuggestionsIn(doc: RichNode, asker: string, scope: Read
 
 const TEXT_ROWS = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);
 
-/** What an op takes: words of one row, a row's style, whole rows, or the
-    gap after a row (-1: the document's start). */
+/** What an op takes: words of one row, a row's paragraph style or its
+    alignment, whole rows, or the gap after a row (-1: the document's start). */
 type Claim =
   | { kind: "words"; row: number; from: number; to: number }
-  | { kind: "style"; row: number }
+  | { kind: "style"; row: number; attr: "style" | "alignment" }
   | { kind: "rows"; rows: number[] }
   | { kind: "gap"; after: number };
 
@@ -271,6 +300,7 @@ function conflicts(a: Claim, b: Claim): boolean {
     return b.kind === "rows" && b.rows.some((k) => k === a.after || k === a.after + 1);
   }
   if (a.kind === "words" && b.kind === "words") return a.row === b.row && a.from <= b.to && b.from <= a.to;
+  if (a.kind === "style" && b.kind === "style") return a.row === b.row && a.attr === b.attr;
   if ((a.kind === "style" && b.kind === "words") || (a.kind === "words" && b.kind === "style")) return false;
   const rowsOf = (c: Claim) => (c.kind === "rows" ? c.rows : c.kind === "gap" ? [] : [c.row]);
   return rowsOf(a).some((k) => rowsOf(b).includes(k));
@@ -370,7 +400,12 @@ export function resolveOps(
     if (op.op === "set_style") {
       if (!place.style || place.where !== "body") return "notText";
       if (op.style === place.style) return null;
-      return { op: { i, op: op.op, blockId: row.id, style: op.style, baseStyle: place.style, why: op.why }, claim: { kind: "style", row: k }, chars: 0 };
+      return { op: { i, op: op.op, blockId: row.id, style: op.style, baseStyle: place.style, why: op.why }, claim: { kind: "style", row: k, attr: "style" }, chars: 0 };
+    }
+    if (op.op === "set_alignment") {
+      // A paragraph, a heading, a list line, a table cell's or a footnote's paragraph; not code.
+      if (!place.style) return "notText";
+      return { op: { i, op: op.op, blockId: row.id, alignment: op.alignment, why: op.why }, claim: { kind: "style", row: k, attr: "alignment" }, chars: 0 };
     }
     if (op.op === "rewrite_block") {
       if (scope.kind === "words" && !coversRow(row.text, spans.get(row.id))) return "outside";
@@ -391,10 +426,15 @@ export function resolveOps(
     const found = row.text.slice(start, end);
     const claim: Claim = { kind: "words", row: k, from: start, to: end };
     if (op.op === "format_words") {
-      return { op: { i, op: op.op, blockId: row.id, start, end, find: found, format: op.format, why: op.why }, claim, chars: 0 };
+      const value = formatValue(op.format, op.value);
+      if (value === null) return "unreadable";
+      return { op: { i, op: op.op, blockId: row.id, start, end, find: found, format: op.format, ...(value === undefined ? {} : { value }), why: op.why }, claim, chars: 0 };
     }
-    if (found === op.text) return null;
-    return { op: { i, op: op.op, blockId: row.id, start, end, find: found, text: op.text, why: op.why }, claim, chars: op.text.length };
+    // The same words in a new format are a format change.
+    if (found === op.text) {
+      return op.format ? { op: { i, op: "format_words", blockId: row.id, start, end, find: found, format: op.format, why: op.why }, claim, chars: 0 } : null;
+    }
+    return { op: { i, op: op.op, blockId: row.id, start, end, find: found, text: op.text, ...(op.format ? { format: op.format } : {}), why: op.why }, claim, chars: op.text.length };
   };
 
   const out: ResolvedOp[] = [];

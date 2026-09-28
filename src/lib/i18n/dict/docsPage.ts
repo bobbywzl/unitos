@@ -15,6 +15,8 @@ const en = {
   // The import line: where an import came from
   importedFrom: "Imported from {site}",
   importPdf: "PDF · {n} page{s}",
+  importPdfPage: "PDF · page {pages} of {n}",
+  importPdfPages: "PDF · pages {pages} of {n}",
   importTextFile: "Text file",
   importWordFile: "Word file",
   // Commands (Search the menus)
@@ -123,6 +125,8 @@ const zh: Record<keyof typeof en, string> = {
   statusFailed: "你最新的更改尚未保存。Unitos 会在你下次更改时再次尝试。",
   importedFrom: "导入自 {site}",
   importPdf: "PDF · {n} 页",
+  importPdfPage: "PDF · 第 {pages} 页，共 {n} 页",
+  importPdfPages: "PDF · 第 {pages} 页，共 {n} 页",
   importTextFile: "文本文件",
   importWordFile: "Word 文件",
   pageSetup: "页面设置",

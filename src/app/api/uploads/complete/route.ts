@@ -20,6 +20,7 @@ import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
 import { isMarkdownFile } from "@/lib/markdown-file";
 import { isSheetsFile } from "@/lib/office-file";
+import { pageRangesSchema } from "@/lib/pdf-pages";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 
 // Media uploads kick off transcription in after(); a long audio's chunked run
@@ -37,6 +38,8 @@ const bodySchema = z.object({
   // upload assistant's import pick; video ignores them.
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
+  // The PDF's pages the reader chose (SPEC.md §15); absent, every page. PDF only.
+  pdfPages: pageRangesSchema.optional(),
   // The part of a recording to import (SPEC.md §15), seconds: the range the
   // reader picked in the upload box. Absent = the whole recording. Video only.
   clipStart: z.number().min(0).optional(),
@@ -177,7 +180,7 @@ export async function POST(req: Request) {
         bytes,
         filename,
         onProgress,
-        { pages, convert: data.convert },
+        { pages, convert: data.convert, pdfPages: data.pdfPages },
         user?.id ?? null,
       );
       await attachDocument(data.notebookId, document.id);

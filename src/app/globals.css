@@ -1985,6 +1985,13 @@ ellipse.anchor-flash {
     .sheet-in {
       animation: sheet-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
+    /* The workspace's fade lets go once it ran, as the page editor's pane
+       does (components/docs/css/layer.css): filling for good would keep the
+       workspace in a stacking context of its own, and the sheet and the
+       bottom bar under the Feedback button, over the assistant's Send. */
+    .content-in:has(.tray-column) {
+      animation-fill-mode: backwards;
+    }
   }
   .presence-exit-fade > * {
     animation: fade-out 0.18s ease-out both;
