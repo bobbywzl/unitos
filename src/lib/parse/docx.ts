@@ -446,11 +446,14 @@ function formatNumber(fmt: string, n: number): string {
 }
 
 /** A bullet level's character as the character it draws: a symbol font's
-    code mapped, and Courier New's "o" — Word's hollow second-level bullet —
-    as the hollow bullet ◦. */
+    code mapped (Symbol's U+F0B7 "•", Wingdings' U+F0A7 "▪"), Courier New's
+    "o" — Word's hollow second-level bullet — as the hollow bullet ◦, any
+    other character as it is. A bullet with no character we can name is the
+    default dot, so the line stays a list line (the converter draws the
+    LIST text's bullets, lib/docs/import.ts). */
 function bulletChar(level: Level): string {
   const text = level.text.trim();
-  if (!text) return "";
+  if (!text) return "•";
   if (text === "o") return "◦";
   const drawn = [...text].map((ch) => symbolChar(level.font, ch) ?? (/[\uf000-\uf0ff]/.test(ch) ? (symbolChar("Symbol", ch) ?? "") : ch)).join("");
   return drawn || "•";
@@ -526,7 +529,7 @@ class Numbering {
   }
 
   /** The marker of the next item of list `numId` at level `ilvl`, as Word
-      draws it ("1.", "1.1", "(a)", "•"; "" when the level draws none), and
+      draws it ("1.", "1.1", "(a)", "•"; "" when a number format draws none), and
       the level's indent; null when the list is not defined. The counters
       move on. */
   next(numId: string, ilvl: number): { marker: string; left: number | null } | null {

@@ -1026,15 +1026,16 @@ function drawnRadicals(atoms: Atom[], rules: Rule[], paths: Box[], used: Set<Box
 function unreadShape(atoms: Atom[], rules: Rule[], paths: Box[], used: Set<Box>): boolean {
   if (atoms.length === 0) return false;
   const em = maxSize(atoms);
-  const x1 = Math.min(...atoms.map((a) => a.x1)) - 0.3 * em;
+  const x1 = Math.min(...atoms.map((a) => a.x1));
   const x2 = Math.max(...atoms.map((a) => a.x2));
   const low = Math.min(...atoms.map((a) => a.bottom)) - em;
   const high = Math.max(...atoms.map((a) => a.top)) + em;
-  if (rules.some((r) => r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low && r.y2 < high)) return true;
-  // A path that paints a rule is that rule. A clipped picture's box runs
-  // past its clip: it starts inside.
+  if (rules.some((r) => r.dir === "v" && r.x1 > x1 - 0.3 * em && r.x1 < x2 && r.y1 > low && r.y2 < high)) return true;
+  // A path that paints a rule is that rule. A picture starts at most an em
+  // and a half left of the glyphs it covers (a radical's sign), and a
+  // clipped one runs past its clip.
   const rule = (p: Box) => rules.some((r) => Math.abs(p.x1 - r.x1) < 1 && Math.abs((p.y1 + p.y2) / 2 - r.y1) < r.thickness + 1 && p.y2 - p.y1 < r.thickness + 2);
-  return paths.some((p) => !used.has(p) && p.x1 > x1 && p.x1 < x2 && p.y1 > low && p.y2 < high && !rule(p));
+  return paths.some((p) => !used.has(p) && p.x1 > x1 - 1.5 * em && p.x1 < x2 && p.x2 > x1 && p.y1 > low && p.y2 < high && !rule(p));
 }
 
 /** A formula's LaTeX from its glyphs and the shapes drawn with them (rules,

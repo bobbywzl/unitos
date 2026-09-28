@@ -1305,105 +1305,38 @@
   }
 }
 
-/* ── List presets ─────────────────────────────────────────────────────────
-   A list line n levels deep draws --docs-bullet-n or --docs-number-n, which
-   the outermost list's preset (data-list-style) sets; the page sets Google
-   Docs' defaults (● ○ ■, 1. a. i.). */
-@counter-style docs-decimal-dot { system: extends decimal; suffix: ".\2003"; }
-@counter-style docs-decimal-dotparen { system: extends decimal; suffix: ".)\2003"; }
-@counter-style docs-decimal-leading-zero-dot { system: extends decimal-leading-zero; suffix: ".\2003"; }
-@counter-style docs-decimal-paren { system: extends decimal; suffix: ")\2003"; }
-@counter-style docs-decimal-parens { system: extends decimal; prefix: "("; suffix: ")\2003"; }
-@counter-style docs-lower-alpha-dot { system: extends lower-alpha; suffix: ".\2003"; }
-@counter-style docs-lower-alpha-dotparen { system: extends lower-alpha; suffix: ".)\2003"; }
-@counter-style docs-lower-alpha-paren { system: extends lower-alpha; suffix: ")\2003"; }
-@counter-style docs-lower-alpha-parens { system: extends lower-alpha; prefix: "("; suffix: ")\2003"; }
-@counter-style docs-lower-roman-dot { system: extends lower-roman; suffix: ".\2003"; }
-@counter-style docs-lower-roman-dotparen { system: extends lower-roman; suffix: ".)\2003"; }
-@counter-style docs-lower-roman-paren { system: extends lower-roman; suffix: ")\2003"; }
-@counter-style docs-lower-roman-parens { system: extends lower-roman; prefix: "("; suffix: ")\2003"; }
-@counter-style docs-upper-alpha-dot { system: extends upper-alpha; suffix: ".\2003"; }
-@counter-style docs-upper-alpha-paren { system: extends upper-alpha; suffix: ")\2003"; }
-@counter-style docs-upper-alpha-parens { system: extends upper-alpha; prefix: "("; suffix: ")\2003"; }
-@counter-style docs-upper-roman-dot { system: extends upper-roman; suffix: ".\2003"; }
-
+/* ── Lists ────────────────────────────────────────────────────────────────
+   A list line n levels deep draws level n of its outermost list: a bullet
+   from --docs-bullet-n, a number from --docs-marker-n (::marker's content:
+   its glyph format's words around counter(), or counters() for a legal
+   number), or, where ::marker takes no content, the counter in
+   --docs-number-n. The outermost list's inline style sets its preset's or
+   its own levels (toolbar/lists.ts levelStyle); the page sets Google Docs'
+   defaults (● ○ ■, 1. a. i.). */
 .docs-prose {
   --docs-bullet-1: "●\2003"; --docs-bullet-2: "○\2003"; --docs-bullet-3: "■\2003"; --docs-bullet-4: "●\2003"; --docs-bullet-5: "○\2003"; --docs-bullet-6: "■\2003"; --docs-bullet-7: "●\2003"; --docs-bullet-8: "○\2003"; --docs-bullet-9: "■\2003";
-  --docs-number-1: docs-decimal-dot; --docs-number-2: docs-lower-alpha-dot; --docs-number-3: docs-lower-roman-dot; --docs-number-4: docs-decimal-dot; --docs-number-5: docs-lower-alpha-dot; --docs-number-6: docs-lower-roman-dot; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
+  --docs-number-1: decimal; --docs-number-2: lower-alpha; --docs-number-3: lower-roman; --docs-number-4: decimal; --docs-number-5: lower-alpha; --docs-number-6: lower-roman; --docs-number-7: decimal; --docs-number-8: lower-alpha; --docs-number-9: lower-roman;
+  --docs-marker-1: counter(list-item, decimal) ".\2003"; --docs-marker-2: counter(list-item, lower-alpha) ".\2003"; --docs-marker-3: counter(list-item, lower-roman) ".\2003";
+  --docs-marker-4: counter(list-item, decimal) ".\2003"; --docs-marker-5: counter(list-item, lower-alpha) ".\2003"; --docs-marker-6: counter(list-item, lower-roman) ".\2003";
+  --docs-marker-7: counter(list-item, decimal) ".\2003"; --docs-marker-8: counter(list-item, lower-alpha) ".\2003"; --docs-marker-9: counter(list-item, lower-roman) ".\2003";
 }
-.docs-prose [data-list-style="BULLET_DIAMONDX_ARROW3D_SQUARE"] {
-  --docs-bullet-1: "❖\2003"; --docs-bullet-2: "➢\2003"; --docs-bullet-3: "■\2003"; --docs-bullet-4: "●\2003"; --docs-bullet-5: "◆\2003"; --docs-bullet-6: "➢\2003"; --docs-bullet-7: "■\2003"; --docs-bullet-8: "●\2003"; --docs-bullet-9: "◆\2003";
-}
-.docs-prose [data-list-style="BULLET_CHECKBOX"] {
-  --docs-bullet-1: "❏\2003"; --docs-bullet-2: "❏\2003"; --docs-bullet-3: "❏\2003"; --docs-bullet-4: "❏\2003"; --docs-bullet-5: "❏\2003"; --docs-bullet-6: "❏\2003"; --docs-bullet-7: "❏\2003"; --docs-bullet-8: "❏\2003"; --docs-bullet-9: "❏\2003";
-}
-.docs-prose [data-list-style="BULLET_ARROW_DIAMOND_DISC"] {
-  --docs-bullet-1: "➔\2003"; --docs-bullet-2: "◆\2003"; --docs-bullet-3: "●\2003"; --docs-bullet-4: "○\2003"; --docs-bullet-5: "◆\2003"; --docs-bullet-6: "●\2003"; --docs-bullet-7: "○\2003"; --docs-bullet-8: "◆\2003"; --docs-bullet-9: "●\2003";
-}
-.docs-prose [data-list-style="BULLET_STAR_CIRCLE_SQUARE"] {
-  --docs-bullet-1: "★\2003"; --docs-bullet-2: "○\2003"; --docs-bullet-3: "■\2003"; --docs-bullet-4: "●\2003"; --docs-bullet-5: "○\2003"; --docs-bullet-6: "■\2003"; --docs-bullet-7: "●\2003"; --docs-bullet-8: "○\2003"; --docs-bullet-9: "■\2003";
-}
-.docs-prose [data-list-style="BULLET_ARROW3D_CIRCLE_SQUARE"] {
-  --docs-bullet-1: "➢\2003"; --docs-bullet-2: "○\2003"; --docs-bullet-3: "■\2003"; --docs-bullet-4: "●\2003"; --docs-bullet-5: "○\2003"; --docs-bullet-6: "■\2003"; --docs-bullet-7: "●\2003"; --docs-bullet-8: "○\2003"; --docs-bullet-9: "■\2003";
-}
-.docs-prose [data-list-style="BULLET_DASH"] {
-  --docs-bullet-1: "-\2003"; --docs-bullet-2: "-\2003"; --docs-bullet-3: "-\2003"; --docs-bullet-4: "-\2003"; --docs-bullet-5: "-\2003"; --docs-bullet-6: "-\2003"; --docs-bullet-7: "-\2003"; --docs-bullet-8: "-\2003"; --docs-bullet-9: "-\2003";
-}
-.docs-prose [data-list-style="BULLET_PLUS"] {
-  --docs-bullet-1: "+\2003"; --docs-bullet-2: "+\2003"; --docs-bullet-3: "+\2003"; --docs-bullet-4: "+\2003"; --docs-bullet-5: "+\2003"; --docs-bullet-6: "+\2003"; --docs-bullet-7: "+\2003"; --docs-bullet-8: "+\2003"; --docs-bullet-9: "+\2003";
-}
-.docs-prose [data-list-style="NUMBERED_DECIMAL_ALPHA_ROMAN_PARENS"] {
-  --docs-number-1: docs-decimal-paren; --docs-number-2: docs-lower-alpha-paren; --docs-number-3: docs-lower-roman-paren; --docs-number-4: docs-decimal-parens; --docs-number-5: docs-lower-alpha-parens; --docs-number-6: docs-lower-roman-parens; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
-}
-.docs-prose [data-list-style="NUMBERED_DECIMAL_ALPHA_ROMAN_TWO_PARENS"] {
-  --docs-number-1: docs-decimal-parens; --docs-number-2: docs-lower-alpha-parens; --docs-number-3: docs-lower-roman-parens; --docs-number-4: docs-decimal-paren; --docs-number-5: docs-lower-alpha-paren; --docs-number-6: docs-lower-roman-paren; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
-}
-.docs-prose [data-list-style="NUMBERED_DECIMAL_ALPHA_ROMAN_PERIOD_PARENS"] {
-  --docs-number-1: docs-decimal-dotparen; --docs-number-2: docs-lower-alpha-dotparen; --docs-number-3: docs-lower-roman-dotparen; --docs-number-4: docs-decimal-parens; --docs-number-5: docs-lower-alpha-parens; --docs-number-6: docs-lower-roman-parens; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
-}
-.docs-prose [data-list-style="NUMBERED_ZERODECIMAL_ALPHA_ROMAN"] {
-  --docs-number-1: docs-decimal-leading-zero-dot; --docs-number-2: docs-lower-alpha-dot; --docs-number-3: docs-lower-roman-dot; --docs-number-4: docs-decimal-dot; --docs-number-5: docs-lower-alpha-dot; --docs-number-6: docs-lower-roman-dot; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
-}
-.docs-prose [data-list-style="NUMBERED_ALPHA_ROMAN_DECIMAL"] {
-  --docs-number-1: docs-lower-alpha-dot; --docs-number-2: docs-lower-roman-dot; --docs-number-3: docs-decimal-dot; --docs-number-4: docs-lower-alpha-dot; --docs-number-5: docs-lower-roman-dot; --docs-number-6: docs-decimal-dot; --docs-number-7: docs-lower-alpha-dot; --docs-number-8: docs-lower-roman-dot; --docs-number-9: docs-decimal-dot;
-}
-.docs-prose [data-list-style="NUMBERED_ALPHA_ROMAN_DECIMAL_PARENS"] {
-  --docs-number-1: docs-lower-alpha-paren; --docs-number-2: docs-lower-roman-paren; --docs-number-3: docs-decimal-paren; --docs-number-4: docs-lower-alpha-parens; --docs-number-5: docs-lower-roman-parens; --docs-number-6: docs-decimal-parens; --docs-number-7: docs-lower-alpha-dot; --docs-number-8: docs-lower-roman-dot; --docs-number-9: docs-decimal-dot;
-}
-.docs-prose [data-list-style="NUMBERED_ALPHA_ROMAN_DECIMAL_TWO_PARENS"] {
-  --docs-number-1: docs-lower-alpha-parens; --docs-number-2: docs-lower-roman-parens; --docs-number-3: docs-decimal-parens; --docs-number-4: docs-lower-alpha-paren; --docs-number-5: docs-lower-roman-paren; --docs-number-6: docs-decimal-paren; --docs-number-7: docs-lower-alpha-dot; --docs-number-8: docs-lower-roman-dot; --docs-number-9: docs-decimal-dot;
-}
-.docs-prose [data-list-style="NUMBERED_UPPERALPHA_ALPHA_ROMAN"] {
-  --docs-number-1: docs-upper-alpha-dot; --docs-number-2: docs-lower-alpha-dot; --docs-number-3: docs-lower-roman-dot; --docs-number-4: docs-decimal-dot; --docs-number-5: docs-lower-alpha-dot; --docs-number-6: docs-lower-roman-dot; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
-}
-.docs-prose [data-list-style="NUMBERED_UPPERALPHA_ALPHA_ROMAN_PARENS"] {
-  --docs-number-1: docs-upper-alpha-paren; --docs-number-2: docs-lower-alpha-paren; --docs-number-3: docs-lower-roman-paren; --docs-number-4: docs-decimal-parens; --docs-number-5: docs-lower-alpha-parens; --docs-number-6: docs-lower-roman-parens; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
-}
-.docs-prose [data-list-style="NUMBERED_UPPERALPHA_ALPHA_ROMAN_TWO_PARENS"] {
-  --docs-number-1: docs-upper-alpha-parens; --docs-number-2: docs-lower-alpha-parens; --docs-number-3: docs-lower-roman-parens; --docs-number-4: docs-decimal-paren; --docs-number-5: docs-lower-alpha-paren; --docs-number-6: docs-lower-roman-paren; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-lower-alpha-dot; --docs-number-9: docs-lower-roman-dot;
-}
-.docs-prose [data-list-style="NUMBERED_UPPERROMAN_UPPERALPHA_DECIMAL"] {
-  --docs-number-1: docs-upper-roman-dot; --docs-number-2: docs-upper-alpha-dot; --docs-number-3: docs-decimal-dot; --docs-number-4: docs-lower-alpha-paren; --docs-number-5: docs-decimal-parens; --docs-number-6: docs-lower-alpha-parens; --docs-number-7: docs-lower-roman-parens; --docs-number-8: docs-lower-alpha-parens; --docs-number-9: docs-lower-roman-parens;
-}
-.docs-prose li { --docs-level-bullet: var(--docs-bullet-1); --docs-level-number: var(--docs-number-1); }
-.docs-prose li li { --docs-level-bullet: var(--docs-bullet-2); --docs-level-number: var(--docs-number-2); }
-.docs-prose li li li { --docs-level-bullet: var(--docs-bullet-3); --docs-level-number: var(--docs-number-3); }
-.docs-prose li li li li { --docs-level-bullet: var(--docs-bullet-4); --docs-level-number: var(--docs-number-4); }
-.docs-prose li li li li li { --docs-level-bullet: var(--docs-bullet-5); --docs-level-number: var(--docs-number-5); }
-.docs-prose li li li li li li { --docs-level-bullet: var(--docs-bullet-6); --docs-level-number: var(--docs-number-6); }
-.docs-prose li li li li li li li { --docs-level-bullet: var(--docs-bullet-7); --docs-level-number: var(--docs-number-7); }
-.docs-prose li li li li li li li li { --docs-level-bullet: var(--docs-bullet-8); --docs-level-number: var(--docs-number-8); }
-.docs-prose li li li li li li li li li { --docs-level-bullet: var(--docs-bullet-9); --docs-level-number: var(--docs-number-9); }
+.docs-prose li { --docs-level-bullet: var(--docs-bullet-1); --docs-level-number: var(--docs-number-1); --docs-level-marker: var(--docs-marker-1); }
+.docs-prose li li { --docs-level-bullet: var(--docs-bullet-2); --docs-level-number: var(--docs-number-2); --docs-level-marker: var(--docs-marker-2); }
+.docs-prose li li li { --docs-level-bullet: var(--docs-bullet-3); --docs-level-number: var(--docs-number-3); --docs-level-marker: var(--docs-marker-3); }
+.docs-prose li li li li { --docs-level-bullet: var(--docs-bullet-4); --docs-level-number: var(--docs-number-4); --docs-level-marker: var(--docs-marker-4); }
+.docs-prose li li li li li { --docs-level-bullet: var(--docs-bullet-5); --docs-level-number: var(--docs-number-5); --docs-level-marker: var(--docs-marker-5); }
+.docs-prose li li li li li li { --docs-level-bullet: var(--docs-bullet-6); --docs-level-number: var(--docs-number-6); --docs-level-marker: var(--docs-marker-6); }
+.docs-prose li li li li li li li { --docs-level-bullet: var(--docs-bullet-7); --docs-level-number: var(--docs-number-7); --docs-level-marker: var(--docs-marker-7); }
+.docs-prose li li li li li li li li { --docs-level-bullet: var(--docs-bullet-8); --docs-level-number: var(--docs-number-8); --docs-level-marker: var(--docs-marker-8); }
+.docs-prose li li li li li li li li li { --docs-level-bullet: var(--docs-bullet-9); --docs-level-number: var(--docs-number-9); --docs-level-marker: var(--docs-marker-9); }
 .docs-prose ul:not([data-type="taskList"]) > li {
   list-style-type: var(--docs-level-bullet);
 }
 .docs-prose ol > li {
   list-style-type: var(--docs-level-number);
 }
-.docs-prose [data-list-style="NUMBERED_DECIMAL_NESTED"] {
-  --docs-number-1: docs-decimal-dot; --docs-number-2: docs-decimal-dot; --docs-number-3: docs-decimal-dot; --docs-number-4: docs-decimal-dot; --docs-number-5: docs-decimal-dot; --docs-number-6: docs-decimal-dot; --docs-number-7: docs-decimal-dot; --docs-number-8: docs-decimal-dot; --docs-number-9: docs-decimal-dot;
-}
-/* 1. 1.1. 1.1.1.: each level repeats the numbers above it. */
-.docs-prose ol[data-list-style="NUMBERED_DECIMAL_NESTED"] li::marker {
-  content: counters(list-item, ".") ".\2003";
+/* A line a suggestion adds or removes whole sits in the suggestion's
+   wrapper (css/suggest.css). */
+.docs-prose :is(ol > li, ol > [data-suggestion-block] > li)::marker {
+  content: var(--docs-level-marker);
 }

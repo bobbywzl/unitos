@@ -34,6 +34,7 @@ import { armPlainPaste, imageFiles, insertImageFiles, notePaste, pastedHtml, pla
 import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
 import { tracePlugin } from "@/components/docs/typing/trace";
 import { replaceWithChip, urlChipPlugin } from "@/components/docs/typing/url-chip";
+import { listLevelsOf } from "@/lib/docs/schema";
 
 // The page editor's typing (SPEC.md §29): Google Docs' keys, autocorrect,
 // paste, and find. It runs first (priority 1001), so its keys win over

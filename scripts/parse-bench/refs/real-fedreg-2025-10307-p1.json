@@ -1,0 +1,459 @@
+{
+ "id": "real-fedreg-2025-10307-p1",
+ "category": "legal",
+ "source": {
+  "pdf": ".bench/real/fedreg-2025-10307.pdf",
+  "url": "https://www.govinfo.gov/content/pkg/FR-2025-06-10/pdf/2025-10307.pdf"
+ },
+ "pages": [
+  1,
+  1
+ ],
+ "license": "public-domain",
+ "provenance": "hand",
+ "notes": "Federal Register vol. 90 no. 110 (June 10, 2025), p. 24348: EPA final rule 2025-10307, pesticide tolerances; a work of the United States government, as govinfo serves it (GPO typesetting, Melior and Helvetica, three columns). Scored: the tail of the previous rule (a signature, its FR Doc line, a billing code) and the rule between the two documents (a separator), the rule's heading lines (agency, CFR part, docket, RIN: bold paragraphs) over its subject (the title), run-in caps labels (AGENCY:, ACTION:, SUMMARY:, DATES:, ADDRESSES:, FOR FURTHER INFORMATION CONTACT:, bold), a bold roman heading (level 1) and italic lettered headings (level 2), first-line indents, '•' items whose wraps return to the column edge, italic URLs cut at a line end with no hyphen, typewriter quotes set as two single quotes (‘‘safe.’’), a spaced ellipsis, and a paragraph that runs from the second column into the third. The last paragraph continues on p. 24349: only its words on this page are here. The page carries white text a reader never sees (GPO's VerDate line at the foot and an operator stamp set sideways in the left margin): furniture. The govinfo authentication seal in the top left corner is no block.",
+ "furniture": [
+  "24348",
+  "Federal Register / Vol. 90, No. 110 / Tuesday, June 10, 2025 / Rules and Regulations",
+  "VerDate Sep<11>2014",
+  "16:29 Jun 09, 2025",
+  "Jkt 265001",
+  "PO 00000",
+  "Frm 00034",
+  "Fmt 4700",
+  "Sfmt 4700",
+  "E:\\FR\\FM\\10JNR1.SGM",
+  "10JNR1",
+  "ddrumheller on DSK120RN23PROD with RULES1"
+ ],
+ "blocks": [
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Colleen Hibbert-Kapler,",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Attorney, Ethics and Legal Compliance.",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "[FR Doc. 2025–10462 Filed 6–9–25; 8:45 am]"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "BILLING CODE P",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "separator"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "ENVIRONMENTAL PROTECTION AGENCY",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "40 CFR Part 180",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "[EPA–HQ–OPP–2023–0454; FRL–12177–02–OCSPP]",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "RIN 2070–ZA16",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "Pesticide Tolerances; Implementing Registration Review Decisions for Certain Pesticides (Capric (Decanoic) Acid, Caprylic (Octanoic) Acid, and Pelargonic (Nonanoic) Acid)",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "AGENCY:",
+     "bold": true
+    },
+    {
+     "text": " Environmental Protection Agency (EPA)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "ACTION:",
+     "bold": true
+    },
+    {
+     "text": " Final rule."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "SUMMARY:",
+     "bold": true
+    },
+    {
+     "text": " The Environmental Protection Agency (EPA or Agency) is finalizing several tolerance actions under the Federal Food, Drug, and Cosmetic Act (FFDCA) that the Agency previously determined were necessary or appropriate during the registration review conducted under the Federal Insecticide, Fungicide, and Rodenticide Act (FIFRA). During registration review, EPA reviews all aspects of a pesticide case, including existing tolerances, to ensure that the pesticide continues to meet the standard for registration under FIFRA."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "DATES:",
+     "bold": true
+    },
+    {
+     "text": " This rule is effective on June 10, 2025. For actions in this final rule that lower or revoke existing tolerances, the expiration date for the existing tolerance is December 10, 2025. Objections and requests for hearings must be received on or before August 11, 2025, and must be filed in accordance with the instructions provided in 40 CFR part 178 (see also Unit I.D. of this document)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "ADDRESSES:",
+     "bold": true
+    },
+    {
+     "text": " The docket for this action, identified by docket identification (ID) number EPA–HQ–OPP–2023–0454, is available through "
+    },
+    {
+     "text": "https://www.regulations.gov",
+     "italic": true
+    },
+    {
+     "text": ". Additional information about dockets generally, along with instructions for visiting the docket in person, is available at "
+    },
+    {
+     "text": "https://www.epa.gov/dockets",
+     "italic": true
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "FOR FURTHER INFORMATION CONTACT:",
+     "bold": true
+    },
+    {
+     "text": " Anita Pease, Antimicrobials Division (7510M), Office of Pesticide Programs, Environmental Protection Agency, 1200 Pennsylvania Ave. NW, Washington, DC 20460–0001; telephone number: (202) 566–0736; email address: "
+    },
+    {
+     "text": "pease.anita@epa.gov",
+     "italic": true
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "SUPPLEMENTARY INFORMATION:",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "I. Executive Summary",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "A. Does this action apply to me?",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "You may be potentially affected by this action if you are an agricultural producer, food manufacturer, or pesticide manufacturer. The following list of North American Industrial Classification System (NAICS) codes is not intended to be exhaustive, but rather provides a guide to help readers determine whether this document might apply to them:"
+    }
+   ],
+   "indent": "first"
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Crop production (NAICS code 111)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Animal production (NAICS code 112)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Food manufacturing (NAICS code 311)."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Pesticide manufacturing (NAICS code 32532)."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "If you have any questions regarding the applicability of this proposed action to a particular entity, consult the person listed under "
+    },
+    {
+     "text": "FOR FURTHER INFORMATION CONTACT",
+     "bold": true
+    },
+    {
+     "text": "."
+    }
+   ],
+   "indent": "first"
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "B. What action is the Agency taking?",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "EPA is finalizing several tolerance actions that the Agency proposed in the "
+    },
+    {
+     "text": "Federal Register",
+     "bold": true
+    },
+    {
+     "text": " of September 6, 2024 (89 FR 72775 (FRL–12177–01–OCSPP)), because EPA previously determined these tolerance actions were necessary or appropriate during registration review of the pesticide active ingredients identified in Unit III. of this final rule. The tolerance actions for each pesticide active ingredient are described in Unit III. of the proposed rule and may include but are not limited to the following types of actions:"
+    }
+   ],
+   "indent": "first"
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Revising tolerance expressions;"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Modifying commodity definitions;"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Updating crop groupings;"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Removing expired tolerances;"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Revoking tolerances that are no longer needed; and"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Harmonizing tolerances with the Codex Alimentarius Commission (Codex) Maximum Residue Levels (MRLs)."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "As indicated in the proposed rule, this final rule may reflect the Agency’s 2019 adoption of the Organization of Economic Cooperation and Development (OECD) Rounding Class Practice. More information on the OECD Rounding Class Practice can be found at "
+    },
+    {
+     "text": "https://one.oecd.org/document/ENV/JM/MONO(2011)2/en/pdf",
+     "italic": true
+    },
+    {
+     "text": ". Where applicable, these adjustments for specific pesticides are reflected in the final regulatory text."
+    }
+   ],
+   "indent": "first"
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "C. What is EPA’s authority for taking this action?",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "FFDCA section 408(e), 21 U.S.C. 346a(e), authorizes EPA to establish, modify, or revoke tolerances or exemptions from the requirement of a tolerance on its own initiative. After providing a 60-day public comment period, EPA may finalize the rule. EPA provided a 60-day comment period and is now finalizing the rule."
+    }
+   ],
+   "indent": "first"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "FFDCA section 408(b)(2)(A)(i) allows EPA to establish a tolerance (the legal limit for a pesticide chemical residue in or on a food) only if EPA determines that the tolerance is ‘‘safe.’’ FFDCA section 408(b)(2)(A)(ii) defines ‘‘safe’’ to mean that ‘‘there is a reasonable certainty that no harm will result from aggregate exposure to the pesticide chemical residue, including all anticipated dietary exposures and all other exposures for which there is reliable information.’’ This includes exposure through drinking water and in residential settings but does not include occupational exposure. FFDCA section 408(b)(2)(C) requires EPA to give special consideration to exposure of infants and children to the pesticide chemical residue in establishing a tolerance and to ‘‘ensure that there is a reasonable certainty that no harm will result to infants and children from aggregate exposure to the pesticide chemical residue . . . .’’"
+    }
+   ],
+   "indent": "first"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Under FIFRA section 3(g), 7 U.S.C. 136a(g), EPA is required to periodically review all registered pesticides and determine if those pesticides continue to meet the standard for registration under FIFRA. To learn more about the registration review, please see Unit II.C. of the proposed rule ‘‘Pesticide Tolerances; Implementing Registration Review Decisions for Certain Pesticides (Capric (Decanoic) Acid, Caprylic (Octanoic) Acid, and Pelargonic (Nonanoic) Acid)’’ (89 FR 72775, September 6, 2024 (FRL–12177–01–OCSPP))."
+    }
+   ],
+   "indent": "first"
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "D. How can I file an objection or hearing request?",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Under FFDCA section 408(g), 21 U.S.C. 346a(g), any person may file an objection to any aspect of this regulation and may also request a hearing on those objections. If you fail to file an objection to the final rule within the time period specified in the final rule, you will have waived the right to raise any issues resolved in the final rule. You must file your objection or request a hearing on this regulation in accordance with the instructions provided in 40 CFR part 178. To ensure proper receipt by EPA, you must identify the chemical specific docket ID number as provided in Unit III. in the subject line on the first page of your submission. All objections and requests for a hearing must be in writing"
+    }
+   ],
+   "indent": "first"
+  }
+ ]
+}

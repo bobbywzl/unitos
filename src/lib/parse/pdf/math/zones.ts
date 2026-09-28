@@ -277,7 +277,10 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
       const x2 = Math.max(...zone.glyphs.map((g) => g.x + g.w));
       const low = Math.min(...zone.glyphs.map((g) => g.y));
       const high = Math.max(...zone.glyphs.map((g) => g.y));
-      const on = (g: Glyph) => g.x + g.w / 2 > x1 && g.x + g.w / 2 < x2 && g.y > low - zone.size * 0.6 && g.y < high + zone.size * 1.2;
+      // An em of the formula: KaTeX sets math a fifth larger than its text
+      // (a radical's bar over a 13 pt digit in 11 pt prose).
+      const em = Math.max(zone.size, ...zone.glyphs.map((g) => g.size));
+      const on = (g: Glyph) => g.x + g.w / 2 > x1 && g.x + g.w / 2 < x2 && g.y > low - em * 0.6 && g.y < high + em * 1.2;
       const extra = orphans.filter(on);
       for (const g of extra) orphans.splice(orphans.indexOf(g), 1);
       const glyphs = [...zone.glyphs, ...extra];
@@ -292,17 +295,15 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
           (r.dir === "h" &&
             r.x1 >= x1 - 1 &&
             r.x2 <= x2 + 1 &&
-            r.y1 > low - zone.size &&
-            r.y1 < high + zone.size &&
+            r.y1 > low - em &&
+            r.y1 < high + em &&
             glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2)) ||
-          (r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low - zone.size && r.y2 < high + zone.size * 1.2),
+          (r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low - em && r.y2 < high + em * 1.2),
       );
       // The paths drawn on it: a radical's sign, a picture of an accent or
       // a tall delimiter (KaTeX draws them so), which may start an em left
       // of the glyphs.
-      const paths = drawing.paths.filter(
-        (b) => !b.clip && b.x1 >= x1 - zone.size * 1.5 && b.x1 < x2 && b.y1 > low - zone.size * 2 && b.y2 < high + zone.size * 2,
-      );
+      const paths = drawing.paths.filter((b) => !b.clip && b.x1 >= x1 - em * 1.5 && b.x1 < x2 && b.y1 > low - em * 2 && b.y2 < high + em * 2);
       try {
         const { latex, check, atoms } = layoutLatex(glyphs, near, { display: false, size: zone.size }, paths);
         zone.latex = latex;
@@ -310,6 +311,7 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
         // another line took is missing from the LaTeX, which still passes
         // the check (synth-math-html: a numerator's x^k read as x).
         zone.ok = check.ok && !strayInside(atoms, new Set(glyphs), drawing.glyphs);
+        if (process.env.ZDEBUG && !zone.ok) console.error("FAIL", JSON.stringify(glyphs.map((g) => g.unicode).join("")), latex, JSON.stringify(check), "stray:", strayInside(atoms, new Set(glyphs), drawing.glyphs), "paths:", paths.length, "rules:", near.length);
         const last = atoms.filter((a) => a.size >= zone.size * 0.85).sort((a, b) => b.x2 - a.x2)[0];
         zone.open = last !== undefined && (last.cls === "rel" || last.cls === "bin" || last.cls === "punct");
       } catch {

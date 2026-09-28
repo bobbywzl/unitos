@@ -187,6 +187,7 @@ function isChart(b: Box, xs: number[], ys: number[], cells: number, drawing: Tab
 // (MMWR p. 21's "Vaccination status beneficiaries related TE person-days
 // …" cut Table 3's head from its body).
 const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
+const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 function isProseLine(line: Line, width: number): boolean {
   if (line.cells.length !== 1 || line.xEnd - line.x <= width * 0.6) return false;
   const apart = line.items.filter((it, k) => k > 0 && it.x - (line.items[k - 1].x + line.items[k - 1].w) > line.size * 0.7).length;
@@ -701,11 +702,13 @@ function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: n
   lines.forEach((line, k) => {
     const prev = lines[k - 1];
     const before = prev?.text.trim() ?? "";
+    // Chinese wraps anywhere, a closing quote never opening a line: a
+    // line short of the edge goes on unless a sentence ends it.
     const wraps =
       prev !== undefined &&
       (prev.xEnd - prev.x + prev.size * 0.28 + line.firstWordWidth > right - left - 1 ||
         /[\p{L}\p{N}]-$/u.test(before) ||
-        (!/[.!?:;]["'”’)]?$/.test(before) && /^\p{Ll}/u.test(line.text)));
+        (!/[.!?:;。！？：；]["'”’)]?$/.test(before) && (/^\p{Ll}/u.test(line.text) || CJK_START_RE.test(line.text))));
     if (wraps) groups[groups.length - 1].push(line);
     else groups.push([line]);
   });
