@@ -151,8 +151,8 @@ function scanNumber(label: string): number | null {
     gap, each opening with its number, and the numbers count: the first is
     1 (a chapter's first), or the one after the page before's last, or two
     in a row. A line that opens with another number is a note's line ("9
-    or 10, 1945" inside note 2). All five pages' notes read as lists and
-    paragraphs, their numbers lost. */
+    or 10, 1945" inside note 2). The book's notes read as numbered lists
+    and paragraphs of the body, their numbers lost. */
 function cutScanNotes(column: Line[], end: number, continuing: boolean, counted: number): { kept: Line[]; cuts: Cut[] } | null {
   const gaps = column
     .slice(1, end)
