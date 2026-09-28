@@ -16,7 +16,7 @@
 //   npx tsx scripts/eval/visualize/run.ts score --round r0 --variants base[,cand]
 //   npx tsx scripts/eval/visualize/run.ts batches --round r0 --variant base --file prompt.md --size 5
 import "../env";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseJson } from "@/lib/derive/json";
 import {
@@ -41,6 +41,7 @@ const flag = (name: string): string | null => {
 };
 const round = flag("round") ?? "r0";
 const casesWanted = flag("cases")?.split(",").filter(Boolean) ?? null;
+const differingOnly = args.includes("--differing");
 
 const SYSTEM = "=====[SYSTEM]=====";
 const USER = "=====[USER]=====";
@@ -49,8 +50,11 @@ function cases(): VizCase[] {
   return VIZ_CASES.filter((c) => !casesWanted || casesWanted.includes(c.id));
 }
 
+// A variant is a directory of this round, or "<round>/<variant>" for one of
+// another round: a renderer change is judged against the round before it
+// with the same answers.
 function dirOf(variant: string, id: string): string {
-  return join(VIZ_ROOT, round, variant, id);
+  return variant.includes("/") ? join(VIZ_ROOT, variant, id) : join(VIZ_ROOT, round, variant, id);
 }
 
 function readText(path: string): string | null {
@@ -62,7 +66,7 @@ function writeJson(path: string, value: unknown): void {
 }
 
 // ── prepare: the draw prompt, as the route sends it ────────────────────────
-function prepare(variantId: string): void {
+function prepare(variantId: string, dirName: string): void {
   const variant = variantOf(variantId);
   const fixtures = loadFixtures();
   let n = 0;
@@ -70,7 +74,7 @@ function prepare(variantId: string): void {
     const f = fixtures.get(c.fixture);
     if (!f) throw new Error(`fixture ${c.fixture} is missing`);
     const ctx = promptCtx(f, { profile: c.profile, lang: c.lang, selection: c.selection });
-    const dir = dirOf(variantId, c.id);
+    const dir = dirOf(dirName, c.id);
     mkdirSync(dir, { recursive: true });
     const system = fixturePrefix(f);
     const user = variant.draw(ctx);
@@ -78,7 +82,7 @@ function prepare(variantId: string): void {
     writeJson(join(dir, "case.json"), { ...c, title: f.title, passage: ctx.anchoredText, variant: variantId, round });
     n++;
   }
-  console.log(`prepared ${n} cases in ${join(VIZ_ROOT, round, variantId)}`);
+  console.log(`prepared ${n} cases in ${join(VIZ_ROOT, round, dirName)}`);
 }
 
 type Stage = {
@@ -89,12 +93,12 @@ type Stage = {
 };
 
 // ── draw: validate and render the draw pass; write the check prompt ────────
-async function draw(variantId: string): Promise<void> {
+async function draw(variantId: string, dirName: string): Promise<void> {
   const variant = variantOf(variantId);
   const browser = await openBrowser();
   try {
     for (const c of cases()) {
-      const dir = dirOf(variantId, c.id);
+      const dir = dirOf(dirName, c.id);
       const raw = readText(join(dir, "draw.json"));
       if (raw === null) {
         console.log(`${c.id}: no draw.json`);
@@ -110,11 +114,17 @@ async function draw(variantId: string): Promise<void> {
         else {
           stage = { status: "drawn", visual: parsed.visual };
           writeFileSync(join(dir, "draw.svg"), rendered.svg);
-          const lint = await rasterize(browser, rendered.svg, { png: join(dir, "draw.png") }, { modelDrawn: modelDrawn(parsed.visual) });
+          const lint = await rasterize(browser, rendered.svg, { png: join(dir, "draw.png"), frames: join(dir, "draw-frames.png") }, { modelDrawn: modelDrawn(parsed.visual) });
           writeJson(join(dir, "draw-lint.json"), lint);
           if (variant.check) {
             const prompt = readFileSync(join(dir, "prompt.md"), "utf8");
             const simulation = parsed.visual.kind === "simulation";
+            const moving = existsSync(join(dir, "draw-frames.png"));
+            // What the check sees besides its prompt (Variant.checkSees): the
+            // SVG source as production does, or the picture as drawn — the
+            // still, and four moments of a picture that moves — with or
+            // without the source.
+            const seesSvg = variant.checkSees === "svg" || (variant.checkSees === "both" && modelDrawn(parsed.visual));
             const checkText = variant.check({
               lang: c.lang,
               passage: JSON.parse(readFileSync(join(dir, "case.json"), "utf8")).passage,
@@ -125,10 +135,14 @@ async function draw(variantId: string): Promise<void> {
                 : parsed.visual.simulation
                   ? JSON.stringify(parsed.visual.simulation)
                   : null,
-              svg: simulation || variant.checkSees === "png" ? null : rendered.svg,
+              svg: simulation || !seesSvg ? null : rendered.svg,
               findings: lintLines(lint),
+              moving,
             });
-            const image = variant.checkSees !== "svg" ? [`=====[IMAGE: ${join(dir, "draw.png")}]=====`] : [];
+            const image =
+              variant.checkSees !== "svg"
+                ? [`=====[IMAGE: ${join(dir, "draw.png")}]=====`, ...(moving ? [`=====[IMAGE: ${join(dir, "draw-frames.png")}]=====`] : [])]
+                : [];
             writeFileSync(join(dir, "check-prompt.md"), [prompt.trimEnd(), "", USER, checkText, ...image, ""].join("\n"));
           }
         }
@@ -170,6 +184,7 @@ function tokens(text: string): number {
 
 // ── final: apply the check, render what stands, draw it, lint it ───────────
 async function final(variantId: string): Promise<void> {
+  // variantId here is the directory: the check's answer is already in it.
   const browser = await openBrowser();
   try {
     for (const c of cases()) {
@@ -273,6 +288,17 @@ function judge(variantIds: string[]): void {
     const f = fixtures.get(c.fixture)!;
     const present = variantIds.filter((v) => existsSync(join(dirOf(v, c.id), "result.json")));
     if (present.length === 0) continue;
+    // --differing: only the cases where the variants' outcomes differ; the
+    // same picture twice needs no judge.
+    if (differingOnly && present.length > 1) {
+      const sig = (v: string) => {
+        const d = dirOf(v, c.id);
+        const r = JSON.parse(readFileSync(join(d, "result.json"), "utf8")) as Result;
+        return `${r.outcome}|${r.caption ?? ""}|${existsSync(join(d, "final.svg")) ? readFileSync(join(d, "final.svg"), "utf8") : r.reason ?? ""}`;
+      };
+      const first = sig(present[0]);
+      if (present.every((v) => sig(v) === first)) continue;
+    }
     const order = shuffled(present, `${round}:${c.id}`);
     const jdir = join(VIZ_ROOT, round, "judge", c.id);
     mkdirSync(jdir, { recursive: true });
@@ -283,6 +309,15 @@ function judge(variantIds: string[]): void {
       "You see the picture(s) before you know the passage, as a reader flipping to a card would. For each candidate below, open its image file(s) with the Read tool and look at it for a moment. Then write, in one sentence each, what you take the picture's point to be. Do not open part B until takeaway.json is written.",
       "",
     ];
+    // The pictures are copied into the packet under the candidate's letter,
+    // so no path names the variant: the judge is blind to which is which.
+    const shown = (label: string, v: string, file: string): string | null => {
+      const from = join(dirOf(v, c.id), file);
+      if (!existsSync(from)) return null;
+      const to = join(jdir, `${label}-${file}`);
+      copyFileSync(from, to);
+      return to;
+    };
     for (const [i, v] of order.entries()) {
       const label = LABELS[i];
       map[label] = v;
@@ -291,8 +326,9 @@ function judge(variantIds: string[]): void {
       if (r.outcome !== "drawn") partA.push("No picture: the tool declined or failed. Write \"(no picture)\".");
       else {
         partA.push(`Kind: ${r.kind}`);
-        partA.push(`Image as it shows in the card (320 px wide, drawn at 2x): ${join(dirOf(v, c.id), "final.png")}`);
-        if (existsSync(join(dirOf(v, c.id), "frames.png"))) partA.push(`It moves: four moments of its 8-second loop: ${join(dirOf(v, c.id), "frames.png")}`);
+        partA.push(`Image as it shows in the card (320 px wide, drawn at 2x): ${shown(label, v, "final.png")}`);
+        const frames = shown(label, v, "frames.png");
+        if (frames) partA.push(`It moves: four moments of its 8-second loop: ${frames}`);
         partA.push(`Caption under it: ${r.caption}`);
       }
       partA.push("");
@@ -331,8 +367,8 @@ function judge(variantIds: string[]): void {
       if (r.outcome === "drawn") {
         partB.push(`Kind: ${r.kind}. Caption: ${r.caption}`);
         partB.push(`The tool's own judgment: ${r.structure ?? "(none)"}`);
-        partB.push(`Images: ${join(dirOf(v, c.id), "final.png")}${existsSync(join(dirOf(v, c.id), "frames.png")) ? `, ${join(dirOf(v, c.id), "frames.png")}` : ""}`);
-        partB.push(`SVG source, if you need to read a detail: ${join(dirOf(v, c.id), "final.svg")}`);
+        partB.push(`Images: ${join(jdir, `${label}-final.png`)}${existsSync(join(jdir, `${label}-frames.png`)) ? `, ${join(jdir, `${label}-frames.png`)}` : ""}`);
+        partB.push(`SVG source, if you need to read a detail: ${shown(label, v, "final.svg")}`);
         partB.push(`Mechanical findings: ${r.issues.length ? r.issues.join(" ") : "none"}`);
       } else if (r.outcome === "declined") {
         partB.push(`Declined${r.declinedBy === "check" ? " (by the check pass, after drawing)" : ""}. Reason shown to the reader: ${r.reason}`);
@@ -440,10 +476,13 @@ function batches(variantId: string, file: string, size: number): void {
 
 async function main(): Promise<void> {
   const variant = flag("variant") ?? "base";
+  // --dir: the directory the run writes, when it is not the variant's name
+  // (a renderer change runs the same variant twice).
+  const dirName = flag("dir") ?? variant;
   const variants = (flag("variants") ?? variant).split(",").filter(Boolean);
-  if (command === "prepare") prepare(variant);
-  else if (command === "draw") await draw(variant);
-  else if (command === "final") await final(variant);
+  if (command === "prepare") prepare(variant, dirName);
+  else if (command === "draw") await draw(variant, dirName);
+  else if (command === "final") await final(dirName);
   else if (command === "judge") judge(variants);
   else if (command === "score") score(variants);
   else if (command === "batches") batches(variant, flag("file") ?? "prompt.md", Number(flag("size") ?? "5"));

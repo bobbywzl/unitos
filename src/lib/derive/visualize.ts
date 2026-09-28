@@ -147,7 +147,10 @@ function wrap(text: string, size: number, bold: boolean, maxWidth: number, measu
     if (measure(candidate, size, bold) <= maxWidth) return candidate;
     if (line) lines.push(line);
     if (measure(word, size, bold) <= maxWidth) return word;
-    // Too wide alone: cut by characters.
+    // Too wide alone: a word in a spaced script stays whole — its box widens
+    // to hold it — and a run of CJK, which has no spaces, is cut by
+    // characters.
+    if (!/[\u2e80-\u9fff\uf900-\ufaff]/.test(word)) return word;
     let run = "";
     for (const ch of word) {
       if (measure(run + ch, size, bold) > maxWidth && run) {
@@ -171,16 +174,19 @@ function wrap(text: string, size: number, bold: boolean, maxWidth: number, measu
 // ── Diagram layout ─────────────────────────────────────────────────────────
 
 const LABEL_SIZE = 15;
-const DETAIL_SIZE = 12;
+const DETAIL_SIZE = 13;
 const LABEL_LINE = 19;
-const DETAIL_LINE = 15;
-const EDGE_SIZE = 12;
+const DETAIL_LINE = 16;
+const EDGE_SIZE = 13;
+const EDGE_LINE = 16;
 const PAD_X = 14;
 const PAD_Y = 10;
 const MAX_TEXT = 190;
 const MIN_WIDTH = 90;
 const GAP = 28; // between nodes of one rank
 const RANK_GAP = 84; // between ranks
+const LOOP_OUT = 34; // how far a node's loop to itself reaches out of its box
+const LABEL_CLEAR = 18; // between an edge's label and the boxes it joins: an arrowhead's length
 const MARGIN = 24;
 const BACK_LIFT = 64; // how far a back edge arcs outside the nodes
 const WAYPOINT = 20; // the lane one long edge takes in a rank it passes
@@ -274,24 +280,44 @@ function splinePath(points: Point[], right: boolean): string {
   return parts.join(" ");
 }
 
-/** The diagram as SVG. The model picks the direction; when that reads as a
-    strip too wide for the card (a long chain laid out left to right), the
-    other direction stands in, so the picture is legible at card width. */
+// The card shows a picture 320 px wide, so a drawing W units wide draws its
+// text at 320 / W of its size: past FIT_WIDTH a detail line (13) falls under
+// 9 px. A drawing taller than TALL_AT_CARD px at the card's width is a long
+// scroll in the card, so a narrower layout wins only up to that height.
+const CARD_PX = 320;
+const FIT_WIDTH = 460;
+const TALL_AT_CARD = 1100;
+// How wide a box's text may run before it wraps: the widest reads best, the
+// narrower ones let a crowded rank fit the card.
+const TEXT_WIDTHS = [MAX_TEXT, 150, 116];
+
+/** The diagram as SVG. The model picks the direction; the layout is the one
+    that keeps the text legible at the card's width: the model's direction
+    at the widest text first, then narrower text, then the other direction —
+    the first that fits the card wins, else the narrowest that is not a long
+    scroll. */
 export async function renderDiagram(diagram: Diagram): Promise<string> {
   const measure = await measurer();
   const right = diagram.direction === "right";
-  let drawn = drawDiagram(diagram, right, measure);
-  if (drawn.width > drawn.height * 1.6) {
-    const flipped = drawDiagram(diagram, !right, measure);
-    if (flipped.width / flipped.height < drawn.width / drawn.height) drawn = flipped;
+  const tries: { svg: string; width: number; height: number }[] = [];
+  for (const dir of [right, !right]) {
+    for (const maxText of TEXT_WIDTHS) {
+      const drawn = drawDiagram(diagram, dir, measure, maxText);
+      if (drawn.width <= FIT_WIDTH) return drawn.svg;
+      tries.push(drawn);
+    }
   }
-  return drawn.svg;
+  const tallAtCard = (d: { width: number; height: number }) => (d.height * CARD_PX) / d.width;
+  const fits = tries.filter((d) => tallAtCard(d) <= TALL_AT_CARD);
+  const pool = fits.length > 0 ? fits : tries;
+  return pool.reduce((best, d) => (d.width < best.width ? d : best)).svg;
 }
 
 function drawDiagram(
   diagram: Diagram,
   right: boolean,
   measure: Measure,
+  maxText: number = MAX_TEXT,
 ): { svg: string; width: number; height: number } {
   const seen = new Set<string>();
   const nodes = diagram.nodes.filter((n) => {
@@ -311,10 +337,23 @@ function drawDiagram(
     })
     .map((e) => ({ from: e.from, to: e.to, label: e.label?.trim() || null, back: false }));
 
+  // An edge from a node to itself — a state that stays or repeats — draws as
+  // a loop beside its box, with its label beyond the loop; its box keeps the
+  // room for both in its rank.
+  const loopSeen = new Set<string>();
+  const loops = diagram.edges
+    .filter((e) => e.from === e.to && seen.has(e.from) && !loopSeen.has(e.from) && loopSeen.add(e.from))
+    .map((e) => {
+      const lines = e.label?.trim() ? wrap(e.label.trim(), EDGE_SIZE, false, 120, measure) : [];
+      const w = lines.length ? Math.max(...lines.map((l) => measure(l, EDGE_SIZE, false))) + 10 : 0;
+      return { id: e.from, lines, w, h: lines.length ? lines.length * EDGE_LINE + 4 : 0 };
+    });
+  const loopOf = new Map(loops.map((l) => [l.id, l]));
+
   const rank = layer(ids, edges);
   const boxes: Box[] = nodes.map((n) => {
-    const label = wrap(n.label, LABEL_SIZE, true, MAX_TEXT, measure);
-    const detail = n.detail?.trim() ? wrap(n.detail, DETAIL_SIZE, false, MAX_TEXT, measure) : [];
+    const label = wrap(n.label, LABEL_SIZE, true, maxText, measure);
+    const detail = n.detail?.trim() ? wrap(n.detail, DETAIL_SIZE, false, maxText, measure) : [];
     const textW = Math.max(
       ...label.map((l) => measure(l, LABEL_SIZE, true)),
       ...detail.map((l) => measure(l, DETAIL_SIZE, false)),
@@ -346,7 +385,7 @@ function drawDiagram(
     chip.set(e, {
       lines,
       w: Math.max(...lines.map((l) => measure(l, EDGE_SIZE, false))) + 10,
-      h: lines.length * 15 + 4,
+      h: lines.length * EDGE_LINE + 4,
     });
   }
 
@@ -460,12 +499,36 @@ function drawDiagram(
   const along = (b: Box) => (right ? b.w : b.h);
   const across = (b: Box) => (right ? b.h : b.w);
   const rankSize = ranks.map((r) => Math.max(0, ...r.map(along)));
-  const rankSpan = ranks.map((r) => r.reduce((s, b) => s + across(b), 0) + GAP * (r.length - 1));
+  // The room a box's loop takes across the rank: the loop, then its label.
+  const loopRoom = (b: Box) => {
+    const l = loopOf.get(b.id);
+    return l ? LOOP_OUT + (right ? l.h : l.w) + 6 : 0;
+  };
+  const rankSpan = ranks.map((r) => r.reduce((s, b) => s + across(b) + loopRoom(b), 0) + GAP * (r.length - 1));
   const maxSpan = Math.max(...rankSpan);
+  // The gap after a rank holds the widest label of the edges that cross it
+  // without a waypoint, with room for the arrow on either side, so a label
+  // never covers an arrowhead or a box.
+  // Where two labeled edges leave one box or enter one, their labels stagger
+  // (below), so that gap holds two labels end to end.
+  const gapAfter = ranks.map(() => RANK_GAP);
+  const direct = chains.filter((c) => chip.has(c.edge) && !c.edge.back && c.ids.length === 2);
+  for (const c of direct) {
+    const box = chip.get(c.edge)!;
+    const r = rank.get(c.edge.from)!;
+    const shared = direct.some(
+      (o) => o !== c && (o.edge.from === c.edge.from || o.edge.to === c.edge.to),
+    );
+    const size = right ? box.w : box.h;
+    gapAfter[r] = Math.max(gapAfter[r], (shared ? size * 2.2 : size) + 2 * LABEL_CLEAR);
+  }
   let alongAt = MARGIN;
   ranks.forEach((r, i) => {
     let acrossAt = MARGIN + (maxSpan - rankSpan[i]) / 2;
     for (const b of r) {
+      // Across a rank that runs down the page (direction right), the loop
+      // sits above its box; across one that runs along it, to the right.
+      if (right) acrossAt += loopRoom(b);
       const centered = alongAt + (rankSize[i] - along(b)) / 2;
       if (right) {
         b.x = centered;
@@ -474,9 +537,9 @@ function drawDiagram(
         b.y = centered;
         b.x = acrossAt;
       }
-      acrossAt += across(b) + GAP;
+      acrossAt += across(b) + GAP + (right ? 0 : loopRoom(b));
     }
-    alongAt += rankSize[i] + RANK_GAP;
+    alongAt += rankSize[i] + gapAfter[i];
   });
 
   // The viewBox is what the drawing actually covers, so nothing is cut: every
@@ -498,6 +561,8 @@ function drawDiagram(
   // over the top (or the left) so it never crosses the nodes it passes.
   const paths: string[] = [];
   const labels: string[] = [];
+  // The labels placed so far, by their centers, for the ones still to come.
+  const placed: { x: number; y: number; w: number; h: number }[] = [];
   const center = (b: Box): Point => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
   // Back edges arc concentrically, each one deeper than the last, so two that
   // run the same way stay two lines and not one thick one.
@@ -519,10 +584,24 @@ function drawDiagram(
         const [p1, p2] = points;
         const c1 = right ? { x: p1.x + RANK_GAP / 2, y: p1.y } : { x: p1.x, y: p1.y + RANK_GAP / 2 };
         const c2 = right ? { x: p2.x - RANK_GAP / 2, y: p2.y } : { x: p2.x, y: p2.y - RANK_GAP / 2 };
-        mid = {
-          x: (p1.x + 3 * c1.x + 3 * c2.x + p2.x) / 8,
-          y: (p1.y + 3 * c1.y + 3 * c2.y + p2.y) / 8,
+        const at = (t: number): Point => {
+          const u = 1 - t;
+          return {
+            x: u * u * u * p1.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * p2.x,
+            y: u * u * u * p1.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * p2.y,
+          };
         };
+        mid = at(0.5);
+        // Two labels on one spot — edges fanning out of one box or into one —
+        // slide along their own curves until they clear each other.
+        const box = chip.get(e);
+        if (box) {
+          const hits = (p: Point) =>
+            placed.some(
+              (r) => Math.abs(r.x - p.x) < (r.w + box.w) / 2 + 2 && Math.abs(r.y - p.y) < (r.h + box.h) / 2 + 2,
+            );
+          if (hits(mid)) mid = [0.66, 0.34, 0.78, 0.22].map(at).find((p) => !hits(p)) ?? mid;
+        }
       } else {
         // On a waypoint: the one place along a long edge that is clear.
         mid = points[Math.floor(points.length / 2)];
@@ -533,10 +612,17 @@ function drawDiagram(
       const x2 = right ? b.x + b.w / 2 : b.x;
       const y2 = right ? b.y : b.y + b.h / 2;
       const deep = BACK_LIFT * (1 + backs++ * 0.45);
-      const c1x = right ? x1 : x1 - deep;
-      const c1y = right ? y1 - deep : y1;
-      const c2x = right ? x2 : x2 - deep;
-      const c2y = right ? y2 - deep : y2;
+      // The arc clears every box of the ranks it spans, not only its ends:
+      // it lifts from the outermost edge among them.
+      const lo = Math.min(a.rank, b.rank);
+      const hi = Math.max(a.rank, b.rank);
+      const spanned = boxes.filter((o) => !o.waypoint && o.rank >= lo && o.rank <= hi);
+      const edgeX = Math.min(...spanned.map((o) => o.x));
+      const edgeY = Math.min(...spanned.map((o) => o.y));
+      const c1x = right ? x1 : Math.min(x1, edgeX) - deep;
+      const c1y = right ? Math.min(y1, edgeY) - deep : y1;
+      const c2x = right ? x2 : Math.min(x2, edgeX) - deep;
+      const c2y = right ? Math.min(y2, edgeY) - deep : y2;
       d = `M${x1},${y1} C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`;
       mid = { x: (x1 + 3 * c1x + 3 * c2x + x2) / 8, y: (y1 + 3 * c1y + 3 * c2y + y2) / 8 };
       // The arc reaches past the nodes on the lift side; a curve stays inside
@@ -557,11 +643,46 @@ function drawDiagram(
         else mid.x -= lw / 2 + 4;
       }
       cover(mid.x - lw / 2, mid.y - lh / 2, lw, lh);
+      placed.push({ x: mid.x, y: mid.y, w: lw, h: lh });
       labels.push(
         `<rect x="${(mid.x - lw / 2).toFixed(1)}" y="${(mid.y - lh / 2).toFixed(1)}" width="${lw.toFixed(1)}" height="${lh}" rx="4" fill="${PAPER}" stroke="${CHIP_LINE}" stroke-width="1"/>`,
         ...lines.map(
           (l, i) =>
-            `<text x="${mid.x.toFixed(1)}" y="${(mid.y - lh / 2 + 2 + (i + 1) * 15 - 4).toFixed(1)}" font-size="${EDGE_SIZE}" fill="${MUTED}" text-anchor="middle" font-family="system-ui, sans-serif">${escapeXml(l)}</text>`,
+            `<text x="${mid.x.toFixed(1)}" y="${(mid.y - lh / 2 + 2 + (i + 1) * EDGE_LINE - 4).toFixed(1)}" font-size="${EDGE_SIZE}" fill="${MUTED}" text-anchor="middle" font-family="system-ui, sans-serif">${escapeXml(l)}</text>`,
+        ),
+      );
+    }
+  }
+
+  for (const l of loops) {
+    const b = byId.get(l.id)!;
+    // Out of one side of the box and back into it, the arrow on the return.
+    const [p1, c1, c2, p2, labelAt] = right
+      ? [
+          { x: b.x + b.w * 0.35, y: b.y },
+          { x: b.x + b.w * 0.3, y: b.y - LOOP_OUT },
+          { x: b.x + b.w * 0.7, y: b.y - LOOP_OUT },
+          { x: b.x + b.w * 0.65, y: b.y },
+          { x: b.x + b.w / 2, y: b.y - LOOP_OUT - 2 - l.h / 2 },
+        ]
+      : [
+          { x: b.x + b.w, y: b.y + b.h * 0.3 },
+          { x: b.x + b.w + LOOP_OUT, y: b.y + b.h * 0.25 },
+          { x: b.x + b.w + LOOP_OUT, y: b.y + b.h * 0.75 },
+          { x: b.x + b.w, y: b.y + b.h * 0.7 },
+          { x: b.x + b.w + LOOP_OUT + 4 + l.w / 2, y: b.y + b.h / 2 },
+        ];
+    paths.push(
+      `<path d="M${at(p1)} C${at(c1)} ${at(c2)} ${at(p2)}" fill="none" stroke="${INK}" stroke-width="2" marker-end="url(#arrow)"/>`,
+    );
+    cover(Math.min(c1.x, c2.x, p1.x), Math.min(c1.y, c2.y, p1.y), Math.abs(c2.x - p1.x), Math.abs(c2.y - p1.y));
+    if (l.lines.length) {
+      cover(labelAt.x - l.w / 2, labelAt.y - l.h / 2, l.w, l.h);
+      labels.push(
+        `<rect x="${(labelAt.x - l.w / 2).toFixed(1)}" y="${(labelAt.y - l.h / 2).toFixed(1)}" width="${l.w.toFixed(1)}" height="${l.h}" rx="4" fill="${PAPER}" stroke="${CHIP_LINE}" stroke-width="1"/>`,
+        ...l.lines.map(
+          (line, i) =>
+            `<text x="${labelAt.x.toFixed(1)}" y="${(labelAt.y - l.h / 2 + 2 + (i + 1) * EDGE_LINE - 4).toFixed(1)}" font-size="${EDGE_SIZE}" fill="${MUTED}" text-anchor="middle" font-family="system-ui, sans-serif">${escapeXml(line)}</text>`,
         ),
       );
     }
