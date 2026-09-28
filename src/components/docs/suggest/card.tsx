@@ -113,17 +113,20 @@ function describe(s: Suggestion, t: TFunc): ReactNode[] {
     const { type, attrName, previousValue, newValue } = mark.attrs;
     return type === "mark" ? markName(previousValue as MarkJson, newValue as MarkJson, t) : blockName(node, attrName, newValue, t);
   });
+  // Whole blocks with no words (an empty line) read as "¶".
+  const side = (pieces: (string | PMNode)[], blocks: [number, number][]) => (pieces.length || !blocks.length ? pieces : ["¶"]);
+  const [plus, minus] = [side(s.added, s.blocks.added), side(s.removed, s.blocks.removed)];
   if (s.same === "move") {
     lines.push(<><b>{t("docsSuggest.move")}</b> <i>{words(s.added, t)}</i></>);
   } else if (s.same) {
     formats.unshift(listName(s.same, t));
-  } else if (s.added.length || s.removed.length) {
-    const [added, removed] = [s.added.length > 0, s.removed.length > 0];
+  } else if (plus.length || minus.length) {
+    const [added, removed] = [plus.length > 0, minus.length > 0];
     lines.push(
       <>
         <b>{t(added && removed ? "docsSuggest.replace" : added ? "docsSuggest.add" : "docsSuggest.delete")}</b>{" "}
-        <i>{words(removed ? s.removed : s.added, t)}</i>
-        {added && removed && <> {t("docsSuggest.replaceWith")} <i>{words(s.added, t)}</i></>}
+        <i>{words(removed ? minus : plus, t)}</i>
+        {added && removed && <> {t("docsSuggest.replaceWith")} <i>{words(plus, t)}</i></>}
       </>,
     );
   }
