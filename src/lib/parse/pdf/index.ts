@@ -435,7 +435,10 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     segments.splice(1, 1);
   }
 
-  assignHeadingLevels(segments, bodySize);
+  // A slide deck: every page wider than tall, two or more of them (a slide
+  // program's 960 × 540, beamer's 364 × 272).
+  const slides = pageWidths.length >= 2 && pageWidths.every((w, p) => w > pageHeights[p]);
+  assignHeadingLevels(segments, bodySize, slides);
 
   // Title: the biggest heading on the first page.
   let title: string | null = null;

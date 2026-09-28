@@ -49,7 +49,7 @@ export function isCaption(text: string, runs: Run[] | undefined): boolean {
 // 2302.12627 p18, 2410.04586 p9, 2506.08209 p12, Grinstead–Snell p16: their
 // words were in no block). A letter alone is the panel's label, which the
 // figure's caption names.
-const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=.*\p{L}).{3,}/su;
+const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=[^]*\p{L})[^]{3,}/u;
 const NOTE_RE = /^(?:notes?|sources?)\s*[:.]\s+\S/i;
 const isSubCaption = (text: string) => PANEL_RE.test(text.trim()) || NOTE_RE.test(text.trim());
 
@@ -65,7 +65,7 @@ function readingOrder(a: CaptionPart, b: CaptionPart): number {
 // A figure's caption with its panels' captions, in reading order.
 function withPanels(figure: Segment, panels: CaptionPart[]) {
   const own: CaptionPart = { text: figure.text, runs: figure.runs ?? [], box: figure.captionBox ?? figure.box! };
-  const parts = [...panels, own].sort(readingOrder);
+  const parts = [...panels, own].filter((p) => p.text.trim() !== "").sort(readingOrder);
   let text = "";
   const runs: Run[] = [];
   for (const part of parts) {
@@ -303,18 +303,25 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
 
   // Captions: the short lines right under a graphic, inside its width, set
   // apart from the text (smaller, italic, or centered under it) — a photo
-  // grid's names, a newsletter's caption. A "Figure N" caption is the
-  // captioned figures' own (attachFigureRegions).
+  // grid's names, a newsletter's caption, a panel's "(a) …". A line that
+  // opens with a float's label, with a stop or none ("Figure 2:", "Figure 2
+  // Mapped …", "Table 1"), is the captioned figures' own (attachFigureRegions)
+  // or a table's. Inside its width: within an em of its edges, or 60% of the
+  // line under it — a circuit's caption starts under its wire labels, left of
+  // its drawing (arXiv 2506.06752 p4).
   const taken = new Set<TextRun>();
+  const within = (r: TextRun, graphic: Box) =>
+    (r.box.x1 >= graphic.x1 - r.size && r.box.x2 <= graphic.x2 + r.size) ||
+    Math.min(r.box.x2, graphic.x2) - Math.max(r.box.x1, graphic.x1) >= (r.box.x2 - r.box.x1) * 0.6;
   const captionOf = (graphic: Box): TextRun[] => {
     const under = runs
-      .filter((r) => !taken.has(r) && r.box.x1 >= graphic.x1 - r.size && r.box.x2 <= graphic.x2 + r.size && r.box.y2 <= graphic.y1 + r.size * 0.5)
+      .filter((r) => !taken.has(r) && within(r, graphic) && r.box.y2 <= graphic.y1 + r.size * 0.5)
       .sort((a, b) => b.box.y2 - a.box.y2);
     const out: TextRun[] = [];
     let bottom = graphic.y1;
     for (const r of under) {
       if (bottom - r.box.y2 > r.size * (out.length === 0 ? 1.2 : 0.8)) break;
-      if (out.length >= 3 || r.size >= textSize * 1.3 || (out.length === 0 && CAPTION_RE.test(r.items.map((i) => i.str).join(" ")))) break;
+      if (out.length >= 3 || r.size >= textSize * 1.3 || LABEL_START_RE.test(r.items.map((i) => i.str).join(" "))) break;
       out.push(r);
       bottom = r.box.y1;
     }
@@ -422,6 +429,30 @@ function overlapsDrawing(box: Box, drawing: Drawn): boolean {
   );
 }
 
+// The box stands under a drawing: across its width, the nearest drawing
+// over it is nearer than the nearest drawing under it. A panel's caption
+// stands under its panel; a panel's title stands over it (arXiv 2609.29669
+// p7: "(a) Benchmarks per year" over its bars is the figure's own words).
+function underDrawing(box: Box, drawing: Drawn): boolean {
+  let over = Infinity;
+  let under = Infinity;
+  for (const b of [...drawing.paths, ...drawing.images]) {
+    if (("clip" in b && b.clip) || b.x2 <= box.x1 || b.x1 >= box.x2) continue;
+    if (b.y1 >= box.y2 - 1) over = Math.min(over, b.y1 - box.y2);
+    else if (b.y2 <= box.y1 + 1) under = Math.min(under, box.y1 - b.y2);
+  }
+  return over < under;
+}
+
+// A caption's lines as one line of text, and where they sit.
+function captionPart(lines: Line[]): CaptionPart {
+  const { text, runs } = joinGroup(lines, true);
+  const box = lines
+    .map((l) => ({ x1: l.x, x2: l.xEnd, y1: l.yMin - l.size * 0.3, y2: l.yMax + l.size * 0.85 }))
+    .reduce((a, b) => unionBox(a, b));
+  return { text: text.replace(/\n/g, " "), runs, box };
+}
+
 export function attachFigureRegions(
   segments: Segment[],
   lines: Line[],
@@ -465,13 +496,23 @@ export function attachFigureRegions(
   // Segments a figure took below its caption: debris, and the caption's
   // second paragraph.
   const consumed = new Set<Segment>();
+  // Each figure's panel captions and notes (Panel captions above), joined to
+  // its caption once every graphic has its figure. Among the words a figure
+  // takes, a panel's caption opens with its letter or a note's lead and
+  // stands under a drawing.
+  const panels = new Map<Segment, CaptionPart[]>();
+  const addPanel = (figure: Segment, part: CaptionPart) => panels.set(figure, [...(panels.get(figure) ?? []), part]);
+  const panelOf = (s: Segment): CaptionPart | null =>
+    s.box && (s.type === "PARAGRAPH" || s.type === "LIST" || s.type === "HEADING") && isSubCaption(s.text) && underDrawing(s.box, drawing)
+      ? { text: s.text.replace(/\n/g, " "), runs: s.runs ?? [], box: s.box }
+      : null;
   for (let c = 0; c < withMath.length; c++) {
     const cap = withMath[c];
     if (consumed.has(cap)) continue;
     if (
       cap.type !== "PARAGRAPH" ||
       !cap.box ||
-      !CAPTION_RE.test(cap.text) ||
+      !isCaption(cap.text, cap.runs) ||
       TABLE_CAPTION_RE.test(cap.text)
     ) {
       out.push(cap);
@@ -537,8 +578,10 @@ export function attachFigureRegions(
     let box: Box | null = null;
     const drawnAbove = drawingIn(drawing, cap.box.y2, top, x1, x2);
     const next = withMath.slice(c + 1).filter((s) => inColumn(s) && !consumed.has(s));
+    const taken: Segment[] = [];
     if (swept.length > 0 || top - cap.box.y2 > rowGap * 3 || drawnAbove) {
       for (const s of swept) out.splice(out.indexOf(s), 1);
+      taken.push(...swept);
       box = { x1, x2, y1: cap.box.y2 + ctx.bodySize * 0.2, y2: top };
       for (const s of swept) if (s.box) box = unionBox(box, s.box);
       // The drawing sets the width: a chart wider than the text column keeps
@@ -556,6 +599,7 @@ export function attachFigureRegions(
         for (const s of next.slice(0, m)) {
           if (s.box) box = unionBox(box, s.box);
           consumed.add(s);
+          taken.push(s);
         }
         if (drawnBelow) box = unionBox(box, { ...drawnBelow, y1: Math.max(drawnBelow.y1, box.y1), y2: Math.min(drawnBelow.y2, box.y2) });
         next.splice(0, m);
@@ -593,7 +637,7 @@ export function attachFigureRegions(
       captionBox = unionBox(captionBox, follow.box);
       consumed.add(follow);
     }
-    out.push({
+    const figure: Segment = {
       type: "FIGURE",
       text,
       page: cap.page,
@@ -603,7 +647,12 @@ export function attachFigureRegions(
       region: toRegion(box),
       lineSize: cap.lineSize,
       mathShare: 0,
-    });
+    };
+    out.push(figure);
+    for (const s of taken) {
+      const part = panelOf(s);
+      if (part) addPanel(figure, part);
+    }
   }
 
   // 3. Graphics (images and vector drawings). One a captioned figure already
@@ -615,41 +664,55 @@ export function attachFigureRegions(
   const own = new Set<Segment>();
   for (const graphic of [...graphics].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
     const box = graphic.box;
-    const covering = placed.find((s) => s.type === "FIGURE" && s.box && inside(box, s.box));
-    if (covering) continue;
-    const overlapping = placed.find((s) => s.type === "FIGURE" && s.box && inside(s.box, box));
-    if (overlapping && overlapping.box) {
-      overlapping.box = unionBox(overlapping.box, box);
-      overlapping.region = toRegion(overlapping.box);
+    const captionLines = buildLines(graphic.caption, page);
+    const caption = captionLines.length > 0 ? captionPart(captionLines) : null;
+    // A graphic inside a captioned figure is one of its panels: its caption
+    // joins the figure's when it is a panel's or a note (Panel captions
+    // above). Any other words under it are the drawing's own, which the crop
+    // shows (arXiv 2411.19946 p1: "Early-optimized image" under a row of
+    // pictures).
+    const host =
+      placed.find((s) => s.type === "FIGURE" && s.box && inside(box, s.box)) ??
+      placed.find((s) => s.type === "FIGURE" && s.box && inside(s.box, box));
+    if (host?.box) {
+      if (!inside(box, host.box)) {
+        host.box = unionBox(host.box, box);
+        host.region = toRegion(host.box);
+      }
+      if (caption && isSubCaption(caption.text)) addPanel(host, caption);
       continue;
     }
-    const captionLines = buildLines(graphic.caption, page);
-    const caption = joinGroup(captionLines, true);
     const figure: Segment = {
       type: "FIGURE",
-      text: caption.text.replace(/\n/g, " "),
+      text: caption?.text ?? "",
       // The page's own number: a page with no text has no segment to read it from.
       page,
-      runs: caption.runs,
+      runs: caption?.runs ?? [],
       box,
       region: toRegion(box),
       lineSize: captionLines[0]?.size ?? ctx.bodySize,
       mathShare: 0,
     };
-    if (captionLines.length > 0) {
-      figure.captionBox = captionLines
-        .map((l) => ({ x1: l.x, x2: l.xEnd, y1: l.yMin - l.size * 0.3, y2: l.yMax + l.size * 0.85 }))
-        .reduce((a, b) => unionBox(a, b));
-    }
+    if (caption) figure.captionBox = caption.box;
     own.add(figure);
     placed = [...placed];
     placed.splice(placeOf(placed, graphic, own), 0, figure);
   }
   // Text inside a figure's box (a hidden chart title, a stray label) is part
-  // of the graphic. A graphic's labels never became text, and what text is
-  // left over it is the page's own (census class 2).
-  const boxes = placed.filter((s) => s.type === "FIGURE" && s.region && s.box && !own.has(s)).map((s) => s.box!);
-  return placed.filter((s) => (s.type === "FIGURE" && s.region) || !s.box || !boxes.some((f) => inside(s.box!, f)));
+  // of the graphic, and a panel's caption there part of its caption. A
+  // graphic's labels never became text, and what text is left over it is the
+  // page's own (census class 2).
+  const hosts = placed.filter((s) => s.type === "FIGURE" && s.region && s.box && !own.has(s));
+  const kept = placed.filter((s) => {
+    if ((s.type === "FIGURE" && s.region) || !s.box) return true;
+    const host = hosts.find((f) => inside(s.box!, f.box!));
+    if (!host) return true;
+    const part = panelOf(s);
+    if (part) addPanel(host, part);
+    return false;
+  });
+  for (const [figure, parts] of panels) withPanels(figure, parts);
+  return kept;
 }
 
 // Where a graphic's FIGURE goes: after the segment that holds the line read

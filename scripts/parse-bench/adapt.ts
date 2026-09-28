@@ -436,7 +436,9 @@ function roman(n: number): string {
 function orderedMarker(style: unknown, depth: number, n: number): string {
   const glyph = listPreset(true, style).levels[Math.min(depth, 8)];
   if ("bullet" in glyph) return "•";
-  if ("nested" in glyph) return `${n}.`;
+  // A legal level ("%0.%1.") prints the numbers above its own: one here.
+  const [before, ...rest] = glyph.format.split(/%[0-8]/);
+  if (rest.length !== 1) return `${n}.`;
   const counter =
     glyph.counter === "decimal" ? String(n)
     : glyph.counter === "decimal-leading-zero" ? String(n).padStart(2, "0")
@@ -444,7 +446,7 @@ function orderedMarker(style: unknown, depth: number, n: number): string {
     : glyph.counter === "upper-alpha" ? String.fromCharCode(64 + Math.min(26, Math.max(1, n)))
     : glyph.counter === "lower-roman" ? roman(n)
     : roman(n).toUpperCase();
-  return `${glyph.before}${counter}${glyph.after}`;
+  return `${before}${counter}${rest[0]}`;
 }
 
 class ImportReader {

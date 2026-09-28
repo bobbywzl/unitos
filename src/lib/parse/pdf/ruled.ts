@@ -174,10 +174,15 @@ function isChart(b: Box, xs: number[], ys: number[], cells: number, drawing: Tab
 // that share their rules' width). Prose is eight words of letters: a row of
 // numbers set close is none (arXiv 2302.12627's "ℙ(1852 ∈ 𝒮̂) 0.00 (0.00)
 // 0.00 (0.00) 0.00 (0.00)" cut its table in three). Chinese sets no spaces:
-// twenty characters are a sentence's worth.
+// twenty characters are a sentence's worth. Column heads set an em apart,
+// too close to part cells, are no prose either: prose has word spaces
+// (MMWR p. 21's "Vaccination status beneficiaries related TE person-days
+// …" cut Table 3's head from its body).
 const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
 function isProseLine(line: Line, width: number): boolean {
   if (line.cells.length !== 1 || line.xEnd - line.x <= width * 0.6) return false;
+  const apart = line.items.filter((it, k) => k > 0 && it.x - (line.items[k - 1].x + line.items[k - 1].w) > line.size * 0.7).length;
+  if (apart >= 3) return false;
   const words = line.text.split(/\s+/).filter((w) => /\p{L}{2}/u.test(w));
   return words.length >= 8 || (line.text.match(CJK_RE)?.length ?? 0) >= 20;
 }

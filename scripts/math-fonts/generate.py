@@ -16,7 +16,25 @@ TeX Live itself, so the next run regenerates it rather than anyone editing it:
 - heights and depths from tftopl, and the display size of an integral from
   its NEXTLARGER.
 
-Needs TeX Live (kpsewhich, tftopl) and fontTools; the app never runs it.
+A math font set in Unicode — KaTeX's fonts (a web page printed) and an
+OpenType math font (LuaLaTeX, XeLaTeX, Word) — reads right in the text
+layer, and the parse gives each of its glyphs the family and code of the
+same symbol in TeX's fonts. What that needs besides the tables above:
+
+- symbols TeX builds from two glyphs and these fonts draw as one (⟹ ↦ ⋯ ≠),
+  as codes past TeX's 128 in the symbol family;
+- KaTeX's size fonts, whose glyphs stand on the baseline where TeX's
+  extension font hangs its own: each glyph's code and box from KaTeX's
+  metrics (node_modules/katex/src/fontMetricsData.js);
+- each OpenType math font's size variants and assembly parts of its
+  delimiters, big operators, and radicals, which the PDF maps to the one
+  character "(" or "∑": each glyph's advance, box, and TeX code, from the
+  font's MATH table. Latin Modern Math comes with TeX Live; STIX Two Math
+  and XITS Math are read from .bench/fonts/ (CTAN: fonts/stix2-otf,
+  fonts/xits).
+
+Needs TeX Live (kpsewhich, tftopl), fontTools, the repo's node_modules, and
+the fonts above; the app never runs it.
 Run from anywhere: python3 scripts/math-fonts/generate.py
 Check the result: npx tsx scripts/math-fonts/check.mts
 """
@@ -27,8 +45,11 @@ import subprocess
 from pathlib import Path
 
 from fontTools import t1Lib
+from fontTools.pens.boundsPen import BoundsPen
+from fontTools.ttLib import TTFont
 
-OUT = Path(__file__).resolve().parents[2] / "src/lib/parse/pdf/math-fonts.ts"
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / "src/lib/parse/pdf/math-fonts.ts"
 
 # Each family and the font its codes are read from (the 10 pt design size).
 FONTS = {
@@ -123,6 +144,38 @@ ALPHABETS = {
     "cal": (0x1D49C, None, {"B": "ℬ", "E": "ℰ", "F": "ℱ", "H": "ℋ", "I": "ℐ", "L": "ℒ", "M": "ℳ", "R": "ℛ"}),
     "frak": (0x1D504, 0x1D51E, {"C": "ℭ", "H": "ℌ", "I": "ℑ", "R": "ℜ", "Z": "ℨ"}),
     "bb": (0x1D538, None, {"C": "ℂ", "H": "ℍ", "N": "ℕ", "P": "ℙ", "Q": "ℚ", "R": "ℝ", "Z": "ℤ"}),
+}
+
+
+# The extension font's sized delimiters, small to large (TFM NEXTLARGER
+# chains), its big operators in their text and display forms, and the pieces
+# of its extensible delimiters and braces.
+CHAINS = {
+    "(": [0x00, 0x10, 0x12, 0x20], ")": [0x01, 0x11, 0x13, 0x21], "[": [0x02, 0x68, 0x14, 0x22],
+    "]": [0x03, 0x69, 0x15, 0x23], "\\lfloor": [0x04, 0x6A, 0x16, 0x24], "\\rfloor": [0x05, 0x6B, 0x17, 0x25],
+    "\\lceil": [0x06, 0x6C, 0x18, 0x26], "\\rceil": [0x07, 0x6D, 0x19, 0x27], "\\{": [0x08, 0x6E, 0x1A, 0x28],
+    "\\}": [0x09, 0x6F, 0x1B, 0x29], "\\langle": [0x0A, 0x44, 0x1C, 0x2A], "\\rangle": [0x0B, 0x45, 0x1D, 0x2B],
+    "/": [0x0E, 0x2E, 0x1E, 0x2C], "\\backslash": [0x0F, 0x2F, 0x1F, 0x2D],
+}
+DELIMITER_UNICODE = {
+    "(": "(", ")": ")", "[": "[", "]": "]", "\\lfloor": "⌊", "\\rfloor": "⌋", "\\lceil": "⌈", "\\rceil": "⌉",
+    "\\{": "{", "\\}": "}", "\\langle": "⟨", "\\rangle": "⟩", "/": "/", "\\backslash": "\\",
+}
+OPERATORS = [
+    ("\\bigsqcup", 0x46, 0x47, "⨆"), ("\\oint", 0x48, 0x49, "∮"), ("\\bigodot", 0x4A, 0x4B, "⨀"),
+    ("\\bigoplus", 0x4C, 0x4D, "⨁"), ("\\bigotimes", 0x4E, 0x4F, "⨂"), ("\\sum", 0x50, 0x58, "∑"),
+    ("\\prod", 0x51, 0x59, "∏"), ("\\int", 0x52, 0x5A, "∫"), ("\\bigcup", 0x53, 0x5B, "⋃"),
+    ("\\bigcap", 0x54, 0x5C, "⋂"), ("\\biguplus", 0x55, 0x5D, "⨄"), ("\\bigwedge", 0x56, 0x5E, "⋀"),
+    ("\\bigvee", 0x57, 0x5F, "⋁"), ("\\coprod", 0x60, 0x61, "∐"),
+]
+PIECES = {
+    0x30: "lparen-top", 0x31: "rparen-top", 0x40: "lparen-bot", 0x41: "rparen-bot", 0x42: "lparen-rep",
+    0x43: "rparen-rep", 0x32: "lbrack-top", 0x33: "rbrack-top", 0x34: "lbrack-bot", 0x35: "rbrack-bot",
+    0x36: "lbrack-rep", 0x37: "rbrack-rep", 0x38: "lbrace-top", 0x39: "rbrace-top", 0x3A: "lbrace-bot",
+    0x3B: "rbrace-bot", 0x3C: "lbrace-mid", 0x3D: "rbrace-mid", 0x3E: "brace-rep", 0x3F: "arrow-rep",
+    0x74: "radical-bot", 0x75: "radical-rep", 0x76: "radical-top", 0x77: "dblarrow-rep", 0x78: "arrow-top",
+    0x79: "arrow-bot", 0x7A: "hbrace-down-left", 0x7B: "hbrace-down-right", 0x7C: "hbrace-up-left",
+    0x7D: "hbrace-up-right", 0x7E: "dblarrow-top", 0x7F: "dblarrow-bot",
 }
 
 
@@ -303,31 +356,13 @@ def build():
     # OMX: sized delimiters (TFM NEXTLARGER chains, small to large), big
     # operators in their text and display forms, wide accents, radicals, and
     # the pieces of extensible delimiters and braces.
-    chains = {
-        "(": [0x00, 0x10, 0x12, 0x20], ")": [0x01, 0x11, 0x13, 0x21], "[": [0x02, 0x68, 0x14, 0x22],
-        "]": [0x03, 0x69, 0x15, 0x23], "\\lfloor": [0x04, 0x6A, 0x16, 0x24], "\\rfloor": [0x05, 0x6B, 0x17, 0x25],
-        "\\lceil": [0x06, 0x6C, 0x18, 0x26], "\\rceil": [0x07, 0x6D, 0x19, 0x27], "\\{": [0x08, 0x6E, 0x1A, 0x28],
-        "\\}": [0x09, 0x6F, 0x1B, 0x29], "\\langle": [0x0A, 0x44, 0x1C, 0x2A], "\\rangle": [0x0B, 0x45, 0x1D, 0x2B],
-        "/": [0x0E, 0x2E, 0x1E, 0x2C], "\\backslash": [0x0F, 0x2F, 0x1F, 0x2D],
-    }
-    delimiter_unicode = {
-        "(": "(", ")": ")", "[": "[", "]": "]", "\\lfloor": "⌊", "\\rfloor": "⌋", "\\lceil": "⌈", "\\rceil": "⌉",
-        "\\{": "{", "\\}": "}", "\\langle": "⟨", "\\rangle": "⟩", "/": "/", "\\backslash": "\\",
-    }
-    for delim, codes in chains.items():
+    for delim, codes in CHAINS.items():
         cls = "open" if delim in ("(", "[", "\\lfloor", "\\lceil", "\\{", "\\langle") else "ord" if delim in ("/", "\\backslash") else "close"
         for size, code in enumerate(codes, start=1):
-            put("omx", code, delim, cls, delimiter_unicode[delim], size=size)
+            put("omx", code, delim, cls, DELIMITER_UNICODE[delim], size=size)
     put("omx", 0x0C, "|", "ord", "|", piece="vrep")
     put("omx", 0x0D, "\\|", "ord", "‖", piece="vrep")
-    operators = [
-        ("\\bigsqcup", 0x46, 0x47, "⨆"), ("\\oint", 0x48, 0x49, "∮"), ("\\bigodot", 0x4A, 0x4B, "⨀"),
-        ("\\bigoplus", 0x4C, 0x4D, "⨁"), ("\\bigotimes", 0x4E, 0x4F, "⨂"), ("\\sum", 0x50, 0x58, "∑"),
-        ("\\prod", 0x51, 0x59, "∏"), ("\\int", 0x52, 0x5A, "∫"), ("\\bigcup", 0x53, 0x5B, "⋃"),
-        ("\\bigcap", 0x54, 0x5C, "⋂"), ("\\biguplus", 0x55, 0x5D, "⨄"), ("\\bigwedge", 0x56, 0x5E, "⋀"),
-        ("\\bigvee", 0x57, 0x5F, "⋁"), ("\\coprod", 0x60, 0x61, "∐"),
-    ]
-    for latex, text_code, display_code, unicode in operators:
+    for latex, text_code, display_code, unicode in OPERATORS:
         put("omx", text_code, latex, "op", unicode)
         put("omx", display_code, latex, "op", unicode, display=True)
     for code in (0x62, 0x63, 0x64):
@@ -336,16 +371,7 @@ def build():
         put("omx", code, "\\widetilde", "accent", "\u0303", wide=True)
     for code in (0x70, 0x71, 0x72, 0x73):
         put("omx", code, "", "radical", "√", piece="radical", size=code - 0x6F)
-    pieces = {
-        0x30: "lparen-top", 0x31: "rparen-top", 0x40: "lparen-bot", 0x41: "rparen-bot", 0x42: "lparen-rep",
-        0x43: "rparen-rep", 0x32: "lbrack-top", 0x33: "rbrack-top", 0x34: "lbrack-bot", 0x35: "rbrack-bot",
-        0x36: "lbrack-rep", 0x37: "rbrack-rep", 0x38: "lbrace-top", 0x39: "rbrace-top", 0x3A: "lbrace-bot",
-        0x3B: "rbrace-bot", 0x3C: "lbrace-mid", 0x3D: "rbrace-mid", 0x3E: "brace-rep", 0x3F: "arrow-rep",
-        0x74: "radical-bot", 0x75: "radical-rep", 0x76: "radical-top", 0x77: "dblarrow-rep", 0x78: "arrow-top",
-        0x79: "arrow-bot", 0x7A: "hbrace-down-left", 0x7B: "hbrace-down-right", 0x7C: "hbrace-up-left",
-        0x7D: "hbrace-up-right", 0x7E: "dblarrow-top", 0x7F: "dblarrow-bot",
-    }
-    for code, piece in pieces.items():
+    for code, piece in PIECES.items():
         put("omx", code, "", "piece", "", piece=piece)
 
     # OT1 in math: upright Greek capitals, letters, digits, punctuation, accents.

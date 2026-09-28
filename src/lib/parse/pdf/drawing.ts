@@ -47,11 +47,16 @@ export type Glyph = {
   // Drawn outside the clip in effect or outside the page box: the glyph
   // shows nothing (a figure's labels past its crop, arXiv 2411.19946 p4).
   hidden?: true;
+  // Its fill color as it shows over white (#rrggbb); absent where no plain
+  // color fills it (a pattern).
+  color?: string;
 };
 // A drawn line: a stroked segment, or a filled box at most 2 pt thick.
 // Horizontal: y1 = y2. Vertical: x1 = x2.
 export type Rule = { dir: "h" | "v"; x1: number; y1: number; x2: number; y2: number; thickness: number };
-export type Fill = Box; // a filled box: cell shading, a frame, a highlight
+// A filled box: cell shading, a frame, a highlight; its color as it shows
+// over white, absent for a pattern.
+export type Fill = Box & { color?: string };
 // A path's box; clip marks a path that only clips and paints nothing.
 export type PathBox = Box & { clip?: true };
 export type PageDrawing = { glyphs: Glyph[]; rules: Rule[]; fills: Fill[]; images: Box[]; paths: PathBox[] };
@@ -100,6 +105,9 @@ const OP = {
   imageRepeat: 88,
   solidColorImageMask: 90,
   constructPath: 91,
+  setFillColorN: 55,
+  setFillRGBColor: 59,
+  setFillTransparent: 93,
 } as const;
 const STROKES = new Set<number>([OP.stroke, OP.closeStroke, OP.fillStroke, OP.eoFillStroke, OP.closeFillStroke, OP.closeEOFillStroke]);
 const FILLS = new Set<number>([OP.fill, OP.eoFill, OP.fillStroke, OP.eoFillStroke, OP.closeFillStroke, OP.closeEOFillStroke]);
@@ -156,6 +164,10 @@ type State = {
   // The clip in effect, as a box; null is the whole page. An image shows
   // only inside it (a slide crops each photo of a grid to its frame).
   clip: Box | null;
+  // The fill color (#rrggbb; null for a pattern or none) and its opacity:
+  // pdf.js turns every color space's fill into one RGB color.
+  fill: string | null;
+  alpha: number;
 };
 
 type PdfGlyph = { originalCharCode?: number; unicode?: string; width?: number; isSpace?: boolean };
@@ -187,6 +199,8 @@ export function readDrawing(
     rise: 0,
     mode: 0,
     clip: null,
+    fill: "#000000",
+    alpha: 1,
   };
   const stack: State[] = [];
   const forms: State[] = [];
@@ -263,6 +277,7 @@ export function readDrawing(
           if (!Array.isArray(entry)) continue;
           const [key, value] = entry as [string, unknown];
           if (key === "LW" && typeof value === "number") state.lineWidth = value;
+          if (key === "ca" && typeof value === "number") state.alpha = value;
           if (key === "Font" && Array.isArray(value)) {
             state.font = String(value[0]);
             state.fontSize = Number(value[1]) || 0;
@@ -291,6 +306,13 @@ export function readDrawing(
         break;
       case OP.setTextRenderingMode:
         state.mode = Number(args?.[0]) || 0;
+        break;
+      case OP.setFillRGBColor:
+        state.fill = typeof args?.[0] === "string" && /^#[0-9a-f]{6}$/i.test(args[0]) ? args[0].toLowerCase() : null;
+        break;
+      case OP.setFillColorN:
+      case OP.setFillTransparent:
+        state.fill = null;
         break;
       case OP.setTextRise:
         state.rise = Number(args?.[0]) || 0;
@@ -327,6 +349,7 @@ export function readDrawing(
         // What shows: the page box, and in it the clip in effect. A glyph
         // whose box falls outside it is hidden.
         const shown = state.clip ? intersect(state.clip, view) : view;
+        const color = paint(state);
         let x = 0; // the advance in text space, before the horizontal scale
         for (const g of list as (number | PdfGlyph | null)[]) {
           if (typeof g === "number") {
@@ -354,6 +377,7 @@ export function readDrawing(
               size,
               mode: state.mode,
             };
+            if (color) glyph.color = color;
             if (
               Math.max(px, ex) <= shown.x1 - 0.5 ||
               Math.min(px, ex) >= shown.x2 + 0.5 ||
@@ -397,7 +421,7 @@ export function readDrawing(
         // its p. 26, and no rule read) and its tables' \hline.
         if (annotation > 0) break;
         const box = boxOf([apply(state.ctm, 0, 0), apply(state.ctm, 1, 0), apply(state.ctm, 0, 1), apply(state.ctm, 1, 1)]);
-        addFilledBox(box, state.clip, rules, fills);
+        addFilledBox(box, state.clip, rules, fills, paint(state));
         break;
       }
     }
@@ -512,14 +536,23 @@ function readPath(args: unknown[] | null, state: State, rules: Rule[], fills: Fi
       const box = boxOf(pts);
       const onEdge = (v: number, a: number, b: number) => Math.abs(v - a) < 0.1 || Math.abs(v - b) < 0.1;
       if (!pts.every(([x, y]) => onEdge(x, box.x1, box.x2) && onEdge(y, box.y1, box.y2))) continue;
-      addFilledBox(box, state.clip, rules, fills);
+      addFilledBox(box, state.clip, rules, fills, paint(state));
     }
   }
 }
 
+// The fill color as it shows over white: a see-through fill (a highlight
+// Chrome draws at an opacity) is mixed with the white under it.
+function paint(state: State): string | undefined {
+  if (state.fill === null || state.alpha <= 0) return undefined;
+  if (state.alpha >= 1) return state.fill;
+  const mix = (at: number) => Math.round(parseInt(state.fill!.slice(at, at + 2), 16) * state.alpha + 255 * (1 - state.alpha));
+  return `#${[1, 3, 5].map((at) => mix(at).toString(16).padStart(2, "0")).join("")}`;
+}
+
 // A filled box at most 2 pt thick is a rule; any other is a filled box.
 // Each is what the clip shows of it.
-function addFilledBox(drawn: Box, clip: Box | null, rules: Rule[], fills: Fill[]) {
+function addFilledBox(drawn: Box, clip: Box | null, rules: Rule[], fills: Fill[], color?: string) {
   const box = shownPart(drawn, clip, RULE_SLACK);
   if (!box) return;
   const w = box.x2 - box.x1;
@@ -531,7 +564,7 @@ function addFilledBox(drawn: Box, clip: Box | null, rules: Rule[], fills: Fill[]
     const x = (box.x1 + box.x2) / 2;
     rules.push({ dir: "v", x1: x, y1: box.y1, x2: x, y2: box.y2, thickness: w });
   } else {
-    fills.push(box);
+    fills.push(color ? { ...box, color } : box);
   }
 }
 
