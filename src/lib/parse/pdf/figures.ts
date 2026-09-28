@@ -7,7 +7,7 @@ import { median, regionOf, unionBox } from "@/lib/parse/pdf/geometry";
 import { lineColumn, type Placed } from "@/lib/parse/pdf/columns";
 import { buildLines } from "@/lib/parse/pdf/lines";
 import { joinGroup } from "@/lib/parse/pdf/text";
-import type { Box, Item, Line, PageContext, Segment } from "@/lib/parse/pdf/types";
+import type { Box, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
 // ── Figure regions ──────────────────────────────────────────────────────────
 // A PDF carries no figure objects the text layer can name: a vector chart is
@@ -22,11 +22,67 @@ import type { Box, Item, Line, PageContext, Segment } from "@/lib/parse/pdf/type
 export const CAPTION_RE = /^(fig\.|figure|table|tab\.)\s*(\d+|[A-Z]\d+)[a-z]?\s*[.:|–—-]\s*/i;
 // "Table 3", "Table A1", and IEEE's "TABLE IV".
 const TABLE_CAPTION_RE = /^(table|tab\.)\s*(\d+|[A-Z]\d+|[IVXL]+\b)/i;
+// A float's label at a line's start, with a stop after it or none.
+const LABEL_START_RE = /^(fig\.?|figure|table|tab\.)\s*(\d+|[A-Z]\d+|[IVXL]+\b)/i;
+const LABEL_RE = /^(fig\.?|figure|table|tab\.)\s*(\d+|[A-Z]\d+)[a-z]?(?=\s)/i;
+
+/** A figure's or a table's caption: its label and a stop ("Figure 2:",
+    "Fig. 3.", "Table 1 |"), or a label set bold or in small caps with no
+    stop and the words after it plain. LIPIcs and Springer set a caption so
+    ("Figure 2 Mapped circuit …", arXiv 2506.06752: every caption read as a
+    paragraph and its figure lost it), where a sentence that opens with
+    "Figure 2 shows …" is plain throughout. */
+export function isCaption(text: string, runs: Run[] | undefined): boolean {
+  if (CAPTION_RE.test(text)) return true;
+  const label = LABEL_RE.exec(text)?.[0].length;
+  if (label === undefined || !runs?.some((r) => r.start === 0)) return false;
+  const styled = (r: Run) => r.bold || r.smallCaps;
+  const words = runs.filter((r) => r.end > label && /\p{L}/u.test(text.slice(Math.max(r.start, label), r.end)));
+  return runs.filter((r) => r.start < label).every(styled) && words.length > 0 && !styled(words[0]);
+}
+
+// ── Panel captions ──────────────────────────────────────────────────────────
+// A figure of panels captions each panel under it ("(a) Round 1: k × k × k
+// cube", "(B) d = 3, e = 3", "b. Random walk in two dimensions.") and may
+// add a note under the figure ("Note: The dashed line is …"). They are the
+// figure's caption, before or after its own as the page reads (arXiv
+// 2302.12627 p18, 2410.04586 p9, 2506.08209 p12, Grinstead–Snell p16: their
+// words were in no block). A letter alone is the panel's label, which the
+// figure's caption names.
+const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=.*\p{L}).{3,}/su;
+const NOTE_RE = /^(?:notes?|sources?)\s*[:.]\s+\S/i;
+const isSubCaption = (text: string) => PANEL_RE.test(text.trim()) || NOTE_RE.test(text.trim());
+
+type CaptionPart = { text: string; runs: Run[]; box: Box };
+
+// Rows from the top of the page, each row from the left.
+function readingOrder(a: CaptionPart, b: CaptionPart): number {
+  const overlap = Math.min(a.box.y2, b.box.y2) - Math.max(a.box.y1, b.box.y1);
+  const shorter = Math.min(a.box.y2 - a.box.y1, b.box.y2 - b.box.y1);
+  return overlap > shorter * 0.5 ? a.box.x1 - b.box.x1 : b.box.y2 - a.box.y2;
+}
+
+// A figure's caption with its panels' captions, in reading order.
+function withPanels(figure: Segment, panels: CaptionPart[]) {
+  const own: CaptionPart = { text: figure.text, runs: figure.runs ?? [], box: figure.captionBox ?? figure.box! };
+  const parts = [...panels, own].sort(readingOrder);
+  let text = "";
+  const runs: Run[] = [];
+  for (const part of parts) {
+    if (text !== "") text += " ";
+    const offset = text.length;
+    text += part.text;
+    runs.push(...part.runs.map((r) => ({ ...r, start: r.start + offset, end: r.end + offset })));
+  }
+  figure.text = text;
+  figure.runs = runs;
+  figure.captionBox = parts.map((p) => p.box).reduce((a, b) => unionBox(a, b));
+}
 
 // Chart text, equation glyphs, ticks: what a figure leaves in the text layer.
 function isFigureDebris(s: Segment, ctx: PageContext): boolean {
   if (s.region || s.type === "HEADING" || s.type === "CODE" || s.type === "EQUATION") return false;
-  if (CAPTION_RE.test(s.text)) return false;
+  if (isCaption(s.text, s.runs)) return false;
   if (s.type === "FIGURE") return !s.region;
   if (s.type === "TABLE") return true;
   if ((s.lineSize ?? ctx.bodySize) < ctx.bodySize * 0.92) return true;

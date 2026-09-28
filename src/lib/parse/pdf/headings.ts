@@ -8,7 +8,7 @@ import { charCount } from "@/lib/parse/pdf/glyphs";
 import { BULLET_RE, isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { isCentered, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { boldShare, escapeHtml, joinGroup, startsWithBoldLead } from "@/lib/parse/pdf/text";
-import type { Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
+import type { Item, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 
 // Numbered heading: the number must close with "." or ")" or dot into a
 // sub-number — "3.1 Results" and "1. Summary" match, "23 advertisers" does not.
@@ -27,6 +27,21 @@ function headingDepth(text: string): number | null {
 // A run-in heading's lead: a number with a sub-number, words, a period
 // ("3.2.1. Two examples.").
 const RUN_IN_RE = /^(?:\d{1,2}|[A-Z])(?:\.\d{1,2})+\.?\s+\S.*\.$/u;
+// IEEE's fourth level: a number with a parenthesis and a title in italics
+// closed by a colon, run into its paragraph ("1) Implementation: The
+// pattern needs…"). It read as a list item that took the paragraph.
+const IEEE_RUN_IN_RE = /^\d{1,2}\)\s+\S.*:$/u;
+
+// The end of a line's lead set in italics from the line's start, marker
+// and all: IEEE sets "1) Implementation:" in one italic run.
+function italicLeadEnd(line: Line): number {
+  let end = 0;
+  for (const r of line.runs) {
+    if (!r.italic || line.text.slice(end, r.start).trim() !== "") break;
+    end = r.end;
+  }
+  return end;
+}
 
 // Share of a line's characters set bold or in small caps: a heading's look.
 function styledShare(line: Line): number {
@@ -173,9 +188,12 @@ function styledLeadEnd(line: Line): number {
 function runInHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
   const line = lines[i];
   if (line.cells.length !== 1 || line.size > ctx.bodySize * 1.14) return null;
-  const end = styledLeadEnd(line);
+  const styled = styledLeadEnd(line);
+  const italic = italicLeadEnd(line);
+  const ieee = IEEE_RUN_IN_RE.test(line.text.slice(0, italic).trim());
+  const end = ieee ? italic : styled;
   const lead = line.text.slice(0, end).trim();
-  if (!RUN_IN_RE.test(lead) || [...lead].length > 120) return null;
+  if (!(ieee || RUN_IN_RE.test(lead)) || [...lead].length > 120) return null;
   const heading = headingOf([line], lead, line.runs.filter((r) => r.start < end).map((r) => ({ ...r, end: Math.min(r.end, lead.length) })));
   const rest = line.text.slice(end);
   const cut = end + (rest.length - rest.trimStart().length);
@@ -188,36 +206,85 @@ function runInHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
   return { segments: [heading, ...paragraph.segments], next: paragraph.next };
 }
 
-// IEEE's section headings: a roman numeral and a title in capitals ("II.
-// RELATED WORK"), and a letter and a title in italics ("A. Efficient
-// attention"), each on a line of its own over its section's first
-// paragraph. They read as a paragraph, and as a list item that took the
-// section's first paragraph.
+// IEEE's and APS's (REVTeX) section headings: a roman numeral and a title
+// in capitals ("II. RELATED WORK"), a letter and a title in italics or, in
+// a centered line, bold ("A. Efficient attention"), and REVTeX's third
+// level, a number and a title centered in italics ("1. Density of
+// states"), each on a line of its own over its section's first paragraph.
+// REVTeX sets them a size under the body's (8.97 pt over 9.96 pt). They
+// read as a paragraph, and as a list item that took the section's first
+// paragraph.
 const ROMAN_SECTION_RE = /^[IVX]{1,5}\.\s+\p{Lu}/u;
 const LETTER_SECTION_RE = /^[A-Z]\.\s+\p{Lu}/u;
+const NUMBER_SECTION_RE = /^\d{1,2}\.\s+\p{Lu}/u;
 
-function italicShare(line: Line): number {
-  let italic = 0;
-  for (const r of line.runs) if (r.italic) italic += r.end - r.start;
-  return line.text.length > 0 ? italic / line.text.length : 0;
+// Share of a line's characters, its formulas aside, whose item passes a
+// test: a heading's formula is set in math italic, not in the heading's
+// style ("1. Time for the beginning of the ramp for BRM: tdip").
+function textShare(line: Line, test: (item: Item) => boolean): number {
+  let all = 0;
+  let hit = 0;
+  for (const item of line.items) {
+    if (item.math) continue;
+    const n = charCount(item.str);
+    all += n;
+    if (test(item)) hit += n;
+  }
+  return all > 0 ? hit / all : 0;
+}
+
+// Nothing sits right above the line: no line, a paragraph gap (1.3 leading),
+// or the line above in reading order closed another column, so this one
+// opens its column (IEEE's "III. METHOD" atop the right column read as a
+// paragraph).
+function apartAbove(above: Line | undefined, line: Line, ctx: PageContext): boolean {
+  return !above || above.y - line.y < line.size * 0.5 || above.y - line.y > line.size * ctx.leading * 1.3;
+}
+
+// Nothing sits right under the line: a gap past 1.15 leading, or the next
+// line in reading order opens another column.
+function apartBelow(line: Line, below: Line, ctx: PageContext): boolean {
+  return line.y - below.y < line.size * 0.5 || line.y - below.y > line.size * ctx.leading * 1.15;
 }
 
 function sectionHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
   const line = lines[i];
   const text = line.text.trim();
   if (line.cells.length !== 1 || [...text].length > 80 || /[.,;:]$/.test(text)) return null;
-  if (line.size < ctx.bodySize * 0.9 || line.size > ctx.bodySize * 1.14) return null;
-  const roman = ROMAN_SECTION_RE.test(text) && capsShare(text) >= 0.9;
-  const lettered = LETTER_SECTION_RE.test(text) && italicShare(line) > 0.9;
-  if (!roman && !lettered) return null;
-  // Set apart above, or over a paragraph's indented first line.
+  if (line.size < ctx.bodySize * 0.85 || line.size > ctx.bodySize * 1.14) return null;
+  const centered = isCentered(lines, i, ctx);
+  const italic = (l: Line) => textShare(l, (item) => item.italic) > 0.9;
+  const bold = (l: Line) => textShare(l, (item) => item.bold) > 0.9;
+  const caps = (l: Line) => capsShare(l.text) >= 0.9;
+  const look =
+    ROMAN_SECTION_RE.test(text) && caps(line) ? caps
+    : LETTER_SECTION_RE.test(text) && italic(line) ? italic
+    : LETTER_SECTION_RE.test(text) && centered && bold(line) ? bold
+    : NUMBER_SECTION_RE.test(text) && centered && (italic(line) || bold(line)) ? (italic(line) ? italic : bold)
+    : null;
+  if (!look) return null;
+  // A centered title wraps onto centered lines of its size and look ("IV.
+  // LONG-RANGE SPECTRAL STATISTICS OF" over "BRM").
+  const run: Line[] = [line];
+  let j = i + 1;
+  while (centered && j < lines.length && run.length < 3) {
+    const next = lines[j];
+    const gap = run[run.length - 1].y - next.y;
+    if (next.cells.length !== 1 || Math.abs(next.size - line.size) > 0.5 || gap <= 0 || gap > line.size * ctx.leading * 1.3) break;
+    if (!look(next) || !isCentered(lines, j, ctx) || NUMBER_SECTION_RE.test(next.text) || LETTER_SECTION_RE.test(next.text)) break;
+    run.push(next);
+    j++;
+  }
+  // Set apart above, or over a paragraph's indented first line; a centered
+  // title set apart below.
+  const last = run[run.length - 1];
   const above = lines[i - 1];
-  const below = lines[i + 1];
+  const below = lines[j];
   if (!below) return null;
-  const gapAbove = !above || above.y - line.y > line.size * ctx.leading * 1.3;
-  const opens = below.x > line.x + line.size * 0.8 && below.x < line.x + line.size * 3 && italicShare(below) < 0.5;
-  if (!gapAbove && !opens) return null;
-  return { segments: [headingOf([line], line.text, line.runs)], next: i + 1 };
+  const opens = below.x > line.x + line.size * 0.8 && below.x < line.x + line.size * 3 && textShare(below, (item) => item.italic) < 0.5;
+  if (!apartAbove(above, line, ctx) && !opens && !(centered && apartBelow(last, below, ctx))) return null;
+  const { text: joined, runs } = joinGroup(run);
+  return { segments: [headingOf(run, joined.replace(/\n/g, " "), runs)], next: j };
 }
 
 // Numbered heading at body size: "3.1 Results" — short, isolated, and

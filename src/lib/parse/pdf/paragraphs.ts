@@ -224,7 +224,7 @@ export function isFirstLineIndent(lines: Line[], i: number, ctx: PageContext, ru
     // does (Word's half-inch indent is 3.3 em at 11 pt, and its first lines
     // read as one-line items).
     (line.x - after.x <= line.size * 3.2 ||
-      (line.x - after.x <= line.size * 5 && line.xEnd >= columnRight(lines, i, ctx) - line.size * 1.5)) &&
+      (line.x - after.x <= line.size * 5 && line.xEnd >= columnEdges(lines, i, ctx).right - line.size * 1.5)) &&
     line.y - after.y > 0 &&
     line.y - after.y <= after.size * ctx.leading * 1.3 &&
     !sizesDiffer(after, line, ctx) &&
@@ -348,19 +348,20 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
 }
 
 // What a paragraph's lines show of its layout, as the class tokens the reader
-// and the import converter read: "center" for centered lines, "caption" for
-// a table's or a figure's caption, and its indent — "indent-first" (the
-// first line set in from the others), "indent-hanging" (the others set in
-// from the first), or "indent-block" (every line set in from the column's
-// edge). One line alone shows no indent.
+// and the import converter read: its alignment ("center", "right", or
+// "justify", lineAlign), "caption" for a table's or a figure's caption, and
+// its indent — "indent-first" (the first line set in from the others),
+// "indent-hanging" (the others set in from the first), or "indent-block"
+// (every line set in from the column's edge). One line alone shows no
+// indent, and neither does a centered or flush-right one.
 function layoutTokens(lines: Line[], from: number, to: number, ctx: PageContext, text: string): string[] {
   const tokens: string[] = [];
   const group = lines.slice(from, to);
   const size = group[0].size;
-  const centered = group.every((_, k) => isCentered(lines, from + k, ctx));
-  if (centered) tokens.push("center");
+  const align = lineAlign(lines, from, to, ctx);
+  if (align) tokens.push(align);
   if (CAPTION_RE.test(text)) tokens.push("caption");
-  if (centered || group.length < 2) return tokens;
+  if (align === "center" || align === "right" || group.length < 2) return tokens;
   const rest = group.slice(1);
   const restX = rest[0].x;
   if (!rest.every((l) => Math.abs(l.x - restX) <= size * 0.5)) return tokens;

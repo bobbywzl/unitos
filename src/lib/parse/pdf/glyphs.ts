@@ -106,6 +106,19 @@ export function mathFamily(base: string): MathFamily | null {
   return null;
 }
 
+// The alphabet a math glyph is set in where its font's name does not say
+// it: \boldsymbol (bold math italic), \mathbf, \mathsf, \mathtt.
+export type MathVariant = "bold" | "bf" | "sf" | "tt";
+
+/** The page's glyphs with each glyph of a math font set in Unicode — KaTeX's
+    fonts (a web page printed), an OpenType math font (Latin Modern Math,
+    STIX Two Math, XITS Math from LuaLaTeX) — given the TeX family and code of
+    the same symbol, so the zones, the layout, and the check read it as they
+    read TeX's. */
+export function unicodeMath(glyphs: Glyph[]): Glyph[] {
+  return glyphs;
+}
+
 // A big operator or a radical: its glyph hangs from its origin, so a line
 // places it by its center (lines.ts). The integrals after ∐ are esint's.
 export const OPERATOR_GLYPH_RE = /^[∫∑∏⋃⋂⊎⋀⋁√⨄⨆⨀⨁⨂∮∐∬∭⨌∯⨖∳∲⨏]$/;

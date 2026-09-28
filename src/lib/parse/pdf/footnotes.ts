@@ -354,9 +354,9 @@ function referencesTo(hosts: Segment[], label: string, free: (host: Segment, sta
     references, and give that block its references. A footnote's reference
     is on its page; an endnote's on any page before, and only one place in
     the document may read its label (a web page's formulas raise digits
-    too). A table's notes, and a footnote cited in a table's cell, follow
-    the table with no reference (the import builds a table from its html);
-    a footnote whose reference is not found stays where its page's words
+    too). A footnote cited in a table's cell follows the table, which holds
+    its reference; a table's own notes follow it with no reference; a
+    footnote whose reference is not found stays where its page's words
     end. Runs after every pass
     that drops or moves blocks: a reference names its footnote's place in
     the blocks. */
@@ -387,7 +387,21 @@ export function placeFootnotes(segments: Segment[], footnotes: Segment[]): Segme
     const free = (host: Segment, start: number) =>
       !used.get(host)?.has(start) && (endnote ? pageAt(host, start) <= page : pageAt(host, start) === page);
     const places = label && !tableNotes.has(note) ? referencesTo(endnote ? hosts : (onPage.get(page) ?? []), label, free) : [];
-    const found = endnote ? (places.length === 1 ? places[0] : null) : (places[0] ?? null);
+    let found = endnote ? (places.length === 1 ? places[0] : null) : (places[0] ?? null);
+    // A footnote cited in a table's cell ("renewal2" in a Word table): the
+    // table holds its reference, set level after a word, so the import puts
+    // the number in the cell (synth-report-docx). A table stands apart from
+    // its page's lines, so a note on the last page that the table cites
+    // counts as an endnote: it takes the table's place when that is the one
+    // place that reads its label. A table's own notes ("*", "a") link to
+    // none: a table cites them from many cells.
+    if (!found && label && !tableNotes.has(note) && !(endnote && places.length > 0)) {
+      const tables = endnote ? segments.filter((s) => s.type === "TABLE") : (tablesOn.get(page) ?? []);
+      const cells = tables.flatMap((t) =>
+        [...t.text.matchAll(levelLabel(label))].flatMap((m) => (m.index !== undefined && free(t, m.index) ? [{ host: t, start: m.index, end: m.index + label.length }] : [])),
+      );
+      if (endnote ? cells.length === 1 : cells.length > 0) found = cells[0];
+    }
     let index = -1;
     if (found) {
       used.set(found.host, (used.get(found.host) ?? new Set<number>()).add(found.start));

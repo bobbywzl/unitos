@@ -13,15 +13,24 @@
 // on the owner's notes, a legal packet from Word, a Google Docs export, and
 // a pdfLaTeX file, every text item's origin is a glyph origin here.
 
-import { mathFamily, type MathFamily } from "@/lib/parse/pdf/glyphs";
+import { mathFamily, unicodeMath, type MathFamily, type MathVariant } from "@/lib/parse/pdf/glyphs";
 import type { Box } from "@/lib/parse/pdf/types";
 
 export type Glyph = {
   font: string; // pdf.js's id of the font, as on a text item (Item.font)
   base: string; // the font's name without its subset prefix ("CMMI10")
   family: MathFamily | null;
-  code: number; // the character code in the font
+  // The character code in the font; for a math font set in Unicode (KaTeX's,
+  // an OpenType math font), the code of the same symbol in TeX's font of
+  // its family (glyphs.ts unicodeMath).
+  code: number;
   unicode: string; // what pdf.js reads the code as
+  // A math font set in Unicode: the glyph's height and depth in em where
+  // its font draws it otherwise than TeX's (a KaTeX_Size ∑ stands on the
+  // baseline, TeX's extension font hangs its ∑ from it), and the alphabet
+  // where the font's name does not say it (𝐱 is \mathbf{x}).
+  box?: [number, number];
+  variant?: MathVariant;
   x: number; // the origin, in PDF points (y grows upward)
   y: number;
   w: number; // the advance
@@ -378,8 +387,8 @@ export function readDrawing(
         // The image fills the unit square under the current transform; what
         // shows is its part inside the clip.
         const box = boxOf([apply(state.ctm, 0, 0), apply(state.ctm, 1, 0), apply(state.ctm, 0, 1), apply(state.ctm, 1, 1)]);
-        const shown = state.clip ? intersect(state.clip, box) : box;
-        if (shown.x2 > shown.x1 && shown.y2 > shown.y1) images.push(shown);
+        const shown = shownPart(box, state.clip);
+        if (shown) images.push(shown);
         break;
       }
       case OP.solidColorImageMask: {
@@ -388,18 +397,31 @@ export function readDrawing(
         // its p. 26, and no rule read) and its tables' \hline.
         if (annotation > 0) break;
         const box = boxOf([apply(state.ctm, 0, 0), apply(state.ctm, 1, 0), apply(state.ctm, 0, 1), apply(state.ctm, 1, 1)]);
-        const shown = state.clip ? intersect(state.clip, box) : box;
-        if (shown.x2 > shown.x1 && shown.y2 > shown.y1) addFilledBox(shown, rules, fills);
+        addFilledBox(box, state.clip, rules, fills);
         break;
       }
     }
   }
-  return { glyphs, rules, fills, images, paths };
+  return { glyphs: unicodeMath(glyphs), rules, fills, images, paths };
 }
 
 // Two boxes' overlap; empty (x2 ≤ x1 or y2 ≤ y1) when they do not meet.
 function intersect(a: Box, b: Box): Box {
   return { x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1), x2: Math.min(a.x2, b.x2), y2: Math.min(a.y2, b.y2) };
+}
+
+// What of a box the clip in effect shows: its part inside, or null when none
+// of it shows. Images, rules, and filled boxes are cut alike: KaTeX draws a
+// \sqrt's bar 400 em long and clips it to its formula (synth-math-html read
+// rules 5,300 pt long). A line has no extent across it: it shows when it
+// lies inside. slack lets a rule on the clip's very edge (a table's outer
+// border, a hairline) stay whole.
+const RULE_SLACK = 0.5;
+function shownPart(box: Box, clip: Box | null, slack = 0): Box | null {
+  if (!clip) return box;
+  const out = intersect({ x1: clip.x1 - slack, y1: clip.y1 - slack, x2: clip.x2 + slack, y2: clip.y2 + slack }, box);
+  const shows = (lo: number, hi: number, from: number, to: number) => (hi > lo ? to > from : to >= from);
+  return shows(box.x1, box.x2, out.x1, out.x2) && shows(box.y1, box.y2, out.y1, out.y2) ? out : null;
 }
 
 function boxOf(points: [number, number][]): Box {
@@ -477,10 +499,12 @@ function readPath(args: unknown[] | null, state: State, rules: Rule[], fills: Fi
         const [x1, y1] = pts[(i + 1) % pts.length];
         if (Math.abs(y0 - y1) < 0.1 && Math.abs(x0 - x1) >= 0.1) {
           const y = (y0 + y1) / 2;
-          rules.push({ dir: "h", x1: Math.min(x0, x1), y1: y, x2: Math.max(x0, x1), y2: y, thickness });
+          const shown = shownPart({ x1: Math.min(x0, x1), y1: y, x2: Math.max(x0, x1), y2: y }, state.clip, RULE_SLACK);
+          if (shown) rules.push({ dir: "h", x1: shown.x1, y1: y, x2: shown.x2, y2: y, thickness });
         } else if (Math.abs(x0 - x1) < 0.1 && Math.abs(y0 - y1) >= 0.1) {
           const x = (x0 + x1) / 2;
-          rules.push({ dir: "v", x1: x, y1: Math.min(y0, y1), x2: x, y2: Math.max(y0, y1), thickness });
+          const shown = shownPart({ x1: x, y1: Math.min(y0, y1), x2: x, y2: Math.max(y0, y1) }, state.clip, RULE_SLACK);
+          if (shown) rules.push({ dir: "v", x1: x, y1: shown.y1, x2: x, y2: shown.y2, thickness });
         }
       }
     }
@@ -488,13 +512,16 @@ function readPath(args: unknown[] | null, state: State, rules: Rule[], fills: Fi
       const box = boxOf(pts);
       const onEdge = (v: number, a: number, b: number) => Math.abs(v - a) < 0.1 || Math.abs(v - b) < 0.1;
       if (!pts.every(([x, y]) => onEdge(x, box.x1, box.x2) && onEdge(y, box.y1, box.y2))) continue;
-      addFilledBox(box, rules, fills);
+      addFilledBox(box, state.clip, rules, fills);
     }
   }
 }
 
 // A filled box at most 2 pt thick is a rule; any other is a filled box.
-function addFilledBox(box: Box, rules: Rule[], fills: Fill[]) {
+// Each is what the clip shows of it.
+function addFilledBox(drawn: Box, clip: Box | null, rules: Rule[], fills: Fill[]) {
+  const box = shownPart(drawn, clip, RULE_SLACK);
+  if (!box) return;
   const w = box.x2 - box.x1;
   const h = box.y2 - box.y1;
   if (h <= 2 && w > h) {

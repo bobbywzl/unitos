@@ -203,6 +203,7 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[]): Box
     const band = { x1: x1 - 2, x2: x2 + 2, y1: sorted[k + 1].y1, y2: sorted[k].y1 };
     const lines = buildLines(items.filter((it) => inBox(it, band)), 0);
     const breaks = lines.some((l) => isProseLine(l, x2 - x1) || CAPTION_START_RE.test(l.text));
+    if (process.env.R2T_DEBUG) console.error("BAND", band.y1, band.y2, breaks, lines.map((l) => [l.cells.length, Math.round(l.xEnd - l.x), l.text.slice(0, 50)]));
     if (breaks) {
       close();
       continue;
@@ -363,6 +364,7 @@ export function ruledTables(all: Item[], drawing: TableDrawing, pageWidth: numbe
       regions.push({ box, items: inside, lines, grid: null, rules: inner });
     }
   }
+  if (process.env.R2T_DEBUG) for (const r of regions) console.error("REGION", r.grid ? "grid" : "rules", JSON.stringify(r.box), r.lines.length, r.lines.slice(0, 2).map((l) => l.text.slice(0, 60)));
   return regions;
 }
 

@@ -249,12 +249,14 @@ function inline(src: Source, extra: RichMark[] = []): RichNode[] {
   return inlineNodes(pieces);
 }
 
-/** The page editor's mark for each style of the parse (lib/parse/types.ts
-    StyleSpan): a lowered or raised run is Docs' subscript or superscript. */
-const STYLE_MARKS: Record<StyleSpan["style"], string> = {
+/** The page editor's mark for each plain style of the parse
+    (lib/parse/types.ts StyleSpan): a lowered or raised run is Docs'
+    subscript or superscript. */
+const STYLE_MARKS: Partial<Record<StyleSpan["style"], string>> = {
   bold: "bold",
   italic: "italic",
   underline: "underline",
+  strike: "strike",
   code: "code",
   smallCaps: "smallCaps",
   sub: "subscript",
@@ -558,9 +560,10 @@ class Converter {
   private readonly footnoteIds = new Map<number, string>();
   private readonly numbers = new Map<ParsedBlock, Atom[]>();
   private readonly footnotes = new Map<string, RichNode>();
-  /** The numbers at the Title's end: the first page's footnotes the page
-      prints no mark for. */
+  /** The numbers at the Title's end, and the mark the first of them stands
+      for when the title prints one (linkFootnotes). */
   private readonly titleNotes: RichNode[] = [];
+  private titleMark = "";
 
   constructor(private readonly input: ImportInput) {
     this.paged = input.kind === "pdf" && input.blocks.some((b) => typeof b.page === "number");
@@ -590,18 +593,34 @@ class Converter {
       }
       if (atoms.length > 0) this.numbers.set(block, atoms);
     });
-    // A footnote the page prints no mark for (no label, no reference) on a
-    // PDF's first page is the title's own: an acknowledgment, LaTeX's
-    // \thanks set without a symbol. The page editor has no footnote without
-    // a number, so its number stands at the Title's end (arxiv-2506-08209's
-    // acknowledgment read as a paragraph of the body).
-    if (this.input.kind !== "pdf" || !this.input.titleFromOriginal || !(this.input.title ?? "").trim()) return;
-    blocks.forEach((block, index) => {
-      if (block.footnote?.label.trim() !== "" || (block.page ?? 1) > 1 || this.footnoteIds.has(index) || !block.text.trim()) return;
+    // The title's own footnotes on a PDF's first page: one whose label ends
+    // the title ("…as SAT∗", LaTeX's \thanks; arxiv-2506-06752), and one the
+    // page prints no mark for (an acknowledgment; arxiv-2506-08209's read as
+    // a paragraph of the body). The title is no block the parse finds a
+    // reference in, and the page editor has no footnote without a number:
+    // their numbers stand at the Title's end, the mark's in place of it.
+    const title = this.input.titleFromOriginal ? (this.input.title ?? "").replace(/\s+/g, " ").trim() : "";
+    if (this.input.kind !== "pdf" || !title) return;
+    const loose = blocks
+      .map((block, index) => ({ label: block.footnote?.label.trim(), index }))
+      .filter(({ label, index }) => label !== undefined && (blocks[index].page ?? 1) <= 1 && !this.footnoteIds.has(index) && blocks[index].text.trim());
+    const marked = loose.find(({ label }) => label && title.endsWith(label) && /[\p{L})\].,:;!?]$/u.test(title.slice(0, -label.length)));
+    if (marked) this.titleMark = marked.label ?? "";
+    for (const { index } of [...(marked ? [marked] : []), ...loose.filter(({ label }) => label === "")]) {
       const footnoteId = newBlockId();
       this.footnoteIds.set(index, footnoteId);
       this.titleNotes.push({ type: "footnoteReference", attrs: { footnoteId } });
-    });
+    }
+  }
+
+  /** The Title's words and then the numbers of the footnotes it cites, the
+      mark a number stands for left out of the words. */
+  private titleContent(content: RichNode[]): RichNode[] {
+    const last = content.at(-1);
+    const words = last?.type === "text" ? (last.text ?? "").trimEnd() : "";
+    if (!this.titleMark || !last || !words.endsWith(this.titleMark)) return [...content, ...this.titleNotes];
+    const rest = words.slice(0, -this.titleMark.length);
+    return [...content.slice(0, -1), ...(rest ? [{ ...last, text: rest }] : []), ...this.titleNotes];
   }
 
   /** The footnotes a table's cells cite (a TABLE's footnoteRefs: a Word
@@ -745,7 +764,7 @@ class Converter {
       (heading !== undefined && alignOf(tokensOf(heading.html)) === "center");
     const attrs: Record<string, unknown> = { docStyle: "title" };
     if (centered) attrs.textAlign = "center";
-    this.push(paragraphNode([...inline({ text: title, spans: [], starts }), ...this.titleNotes], attrs));
+    this.push(paragraphNode(this.titleContent(inline({ text: title, spans: [], starts })), attrs));
   }
 
   private block(block: ParsedBlock, index: number, isTitle: boolean) {
@@ -808,7 +827,7 @@ class Converter {
     const align = alignOf(tokensOf(block.html));
     const content = inline(this.sourceOf(block, starts));
     if (isTitle) {
-      this.place(index, [paragraphNode([...content, ...this.titleNotes], align ? { docStyle: "title", textAlign: align } : { docStyle: "title" })]);
+      this.place(index, [paragraphNode(this.titleContent(content), align ? { docStyle: "title", textAlign: align } : { docStyle: "title" })]);
       return;
     }
     const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId() };

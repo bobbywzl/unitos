@@ -153,7 +153,10 @@ function textSpans(block: ParsedBlock, from: number, to: number, pageAt: (o: num
       continue;
     }
     const span: Span = { text: block.text.slice(a, b) };
-    for (const s of block.styles ?? []) if (s.start <= a && s.end >= b) span[s.style] = true;
+    for (const s of block.styles ?? []) {
+      const flag = FLAGS.find((f) => f === s.style);
+      if (flag && s.start <= a && s.end >= b) span[flag] = true;
+    }
     const href = block.links?.find((l) => l.href && l.start <= a && l.end >= b)?.href;
     if (href) span.href = href;
     into.add(span);

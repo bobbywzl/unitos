@@ -230,6 +230,66 @@ function safeDropdownOptions(value: unknown): string | null {
   }
 }
 
+/** A counter a list level draws its numbers in: CSS's counter styles, which
+    the page draws them with (1, 01, a, A, i, I). */
+export const LIST_COUNTERS = ["decimal", "decimal-leading-zero", "lower-alpha", "upper-alpha", "lower-roman", "upper-roman"] as const;
+export type ListCounter = (typeof LIST_COUNTERS)[number];
+
+/** One of a list's nine nesting levels, as the Google Docs API has it: a
+    bullet's glyph, or a counter and its glyph format, the text around the
+    numbers ("%0.", "(%1)", "[%0]", "%0.%1."; %k is level k's number). */
+export type ListLevel = { bullet: string } | { counter: ListCounter; format: string };
+
+/** A list line's marker drawn ("(a)", "a).", "A-", "1."): a few characters,
+    none a space, a quote, a backslash, or a percent sign. */
+const MARKER_TEXT = /^[^\s"\\%\p{C}]{0,6}$/u;
+
+/** A level's glyph format as the page can draw it: the text before the
+    numbers, between them, and after. One number is the level's own (%k);
+    several are levels 0 to k in order with one separator between them, as
+    legal numbers are ("%0.%1.%2"). Null for any other format. */
+export function formatParts(format: string, level: number): { before: string; sep: string | null; after: string } | null {
+  const parts = format.split(/%([0-8])/);
+  const holders = parts.filter((_, i) => i % 2 === 1).map(Number);
+  const texts = parts.filter((_, i) => i % 2 === 0);
+  const before = texts[0];
+  const after = texts[texts.length - 1];
+  if (!MARKER_TEXT.test(before) || !MARKER_TEXT.test(after)) return null;
+  if (holders.length === 1) return holders[0] === level ? { before, sep: null, after } : null;
+  const sep = texts[1];
+  const legal =
+    holders.length === level + 1 &&
+    holders.every((k, i) => k === i) &&
+    texts.slice(1, -1).every((t) => t === sep) &&
+    sep !== "" &&
+    sep.length <= 3 &&
+    MARKER_TEXT.test(sep);
+  return legal ? { before, sep, after } : null;
+}
+
+/** A list's nine levels from its `listLevels` (a JSON string), or null
+    when it is not nine levels the page can draw: a bullet of one to three
+    characters, or a known counter with a format formatParts reads. */
+export function listLevelsOf(value: unknown): ListLevel[] | null {
+  if (typeof value !== "string" || value.length > 2000) return null;
+  let list: unknown;
+  try {
+    list = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(list) || list.length !== 9) return null;
+  const levels: ListLevel[] = [];
+  for (const [k, item] of list.entries()) {
+    const { bullet, counter, format } = (item ?? {}) as { bullet?: unknown; counter?: unknown; format?: unknown };
+    if (typeof bullet === "string" && bullet.length > 0 && bullet.length <= 3 && MARKER_TEXT.test(bullet)) levels.push({ bullet });
+    else if (LIST_COUNTERS.includes(counter as ListCounter) && typeof format === "string" && formatParts(format, k)) {
+      levels.push({ counter: counter as ListCounter, format });
+    } else return null;
+  }
+  return levels;
+}
+
 /** One attribute value, kept only when it is a plain value: null, a boolean,
     a finite number, a short string, or a short list of numbers. The
     attributes that end up in a style, an href, or a src are checked by
@@ -255,6 +315,11 @@ function cleanAttr(name: string, value: unknown): unknown {
       return typeof value === "string" && DASHES.has(value) ? value : null;
     case "dropdownOptions":
       return safeDropdownOptions(value);
+    // A list's own levels, written the one way JSON writes them.
+    case "listLevels": {
+      const levels = listLevelsOf(value);
+      return levels ? JSON.stringify(levels) : null;
+    }
     case "fontFamily":
       return typeof value === "string" && FONT_FAMILY.test(value) ? value : null;
     case "fontSize":
