@@ -141,6 +141,11 @@ function unicodeFont(base: string): UnicodeFont {
   return kind;
 }
 
+/** A font that sets nothing but formulas: KaTeX's, an OpenType math font. */
+export function isUnicodeMathFont(base: string): boolean {
+  return unicodeFont(base) !== null;
+}
+
 // Every TeX glyph by its character, the families in the order a character
 // several families draw is read by (upright text first: "(" is the text
 // font's, not a sized delimiter's; \mathcal before \mathscr).

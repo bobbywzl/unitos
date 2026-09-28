@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { listPreset } from "@/components/docs/toolbar/lists";
+import { listMarker } from "@/components/docs/toolbar/lists";
 import type { RichMark, RichNode } from "@/lib/docs/schema";
 import type { ParsedBlock } from "@/lib/parse/types";
 import { parseRegion, type Region } from "@/lib/video/types";
@@ -112,6 +112,10 @@ const MARKER_RE =
   /^(?:[-*•▪◦‣●○■□·∙–—➢❖◆★➔✓✔❏]|[☐☑☒]|\[\d{1,3}\]|\[[A-Za-z][A-Za-z+\-]{0,7}\d{2}(?:\d{2})?[a-z]?\]|\((?:\d{1,3}|[a-zA-Z]|[ivxlcdm]{1,6}|[IVXLCDM]{1,6})\)|(?:\d{1,3}(?:\.\d{1,3})*|[a-zA-Z]|[ivxlcdm]{1,6}|[IVXLCDM]{1,6})(?:[.)]|\)\.)|\d{1,3}(?:\.\d{1,3})+|\*?\d{1,3})(?=\s|$)\s*/;
 /** A checklist line's box after its bullet: "- ☐ …", "- [x] …". */
 const BOX_RE = /^(?:([☐☑☒])|\[([ xX])\])(?:\s+|$)/;
+/** A contents entry's section number, its marker: "2", "2.1", "B", "C.4"
+    (lib/parse/pdf/contents.ts reads entries so). An appendix's letter is no
+    list counter anywhere else. */
+const CONTENTS_MARKER_RE = /^((?:\d{1,2}|[A-Z])(?:\.\d{1,2})*[.)]?)(?:\s+|$)/;
 
 /** The page each offset of a block's text is on. */
 function pageLookup(block: ParsedBlock): (offset: number) => number {
@@ -175,7 +179,9 @@ function level(value: number): 1 | 2 | 3 | 4 | 5 | 6 {
 let scratch: Document | null = null;
 
 /** A table's html as rows of cells, each cell's words with their bold,
-    italic, code, and links. */
+    italic, underline, code, sub, sup, and links; an inline formula (the
+    page editor's inline-math html) is a span of its readable characters
+    that carries its TeX. */
 function htmlRows(html: string): { rows: Row[]; caption: Span[] | null } | null {
   scratch ??= new JSDOM("<!doctype html><body></body>").window.document;
   const host = scratch.createElement("div");
@@ -189,10 +195,14 @@ function htmlRows(html: string): { rows: Row[]; caption: Span[] | null } | null 
     const tag = el.tagName.toLowerCase();
     if (el.classList.contains("cell-gap") || tag === "script" || tag === "style") return;
     if (tag === "br") return into.add({ ...look, text: "\n" });
+    const latex = el.getAttribute("data-type") === "inline-math" ? el.getAttribute("data-latex") : null;
+    if (latex) return into.add({ text: el.textContent ?? "", latex });
     const next: Look = { ...look };
     if (tag === "strong" || tag === "b") next.bold = true;
     if (tag === "em" || tag === "i") next.italic = true;
     if (tag === "u") next.underline = true;
+    if (tag === "sub") next.sub = true;
+    if (tag === "sup") next.sup = true;
     if (tag === "code" || tag === "kbd" || tag === "tt" || tag === "samp") next.code = true;
     const href = tag === "a" ? el.getAttribute("href") : null;
     if (href) next.href = href;
@@ -226,7 +236,7 @@ function htmlRows(html: string): { rows: Row[]; caption: Span[] | null } | null 
   return { rows, caption };
 }
 
-function parseList(block: ParsedBlock, pageAt: (o: number) => number, inRange: (p: number) => boolean): DocBlock | null {
+function parseList(block: ParsedBlock, pageAt: (o: number) => number, inRange: (p: number) => boolean, contents: boolean): DocBlock | null {
   const items: Item[] = [];
   const breaks: Break[] = [];
   const marks: NoteMark[] = [];
@@ -235,7 +245,7 @@ function parseList(block: ParsedBlock, pageAt: (o: number) => number, inRange: (
     const start = from;
     from += line.length + 1;
     const indent = /^ */.exec(line)?.[0].length ?? 0;
-    const m = MARKER_RE.exec(line.slice(indent));
+    const m = (contents ? CONTENTS_MARKER_RE : MARKER_RE).exec(line.slice(indent));
     let marker = m?.[0].trim() ?? "";
     let cut = indent + (m?.[0].length ?? 0);
     const box = !marker || /^[-*•]$/.test(marker) ? BOX_RE.exec(line.slice(cut)) : null;
@@ -322,9 +332,9 @@ function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => b
       return into.hasText ? { kind: "heading", level: level(n), spans: into.spans, ...breaks(into) } : null;
     }
     case "LIST": {
-      const list = parseList(block, pageAt, inRange);
       // A contents list: its class, or lines that link to headings (the converter's test).
       const contents = /\bclass="[^"]*\bcontents\b/.test(block.html ?? "") || (block.links ?? []).some((l) => l.targetOrder !== undefined);
+      const list = parseList(block, pageAt, inRange, contents);
       return list && contents ? { ...list, role: "contents" } : list;
     }
     case "TABLE":
@@ -380,6 +390,8 @@ export function fromParse(parsed: { title: string | null; blocks: ParsedBlock[] 
 
 const LISTS = new Set(["bulletList", "orderedList", "taskList"]);
 const CHIPS = new Set(["dateChip", "personChip", "fileChip", "dropdownChip"]);
+/** The page editor's indent step, in points (components/docs/extensions.ts). */
+const INDENT_PT = 36;
 
 function lookOf(marks: RichMark[] | undefined): Look {
   const look: Look = {};
@@ -395,19 +407,36 @@ function lookOf(marks: RichMark[] | undefined): Look {
 
 /** A footnote the converter could not link to its mark: a paragraph set
     in one small size throughout that opens with its label raised ("² Two of
-    the top ten…"), as the parse view reads it. */
+    the top ten…"), as the parse view reads it, or with a note symbol on the
+    line ("* All costs are in U.S. dollars.", a table's note under MMWR's
+    tables). */
 function unlinkedNote(node: RichNode): { label: string; rest: RichNode } | null {
   const content = node.content ?? [];
   // Page starts before the label stay with the words.
   const at = content.findIndex((c) => c.type !== "pageStart");
   const first = content[at];
-  if (first?.type !== "text" || !first.marks?.some((m) => m.type === "superscript")) return null;
-  const label = (first.text ?? "").trim();
-  if (!/^(?:\d{1,3}|[*∗†‡§¶‖#]{1,4})$/.test(label)) return null;
+  if (first?.type !== "text") return null;
   if (!content.every((c) => c.type !== "text" || c.marks?.some((m) => m.type === "textStyle" && m.attrs?.fontSize))) return null;
-  const next = content[at + 1];
-  const after = next?.type === "text" ? [{ ...next, text: (next.text ?? "").trimStart() }, ...content.slice(at + 2)] : content.slice(at + 1);
-  return { label, rest: { ...node, content: [...content.slice(0, at), ...after] } };
+  const text = first.text ?? "";
+  if (first.marks?.some((m) => m.type === "superscript")) {
+    const label = text.trim();
+    if (!/^(?:\d{1,3}|[*∗†‡§¶‖#]{1,4})$/.test(label)) return null;
+    const next = content[at + 1];
+    const after = next?.type === "text" ? [{ ...next, text: (next.text ?? "").trimStart() }, ...content.slice(at + 2)] : content.slice(at + 1);
+    return { label, rest: { ...node, content: [...content.slice(0, at), ...after] } };
+  }
+  const symbol = /^([*∗†‡§¶‖])\1?(?=\s)/.exec(text);
+  if (!symbol) return null;
+  const rest = text.slice(symbol[0].length).trimStart();
+  return { label: symbol[0], rest: { ...node, content: [...content.slice(0, at), ...(rest ? [{ ...first, text: rest }] : []), ...content.slice(at + 1)] } };
+}
+
+/** A paragraph set as a caption: centered, every run in one small size (the
+    converter's caption, SPEC.md §30). Right before a table, it is the
+    table's caption. */
+function isCaption(node: RichNode): boolean {
+  const runs = (node.content ?? []).filter((c) => c.type === "text");
+  return node.attrs?.textAlign === "center" && runs.length > 0 && runs.every((c) => c.marks?.some((m) => m.type === "textStyle" && m.attrs?.fontSize === "9pt"));
 }
 
 /** A paragraph's indentation from the page editor's attributes: a first
@@ -416,37 +445,6 @@ function indentOf(attrs: Record<string, unknown> | undefined): "first" | "hangin
   const first = Number(attrs?.indentFirstLine ?? 0) || 0;
   const left = Number(attrs?.indentLeft ?? 0) || 0;
   return first > 0 ? "first" : first < 0 ? "hanging" : left > 0 ? "block" : undefined;
-}
-
-function roman(n: number): string {
-  const table: [number, string][] = [[1000, "m"], [900, "cm"], [500, "d"], [400, "cd"], [100, "c"], [90, "xc"], [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]];
-  let out = "";
-  let rest = Math.max(1, n);
-  for (const [value, letters] of table) {
-    while (rest >= value) {
-      out += letters;
-      rest -= value;
-    }
-  }
-  return out;
-}
-
-/** The marker the page editor draws for item `n` of an ordered list at
-    `depth`, the outermost list's preset giving each level's counter. */
-function orderedMarker(style: unknown, depth: number, n: number): string {
-  const glyph = listPreset(true, style).levels[Math.min(depth, 8)];
-  if ("bullet" in glyph) return "•";
-  // A legal level ("%0.%1.") prints the numbers above its own: one here.
-  const [before, ...rest] = glyph.format.split(/%[0-8]/);
-  if (rest.length !== 1) return `${n}.`;
-  const counter =
-    glyph.counter === "decimal" ? String(n)
-    : glyph.counter === "decimal-leading-zero" ? String(n).padStart(2, "0")
-    : glyph.counter === "lower-alpha" ? String.fromCharCode(96 + Math.min(26, Math.max(1, n)))
-    : glyph.counter === "upper-alpha" ? String.fromCharCode(64 + Math.min(26, Math.max(1, n)))
-    : glyph.counter === "lower-roman" ? roman(n)
-    : roman(n).toUpperCase();
-  return `${before}${counter}${rest[0]}`;
 }
 
 class ImportReader {
@@ -459,6 +457,8 @@ class ImportReader {
   private readonly notes = new Map<string, { n: number; page: number }>();
   /** Paragraphs taken for contents entries because they read like headings: kept only in runs of three. */
   readonly headingLike = new Set<DocBlock>();
+  /** A contents entry's depth: its left indent in the page editor's steps. */
+  readonly entryDepth = new Map<DocBlock, number>();
 
   /** `labels`: the page's own mark for a footnote id, where a reference
       gives it (printedLabels); `headings`: the words of every heading of the
@@ -563,8 +563,10 @@ class ImportReader {
         const words = wordsOf(into.spans.map((span) => span.text).join("")).map((w) => w.w);
         const linked = into.spans.some((span) => span.href?.startsWith("#heading="));
         const like = this.headings.has(words.join(" ")) || (/^\d+$/.test(words.at(-1) ?? "") && this.headings.has(words.slice(0, -1).join(" ")));
-        const block: DocBlock = { kind: "paragraph", spans: into.spans, ...(align ? { align } : {}), ...(indent ? { indent } : {}), ...(linked || like ? { role: "contents" as const } : {}) };
+        const role = linked || like ? ("contents" as const) : isCaption(node) ? ("caption" as const) : undefined;
+        const block: DocBlock = { kind: "paragraph", spans: into.spans, ...(align ? { align } : {}), ...(indent ? { indent } : {}), ...(role ? { role } : {}) };
         if (like && !linked) this.headingLike.add(block);
+        if (linked || like) this.entryDepth.set(block, Math.max(0, Math.round((Number(node.attrs?.indentLeft ?? 0) || 0) / INDENT_PT)));
         return this.push(block, into);
       }
       case "bulletList":
@@ -612,10 +614,13 @@ class ImportReader {
     const items: Item[] = [];
     const breaks: Break[] = [];
     const marks: NoteMark[] = [];
-    const style = node.type === "orderedList" ? node.attrs?.listStyle : null;
-    const visit = (list: RichNode, depth: number) => {
+    // Each line's number at each level, from the outermost list down: the
+    // page editor draws a numbered line's marker from them and the outermost
+    // list's level formats (listMarker).
+    const visit = (list: RichNode, depth: number, above: number[]) => {
       const start = Number(list.attrs?.start ?? 1) || 1;
       (list.content ?? []).forEach((item, index) => {
+        const numbers = [...above, start + index];
         const into = new Spans();
         const nested: RichNode[] = [];
         let first = true;
@@ -632,15 +637,15 @@ class ImportReader {
         if (into.hasText) {
           const checked = item.attrs?.checked === true;
           const marker =
-            list.type === "taskList" ? (checked ? "☑" : "☐") : list.type === "orderedList" ? orderedMarker(style, depth, start + index) : "•";
+            list.type === "taskList" ? (checked ? "☑" : "☐") : list.type === "orderedList" ? listMarker(node, numbers) : "•";
           for (const at of into.breaks) breaks.push({ unit: items.length, at });
           for (const m of into.marks) marks.push({ unit: items.length, ...m });
           items.push(list.type === "taskList" ? { depth, marker, spans: into.spans, checked } : { depth, marker, spans: into.spans });
         }
-        for (const sub of nested) visit(sub, depth + 1);
+        for (const sub of nested) visit(sub, depth + 1, numbers);
       });
     };
-    visit(node, 0);
+    visit(node, 0, []);
     if (items.length > 0) this.blocks.push({ kind: "list", items, ...(breaks.length > 0 ? { breaks } : {}), ...(marks.length > 0 ? { marks } : {}) });
   }
 
@@ -673,7 +678,15 @@ class ImportReader {
         }
       }
     }
-    if (rows.some((row) => row.cells.some((c) => c.spans.some((s) => s.text.trim())))) this.blocks.push({ kind: "table", rows, ...(marks.length > 0 ? { marks } : {}) });
+    if (!rows.some((row) => row.cells.some((c) => c.spans.some((s) => s.text.trim())))) return;
+    // The converter sets a table's caption as a caption paragraph right before it.
+    const before = this.blocks.at(-1);
+    const caption = before?.kind === "paragraph" && before.role === "caption" ? before : null;
+    if (caption) {
+      this.blocks.pop();
+      for (const m of caption.marks ?? []) marks.push({ ...m, unit: -1 });
+    }
+    this.blocks.push({ kind: "table", ...(caption ? { caption: caption.spans } : {}), rows, ...(marks.length > 0 ? { marks } : {}) });
   }
 }
 
@@ -697,14 +710,60 @@ export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[]
     if (j - i < 3) for (let k = i; k < j; k++) if (reader.headingLike.has(blocks[k])) delete blocks[k].role;
     i = Math.max(j, i + 1);
   }
-  return { blocks };
+  return { blocks: contentsLists(blocks, reader.entryDepth) };
+}
+
+/** The converter writes a contents list as one paragraph per entry, each a
+    link to its heading (SPEC.md §30): a run of entries reads as the list it
+    stands for, each entry an item, its section number the marker, its
+    indent the depth. */
+function contentsLists(blocks: DocBlock[], depths: Map<DocBlock, number>): DocBlock[] {
+  const out: DocBlock[] = [];
+  for (let i = 0; i < blocks.length; ) {
+    if (blocks[i].kind !== "paragraph" || blocks[i].role !== "contents") {
+      out.push(blocks[i++]);
+      continue;
+    }
+    const items: Item[] = [];
+    const breaks: Break[] = [];
+    const marks: NoteMark[] = [];
+    for (; i < blocks.length && blocks[i].kind === "paragraph" && blocks[i].role === "contents"; i++) {
+      const entry = blocks[i] as Extract<DocBlock, { kind: "paragraph" }>;
+      const m = CONTENTS_MARKER_RE.exec(entry.spans.map((s) => s.text).join(""));
+      const cut = m?.[0].length ?? 0;
+      const unit = items.length;
+      items.push({ depth: depths.get(entry) ?? 0, marker: m?.[1] ?? "", spans: dropChars(entry.spans, cut) });
+      for (const b of entry.breaks ?? []) if (b.at > cut) breaks.push({ unit, at: b.at - cut });
+      for (const x of entry.marks ?? []) if (x.at >= cut) marks.push({ ...x, unit, at: x.at - cut, end: x.end - cut });
+    }
+    out.push({ kind: "list", role: "contents", items, ...(breaks.length > 0 ? { breaks } : {}), ...(marks.length > 0 ? { marks } : {}) });
+  }
+  return out;
+}
+
+/** Spans without their first `n` characters. */
+function dropChars(spans: Span[], n: number): Span[] {
+  const out: Span[] = [];
+  let rest = n;
+  for (const span of spans) {
+    if (rest >= span.text.length && span.latex === undefined) {
+      rest -= span.text.length;
+      continue;
+    }
+    out.push(rest > 0 ? { ...span, text: span.text.slice(rest) } : span);
+    rest = 0;
+  }
+  return out;
 }
 
 /** A reference footnote: its label and its words. */
 export type PrintedNote = { label: string; words: string[] };
 
+/** The reference's footnotes, a note the page prints with no mark among
+    them (label ""): the page editor numbers every footnote, and a number
+    where the page prints none is no word of the page. */
 export function printedNotes(blocks: RefBlock[]): PrintedNote[] {
-  return blocks.flatMap((b) => (b.kind === "footnote" && b.label.trim() ? [{ label: b.label.trim(), words: wordsOf(b.spans.map((s) => s.text).join("")).map((w) => w.w) }] : []));
+  return blocks.flatMap((b) => (b.kind === "footnote" ? [{ label: b.label.trim(), words: wordsOf(b.spans.map((s) => s.text).join("")).map((w) => w.w) }] : []));
 }
 
 /** The page's own marks for an import's footnotes. The page editor numbers

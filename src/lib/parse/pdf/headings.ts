@@ -164,8 +164,8 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
 // The end of a line's lead set bold or in small caps: its styled runs from
 // the line's start, through short runs of other glyphs between them (a
 // formula's letters in a bold title) and through a formula of any length
-// (amsbook's "1.1.1. The probability space (Ω, ℱ, P).": the formula is in
-// math fonts, and the lead read as a list item "1.").
+// (an amsbook subsection lead "1.1.1. A title with a formula.": the
+// formula is in math fonts, and the lead read as a list item "1.").
 function styledLeadEnd(line: Line): number {
   let end = 0;
   // Where the next run may start: the lead's end, or past the glyphs let

@@ -12,6 +12,7 @@ import type { PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { joinedRules, latticeGrids, ruleStacks, type Grid, type GridCell } from "@/lib/parse/pdf/lattice";
 import { buildLines } from "@/lib/parse/pdf/lines";
+import { resolveZones } from "@/lib/parse/pdf/math/zones";
 import {
   boldHeaderRows,
   cellsBySeparators,
@@ -19,6 +20,7 @@ import {
   columnSeparators,
   rowsOf,
   tableSegment,
+  type CellParagraph,
   type TableCell,
   type TableRow,
 } from "@/lib/parse/pdf/tables";
@@ -40,12 +42,15 @@ const inBox = (it: Item, b: Box) => {
 const SLIVER = 6;
 
 // The grid with its slivers closed: grid lines that bound an empty sliver
-// become one line, and a cell that spanned the sliver spans one fewer.
+// become one line, and a cell that spanned the sliver spans one fewer. A
+// run of slivers is one line: Word shades a header cell with a second box
+// set in by the cell's padding, and the legal packet's wire table read its
+// two cells' insets and the rule between them as a column of their own.
 function closeSlivers(grid: Grid, items: Item[]): Grid {
   const keep = (lines: number[], dir: "x" | "y") => {
     const kept = [lines[0]];
     for (let k = 1; k < lines.length; k++) {
-      const [a, b] = [Math.min(kept[kept.length - 1], lines[k]), Math.max(kept[kept.length - 1], lines[k])];
+      const [a, b] = [Math.min(lines[k - 1], lines[k]), Math.max(lines[k - 1], lines[k])];
       const empty = !items.some((it) => {
         const c = centerOf(it);
         const v = dir === "x" ? c.x : c.y;
@@ -321,7 +326,7 @@ function gridHead(grid: Grid, body: Item[], items: Item[]): Item[] {
 
 // The ruled tables of a page, from its rules and filled boxes: grids first,
 // then the regions of rule stacks outside them.
-export function ruledTables(all: Item[], drawing: TableDrawing, pageWidth: number, pageHeight: number): TableRegion[] {
+export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number, pageHeight: number): TableRegion[] {
   // Blank items (the spaces pdf.js reports between words) say nothing of
   // where text is: one in a sliver between two cells kept the sliver open.
   const items = all.filter((it) => it.str.trim().length > 0);
@@ -348,13 +353,13 @@ export function ruledTables(all: Item[], drawing: TableDrawing, pageWidth: numbe
     if (isGroupGrid(grid, body)) {
       const b = grid.box;
       const inner = joinedRules(drawing.rules.filter((r) => r.dir === "h" && r.y1 < b.y2 - 1 && r.y1 > b.y1 + 1 && r.x1 >= b.x1 - 3 && r.x2 <= b.x2 + 3));
-      regions.push({ box: b, items: body, lines: buildLines(body, 0), grid: null, rules: inner });
+      regions.push({ box: b, items: body, lines: buildLines(body, 0), grid: null, rules: inner, drawing });
       continue;
     }
     const head = gridHead(grid, body, loose);
     const box = head.length > 0 ? { ...grid.box, y2: Math.max(...head.map((it) => it.y + it.size)) } : grid.box;
     const inside = [...head, ...body];
-    regions.push({ box, items: inside, lines: buildLines(inside, 0), grid, rules: [] });
+    regions.push({ box, items: inside, lines: buildLines(inside, 0), grid, rules: [], drawing });
   }
   const free = (b: Box) => !regions.some((r) => b.x1 < r.box.x2 && b.x2 > r.box.x1 && b.y1 < r.box.y2 && b.y2 > r.box.y1);
   const rules = joinedRules(drawing.rules.filter((r) => r.dir === "h" && free({ x1: r.x1, x2: r.x2, y1: r.y1 - 1, y2: r.y2 + 1 })));
@@ -366,7 +371,7 @@ export function ruledTables(all: Item[], drawing: TableDrawing, pageWidth: numbe
       if (!isTableRegion(lines, box.x2 - box.x1)) continue;
       if (isChart(box, [box.x1, box.x2], stack.rules.map((r) => r.y1), lines.length, drawing)) continue;
       const inner = rules.filter((r) => r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3);
-      regions.push({ box, items: inside, lines, grid: null, rules: inner });
+      regions.push({ box, items: inside, lines, grid: null, rules: inner, drawing });
     }
   }
   if (process.env.R2T_DEBUG) for (const r of regions) console.error("REGION", r.grid ? "grid" : "rules", JSON.stringify(r.box), r.lines.length, r.lines.slice(0, 2).map((l) => l.text.slice(0, 60)));
@@ -446,6 +451,14 @@ export function placeTables(lines: Line[]): Line[] {
 export function tableFromRegion(region: TableRegion, page: number): Segment {
   const lines = buildLines(region.items, page);
   const where = { ...geom(lines), box: region.box, mathShare: 0 };
+  // The lines the cells' words come from: their formulas are read last,
+  // against the glyphs and rules the page draws (a failed check keeps the
+  // words; synth-notes-tex's table of fractions read "1 36" for 1/36).
+  const built: Line[] = [];
+  const segment = (rows: TableRow[], headerRows: number) => {
+    resolveZones(built, region.drawing);
+    return tableSegment(rows, headerRows, page, where);
+  };
   if (region.grid) {
     const grid = region.grid;
     // The head found over the grid: its lines grouped into rows, a row per
@@ -460,11 +473,11 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
       groups[groups.length - 1].push(line);
       last = covers;
     });
-    const head = groups.map((g) => headerRow(g, grid.xs));
-    const rows = [...head, ...gridRows(grid, region.items.filter((it) => centerOf(it).y <= grid.box.y2), page)];
+    const head = groups.map((g) => headerRow(g, grid.xs, built));
+    const rows = [...head, ...gridRows(grid, region.items.filter((it) => centerOf(it).y <= grid.box.y2), page, built)];
     const headerRows = boldHeaderRows(rows);
     spanHeadColumns(rows, headerRows);
-    return tableSegment(rows, headerRows, page, where);
+    return segment(rows, headerRows);
   }
   const width = region.box.x2 - region.box.x1;
   const full = region.rules.filter((r) => r.x2 - r.x1 >= width * 0.9).map((r) => r.y1);
@@ -485,7 +498,7 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
     headGroups[headGroups.length - 1].push(line);
   });
   const bounds = [region.box.x1, ...separators, region.box.x2];
-  for (const group of headGroups) rows.push(headerRow(group, bounds));
+  for (const group of headGroups) rows.push(headerRow(group, bounds, built));
   if (process.env.R2T_DEBUG) {
     console.error("BOUNDS", bounds.map((b) => Math.round(b * 10) / 10).join(","), "partial", partial.map((y) => Math.round(y)));
     for (const group of headGroups) for (const line of group) console.error("  HEADLINE", Math.round(line.y), phraseColumns(line, bounds).map((p) => `${p.from}-${p.to}:${p.items.map((i) => i.str).join("|")}@${Math.round(p.items[0].x)}-${Math.round(p.items[p.items.length - 1].x + p.items[p.items.length - 1].w)}`).join("  "));
@@ -493,11 +506,12 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
   const headerRows = rows.length;
   spanHeadColumns(rows, headerRows);
   if (body.length > 0) {
+    built.push(...body);
     const cellsOf = body.map((line) => cellsBySeparators(line, separators));
     const starts = regionRowStarts(body, cellsOf);
     rows.push(...spanCenteredLabels(rowsOf(cellsOf, starts, columnCount), starts.map((k) => body[k].y), full));
   }
-  return tableSegment(rows, headerRows || (rows.length > 1 && boldHeaderRows(rows) > 0 ? 1 : 0), page, where);
+  return segment(rows, headerRows || (rows.length > 1 && boldHeaderRows(rows) > 0 ? 1 : 0));
 }
 
 // A label set alone on its line midway between two rows, with no rule
@@ -589,7 +603,7 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
 // One header row out of lines: the words of each column joined, a phrase
 // over several columns one cell spanning them. bounds are the column edges,
 // the table's left edge first.
-function headerRow(lines: Line[], bounds: number[]): TableRow {
+function headerRow(lines: Line[], bounds: number[], built: Line[]): TableRow {
   type Piece = { from: number; to: number; items: Item[] };
   const pieces: Piece[] = [];
   const columns = bounds.length - 1;
@@ -620,7 +634,9 @@ function headerRow(lines: Line[], bounds: number[]): TableRow {
       cells.push({ text: "", runs: [] });
       col++;
     }
-    const cell: TableCell = { ...linesText(buildLines(p.items, 0)) };
+    const pieceLines = buildLines(p.items, 0);
+    built.push(...pieceLines);
+    const cell: TableCell = { ...linesText(pieceLines) };
     if (p.to > p.from) cell.colspan = p.to - p.from + 1;
     cells.push(cell);
     col = p.to + 1;
@@ -668,9 +684,8 @@ function gridRows(grid: Grid, items: Item[], page: number, built: Line[]): Table
 // breaks it, not where the cell's width wraps it. A line wraps into the
 // next when the next line's first word had no room left on it, when it
 // ends in a hyphen, or when it ends mid-sentence and the next goes on in
-// lowercase; else the next line opens a paragraph (the legal packet's
-// signature cell: "By: Oak Valley Investments LLC", "By: Iron Core
-// Management LLC", "It's Manager", each on a line of its own, read as one).
+// lowercase; else the next line opens a paragraph (a signature cell's
+// "By:" lines, each on a line of its own, read as one line).
 // Each paragraph keeps how its lines sit in the cell: centered, flush
 // right, or set in from the cell's left edge. inset: the cells' padding.
 function cellParagraphs(lines: Line[], box: Box, inset: number): TableCell {

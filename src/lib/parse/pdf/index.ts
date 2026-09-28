@@ -18,6 +18,7 @@ import {
   type FontFlags,
 } from "@/lib/parse/pdf/glyphs";
 import { assignHeadingLevels } from "@/lib/parse/pdf/headings";
+import { lookItems } from "@/lib/parse/pdf/look";
 import { displayEquations, displayLines, isTexPage } from "@/lib/parse/pdf/math/display";
 import { mathSpans, resolveZones } from "@/lib/parse/pdf/math/zones";
 import { firstPageOf, mergeAcrossPages, shiftSpansInto } from "@/lib/parse/pdf/merge";
@@ -245,6 +246,10 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
         for (const it of items) if (it.font === font) it.mono = true;
       }
     }
+    // Each item's face and size and what the drawing marks on it: its
+    // color, a highlight, an underline, a strikethrough (look.ts). An item
+    // that looks two ways is cut where its look changes.
+    lookItems(items, drawing, (id) => page.commonObjs.get(id) as { name?: string; fallbackName?: string } | null, hrefAt);
     pageHeights.push(viewport.height);
     pageWidths.push(viewport.width);
     // The tables the page's rules draw leave the text flow before the column

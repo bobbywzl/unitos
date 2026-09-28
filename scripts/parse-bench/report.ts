@@ -143,6 +143,7 @@ function referenceDetail(ref: RefDoc, candidate: Doc) {
 
   if (s.lists.items > 0) {
     console.log(`\nList items: ${s.lists.found} of ${s.lists.items} found, ${s.lists.atDepth} at their depth, ${s.lists.marked} with their marker.`);
+    console.log(`  Markers by depth: ${s.lists.byDepth.map((level, depth) => `${depth}: ${level.marked} of ${level.found}`).join(", ") || "—"}.`);
     for (const m of s.lists.misses.slice(0, 40)) {
       console.log(`  ${m.why}: ${clip(r.units[m.unit].text, 100)}${m.cand >= 0 ? `  →  ${clip(c.units[m.cand].text, 60)}` : ""}`);
     }

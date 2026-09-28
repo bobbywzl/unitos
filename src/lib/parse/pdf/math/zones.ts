@@ -9,6 +9,7 @@
 // page's rules are known (resolveZones).
 
 import type { Glyph, PageDrawing } from "@/lib/parse/pdf/drawing";
+import { isUnicodeMathFont } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Item, Line, MathZone, Run } from "@/lib/parse/pdf/types";
@@ -25,10 +26,14 @@ const OPNAMES = new Set([
   "arg", "Pr", "limsup", "liminf", "mod",
 ]);
 
-// A glyph only math sets: a math family's, or the text font's upright
-// capital Greek (Γ … Ω, codes 0–10: "ω ∈ Ω" ended the formula at the Ω, read
-// as a word).
-const isMathGlyph = (g: Glyph) => (g.family !== null && MATH_FAMILIES.has(g.family)) || (g.family === "ot1" && g.code <= 0x0a);
+// A glyph only math sets: a math family's, the text font's upright capital
+// Greek (Γ … Ω, codes 0–10: "ω ∈ Ω" ended the formula at the Ω, read as a
+// word), or any glyph of a math font set in Unicode — KaTeX's fonts and
+// OpenType math fonts set nothing but formulas, their digits and roman
+// letters too (synth-math-html's \dfrac{1}{2} had no glyph to start a
+// formula, and \text{if } cut its formula in two).
+const isMathGlyph = (g: Glyph) =>
+  (g.family !== null && MATH_FAMILIES.has(g.family)) || (g.family === "ot1" && (g.code <= 0x0a || isUnicodeMathFont(g.base)));
 
 function kind(g: Glyph, size: number): Kind {
   if (isMathGlyph(g)) return "math";

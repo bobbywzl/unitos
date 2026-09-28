@@ -100,10 +100,28 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     type: "doc",
     content: [paragraph("1. Channels and banks 12"), paragraph("2. Floods 14"), paragraph("3. Dams 17"), heading("1. Channels and banks"), paragraph("2. Floods"), heading("2. Floods"), heading("3. Dams")],
   });
+  const entries = unlinked.blocks[0];
   check(
-    "import: three paragraphs in a row that read like headings are contents entries; one alone is no entry",
-    unlinked.blocks.slice(0, 3).every((b) => b.role === "contents") && unlinked.blocks[4]?.role === undefined,
+    "import: three paragraphs in a row that read like headings are a contents list, their numbers the markers; one alone is no entry",
+    entries?.kind === "list" && entries.role === "contents" && entries.items.map((it) => it.marker).join(",") === "1.,2.,3." && unlinked.blocks[2]?.kind === "paragraph" && unlinked.blocks[2].role === undefined,
     JSON.stringify(unlinked.blocks.map((b) => b.role ?? b.kind)),
+  );
+  const linkedEntry = (text: string, indentLeft?: number): RichNode => ({
+    type: "paragraph",
+    ...(indentLeft ? { attrs: { indentLeft } } : {}),
+    content: [{ type: "text", text, marks: [{ type: "link", attrs: { href: "#heading=h1" } }] }],
+  });
+  const toc = fromImport({ type: "doc", content: [linkedEntry("2 Data"), linkedEntry("2.1 Delay variables", 36), linkedEntry("B Data cleaning")] }).blocks[0];
+  check(
+    "import: linked contents entries are one list: the section number the marker, the indent the depth",
+    toc?.kind === "list" && toc.items.map((it) => `${it.depth}${it.marker}:${it.spans.map((s) => s.text).join("")}`).join("|") === "02:Data|12.1:Delay variables|0B:Data cleaning",
+    JSON.stringify(toc),
+  );
+  const parsedToc = fromParse({ title: null, blocks: [{ type: "LIST", text: "C Estimation\n  C.1 Base regression", html: '<ol class="contents"></ol>', page: 1 }] }).blocks[0];
+  check(
+    "parse: a contents list's appendix letters are its markers",
+    parsedToc?.kind === "list" && parsedToc.items.map((it) => `${it.depth}${it.marker}`).join(",") === "0C,1C.1",
+    JSON.stringify(parsedToc),
   );
   const listed = fromParse({ title: null, blocks: [{ type: "LIST", text: "[Bil95] Billingsley, Probability and Measure.\n[Wil91] Williams, Probability with Martingales.", page: 1 }] }).blocks[0];
   check("parse: an author-year label is a list marker", listed?.kind === "list" && listed.items[0].marker === "[Bil95]" && listed.items[1].marker === "[Wil91]", JSON.stringify(listed));
@@ -143,6 +161,31 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("a list item at the wrong depth counts", s.lists.found === 2 && near(s.lists.depth, 0.5), `depth ${s.lists.depth}`);
   const flat = run(edit((b) => b.splice(5, 1, para("Gravel bars form where the current slows."), para("Sand settles behind every bar."))));
   check("list items read as paragraphs are not found", flat.lists.found === 0 && near(flat.lists.recall, 0));
+  const drawn = run(edit((b) => ((b[5] as Extract<RefBlock, { kind: "list" }>).items[0].marker = "a.")));
+  check(
+    "a list item drawn with another marker counts, by depth, and lowers the lists part",
+    near(drawn.lists.markers, 0.5) && drawn.lists.byDepth[0]?.marked === 0 && drawn.lists.byDepth[1]?.marked === 1 && near(drawn.parts.lists, 5 / 6),
+    `markers ${drawn.lists.markers}, lists ${drawn.parts.lists}, ${JSON.stringify(drawn.lists.byDepth)}`,
+  );
+}
+{
+  // An import's list in its own level formats (R2-LISTS: listLevels on the outermost list).
+  const levels = JSON.stringify([
+    { counter: "decimal", format: "%0." },
+    { counter: "lower-alpha", format: "%1)." },
+    ...Array.from({ length: 7 }, (_, k) => ({ counter: "decimal", format: `%${k + 2}.` })),
+  ]);
+  const item = (text: string, ...nested: RichNode[]): RichNode => ({ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text }] }, ...nested] });
+  const doc: RichNode = {
+    type: "doc",
+    content: [{ type: "orderedList", attrs: { listLevels: levels, start: 3 }, content: [item("Third step", { type: "orderedList", content: [item("First case"), item("Second case")] })] }],
+  };
+  const list = fromImport(doc).blocks[0];
+  check(
+    "import: a list's own level formats draw its markers",
+    list?.kind === "list" && list.items.map((it) => it.marker).join(",") === "3.,a).,b).",
+    list?.kind === "list" ? list.items.map((it) => it.marker).join(",") : JSON.stringify(list),
+  );
 }
 {
   const s = run(edit((b) => (b[4] = { kind: "figure", mathImage: "∫ 1 0 f(x) dx = 1 (1.1)" })));
@@ -280,6 +323,21 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     (drawnOnly.words.recall ?? 1) < 1 && near(relabeled.words.f1, 1) && relabeled.notes?.linked === 2,
     `drawn recall ${drawnOnly.words.recall}; relabeled f1 ${relabeled.words.f1}, ${JSON.stringify(relabeled.notes)}`,
   );
+  // A note the page prints with no mark (a first page's acknowledgment): the
+  // page editor's number at the title's end is no word of the page.
+  const UNMARKED: RefBlock[] = [
+    { kind: "title", spans: [{ text: "Floods of 2025" }] },
+    { kind: "footnote", label: "", spans: [{ text: "The author thanks the gauge keepers of the upper basin." }] },
+  ];
+  const unmarked: RichNode = {
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { docStyle: "title" }, content: [{ type: "text", text: "Floods of 2025" }, { type: "footnoteReference", attrs: { footnoteId: "u" } }] },
+      { type: "footnotes", content: [note("u", "The author thanks the gauge keepers of the upper basin.")] },
+    ],
+  };
+  const noMark = score({ blocks: UNMARKED }, [], fromImport(unmarked, undefined, printedNotes(UNMARKED))).scores;
+  check("notes: a note the page prints with no mark draws no number into the import's words", near(noMark.words.f1, 1) && noMark.notes?.found === 1, `f1 ${noMark.words.f1}, ${JSON.stringify(noMark.notes)}`);
   // A note cited twice ("Shen∗", "Sherif∗"): a mark at either citation links it.
   const TWICE: RefBlock[] = [
     { kind: "paragraph", spans: [{ text: "Lin Shen" }, { text: "∗", sup: true }, { text: " and Omar Sherif" }, { text: "∗", sup: true }, { text: " wrote the survey of the basin." }] },
@@ -501,6 +559,47 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   check("parse: a figure of math is an equation image", page2.blocks[3].kind === "figure" && page2.blocks[3].mathImage !== undefined);
   const withBreak = fromParse({ title: null, blocks: [blocks[1]] });
   check("parse: a page start inside a block is a break", withBreak.blocks[0].breaks?.[0]?.at === 19);
+  const cells = fromParse({
+    title: null,
+    blocks: [
+      {
+        type: "TABLE",
+        text: "Table 1: Flows\nCost\tE = mc2",
+        html: '<table><caption>Table 1: Flows<span class="cell-gap">\n</span></caption><tbody><tr><td>1.0·10<sup>20</sup> H<sub>2</sub>O<span class="cell-gap">\t</span></td><td><span data-type="inline-math" data-latex="E = mc^2">E = mc2</span></td></tr></tbody></table>',
+        page: 1,
+      },
+    ],
+  }).blocks[0];
+  const flags = cells.kind === "table" ? cells.rows[0].cells[0].spans.map((s) => `${s.text}${s.sup ? "^" : ""}${s.sub ? "_" : ""}`).join("|") : "";
+  const formula = cells.kind === "table" ? cells.rows[0].cells[1].spans[0] : undefined;
+  check(
+    "parse: a cell keeps its sup and sub, an inline formula its TeX, and the table its caption",
+    flags === "1.0·10|20^| H|2_|O" && formula?.latex === "E = mc^2" && formula.text === "E = mc2" && cells.kind === "table" && cells.caption?.[0]?.text.startsWith("Table 1: Flows") === true,
+    `${flags} ${JSON.stringify(formula)}`,
+  );
+}
+{
+  // The converter's table caption: a centered 9 pt paragraph right before the table.
+  const small = (text: string) => ({ type: "text", text, marks: [{ type: "textStyle", attrs: { fontSize: "9pt" } }] });
+  const doc: RichNode = {
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { textAlign: "center" }, content: [small("Table 1: River flows")] },
+      { type: "table", content: [{ type: "tableRow", content: [{ type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "Q" }] }] }] }] },
+      { type: "paragraph", content: [small("* All flows are in cubic meters a second.")] },
+    ],
+  };
+  const read = fromImport(doc).blocks;
+  check(
+    "import: a centered 9 pt paragraph right before a table is its caption",
+    read[0]?.kind === "table" && read[0].caption?.map((s) => s.text).join("") === "Table 1: River flows",
+    JSON.stringify(read[0]),
+  );
+  check(
+    "import: a small paragraph opening with a note symbol is a footnote",
+    read[1]?.kind === "footnote" && read[1].label === "*" && read[1].spans.map((s) => s.text).join("") === "All flows are in cubic meters a second.",
+    JSON.stringify(read[1]),
+  );
 }
 {
   const doc: RichNode = {

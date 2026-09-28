@@ -12,7 +12,7 @@ import { garblesOf, wordsOf, type Garble } from "./text";
 //   blocks      F1 of reference blocks found with their kind and candidate blocks of the right kind
 //   paragraphs  1 − (units split + units merged) / reference units (a paragraph, a heading, a list item)
 //   headings    share of reference headings found as headings at their level, after the best level shift
-//   lists       mean of list item recall and depth accuracy (markers reported)
+//   lists       mean of list item recall, depth accuracy, and marker accuracy (the marker as drawn)
 //   tables      F1 of table words in their cell, rows and columns mapped one to one (leaks both ways reported)
 //   math        mean of display and inline similarity of canonical forms (images and words read as math reported)
 //   garbles     1 − garbled glyphs past the reference's own over (5 + words / 100)
@@ -31,7 +31,7 @@ export const WEIGHTS = {
   blocks: 10, // block kinds found, F1
   paragraphs: 5, // no unit split, no units merged
   headings: 5, // headings found at their level
-  lists: 5, // list items found, and at their depth
+  lists: 5, // list items found, at their depth, with their marker
   tables: 10, // table words in their cell, F1
   math: 10, // display and inline math similarity
   garbles: 5, // no garbled glyph
@@ -336,9 +336,10 @@ export function align(ref: Flat, cand: Flat): Alignment {
     }
     owner[rb] = best;
   }
+  // A table that carries its caption is a table, however few of its cells' words match.
   const caption = new Uint8Array(cand.blocks.length);
   captionWords.forEach((n, cb) => {
-    if (n > candMatched[cb]) caption[cb] = 1;
+    if (n > candMatched[cb] && cand.blocks[cb].kind !== "table") caption[cb] = 1;
   });
   // Word-less reference blocks pair with a free candidate block between the
   // owners of their neighbors.
@@ -667,6 +668,8 @@ export type ListScores = {
   marked: number;
   /** Reference checklist items, and those whose counterpart has a box in the same state. */
   checks: { ref: number; right: number };
+  /** Found items and those with their marker, by the reference's depth. */
+  byDepth: { found: number; marked: number }[];
   recall: number | null;
   depth: number | null;
   markers: number | null;
@@ -682,7 +685,9 @@ const sameMarker = (a: string, b: string) => (bulletLike(a) && bulletLike(b)) ||
 /** List items: an item is found when the candidate unit holding most of its
     words is a list item whose words are mostly this item's (an item of
     math alone stands between its found neighbors); then its depth and its
-    marker are compared (every bullet glyph is one marker). */
+    marker are compared (every bullet glyph is one marker). A candidate's
+    marker is the one it draws: the parse's printed marker, the import's
+    list format (a marker left in the words is no marker). */
 export function listScores(ref: Flat, cand: Flat, al: Alignment): ListScores {
   const votes = new Map<number, Map<number, number>>(); // ref unit → cand unit → words
   const back = new Map<number, Map<number, number>>(); // cand unit → ref unit → words
@@ -735,6 +740,7 @@ export function listScores(ref: Flat, cand: Flat, al: Alignment): ListScores {
   let atDepth = 0;
   let marked = 0;
   const checks = { ref: 0, right: 0 };
+  const byDepth: ListScores["byDepth"] = [];
   const misses: ListScores["misses"] = [];
   ref.units.forEach((unit, ru) => {
     const block = ref.blocks[unit.block];
@@ -754,23 +760,29 @@ export function listScores(ref: Flat, cand: Flat, al: Alignment): ListScores {
     const theirs = other.items[cand.units[cu].index];
     if (mine.depth === theirs.depth) atDepth++;
     else misses.push({ unit: ru, cand: cu, why: `depth ${theirs.depth}, not ${mine.depth}` });
-    if (sameMarker(mine.marker, theirs.marker)) marked++;
-    else misses.push({ unit: ru, cand: cu, why: `marker "${theirs.marker}", not "${mine.marker}"` });
+    const level = (byDepth[mine.depth] ??= { found: 0, marked: 0 });
+    level.found++;
+    if (sameMarker(mine.marker, theirs.marker)) {
+      marked++;
+      level.marked++;
+    } else misses.push({ unit: ru, cand: cu, why: `marker "${theirs.marker}", not "${mine.marker}"` });
     if (box !== undefined && theirs.checked === box) checks.right++;
   });
   const found = itemTo.size;
   const recall = share(found, items);
   const depth = found > 0 ? atDepth / found : items > 0 ? 0 : null;
+  const markers = found > 0 ? marked / found : items > 0 ? 0 : null;
   return {
     items,
     found,
     atDepth,
     marked,
     checks,
+    byDepth: Array.from(byDepth, (level) => level ?? { found: 0, marked: 0 }),
     recall,
     depth,
-    markers: found > 0 ? marked / found : null,
-    score: recall === null || depth === null ? null : (recall + depth) / 2,
+    markers,
+    score: recall === null || depth === null || markers === null ? null : (recall + depth + markers) / 3,
     misses,
   };
 }
