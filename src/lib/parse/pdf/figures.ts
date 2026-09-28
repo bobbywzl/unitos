@@ -50,11 +50,11 @@ export function isCaption(text: string, runs: Run[] | undefined): boolean {
 // ── Panel captions ──────────────────────────────────────────────────────────
 // A figure of panels captions each panel under it ("(a) Round 1: k × k × k
 // cube", "(B) d = 3, e = 3", "b. Random walk in two dimensions.") and may
-// add a note under the figure ("Note: The dashed line is …"). They are the
-// figure's caption, before or after its own as the page reads (arXiv
-// 2302.12627 p18, 2410.04586 p9, 2506.08209 p12, Grinstead–Snell p16: their
-// words were in no block). A letter alone is the panel's label, which the
-// figure's caption names.
+// add a note or its source under the figure ("Note: The dashed line is …",
+// "（出典）…"). They are the figure's caption, before or after its own as
+// the page reads (arXiv 2302.12627 p18, 2410.04586 p9, 2506.08209 p12,
+// Grinstead–Snell p16: their words were in no block). A letter alone is
+// the panel's label, which the figure's caption names.
 const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=[^]*\p{L})[^]{3,}/u;
 const NOTE_RE = /^(?:(?:notes?|sources?)\s*[:.]\s+\S|[（(](?:出典|注|資料|来源|來源)[）)]|(?:出典|注|来源|來源)[:：])/i;
 // Panel letters alone ("(c) (d)") are a chart's labels, no caption.
@@ -256,8 +256,10 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     const box = onPage(raw);
     if (box.x2 < box.x1 || box.y2 < box.y1) continue;
     // A rule is thin and long. A dot is a shape: a chart's markers are
-    // hundreds of them (arXiv 2502.02648: four charts read as rules, and
-    // their ticks and panel letters ran through the text).
+    // hundreds of them, and so are a table's letters drawn as outlines
+    // (arXiv 2502.02648: four charts read as rules; Grinstead–Snell p8: a
+    // chart's ticks became a code block; IEEE Access 3721067: four tables
+    // showed nothing at all).
     const thin = Math.min(box.x2 - box.x1, box.y2 - box.y1) < 1.5 && Math.max(box.x2 - box.x1, box.y2 - box.y1) >= 1.5;
     if (!thin && box.x2 - box.x1 > textSize * 2 && box.y2 - box.y1 > textSize * 2 && holdsText(box)) continue;
     parts.push({ box, image: false, thin });
@@ -782,8 +784,8 @@ export function attachFigureRegions(
   }
   // A table drawn as a picture, its words outlines and none in the text
   // layer, is a figure, and the "TABLE 6." caption right over or under it
-  // is its caption (IEEE Access 3721067: four tables showed nothing, then
-  // an uncaptioned crop under a caption paragraph).
+  // is its caption (IEEE Access 3721067: each table was a crop with no
+  // caption under its caption's paragraph).
   for (const figure of own) {
     const at = figure.box;
     if (figure.text !== "" || !at) continue;

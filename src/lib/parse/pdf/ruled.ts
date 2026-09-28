@@ -819,10 +819,11 @@ function spanHeadColumns(rows: TableRow[], count: number) {
 // fused five rows into one by the text leading's rhythm). A line whose
 // words all go on lowercase continues the row above it (a wrapped cell),
 // when its first column is empty, or when two of its cells or more each go
-// on from a cell above that ends no sentence (arXiv 2503.22874's Table 4:
-// "per cent CL | observations (EBL Saldana)" under "0.500 < z < 0.537 at
-// 95 | Global fit of the photohadronic model to independent"; arXiv
-// 2506.06752's variables and their one-sentence descriptions are rows).
+// on from a cell above that ends no sentence and a cell the row above
+// fills stays empty (arXiv 2503.22874's Table 4: "per cent CL |
+// observations (EBL Saldana) |" under "0.500 < z < 0.537 at 95 | Global
+// fit of the photohadronic model to independent | This work"; arXiv
+// 2506.06752's variables and their descriptions fill every column: rows).
 function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const pitch = median(gaps);
@@ -836,6 +837,7 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
     const above = cellsOf[k - 1];
     const goesOn =
       filled.length >= 2 &&
+      cells.some((c, j) => c.text.length === 0 && (above[j]?.text.trim().length ?? 0) > 0) &&
       cells.every((c, j) => c.text.length === 0 || ((above[j]?.text.trim().length ?? 0) > 0 && !/[.!?:;]["'”’)\]]?$/.test(above[j].text.trim())));
     const wrap = gap <= pitch * 1.3 && lower && (cells[0].text.length === 0 || goesOn);
     if (!wrap) starts.push(k);
