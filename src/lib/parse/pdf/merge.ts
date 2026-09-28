@@ -22,6 +22,10 @@ const isFloat = (s: Segment) =>
 function continuesOnPage(prev: Segment, next: Segment): boolean {
   if (prev.type !== "PARAGRAPH" || next.type !== "PARAGRAPH" || prev.page !== next.page) return false;
   if (prev.listItem || next.listItem || prev.text.includes("\n")) return false;
+  // Two links, each on its own line, are two paragraphs: a Google Docs
+  // export's list of links read as one. "…available at" and a link still
+  // join.
+  if (/(?:https?:\/\/|www\.)\S*$/.test(prev.text) && /^(?:https?:\/\/|www\.)/.test(next.text)) return false;
   if (/[a-z,;\-–—]$/.test(prev.text) && /^[a-z(]/.test(next.text)) return true;
   if (prev.text.length <= 60 || !/\s[\p{L}\p{M}]+$/u.test(prev.text)) return false;
   if (/^[a-z(]/.test(next.text)) return true;

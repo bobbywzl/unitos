@@ -477,8 +477,9 @@ function linkUnder(region: TableRegion, items: Item[]): Item[] {
   const b = region.box;
   const size = median(region.items.map((it) => it.size));
   const below = items.filter((it) => centerOf(it).y < b.y1 && centerOf(it).y > b.y1 - size * 2.5 && it.x >= b.x1 - 2 && it.x + it.w <= b.x2 + 2);
+  // The line's own items, not buildLines' copies: they leave the text flow.
   const [line] = buildLines(below, 0);
-  return line && LINK_LINE_RE.test(line.text.trim()) ? line.items : [];
+  return line && LINK_LINE_RE.test(line.text.trim()) ? below.filter((it) => Math.abs(it.y - line.y) < line.size * 0.5) : [];
 }
 
 // The page's items with each table's text taken out and one item in its

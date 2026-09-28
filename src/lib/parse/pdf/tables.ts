@@ -580,6 +580,13 @@ export function isWrappedRowLine(line: Line, lines: Line[]): boolean {
   );
 }
 
+// A figure's caption line is no table cell: a caption at a column's foot
+// beside the other column's lines read as a row of them (Nature
+// Communications 55977 p. 4: "Fig. 3 | Comparison of theory and
+// experiment" beside the right column).
+const FIGURE_CAPTION_RE = /^(?:fig\.|figure)\s*\d+[a-z]?\s*[.:|]/i;
+const holdsCaption = (line: Line) => line.cells.some((c) => FIGURE_CAPTION_RE.test(c.text.trim()));
+
 // A cell of prose: six words or more.
 const proseCell = (text: string) => text.split(/\s+/).filter((w) => /\p{L}{2}/u.test(w)).length >= 6;
 
@@ -618,7 +625,8 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       runOf[i] !== -1 ||
       isLabelLine(lines[i], ctx) ||
       isMonoLine(lines[i]) ||
-      lineMathShare(lines[i]) >= 0.4
+      lineMathShare(lines[i]) >= 0.4 ||
+      holdsCaption(lines[i])
     ) {
       i++;
       continue;
@@ -632,7 +640,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       const next = lines[j];
       const last = lines[members[members.length - 1]];
       const gap = last.y - next.y;
-      if (next.table || gap < 0 || gap > next.size * ctx.leading * 2.2) break;
+      if (next.table || gap < 0 || gap > next.size * ctx.leading * 2.2 || holdsCaption(next)) break;
       // A wrapped row line can read as a label line (a short first cell at
       // the left edge, the rest under the last column); inside a run whose
       // columns it sits at, it is a row.
