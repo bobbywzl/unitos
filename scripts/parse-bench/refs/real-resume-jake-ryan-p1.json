@@ -1,0 +1,636 @@
+{
+ "id": "real-resume-jake-ryan-p1",
+ "category": "report",
+ "source": {
+  "pdf": ".bench/real/resume-jake-ryan.pdf",
+  "url": "https://github.com/jakegut/resume"
+ },
+ "pages": [
+  1,
+  1
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "Jake Ryan",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "123-456-7890 | "
+    },
+    {
+     "text": "jake@su.edu",
+     "underline": true,
+     "href": "mailto:x@x.com"
+    },
+    {
+     "text": " | "
+    },
+    {
+     "text": "linkedin.com/in/jake",
+     "underline": true,
+     "href": "https://linkedin.com/in/..."
+    },
+    {
+     "text": " | "
+    },
+    {
+     "text": "github.com/jake",
+     "underline": true,
+     "href": "https://github.com/..."
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Education",
+     "smallCaps": true
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Southwestern University",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Georgetown, TX"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Bachelor of Arts in Computer Science, Minor in Business",
+         "italic": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Aug. 2018 – May 2021",
+         "italic": true
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Blinn College",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Bryan, TX"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Associate’s in Liberal Arts",
+         "italic": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Aug. 2014 – May 2018",
+         "italic": true
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Experience",
+     "smallCaps": true
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Undergraduate Research Assistant",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "June 2020 – Present"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Texas A&M University",
+         "italic": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "College Station, TX",
+         "italic": true
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Developed a REST API using FastAPI and PostgreSQL to store data from learning management systems"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Developed a full-stack web application using Flask, React, PostgreSQL and Docker to analyze GitHub data"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Explored ways to visualize GitHub collaboration in a classroom setting"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Information Technology Support Specialist",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Sep. 2018 – Present"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Southwestern University",
+         "italic": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Georgetown, TX",
+         "italic": true
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Communicate with managers to set up campus computers used on campus"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Assess and troubleshoot computer problems brought by students, faculty and staff"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Maintain upkeep of computers, classroom equipment, and 200 printers across campus"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Artificial Intelligence Research Assistant",
+         "bold": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "May 2019 – July 2019"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Southwestern University",
+         "italic": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "Georgetown, TX",
+         "italic": true
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Explored methods to generate video game dungeons based off of "
+      },
+      {
+       "text": "The Legend of Zelda",
+       "italic": true
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Developed a game in Java to test the generated dungeons"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Contributed 50K+ lines of code to an established codebase via Git"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Conducted a human subject study to determine which video game dungeon generation technique is enjoyable"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Wrote an 8-page paper and gave multiple presentations on-campus"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Presented virtually to the World Conference on Computational Intelligence"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Projects",
+     "smallCaps": true
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Gitlytics",
+         "bold": true
+        },
+        {
+         "text": " | "
+        },
+        {
+         "text": "Python, Flask, React, PostgreSQL, Docker",
+         "italic": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "June 2020 – Present"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Developed a full-stack web application using with Flask serving a REST API with React as the frontend"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Implemented GitHub OAuth to get data from user’s repositories"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Visualized GitHub data to show collaboration"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Used Celery and Redis for asynchronous tasks"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "table",
+   "rows": [
+    {
+     "cells": [
+      {
+       "spans": [
+        {
+         "text": "Simple Paintball",
+         "bold": true
+        },
+        {
+         "text": " | "
+        },
+        {
+         "text": "Spigot API, Java, Maven, TravisCI, Git",
+         "italic": true
+        }
+       ]
+      },
+      {
+       "spans": [
+        {
+         "text": "May 2018 – May 2020"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Developed a Minecraft server plugin to entertain kids during free time for a previous job"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Published plugin to websites gaining 2K+ downloads and an average 4.5/5-star review"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Implemented continuous delivery using TravisCI to build the plugin upon new a release"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Collaborated with Minecraft server administrators to suggest features and get feedback about the plugin"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Technical Skills",
+     "smallCaps": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Languages",
+     "bold": true
+    },
+    {
+     "text": ": Java, Python, C/C++, SQL (Postgres), JavaScript, HTML/CSS, R"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Frameworks",
+     "bold": true
+    },
+    {
+     "text": ": React, Node.js, Flask, JUnit, WordPress, Material-UI, FastAPI"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Developer Tools",
+     "bold": true
+    },
+    {
+     "text": ": Git, Docker, TravisCI, Google Cloud Platform, VS Code, Visual Studio, PyCharm, IntelliJ, Eclipse"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Libraries",
+     "bold": true
+    },
+    {
+     "text": ": pandas, NumPy, Matplotlib"
+    }
+   ]
+  }
+ ],
+ "furniture": [],
+ "license": "open",
+ "provenance": "hand",
+ "notes": "Jake's Resume (github.com/jakegut/resume, MIT license, a fictional person), the most used student résumé template, its resume.tex built with pdflatex (TeX Live 2023). Scored: the name as the title (bold; CM has no bold small caps), a centered contact line with underlined links and '|' set in math, small-caps section headings with a rule under each (the rule is the heading's look, not a separator), each entry a borderless two-column tabular (name and place over role and dates, the right column flush right: a table, since the model has no tab stop), '•' bullet lists at depth 0 (the entries' own list has no marker), and four skill lines with bold labels (four paragraphs)."
+}

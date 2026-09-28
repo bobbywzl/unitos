@@ -535,9 +535,17 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
   // an overline an em over the top one, an underline under the lowest.
   const low = Math.min(...glyphs.map((g) => g.y)) - size * 0.5;
   const high = Math.max(...glyphs.map((g) => g.y)) + size;
-  const rules = ctx.drawing.rules.filter((r) => r.dir === "h" && r.x1 >= line.x - 2 && r.x2 <= line.xEnd + 2 && r.y1 >= low && r.y1 <= high);
+  // A vertical rule inside is an array's column line, which the layout
+  // does not read; the paths on it are a radical's sign or a picture of an
+  // accent or a tall delimiter (KaTeX draws them so).
+  const rules = ctx.drawing.rules.filter(
+    (r) =>
+      (r.dir === "h" && r.x1 >= line.x - 2 && r.x2 <= line.xEnd + 2 && r.y1 >= low && r.y1 <= high) ||
+      (r.dir === "v" && r.x1 > line.x && r.x1 < line.xEnd && r.y1 >= low - size && r.y2 <= high + size),
+  );
+  const paths = ctx.drawing.paths.filter((b) => !b.clip && b.x1 >= line.x - size * 1.5 && b.x1 < line.xEnd && b.y1 >= low - size && b.y2 <= high + size);
   try {
-    const { latex, check } = layoutLatex(glyphs, rules, { display: true, size });
+    const { latex, check } = layoutLatex(glyphs, rules, { display: true, size }, paths);
     // A display cut in two (its operators and an opening bracket on one line,
     // the rest on the next) passes the check on what it has: its brackets
     // do not close.
@@ -551,7 +559,9 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
       const [height, depth] = g.box ?? entry?.box ?? [0.7, 0.2];
       box = unionBox(box, { x1: g.x, x2: g.x + Math.max(g.w, 0), y1: g.y - depth * g.size, y2: g.y + height * g.size });
     }
-    for (const r of rules) box = unionBox(box, { x1: r.x1, x2: r.x2, y1: r.y1 - r.thickness, y2: r.y1 + r.thickness });
+    for (const r of rules) box = unionBox(box, { x1: r.x1, x2: r.x2, y1: r.y1 - r.thickness, y2: r.y2 + r.thickness });
+    // A radical's sign drawn as a path: from where it starts.
+    for (const b of paths) box = unionBox(box, { x1: b.x1, x2: Math.min(b.x2, box.x2), y1: b.y1, y2: b.y2 });
     // Every glyph drawn inside the formula is the formula's: one another
     // line took (a superscript read into the text line beside the display)
     // would be missing from the LaTeX.

@@ -317,8 +317,8 @@ export function charCount(text: string): number {
 
 // ── Math glyphs by code ─────────────────────────────────────────────────────
 // A TeX math glyph reads as its code names it, whatever the text layer says
-// (P0-F memo §1.2: on the owner's notes 27 ϵ were lost, 42 ℓ read as a
-// backtick, 46 ↦ as "7→", 15 ≠ as "6=", and the big brackets as ⋃ and ⊎).
+// (P0-F memo §1.2: in a TeX PDF with no Unicode map ϵ is lost, ℓ reads as a
+// backtick, ↦ as "7→", ≠ as "6=", and the big brackets as ⋃ and ⊎).
 // TeX builds some symbols from two glyphs: they fuse into one character on
 // the glyph that starts the symbol (memo §1.5, Appendix B), and a math
 // accent joins the letter under it.

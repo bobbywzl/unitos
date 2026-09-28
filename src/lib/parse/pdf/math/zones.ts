@@ -11,6 +11,7 @@
 import type { Glyph, PageDrawing } from "@/lib/parse/pdf/drawing";
 import { isUnicodeMathFont } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
+import type { Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Item, Line, MathZone, Run } from "@/lib/parse/pdf/types";
 import type { MathSpan } from "@/lib/parse/types";
@@ -284,19 +285,31 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
       // bar over its glyphs. A bar with the formula's glyphs over it only
       // is a display's fraction bar under its numerator's line (arXiv
       // 2506.08494 p. 2 read it as \underline).
+      // A vertical rule inside it is an array's column line: the layout
+      // reads none, so the formula fails.
       const near = drawing.rules.filter(
         (r) =>
-          r.dir === "h" &&
-          r.x1 >= x1 - 1 &&
-          r.x2 <= x2 + 1 &&
-          r.y1 > low - zone.size &&
-          r.y1 < high + zone.size &&
-          glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2),
+          (r.dir === "h" &&
+            r.x1 >= x1 - 1 &&
+            r.x2 <= x2 + 1 &&
+            r.y1 > low - zone.size &&
+            r.y1 < high + zone.size &&
+            glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2)) ||
+          (r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low - zone.size && r.y2 < high + zone.size * 1.2),
+      );
+      // The paths drawn on it: a radical's sign, a picture of an accent or
+      // a tall delimiter (KaTeX draws them so), which may start an em left
+      // of the glyphs.
+      const paths = drawing.paths.filter(
+        (b) => !b.clip && b.x1 >= x1 - zone.size * 1.5 && b.x1 < x2 && b.y1 > low - zone.size * 2 && b.y2 < high + zone.size * 2,
       );
       try {
-        const { latex, check, atoms } = layoutLatex(glyphs, near, { display: false, size: zone.size });
+        const { latex, check, atoms } = layoutLatex(glyphs, near, { display: false, size: zone.size }, paths);
         zone.latex = latex;
-        zone.ok = check.ok;
+        // Every glyph drawn inside the formula is the formula's: a script
+        // another line took is missing from the LaTeX, which still passes
+        // the check (synth-math-html: a numerator's x^k read as x).
+        zone.ok = check.ok && !strayInside(atoms, new Set(glyphs), drawing.glyphs);
         const last = atoms.filter((a) => a.size >= zone.size * 0.85).sort((a, b) => b.x2 - a.x2)[0];
         zone.open = last !== undefined && (last.cls === "rel" || last.cls === "bin" || last.cls === "punct");
       } catch {
@@ -304,6 +317,21 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
       }
     }
   }
+}
+
+/** A glyph of the page drawn inside the formula's atoms' box — its origin
+    inside — that is not the formula's own (spaces aside). */
+function strayInside(atoms: Atom[], own: Set<Glyph>, page: Glyph[]): boolean {
+  if (atoms.length === 0) return false;
+  const em = Math.max(...atoms.map((a) => a.size));
+  const x1 = Math.min(...atoms.map((a) => a.x1)) + em * 0.05;
+  const x2 = Math.max(...atoms.map((a) => a.x2)) - em * 0.05;
+  const y1 = Math.min(...atoms.map((a) => a.bottom));
+  const y2 = Math.max(...atoms.map((a) => a.top));
+  return page.some((g) => {
+    const cx = g.x + g.w / 2;
+    return cx > x1 && cx < x2 && g.y > y1 && g.y < y2 && !own.has(g) && !g.hidden && g.unicode.trim() !== "";
+  });
 }
 
 /** A block's inline formulas: the runs of one formula that passed the

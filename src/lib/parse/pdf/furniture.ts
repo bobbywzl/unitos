@@ -4,8 +4,8 @@
 // size, and weight of furniture on other pages. parsePdf drops them before
 // segmentation.
 //
-// A fixed band (the top and bottom 8.5% of the page) missed most heads: the
-// owner's notes and Grinstead–Snell set them 13% down, the Supreme Court's
+// A fixed band (the top and bottom 8.5% of the page) missed most heads: a
+// book of lecture notes and Grinstead–Snell set them 13% down, the Supreme Court's
 // slip opinions 15% and 18.5% down in two rows, a scanned book's foot sits
 // 83% down (census class 4). So each page's own first and last rows are the
 // candidates, and a candidate drops only on evidence from other pages.

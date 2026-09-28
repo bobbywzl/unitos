@@ -2,14 +2,15 @@
 // of the parse loop's round 2): a rule under a run's baseline is an
 // underline, a rule through its middle a strikethrough, a filled box behind
 // it a highlight of the box's color, and its glyphs' fill color its text
-// color; and the face and size the run is set in (faces.ts). The owner's
-// Google Docs notes underline their labels and highlight phrases in yellow,
-// and the parse read none of it.
+// color; and the face and size the run is set in (faces.ts). Google Docs
+// exports underline labels and highlight phrases, and the parse read none
+// of it.
 
 import type { Glyph, PageDrawing } from "@/lib/parse/pdf/drawing";
 import { faceOf } from "@/lib/parse/pdf/faces";
 import { CONTROL_CHARS_RE, itemText, normalizeGlyphs } from "@/lib/parse/pdf/glyphs";
-import type { Box, Item, Look } from "@/lib/parse/pdf/types";
+import type { Item, Look } from "@/lib/parse/pdf/types";
+import type { ParsedBlock, TextFont } from "@/lib/parse/types";
 
 /** A font by pdf.js's id: its name and pdf.js's fallback name ("serif",
     "sans-serif", "monospace"). */
@@ -134,7 +135,7 @@ function drawnMarks(glyphs: Glyph[], drawing: PageDrawing): Map<Glyph, Marks> {
     if (!fill.color || luminance(fill.color) > 0.97) continue;
     // A box from under the baseline to over the x-height, about a line
     // tall: a highlight. A shaded frame holds lines, a cell its padding.
-    const inside = marked(byY, fill.x1, fill.x2, fill.y1, -1.7, 0.1).filter(
+    const inside = marked(byY, fill.x1, fill.x2, fill.y1, -0.1, 0.9).filter(
       (g) => fill.y2 >= g.y + g.size * 0.55 && fill.y2 - fill.y1 <= g.size * 2.4,
     );
     const lit = owners(inside, fill.x1, fill.x2);
@@ -258,4 +259,35 @@ function split(item: Item, glyphs: Glyph[], bounds: number[]): Item[] | null {
   return parts.length > 1 ? parts : null;
 }
 
-export type { Box };
+
+// ── The body ────────────────────────────────────────────────────────────────
+
+/** The body's look (ParsedDocument.bodyFont, the import's Normal text): the
+    face, size, and color most characters of the paragraphs and lists take.
+    Taken out of the blocks: a color span in the body's own color is Normal
+    text's, no span of its own (a page set in #595959 gray colored every
+    word). */
+export function takeBodyFont(blocks: ParsedBlock[]): TextFont | undefined {
+  const tally = new Map<string, number>();
+  const add = (key: string, n: number) => tally.set(key, (tally.get(key) ?? 0) + n);
+  for (const b of blocks) {
+    if (!b.font || (b.type !== "PARAGRAPH" && b.type !== "LIST")) continue;
+    const n = b.text.length;
+    add(`family|${b.font.family}`, n);
+    add(`size|${b.font.size}`, n);
+    add(`color|${b.font.color ?? ""}`, n);
+  }
+  const top = (kind: string) =>
+    [...tally].filter(([k]) => k.startsWith(`${kind}|`)).sort((a, b) => b[1] - a[1])[0]?.[0].slice(kind.length + 1);
+  const family = top("family");
+  const size = top("size");
+  if (!family || !size) return undefined;
+  const color = top("color");
+  if (color) {
+    for (const b of blocks) {
+      const kept = b.styles?.filter((s) => s.style !== `color:${color}`);
+      if (kept && kept.length !== b.styles?.length) b.styles = kept.length > 0 ? kept : undefined;
+    }
+  }
+  return { family, size: Number(size), ...(color ? { color } : {}) };
+}

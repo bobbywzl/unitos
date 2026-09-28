@@ -117,26 +117,47 @@ export function isCentered(lines: Line[], k: number, ctx: PageContext): boolean 
 
 /** How lines [from, to) are aligned in their column, when not flush left:
     "center" when every line is centered; "right" when every line ends at
-    the column's right edge and one starts well in from its left (a date
-    line, a signature, an address set flush right); "justify" when two
-    lines or more fill the column to both edges but the last, which stops
-    short (Docs' justify). A line ends at the edge within a third of its
-    size: TeX lets a hyphen or a period hang into the margin. */
+    the column's right edge and they start at different places, or one
+    line starts well in from its left (a date line, a signature, an address
+    set flush right); "justify" when two lines or more fill the column to
+    both edges, the last aside, on a page set justified (Docs' justify). A
+    line ends at the edge within a third of its size: TeX lets a hyphen or
+    a period hang into the margin. */
 export function lineAlign(lines: Line[], from: number, to: number, ctx: PageContext): "center" | "right" | "justify" | null {
   const group = lines.slice(from, to);
   if (group.length === 0 || group.some((l) => l.cells.length !== 1)) return null;
   if (group.every((_, k) => isCentered(lines, from + k, ctx))) return "center";
   const edges = group.map((_, k) => columnEdges(lines, from + k, ctx));
   const atRight = (l: Line, k: number) => edges[k].right > 0 && Math.abs(edges[k].right - l.xEnd) <= l.size * 0.33;
-  if (group.every(atRight) && group.some((l, k) => l.x - edges[k].left > l.size * 4)) {
-    // Flush right starts its lines anywhere; a block set in at one x and
-    // justified starts them together.
-    const ragged = group.length === 1 || group.some((l) => Math.abs(l.x - group[0].x) > l.size);
-    if (ragged) return "right";
-  }
+  const ragged = group.length === 1 ? group[0].x - edges[0].left > group[0].size * 4 : group.some((l) => Math.abs(l.x - group[0].x) > l.size);
+  if (group.every(atRight) && ragged) return "right";
   const last = group.length - 1;
-  if (last >= 1 && group.slice(0, last).every(atRight) && !atRight(group[last], last)) return "justify";
+  if (last >= 1 && group.slice(0, last).every(atRight) && justifiedPage(lines, ctx)) return "justify";
   return null;
+}
+
+// A page set justified: of its lines of prose that end within three ems of
+// their column's right edge, most end at it. A ragged page's lines end
+// anywhere near the edge, a justified page's at it, its paragraphs' last
+// lines aside. Without it a ragged page's two-line paragraph read as
+// justified wherever its first line happened to fill the column.
+const justifiedPages = new WeakMap<Line[], boolean>();
+function justifiedPage(lines: Line[], ctx: PageContext): boolean {
+  let justified = justifiedPages.get(lines);
+  if (justified === undefined) {
+    let near = 0;
+    let flush = 0;
+    lines.forEach((l, k) => {
+      if (l.cells.length !== 1 || [...l.text].length < 30) return;
+      const short = columnEdges(lines, k, ctx).right - l.xEnd;
+      if (short > l.size * 3 || short < -l.size) return;
+      near++;
+      if (Math.abs(short) <= l.size * 0.33) flush++;
+    });
+    justified = near >= 4 && flush >= near * 0.6;
+    justifiedPages.set(lines, justified);
+  }
+  return justified;
 }
 
 // Two lines pushed apart by tall glyphs: an inline fraction's denominator on

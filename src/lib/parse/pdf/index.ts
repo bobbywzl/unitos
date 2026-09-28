@@ -18,7 +18,7 @@ import {
   type FontFlags,
 } from "@/lib/parse/pdf/glyphs";
 import { assignHeadingLevels } from "@/lib/parse/pdf/headings";
-import { lookItems } from "@/lib/parse/pdf/look";
+import { lookItems, takeBodyFont } from "@/lib/parse/pdf/look";
 import { displayEquations, displayLines, isTexPage } from "@/lib/parse/pdf/math/display";
 import { mathSpans, resolveZones } from "@/lib/parse/pdf/math/zones";
 import { firstPageOf, mergeAcrossPages, shiftSpansInto } from "@/lib/parse/pdf/merge";
@@ -458,6 +458,11 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     }
   }
 
+  // The title's look and alignment (the import's Title), read before the
+  // heading it came from leaves the blocks.
+  const titleSegment = title ? segments.find((s) => s.page === 0 && s.type === "HEADING" && s.text === title) : undefined;
+  const titleFont = titleSegment ? spansFromRuns(titleSegment.text, titleSegment.runs).font : undefined;
+
   // The reader shows the title above the blocks; the heading it came from
   // would show it twice.
   if (title && segments[0]?.type === "HEADING" && segments[0].text === title) segments = segments.slice(1);
@@ -470,7 +475,7 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   resolveContentsLinks(segments);
 
   const blocks: ParsedBlock[] = segments.map((s) => {
-    const { styles, links } = spansFromRuns(s.text, s.runs, {
+    const { styles, links, font } = spansFromRuns(s.text, s.runs, {
       skipBold: s.type === "HEADING",
       skipMono: s.type === "CODE",
     });
@@ -490,6 +495,7 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     if (allLinks.length > 0) block.links = allLinks;
     if (s.footnote) block.footnote = s.footnote;
     if (s.footnoteRefs) block.footnoteRefs = s.footnoteRefs;
+    if (font && (s.type === "PARAGRAPH" || s.type === "HEADING" || s.type === "LIST")) block.font = font;
     return block;
   });
 
@@ -497,10 +503,15 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   if (pageWidths.length > 0) parsed.pageSize = { width: points(pageWidths[0]), height: points(pageHeights[0]) };
   const labels = pageLabelsOf(await pdf.getPageLabels().catch(() => null), pdf.numPages);
   if (labels) parsed.pageLabels = labels;
+  // The page's look: the body's (Normal text) and the title's.
+  const bodyFont = takeBodyFont(blocks);
+  if (bodyFont) parsed.bodyFont = bodyFont;
+  if (titleFont) parsed.titleFont = titleFont;
+  if (titleSegment?.align) parsed.titleAlign = titleSegment.align;
   return parsed;
 }
 
-type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels">;
+type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign">;
 
 // A size in points, to a hundredth: A4 is 595.28 × 841.89.
 function points(value: number): number {

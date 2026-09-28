@@ -6,8 +6,8 @@
 // Calibri), Computer Modern for TeX's text fonts (the page draws KaTeX's
 // copy of them), and else a face of the same shape: Times New Roman for a
 // serif, Arial for a sans, Courier New for a monospace. Every import drew in
-// the page editor's sans-serif before, the owner's serif notes and legal
-// packet too.
+// the page editor's sans-serif before, a book set in Times or Computer
+// Modern too.
 
 import { DOCS_FONTS } from "@/components/docs/fonts";
 

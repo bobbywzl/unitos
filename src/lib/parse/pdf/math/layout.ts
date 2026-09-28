@@ -8,7 +8,7 @@
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
 import type { MathFamily } from "@/lib/parse/pdf/glyphs";
 import { mathGlyph, type MathGlyph } from "@/lib/parse/pdf/math-fonts";
-import type { Item } from "@/lib/parse/pdf/types";
+import type { Box, Item } from "@/lib/parse/pdf/types";
 
 type Variant = "bold" | "bf" | "sf" | "tt" | null;
 
@@ -996,23 +996,70 @@ function join(tokens: string[]): string {
   return s;
 }
 
-/** A formula's LaTeX from its glyphs and the rules drawn with them, and the
-    atoms the check compares against (pieces joined, composites fused). */
+// ── Shapes: a radical sign drawn as a path, and what no glyph explains ──────
+
+/** Radical signs drawn as paths (KaTeX draws \sqrt's sign and bar as one
+    picture; synth-math-html read its bar alone as \overline): a path that
+    ends where a rule starts, the rule on its top edge, reaching down past
+    the rule. Each becomes the radical atom the layout pairs with its rule. */
+function drawnRadicals(atoms: Atom[], rules: Rule[], paths: Box[], used: Set<Box>): Atom[] {
+  const em = maxSize(atoms);
+  const out: Atom[] = [];
+  const entry = mathGlyph("oms", 0x70);
+  for (const r of rules) {
+    if (r.dir !== "h") continue;
+    const top = r.y1 + r.thickness / 2;
+    const sign = paths.find(
+      (p) => !used.has(p) && p.x1 < r.x1 - 0.2 * em && p.x1 > r.x1 - 1.5 * em && Math.abs(p.y2 - top) < 0.15 * em && top - p.y1 > 0.5 * em,
+    );
+    if (!sign || !entry) continue;
+    used.add(sign);
+    out.push({ fam: "oms", code: 0x70, entry, tex: "", cls: "radical", size: em, x1: sign.x1, x2: r.x1, yb: sign.y1, top, bottom: sign.y1, upright: false });
+  }
+  return out;
+}
+
+/** A shape drawn inside the formula that the layout did not read: a
+    vertical rule (an array's column line), or a path no rule or radical
+    explains (KaTeX draws \vec, \widehat, braces, and tall delimiters as
+    pictures; the LaTeX would lack them and still pass the check). */
+function unreadShape(atoms: Atom[], rules: Rule[], paths: Box[], used: Set<Box>): boolean {
+  if (atoms.length === 0) return false;
+  const em = maxSize(atoms);
+  const x1 = Math.min(...atoms.map((a) => a.x1)) - 0.3 * em;
+  const x2 = Math.max(...atoms.map((a) => a.x2));
+  const low = Math.min(...atoms.map((a) => a.bottom)) - em;
+  const high = Math.max(...atoms.map((a) => a.top)) + em;
+  if (rules.some((r) => r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low && r.y2 < high)) return true;
+  // A path that paints a rule is that rule. A clipped picture's box runs
+  // past its clip: it starts inside.
+  const rule = (p: Box) => rules.some((r) => Math.abs(p.x1 - r.x1) < 1 && Math.abs((p.y1 + p.y2) / 2 - r.y1) < r.thickness + 1 && p.y2 - p.y1 < r.thickness + 2);
+  return paths.some((p) => !used.has(p) && p.x1 > x1 && p.x1 < x2 && p.y1 > low && p.y2 < high && !rule(p));
+}
+
+/** A formula's LaTeX from its glyphs and the shapes drawn with them (rules,
+    and paths), and the atoms the check compares against (pieces joined,
+    composites fused). */
 export function formulaToLatex(
   glyphs: Glyph[],
   rules: Rule[],
   opts: { display: boolean; size: number },
+  paths: Box[] = [],
 ): { latex: string; atoms: Atom[]; unknown: Glyph[] } {
   style = opts;
   lost = 0;
   read = new Set();
   const { atoms, unknown } = atomsOf(glyphs);
+  const used = new Set<Box>();
+  const radicals = drawnRadicals(atoms, rules, paths, used);
   // Arrow runs before composites: a minus and an arrowhead inside a long
   // arrow would otherwise fuse into \longrightarrow.
-  const fused = fuseComposites(arrowRuns(assemblePieces(atoms)));
+  const fused = fuseComposites(arrowRuns(assemblePieces([...atoms, ...radicals])));
   const copies = fused.map((a) => ({ ...a }));
-  const latex = linear(structure(copies, rules));
-  if (rules.some((r) => r.dir === "h" && !read.has(r))) lost++;
+  const bars = rules.filter((r) => r.dir === "h");
+  const latex = linear(structure(copies, bars));
+  if (bars.some((r) => !read.has(r))) lost++;
+  if (unreadShape(fused, rules, paths, used)) lost++;
   return { latex: lost > 0 ? "" : latex, atoms: fused, unknown };
 }
 

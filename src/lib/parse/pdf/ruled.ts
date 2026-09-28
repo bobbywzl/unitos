@@ -44,11 +44,14 @@ const SLIVER = 6;
 // The grid with its slivers closed: grid lines that bound an empty sliver
 // become one line, and a cell that spanned the sliver spans one fewer. A
 // run of slivers is one line: Word shades a header cell with a second box
-// set in by the cell's padding, and the legal packet's wire table read its
-// two cells' insets and the rule between them as a column of their own.
+// set in by the cell's padding, and a form's two shaded header cells read
+// their insets and the rule between them as a column of their own.
 function closeSlivers(grid: Grid, items: Item[]): Grid {
-  const keep = (lines: number[], dir: "x" | "y") => {
-    const kept = [lines[0]];
+  // Each line's run: a line an empty sliver from the one before joins its
+  // run. A run stands at its outer line on the table's edge (the border),
+  // else at its middle one (the rule between two insets).
+  const runsOf = (lines: number[], dir: "x" | "y") => {
+    const runOf = [0];
     for (let k = 1; k < lines.length; k++) {
       const [a, b] = [Math.min(lines[k - 1], lines[k]), Math.max(lines[k - 1], lines[k])];
       const empty = !items.some((it) => {
@@ -57,30 +60,30 @@ function closeSlivers(grid: Grid, items: Item[]): Grid {
         const inside = dir === "x" ? c.y > grid.box.y1 && c.y < grid.box.y2 : c.x > grid.box.x1 && c.x < grid.box.x2;
         return inside && v > a && v < b;
       });
-      if (b - a < SLIVER && empty) continue;
-      kept.push(lines[k]);
+      runOf.push(runOf[k - 1] + (b - a < SLIVER && empty ? 0 : 1));
     }
-    return kept;
+    const count = runOf[runOf.length - 1] + 1;
+    const kept = Array.from({ length: count }, (_, r) => {
+      const members = lines.filter((_, k) => runOf[k] === r);
+      return r === 0 ? members[0] : r === count - 1 ? members[members.length - 1] : members[Math.floor(members.length / 2)];
+    });
+    return { kept, runOf };
   };
-  const xs = keep(grid.xs, "x");
-  const ys = keep(grid.ys, "y");
-  // Each old line maps to the kept line at or before it.
-  const at = (lines: number[], v: number, down: boolean) => {
-    let idx = 0;
-    for (let k = 0; k < lines.length; k++) if (down ? lines[k] >= v - 0.01 : lines[k] <= v + 0.01) idx = k;
-    return idx;
-  };
+  const x = runsOf(grid.xs, "x");
+  const y = runsOf(grid.ys, "y");
   const cells: GridCell[] = [];
   for (const c of grid.cells) {
-    const col = at(xs, c.x1, false);
-    const colEnd = at(xs, c.x2, false);
-    const row = at(ys, c.y2, true);
-    const rowEnd = at(ys, c.y1, true);
+    const col = x.runOf[grid.xs.indexOf(c.x1)];
+    const colEnd = x.runOf[grid.xs.indexOf(c.x2)];
+    const row = y.runOf[grid.ys.indexOf(c.y2)];
+    const rowEnd = y.runOf[grid.ys.indexOf(c.y1)];
     if (colEnd <= col || rowEnd <= row) continue;
     if (cells.some((d) => d.row === row && d.col === col)) continue;
-    cells.push({ ...c, col, row, colspan: colEnd - col, rowspan: rowEnd - row });
+    // The cell reaches the kept lines, over the slivers it closed.
+    const box = { x1: x.kept[col], x2: x.kept[colEnd], y1: y.kept[rowEnd], y2: y.kept[row] };
+    cells.push({ ...box, col, row, colspan: colEnd - col, rowspan: rowEnd - row });
   }
-  return { box: grid.box, xs, ys, cells };
+  return { box: grid.box, xs: x.kept, ys: y.kept, cells };
 }
 
 // A grid is a table when its text fills it: two rows and two columns at
@@ -665,10 +668,13 @@ function gridRows(grid: Grid, items: Item[], page: number, built: Line[]): Table
   const rowCount = grid.ys.length - 1;
   const rows: TableRow[] = Array.from({ length: rowCount }, () => ({ cells: [] }));
   const cellLines = grid.cells.map((cell) => buildLines(pieces.filter((it) => inBox(it, cell)), page));
-  // The cells' padding: the least a left-set line stands from its cell's
-  // edge (Word's 5.4 pt); more is a line set in.
-  const insets = grid.cells.flatMap((cell, k) => cellLines[k].map((l) => l.x - cell.x1)).filter((d) => d >= 0);
-  const inset = Math.min(10, insets.length > 0 ? Math.min(...insets) : 0);
+  // The cells' padding: the least a line stands from its cell's left edge,
+  // and from its right edge (Word's 5.4 pt); more is a line set in.
+  const least = (gaps: number[]) => Math.min(10, ...gaps.filter((d) => d >= 0));
+  const inset = {
+    left: least(grid.cells.flatMap((cell, k) => cellLines[k].map((l) => l.x - cell.x1))),
+    right: least(grid.cells.flatMap((cell, k) => cellLines[k].map((l) => cell.x2 - l.xEnd))),
+  };
   grid.cells.forEach((cell, k) => {
     built.push(...cellLines[k]);
     const words = cellLines[k].length > 0 ? cellParagraphs(cellLines[k], cell, inset) : { text: "", runs: [] };
@@ -688,9 +694,9 @@ function gridRows(grid: Grid, items: Item[], page: number, built: Line[]): Table
 // "By:" lines, each on a line of its own, read as one line).
 // Each paragraph keeps how its lines sit in the cell: centered, flush
 // right, or set in from the cell's left edge. inset: the cells' padding.
-function cellParagraphs(lines: Line[], box: Box, inset: number): TableCell {
-  const left = box.x1 + inset;
-  const right = box.x2 - inset;
+function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: number }): TableCell {
+  const left = box.x1 + inset.left;
+  const right = box.x2 - inset.right;
   const groups: Line[][] = [];
   lines.forEach((line, k) => {
     const prev = lines[k - 1];
@@ -706,10 +712,11 @@ function cellParagraphs(lines: Line[], box: Box, inset: number): TableCell {
   const middle = (box.x1 + box.x2) / 2;
   const sitOf = (group: Line[]): Pick<CellParagraph, "align" | "indent"> => {
     const size = group[0].size;
-    if (group.every((l) => l.x - left <= size * 0.5)) return {};
+    const indent = Math.min(...group.map((l) => l.x)) - left;
+    if (indent <= size * 0.5) return {};
     if (group.every((l) => Math.abs((l.x + l.xEnd) / 2 - middle) <= Math.max(size * 0.6, (box.x2 - box.x1) * 0.04))) return { align: "center" };
     if (group.every((l) => right - l.xEnd <= size * 0.3)) return { align: "right" };
-    return { indent: Math.round(Math.min(...group.map((l) => l.x)) - left) };
+    return { indent: Math.round(indent) };
   };
   const cell: TableCell = { text: "", runs: [], paragraphs: [] };
   for (const group of groups) {

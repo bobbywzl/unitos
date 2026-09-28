@@ -8,6 +8,7 @@
 import katex from "katex";
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
 import { formulaToLatex, hangingFamily, type Atom } from "@/lib/parse/pdf/math/layout";
+import type { Box } from "@/lib/parse/pdf/types";
 import { KATEX_MACROS } from "@/lib/katex";
 
 export type MathCheck = { ok: boolean; missing: string[]; extra: string[] };
@@ -95,15 +96,16 @@ function checkLatex(latex: string, atoms: Atom[], unknown: Glyph[], display: boo
   return { ok: missing.length === 0 && extra.length === 0, missing, extra };
 }
 
-/** A formula's LaTeX from its glyphs and rules, and the check of it against
-    them. display and size say how it is set: in a display or in a line of
-    text of that size. */
+/** A formula's LaTeX from its glyphs and shapes (rules, and the page's
+    paths around it), and the check of it against them. display and size say
+    how it is set: in a display or in a line of text of that size. */
 export function layoutLatex(
   glyphs: Glyph[],
   rules: Rule[],
   opts: { display: boolean; size: number },
+  paths: Box[] = [],
 ): { latex: string; check: MathCheck; atoms: Atom[] } {
-  const { latex, atoms, unknown } = formulaToLatex(glyphs, rules, opts);
+  const { latex, atoms, unknown } = formulaToLatex(glyphs, rules, opts, paths);
   const check = latex ? checkLatex(latex, atoms, unknown, opts.display, opts.size) : { ok: false, missing: ["(no layout)"], extra: [] };
   return { latex, check, atoms };
 }
