@@ -300,19 +300,28 @@ function split(item: Item, glyphs: Glyph[], bounds: number[]): Item[] | null {
   return parts.length > 1 ? parts : null;
 }
 
-
 // ── The body ────────────────────────────────────────────────────────────────
 
+// A paragraph with a role of the page: a caption, a footnote, a kicker, a
+// byline, a pull quote (the block reader's layout tokens, SPEC.md §6).
+const ROLE_RE = /^<[a-z][a-z0-9]*\b[^>]*?\bclass="[^"]*\b(?:kicker|meta|label|contents|display|quote|caption|footnote)\b/;
+
 /** The body's look (ParsedDocument.bodyFont, the import's Normal text): the
-    face, size, and color most characters of the paragraphs and lists take.
+    face, size, and color most characters of the body's paragraphs take (no
+    role of the page), or of every paragraph and list where the body's
+    paragraphs hold under 400 characters (a slide's or a résumé's lists are
+    its body). A paper's reference list at 7 pt outweighed its body at 9 pt,
+    and every body paragraph carried a size (arxiv-2609-29669).
     Taken out of the blocks: a color span in the body's own color is Normal
     text's, no span of its own (a page set in #595959 gray colored every
     word). */
 export function takeBodyFont(blocks: ParsedBlock[]): TextFont | undefined {
+  const texts = blocks.filter((b) => b.font && (b.type === "PARAGRAPH" || b.type === "LIST"));
+  const body = texts.filter((b) => b.type === "PARAGRAPH" && !ROLE_RE.test(b.html ?? ""));
   const tally = new Map<string, number>();
   const add = (key: string, n: number) => tally.set(key, (tally.get(key) ?? 0) + n);
-  for (const b of blocks) {
-    if (!b.font || (b.type !== "PARAGRAPH" && b.type !== "LIST")) continue;
+  for (const b of body.reduce((n, b) => n + b.text.length, 0) >= 400 ? body : texts) {
+    if (!b.font) continue;
     const n = b.text.length;
     add(`family|${b.font.family}`, n);
     add(`size|${b.font.size}`, n);

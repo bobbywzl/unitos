@@ -146,6 +146,12 @@ export function isUnicodeMathFont(base: string): boolean {
   return unicodeFont(base) !== null;
 }
 
+/** One of KaTeX's fonts: KaTeX sets a formula a fifth larger than the
+    prose around it (an OpenType math font sets it at the prose's size). */
+export function isKatexFont(base: string): boolean {
+  return unicodeFont(base)?.kind === "katex";
+}
+
 // Every TeX glyph by its character, the families in the order a character
 // several families draw is read by (upright text first: "(" is the text
 // font's, not a sized delimiter's; \mathcal before \mathscr).

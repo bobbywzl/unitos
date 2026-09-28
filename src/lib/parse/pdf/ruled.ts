@@ -18,6 +18,7 @@ import {
   cellsBySeparators,
   columnAt,
   columnSeparators,
+  isProseColumns,
   rowsOf,
   tableSegment,
   type CellParagraph,
@@ -208,7 +209,8 @@ const CAPTION_START_RE = /^(fig\.|figure|table|tab\.)\s*([\dIVX]+|[A-Z]\d+)\b/i;
 // consecutive rules, joined while they read as one table. A band that holds
 // a caption or prose ends a region (two tables stacked at one width with a
 // heading and the next caption between them, a page's head rule and foot
-// rule around its text).
+// rule around its text, two columns of text between a form's signature
+// rule and the page's foot rule: the IRS W-9's instructions).
 function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[]): Box[] {
   const sorted = [...rules].sort((a, b) => b.y1 - a.y1);
   const regions: Box[] = [];
@@ -222,7 +224,7 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[]): Box
   for (let k = 0; k + 1 < sorted.length; k++) {
     const band = { x1: x1 - 2, x2: x2 + 2, y1: sorted[k + 1].y1, y2: sorted[k].y1 };
     const lines = buildLines(items.filter((it) => inBox(it, band)), 0);
-    const breaks = lines.some((l) => isProseLine(l, x2 - x1) || CAPTION_START_RE.test(l.text));
+    const breaks = lines.some((l) => isProseLine(l, x2 - x1) || CAPTION_START_RE.test(l.text)) || isProseColumns(lines, false);
     if (breaks) {
       close();
       continue;

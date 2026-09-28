@@ -557,7 +557,7 @@ const proseCell = (text: string) => text.split(/\s+/).filter((w) => /\p{L}{2}/u.
 // Lines whose cells hold prose: two prose cells side by side on half of
 // them or more (two columns of text), or on a scan's text layer a prose
 // cell on half of them or more (text beside a drawing's labels).
-function isProseColumns(lines: Line[], ocr: boolean): boolean {
+export function isProseColumns(lines: Line[], ocr: boolean): boolean {
   const prose = lines.filter((l) => l.cells.filter((c) => proseCell(c.text)).length >= (ocr ? 1 : 2)).length;
   return lines.length > 0 && prose * 2 >= lines.length;
 }
