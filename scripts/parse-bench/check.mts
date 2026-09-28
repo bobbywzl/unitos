@@ -149,6 +149,19 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("prose inside a table counts as a leak", s.tables.inside > 0 && (s.tables.precision ?? 1) < 1, `inside ${s.tables.inside}`);
 }
 {
+  // A table of formulas: no words in its cells, found by its place, each formula placed as a word is.
+  const f = (latex: string, text: string): Span => ({ text, latex });
+  const grid = (cells: Span[][]): RefBlock => ({ kind: "table", rows: cells.map((row) => ({ cells: row.map((span) => ({ spans: [span] })) })) });
+  const around = (table: RefBlock): RefBlock[] => [para("The two dice fall and the sum is counted."), table, para("Each sum has its own chance of showing.")];
+  const dice = around(grid([[f("k", "k"), f("2", "2"), f("3", "3")], [f("P(S=k)", "P(S=k)"), f("\\frac{1}{36}", "1/36"), f("\\frac{2}{36}", "2/36")]]));
+  const same = score({ blocks: dice }, [], { blocks: around(grid([[f("k", "k"), f("2", "2"), f("3", "3")], [f("P(S=k)", "P(S=k)"), f("\\frac{1}{36}", "1/36"), f("\\frac{2}{36}", "2/36")]])) }).scores;
+  check("tables: a table of formulas is found and its formulas in place score 1", near(same.tables.f1, 1) && same.blocks.byKind.table?.found === 1, `f1 ${same.tables.f1}, found ${same.blocks.byKind.table?.found}`);
+  const swapped = score({ blocks: dice }, [], { blocks: around(grid([[f("k", "k"), f("2", "2"), f("3", "3")], [f("P(S=k)", "P(S=k)"), f("\\frac{2}{36}", "2/36"), f("\\frac{1}{36}", "1/36")]])) }).scores;
+  check("tables: two formulas in each other's cells are out of place", (swapped.tables.f1 ?? 1) < 1 && (swapped.tables.f1 ?? 0) > 0.5, `f1 ${swapped.tables.f1}`);
+  const asWords = score({ blocks: dice }, [], { blocks: around(grid([[{ text: "k" }, { text: "2" }, { text: "3" }], [{ text: "P(S=k)" }, { text: "1/36" }, { text: "2/36" }]])) }).scores;
+  check("tables: a formula read as the same characters in its cell is in place", near(asWords.tables.recall, 1), `recall ${asWords.tables.recall}`);
+}
+{
   const s = run(edit((b) => b.splice(2, 2, b[3], b[2])));
   check("two paragraphs out of order lower reading order", (s.order ?? 1) < 1 && (s.order ?? 0) > 0.5, `order ${s.order?.toFixed(3)}`);
 }
@@ -865,13 +878,17 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
       { type: "paragraph", content: [{ type: "text", text: "The lake rose in April." }] },
       { type: "paragraph", attrs: { textAlign: "center" }, content: [sized("Table 2: Lake levels")] },
       table,
+      { type: "paragraph", attrs: { textAlign: "center" }, content: [{ type: "text", text: "(In thousands of liters)", marks: [{ type: "textStyle", attrs: { fontSize: "10pt" } }] }] },
+      table,
     ],
   };
   const read = fromImport(doc).blocks;
-  const shape = read.map((b) => `${b.kind}${b.kind === "paragraph" && b.role ? `/${b.role}` : ""}${b.kind === "table" && b.caption ? `+caption` : ""}`).join(" ");
+  const shape = read
+    .map((b) => `${b.kind}${b.kind === "paragraph" && b.role ? `/${b.role}` : ""}${b.kind === "paragraph" && b.align ? `/${b.align}` : ""}${b.kind === "table" && b.caption ? `+caption` : ""}`)
+    .join(" ");
   check(
-    "import: a caption-set line is a table's caption right before it, at any size; elsewhere a caption only with its label",
-    shape === "paragraph paragraph paragraph/caption paragraph table+caption",
+    "import: a line right before a table is its caption with a caption's label or a size under the body's; elsewhere only with its label",
+    shape === "paragraph/center paragraph paragraph/caption/center paragraph table+caption paragraph/center table",
     shape,
   );
 }

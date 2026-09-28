@@ -357,7 +357,7 @@ function parseTable(block: ParsedBlock, pageAt: (o: number) => number, inRange: 
   const captionLine = fromHtml?.caption && lines.length === rows.length + 1 ? 1 : 0;
   const onPage = (line: number) => inRange(pageAt(lineStarts[Math.min(line, lineStarts.length - 1)] ?? 0));
   const kept = rows.filter((_, r) => onPage(r + captionLine));
-  if (!kept.some((row) => row.cells.some((cell) => cell.spans.some((s) => s.text.trim())))) return null;
+  if (!kept.some((row) => row.cells.some((cell) => cell.spans.some((s) => s.text.trim() || s.latex !== undefined)))) return null;
   const caption = fromHtml?.caption && (captionLine === 0 || onPage(0)) ? { caption: fromHtml.caption } : {};
   // Footnote references in cells: a tab ends a cell; a mark's unit is its
   // cell's place among the kept rows' cells.
@@ -679,11 +679,11 @@ class ImportReader {
     });
   }
 
-  /** A caption-set paragraph right before a table is the table's caption,
-      which table() takes. Elsewhere it is a caption only when it opens with
-      a caption's label ("Fig. 3.", "Table 2:", a figure's caption the
-      converter could not attach); else it is a paragraph (a centered small
-      line under a title). */
+  /** A caption-set paragraph right before a table is the table's caption
+      when table() takes it (a caption's label, or a size under the body's).
+      Elsewhere it is a caption only when it opens with a caption's label
+      ("Fig. 3.", "Table 2:", a figure's caption the converter could not
+      attach); else it is a paragraph (a centered small line under a title). */
   settle() {
     const last = this.blocks.at(-1);
     if (last?.kind === "paragraph" && last.role === "caption" && !CAPTION_LABEL_RE.test(last.spans.map((span) => span.text).join(""))) delete last.role;
@@ -863,7 +863,7 @@ class ImportReader {
         rowMarks.push(into.marks);
       }
       // A row whose words are all on pages out of range is not scored.
-      if (cells.some((c) => c.spans.some((s) => s.text.trim())) || this.here()) {
+      if (cells.some((c) => c.spans.some((s) => s.text.trim() || s.latex !== undefined)) || this.here()) {
         rows.push({ cells });
         for (const list of rowMarks) {
           for (const m of list) marks.push({ unit: index, ...m });
@@ -871,10 +871,18 @@ class ImportReader {
         }
       }
     }
-    if (!rows.some((row) => row.cells.some((c) => c.spans.some((s) => s.text.trim())))) return;
+    // A table of formulas holds no words, but it is a table.
+    if (!rows.some((row) => row.cells.some((c) => c.spans.some((s) => s.text.trim() || s.latex !== undefined)))) return;
     // The converter sets a table's caption as a caption paragraph right before it.
+    // The line right before is the table's caption when it opens with a
+    // caption's label or is set smaller than the body (the converter's 9 pt);
+    // a centered line in the body's size or larger ("(In millions…)" over a
+    // statement) is a paragraph.
     const before = this.blocks.at(-1);
-    const caption = before?.kind === "paragraph" && before.role === "caption" ? before : null;
+    const labeled = (b: DocBlock) => b.kind === "paragraph" && CAPTION_LABEL_RE.test(b.spans.map((span) => span.text).join(""));
+    const smaller = (b: DocBlock) => b.kind === "paragraph" && b.font !== undefined && b.font.size < this.styles.normal.size;
+    const caption = before?.kind === "paragraph" && before.role === "caption" && (labeled(before) || smaller(before)) ? before : null;
+    if (before?.kind === "paragraph" && before.role === "caption" && !caption) delete before.role;
     if (caption) {
       this.blocks.pop();
       for (const m of caption.marks ?? []) marks.push({ ...m, unit: -1 });

@@ -613,14 +613,14 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
     drawn.filter((r) => r.x1 > it.x + it.w * 0.05 && r.x1 < it.x + it.w * 0.95 && r.y1 <= centerOf(it).y && r.y2 >= centerOf(it).y).map((r) => r.x1);
   const phrased = buildLines(region.items.flatMap(splitWide).flatMap((it) => splitAt(it, [...new Set(cuts(it))].sort((a, b) => a - b))), page);
   const full = region.rules.filter((r) => r.x2 - r.x1 >= width * 0.9).map((r) => r.y1);
-  // With no full rule under the head, a rule under its spanned columns alone
-  // parts it from the body when every line above it is the head's (a web
+  // With no full rule under the head, the first rule under two lines or
+  // more that spans some columns alone parts the head from the body (a web
   // table's border under "arXiv | PubMed" and not under the heads that span
   // both head rows: synth-paper-html's Table I).
   const under = region.rules
     .filter((r) => r.x2 - r.x1 < width * 0.9 && phrased.filter((l) => l.y > r.y1).length >= 2 && phrased.filter((l) => l.y < r.y1).length >= 2)
     .map((r) => r.y1)
-    .sort((a, b) => a - b)[0];
+    .sort((a, b) => b - a)[0];
   const headerRule = full.find((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2) ?? under;
   let head = headerRule === undefined ? [] : phrased.filter((l) => l.y > headerRule);
   let body = headerRule === undefined ? phrased : phrased.filter((l) => l.y < headerRule);

@@ -392,11 +392,14 @@ export function align(ref: Flat, cand: Flat): Alignment {
     if (n > candMatched[cb] && cand.blocks[cb].kind !== "table") caption[cb] = 1;
   });
   // Word-less reference blocks pair with a free candidate block between the
-  // owners of their neighbors.
+  // owners of their neighbors: an equation, a figure, a separator, and a
+  // table whose cells hold no words (a table of formulas).
   const used = new Set<number>();
+  const cellWords = (rb: number) => ref.unitsOf[rb].some((u) => ref.units[u].index >= 0 && ref.units[u].end > ref.units[u].first);
   for (let rb = 0; rb < ref.blocks.length; rb++) {
     const kind = ref.blocks[rb].kind;
-    if (owner[rb] >= 0 || hasWords(ref, rb) || !(kind === "equation" || kind === "figure" || kind === "separator")) continue;
+    const wordless = kind === "table" ? !cellWords(rb) : !hasWords(ref, rb) && (kind === "equation" || kind === "figure" || kind === "separator");
+    if (owner[rb] >= 0 || !wordless) continue;
     let lo = -1;
     let hi = cand.blocks.length;
     for (let p = rb - 1; p >= 0; p--) if (owner[p] >= 0) { lo = owner[p]; break; }
@@ -404,8 +407,12 @@ export function align(ref: Flat, cand: Flat): Alignment {
     if (hi <= lo) hi = Math.min(cand.blocks.length, lo + 8);
     let best = -1;
     let bestFit = 0;
+    // A candidate table's words may pair with the same numbers in the prose; it is free unless it holds
+    // another reference table.
+    const tableOwners = new Set(ref.blocks.flatMap((b, r) => (b.kind === "table" && owner[r] >= 0 ? [owner[r]] : [])));
     for (let cb = lo + 1; cb < hi; cb++) {
-      if (used.has(cb) || candMatched[cb] >= 3) continue;
+      const free = kind === "table" ? cand.blocks[cb].kind === "table" && !tableOwners.has(cb) : candMatched[cb] < 3;
+      if (used.has(cb) || !free) continue;
       const f = fit(ref.blocks[rb], cand.blocks[cb], cand, cb);
       if (f > bestFit) [best, bestFit] = [cb, f];
     }
@@ -896,12 +903,35 @@ function assign(votes: Map<string, number>): Map<number, number> {
   return out;
 }
 
+/** A formula in a table cell and a candidate formula read alike: the same
+    canonical form, near enough. */
+const SAME_FORMULA = 0.9;
+
+/** The inline formulas of a flat's table cells, by unit. */
+function cellFormulas(flat: Flat): Map<number, number[]> {
+  const out = new Map<number, number[]>();
+  flat.math.forEach((m, k) => {
+    if (m.display || m.unit < 0) return;
+    const unit = flat.units[m.unit];
+    if (flat.blocks[unit.block].kind !== "table" || unit.index < 0) return;
+    out.set(m.unit, [...(out.get(m.unit) ?? []), k]);
+  });
+  return out;
+}
+
 /** Tables: a table word is in place when it lands in the candidate table
     that owns its table, in the row and column its row and column map to
-    (rows and columns map one to one, by the most words shared). F1 of words
-    in place, and the leaks both ways. */
+    (rows and columns map one to one, by the most words and formulas shared).
+    A formula in a cell is placed as a word is: in place when the mapped
+    cell holds a formula read alike, or the same characters as words. F1 of
+    words and formulas in place, and the leaks both ways. */
 export function tableScores(ref: Flat, cand: Flat, al: Alignment): TableScores {
   const inPlace = new Uint8Array(cand.toks.length);
+  const refFormulas = cellFormulas(ref);
+  const candFormulas = cellFormulas(cand);
+  const formulaPlaced = new Set<number>();
+  const tokensOf = (flat: Flat, k: number) => mathTokens(flat.math[k], false);
+  const plain = (text: string) => text.normalize("NFKC").replace(/\s+/g, "");
   let refWords = 0;
   let hits = 0;
   let outside = 0;
@@ -912,19 +942,62 @@ export function tableScores(ref: Flat, cand: Flat, al: Alignment): TableScores {
     const body = ref.unitsOf[rb].filter((u) => ref.units[u].index >= 0);
     const rowVotes = new Map<string, number>();
     const colVotes = new Map<string, number>();
+    const key = (a: number, b: number) => `${a},${b}`;
+    const vote = (ru: Unit, cu: Unit) => {
+      rowVotes.set(key(ru.row, cu.row), (rowVotes.get(key(ru.row, cu.row)) ?? 0) + 1);
+      colVotes.set(key(ru.col, cu.col), (colVotes.get(key(ru.col, cu.col)) ?? 0) + 1);
+    };
     for (const u of body) {
       for (let i = ref.units[u].first; i < ref.units[u].end; i++) {
         const j = al.aTo[i];
         if (j < 0) continue;
         const cu = cand.units[cand.toks[j].unit];
         if (cu.block !== cb || cu.index < 0) continue;
-        const key = (a: number, b: number) => `${a},${b}`;
-        rowVotes.set(key(ref.units[u].row, cu.row), (rowVotes.get(key(ref.units[u].row, cu.row)) ?? 0) + 1);
-        colVotes.set(key(ref.units[u].col, cu.col), (colVotes.get(key(ref.units[u].col, cu.col)) ?? 0) + 1);
+        vote(ref.units[u], cu);
+      }
+    }
+    // A formula the owner's cells hold once, read alike or as the same characters, votes too.
+    const ownerCells = cb >= 0 ? cand.unitsOf[cb].filter((u) => cand.units[u].index >= 0) : [];
+    for (const u of body) {
+      for (const k of refFormulas.get(u) ?? []) {
+        const want = tokensOf(ref, k);
+        const reading = plain(ref.math[k].text ?? "");
+        const alike = ownerCells.filter(
+          (cu) => (candFormulas.get(cu) ?? []).some((c) => sequenceSimilarity(want, tokensOf(cand, c)) >= SAME_FORMULA) || (reading !== "" && plain(cand.units[cu].text) === reading),
+        );
+        if (alike.length === 1) vote(ref.units[u], cand.units[alike[0]]);
       }
     }
     const rows = assign(rowVotes);
     const cols = assign(colVotes);
+    // Rows and columns no word or formula maps keep their place when that place is free (a table of formulas
+    // read as words).
+    const byPlace = (map: Map<number, number>, from: number[], to: number[]) => {
+      const taken = new Set(map.values());
+      for (const r of new Set(from)) {
+        if (map.has(r) || !to.includes(r) || taken.has(r)) continue;
+        map.set(r, r);
+        taken.add(r);
+      }
+    };
+    byPlace(rows, body.map((u) => ref.units[u].row), ownerCells.map((u) => cand.units[u].row));
+    byPlace(cols, body.map((u) => ref.units[u].col), ownerCells.map((u) => cand.units[u].col));
+    const cellAt = (unit: Unit) => ownerCells.find((c) => cand.units[c].row === rows.get(unit.row) && cand.units[c].col === cols.get(unit.col)) ?? -1;
+    for (const u of body) {
+      const unit = ref.units[u];
+      for (const k of refFormulas.get(u) ?? []) {
+        refWords++;
+        const at = cellAt(unit);
+        const want = tokensOf(ref, k);
+        const formula = at < 0 ? undefined : (candFormulas.get(at) ?? []).find((c) => !formulaPlaced.has(c) && sequenceSimilarity(want, tokensOf(cand, c)) >= SAME_FORMULA);
+        const reading = ref.math[k].text;
+        const asWords = at >= 0 && formula === undefined && reading !== undefined && plain(reading) !== "" && plain(cand.units[at].text) === plain(reading);
+        if (formula !== undefined) formulaPlaced.add(formula);
+        if (asWords) for (let j = cand.units[at].first; j < cand.units[at].end; j++) inPlace[j] = 1;
+        if (formula !== undefined || asWords) hits++;
+        else misses.push({ ref: u, row: unit.row, col: unit.col, want: latexOf(ref.math[k]), got: at >= 0 ? cand.units[at].text : "" });
+      }
+    }
     for (const u of body) {
       const unit = ref.units[u];
       let ok = 0;
@@ -953,6 +1026,10 @@ export function tableScores(ref: Flat, cand: Flat, al: Alignment): TableScores {
   let candWords = 0;
   let candHits = 0;
   let inside = 0;
+  for (const list of candFormulas.values()) {
+    candWords += list.length;
+    candHits += list.filter((k) => formulaPlaced.has(k)).length;
+  }
   cand.blocks.forEach((block, cb) => {
     if (block.kind !== "table") return;
     for (const u of cand.unitsOf[cb]) {
