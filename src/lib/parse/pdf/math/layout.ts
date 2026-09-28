@@ -117,13 +117,13 @@ function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
       else unknown.push(g);
       continue;
     }
-    const variant = variantOf(g.base);
+    const variant = g.variant ?? variantOf(g.base);
     let tex = entry.latex;
     if (tex && variant === "bold" && entry.cls !== "piece") tex = `\\boldsymbol{${tex}}`;
     else if (variant === "bf" && /^[A-Za-z0-9]$/.test(tex)) tex = `\\mathbf{${tex}}`;
     else if (variant === "sf" && /^[A-Za-z]$/.test(tex)) tex = `\\mathsf{${tex}}`;
     else if (variant === "tt" && /^[A-Za-z]$/.test(tex)) tex = `\\mathtt{${tex}}`;
-    const [height, depth] = entry.box;
+    const [height, depth] = g.box ?? entry.box;
     atoms.push({
       fam: g.family,
       code: g.code,
@@ -1031,8 +1031,9 @@ export function hangingBox(item: Item): { top: number; bottom: number; display: 
   for (const g of glyphs) {
     const entry = g.family !== null && (hangingFamily(g.family) || g.family === "oms") ? mathGlyph(g.family, g.code) : null;
     if (!entry || (g.family === "oms" && entry.cls !== "radical")) return null;
-    top = Math.max(top, g.y + entry.box[0] * g.size);
-    bottom = Math.min(bottom, g.y - entry.box[1] * g.size);
+    const [height, depth] = g.box ?? entry.box;
+    top = Math.max(top, g.y + height * g.size);
+    bottom = Math.min(bottom, g.y - depth * g.size);
     display ||= Boolean(entry.display);
   }
   return { top, bottom, display };

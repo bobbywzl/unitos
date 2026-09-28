@@ -71,8 +71,9 @@ export type Box = { x1: number; y1: number; x2: number; y2: number };
 // A table the page's rules draw, taken out of the text flow before the
 // column split: its box, its text and the text's lines, the grid of a fully
 // ruled table (none when only horizontal rules bound it: rows and columns
-// come from the text), and the horizontal rules inside it.
-export type TableRegion = { box: Box; items: Item[]; lines: Line[]; grid: Grid | null; rules: Rule[] };
+// come from the text), the horizontal rules inside it, and the page's
+// drawing (a cell's formulas read their glyphs and rules from it).
+export type TableRegion = { box: Box; items: Item[]; lines: Line[]; grid: Grid | null; rules: Rule[]; drawing: PageDrawing };
 
 // A page start inside a joined segment: where a later page's words begin in
 // the text. page is 0-based, like Segment.page.

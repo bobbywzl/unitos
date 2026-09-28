@@ -454,7 +454,211 @@ def build():
     return table
 
 
-def write(table):
+# ── Math fonts set in Unicode ───────────────────────────────────────────────
+
+# Symbols TeX builds from two glyphs or more (the layout fuses them) that a
+# Unicode math font draws as one glyph: codes past TeX's 128 in the symbol
+# family, each with the box of the TeX glyph it looks like.
+VIRTUAL = [
+    ("\\cdots", "⋯", "ord", ("oms", 0x01)), ("\\ldots", "…", "ord", ("oml", 0x3A)),
+    ("\\vdots", "⋮", "ord", ("ot1", 0x28)), ("\\ddots", "⋱", "ord", ("ot1", 0x28)),
+    ("\\neq", "≠", "rel", ("ot1", 0x3D)), ("\\notin", "∉", "rel", ("oms", 0x32)),
+    ("\\mapsto", "↦", "rel", ("oms", 0x21)), ("\\longmapsto", "⟼", "rel", ("oms", 0x21)),
+    ("\\longrightarrow", "⟶", "rel", ("oms", 0x21)), ("\\longleftarrow", "⟵", "rel", ("oms", 0x20)),
+    ("\\longleftrightarrow", "⟷", "rel", ("oms", 0x24)), ("\\Longrightarrow", "⟹", "rel", ("oms", 0x29)),
+    ("\\Longleftarrow", "⟸", "rel", ("oms", 0x28)), ("\\Longleftrightarrow", "⟺", "rel", ("oms", 0x2C)),
+    ("\\hookrightarrow", "↪", "rel", ("oms", 0x21)), ("\\hookleftarrow", "↩", "rel", ("oms", 0x20)),
+    ("\\models", "⊨", "rel", ("ot1", 0x3D)), ("\\bowtie", "⋈", "rel", ("oml", 0x2E)),
+    ("\\doteq", "≐", "rel", ("ot1", 0x3D)), ("\\cong", "≅", "rel", ("ot1", 0x3D)),
+    ("\\not\\equiv", "≢", "rel", ("oms", 0x11)), ("\\not\\subset", "⊄", "rel", ("oms", 0x1A)),
+    ("\\not\\supset", "⊅", "rel", ("oms", 0x1B)),
+]
+# The pieces of tall delimiters by their Unicode characters (U+239B…).
+PIECE_CHARS = {
+    "⎛": 0x30, "⎜": 0x42, "⎝": 0x40, "⎞": 0x31, "⎟": 0x43, "⎠": 0x41, "⎡": 0x32, "⎢": 0x36, "⎣": 0x34,
+    "⎤": 0x33, "⎥": 0x37, "⎦": 0x35, "⎧": 0x38, "⎨": 0x3C, "⎩": 0x3A, "⎪": 0x3E, "⎫": 0x39, "⎬": 0x3D,
+    "⎭": 0x3B, "⎷": 0x74, "⏐": 0x0C,
+}
+# A delimiter's extending piece where the font gives it no character of its
+# own (the PDF maps it to the delimiter's).
+REPEATERS = {"(": 0x42, ")": 0x43, "[": 0x36, "]": 0x37, "{": 0x3E, "}": 0x3E, "|": 0x0C, "‖": 0x0D, "√": 0x75}
+# Each delimiter at text size, in TeX's text and symbol fonts.
+DELIMITER_BASE = {
+    "(": ("ot1", 0x28), ")": ("ot1", 0x29), "[": ("ot1", 0x5B), "]": ("ot1", 0x5D), "{": ("oms", 0x66),
+    "}": ("oms", 0x67), "⟨": ("oms", 0x68), "⟩": ("oms", 0x69), "⌊": ("oms", 0x62), "⌋": ("oms", 0x63),
+    "⌈": ("oms", 0x64), "⌉": ("oms", 0x65), "|": ("oms", 0x6A), "‖": ("oms", 0x6B), "/": ("oml", 0x3D),
+    "\\": ("oms", 0x6E), "√": ("oms", 0x70),
+}
+BARS = {"|": 0x0C, "∣": 0x0C, "‖": 0x0D, "∥": 0x0D}
+# TeX's four sizes past a delimiter's text size (\big to \Bigg), by height in em.
+SIZE_HEIGHTS = [1.2, 1.8, 2.4, 3.0]
+OPENTYPE_CHARS = "()[]{}⟨⟩⌊⌋⌈⌉|‖/∑∏∐∫∬∭∮⋃⋂⨀⨁⨂⨄⨆⋀⋁√"
+
+
+def virtual(table):
+    have = {e["unicode"] for entries in table.values() for e in entries.values()}
+    boxes = {family: metrics(font) for family, font in FONTS.items() if family in ("oml", "oms", "ot1")}
+    code = 0x100
+    for latex, unicode, cls, (family, like) in VIRTUAL:
+        if unicode in have:
+            continue
+        height, depth, _ = boxes[family][like]
+        table["oms"][code] = dict(latex=latex, unicode=unicode, cls=cls, box=[round(height, 3), round(depth, 3)])
+        code += 1
+
+
+def delimiter_codes():
+    """Character → the extension font's codes for \\big to \\Bigg."""
+    return {DELIMITER_UNICODE[latex]: codes for latex, codes in CHAINS.items()}
+
+
+def operator_codes():
+    """Character → the family and the codes of its text and display forms."""
+    out = {unicode: ("omx", text, display) for _, text, display, unicode in OPERATORS}
+    out["∬"] = ("esint", 0x03, 0x04)
+    out["∭"] = ("esint", 0x05, 0x06)
+    return out
+
+
+def size_of(height):
+    """TeX's size (1 = \\big … 4 = \\Bigg) nearest a glyph's height in em."""
+    return min(range(4), key=lambda i: abs(SIZE_HEIGHTS[i] - height)) + 1
+
+
+def katex_sizes():
+    """KaTeX's size fonts: each glyph's TeX code and its box from KaTeX's
+    metrics ([depth, height, italic, skew, width] in em). KaTeX sets the
+    glyph on the baseline and TeX hangs its own from it, so the box is
+    KaTeX's."""
+    source = (ROOT / "node_modules/katex/src/fontMetricsData.js").read_text()
+    body = re.sub(r"^.*?export default\s*", "", source, flags=re.S).rstrip().rstrip(";")
+    data = json.loads(re.sub(r",(\s*[}\]])", r"\1", body))  # JavaScript's trailing commas
+    delims = delimiter_codes()
+    operators = operator_codes()
+    out = {}
+    for n in range(1, 5):
+        font = f"Size{n}-Regular"
+        rows = []
+        for cp, (depth, height, *_rest) in sorted(data[font].items(), key=lambda kv: int(kv[0])):
+            ch = chr(int(cp))
+            if ch in delims:
+                family, code = "omx", delims[ch][n - 1]
+            elif ch in operators and n <= 2:
+                family, code = operators[ch][0], operators[ch][n]
+            elif ch == "√":
+                family, code = "omx", 0x6F + n
+            elif ch in PIECE_CHARS:
+                family, code = "omx", PIECE_CHARS[ch]
+            elif ch in BARS:
+                family, code = "omx", BARS[ch]
+            elif ch in "ˆ\u0302":
+                family, code = "omx", 0x61 + min(n, 3)
+            elif ch in "˜\u0303":
+                family, code = "omx", 0x64 + min(n, 3)
+            else:
+                continue
+            rows.append([ch, family, code, round(height, 3), round(depth, 3)])
+        out[font] = rows
+    return out
+
+
+def opentype(path):
+    """An OpenType math font's delimiters, big operators, and radicals: each
+    size variant, script-style form, and assembly part the font draws, as
+    [character, glyph id, advance, height, depth, family, code], sizes in
+    em. The PDF reads them all as the base character (or a part's own):
+    LuaLaTeX's code is the glyph id, and another producer's glyph tells
+    itself by its advance. The family and code are TeX's for that size."""
+    f = TTFont(path)
+    upm = f["head"].unitsPerEm
+    order = {name: gid for gid, name in enumerate(f.getGlyphOrder())}
+    cmap = f.getBestCmap()
+    hmtx = f["hmtx"]
+    glyphs = f.getGlyphSet()
+    variants = f["MATH"].table.MathVariants
+    coverage = {g: i for i, g in enumerate(variants.VertGlyphCoverage.glyphs)}
+    script = {}  # glyph → its script-style forms (GSUB ssty)
+    for record in f["GSUB"].table.FeatureList.FeatureRecord:
+        if record.FeatureTag != "ssty":
+            continue
+        for index in record.Feature.LookupListIndex:
+            for sub in f["GSUB"].table.LookupList.Lookup[index].SubTable:
+                sub = getattr(sub, "ExtSubTable", sub)
+                for g, alt in (getattr(sub, "mapping", None) or {}).items():
+                    script.setdefault(g, []).append(alt)
+                for g, alts in (getattr(sub, "alternates", None) or {}).items():
+                    script.setdefault(g, []).extend(alts)
+    delims = delimiter_codes()
+    operators = operator_codes()
+
+    def box(g):
+        pen = BoundsPen(glyphs)
+        glyphs[g].draw(pen)
+        lo, hi = (pen.bounds[1], pen.bounds[3]) if pen.bounds else (0, 0)
+        return round(hmtx[g][0] / upm, 3), round(hi / upm, 3), round(-lo / upm, 3)
+
+    rows = []
+    seen = set()
+
+    def add(ch, g, family, code):
+        if (ch, g) in seen:
+            return
+        seen.add((ch, g))
+        advance, height, depth = box(g)
+        rows.append([ch, order[g], advance, height, depth, family, code])
+
+    for ch in OPENTYPE_CHARS:
+        base = cmap.get(ord(ch))
+        if base is None:
+            continue
+        construction = variants.VertGlyphConstruction[coverage[base]] if base in coverage else None
+        sizes = [v.VariantGlyph for v in construction.MathGlyphVariantRecord] if construction else []
+        sizes = [base] + [g for g in sizes if g != base]
+        for k, g in enumerate(sizes):
+            _, height, depth = box(g)
+            if ch in operators:
+                family, text, display = operators[ch]
+                code = text if k == 0 else display
+            elif k == 0:
+                family, code = DELIMITER_BASE[ch]
+            elif ch == "√":
+                family, code = "omx", 0x6F + size_of(height + depth)
+            elif ch in BARS:
+                family, code = "omx", BARS[ch]
+            else:
+                family, code = "omx", delims[ch][size_of(height + depth) - 1]
+            add(ch, g, family, code)
+        for g in dict.fromkeys(script.get(base, [])):
+            if ch in operators:
+                add(ch, g, operators[ch][0], operators[ch][1])
+            else:
+                add(ch, g, *DELIMITER_BASE[ch])
+        assembly = construction.GlyphAssembly if construction else None
+        for part in assembly.PartRecords if assembly else []:
+            g = part.glyph
+            own = next((chr(u) for u, name in cmap.items() if name == g and chr(u) in PIECE_CHARS), None)
+            if own:
+                add(own, g, "omx", PIECE_CHARS[own])
+            elif part.PartFlags & 1 and ch in REPEATERS:
+                add(ch, g, "omx", REPEATERS[ch])
+    return f["name"].getDebugName(6), rows
+
+
+def opentype_fonts():
+    out = {}
+    for name, path in [
+        ("latinmodern-math.otf", kpse("latinmodern-math.otf")),
+        ("STIXTwoMath-Regular.otf", ROOT / ".bench/fonts/STIXTwoMath-Regular.otf"),
+        ("XITSMath-Regular.otf", ROOT / ".bench/fonts/XITSMath-Regular.otf"),
+    ]:
+        if not path or not Path(path).exists():
+            raise SystemExit(f"{name} not found: put it in .bench/fonts/ (CTAN: fonts/stix2-otf, fonts/xits)")
+        font, rows = opentype(path)
+        out[font] = rows
+    return out
+
+
+def write(table, sizes, fonts):
     def js(value):
         return json.dumps(value, ensure_ascii=False)
 
@@ -467,15 +671,28 @@ def write(table):
             row = [e["latex"], e["unicode"], e["cls"], e["box"][0], e["box"][1]] + ([extra] if extra else [])
             lines.append(f"    0x{code:02x}: {js(row)},")
         lines.append("  },")
+    size_lines = []
+    for font, rows in sizes.items():
+        size_lines.append(f"  {js(font)}: [")
+        size_lines.extend(f"    {js(row)}," for row in rows)
+        size_lines.append("  ],")
+    font_lines = []
+    for font, rows in fonts.items():
+        font_lines.append(f"  {js(font)}: [")
+        font_lines.extend(f"    {js(row)}," for row in rows)
+        font_lines.append("  ],")
     OUT.write_text(
         f"""// Generated by scripts/math-fonts/generate.py from TeX Live's fonts,
-// declarations, and pdfTeX's glyph-to-Unicode list. Do not edit: change the
-// generator and run it again.
+// declarations, and pdfTeX's glyph-to-Unicode list, KaTeX's metrics, and the
+// MATH tables of OpenType math fonts. Do not edit: change the generator and
+// run it again.
 //
 // What each character code of a TeX math family draws. A math glyph's code
 // names its symbol whatever the PDF maps it to: without a Unicode map the
 // text layer reads ϵ as a control character and ℓ as a backtick, and with
-// pdfTeX's map the big operators read as letters (P0-F memo §1.2).
+// pdfTeX's map the big operators read as letters (P0-F memo §1.2). A math
+// font set in Unicode (KaTeX's, an OpenType math font) reads right, and its
+// glyphs take the codes of the same symbols here (glyphs.ts unicodeMath).
 
 import type {{ MathFamily }} from "@/lib/parse/pdf/glyphs";
 
@@ -513,10 +730,67 @@ const GLYPHS = Object.fromEntries(
 export function mathGlyph(family: MathFamily, code: number): MathGlyph | null {{
   return GLYPHS[family][code] ?? null;
 }}
+
+// A glyph of a Unicode math font read as TeX's: its family and code, and
+// its box (height and depth in em) as its own font draws it.
+export type TexCode = {{ family: MathFamily; code: number; box: [number, number] }};
+
+// KaTeX's size fonts (\\big to \\Bigg, big operators, the pieces of tall
+// delimiters): [character, family, code, height, depth]. KaTeX stands each
+// glyph on the baseline; TeX's extension font hangs its own from it.
+const KATEX_SIZES: Record<string, [string, MathFamily, number, number, number][]> = {{
+{chr(10).join(size_lines)}
+}};
+
+// OpenType math fonts: each size variant, script-style form, and assembly
+// part of a delimiter, a big operator, or a radical, by the font's name:
+// [character, glyph id, advance, height, depth, family, code], sizes in em.
+// The PDF maps them all to the base character (or a part's own): LuaLaTeX's
+// code is the glyph id, and another producer's glyph tells itself by its
+// advance.
+const OPENTYPE: Record<string, [string, number, number, number, number, MathFamily, number][]> = {{
+{chr(10).join(font_lines)}
+}};
+
+const KATEX_BY_CHAR = new Map(
+  Object.entries(KATEX_SIZES).map(([font, rows]) => [
+    font,
+    new Map(rows.map(([char, family, code, height, depth]) => [char, {{ family, code, box: [height, depth] }} as TexCode])),
+  ]),
+);
+const OPENTYPE_BY_CHAR = new Map(
+  Object.entries(OPENTYPE).map(([font, rows]) => {{
+    const byChar = new Map<string, OpenTypeGlyph[]>();
+    for (const [char, gid, advance, height, depth, family, code] of rows) {{
+      const list = byChar.get(char) ?? [];
+      list.push({{ family, code, box: [height, depth], gid, advance }});
+      byChar.set(char, list);
+    }}
+    return [font, byChar];
+  }}),
+);
+
+/** A glyph of KaTeX's size font ("Size2-Regular") as TeX's. */
+export function katexSizeGlyph(font: string, char: string): TexCode | null {{
+  return KATEX_BY_CHAR.get(font)?.get(char) ?? null;
+}}
+
+export type OpenTypeGlyph = TexCode & {{ gid: number; advance: number }};
+
+/** The OpenType math font's glyphs a character can be, with their glyph ids
+    and advances; null for a font the tables do not know. */
+export function openTypeGlyphs(font: string, char: string): OpenTypeGlyph[] | null {{
+  const byChar = OPENTYPE_BY_CHAR.get(font);
+  return byChar ? (byChar.get(char) ?? []) : null;
+}}
 """
     )
     print(f"{OUT}: " + ", ".join(f"{family} {len(entries)}" for family, entries in table.items()))
+    print("  KaTeX sizes: " + ", ".join(f"{font} {len(rows)}" for font, rows in sizes.items()))
+    print("  OpenType: " + ", ".join(f"{font} {len(rows)}" for font, rows in fonts.items()))
 
 
 if __name__ == "__main__":
-    write(build())
+    table = build()
+    virtual(table)
+    write(table, katex_sizes(), opentype_fonts())

@@ -110,6 +110,11 @@ export function levelsOf(list: { type: string; attrs?: Record<string, unknown> |
   return listLevelsOf(list.attrs?.listLevels) ?? listPreset(list.type === "orderedList", list.attrs?.listStyle).levels;
 }
 
+/** Two levels that draw alike. */
+export function sameLevel(a: ListLevel, b: ListLevel): boolean {
+  return "bullet" in a ? "bullet" in b && a.bullet === b.bullet : "counter" in b && a.counter === b.counter && a.format === b.format;
+}
+
 /** Two lists that draw alike: the same preset and the same own levels. */
 export function sameFormat(a: PMNode, b: PMNode): boolean {
   return (a.attrs.listStyle ?? null) === (b.attrs.listStyle ?? null) && (a.attrs.listLevels ?? null) === (b.attrs.listLevels ?? null);
@@ -166,15 +171,21 @@ export function levelMarker(level: ListLevel, numbers: number[]): string {
   return level.format.replace(/%([0-8])/g, (_, k: string) => counterText(level.counter, numbers[Number(k)] ?? 1));
 }
 
+/** The level a numbered line draws `depth` levels into the outermost list
+    `outer`: the outer list's, or the default's where the outer list draws a
+    bullet (a numbered list inside a bulleted one). */
+export function numberLevel(outer: { type: string; attrs?: Record<string, unknown> | null } | null, depth: number): ListLevel {
+  const k = Math.max(0, Math.min(depth, 8));
+  const own = outer ? levelsOf(outer)[k] : undefined;
+  return own && "counter" in own ? own : NUMBER_PRESETS[0].levels[k];
+}
+
 /** The marker the page draws before a numbered line: `outer` is the
     outermost list around it, `numbers` the line's number at each level from
     there down, its own last ([2, 3]: the third line of the list under the
-    outer list's second line). A level the outer list draws as a bullet (a
-    numbered list inside a bulleted one) draws the default numbers. */
+    outer list's second line). */
 export function listMarker(outer: { type: string; attrs?: Record<string, unknown> | null } | null, numbers: number[]): string {
-  const depth = Math.max(0, Math.min(numbers.length, 9) - 1);
-  const own = outer ? levelsOf(outer)[depth] : undefined;
-  return levelMarker(own && "counter" in own ? own : NUMBER_PRESETS[0].levels[depth], numbers);
+  return levelMarker(numberLevel(outer, numbers.length - 1), numbers);
 }
 
 /** Words as a CSS string: a quote, a backslash, or a line end escaped. */

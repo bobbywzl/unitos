@@ -94,7 +94,7 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     if (!first || Math.abs(first.y + first.size * 0.7 - top) > first.size * 0.5) continue;
     if (lines.filter((l) => l.y >= cap.y - l.size * 0.5).length < 2) continue;
     // Stretched to the first word, it takes no space before it.
-    const lead: Item = { ...cap, str: cap.str.trim(), y: first.y, size: first.size, w: first.x - cap.x, bold: first.bold, italic: first.italic, mono: first.mono, smallCaps: first.smallCaps, href: first.href, font: first.font };
+    const lead: Item = { ...cap, str: cap.str.trim(), y: first.y, size: first.size, w: first.x - cap.x, bold: first.bold, italic: first.italic, mono: first.mono, smallCaps: first.smallCaps, href: first.href, font: first.font, look: first.look };
     out = out.map((i) => (i === cap ? lead : i));
     // The other lines beside it start where the paragraph's next line does,
     // or where the cap does when none follows: set in by its width, they
@@ -265,6 +265,7 @@ function buildLine(rawItems: Item[], page: number): Line {
         sup: item.sup,
         sub: item.sub,
         zone: item.zone,
+        look: item.look,
       });
     }
     prevEnd = item.x + item.w;

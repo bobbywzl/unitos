@@ -365,9 +365,7 @@ function listLevels(list: RichNode): ILevelsOptions[] {
     level,
     ...("bullet" in glyph
       ? { format: LevelFormat.BULLET, text: glyph.bullet }
-      : "nested" in glyph
-        ? { format: LevelFormat.DECIMAL, text: `${Array.from({ length: level + 1 }, (_, i) => `%${i + 1}`).join(".")}.` }
-        : { format: COUNTERS[glyph.counter], text: `${glyph.before}%${level + 1}${glyph.after}` }),
+      : { format: COUNTERS[glyph.counter], text: glyph.format.replace(/%([0-8])/g, (_, k: string) => `%${Number(k) + 1}`) }),
     start: level === 0 ? Number(list.attrs?.start) || 1 : 1,
     style: { paragraph: { indent: levelIndent(level) } },
   }));

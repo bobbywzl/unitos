@@ -486,6 +486,10 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
   });
   const bounds = [region.box.x1, ...separators, region.box.x2];
   for (const group of headGroups) rows.push(headerRow(group, bounds));
+  if (process.env.R2T_DEBUG) {
+    console.error("BOUNDS", bounds.map((b) => Math.round(b * 10) / 10).join(","), "partial", partial.map((y) => Math.round(y)));
+    for (const group of headGroups) for (const line of group) console.error("  HEADLINE", Math.round(line.y), phraseColumns(line, bounds).map((p) => `${p.from}-${p.to}:${p.items.map((i) => i.str).join("|")}@${Math.round(p.items[0].x)}-${Math.round(p.items[p.items.length - 1].x + p.items[p.items.length - 1].w)}`).join("  "));
+  }
   const headerRows = rows.length;
   spanHeadColumns(rows, headerRows);
   if (body.length > 0) {
@@ -637,21 +641,73 @@ function linesText(lines: Line[]): { text: string; runs: Run[] } {
 }
 
 // The rows of a grid: each item in the cell its center is in; an item that
-// runs across a column line is cut there (splitAt).
-function gridRows(grid: Grid, items: Item[], page: number): TableRow[] {
+// runs across a column line is cut there (splitAt). Each cell's lines go
+// into `built`, where the table's formulas are read.
+function gridRows(grid: Grid, items: Item[], page: number, built: Line[]): TableRow[] {
   const inner = grid.xs.slice(1, -1);
   const pieces = items.flatMap((it) => splitAt(it, inner.filter((x) => x > it.x + it.w * 0.05 && x < it.x + it.w * 0.95)));
   const rowCount = grid.ys.length - 1;
   const rows: TableRow[] = Array.from({ length: rowCount }, () => ({ cells: [] }));
-  for (const cell of grid.cells) {
-    const inside = pieces.filter((it) => inBox(it, cell));
-    const text = inside.length > 0 ? linesText(buildLines(inside, page)) : { text: "", runs: [] };
-    const out: TableCell = { text: text.text.trim() === "" ? "" : text.text, runs: text.runs };
+  const cellLines = grid.cells.map((cell) => buildLines(pieces.filter((it) => inBox(it, cell)), page));
+  // The cells' padding: the least a left-set line stands from its cell's
+  // edge (Word's 5.4 pt); more is a line set in.
+  const insets = grid.cells.flatMap((cell, k) => cellLines[k].map((l) => l.x - cell.x1)).filter((d) => d >= 0);
+  const inset = Math.min(10, insets.length > 0 ? Math.min(...insets) : 0);
+  grid.cells.forEach((cell, k) => {
+    built.push(...cellLines[k]);
+    const words = cellLines[k].length > 0 ? cellParagraphs(cellLines[k], cell, inset) : { text: "", runs: [] };
+    const out: TableCell = words.text.trim() === "" ? { text: "", runs: [] } : words;
     if (cell.colspan > 1) out.colspan = cell.colspan;
     if (cell.rowspan > 1) out.rowspan = cell.rowspan;
     rows[cell.row].cells.push(out);
-  }
+  });
   return rows.filter((r) => r.cells.length > 0);
+}
+
+// A grid cell's lines as its paragraphs: a line breaks where the page
+// breaks it, not where the cell's width wraps it. A line wraps into the
+// next when the next line's first word had no room left on it, when it
+// ends in a hyphen, or when it ends mid-sentence and the next goes on in
+// lowercase; else the next line opens a paragraph (the legal packet's
+// signature cell: "By: Oak Valley Investments LLC", "By: Iron Core
+// Management LLC", "It's Manager", each on a line of its own, read as one).
+// Each paragraph keeps how its lines sit in the cell: centered, flush
+// right, or set in from the cell's left edge. inset: the cells' padding.
+function cellParagraphs(lines: Line[], box: Box, inset: number): TableCell {
+  const left = box.x1 + inset;
+  const right = box.x2 - inset;
+  const groups: Line[][] = [];
+  lines.forEach((line, k) => {
+    const prev = lines[k - 1];
+    const before = prev?.text.trim() ?? "";
+    const wraps =
+      prev !== undefined &&
+      (prev.xEnd - prev.x + prev.size * 0.28 + line.firstWordWidth > right - left - 1 ||
+        /[\p{L}\p{N}]-$/u.test(before) ||
+        (!/[.!?:;]["'”’)]?$/.test(before) && /^\p{Ll}/u.test(line.text)));
+    if (wraps) groups[groups.length - 1].push(line);
+    else groups.push([line]);
+  });
+  const middle = (box.x1 + box.x2) / 2;
+  const sitOf = (group: Line[]): Pick<CellParagraph, "align" | "indent"> => {
+    const size = group[0].size;
+    if (group.every((l) => l.x - left <= size * 0.5)) return {};
+    if (group.every((l) => Math.abs((l.x + l.xEnd) / 2 - middle) <= Math.max(size * 0.6, (box.x2 - box.x1) * 0.04))) return { align: "center" };
+    if (group.every((l) => right - l.xEnd <= size * 0.3)) return { align: "right" };
+    return { indent: Math.round(Math.min(...group.map((l) => l.x)) - left) };
+  };
+  const cell: TableCell = { text: "", runs: [], paragraphs: [] };
+  for (const group of groups) {
+    const words = linesText(group);
+    const start = cell.text.length + (cell.text.length > 0 ? 1 : 0);
+    cell.text = cell.text.length > 0 ? `${cell.text} ${words.text}` : words.text;
+    cell.runs.push(...words.runs.map((r) => ({ ...r, start: r.start + start, end: r.end + start })));
+    cell.paragraphs?.push({ start, end: cell.text.length, ...sitOf(group) });
+  }
+  // One paragraph set at the cell's left edge is the cell's words alone.
+  const [only] = cell.paragraphs ?? [];
+  if (groups.length === 1 && !only.align && !only.indent) delete cell.paragraphs;
+  return cell;
 }
 
 // An item that runs across column lines, cut into one piece per cell. A

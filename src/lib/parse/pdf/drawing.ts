@@ -473,10 +473,10 @@ function pathBox(args: unknown[] | null, ctm: Matrix): Box | null {
 // axis is a rule as thick as the line width; a filled rectangle at most 2 pt
 // thick is a rule; any other filled rectangle is a filled box.
 function readPath(args: unknown[] | null, state: State, rules: Rule[], fills: Fill[]) {
-  const paint = args?.[0] as number;
+  const op = args?.[0] as number;
   const data = (args?.[1] as unknown[] | undefined)?.[0] as ArrayLike<number> | null | undefined;
-  const stroke = STROKES.has(paint);
-  const fill = FILLS.has(paint);
+  const stroke = STROKES.has(op);
+  const fill = FILLS.has(op);
   if (!data || (!stroke && !fill)) return;
   const ctm = state.ctm;
   // Subpaths as point lists; a curve makes its subpath no rule and no box.

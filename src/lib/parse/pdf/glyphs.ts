@@ -4,7 +4,7 @@
 // math, the TeX math family).
 
 import type { Glyph } from "@/lib/parse/pdf/drawing";
-import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
+import { katexSizeGlyph, mathGlyph, openTypeGlyphs } from "@/lib/parse/pdf/math-fonts";
 import type { Flags } from "@/lib/parse/pdf/types";
 
 export const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
@@ -110,12 +110,188 @@ export function mathFamily(base: string): MathFamily | null {
 // it: \boldsymbol (bold math italic), \mathbf, \mathsf, \mathtt.
 export type MathVariant = "bold" | "bf" | "sf" | "tt";
 
-/** The page's glyphs with each glyph of a math font set in Unicode — KaTeX's
-    fonts (a web page printed), an OpenType math font (Latin Modern Math,
-    STIX Two Math, XITS Math from LuaLaTeX) — given the TeX family and code of
-    the same symbol, so the zones, the layout, and the check read it as they
-    read TeX's. */
+// ── Math fonts set in Unicode ───────────────────────────────────────────────
+// KaTeX's fonts (a web page printed from Chromium) and OpenType math fonts
+// (Latin Modern Math and STIX Two Math from LuaLaTeX, Cambria Math from
+// Word) carry Unicode maps: the text layer reads them right, but their codes
+// are glyph ids, so nothing read their glyphs as math (synth-math-html: 60
+// of 70 displays crops, its inline formulas words). Each such glyph takes
+// the TeX family and code of the same symbol, so the zones, the layout, and
+// the check read it as they read TeX's. A glyph of a size font or a size
+// variant keeps its own box: KaTeX and OpenType stand a big ∑ on the
+// baseline, where TeX's extension font hangs it from its origin.
+
+type UnicodeFont =
+  | { kind: "katex"; face: string; style: string }
+  | { kind: "opentype"; name: string }
+  | null;
+
+// OpenType math fonts by name (Latin Modern's Type 1 math fonts are TeX's
+// own families; MathDesign's are 8-bit TeX encodings).
+const OPENTYPE_MATH_RE =
+  /^(CambriaMath|Cambria-Math|STIX(Two)?Math|XITS-?Math|LatinModernMath|TeXGyre\w*Math|LibertinusMath|FiraMath|NewCMMath|NewComputerModernMath|DejaVuMathTeXGyre|Asana-?Math|GaramondMath|KpMath|Erewhon-?Math|LucidaBrightMath)/i;
+const fontKinds = new Map<string, UnicodeFont>();
+function unicodeFont(base: string): UnicodeFont {
+  let kind = fontKinds.get(base);
+  if (kind === undefined) {
+    const katex = /^KaTeX_(\w+)-(\w+)$/.exec(base);
+    kind = katex ? { kind: "katex", face: katex[1], style: katex[2] } : OPENTYPE_MATH_RE.test(base) ? { kind: "opentype", name: base } : null;
+    fontKinds.set(base, kind);
+  }
+  return kind;
+}
+
+// Every TeX glyph by its character, the families in the order a character
+// several families draw is read by (upright text first: "(" is the text
+// font's, not a sized delimiter's; \mathcal before \mathscr).
+const FAMILY_ORDER: MathFamily[] = ["ot1", "oml", "oms", "msa", "msb", "lasy", "omx", "esint", "euf", "rsfs"];
+let byChar: Map<string, [MathFamily, number][]> | null = null;
+function texGlyphsOf(char: string): [MathFamily, number][] {
+  if (!byChar) {
+    byChar = new Map();
+    for (const family of FAMILY_ORDER) {
+      for (let code = 0; code < 0x200; code++) {
+        const entry = mathGlyph(family, code);
+        if (!entry || !entry.unicode || entry.cls === "piece") continue;
+        const list = byChar.get(entry.unicode) ?? [];
+        list.push([family, code]);
+        byChar.set(entry.unicode, list);
+      }
+    }
+  }
+  return byChar.get(char) ?? [];
+}
+
+// Characters these fonts draw that TeX's tables spell otherwise: a spacing
+// accent for TeX's accent, KaTeX's \not (a private-use glyph), the math
+// slash, and the operators Unicode names apart from their look-alikes.
+const SAME: Record<string, [MathFamily, number]> = {
+  "^": ["ot1", 0x5e], "ˆ": ["ot1", 0x5e], "ˉ": ["ot1", 0x16], "¯": ["ot1", 0x16], "~": ["ot1", 0x7e], "˜": ["ot1", 0x7e],
+  "˙": ["ot1", 0x5f], "¨": ["ot1", 0x7f], "´": ["ot1", 0x13], "ˊ": ["ot1", 0x13], "`": ["ot1", 0x12], "ˋ": ["ot1", 0x12],
+  "˘": ["ot1", 0x15], "ˇ": ["ot1", 0x14], "˚": ["ot1", 0x17], "": ["oms", 0x36], "/": ["oml", 0x3d],
+  "⋅": ["oms", 0x01], "∘": ["oms", 0x0e], "∙": ["oms", 0x0f], "∣": ["oms", 0x6a], "∖": ["oms", 0x6e],
+};
+
+// Unicode's mathematical alphanumerics (U+1D400…): the first code of each
+// alphabet of Latin letters (A–Z, a–z), of Greek (Α–Ω, α–ω, and symbols),
+// and of digits, and how TeX sets it. The letters Unicode had coded before
+// (ℎ ℝ ℭ ℬ) are the holes the tables and NFKC cover.
+type Style = { family: MathFamily; variant?: MathVariant };
+const ITALIC: Style = { family: "oml" };
+const BOLD_ITALIC: Style = { family: "oml", variant: "bold" };
+const ALPHABETS: [number, number, Style][] = [
+  [0x1d400, 52, { family: "ot1", variant: "bf" }],
+  [0x1d434, 52, ITALIC],
+  [0x1d468, 52, BOLD_ITALIC],
+  [0x1d5a0, 52, { family: "ot1", variant: "sf" }],
+  [0x1d5d4, 52, { family: "ot1", variant: "sf" }],
+  [0x1d608, 52, { family: "ot1", variant: "sf" }],
+  [0x1d63c, 52, { family: "ot1", variant: "sf" }],
+  [0x1d670, 52, { family: "ot1", variant: "tt" }],
+  [0x1d6a8, 58, { family: "ot1", variant: "bf" }],
+  [0x1d6e2, 58, ITALIC],
+  [0x1d71c, 58, BOLD_ITALIC],
+  [0x1d756, 58, BOLD_ITALIC],
+  [0x1d790, 58, BOLD_ITALIC],
+  [0x1d7ce, 10, { family: "ot1", variant: "bf" }],
+  [0x1d7e2, 10, { family: "ot1", variant: "sf" }],
+  [0x1d7ec, 10, { family: "ot1", variant: "sf" }],
+  [0x1d7f6, 10, { family: "ot1", variant: "tt" }],
+];
+
+type Tex = { family: MathFamily; code: number; box?: [number, number]; variant?: MathVariant };
+
+/** A character as TeX sets it: the first of families that draws it. */
+function texOf(char: string, families: readonly MathFamily[], variant?: MathVariant): Tex | null {
+  const same = SAME[char];
+  if (same && families.includes(same[0])) return { family: same[0], code: same[1], variant };
+  for (const family of families) {
+    const hit = texGlyphsOf(char).find(([f]) => f === family);
+    if (hit) return { family, code: hit[1], variant };
+  }
+  return null;
+}
+
+/** A character of an OpenType math font: a mathematical alphanumeric by
+    its alphabet, anything else as TeX's tables name it. */
+function openTypeChar(char: string): Tex | null {
+  const cp = char.codePointAt(0) ?? 0;
+  const alphabet = ALPHABETS.find(([start, count]) => cp >= start && cp < start + count);
+  const letter = char.normalize("NFKC");
+  if (alphabet) {
+    const { family, variant } = alphabet[2];
+    // Upright bold Greek has no TeX font: its small letters are \boldsymbol's.
+    if (family === "ot1" && !/[A-Za-z0-9]/.test(letter) && !texOf(letter, ["ot1"])) return texOf(letter, ["oml"], "bold");
+    return texOf(letter, [family], variant);
+  }
+  if (cp === 0x210e) return texOf("h", ["oml"]); // ℎ, the italic h
+  return texOf(char, FAMILY_ORDER);
+}
+
+/** A glyph of an OpenType math font whose character has sizes (a
+    delimiter, a big operator, a radical): LuaLaTeX's code is the glyph id;
+    another producer's glyph tells itself by its advance. */
+function openTypeSized(g: Glyph, font: string): Tex | null | undefined {
+  const rows = openTypeGlyphs(font, g.unicode);
+  if (!rows || rows.length === 0) return undefined;
+  const advance = g.w / g.size;
+  const row =
+    rows.find((r) => r.gid === g.code) ??
+    rows.filter((r) => Math.abs(r.advance - advance) < 0.01).sort((a, b) => Math.abs(a.advance - advance) - Math.abs(b.advance - advance))[0];
+  return row ? { family: row.family, code: row.code, box: row.box } : null;
+}
+
+// KaTeX's faces: the families their characters are read in, and the
+// alphabet a face sets (KaTeX_Main-Bold is \mathbf, KaTeX_Math-BoldItalic
+// \boldsymbol). A letter of the AMS face is blackboard bold, of the
+// Caligraphic, Fraktur, and Script faces their alphabets, at its own code.
+function katexChar(char: string, face: string, style: string): Tex | null {
+  const bold = /Bold/.test(style);
+  const ascii = /^[A-Za-z0-9]$/.test(char) ? char.charCodeAt(0) : null;
+  switch (face) {
+    case "Main":
+      return texOf(char, /Italic/.test(style) && ascii !== null ? ["oml"] : ["ot1", "oms", "oml", "lasy"], bold ? "bf" : undefined);
+    case "Math":
+      return texOf(char, ["oml"], bold ? "bold" : undefined);
+    case "AMS":
+      return ascii !== null && /[A-Z]/.test(char) ? { family: "msb", code: ascii } : texOf(char, ["msa", "msb", "oms", "ot1"]);
+    case "Caligraphic":
+      return ascii !== null && /[A-Z]/.test(char) ? { family: "oms", code: ascii, variant: bold ? "bold" : undefined } : null;
+    case "Fraktur":
+      return ascii !== null && /[A-Za-z]/.test(char) ? { family: "euf", code: ascii, variant: bold ? "bold" : undefined } : null;
+    case "Script":
+      return ascii !== null && /[A-Z]/.test(char) ? { family: "rsfs", code: ascii } : null;
+    case "SansSerif":
+    case "Typewriter":
+      return ascii !== null ? { family: "ot1", code: ascii, variant: face === "Typewriter" ? "tt" : "sf" } : texOf(char, ["ot1"]);
+    default: {
+      const sized = /^Size\d$/.test(face) ? katexSizeGlyph(`${face}-${style}`, char) : null;
+      return sized ? { family: sized.family, code: sized.code, box: sized.box } : null;
+    }
+  }
+}
+
+/** The page's glyphs with each glyph of a math font set in Unicode given
+    the TeX family and code of the same symbol (its own box where its font
+    draws it otherwise, and its alphabet). A glyph no table knows keeps no
+    family: a formula it is in fails the check. */
 export function unicodeMath(glyphs: Glyph[]): Glyph[] {
+  for (const g of glyphs) {
+    if (g.family !== null) continue;
+    const font = unicodeFont(g.base);
+    if (!font || g.unicode.trim() === "" || g.size <= 0) continue;
+    let tex: Tex | null | undefined;
+    if (font.kind === "katex") tex = katexChar(g.unicode, font.face, font.style);
+    else {
+      tex = openTypeSized(g, font.name);
+      if (tex === undefined) tex = openTypeChar(g.unicode);
+    }
+    if (!tex) continue;
+    g.family = tex.family;
+    g.code = tex.code;
+    if (tex.box) g.box = tex.box;
+    if (tex.variant) g.variant = tex.variant;
+  }
   return glyphs;
 }
 
@@ -421,8 +597,8 @@ export function standingBaseline(g: Glyph, glyphs: Glyph[]): number {
     if (!above) break;
     top = above;
   }
-  const high = top.y + entry.box[0] * g.size;
-  const low = g.y - entry.box[1] * g.size;
+  const high = top.y + (top.box ?? entry.box)[0] * g.size;
+  const low = g.y - (g.box ?? entry.box)[1] * g.size;
   return (high + low) / 2 - AXIS_HEIGHT * g.size;
 }
 
@@ -435,6 +611,7 @@ export function sameFlags(a: Flags, b: Flags): boolean {
     a.href === b.href &&
     Boolean(a.sup) === Boolean(b.sup) &&
     Boolean(a.sub) === Boolean(b.sub) &&
-    a.zone === b.zone
+    a.zone === b.zone &&
+    a.look === b.look
   );
 }

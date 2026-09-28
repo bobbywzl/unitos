@@ -1,11 +1,14 @@
-import { NUMBER_PRESETS, listPreset } from "@/components/docs/toolbar/lists";
+import { BULLET_PRESETS, NUMBER_PRESETS, TYPED_PRESETS, numberLevel, sameLevel } from "@/components/docs/toolbar/lists";
 import {
   DEFAULT_PAGE_SETUP,
+  formatParts,
   INDEXED_NODE_TYPES,
   MAX_CAPTION_CHARS,
   newBlockId,
   sanitizeRichText,
   ZWSP,
+  type ListCounter,
+  type ListLevel,
   type PageSetup,
   type RichMark,
   type RichNode,
@@ -281,237 +284,225 @@ function mathAtoms(block: ParsedBlock): Atom[] {
 
 // A list line's marker, after its indent, as the parse keeps it printed: a
 // bullet ("-", "•", "◦", "▪", "–", "➢", "✓"), a checklist box ("☐", and "☑"
-// or "☒" checked), or a counter: "1." "1)" "(1)" "1.1" "a." "a)" "(a)"
-// "A." "(A)" "i." "(i)" "I.", a number alone (an exercise's "15" or
-// "*15"), or a reference's number ("[12]"). Any other line start is words.
+// or "☒" checked), or a counter and the words around it: "1." "1)" "(1)"
+// "a)." "(iv)" "I." "A-1." "[12]", a number alone (an exercise's "15" or
+// "*15"), or a legal number ("2.3.1": the numbers above its own before it).
+// Any other line start is words. A counter draws as the page prints it: the
+// outermost list's level at the line's depth takes the counter's glyph
+// format ("(a)" one level in is Google Docs' "(%1)"; components/docs/
+// toolbar/lists.ts), and the list keeps a preset when one draws every level
+// so, else its own levels. Round 1 drew the presets' markers ("a)." as
+// "a)", "15" as "15.", "[12]" as "12.").
 const LIST_BULLET = /^[-*•▪◦‣●·∙○■□◆❖➢➤►✓✔–—](?: +|$)/;
 const LIST_BOX = /^([☐☑☒])(?: +|$)/;
-const LIST_LEGAL = /^(?:\d{1,3}\.)+(\d{1,3})\.?(?: +|$)/;
+const LIST_LEGAL = /^((?:\d{1,3}\.)+)(\d{1,3})(\.?)(?: +|$)/;
+const LIST_PAREN = /^\(([a-zA-Z]{1,5}|\d{1,3})\)(?: +|$)/;
 const LIST_CITE = /^\[(\d{1,3})\](?: +|$)/;
-const LIST_COUNTER = /^(?:\(([a-zA-Z]{1,5}|\d{1,3})\)|([a-zA-Z]{1,5}|\d{1,3})(\)\.?|\.\)?))(?: +|$)/;
-const LIST_NUMBER = /^\*?(\d{1,3})(?: +|$)/;
+const LIST_CLOSED = /^((?:[A-Z]{1,2}-)?)([a-zA-Z]{1,5}|\d{1,3})(\)\.?|\.\)?)(?: +|$)/;
+const LIST_NUMBER = /^(\*?)(\d{1,3})(?: +|$)/;
 // A task line's box after its bullet (lib/parse/markdown-document.ts).
 const TASK_BOX = /^([☐☑☒]) /;
-// The page editor's preset for a counter's kind and its printed form
-// (components/docs/toolbar/lists.ts). A lower-case numeral has no preset of
-// its own at the first level: the upper-case numerals' preset counts the
-// same.
-const PRESETS: Record<string, Record<string, string>> = {
-  decimal: { ".": "", ")": "NUMBERED_DECIMAL_ALPHA_ROMAN_PARENS", "()": "NUMBERED_DECIMAL_ALPHA_ROMAN_TWO_PARENS", ".)": "NUMBERED_DECIMAL_ALPHA_ROMAN_PERIOD_PARENS" },
-  alpha: { ".": "NUMBERED_ALPHA_ROMAN_DECIMAL", ")": "NUMBERED_ALPHA_ROMAN_DECIMAL_PARENS", "()": "NUMBERED_ALPHA_ROMAN_DECIMAL_TWO_PARENS" },
-  upperAlpha: { ".": "NUMBERED_UPPERALPHA_ALPHA_ROMAN", ")": "NUMBERED_UPPERALPHA_ALPHA_ROMAN_PARENS", "()": "NUMBERED_UPPERALPHA_ALPHA_ROMAN_TWO_PARENS" },
-  roman: { ".": "NUMBERED_UPPERROMAN_UPPERALPHA_DECIMAL" },
-  upperRoman: { ".": "NUMBERED_UPPERROMAN_UPPERALPHA_DECIMAL" },
-};
 const ROMAN_NUMERAL = /^(x{0,3})(ix|iv|v?i{0,3})$/;
+
+type ListType = "bulletList" | "orderedList" | "taskList";
+/** A counter's style and number. */
+type Count = { counter: ListCounter; value: number };
 
 type ListLine = {
   depth: number;
-  /** The list the line belongs to: "bullet", "task", "ordered", or
-      "ordered:<preset>"; null when its start is no marker. */
-  key: string | null;
-  value: number;
-  /** A one-letter numeral ("(i)", "v.") read as a letter: the list it
-      continues when the letter follows on ("(h)" then "(i)"). */
-  letter?: { key: string; value: number };
+  /** The depth the indent gives, for a list drawn as paragraphs. */
+  indent: number;
+  /** The list the line belongs to; null when its start is no marker. */
+  type: ListType | null;
   checked: boolean;
-  /** A counter as printed ("1.", "(a)", "2.3"), and whether it is a legal
-      number, for the preset that draws it (bestPreset). */
-  marker?: string;
-  legal?: boolean;
+  /** A counter, the words before and after it, and a legal number's
+      numbers above its own. */
+  count?: Count & { before: string; after: string; parents?: number[] };
+  /** A numeral of one letter ("(i)", "v.") read as a letter: the list it
+      goes on when the letter follows ("(h)" then "(i)"). */
+  letter?: Count;
+  /** The level the line draws at its depth, once the depths are known. */
+  level?: ListLevel;
   /** The words after the marker; `whole` keeps the marker. */
   words: Source;
   whole: Source;
 };
 
-/** A counter's list key and value: "c" with ")" → the lower-case letters'
-    parenthesis preset and 3. */
-function counterKey(counter: string, form: string): { key: string; value: number } | null {
-  const shape = form === "()" || form === "." || form === ".)" ? form : ")";
-  const lower = counter.toLowerCase();
+/** A counter's style and number: "12" decimal 12, "03" 3 with its zero,
+    "c" lower-alpha 3, "iv" lower-roman 4, "IV" upper-roman 4. */
+function countOf(token: string): Count | null {
+  if (/^\d+$/.test(token)) return { counter: /^0\d$/.test(token) ? "decimal-leading-zero" : "decimal", value: Number(token) };
+  const lower = token.toLowerCase();
+  const upper = token === token.toUpperCase();
+  if (token !== lower && !upper) return null;
   const numeral = ROMAN_NUMERAL.exec(lower);
-  const kind = /^\d+$/.test(counter)
-    ? "decimal"
-    : counter !== lower && counter !== counter.toUpperCase()
-      ? null
-      : numeral && lower.length > 0
-        ? counter === lower ? "roman" : "upperRoman"
-        : counter.length === 1
-          ? counter === lower ? "alpha" : "upperAlpha"
-          : null;
-  if (!kind) return null;
-  const value =
-    kind === "decimal" ? Number(counter)
-    : kind === "alpha" || kind === "upperAlpha" ? lower.charCodeAt(0) - 96
-    : numeral![1].length * 10 + ["", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix"].indexOf(numeral![2]);
-  const preset = PRESETS[kind][shape] ?? PRESETS[kind]["."];
-  return { key: preset ? `ordered:${preset}` : "ordered", value };
+  if (numeral) {
+    const value = numeral[1].length * 10 + ["", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix"].indexOf(numeral[2]);
+    return { counter: upper ? "upper-roman" : "lower-roman", value };
+  }
+  return token.length === 1 ? { counter: upper ? "upper-alpha" : "lower-alpha", value: lower.charCodeAt(0) - 96 } : null;
+}
+
+/** The counter a line starts with: its characters, and the words around it. */
+function counterAt(text: string): { length: number; token: string; before: string; after: string } | null {
+  let m: RegExpExecArray | null;
+  if ((m = LIST_PAREN.exec(text))) return { length: m[0].length, token: m[1], before: "(", after: ")" };
+  if ((m = LIST_CITE.exec(text))) return { length: m[0].length, token: m[1], before: "[", after: "]" };
+  // A prefix ("A-1.", an exhibit's items) comes before a number only.
+  if ((m = LIST_CLOSED.exec(text)) && (!m[1] || /^\d+$/.test(m[2]))) return { length: m[0].length, token: m[2], before: m[1], after: m[3] };
+  if ((m = LIST_NUMBER.exec(text))) return { length: m[0].length, token: m[2], before: m[1], after: "" };
+  return null;
 }
 
 function listLine(line: Source): ListLine {
   const indent = /^ */.exec(line.text)?.[0].length ?? 0;
-  const depth = Math.floor(indent / 2);
   const whole = sliceSource(line, indent, line.text.length, true);
-  const out: ListLine = { depth, key: null, value: 1, checked: false, words: whole, whole };
+  const out: ListLine = { depth: Math.floor(indent / 2), indent: Math.floor(indent / 2), type: null, checked: false, words: whole, whole };
   const text = whole.text;
   let m: RegExpExecArray | null;
   let cut = 0;
   if ((m = LIST_BOX.exec(text))) {
-    out.key = "task";
+    out.type = "taskList";
     out.checked = m[1] !== "☐";
     cut = m[0].length;
   } else if ((m = LIST_BULLET.exec(text))) {
-    out.key = "bullet";
+    out.type = "bulletList";
     cut = m[0].length;
     const box = TASK_BOX.exec(text.slice(cut));
     if (box) {
-      out.key = "task";
+      out.type = "taskList";
       out.checked = box[1] !== "☐";
       cut += box[0].length;
     }
   } else if ((m = LIST_LEGAL.exec(text))) {
-    out.key = "ordered:NUMBERED_DECIMAL_NESTED";
-    out.value = Number(m[1]);
-    out.legal = true;
-    cut = m[0].length;
-  } else if ((m = LIST_COUNTER.exec(text))) {
-    const counter = m[1] ?? m[2];
-    const form = m[1] !== undefined ? "()" : m[3] === ")." ? ")" : m[3];
-    const read = counterKey(counter, form);
-    if (!read) return out;
-    out.key = read.key;
-    out.value = read.value;
-    if (/^[ivx]$/i.test(counter)) {
-      const letter = counterKey(counter === counter.toLowerCase() ? "a" : "A", form);
-      if (letter) out.letter = { key: letter.key, value: counter.toLowerCase().charCodeAt(0) - 96 };
-    }
-    cut = m[0].length;
-  } else if ((m = LIST_NUMBER.exec(text)) || (m = LIST_CITE.exec(text))) {
-    // A number alone and a reference's number count as "1." does: Docs
-    // draws no other number.
-    out.key = "ordered";
-    out.value = Number(m[1]);
+    out.type = "orderedList";
+    out.count = { counter: "decimal", value: Number(m[2]), before: "", after: m[3], parents: m[1].slice(0, -1).split(".").map(Number) };
     cut = m[0].length;
   } else {
-    return out;
+    const found = counterAt(text);
+    const count = found && countOf(found.token);
+    if (!found || !count) return out;
+    out.type = "orderedList";
+    out.count = { ...count, before: found.before, after: found.after };
+    if (/^[ivx]$/i.test(found.token)) {
+      out.letter = { counter: count.counter === "upper-roman" ? "upper-alpha" : "lower-alpha", value: found.token.toLowerCase().charCodeAt(0) - 96 };
+    }
+    cut = found.length;
   }
-  if (m && out.key !== "bullet" && out.key !== "task") out.marker = m[0].trim();
   out.words = sliceSource(whole, cut, whole.text.length, true);
   return out;
 }
 
-// Every numbered preset the page editor draws.
-const ORDERED_STYLES: (string | null)[] = [
-  ...new Set([...NUMBER_PRESETS.map((p) => p.style), ...Object.values(PRESETS).flatMap((forms) => Object.values(forms).filter((s) => s !== ""))]),
-];
-
-function toRoman(n: number): string {
-  const parts: [number, string][] = [[100, "c"], [90, "xc"], [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]];
-  let out = "";
-  for (const [value, text] of parts) {
-    while (n >= value) {
-      out += text;
-      n -= value;
+/** Each counter's level at its line's depth, in reading order. A numeral of
+    one letter reads as a letter where the line before it at its depth is
+    the letter before it ("(h)", "(i)"). A legal number draws the numbers
+    above its own from the lines above it when they are those numbers
+    ("1.2" under "1.": "%0.%1"), else prints them ("1.2" at the top: "1.%0").
+    A counter whose words the page cannot draw (lib/docs/schema.ts
+    formatParts) is no marker. */
+function levelsOfLines(lines: ListLine[]): void {
+  const open: ListLine[] = [];
+  for (const line of lines) {
+    const prev = open[line.depth];
+    open[line.depth] = line;
+    open.length = line.depth + 1;
+    let count = line.count;
+    if (!count) continue;
+    const k = Math.min(line.depth, 8);
+    const [letter, was] = [line.letter, prev?.count];
+    if (letter && was && !was.parents && was.counter === letter.counter && was.value + 1 === letter.value && was.before === count.before && was.after === count.after) {
+      count = line.count = { ...count, ...letter };
     }
+    const parents = count.parents;
+    const above = parents?.length === line.depth && line.depth <= 8 && parents.every((n, j) => open[j]?.type === "orderedList" && open[j]?.count?.value === n);
+    const format = !parents
+      ? `${count.before}%${k}${count.after}`
+      : above
+        ? `${Array.from({ length: k + 1 }, (_, j) => `%${j}`).join(".")}${count.after}`
+        : `${parents.join(".")}.%${k}${count.after}`;
+    if (formatParts(format, k)) line.level = { counter: count.counter, format };
+    else line.type = null;
+  }
+}
+
+/** The list a line joins: its type, and a counter's level. */
+const keyOf = (line: ListLine) => (line.level ? `${line.type} ${line.level.counter} ${line.level.format}` : String(line.type));
+
+/** The outermost list's levels with the lines' added, by depth; null when
+    a line draws its depth otherwise and `strict`, else the first stands. */
+function withLevels(seen: (ListLevel | undefined)[], lines: ListLine[], strict: boolean): (ListLevel | undefined)[] | null {
+  const out = [...seen];
+  for (const line of lines) {
+    if (!line.level) continue;
+    const k = Math.min(line.depth, 8);
+    const had = out[k];
+    if (had && !sameLevel(had, line.level)) {
+      if (strict) return null;
+      continue;
+    }
+    out[k] = line.level;
   }
   return out;
 }
 
-/** The marker a preset draws for item n at a level; a nested level's is
-    the number alone ("1." at the first level, "1.1." below it). */
-function drawn(style: string | null, depth: number, n: number): string {
-  const glyph = listPreset(true, style).levels[Math.min(depth, 8)];
-  if ("nested" in glyph) return depth === 0 ? `${n}.` : "nested";
-  if (!("counter" in glyph)) return glyph.bullet;
-  const counter =
-    glyph.counter === "decimal" ? String(n)
-    : glyph.counter === "decimal-leading-zero" ? String(n).padStart(2, "0")
-    : glyph.counter === "lower-alpha" ? String.fromCharCode(96 + n)
-    : glyph.counter === "upper-alpha" ? String.fromCharCode(64 + n)
-    : glyph.counter === "lower-roman" ? toRoman(n)
-    : toRoman(n).toUpperCase();
-  return `${glyph.before}${counter}${glyph.after}`;
+/** An outermost list and the levels its lines draw. */
+type Top = { node: RichNode; seen: (ListLevel | undefined)[] };
+
+function listNode(type: ListType, value: number): RichNode {
+  return type === "orderedList" && value !== 1 ? { type, attrs: { start: value }, content: [] } : { type, content: [] };
 }
 
-/** A preset draws a line's counter as printed ("2.3" under "2." is the
-    nested preset's). */
-function draws(style: string | null, line: ListLine): boolean {
-  if (!line.marker) return false;
-  const values = [line.value, ...(line.letter ? [line.letter.value] : [])];
-  return values.some((n) => {
-    const mark = drawn(style, line.depth, n);
-    return mark === line.marker || (mark === "nested" && line.legal === true);
-  });
-}
-
-/** The outermost list's preset: of the presets that draw its first item as
-    its own preset does, the one that draws the most of its lines' counters
-    as printed. "1." over "1.1" and "1.2" takes Docs' nested numbering: the
-    default drew them "a." and "b.". */
-function bestPreset(current: string | null, lines: ListLine[]): string | null {
-  const first = drawn(current, 0, lines[0].value);
-  const count = (style: string | null) => lines.filter((l) => draws(style, l)).length;
-  let best = current;
-  let most = count(current);
-  for (const style of ORDERED_STYLES) {
-    if (drawn(style, 0, lines[0].value) !== first) continue;
-    const n = count(style);
-    if (n > most) {
-      best = style;
-      most = n;
-    }
-  }
-  return best;
-}
-
-function listNode(key: string, value: number, outermost: boolean): RichNode {
-  if (key === "bullet") return { type: "bulletList", content: [] };
-  if (key === "task") return { type: "taskList", content: [] };
-  const attrs: Record<string, unknown> = {};
-  if (value !== 1) attrs.start = value;
-  // A preset is the outermost list's; a nested list draws its level of it.
-  if (key.startsWith("ordered:") && outermost) attrs.listStyle = key.slice("ordered:".length);
-  return Object.keys(attrs).length > 0 ? { type: "orderedList", attrs, content: [] } : { type: "orderedList", content: [] };
-}
-
-/** The lists of the lines from `from` at `depth`: a line of another kind,
-    or a number that does not follow on, starts a new list. `tops` collects
-    each outermost list and its first line. */
-function listsAt(
-  lines: ListLine[],
-  from: number,
-  depth: number,
-  tops?: { node: RichNode; from: number }[],
-): { nodes: RichNode[]; next: number } {
+/** The lists of the lines from `from` at `depth`: a line of another type or
+    level, or a number that does not follow on, starts a new list. At the
+    top, so does a line whose lines draw a level otherwise than the list's
+    lines so far: a list draws one format a level. `tops` collects each
+    outermost list. */
+function listsAt(lines: ListLine[], from: number, depth: number, tops?: Top[]): { nodes: RichNode[]; next: number } {
   const nodes: RichNode[] = [];
   let list: RichNode | null = null;
-  let key: string | null = null;
+  let key = "";
   let expected = 0;
   let i = from;
   while (i < lines.length && lines[i].depth >= depth) {
     const line = lines[i];
-    // "(i)" after "(h)" is the ninth letter, not the first numeral.
-    const read: { key: string; value: number } | null =
-      line.letter && list && key === line.letter.key && line.letter.value === expected ? line.letter : null;
-    const lineKey: string = read?.key ?? line.key ?? "bullet";
-    const value = read?.value ?? line.value;
-    const ordered = lineKey.startsWith("ordered");
-    if (!list || lineKey !== key || (ordered && value !== expected)) {
-      list = listNode(lineKey, value, depth === 0);
+    let end = i + 1;
+    while (end < lines.length && lines[end].depth > depth) end++;
+    const value = line.count?.value ?? 1;
+    const top = tops && list ? tops[tops.length - 1] : undefined;
+    const levels = top ? withLevels(top.seen, lines.slice(i, end), true) : null;
+    if (!list || keyOf(line) !== key || (line.type === "orderedList" && value !== expected) || (top && !levels)) {
+      list = listNode(line.type ?? "bulletList", value);
       nodes.push(list);
-      tops?.push({ node: list, from: i });
-      key = lineKey;
+      key = keyOf(line);
+      tops?.push({ node: list, seen: withLevels([], lines.slice(i, end), false) ?? [] });
+    } else if (top && levels) {
+      top.seen = levels;
     }
     expected = value + 1;
     const sub = listsAt(lines, i + 1, depth + 1);
+    const paragraph = paragraphNode(inline(line.words));
     const item: RichNode =
-      lineKey === "task"
-        ? { type: "taskItem", attrs: { checked: line.checked }, content: [paragraphNode(inline(line.words)), ...sub.nodes] }
-        : { type: "listItem", content: [paragraphNode(inline(line.words)), ...sub.nodes] };
+      line.type === "taskList"
+        ? { type: "taskItem", attrs: { checked: line.checked }, content: [paragraph, ...sub.nodes] }
+        : { type: "listItem", content: [paragraph, ...sub.nodes] };
     (list.content ??= []).push(item);
     i = sub.next;
   }
   return { nodes, next: i };
+}
+
+/** An outermost list's format: none when its type's default draws every
+    level its lines print, else the first preset that does, else levels of
+    its own (the default's where no line says). */
+function formatAttrs(type: string, seen: (ListLevel | undefined)[]): Record<string, unknown> | null {
+  const draws = (attrs: Record<string, unknown>) => seen.every((level, k) => !level || sameLevel(numberLevel({ type, attrs }, k), level));
+  if (draws({})) return null;
+  if (type === "orderedList") {
+    const preset = [...NUMBER_PRESETS, ...TYPED_PRESETS].find((p) => p.kind === "orderedList" && p.style !== null && draws({ listStyle: p.style }));
+    if (preset) return { listStyle: preset.style };
+  }
+  const base = type === "orderedList" ? NUMBER_PRESETS[0].levels : BULLET_PRESETS[0].levels;
+  return { listLevels: JSON.stringify(base.map((level, k) => seen[k] ?? level)) };
 }
 
 /** The last paragraph under a node, in reading order. */
@@ -854,27 +845,22 @@ class Converter {
     // their markers ("1 Introduction", "2.1 Background").
     const contents =
       tokensOf(block.html).includes("contents") || (block.links ?? []).some((l) => l.targetOrder !== undefined);
+    // A line goes at most one level deeper than the line before it.
+    let depth = -1;
+    for (const l of lines) depth = l.depth = Math.min(l.depth, depth + 1);
+    levelsOfLines(lines);
     let nodes: RichNode[];
-    if (contents || lines.some((l) => l.key === null)) {
+    if (contents || lines.some((l) => l.type === null)) {
       // A contents list, or lines the page editor's lists cannot draw:
-      // a paragraph per line, the words as they stand, indented by depth.
-      nodes = lines.map((l) => paragraphNode(inline(l.whole), l.depth > 0 ? { indentLeft: l.depth * INDENT_PT } : {}));
+      // a paragraph per line, the words as they stand, indented as printed.
+      nodes = lines.map((l) => paragraphNode(inline(l.whole), l.indent > 0 ? { indentLeft: l.indent * INDENT_PT } : {}));
     } else {
-      let depth = -1;
-      for (const l of lines) depth = l.depth = Math.min(l.depth, depth + 1);
-      const tops: { node: RichNode; from: number }[] = [];
+      const tops: Top[] = [];
       nodes = listsAt(lines, 0, 0, tops).nodes;
-      tops.forEach((top, k) => {
-        if (top.node.type !== "orderedList") return;
-        const current = typeof top.node.attrs?.listStyle === "string" ? top.node.attrs.listStyle : null;
-        const style = bestPreset(current, lines.slice(top.from, tops[k + 1]?.from ?? lines.length));
-        if (style === current) return;
-        const attrs: Record<string, unknown> = { ...(top.node.attrs ?? {}) };
-        if (style) attrs.listStyle = style;
-        else delete attrs.listStyle;
-        if (Object.keys(attrs).length > 0) top.node.attrs = attrs;
-        else delete top.node.attrs;
-      });
+      for (const top of tops) {
+        const attrs = formatAttrs(top.node.type, top.seen);
+        if (attrs) top.node.attrs = { ...top.node.attrs, ...attrs };
+      }
     }
     const last = lastParagraph(nodes);
     if (last?.attrs) last.attrs.spaceAfter = PARAGRAPH_SPACE_PT;

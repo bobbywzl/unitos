@@ -10,9 +10,11 @@ const nextConfig: NextConfig = {
   // file trace of a route that launches the browser (an add, a re-parse, the
   // upload review, a transcript) misses them and the deployed function fails
   // with "Cannot find module '.../playwright-core/browsers.json'". The whole
-  // package travels with every API route.
+  // package travels with every API route. So do pdf.js's CMaps, which pdf.js
+  // reads by path when a PDF sets CJK text in a font without a Unicode map
+  // (lib/pdf-runtime.ts).
   outputFileTracingIncludes: {
-    "/api/**": ["./node_modules/playwright-core/**/*"],
+    "/api/**": ["./node_modules/playwright-core/**/*", "./src/lib/parse/pdf/cmaps/**/*"],
   },
 };
 

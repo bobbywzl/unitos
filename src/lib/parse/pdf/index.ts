@@ -1,4 +1,4 @@
-import "@/lib/pdf-runtime";
+import { PDF_CMAPS } from "@/lib/pdf-runtime";
 import { getDocumentProxy } from "unpdf";
 import { pageLines } from "@/lib/parse/pdf/columns";
 import { resolveContentsLinks } from "@/lib/parse/pdf/contents";
@@ -57,7 +57,7 @@ if (typeof mathWithSum.sumPrecise !== "function") {
 
 export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   // pdf.js transfers (detaches) the buffer it receives — parse a copy so callers keep theirs.
-  const pdf = await getDocumentProxy(new Uint8Array(data));
+  const pdf = await getDocumentProxy(new Uint8Array(data), PDF_CMAPS);
 
   const pages: Line[][] = [];
   const pageHeights: number[] = [];

@@ -6,12 +6,17 @@
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
 import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
+import { mathSpans } from "@/lib/parse/pdf/math/zones";
 import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup } from "@/lib/parse/pdf/text";
 import type { Cell, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
 // ── Tables ──────────────────────────────────────────────────────────────────
 
-export type TableCell = { text: string; runs: Run[]; colspan?: number; rowspan?: number };
+// A paragraph of a cell that holds more than one, over the cell's text
+// (which joins them with a space), and how its lines sit in the cell:
+// centered, flush right, or set in from the cell's left edge (points).
+export type CellParagraph = { start: number; end: number; align?: "center" | "right"; indent?: number };
+export type TableCell = { text: string; runs: Run[]; colspan?: number; rowspan?: number; paragraphs?: CellParagraph[] };
 export type TableRow = { cells: TableCell[] };
 
 function clusterColumns(lines: Line[]): number[] {
@@ -87,6 +92,7 @@ function cellOfItems(items: Item[], size: number): Cell {
     if (last && sameFlags(last, item) && start - last.end <= 1) {
       last.end = cell.text.length;
     } else {
+      // A cell keeps its formulas and its look, as a line does (lines.ts).
       cell.runs.push({
         start,
         end: cell.text.length,
@@ -97,6 +103,8 @@ function cellOfItems(items: Item[], size: number): Cell {
         href: item.href,
         sup: item.sup,
         sub: item.sub,
+        zone: item.zone,
+        look: item.look,
       });
     }
     prevEnd = item.x + item.w;
@@ -118,33 +126,59 @@ export function columnAt(x: number, separators: number[]): number {
   return idx;
 }
 
-function cellHtml(text: string, runs: Run[]): string {
-  if (text.length === 0) return "";
-  const bounds = new Set<number>([0, text.length]);
-  for (const r of runs) {
-    bounds.add(Math.max(0, Math.min(r.start, text.length)));
-    bounds.add(Math.max(0, Math.min(r.end, text.length)));
+// A cell's words [from, to) as html: each run with its styles, each inline
+// formula that passed its check the page editor's inline equation over its
+// readable characters (the converter reads its TeX; the reader shows the
+// characters, and the DOM text stays the cell's text).
+function wordsHtml(text: string, runs: Run[], math: { start: number; end: number; latex: string }[], from: number, to: number): string {
+  const bounds = new Set<number>([from, to]);
+  for (const r of [...runs, ...math]) {
+    bounds.add(Math.max(from, Math.min(r.start, to)));
+    bounds.add(Math.max(from, Math.min(r.end, to)));
   }
   const points = [...bounds].sort((a, b) => a - b);
   let html = "";
   for (let i = 0; i < points.length - 1; i++) {
-    const [from, to] = [points[i], points[i + 1]];
-    if (from === to) continue;
-    const segment = escapeHtml(text.slice(from, to));
-    const covering = runs.filter((r) => r.start <= from && r.end >= to);
-    const bold = covering.some((r) => r.bold);
-    const italic = covering.some((r) => r.italic);
-    const mono = covering.some((r) => r.mono);
-    let wrapped = segment;
+    const [a, b] = [points[i], points[i + 1]];
+    if (a === b) continue;
+    const formula = math.find((m) => m.start <= a && m.end >= b);
+    if (formula) {
+      if (a === formula.start) html += `<span data-type="inline-math" data-latex="${escapeHtml(formula.latex).replace(/"/g, "&quot;")}">${escapeHtml(text.slice(formula.start, formula.end))}</span>`;
+      continue;
+    }
+    const covering = runs.filter((r) => r.start <= a && r.end >= b);
+    const look = covering.find((r) => r.look)?.look;
+    let wrapped = escapeHtml(text.slice(a, b));
     // A raised or lowered run (a note mark, a unit's power) keeps its place.
     if (covering.some((r) => r.sup)) wrapped = `<sup>${wrapped}</sup>`;
     else if (covering.some((r) => r.sub)) wrapped = `<sub>${wrapped}</sub>`;
-    if (mono) wrapped = `<code>${wrapped}</code>`;
-    if (italic) wrapped = `<em>${wrapped}</em>`;
-    if (bold) wrapped = `<strong>${wrapped}</strong>`;
+    if (covering.some((r) => r.mono)) wrapped = `<code>${wrapped}</code>`;
+    if (covering.some((r) => r.italic)) wrapped = `<em>${wrapped}</em>`;
+    if (covering.some((r) => r.bold)) wrapped = `<strong>${wrapped}</strong>`;
+    if (look?.underline) wrapped = `<u>${wrapped}</u>`;
+    if (look?.strike) wrapped = `<s>${wrapped}</s>`;
+    const paint = [look?.color ? `color:${look.color}` : "", look?.highlight ? `background-color:${look.highlight}` : ""].filter(Boolean);
+    if (paint.length > 0) wrapped = `<span style="${paint.join(";")}">${wrapped}</span>`;
     html += wrapped;
   }
   return html;
+}
+
+// A cell's html: its words, or its paragraphs, each a <p> with its
+// alignment or indent, the space between two in a cell gap.
+function cellHtml(cell: TableCell): string {
+  if (cell.text.length === 0) return "";
+  // A formula a paragraph break cuts stays words.
+  const paragraphs = cell.paragraphs ?? [{ start: 0, end: cell.text.length }];
+  const math = mathSpans(cell.text, cell.runs).filter((m) => paragraphs.some((p) => p.start <= m.start && m.end <= p.end));
+  if (!cell.paragraphs) return wordsHtml(cell.text, cell.runs, math, 0, cell.text.length);
+  return cell.paragraphs
+    .map((p, k) => {
+      const style = p.align ? `text-align:${p.align}` : p.indent ? `margin-left:${p.indent}pt` : "";
+      const attrs = `${p.indent && !p.align ? ` data-indent-left="${p.indent}"` : ""}${style ? ` style="${style}"` : ""}`;
+      return `${k > 0 ? '<span class="cell-gap"> </span>' : ""}<p${attrs}>${wordsHtml(cell.text, cell.runs, math, p.start, p.end)}</p>`;
+    })
+    .join("");
 }
 
 // Text appended to a cell: a space between its lines.
@@ -182,7 +216,7 @@ export function tableSegment(rows: TableRow[], headerRows: number, page: number,
             : '<span class="cell-gap">\n</span>'
           : '<span class="cell-gap">\t</span>';
         const spans = `${(c.colspan ?? 1) > 1 ? ` colspan="${c.colspan}"` : ""}${(c.rowspan ?? 1) > 1 ? ` rowspan="${c.rowspan}"` : ""}`;
-        return `<${tag}${spans}>${cellHtml(c.text, c.runs)}${gap}</${tag}>`;
+        return `<${tag}${spans}>${cellHtml(c)}${gap}</${tag}>`;
       })
       .join("")}</tr>`;
   const html =

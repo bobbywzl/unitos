@@ -239,8 +239,9 @@ function fencesOf(ctx: PageContext): Box[] {
   for (const g of ctx.drawing.glyphs) {
     const entry = g.family === "omx" ? mathGlyph("omx", g.code) : null;
     if (!entry || (entry.cls !== "open" && entry.cls !== "close" && !entry.piece)) continue;
-    const top = g.y + entry.box[0] * g.size;
-    const bottom = g.y - entry.box[1] * g.size;
+    const [height, depth] = g.box ?? entry.box;
+    const top = g.y + height * g.size;
+    const bottom = g.y - depth * g.size;
     const found = columns.find((c) => Math.abs(c.x1 - g.x) < 1 && top >= c.y1 - g.size && bottom <= c.y2 + g.size);
     if (found) {
       found.y1 = Math.min(found.y1, bottom);
@@ -547,7 +548,7 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
     let box: Box = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
     for (const g of all) {
       const entry = g.family ? mathGlyph(g.family, g.code) : null;
-      const [height, depth] = entry?.box ?? [0.7, 0.2];
+      const [height, depth] = g.box ?? entry?.box ?? [0.7, 0.2];
       box = unionBox(box, { x1: g.x, x2: g.x + Math.max(g.w, 0), y1: g.y - depth * g.size, y2: g.y + height * g.size });
     }
     for (const r of rules) box = unionBox(box, { x1: r.x1, x2: r.x2, y1: r.y1 - r.thickness, y2: r.y1 + r.thickness });
