@@ -1,0 +1,464 @@
+<title>Visualize Bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one review column — the round's table and findings, then one card per case: the passage above, the variants' pictures side by side below, each with its scores and the reviewer's verdict. */
+:root {
+  --bg: #f6f3ee;
+  --card: #ffffff;
+  --ink: #2b2622;
+  --muted: #6b625a;
+  --line: #e3dccf;
+  --soft: #efe9df;
+  --accent: #c2408f;
+  --accent-soft: #f7e3ef;
+  --good: #2f8f5b;
+  --good-soft: #e1f2e8;
+  --bad: #c8433b;
+  --bad-soft: #f8e1df;
+  --warn: #a8761c;
+  --mark: #f6d9ea;
+  --font-display: "Caprasimo", "Figtree", Georgia, serif;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1c1a17; --card: #26231f; --ink: #efe9e1; --muted: #a79d92; --line: #3a352f; --soft: #2f2b26;
+    --accent: #f08ac8; --accent-soft: #3c2433; --good: #6fcf97; --good-soft: #1f3327; --bad: #ef8079; --bad-soft: #3d2322;
+    --warn: #e0b35a; --mark: #4a2a3d; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1c1a17; --card: #26231f; --ink: #efe9e1; --muted: #a79d92; --line: #3a352f; --soft: #2f2b26;
+  --accent: #f08ac8; --accent-soft: #3c2433; --good: #6fcf97; --good-soft: #1f3327; --bad: #ef8079; --bad-soft: #3d2322;
+  --warn: #e0b35a; --mark: #4a2a3d; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 64px; display: grid; gap: 22px; }
+h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(28px, 5vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; }
+h2 { font-size: 19px; margin: 0; text-wrap: balance; }
+h3 { font-size: 16px; margin: 0; }
+.lede { color: var(--muted); max-width: 70ch; margin: 6px 0 0; }
+.eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+button, select, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab { border: 1px solid var(--line); background: var(--card); padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 13px; }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.scroll { overflow-x: auto; }
+table.sum { border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; min-width: 100%; }
+table.sum th, table.sum td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+table.sum th:first-child, table.sum td:first-child { text-align: left; }
+table.sum th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.findings { max-width: 78ch; font-size: 14.5px; }
+.findings h1, .findings h2, .findings h3 { font-family: var(--font-body); font-size: 15px; margin: 14px 0 4px; }
+.findings h1 { display: none; }
+.findings p { margin: 6px 0; }
+.findings ul { margin: 6px 0; padding-left: 20px; }
+.findings code, code { font-family: var(--font-mono); font-size: .88em; background: var(--soft); padding: 1px 4px; border-radius: 4px; }
+.findings table { border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.findings td, .findings th { border-bottom: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+
+.notes { display: grid; gap: 8px; }
+.notes textarea { width: 100%; min-height: 70px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); resize: vertical; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 8px; }
+.filters label { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+.filters select, .filters input { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 5px 8px; font-size: 13px; }
+.filters input { min-width: 0; width: 180px; }
+.count { font-size: 13px; color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.case { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.case-head { padding: 14px 18px 0; display: grid; gap: 8px; }
+.case-title { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.case-id { font-family: var(--font-mono); font-size: 13px; font-weight: 500; }
+.doc { color: var(--muted); font-size: 13px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); }
+.chip.accent { background: var(--accent-soft); color: var(--accent); }
+.chip.good { background: var(--good-soft); color: var(--good); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+.passage { font-size: 14px; color: var(--muted); max-width: 90ch; margin: 0; }
+.passage mark { background: var(--mark); color: var(--ink); padding: 0 1px; border-radius: 2px; }
+.passage.clip { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.more { border: 0; background: none; color: var(--accent); font-size: 13px; font-weight: 600; padding: 0; justify-self: start; }
+.good-note { font-size: 13px; color: var(--muted); border-left: 2px solid var(--line); padding-left: 10px; max-width: 90ch; }
+.good-note b { color: var(--ink); font-weight: 600; }
+
+.outs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0; margin-top: 14px; border-top: 1px solid var(--line); }
+.out { padding: 16px 18px; display: grid; gap: 10px; align-content: start; min-width: 0; border-right: 1px solid var(--line); }
+.out:last-child { border-right: 0; }
+.out-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.variant { font-family: var(--font-mono); font-size: 12px; font-weight: 500; }
+.pref { font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: .04em; text-transform: uppercase; }
+.pic { width: 100%; max-width: 320px; border: 1px solid var(--line); border-radius: 8px; background: #ffffff; display: block; cursor: zoom-in; padding: 0; }
+.pic img { display: block; width: 100%; height: auto; border-radius: 8px; }
+.declined { border: 1px dashed var(--line); border-radius: 8px; padding: 12px; font-size: 13.5px; max-width: 320px; background: var(--bg); }
+.declined b { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.caption { font-style: italic; font-size: 13.5px; max-width: 320px; margin: 0; }
+.score-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.overall { font-family: var(--font-display); font-size: 30px; line-height: 1; min-width: 36px; }
+.overall small { font-family: var(--font-body); font-size: 12px; color: var(--muted); }
+.bars { display: grid; grid-template-columns: auto 60px auto; gap: 2px 8px; font-size: 11.5px; align-items: center; font-variant-numeric: tabular-nums; }
+.bars span:nth-child(3n+1) { color: var(--muted); }
+.bar { height: 6px; background: var(--soft); border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); }
+.bar i.lo { background: var(--bad); }
+details { font-size: 13px; }
+details summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: 12.5px; }
+details .body { padding-top: 6px; display: grid; gap: 6px; }
+.kv b { font-weight: 600; }
+.issues { color: var(--warn); font-size: 12.5px; margin: 0; padding-left: 16px; }
+.meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.verdict { display: grid; gap: 6px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.vote { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.vote button { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 4px 12px; font-size: 13px; font-weight: 600; }
+.vote button[aria-pressed="true"].g { background: var(--good-soft); border-color: var(--good); color: var(--good); }
+.vote button[aria-pressed="true"].b { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+.verdict textarea { width: 100%; min-height: 52px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 13px; background: var(--bg); resize: vertical; }
+.saved { font-size: 12px; color: var(--muted); }
+.why { padding: 0 18px 14px; font-size: 13px; color: var(--muted); }
+
+dialog { border: 0; border-radius: 12px; padding: 0; max-width: min(96vw, 900px); background: var(--card); color: var(--ink); }
+dialog::backdrop { background: rgb(20 16 12 / .6); }
+dialog .dbody { padding: 14px; display: grid; gap: 10px; }
+dialog img { width: min(88vw, 820px); max-height: 78vh; object-fit: contain; background: #ffffff; border-radius: 8px; }
+dialog .close { justify-self: end; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 4px 10px; }
+.empty { color: var(--muted); padding: 30px 0; text-align: center; }
+@media (max-width: 640px) {
+  .out { border-right: 0; border-bottom: 1px solid var(--line); }
+  .out:last-child { border-bottom: 0; }
+  .count { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Unitos · the Visualize quality loop</div>
+    <h1>Visualize Bench</h1>
+    <p class="lede">Each card is one passage a reader selected and what Visualize drew for it. Pictures show at the card's real width, 320 px. Mark each one Good or Bad and say what is wrong; the next round reads your verdicts first.</p>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Rounds"></nav>
+
+  <section class="panel" id="summary">
+    <p class="empty">Loading the rounds…</p>
+  </section>
+
+  <div class="filters" id="filters">
+    <label for="f-variant">Variant <select id="f-variant"><option value="">All</option></select></label>
+    <label for="f-outcome">Outcome <select id="f-outcome"><option value="">All</option><option value="drawn">Drawn</option><option value="declined">Declined</option><option value="failed">Failed</option></select></label>
+    <label for="f-expect">Expected <select id="f-expect"><option value="">All</option><option value="draw">Draw</option><option value="decline">Decline</option><option value="either">Either</option></select></label>
+    <label for="f-sort">Sort <select id="f-sort"><option value="order">Bench order</option><option value="low">Lowest judge score</option><option value="unrated">Not yet rated by you</option></select></label>
+    <input id="f-q" type="search" placeholder="Search passages, captions" aria-label="Search">
+    <span class="count" id="count"></span>
+  </div>
+
+  <main id="cases" aria-live="polite"></main>
+</div>
+
+<dialog id="viewer" aria-label="Picture">
+  <div class="dbody">
+    <button class="close" id="viewer-close" type="button">Close</button>
+    <img id="viewer-img" alt="">
+    <p class="caption" id="viewer-cap"></p>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const $ = (s, el = document) => el.querySelector(s);
+  const h = (tag, attrs = {}, ...kids) => {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") el.className = v;
+      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids.flat()) if (kid !== null && kid !== undefined && kid !== false) el.append(kid.nodeType ? kid : String(kid));
+    return el;
+  };
+  const state = { index: null, round: null, data: null, feedback: {}, db: null, canWrite: true, urls: [] };
+  const LS = "vizbench.round";
+  const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+
+  // A small markdown reader for the findings: headings, lists, tables, paragraphs, **bold**, `code`.
+  function inline(text) {
+    const frag = document.createDocumentFragment();
+    const re = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+    let last = 0, m;
+    while ((m = re.exec(text))) {
+      if (m.index > last) frag.append(text.slice(last, m.index));
+      const t = m[0];
+      frag.append(t.startsWith("**") ? h("strong", {}, t.slice(2, -2)) : h("code", {}, t.slice(1, -1)));
+      last = m.index + t.length;
+    }
+    if (last < text.length) frag.append(text.slice(last));
+    return frag;
+  }
+  function markdown(md) {
+    const out = h("div", { class: "findings" });
+    const lines = md.split("\n");
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (/^#{1,3} /.test(line)) { const lvl = line.match(/^#+/)[0].length; out.append(h("h" + lvl, {}, inline(line.replace(/^#+ /, "")))); i++; continue; }
+      if (/^\s*[-*] /.test(line)) {
+        const ul = h("ul");
+        while (i < lines.length && /^\s*[-*] /.test(lines[i])) { ul.append(h("li", {}, inline(lines[i].replace(/^\s*[-*] /, "")))); i++; }
+        out.append(ul); continue;
+      }
+      if (/^\|/.test(line)) {
+        const rows = [];
+        while (i < lines.length && /^\|/.test(lines[i])) { rows.push(lines[i]); i++; }
+        const table = h("table");
+        rows.filter((r) => !/^\|[\s|:-]+\|$/.test(r)).forEach((r, ri) => {
+          const cells = r.replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+          table.append(h("tr", {}, cells.map((c) => h(ri === 0 ? "th" : "td", {}, inline(c)))));
+        });
+        out.append(h("div", { class: "scroll" }, table)); continue;
+      }
+      if (line.trim() === "") { i++; continue; }
+      const para = [];
+      while (i < lines.length && lines[i].trim() !== "" && !/^(#{1,3} |\s*[-*] |\|)/.test(lines[i])) { para.push(lines[i]); i++; }
+      out.append(h("p", {}, inline(para.join(" "))));
+    }
+    return out;
+  }
+
+  const fmt = (n) => (typeof n === "number" ? (Math.round(n * 100) / 100).toString() : "–");
+
+  function renderTabs() {
+    const tabs = $("#tabs");
+    tabs.replaceChildren(...state.index.rounds.map((r) => h("button", {
+      class: "tab", role: "tab", type: "button", "aria-selected": String(r.id === state.round),
+      onclick: () => selectRound(r.id),
+    }, r.title || r.id)));
+  }
+
+  function renderSummary() {
+    const round = state.index.rounds.find((r) => r.id === state.round);
+    const panel = $("#summary");
+    panel.replaceChildren();
+    if (!round) { panel.append(h("p", { class: "empty" }, "No round yet.")); return; }
+    panel.append(h("div", {}, h("div", { class: "eyebrow" }, "Round " + round.id), h("h2", {}, round.title)));
+    const sum = round.summary || {};
+    const variants = Object.keys(sum);
+    if (variants.length) {
+      const cols = [["overall", "Overall"], ["decision", "Decision"], ["accuracy", "Accuracy"], ["core_idea", "Core idea"], ["glance", "At a glance"], ["legibility", "Legibility"], ["kind_fit", "Kind fit"], ["first_sight", "First sight"], ["agrees", "Decision agrees"], ["drawn", "Drawn"], ["replaced", "Check replaced"], ["issues", "Lint / picture"], ["outTokens", "Out tokens"], ["wins", "Preferred"]];
+      const table = h("table", { class: "sum" },
+        h("tr", {}, h("th", {}, "Variant"), cols.map(([, label]) => h("th", {}, label))),
+        variants.map((v) => h("tr", {}, h("td", {}, h("span", { class: "variant" }, v)), cols.map(([k]) => h("td", {}, fmt(sum[v][k]))))));
+      panel.append(h("div", { class: "scroll" }, table));
+    }
+    if (round.findings) panel.append(markdown(round.findings));
+    const note = h("textarea", { id: "round-note", placeholder: "Your direction for the next round: what to fix first, what to keep, what looks wrong across cases." });
+    const saved = h("span", { class: "saved" });
+    const fb = state.feedback["note." + round.id];
+    if (fb && fb.comment) note.value = fb.comment;
+    const save = h("button", { class: "tab", type: "button", onclick: async () => {
+      saved.textContent = "Saving…";
+      saved.textContent = (await saveDoc("note." + round.id, { kind: "note", round: round.id, comment: note.value })) ? "Saved" : "Could not save: this view cannot write.";
+    } }, "Save note");
+    panel.append(h("div", { class: "notes" }, h("label", { for: "round-note", class: "eyebrow" }, "Your notes on this round"), note, h("div", { class: "vote" }, save, saved)));
+  }
+
+  function outcomeOf(o) { return o.outcome === "drawn" ? "drawn" : o.outcome === "declined" ? "declined" : "failed"; }
+
+  function selectionHtml(c) {
+    const p = h("p", { class: "passage clip" });
+    const t = c.block.text;
+    p.append(t.slice(0, c.block.start), h("mark", {}, t.slice(c.block.start, c.block.end)), t.slice(c.block.end));
+    return p;
+  }
+
+  function svgUrl(svg) {
+    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+    state.urls.push(url);
+    return url;
+  }
+
+  function openViewer(url, caption) {
+    const d = $("#viewer");
+    $("#viewer-img").src = url;
+    $("#viewer-img").alt = caption || "Visualization";
+    $("#viewer-cap").textContent = caption || "";
+    if (typeof d.showModal === "function") d.showModal();
+  }
+
+  function bars(score) {
+    const keys = [["decision", "Decision"], ["accuracy", "Accuracy"], ["core_idea", "Core idea"], ["glance", "At a glance"], ["legibility", "Legibility"], ["kind_fit", "Kind fit"], ["first_sight", "First sight"]];
+    const wrap = h("div", { class: "bars" });
+    for (const [k, label] of keys) {
+      const v = score[k];
+      if (typeof v !== "number") continue;
+      wrap.append(h("span", {}, label), h("span", { class: "bar" }, h("i", { class: v <= 2 ? "lo" : "", style: `width:${v * 20}%` })), h("span", {}, v));
+    }
+    return wrap;
+  }
+
+  function verdict(c, o) {
+    const id = `${state.round}.${o.variant}.${c.id}`;
+    const fb = state.feedback[id] || {};
+    const saved = h("span", { class: "saved" }, fb.updatedAt ? "Saved" : "");
+    const note = h("textarea", { id: "c-" + id, placeholder: "What is wrong, or what makes it good?" });
+    note.value = fb.comment || "";
+    let vote = fb.vote || null;
+    const good = h("button", { class: "g", type: "button", "aria-pressed": String(vote === "good") }, "Good");
+    const bad = h("button", { class: "b", type: "button", "aria-pressed": String(vote === "bad") }, "Bad");
+    const persist = async () => {
+      saved.textContent = "Saving…";
+      const ok = await saveDoc(id, { kind: "case", round: state.round, variant: o.variant, caseId: c.id, vote, comment: note.value });
+      saved.textContent = ok ? "Saved" : "Could not save: this view cannot write.";
+    };
+    const pick = (v) => { vote = vote === v ? null : v; good.setAttribute("aria-pressed", String(vote === "good")); bad.setAttribute("aria-pressed", String(vote === "bad")); persist(); };
+    good.addEventListener("click", () => pick("good"));
+    bad.addEventListener("click", () => pick("bad"));
+    const save = h("button", { type: "button", onclick: persist }, "Save comment");
+    return h("div", { class: "verdict" }, h("div", { class: "vote" }, good, bad, saved), note, h("div", { class: "vote" }, save));
+  }
+
+  function outputCard(c, o) {
+    const card = h("div", { class: "out" });
+    const kind = o.kind ? h("span", { class: "chip accent" }, o.kind) : null;
+    const oc = outcomeOf(o);
+    card.append(h("div", { class: "out-head" },
+      h("span", { class: "variant" }, o.variant),
+      kind,
+      oc !== "drawn" ? h("span", { class: "chip " + (oc === "declined" ? "" : "bad") }, oc === "declined" ? (o.declinedBy === "check" ? "withdrawn by the check" : "declined") : "failed") : null,
+      o.check === "replace" ? h("span", { class: "chip" }, "check redrew it") : null,
+      c.preference === o.variant ? h("span", { class: "pref" }, "judge's pick") : null));
+    if (o.svg) {
+      const url = svgUrl(o.svg);
+      card.append(h("button", { class: "pic", type: "button", "aria-label": "Open the picture large", onclick: () => openViewer(url, o.caption) }, h("img", { src: url, alt: o.caption || "Visualization", loading: "lazy" })));
+      if (o.caption) card.append(h("p", { class: "caption" }, o.caption));
+    } else {
+      card.append(h("div", { class: "declined" }, h("b", {}, oc === "declined" ? "The reader sees" : "Error"), o.reason || "(no reason)"));
+    }
+    const s = o.score;
+    if (s) {
+      card.append(h("div", { class: "score-row" }, h("div", { class: "overall" }, s.overall ?? "–", h("small", {}, " / 5")), bars(s)));
+      const det = h("details", {}, h("summary", {}, "Judge's reading"), h("div", { class: "body" },
+        o.takeaway ? h("div", { class: "kv" }, h("b", {}, "First sight, before reading the passage: "), o.takeaway) : null,
+        s.worst ? h("div", { class: "kv" }, h("b", {}, "Weakest: "), `${s.worst} — ${s.evidence || ""}`) : null,
+        s.fix ? h("div", { class: "kv" }, h("b", {}, "Suggested fix: "), s.fix) : null));
+      card.append(det);
+    }
+    const tool = h("details", {}, h("summary", {}, "The tool's own reasoning"), h("div", { class: "body" },
+      o.structure ? h("div", { class: "kv" }, h("b", {}, "Judgment: "), o.structure) : null,
+      o.outcome === "drawn" && o.reason ? h("div", { class: "kv" }, h("b", {}, "Reason: "), o.reason) : null,
+      o.check !== "none" ? h("div", { class: "kv" }, h("b", {}, `Check (${o.check}): `), o.checkReason || "") : null,
+      o.draft ? (() => { const u = svgUrl(o.draft); return h("div", { class: "kv" }, h("b", {}, "Before the check redrew it: "), h("button", { class: "pic", type: "button", onclick: () => openViewer(u, "First draft") }, h("img", { src: u, alt: "First draft", loading: "lazy" }))); })() : null));
+    card.append(tool);
+    if (o.issues && o.issues.length) card.append(h("ul", { class: "issues" }, o.issues.map((i) => h("li", {}, i))));
+    const e = o.efficiency || {};
+    card.append(h("div", { class: "meta" }, `≈${e.outTokens ?? "?"} output tokens · ${e.calls ?? "?"} call${e.calls === 1 ? "" : "s"}${e.svgBytes ? ` · SVG ${Math.round(e.svgBytes / 1024)} kB` : ""}`));
+    card.append(verdict(c, o));
+    return card;
+  }
+
+  function caseCard(c, outs) {
+    const passage = selectionHtml(c);
+    const more = h("button", { class: "more", type: "button", onclick: () => { passage.classList.toggle("clip"); more.textContent = passage.classList.contains("clip") ? "Show the whole block" : "Show less"; } }, "Show the whole block");
+    return h("article", { class: "case", id: "case-" + c.id },
+      h("div", { class: "case-head" },
+        h("div", { class: "case-title" }, h("span", { class: "case-id" }, c.id), h("span", { class: "doc" }, c.title)),
+        h("div", { class: "chips" },
+          h("span", { class: "chip " + (c.expect === "draw" ? "good" : c.expect === "decline" ? "bad" : "") }, "expected: " + c.expect),
+          c.kinds.length ? h("span", { class: "chip" }, "fits: " + c.kinds.join(", ")) : null,
+          h("span", { class: "chip" }, c.lang === "zh" ? "中文 interface" : "English interface"),
+          h("span", { class: "chip" }, c.reader ? "Reader: " + c.reader : "Reader: not set")),
+        passage, more,
+        h("div", { class: "good-note" }, h("b", {}, "What a good answer shows: "), c.good)),
+      h("div", { class: "outs" }, outs.map((o) => outputCard(c, o))),
+      c.why ? h("div", { class: "why" }, "Judge's preference: " + c.why) : null);
+  }
+
+  function renderCases() {
+    for (const u of state.urls) URL.revokeObjectURL(u);
+    state.urls = [];
+    const main = $("#cases");
+    main.replaceChildren();
+    if (!state.data) { main.append(h("p", { class: "empty" }, "Loading the cases…")); return; }
+    const fv = $("#f-variant").value, fo = $("#f-outcome").value, fe = $("#f-expect").value, sort = $("#f-sort").value;
+    const q = $("#f-q").value.trim().toLowerCase();
+    let items = state.data.cases.map((c) => ({ c, outs: c.outputs.filter((o) => (!fv || o.variant === fv) && (!fo || outcomeOf(o) === fo)) }))
+      .filter(({ c, outs }) => outs.length && (!fe || c.expect === fe) && (!q || (c.block.text + " " + c.id + " " + outs.map((o) => (o.caption || "") + " " + (o.reason || "")).join(" ")).toLowerCase().includes(q)));
+    const low = (x) => Math.min(...x.outs.map((o) => (o.score && typeof o.score.overall === "number" ? o.score.overall : 9)));
+    const unrated = (x) => x.outs.some((o) => !state.feedback[`${state.round}.${o.variant}.${x.c.id}`]);
+    if (sort === "low") items.sort((a, b) => low(a) - low(b));
+    if (sort === "unrated") items.sort((a, b) => Number(unrated(b)) - Number(unrated(a)));
+    const rated = state.data.cases.reduce((n, c) => n + c.outputs.filter((o) => state.feedback[`${state.round}.${o.variant}.${c.id}`]?.vote).length, 0);
+    const total = state.data.cases.reduce((n, c) => n + c.outputs.length, 0);
+    $("#count").textContent = `${items.length} cases shown · you rated ${rated} of ${total} outputs`;
+    if (!items.length) { main.append(h("p", { class: "empty" }, "No case matches these filters.")); return; }
+    main.append(...items.map(({ c, outs }) => caseCard(c, outs)));
+    main.style.display = "grid"; main.style.gap = "18px";
+  }
+
+  async function saveDoc(id, body) {
+    if (!state.db || !state.canWrite) return false;
+    try {
+      const doc = { ...body, updatedAt: new Date().toISOString() };
+      await state.db.collection("feedback").doc(id).set(doc);
+      state.feedback[id] = doc;
+      return true;
+    } catch (e) {
+      if (e && e.code === "invalid_argument") state.canWrite = false;
+      return false;
+    }
+  }
+
+  async function selectRound(id) {
+    state.round = id;
+    store.set(LS, id);
+    state.data = null;
+    renderTabs(); renderSummary(); renderCases();
+    try {
+      const res = await fetch(`data/${id}.json`);
+      state.data = await res.json();
+    } catch { state.data = { cases: [], variants: [] }; }
+    const sel = $("#f-variant");
+    sel.replaceChildren(h("option", { value: "" }, "All"), ...state.data.variants.map((v) => h("option", { value: v.id }, v.id)));
+    renderCases();
+  }
+
+  ["#f-variant", "#f-outcome", "#f-expect", "#f-sort"].forEach((s) => $(s).addEventListener("change", renderCases));
+  let t; $("#f-q").addEventListener("input", () => { clearTimeout(t); t = setTimeout(renderCases, 200); });
+  $("#viewer-close").addEventListener("click", () => $("#viewer").close());
+  $("#viewer").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
+  async function boot() {
+    try {
+      state.index = await (await fetch("data/index.json")).json();
+    } catch { state.index = { rounds: [] }; }
+    const remembered = store.get(LS);
+    const last = state.index.rounds.length ? state.index.rounds[state.index.rounds.length - 1].id : null;
+    const first = state.index.rounds.some((r) => r.id === remembered) ? remembered : last;
+    if (!first) { renderSummary(); return; }
+    selectRound(first);
+    // The verdicts live in the artifact's store, so the next round reads them.
+    const db = window.claude ? await window.claude.use("db") : null;
+    if (!db) return;
+    state.db = db;
+    db.collection("feedback").onSnapshot((snap) => {
+      const next = {};
+      for (const d of snap.docs) next[d.id] = d.data();
+      state.feedback = next;
+      const active = document.activeElement;
+      if (!(active && active.tagName === "TEXTAREA")) { renderSummary(); renderCases(); }
+    }, () => {});
+  }
+  boot();
+})();
+</script>
