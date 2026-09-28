@@ -265,6 +265,12 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     // table's cells (its prose read as tables, a quotation as rows).
     const ocr = isOcrLayer(drawing.glyphs);
     if (ocr) fitOcrItems(items);
+    // From here on a position is taken from the page box's corner, as the
+    // figure route renders the page: a region is a share of the page box.
+    // The MIC white paper's box starts at (36.85, 36.85); read in the PDF's
+    // own coordinates, every crop sat 4.4% too high and 6.2% too far right,
+    // and 19 lines at figures' feet were in neither the text nor a crop.
+    if (viewX1 !== 0 || viewY1 !== 0) toPageBox(items, drawing, viewX1, viewY1);
     pageHeights.push(viewport.height);
     pageWidths.push(viewport.width);
     // The tables the page's rules draw leave the text flow before the column
@@ -542,6 +548,26 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
 }
 
 type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign">;
+
+// A page's items and drawing moved by the page box's corner (dx, dy), so
+// (0, 0) is the box's bottom left. Each glyph and box moves once: an item
+// holds glyphs of the drawing, and one box may stand in two lists.
+function toPageBox(items: Item[], drawing: PageDrawing, dx: number, dy: number) {
+  for (const g of new Set([...drawing.glyphs, ...items.flatMap((i) => i.glyphs ?? [])])) {
+    g.x -= dx;
+    g.y -= dy;
+  }
+  for (const b of new Set<Box>([...drawing.rules, ...drawing.fills, ...drawing.images, ...drawing.paths])) {
+    b.x1 -= dx;
+    b.x2 -= dx;
+    b.y1 -= dy;
+    b.y2 -= dy;
+  }
+  for (const i of items) {
+    i.x -= dx;
+    i.y -= dy;
+  }
+}
 
 // The title: the first of the biggest headings on the first page. A title
 // is set larger than the body text; a body-size bold heading on the first
