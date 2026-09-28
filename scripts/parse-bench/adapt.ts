@@ -250,7 +250,7 @@ let scratch: Document | null = null;
     italic, underline, code, sub, sup, and links; an inline formula (the
     page editor's inline-math html) is a span of its readable characters
     that carries its TeX. */
-function htmlRows(html: string): { rows: Row[]; caption: Span[] | null } | null {
+function htmlRows(html: string): { rows: Row[]; caption: Span[] | null; font?: Font } | null {
   scratch ??= new JSDOM("<!doctype html><body></body>").window.document;
   const host = scratch.createElement("div");
   host.innerHTML = html;
@@ -276,6 +276,7 @@ function htmlRows(html: string): { rows: Row[]; caption: Span[] | null } | null 
     const fill = style ? fillOf(style.backgroundColor) : undefined;
     if (color) next.color = color;
     if (fill) next.highlight = fill;
+    if (style?.fontVariant === "small-caps") next.smallCaps = true;
     if (tag === "sub") next.sub = true;
     if (tag === "sup") next.sup = true;
     if (tag === "code" || tag === "kbd" || tag === "tt" || tag === "samp") next.code = true;
@@ -303,12 +304,21 @@ function htmlRows(html: string): { rows: Row[]; caption: Span[] | null } | null 
     }));
   const captionEl = table.querySelector("caption");
   let caption: Span[] | null = null;
+  let font: Font | undefined;
   if (captionEl) {
     const into = new Spans();
     read(captionEl, {}, into);
     caption = into.hasText ? into.spans : null;
+    // The caption's face and size ride on its span (the parse's
+    // attachTableCaptions, tables.ts); it is bold when most of its
+    // characters are.
+    const look = (captionEl.querySelector("span[style]") as HTMLElement | null)?.style;
+    const size = parseFloat(look?.fontSize ?? "");
+    const chars = (caption ?? []).reduce((n, s) => n + s.text.length, 0);
+    const bold = (caption ?? []).filter((s) => s.bold).reduce((n, s) => n + s.text.length, 0) * 2 > chars;
+    if (look?.fontFamily && size > 0) font = { shape: shapeOf(look.fontFamily), size, ...(bold ? { bold: true as const } : {}) };
   }
-  return { rows, caption };
+  return { rows, caption, ...(font ? { font } : {}) };
 }
 
 function parseList(block: ParsedBlock, pageAt: (o: number) => number, inRange: (p: number) => boolean, contents: boolean): DocBlock | null {
@@ -358,7 +368,7 @@ function parseTable(block: ParsedBlock, pageAt: (o: number) => number, inRange: 
   const onPage = (line: number) => inRange(pageAt(lineStarts[Math.min(line, lineStarts.length - 1)] ?? 0));
   const kept = rows.filter((_, r) => onPage(r + captionLine));
   if (!kept.some((row) => row.cells.some((cell) => cell.spans.some((s) => s.text.trim() || s.latex !== undefined)))) return null;
-  const caption = fromHtml?.caption && (captionLine === 0 || onPage(0)) ? { caption: fromHtml.caption } : {};
+  const caption = fromHtml?.caption && (captionLine === 0 || onPage(0)) ? { caption: fromHtml.caption, ...(fromHtml.font ? { font: fromHtml.font } : {}) } : {};
   // Footnote references in cells: a tab ends a cell; a mark's unit is its
   // cell's place among the kept rows' cells.
   const marks: NoteMark[] = [];

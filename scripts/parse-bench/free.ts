@@ -21,6 +21,18 @@ function run(args: string[]): string {
 
 const keyOf = (text: string) => normText(text).replace(/\d+/g, "#");
 const lettersOf = (text: string) => normText(text).replace(/[^\p{L}]/gu, "");
+/** A caption's label opening a line ("図表Ⅰ-2-1-3", "Figure 4", "TABLE II"):
+    a report sets every chart's caption at one height, so the label repeats
+    with its number changed, but it is the figure's, never the page's. */
+const CAPTION_LABEL_RE = /^\s*(?:図表|図|表|fig(?:ure)?\.?|table)\s*[\dⅠ-Ⅻivxlc]/iu;
+const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+/** A line's length in words, a CJK character a quarter word (wordsOf makes
+    each a word, so a chart's label "インターネット利用率" read as ten words). */
+function labelWords(text: string): number {
+  const words = wordsOf(text);
+  const cjk = words.filter((w) => CJK_RE.test(w.w)).length;
+  return words.length - cjk + cjk / 4;
+}
 /** A long table's foot on each page it breaks at (LaTeX's longtable, Word). */
 const CONTINUED_RE = /^\(?continued (?:on (?:the )?next page|overleaf)\)?\.?$/i;
 /** A line that is a page number, and the number: "12", "12.", "- 12 -", "Page 3 of 12". */
@@ -116,7 +128,7 @@ function layoutOf(pdf: string): Layout {
   const units: Unit[] = [
     ...candidates.map((l) => ({ lines: [l], text: l.text, page: l.page, top: l.top })),
     ...edgeRows.filter((r) => r.length > 1).map((r) => ({ lines: r, text: r.map((l) => l.text.trim()).join(" "), page: r[0].page, top: r[0].top })),
-  ].filter((u) => lettersOf(u.text).length >= 3);
+  ].filter((u) => lettersOf(u.text).length >= 3 && !CAPTION_LABEL_RE.test(u.text));
   const byText = new Map<string, Unit[]>();
   for (const u of units) byText.set(keyOf(u.text), [...(byText.get(keyOf(u.text)) ?? []), u]);
   for (const u of units) {
@@ -322,12 +334,13 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
     }
   }
   // A diagram's labels are the figure's, not words to cover: short lines
-  // (three words at most) inside a region the candidate shows as a figure.
-  // A paragraph shown as a picture still is (its lines are long).
+  // (three words at most, a CJK character a quarter word) inside a region
+  // the candidate shows as a figure. A paragraph shown as a picture still is
+  // (its lines are long).
   const figures = cand.blocks.flatMap((b) => (b.kind === "figure" && b.at ? [b.at] : []));
   const labels = pdf.lines.filter((l) => {
     const size = pdf.sizes.get(l.page);
-    if (!size || wordsOf(l.text).length > 3) return false;
+    if (!size || labelWords(l.text) > 3) return false;
     const [x, y] = [((l.left + l.right) / 2 / size.width) * 100, ((l.top + l.bottom) / 2 / size.height) * 100];
     return figures.some((f) => {
       const b = regionBounds(f.region);

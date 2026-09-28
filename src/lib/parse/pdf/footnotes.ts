@@ -184,10 +184,24 @@ function cutScanNotes(column: Line[], end: number, continuing: boolean, counted:
   return counts ? { kept: [...column.slice(0, start), ...column.slice(stop)], cuts } : null;
 }
 
+/** Lines with no label as notes, one opening at each first-line indent
+    (IEEE's title notes: "Manuscript received …", then each affiliation). */
+function indentedNotes(lines: Line[]): Cut[] {
+  const left = Math.min(...lines.map((l) => l.x));
+  const cuts: Cut[] = [];
+  for (const line of lines) {
+    const last = cuts.at(-1);
+    if (!last || line.x > left + line.size * 0.5) cuts.push({ label: "", lines: [line] });
+    else last.lines.push(line);
+  }
+  return cuts;
+}
+
 /** The footnotes at the foot of one column, and the lines they leave.
     `continuing`: the page before ended in an unfinished footnote. `scan`:
     the page is a scan's text layer, `counted` the last number of its
-    notes so far. */
+    notes so far. `lead`: small lines above the foot's first labeled note
+    are notes too (the first page, or a page after an unfinished note). */
 function cutColumn(
   column: Line[],
   rules: Rule[],
@@ -196,6 +210,7 @@ function cutColumn(
   continuing: boolean,
   scan: boolean,
   counted: number,
+  lead: boolean,
 ): { kept: Line[]; cuts: Cut[] } {
   const left = Math.min(...column.map((l) => l.x));
   const right = Math.max(...column.map((l) => l.xEnd));
@@ -235,7 +250,15 @@ function cutColumn(
   while (from > 0 && smallRun(column, from - 1, bodySize * SMALL) >= end) from--;
   let start = from;
   while (start < end && !raised.has(labelOf(column[start], false) ?? "")) start++;
-  if (start < end) return { kept: [...column.slice(0, start), ...column.slice(end)], cuts: group(column.slice(start, end), false) };
+  if (start < end) {
+    // The small lines above the first labeled note: on the first page the
+    // title's own notes, which IEEE sets with no mark (all three of a
+    // paper's read as body text); on a later page the end of the page
+    // before's note.
+    const top = lead ? from : start;
+    const cuts = [...(top < start ? indentedNotes(column.slice(top, start)) : []), ...group(column.slice(start, end), false)];
+    return { kept: [...column.slice(0, top), ...column.slice(end)], cuts };
+  }
   return (scan && cutScanNotes(column, end, continuing, counted)) || { kept: column, cuts: [] };
 }
 
@@ -329,6 +352,53 @@ function cutTableNotes(column: Line[], rules: Rule[], bodySize: number): { kept:
   return { kept, cuts };
 }
 
+/** Notes set under a short rule inside a column rather than at its foot:
+    REVTeX sets the author notes (∗ † ‡ and the authors' e-mails) at the
+    head of the bibliography, under a centered rule, and they read as a
+    bulleted list (arXiv 2504.02736). The lines right under the rule that
+    open with a note symbol another page raises (`raised`), each note with
+    its lines set in from its label; the lines after them stay. A label
+    the page itself raises is a page's footnote, a table's note, or a
+    title's note, which the foot's own rules read. */
+function cutHeadNotes(column: Line[], rules: Rule[], bodySize: number, raised: Set<string>): { kept: Line[]; cuts: Cut[] } {
+  const left = Math.min(...column.map((l) => l.x));
+  const right = Math.max(...column.map((l) => l.xEnd));
+  // Under a rule a labeled line is a note at the body's size or under it:
+  // REVTeX sets its notes at 9 pt under a 10 pt body.
+  const note = (line: Line) => {
+    const label = SYMBOL_LABEL_RE.exec(line.text)?.[1];
+    return label && raised.has(label) && line.size < bodySize ? label : null;
+  };
+  for (let k = 1; k < column.length; k++) {
+    const first = column[k];
+    if (!note(first)) continue;
+    const size = first.size;
+    const ruled = rules.some(
+      (r) =>
+        r.dir === "h" &&
+        r.y1 > first.y + size * 0.5 &&
+        r.y1 < column[k - 1].y &&
+        r.x1 >= left - size &&
+        r.x2 <= right + size &&
+        r.x2 - r.x1 >= size * 2 &&
+        r.x2 - r.x1 <= (right - left) * 0.6,
+    );
+    if (!ruled) continue;
+    const cuts: Cut[] = [];
+    let end = k;
+    for (; end < column.length; end++) {
+      const line = column[end];
+      const label = note(line);
+      const open = cuts.at(-1);
+      if (label) cuts.push({ label, lines: [line] });
+      else if (open && line.size <= open.lines[0].size * 1.02 && line.x > open.lines[0].x + line.size * 0.5) open.lines.push(line);
+      else break;
+    }
+    if (end < column.length) return { kept: [...column.slice(0, k), ...column.slice(end)], cuts };
+  }
+  return { kept: column, cuts: [] };
+}
+
 /** Cut the footnotes out of every page's lines (the pages keep the rest) and
     return them as blocks in reading order, a footnote that runs onto the
     next page joined with its end there. `rules` are each page's drawn rules;
@@ -352,6 +422,8 @@ export function cutFootnotes(pages: Line[][], rules: Rule[][], bodySize: number,
   );
   const lastPage = pages.findLastIndex((lines) => lines.length > 0);
   const raisedAnywhere = new Set(raisedOn.flatMap((labels) => [...labels]));
+  // The labels other pages raise and a page does not.
+  const raisedElsewhere = (page: number) => new Set([...raisedAnywhere].filter((label) => !raisedOn[page].has(label)));
   pages.forEach((lines, p) => {
     const columns = pageColumns[p];
     const raised = p === lastPage ? raisedAnywhere : raisedOn[p];
@@ -367,7 +439,16 @@ export function cutFootnotes(pages: Line[][], rules: Rule[][], bodySize: number,
         tableNotes.add(note);
         footnotes.push(note);
       }
-      const cut = cutColumn(notes.kept, pageRules, bodySize, raised, continuing, scans[p] === true, counted);
+      // Notes under a rule inside the column whose labels another page
+      // raises: endnotes, their references on earlier pages.
+      const head = cutHeadNotes(notes.kept, pageRules, bodySize, raisedElsewhere(p));
+      for (const one of head.cuts) {
+        const { text, runs } = wordsOf(one);
+        const note: Segment = { type: "PARAGRAPH", text, html: FOOTNOTE_HTML, page: p, runs, footnote: { label: one.label } };
+        endnotes.add(note);
+        footnotes.push(note);
+      }
+      const cut = cutColumn(head.kept, pageRules, bodySize, raised, continuing, scans[p] === true, counted, continuing || p === 0);
       kept.push(...cut.kept);
       if (scans[p]) counted = cut.cuts.reduce((n, one) => scanNumber(one.label) ?? n, counted);
       for (const one of cut.cuts) {
@@ -465,7 +546,8 @@ export function placeFootnotes(segments: Segment[], footnotes: Segment[]): Segme
   if (footnotes.length === 0) return segments;
   // The blocks that can hold a reference on each page, its tables, the
   // last block that begins on each page or before it, and the last block
-  // that ends on each page.
+  // that ends on each page, a heading aside (a note stood between a
+  // heading and its paragraph).
   const onPage = new Map<number, Segment[]>();
   const tablesOn = new Map<number, Segment[]>();
   const lastBy: number[] = [];
@@ -475,7 +557,7 @@ export function placeFootnotes(segments: Segment[], footnotes: Segment[]): Segme
     lastBy[first] = i;
     const into = holdsReferences(s) ? onPage : s.type === "TABLE" ? tablesOn : null;
     const last = s.breaks?.at(-1)?.page ?? first;
-    endsOn.set(last, i);
+    if (s.type !== "HEADING") endsOn.set(last, i);
     for (let p = first; into && p <= last; p++) into.set(p, [...(into.get(p) ?? []), s]);
   });
   const used = new Map<Segment, Set<number>>();
