@@ -577,7 +577,7 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
   const columnCount = separators.length + 1;
   const bounds = [region.box.x1, ...separators, region.box.x2];
   const rows: TableRow[] = [];
-  headGroups.forEach((group, k) => rows.push(headerRow(group, bounds, built, partial, filledBelow(headGroups.slice(k + 1), bounds))));
+  headGroups.forEach((group, k) => rows.push(headerRow(group, bounds, built, partial, filledBelow(headGroups.slice(k + 1), bounds), body)));
   const headerRows = rows.length;
   spanHeadColumns(rows, headerRows);
   if (body.length > 0) {
@@ -794,11 +794,17 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
 // One header row out of lines: the words of each column joined, a phrase
 // over several columns one cell spanning them. bounds are the column edges,
 // the table's left edge first.
-function headerRow(lines: Line[], bounds: number[], built: Line[], rules: Rule[] = [], below: boolean[] = []): TableRow {
+function headerRow(lines: Line[], bounds: number[], built: Line[], rules: Rule[] = [], below: boolean[] = [], body: Line[] = []): TableRow {
   type Piece = { from: number; to: number; items: Item[] };
   const pieces: Piece[] = [];
   const columns = bounds.length - 1;
-  const middles = bounds.slice(1).map((x, c) => (bounds[c] + x) / 2);
+  // A column's middle is its words' middle when the body gives it words: a
+  // column that starts in a wide gutter (a statement's amounts after its
+  // labels) stands at its words, not at the gutter's middle.
+  const middles = bounds.slice(1).map((x, c) => {
+    const inside = body.flatMap((l) => l.items).filter((it) => centerOf(it).x > bounds[c] && centerOf(it).x < x);
+    return inside.length > 0 ? (Math.min(...inside.map((it) => it.x)) + Math.max(...inside.map((it) => it.x + it.w))) / 2 : (bounds[c] + x) / 2;
+  });
   for (const line of lines) {
     for (const phrase of phraseColumns(line, bounds)) {
       // A rule drawn under a head spans the columns the head does (a
