@@ -73,6 +73,14 @@ function columnsOf(lines: Line[]): Line[][] {
 
 /** A lone page number the furniture pass left under a column's foot. */
 const NUMBER_LINE_RE = /^\d{1,4}$/;
+/** A note's number as a scan's text layer reads it: 1 as I or l, 0 as O or
+    o, its digits apart ("I I." for 11, "2 I." for 21), its period as "_".
+    A number read with a letter takes its period or a tab after it: "I
+    have" opens no note. */
+const SCAN_LABEL_RE = /^([\dIlOo](?: ?[\dIlOo]){0,2}(?:[._]|(?=\t))|\d{1,3}(?= ))/;
+/** A gap between a column's lines this many times their usual one sets a
+    scan's notes apart from its body (36 pt under 11 pt lines). */
+const WIDE = 2.2;
 /** The most lines a footnote area may leave under it: a running foot and a
     page number. */
 const UNDER = 2;
@@ -125,14 +133,64 @@ function group(lines: Line[], ruled: boolean): Cut[] {
   return cuts;
 }
 
+/** The number a scan's note label reads ("I I." is 11), or null. */
+function scanNumber(label: string): number | null {
+  const digits = label.replace(/[\s._]/g, "").replace(/[Il]/g, "1").replace(/[Oo]/g, "0");
+  return /^[1-9]\d{0,2}$/.test(digits) ? Number(digits) : null;
+}
+
+/** A scan's numbered notes (a book under an OCR layer, NASA SP-4408): the
+    layer sizes each line from the scan, so the notes read at the body's
+    size, and it reads the body's raised marks as quote signs ("1945.'"),
+    so no label is raised. The notes stand after the column's last wide
+    gap, each opening with its number, and the numbers count: the first is
+    1 (a chapter's first), or the one after the page before's last, or two
+    in a row. A line that opens with another number is a note's line ("9
+    or 10, 1945" inside note 2). All five pages' notes read as lists and
+    paragraphs, their numbers lost. */
+function cutScanNotes(column: Line[], end: number, continuing: boolean, counted: number): { kept: Line[]; cuts: Cut[] } | null {
+  const gaps = column
+    .slice(1, end)
+    .map((line, k) => column[k].y - line.y)
+    .filter((gap) => gap > 0)
+    .sort((a, b) => a - b);
+  const usual = gaps[Math.floor(gaps.length / 2)];
+  if (usual === undefined) return null;
+  let start = end - 1;
+  while (start > 0 && column[start - 1].y - column[start].y <= usual * WIDE) start--;
+  if (start <= 0) return null;
+  // A number line set close under the notes is their last line ("1995"
+  // ending a note), not the page's number.
+  let stop = end;
+  while (stop < column.length && column[stop - 1].y - column[stop].y <= usual) stop++;
+  const cuts: Cut[] = [];
+  const numbers: number[] = [];
+  for (const line of column.slice(start, stop)) {
+    const label = SCAN_LABEL_RE.exec(line.text)?.[1] ?? "";
+    const n = scanNumber(label);
+    if (n !== null && (numbers.length === 0 || n === numbers[numbers.length - 1] + 1)) {
+      cuts.push({ label: label.trim(), lines: [line] });
+      numbers.push(n);
+    } else if (cuts.length > 0) cuts[cuts.length - 1].lines.push(line);
+    else if (continuing) cuts.push({ label: "", lines: [line] });
+    else return null;
+  }
+  const counts = numbers.length >= 2 || numbers[0] === 1 || numbers[0] === counted + 1 || (numbers.length === 0 && continuing);
+  return counts ? { kept: [...column.slice(0, start), ...column.slice(stop)], cuts } : null;
+}
+
 /** The footnotes at the foot of one column, and the lines they leave.
-    `continuing`: the page before ended in an unfinished footnote. */
+    `continuing`: the page before ended in an unfinished footnote. `scan`:
+    the page is a scan's text layer, `counted` the last number of its
+    notes so far. */
 function cutColumn(
   column: Line[],
   rules: Rule[],
   bodySize: number,
   raised: Set<string>,
   continuing: boolean,
+  scan: boolean,
+  counted: number,
 ): { kept: Line[]; cuts: Cut[] } {
   const left = Math.min(...column.map((l) => l.x));
   const right = Math.max(...column.map((l) => l.xEnd));
@@ -172,8 +230,8 @@ function cutColumn(
   while (from > 0 && smallRun(column, from - 1, bodySize * SMALL) >= end) from--;
   let start = from;
   while (start < end && !raised.has(labelOf(column[start], false) ?? "")) start++;
-  if (start >= end) return { kept: column, cuts: [] };
-  return { kept: [...column.slice(0, start), ...column.slice(end)], cuts: group(column.slice(start, end), false) };
+  if (start < end) return { kept: [...column.slice(0, start), ...column.slice(end)], cuts: group(column.slice(start, end), false) };
+  return (scan && cutScanNotes(column, end, continuing, counted)) || { kept: column, cuts: [] };
 }
 
 /** Runs cut to [from, to) and moved by `shift`. */
@@ -264,9 +322,12 @@ function cutTableNotes(column: Line[], rules: Rule[], bodySize: number): { kept:
 
 /** Cut the footnotes out of every page's lines (the pages keep the rest) and
     return them as blocks in reading order, a footnote that runs onto the
-    next page joined with its end there. `rules` are each page's drawn rules. */
-export function cutFootnotes(pages: Line[][], rules: Rule[][], bodySize: number): Segment[] {
+    next page joined with its end there. `rules` are each page's drawn rules;
+    `scans` says which pages are a scan's text layer. */
+export function cutFootnotes(pages: Line[][], rules: Rule[][], bodySize: number, scans: boolean[]): Segment[] {
   const footnotes: Segment[] = [];
+  // The last number of a scan's notes: the next page's notes count on.
+  let counted = 0;
   // The labels each page's body raises: the lines above each column's
   // small ones. On the last page with words, a label raised on any page:
   // the notes there may be endnotes.
@@ -297,8 +358,9 @@ export function cutFootnotes(pages: Line[][], rules: Rule[][], bodySize: number)
         tableNotes.add(note);
         footnotes.push(note);
       }
-      const cut = cutColumn(notes.kept, pageRules, bodySize, raised, continuing);
+      const cut = cutColumn(notes.kept, pageRules, bodySize, raised, continuing, scans[p] === true, counted);
       kept.push(...cut.kept);
+      if (scans[p]) counted = cut.cuts.reduce((n, one) => scanNumber(one.label) ?? n, counted);
       for (const one of cut.cuts) {
         const { text, runs } = wordsOf(one);
         // Words with no label at the top of a foot finish the last footnote

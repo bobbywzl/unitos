@@ -331,7 +331,7 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   const hasBold = measured.some((lines) => lines.some((l) => l.runs.some((r) => r.bold)));
   // Footnotes leave the pages before they are segmented, so a paragraph
   // they cut joins across the page break (footnotes.ts).
-  const footnotes = cutFootnotes(cleaned, pageDrawings.map((d) => d.rules), bodySize);
+  const footnotes = cutFootnotes(cleaned, pageDrawings.map((d) => d.rules), bodySize, pageFlags.map((f) => f.ocr));
 
   let segments: Segment[] = [];
   for (const lines of cleaned) {
