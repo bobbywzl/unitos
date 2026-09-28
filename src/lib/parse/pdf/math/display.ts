@@ -212,10 +212,15 @@ function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean): boole
 // words (a paragraph's last line, all math, under a line that starts with
 // a formula is no row of it). The text line it belongs to, or null.
 function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[], pitch: number): Line | null {
+  // A row of words in a text font is none (a table's caption over its
+  // rules joined the table's place, synth-paper-html), and a table's
+  // place in the text is no text line.
+  if (line.items.some((i) => !i.zone && (i.str.match(/\p{L}{2,}/gu) ?? []).some((w) => !MATH_WORDS.has(w.toLowerCase())))) return null;
+  const text = (t: Line, n: number) => kinds[n] === "text" && !t.table && t.text.trim() !== "";
   for (const f of fences) {
     if (line.y > f.y2 || line.y < f.y1) continue;
     if (!((line.x >= f.x2 - 1 && line.x - f.x2 < line.size * 3) || (line.xEnd <= f.x1 + 1 && f.x1 - line.xEnd < line.size * 3))) continue;
-    const host = lines.find((t, n) => kinds[n] === "text" && t.y <= f.y2 && t.y >= f.y1 && t.x <= f.x1 && t.xEnd >= f.x2);
+    const host = lines.find((t, n) => text(t, n) && t.y <= f.y2 && t.y >= f.y1 && t.x <= f.x1 && t.xEnd >= f.x2);
     if (host) return host;
   }
   // A label stacked over a relation of the text line under it (an L with
@@ -225,7 +230,7 @@ function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[],
   const center = (line.x + line.xEnd) / 2;
   const under = lines.find(
     (t, n) =>
-      kinds[n] === "text" &&
+      text(t, n) &&
       t.y < line.y &&
       line.items.every((i) => i.size <= t.size * 0.85) &&
       t.items.some((i) =>
@@ -238,7 +243,7 @@ function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[],
   );
   if (under) return under;
   const hosts = lines.filter((t, n) => {
-    if (kinds[n] !== "text" || Math.abs(t.y - line.y) > Math.min(line.size * 1.6, pitch * 0.9)) return false;
+    if (!text(t, n) || Math.abs(t.y - line.y) > Math.min(line.size * 1.6, pitch * 0.9)) return false;
     if (t.x > line.x + 1 || t.xEnd < line.xEnd - 1) return false;
     // None of the text line's words under or over the row: its words, not
     // its cells, which reach over the formula they end in (an inline
@@ -277,7 +282,17 @@ function joinInlineRows(lines: Line[], hosts: (Line | null)[], ctx: PageContext)
   if (rowsOf.size === 0) return lines;
   const orphans = orphanGlyphs(lines, ctx.drawing);
   const joined = new Map<Line, Line>();
+  const kept = new Set<Line>();
   for (const [host, rows] of rowsOf) {
+    // A text line cut into cells away from the rows is two columns' lines
+    // or a table's row, no sentence: its rows stay lines (a two-column
+    // page's lines read as a table, arXiv 2502.02648 p. 11).
+    const x1 = Math.min(...rows.map((r) => r.x)) - host.size * 1.5;
+    const x2 = Math.max(...rows.map((r) => r.xEnd)) + host.size * 1.5;
+    if (host.cells.slice(1).some((c) => c.x < x1 || c.x > x2)) {
+      kept.add(host);
+      continue;
+    }
     // One formula to each run of rows that overlap in x.
     const groups: Line[][] = [];
     for (const row of [...rows].sort((a, b) => a.x - b.x)) {
@@ -289,7 +304,7 @@ function joinInlineRows(lines: Line[], hosts: (Line | null)[], ctx: PageContext)
     for (const group of groups) line = joinRows(line, group, ctx, orphans);
     joined.set(host, line);
   }
-  return lines.filter((_, n) => !hosts[n]).map((l) => joined.get(l) ?? l);
+  return lines.filter((_, n) => !hosts[n] || kept.has(hosts[n])).map((l) => joined.get(l) ?? l);
 }
 
 // A text line with the rows of one formula joined into it (joinInlineRows).
@@ -309,8 +324,7 @@ function joinRows(host: Line, rows: Line[], ctx: PageContext, orphans: Glyph[]):
     ok: false,
     open: false,
   };
-  if (zone.glyphs.length === 0) return host;
-  resolveZone(zone, ctx.drawing, orphans);
+  if (zone.glyphs.length > 0) resolveZone(zone, ctx.drawing, orphans);
   const mine = (i: Item): Item => ({ ...i, zone, sup: false, sub: false });
   // Reading order: the text line's words before the formula, its part
   // left of the rows, the rows from the top (the text line's part among
@@ -696,11 +710,10 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
   // A vertical rule inside is an array's column line, which the layout
   // does not read; the paths on it are a radical's sign or a picture of an
   // accent or a tall delimiter (KaTeX draws them so).
-  const rules = ctx.drawing.rules.filter(
-    (r) =>
-      (r.dir === "h" && r.x1 >= line.x - Math.max(2, size * 0.6) && r.x2 <= line.xEnd + Math.max(2, size * 0.6) && r.y1 >= low && r.y1 <= high) ||
-      (r.dir === "v" && r.x1 > line.x && r.x1 < line.xEnd && r.y1 >= low - size && r.y2 <= high + size),
-  );
+  // An array's \hline runs past its cells by their padding.
+  const columns = ctx.drawing.rules.filter((r) => r.dir === "v" && r.x1 > line.x && r.x1 < line.xEnd && r.y1 >= low - size && r.y2 <= high + size);
+  const pad = columns.length > 0 ? Math.max(2, size * 0.6) : 2;
+  const rules = [...ctx.drawing.rules.filter((r) => r.dir === "h" && r.x1 >= line.x - pad && r.x2 <= line.xEnd + pad && r.y1 >= low && r.y1 <= high), ...columns];
   const paths = ctx.drawing.paths.filter(
     (b) =>
       !b.clip &&

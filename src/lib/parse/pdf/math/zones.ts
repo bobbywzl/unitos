@@ -319,19 +319,25 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
   // bar over its glyphs. A bar with the formula's glyphs over it only
   // is a display's fraction bar under its numerator's line (arXiv
   // 2506.08494 p. 2 read it as \underline).
-  // A vertical rule inside it is an array's column line, and an \hline
-  // runs past the array's cells by their padding: an unread one fails
-  // the formula.
-  const near = drawing.rules.filter(
-    (r) =>
-      (r.dir === "h" &&
-        r.x1 >= x1 - em * 0.6 &&
-        r.x2 <= x2 + em * 0.6 &&
+  // A vertical rule inside it is an array's column line: the layout
+  // reads it with the array's rows, and an \hline that runs past the
+  // cells by their padding. Without one, a rule past the glyphs is none
+  // of theirs (a fraction bar over the next formula read as an overline,
+  // arXiv 2502.02648 p. 11).
+  const columns = drawing.rules.filter((r) => r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low - em && r.y2 < high + em * 1.2);
+  const pad = columns.length > 0 ? em * 0.6 : 1;
+  const near = [
+    ...drawing.rules.filter(
+      (r) =>
+        r.dir === "h" &&
+        r.x1 >= x1 - pad &&
+        r.x2 <= x2 + pad &&
         r.y1 > low - em &&
         r.y1 < high + em &&
-        glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2)) ||
-      (r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low - em && r.y2 < high + em * 1.2),
-  );
+        glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2),
+    ),
+    ...columns,
+  ];
   // The paths drawn on it: a radical's sign, a picture of an accent or
   // a tall delimiter (KaTeX draws them so), which may start an em left
   // of the glyphs, or just right of them (a closing delimiter), and run
