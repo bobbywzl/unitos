@@ -453,9 +453,13 @@ export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number
       const inside = items.filter((it) => inBox(it, { ...box, x1: box.x1 - 2, x2: box.x2 + 2 }));
       const lines = buildLines(inside, 0);
       if (!isTableRegion(lines, box.x2 - box.x1)) continue;
-      if (isChart(box, [box.x1, box.x2], stack.rules.map((r) => r.y1), lines.length, drawing)) continue;
       const inner = rules.filter((r) => r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3);
-      regions.push({ box, items: inside, lines, grid: null, rules: inner, drawing });
+      const region = { box, items: inside, lines, grid: null, rules: inner, drawing };
+      // The rules drawn between its columns are the table's, no chart's
+      // (PLOS's tables rule every cell apart: forty rules read as a plot).
+      const ruledXs = [...new Set(columnRules(region).map((r) => r.x1))];
+      if (isChart(box, [box.x1, ...ruledXs, box.x2], stack.rules.map((r) => r.y1), lines.length, drawing)) continue;
+      regions.push(region);
     }
   }
   return regions;
@@ -619,7 +623,7 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
   const columnCount = separators.length + 1;
   const bounds = [region.box.x1, ...separators, region.box.x2];
   const rows: TableRow[] = [];
-  headGroups.forEach((group, k) => rows.push(headerRow(group, bounds, built, partial, filledBelow(headGroups.slice(k + 1), bounds), body)));
+  headGroups.forEach((group, k) => rows.push(headerRow(group, bounds, built, partial, filledBelow(headGroups.slice(k + 1), bounds), body, drawn)));
   const headerRows = rows.length;
   spanHeadColumns(rows, headerRows);
   if (body.length > 0) {
@@ -848,7 +852,7 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
 // One header row out of lines: the words of each column joined, a phrase
 // over several columns one cell spanning them. bounds are the column edges,
 // the table's left edge first.
-function headerRow(lines: Line[], bounds: number[], built: Line[], rules: Rule[] = [], below: boolean[] = [], body: Line[] = []): TableRow {
+function headerRow(lines: Line[], bounds: number[], built: Line[], rules: Rule[] = [], below: boolean[] = [], body: Line[] = [], cuts: Rule[] = []): TableRow {
   type Piece = { from: number; to: number; items: Item[] };
   const pieces: Piece[] = [];
   const columns = bounds.length - 1;
@@ -860,13 +864,24 @@ function headerRow(lines: Line[], bounds: number[], built: Line[], rules: Rule[]
     return inside.length > 0 ? (Math.min(...inside.map((it) => it.x)) + Math.max(...inside.map((it) => it.x + it.w))) / 2 : (bounds[c] + x) / 2;
   });
   for (const line of lines) {
-    for (const phrase of phraseColumns(line, bounds)) {
+    const phrases = phraseColumns(line, bounds);
+    const middleOf = (p: { items: Item[] }) => (p.items[0].x + p.items[p.items.length - 1].x + p.items[p.items.length - 1].w) / 2;
+    // The column rules drawn through the line bound its cells: a head
+    // spans the columns between the two around it (PLOS's "Fig 2A,
+    // segment 1" over its "exp." and "theo.").
+    const through = cuts.filter((r) => r.y1 <= line.y + line.size * 0.3 && r.y2 >= line.y + line.size * 0.3).map((r) => r.x1);
+    for (const phrase of phrases) {
       // A rule drawn under a head spans the columns the head does (a
       // booktabs \cmidrule): its ends say which, where a head centered
-      // over them falls short of the first (MMWR p. 21's Table 3).
-      const x = (phrase.items[0].x + phrase.items[phrase.items.length - 1].x + phrase.items[phrase.items.length - 1].w) / 2;
+      // over them falls short of the first (MMWR p. 21's Table 3). A rule
+      // under the line's other heads too is the row's.
+      const x = middleOf(phrase);
       const rule = rules.find((r) => r.y1 < line.y && line.y - r.y1 <= line.size * 1.5 && r.x1 <= x && r.x2 >= x);
-      const under = rule ? middles.flatMap((m, c) => (m > rule.x1 && m < rule.x2 ? [c] : [])) : [];
+      const own = rule && !phrases.some((q) => q !== phrase && middleOf(q) > rule.x1 && middleOf(q) < rule.x2) ? rule : undefined;
+      const lo = Math.max(bounds[0], ...through.filter((c) => c < x));
+      const hi = Math.min(bounds[bounds.length - 1], ...through.filter((c) => c > x));
+      const within = (a: number, b: number) => middles.flatMap((m, c) => (m > a && m < b ? [c] : []));
+      const under = through.length > 0 ? within(lo, hi) : own ? within(own.x1, own.x2) : [];
       const { from, to, items } = under.length > 0 ? { from: under[0], to: under[under.length - 1], items: phrase.items } : phrase;
       const piece = pieces.find((p) => p.from <= to && p.to >= from);
       if (piece) {
