@@ -73,8 +73,8 @@ const FURNITURE_PAGES = 6;
 export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Promise<PdfParse> {
   // pdf.js transfers (detaches) the buffer it receives — parse a copy so callers keep theirs.
   const pdf = await getDocumentProxy(new Uint8Array(data), PDF_CMAPS);
-  // The chosen pages, each the PDF's page number of the parse's page at its
-  // index, and the pages read.
+  // The chosen pages (chosen[i] is the PDF's number for the parse's page i),
+  // and the pages read.
   const chosen = chosenPages(pdf.numPages, opts.pages);
   const kept = new Set(chosen);
   const read = pagesToRead(chosen, pdf.numPages);
