@@ -4,6 +4,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import { Fragment, type Mark, type Node as PMNode } from "@tiptap/pm/model";
 import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { TableMap } from "@tiptap/pm/tables";
+import { ReplaceStep } from "@tiptap/pm/transform";
 import { isSuggestionMark, newId, readSuggestions, settle, suggest } from "@/components/docs/ext/suggest";
 import { aroundPageStarts, FIGURE, findBlock, findIndexed, PAGE_START, posInBlock } from "@/components/docs/layer/anchor";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
@@ -135,9 +136,15 @@ function land(
       if (at === null || !place) return "changed";
       let reason = clear(place.from, place.to);
       if (reason) return reason;
-      // An inline equation stands in the words as $TeX$: its node takes the new TeX.
+      // An inline equation stands in the words as $TeX$: a new equation
+      // takes its place (Reject keeps the old one whole).
       const math = op.op === "replace_words" && TEX.test(op.find) && TEX.test(op.text.trim()) ? inlineMathAt(tr.doc, place.from, place.to) : null;
-      if (math !== null) return commit((state) => state.tr.setNodeAttribute(math, "latex", op.text.trim().slice(1, -1)));
+      if (math !== null) {
+        return commit((state) => {
+          const node = state.doc.nodeAt(math)!;
+          return state.tr.replaceWith(math, math + node.nodeSize, node.type.create({ ...node.attrs, latex: op.text.trim().slice(1, -1) }, null, node.marks));
+        });
+      }
       // New words in a format of their own replace the words whole.
       const format = op.op === "replace_words" ? op.format : undefined;
       for (const s of format ? [{ start: 0, end: base.length, text: op.text }] : stretches(base, op.text)) {
@@ -406,9 +413,36 @@ function cellOf(doc: PMNode, blockId: string): { table: number; cell: number; ro
   return null;
 }
 
-/** Words into a cell's first paragraph, a new cell having nothing else. */
-function fillCell(tr: Transaction, cellPos: number, words: string): void {
-  if (words) tr.insertText(words, cellPos + 2);
+/** A new cell with its words: its one paragraph holds them. */
+function filledCell(cell: PMNode, words: string): PMNode {
+  const paragraph = cell.firstChild;
+  if (!paragraph || !words) return cell;
+  return cell.type.create(cell.attrs, paragraph.type.create(paragraph.attrs, paragraph.type.schema.text(words)), cell.marks);
+}
+
+/** A row or column command's inserts made again on `state`, each new cell
+    carrying its words: one insert per new row or cell, at the place it
+    took. Words typed into cells the same change adds read to the library
+    as more rows, so the words go in with the cells. Null when the command
+    did more than insert (merged cells widened). */
+function withWords(state: EditorState, scratch: Transaction, words: string[], row: boolean): Transaction | null {
+  const inserts: { pos: number; node: PMNode }[] = [];
+  for (let i = 0; i < scratch.steps.length; i++) {
+    const step = scratch.steps[i];
+    if (!(step instanceof ReplaceStep) || step.from !== step.to || step.slice.openStart || step.slice.openEnd || step.slice.content.childCount !== 1) return null;
+    inserts.push({ pos: scratch.mapping.slice(0, i).invert().map(step.from), node: step.slice.content.firstChild! });
+  }
+  inserts.sort((a, b) => a.pos - b.pos);
+  const filled = inserts.map(({ pos, node }, k) => {
+    if (!row) return { pos, node: filledCell(node, words[k] ?? "") };
+    const cells: PMNode[] = [];
+    node.forEach((cell, _offset, j) => cells.push(filledCell(cell, words[j] ?? "")));
+    return { pos, node: node.type.create(node.attrs, cells, node.marks) };
+  });
+  const edit = state.tr;
+  // The last first, so the places before it hold.
+  for (const { pos, node } of filled.reverse()) edit.insert(pos, node);
+  return edit;
 }
 
 /** A row or a column added, removed, or moved, as the table menu does it,
@@ -419,30 +453,12 @@ function editTable(editor: Editor, state: EditorState, op: Extract<ResolvedOp, {
   if (!at) return "changed";
   const edit = state.tr.setSelection(TextSelection.create(state.doc, at.cell + 2));
   const chain = new CommandManager({ editor, state }).createChain(edit);
-  const table = () => edit.doc.nodeAt(at.table)!;
   if (op.op === "remove_row") return chain.deleteRow().run() ? edit : "object";
   if (op.op === "remove_column") return chain.deleteColumn().run() ? edit : "object";
-  if (op.op === "insert_row") {
-    if (!(op.where === "above" ? chain.addRowBefore() : chain.addRowAfter()).run()) return "object";
-    const index = at.row + (op.where === "below" ? 1 : 0);
-    const cells: number[] = [];
-    let pos = at.table + 1;
-    for (let i = 0; i < index; i++) pos += table().child(i).nodeSize;
-    table().child(index).forEach((_cell, offset) => cells.push(pos + 1 + offset));
-    // The last cell first, so the positions before it hold.
-    for (let i = Math.min(cells.length, op.cells.length) - 1; i >= 0; i--) fillCell(edit, cells[i], op.cells[i]);
-    return edit;
-  }
-  if (op.op === "insert_column") {
-    const column = TableMap.get(table()).findCell(at.cell - at.table - 1).left + (op.where === "right" ? 1 : 0);
-    if (!(op.where === "left" ? chain.addColumnBefore() : chain.addColumnAfter()).run()) return "object";
-    const map = TableMap.get(table());
-    for (let row = Math.min(map.height, op.cells.length) - 1; row >= 0; row--) {
-      const cell = at.table + 1 + map.positionAt(row, column, table());
-      // A merged cell over the new column keeps its words.
-      if (edit.doc.nodeAt(cell)?.textContent === "") fillCell(edit, cell, op.cells[row]);
-    }
-    return edit;
+  if (op.op === "insert_row" || op.op === "insert_column") {
+    const added = op.op === "insert_row" ? (op.where === "above" ? chain.addRowBefore() : chain.addRowAfter()) : op.where === "left" ? chain.addColumnBefore() : chain.addColumnAfter();
+    if (!added.run()) return "object";
+    return withWords(state, edit, op.cells, op.op === "insert_row") ?? "object";
   }
   // move_row: the row out, and a copy of it where it goes; its paragraphs
   // take new ids, as moved blocks do.
