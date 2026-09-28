@@ -971,7 +971,18 @@ async function luma(page, clip) {
 }
 /** Page starts inside a paragraph with at least `n` characters on each side. */
 async function inlineStarts(page, n) {
-  return (await pageStarts(page)).filter((s) => s.on === "paragraph" && s.before.length >= n && s.after.length >= n);
+  const starts = (await pageStarts(page)).filter((s) => s.on === "paragraph" && s.before.length >= n && s.after.length >= n);
+  // Words alone around it: a selection made by position then holds as many
+  // letters as positions (an inline equation is one position, many letters).
+  const words = await page.evaluate(([list, n]) => list.map((s) => {
+    let only = true;
+    window.__docsEditor.state.doc.nodesBetween(Math.max(0, s.pos - n), s.pos + 1 + n, (node, pos) => {
+      if (node.isInline && !node.isText && pos !== s.pos) only = false;
+      return true;
+    });
+    return only;
+  }), [starts, n]);
+  return starts.filter((_, k) => words[k]);
 }
 async function figures(page) {
   return page.evaluate(() => {
@@ -1343,7 +1354,18 @@ RISKS.R3 = async (theme) => {
   await page.keyboard.press("Control+z");
   // A page that begins at a paragraph's start: Backspace joins the paragraph
   // to the one above, and the page start stays where its words begin.
-  const opening = (await pageStarts(page)).find((x) => x.page > 1 && x.on === "paragraph" && x.before === "" && x.after.length > 10);
+  // A plain paragraph under a paragraph: Backspace at a centered line
+  // un-centers it, at an indented one takes the indent, and in a list item
+  // takes the bullet before anything joins (Docs' order, typing/keys.ts).
+  const openings = (await pageStarts(page)).filter((x) => x.page > 1 && x.on === "paragraph" && x.before === "" && x.after.length > 10);
+  const plain = await page.evaluate((list) => list.map((x) => {
+    const $p = window.__docsEditor.state.doc.resolve(x.pos);
+    const container = $p.node($p.depth - 1);
+    const index = $p.index($p.depth - 1);
+    const a = $p.parent.attrs;
+    return container.type.name === "doc" && index > 0 && container.child(index - 1).type.name === "paragraph" && !a.textAlign && !a.indentLeft && !a.indentFirstLine;
+  }), openings);
+  const opening = openings.find((_, k) => plain[k]);
   if (opening) {
     const count = () => page.evaluate(() => {
       let n = 0;
@@ -2684,6 +2706,7 @@ RISKS.AUDIT = async (theme) => {
   await page.keyboard.press("Escape");
   await waitIn(page, () => !document.querySelector(".docs-wc-table"), null, 5000);
   // Version history, from the clock at the title row's right end.
+  const figureObjects = (await figures(page)).length;
   const versions = await openVersions(page);
   const importedPick = page.locator(".docs-versions-list .docs-versions-pick", { hasText: "Imported" }).first();
   let versionView = null;
@@ -2696,7 +2719,7 @@ RISKS.AUDIT = async (theme) => {
     }, null, 30_000);
   }
   const versionShot = await shot(page, `AUDIT-version-imported-${theme}`);
-  check("AUDIT", versions.some((v) => /Imported/.test(v)) && (versionView?.figures ?? 0) >= 12 && (versionView?.images ?? 0) > 0, `(${theme}) Version history lists "Imported" and its view draws the figures`, `${JSON.stringify(versions.slice(0, 4))}; view ${JSON.stringify(versionView)} ${versionShot}`);
+  check("AUDIT", versions.some((v) => /Imported/.test(v)) && figureObjects > 0 && (versionView?.figures ?? 0) >= figureObjects && (versionView?.images ?? 0) > 0, `(${theme}) Version history lists "Imported" and its view draws the figures`, `${JSON.stringify(versions.slice(0, 4))}; view ${JSON.stringify(versionView)} ${versionShot}`);
   await closeVersions(page);
   // The web page: pageless; lists, the table's merged cells, code, a quote,
   // a line, and every figure's media.
@@ -2784,6 +2807,7 @@ RISKS.AUDIT = async (theme) => {
     const names = ["i", "ii", ...Array.from({ length: 13 }, (_, i) => String(i + 1))];
     await db.document.update({ where: { id: labeled.id }, data: { pageLabels: names } });
     await open(page, ctx.notebookId, labeled.id);
+    const labeledFigures = (await figures(page)).length;
     const drawnNames = [];
     for (const st of (await pageStarts(page)).filter((x) => x.page >= 2 && x.on === "paragraph" && x.after.length > 0).slice(0, 3)) {
       const label = await page.evaluate((p) => window.__docsEditor.view.nodeDOM(p)?.getAttribute?.("data-page-label") ?? null, st.pos);
@@ -2825,7 +2849,7 @@ RISKS.AUDIT = async (theme) => {
     const kept = await db.documentVersion.findMany({ where: { documentId: labeled.id }, select: { name: true, richText: true } });
     const keptEdit = kept.some((v) => JSON.stringify(v.richText).includes("(audit edit)"));
     const restoreShot = await shot(page, "AUDIT-version-restored");
-    check("AUDIT", !restored.edit && !restored.open && !storedAfter && restoredStarts === 15 && restoredFigures === 12 && keptEdit, "Restore \"Imported\" brings the original's words back, with its page starts and figures, and a version keeps the edit", `edit in the page ${restored.edit}, stored ${storedAfter}; page starts ${restoredStarts}, figures ${restoredFigures}; a version holds the edit ${keptEdit} (${kept.length} versions) ${restoreShot}`);
+    check("AUDIT", !restored.edit && !restored.open && !storedAfter && restoredStarts === 15 && restoredFigures === labeledFigures && labeledFigures > 0 && keptEdit, "Restore \"Imported\" brings the original's words back, with its page starts and figures, and a version keeps the edit", `edit in the page ${restored.edit}, stored ${storedAfter}; page starts ${restoredStarts}, figures ${restoredFigures}; a version holds the edit ${keptEdit} (${kept.length} versions) ${restoreShot}`);
   }
   await close();
 };
@@ -3428,12 +3452,14 @@ RISKS.TRANSLATE = async (theme) => {
 RISKS.COPY = async (theme) => {
   // Each kind's words, a figure's caption among them, and its figures.
   const kinds = {
-    pdf: { words: ["Attention Is All You Need", "Scaled Dot-Product Attention", "Figure 1: The Transformer"], figures: 12, pictures: 12 },
+    // A PDF's figures are the parse's: counted in the import below.
+    pdf: { words: ["Attention Is All You Need", "Scaled Dot-Product Attention", "Figure 1: The Transformer"], figures: 0, pictures: 0 },
     url: { words: ["The Quiet Engine of River Deltas", "Where the sediment goes", "Figure 4. The same reach"], figures: 6, pictures: 5 },
   };
   const { page, context, close } = await newPage(theme, { risk: "COPY" });
   for (const [kind, want] of Object.entries(kinds)) {
     const added = await doc(kind);
+    if (kind === "pdf") want.figures = want.pictures = await db.figureMedia.count({ where: { documentId: added.id } });
     const noLabels = (text) => !/\bp\. \d+\b/.test(text);
     // Word, from the server (once: the theme does not reach it).
     if (theme === THEMES[0]) {
@@ -3515,14 +3541,14 @@ RISKS.COPY = async (theme) => {
       db.block.count({ where: { documentId: copyId } }),
       db.source.count({ where: { documentId: copyId } }),
     ]);
-    const own = mediaCopy.length === 12 && mediaCopy.every((m) => !mediaOriginal.some((o) => o.id === m.id));
+    const own = mediaOriginal.length > 0 && mediaCopy.length === mediaOriginal.length && mediaCopy.every((m) => !mediaOriginal.some((o) => o.id === m.id));
     const images = await loadFigureImages(page);
     const starts = await pageStarts(page);
     const labels = await page.evaluate(() => [...document.querySelectorAll(".docs-prose .docs-page-start[data-page-label]")].map((e) => e.getAttribute("data-page-label")));
     const m = await mode(page);
     const copyShot = await shot(page, `COPY-copy-of-paper-${theme}`);
     check("COPY", named === "Copy of Attention Is All You Need" && copy?.importRev === null && Boolean(copy?.richText) && own && JSON.stringify(copy.pageSetup) === JSON.stringify(original.pageSetup) && JSON.stringify(copy.pageLabels) === JSON.stringify(original.pageLabels) && rowsCopy === rowsOriginal && sources === 0, `(${theme}) Make a copy of the paper: a blank document with media of its own, the page setup, the page labels, every row, no annotations`, `name "${named}"; importRev ${copy?.importRev}; media ${mediaCopy.length} (own ${own}); page setup kept ${JSON.stringify(copy?.pageSetup) === JSON.stringify(original.pageSetup)}; rows ${rowsCopy}/${rowsOriginal}; sources ${sources}`);
-    check("COPY", images.total >= 12 && images.loaded === images.total && starts.length === 15 && labels.includes("p. 7") && m === "editing", `(${theme}) the copy opens in Editing with its figures drawn and its page numbers`, `figures ${images.loaded}/${images.total}${images.failed.length ? ` (not drawn: ${images.failed.join(", ")})` : ""}; page starts ${starts.length}; labels ${labels.slice(0, 3).join(", ")}…; mode ${m} ${copyShot}`);
+    check("COPY", images.total >= mediaOriginal.length && images.total > 0 && images.loaded === images.total && starts.length === 15 && labels.includes("p. 7") && m === "editing", `(${theme}) the copy opens in Editing with its figures drawn and its page numbers`, `figures ${images.loaded}/${images.total}${images.failed.length ? ` (not drawn: ${images.failed.join(", ")})` : ""}; page starts ${starts.length}; labels ${labels.slice(0, 3).join(", ")}…; mode ${m} ${copyShot}`);
   }
   await close();
 };
