@@ -124,7 +124,7 @@ function isGroupGrid(grid: Grid, items: Item[]): boolean {
     const inColumn = items.filter((it) => centerOf(it).x > grid.xs[c] && centerOf(it).x < grid.xs[c + 1]);
     const lines = buildLines(inColumn, 0);
     const split = lines.filter((l) => l.items.some((it, k) => k > 0 && it.x - (l.items[k - 1].x + l.items[k - 1].w) > l.size * 1.5));
-    if (lines.length >= 2 && split.length * 2 > lines.length) { if (process.env.R2T) console.error("R2T_DEBUG split column", c, grid.xs[c], grid.xs[c + 1], lines.length, split.length); return true; }
+    if (lines.length >= 2 && split.length * 2 > lines.length) return true;
   }
   const baselines = (cell: Box) => [...new Set(items.filter((it) => inBox(it, cell)).map((it) => Math.round(it.y)))];
   const same = (a: number[], b: number[]) => a.every((y) => b.some((v) => Math.abs(v - y) <= 2)) && b.every((y) => a.some((v) => Math.abs(v - y) <= 2));
@@ -359,9 +359,7 @@ export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number
     .filter((grid) => {
       const g = grid.box;
       const inWider = wide.some((b) => b.y1 <= g.y1 + 3 && b.y2 >= g.y2 - 3 && b.x1 <= g.x1 + 3 && b.x2 >= g.x2 - 3 && b.x2 - b.x1 > g.x2 - g.x1 + 10);
-      const ok = !inWider && isTableGrid(grid, items, drawing, pageWidth, pageHeight);
-      if (process.env.R2T) console.error("R2T_DEBUG grid", JSON.stringify(g), grid.xs.length, grid.ys.length, "inWider", inWider, "ok", ok, "group", isGroupGrid(grid, items.filter((it) => inBox(it, g))));
-      return ok;
+      return !inWider && isTableGrid(grid, items, drawing, pageWidth, pageHeight);
     });
   // A grid's head is text no grid holds: the lines above a form's grid are
   // the grid above it, never its head.

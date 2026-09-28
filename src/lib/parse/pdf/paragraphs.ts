@@ -139,24 +139,27 @@ export function isCentered(lines: Line[], k: number, ctx: PageContext): boolean 
   const line = lines[k];
   const { left, right } = columnEdges(lines, k, ctx);
   const inset = line.x - left;
-  return (right > line.xEnd && inset > line.size * 2 && Math.abs(inset - (right - line.xEnd)) <= line.size) || sharesMiddle(lines, k);
+  return (right > line.xEnd && inset > line.size * 2 && Math.abs(inset - (right - line.xEnd)) <= line.size) || sharesMiddle(lines, k, ctx);
 }
 
 // The lines over and under line k, in its column, that share its middle
 // and not their left edges: they are centered on that middle. A title
 // page's lines have no column but their widest line, and against it the
 // widest and the ones nearly as wide read flush left (synth-notes-html's
-// title, subtitle, and department).
-function sharesMiddle(lines: Line[], k: number): boolean {
+// title, subtitle, and department). A line that fills its column shows no
+// centering and ends the run: an abstract's full lines under a centered
+// title and its authors shared their middle, and read as centered
+// (real-jnlp-31-47 p1).
+function sharesMiddle(lines: Line[], k: number, ctx: PageContext): boolean {
   const line = lines[k];
-  if (line.cells.length !== 1) return false;
+  if (line.cells.length !== 1 || fillsColumn(lines, k, ctx)) return false;
   const middle = (line.x + line.xEnd) / 2;
   const run = [line];
   for (const step of [-1, 1]) {
     let prev = line;
     for (let n = k + step; n >= 0 && n < lines.length; n += step) {
       const o = lines[n];
-      if (o.cells.length !== 1 || o.table || lineColumn(o) !== lineColumn(line)) break;
+      if (o.cells.length !== 1 || o.table || lineColumn(o) !== lineColumn(line) || fillsColumn(lines, n, ctx)) break;
       if (Math.abs(o.y - prev.y) > Math.max(o.size, prev.size) * 3) break;
       if (Math.abs((o.x + o.xEnd) / 2 - middle) > Math.min(o.size, line.size) * 0.5) break;
       run.push(o);
@@ -165,6 +168,13 @@ function sharesMiddle(lines: Line[], k: number): boolean {
   }
   const xs = run.map((l) => l.x);
   return run.length > 1 && Math.max(...xs) - Math.min(...xs) > Math.max(...run.map((l) => l.size)) * 2;
+}
+
+// Line k runs from its column's left edge to its right edge, within its size.
+function fillsColumn(lines: Line[], k: number, ctx: PageContext): boolean {
+  const line = lines[k];
+  const { left, right } = columnEdges(lines, k, ctx);
+  return right > 0 && Math.abs(line.x - left) <= line.size && Math.abs(right - line.xEnd) <= line.size;
 }
 
 /** How lines [from, to) are aligned in their column, when not flush left:
