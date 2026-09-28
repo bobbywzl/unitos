@@ -74,7 +74,7 @@ findings:
 
 ## 5. Fix centrally
 
-- Group findings by cause, not by site. Fix the general markup pattern in `src/lib/parse/` — `url.ts` (the walk, math, media, junk pruning, post-clean), `sanitize.ts` (what html survives to the reader), `pdf.ts` (geometry, tables, figures) — never a hostname check, never a site-specific selector. A rendering fix belongs in `src/components/reader/block-view.tsx` or `src/app/globals.css` when the stored block is right and the reader shows it wrong.
+- Group findings by cause, not by site. Fix the general markup pattern in `src/lib/parse/` — `url.ts` (the walk, math, media, junk pruning, post-clean), `sanitize.ts` (what html survives to the reader), `pdf/` (lines, segmentation, tables, figures, furniture) — never a hostname check, never a site-specific selector. A rendering fix belongs in `src/components/reader/block-view.tsx` or `src/app/globals.css` when the stored block is right and the reader shows it wrong.
 - Never author content (SPEC.md §2): text is the page's text, media URLs are the page's URLs, TeX is the page's TeX. Never reconstruct what the page does not carry.
 - Keep the anchoring invariant (SPEC.md §5): a text block's DOM text equals its stored text; table html carries the invisible cell separators; a figure's caption is its only DOM text.
 - The derivation pipeline stays one code path (CLAUDE.md). Parse changes are parse changes; no per-feature forks.

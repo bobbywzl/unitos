@@ -109,6 +109,12 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
       if (str.length === 0) continue;
       const t = raw.transform as number[];
       const size = Math.hypot(t[0], t[1]) || Math.hypot(t[2], t[3]) || 10;
+      // Text under a point both ways is not on the page for a reader: LaTeXiT
+      // stores a formula's source as text at 3e-7 pt, and its glyph advance
+      // made a code line's indent hundreds of millions of spaces (arXiv
+      // 2006.11239 failed). An OCR layer squeezes words to fit (0.9 wide, 6
+      // tall): those stay.
+      if (Math.max(size, Math.hypot(t[2], t[3])) < 1) continue;
       if (Math.abs(t[1]) > size * 0.3) continue; // rotated text (margin watermarks)
       const x = t[4];
       const y = t[5];

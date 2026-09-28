@@ -136,7 +136,7 @@ function tokensOf(b: ParsedBlock): string[] {
   const m = /^<[a-z][a-z0-9]*\b[^>]*\bclass="([^"]*)"/i.exec(b.html ?? "");
   return m ? m[1].split(/\s+/).filter(Boolean) : [];
 }
-/** The parse's own list markers (lib/parse/url.ts listLines, pdf.ts): two
+/** The parse's own list markers (lib/parse/url.ts listLines, lib/parse/pdf): two
     spaces a level, then "- " or "N. ". */
 const MARKER = /^( *)(?:-|\d+\.) /;
 /** Any marker a list line may still carry: the PDF keeps "1)", "(a)", "iv."

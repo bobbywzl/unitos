@@ -80,7 +80,7 @@ export type ImportResult = {
 };
 
 /** Words, the marks over them (offsets into the words), and the page starts
-    inside them: where each page of the PDF begins (lib/parse/pdf.ts). */
+    inside them: where each page of the PDF begins (lib/parse/pdf). */
 type Source = { text: string; spans: { start: number; end: number; mark: RichMark }[]; starts: PageStart[] };
 
 /** The space after a paragraph of the body, in points: Google Docs' "Add
