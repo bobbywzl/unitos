@@ -11,7 +11,7 @@
  ],
  "license": "open",
  "provenance": "hand",
- "notes": "Ariyama et al., 'Achievements and Challenges in Japanese Question Answering: Insights from Quiz Competition Results', Journal of Natural Language Processing (自然言語処理) 31(1):47-78 (2024), CC BY 4.0, from J-STAGE; pLaTeX and dvipdfmx. Its Japanese is set in Ryumin and Gothic BBB (Adobe-Japan1 CID fonts) with no ToUnicode map: only Adobe's CMaps say what the codes are (pdf.js without them drops every Japanese word; poppler without poppler-data too). Scored: page 1: the article type and a boxed 'Peer-Reviewed' at the right, the Japanese title over two lines (one title, the lines joined with no space), the Japanese author line (full-width spaces inside names, raised daggers), a Japanese abstract whose lines join with no space, a keyword line with a Gothic label, the English title (a heading), small-caps English authors, the English abstract (two end-of-line hyphens to drop, an fi ligature), a key-word line in italic, four affiliation notes under a short rule (footnotes, placed after the author line that cites them), and the license line. Gothic in pLaTeX is the bold face: the Gothic lines are bold here. pLaTeX's space between Japanese and Latin letters (xkanjiskip) is spacing, not a space character: 「AI王」, 計3回.",
+ "notes": "Ariyama et al., 'Achievements and Challenges in Japanese Question Answering: Insights from Quiz Competition Results', Journal of Natural Language Processing (自然言語処理) 31(1):47-78 (2024), CC BY 4.0, from J-STAGE; pLaTeX and dvipdfmx. Its Japanese is set in Ryumin and Gothic BBB (Adobe-Japan1 CID fonts) with no ToUnicode map: only Adobe's CMaps say what the codes are (pdf.js without them drops every Japanese word; poppler without poppler-data too). Scored: page 1: the article type and a boxed 'Peer-Reviewed' at the right, the Japanese title over two lines (one title, the lines joined with no space), the Japanese author line (full-width spaces inside names, raised daggers), a Japanese abstract whose lines join with no space, a keyword line with a Gothic label, the English title (a heading), small-caps English authors, the English abstract (two end-of-line hyphens to drop, an fi ligature), a key-word line in italic, four affiliation notes under a short rule (footnotes, placed after the author line that cites them), and the license line. Gothic in pLaTeX is the bold face: the Gothic lines are bold here. pLaTeX's space between Japanese and Latin letters (xkanjiskip) is spacing, not a space character: 「AI王」, 計3回. Alignment (round 2, measured with PyMuPDF): blocks 2 are centered: each line's middle lies within 4 pt of its column's middle and both its ends stand more than 8 pt inside the column's margins (a column's margin is where three or more of its lines end, or its furthest line end).",
  "furniture": [],
  "blocks": [
   {
@@ -39,7 +39,8 @@
      "text": "クイズコンペティションの結果分析から見た日本語質問応答の到達点と課題",
      "bold": true
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "paragraph",

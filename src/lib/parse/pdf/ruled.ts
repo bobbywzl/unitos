@@ -88,6 +88,42 @@ function closeSlivers(grid: Grid, items: Item[]): Grid {
   return { box: grid.box, xs: x.kept, ys: y.kept, cells };
 }
 
+// Two tables drawn one on the other share a border: the rows above it draw
+// other column lines than the rows under it, each part the same lines on
+// every row that draws any (the invoice's order details over its lines of
+// goods read as one grid of eight columns). A row across the whole width
+// goes with the part above it.
+function splitStacked(grid: Grid): Grid[] {
+  const rows = grid.ys.length - 1;
+  const lines = Array.from({ length: rows }, (_, r) =>
+    [...new Set(grid.cells.filter((c) => c.row === r).flatMap((c) => [c.col, c.col + c.colspan]))].filter((k) => k > 0 && k < grid.xs.length - 1).sort((a, b) => a - b).join(","),
+  );
+  for (let r = 1; r + 2 <= rows; r++) {
+    const above = [...new Set(lines.slice(0, r).filter(Boolean))];
+    const below = [...new Set(lines.slice(r).filter(Boolean))];
+    if (above.length !== 1 || below.length !== 1 || !lines[r] || rows - r < 2) continue;
+    const shared = above[0].split(",").some((k) => below[0].split(",").includes(k));
+    if (shared || grid.cells.some((c) => c.row < r && c.row + c.rowspan > r)) continue;
+    return [partOf(grid, 0, r), ...splitStacked(partOf(grid, r, rows))];
+  }
+  return [grid];
+}
+
+// The rows from r0 to r1 of a grid as a grid of their own, on the column
+// lines their cells draw.
+function partOf(grid: Grid, r0: number, r1: number): Grid {
+  const cells = grid.cells.filter((c) => c.row >= r0 && c.row < r1);
+  const used = [...new Set(cells.flatMap((c) => [c.col, c.col + c.colspan]))].sort((a, b) => a - b);
+  const xs = used.map((k) => grid.xs[k]);
+  const ys = grid.ys.slice(r0, r1 + 1);
+  return {
+    box: { x1: xs[0], x2: xs[xs.length - 1], y1: ys[ys.length - 1], y2: ys[0] },
+    xs,
+    ys,
+    cells: cells.map((c) => ({ ...c, row: c.row - r0, col: used.indexOf(c.col), colspan: used.indexOf(c.col + c.colspan) - used.indexOf(c.col) })),
+  };
+}
+
 // A grid is a table when its text fills it: two rows and two columns at
 // least, words in two cells or more and in a third of its cells, and no
 // picture, listing, or prose inside. A chart's frame and gridlines hold a
@@ -326,10 +362,12 @@ function gridHead(grid: Grid, body: Item[], items: Item[]): Item[] {
   for (let k = lines.length - 1; k >= 0 && k >= lines.length - 6; k--) {
     const line = lines[k];
     // A line over the first column alone, set well in from its left edge,
-    // is a title centered over the page (10-K p. 54's "(in millions, except
-    // per share amounts)" over a statement's label column), no row label.
+    // above the column heads, is a title centered over the page (a
+    // statement's line of units over its year head: the 10-K's income
+    // statement, p. 54); right over the rows it is their label
+    // (apple-fy24q4 p. 2's "ASSETS:").
     const phrases = phraseColumns(line, grid.xs);
-    const titled = phrases.every((p) => p.to === 0) && line.x > grid.xs[0] + (grid.xs[1] - grid.xs[0]) * 0.25;
+    const titled = top !== null && phrases.every((p) => p.to === 0) && line.x > grid.xs[0] + (grid.xs[1] - grid.xs[0]) * 0.25;
     const aligned = !phrases.some((p) => p.from === 0 && p.to > 0) && !titled;
     const plain = !CAPTION_START_RE.test(line.text) && !/[.!?]$/.test(line.text.trim()) && !isProseLine(line, b.x2 - b.x1);
     // A line that runs on past the table's sides is the page's: a running
@@ -368,6 +406,7 @@ export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number
   );
   const grids = latticeGrids(drawing.rules, drawing.fills)
     .map((raw) => closeSlivers(raw, items))
+    .flatMap(splitStacked)
     .filter((grid) => {
       const g = grid.box;
       const inWider = wide.some(
@@ -388,10 +427,13 @@ export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number
     const body = items.filter((it) => inBox(it, grid.box));
     if (isGroupGrid(grid, body)) {
       // Its head, found against the columns its text sets: a statement
-      // shades its rows, and its "Year Ended December 31," stands over the
-      // shading (10-K p. 54).
+      // shades its rows, and its year head stands over the shading (the
+      // 10-K's income statement, p. 54). Its rows hold several lines: the
+      // head stands within the lines' pitch (arXiv 2302.12627 p. 24 took
+      // the last row of a matrix 30 pt above its Table 3 for a head row).
       const b = grid.box;
-      const head = gridHead({ ...grid, xs: [b.x1, ...columnSeparators(buildLines(body, 0)), b.x2] }, body, loose);
+      const bodyLines = buildLines(body, 0);
+      const head = gridHead({ ...grid, xs: [b.x1, ...columnSeparators(bodyLines), b.x2], ys: bodyLines.map((l) => l.y) }, body, loose);
       const box = head.length > 0 ? { ...b, y2: Math.max(...head.map((it) => it.y + it.size)) } : b;
       const inside = [...head, ...body];
       const inner = joinedRules(drawing.rules.filter((r) => r.dir === "h" && r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3));
@@ -540,8 +582,8 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
   let head = headerRule === undefined ? [] : phrased.filter((l) => l.y > headerRule);
   let body = headerRule === undefined ? phrased : phrased.filter((l) => l.y < headerRule);
   // With no rule under the head, the lines at the top with no words in the
-  // first column are the column heads (10-K p. 54's "Year Ended December
-  // 31," and its years over the value columns).
+  // first column are the column heads (a statement's year head and its
+  // years over the amounts: the 10-K's income statement, p. 54).
   const labels = headerRule === undefined && body.length >= 3 ? columnSeparators(body)[0] : undefined;
   if (labels !== undefined) {
     let k = 0;
@@ -775,8 +817,12 @@ function spanHeadColumns(rows: TableRow[], count: number) {
 // 0.7 of the pitch under the line before shares its row (a label wrapped
 // beside its row's numbers, which sit on the label's middle: MMWR's Table 2
 // fused five rows into one by the text leading's rhythm). A line whose
-// first column is empty and whose words all go on lowercase continues the
-// row above it (a wrapped cell).
+// words all go on lowercase continues the row above it (a wrapped cell),
+// when its first column is empty, or when two of its cells or more each go
+// on from a cell above that ends no sentence (arXiv 2503.22874's Table 4:
+// "per cent CL | observations (EBL Saldana)" under "0.500 < z < 0.537 at
+// 95 | Global fit of the photohadronic model to independent"; arXiv
+// 2506.06752's variables and their one-sentence descriptions are rows).
 function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const pitch = median(gaps);
@@ -785,7 +831,13 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
     const gap = gaps[k - 1];
     if (gap < pitch * 0.7) continue;
     const cells = cellsOf[k];
-    const wrap = cells[0].text.length === 0 && gap <= pitch * 1.3 && cells.every((c) => c.text.length === 0 || /^\p{Ll}/u.test(c.text));
+    const filled = cells.filter((c) => c.text.length > 0);
+    const lower = filled.every((c) => /^\p{Ll}/u.test(c.text));
+    const above = cellsOf[k - 1];
+    const goesOn =
+      filled.length >= 2 &&
+      cells.every((c, j) => c.text.length === 0 || ((above[j]?.text.trim().length ?? 0) > 0 && !/[.!?:;]["'”’)\]]?$/.test(above[j].text.trim())));
+    const wrap = gap <= pitch * 1.3 && lower && (cells[0].text.length === 0 || goesOn);
     if (!wrap) starts.push(k);
   }
   return starts;

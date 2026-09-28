@@ -94,12 +94,13 @@ async function quietly<T>(work: () => Promise<T>): Promise<T> {
 }
 
 /** A Word file as the Word add parses it (lib/parse/ingest.ts ingestDocx):
-    its title only when the file's own words give it; no picture stored. */
+    its title only when the file's own words give it, and the page's look
+    the add passes the converter (pageLook); no picture stored. */
 async function parseWord(bytes: Uint8Array, path: string): Promise<{ title: string | null; blocks: ParsedBlock[]; pageSize?: undefined } & Look> {
   // Loaded when a Word file comes up, so the runner also runs on a tree without the Word parser.
   const { parseDocx } = await import("@/lib/parse/docx");
   const parsed = await parseDocx(bytes, basename(path), { storeImage: async () => "/api/images/bench" });
-  return { title: parsed.titleFromFile ? null : parsed.title, blocks: parsed.blocks };
+  return { title: parsed.titleFromFile ? null : parsed.title, blocks: parsed.blocks, bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign };
 }
 
 function parseFile(path: string): Promise<Parsed> {

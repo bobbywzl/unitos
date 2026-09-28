@@ -24,7 +24,7 @@ type HrefAt = (x: number, y: number, w: number, size: number) => string | null;
 // sameFlags) and join where the look goes on.
 const interned = new Map<string, Look>();
 function intern(look: Look): Look {
-  const key = `${look.face}|${look.size}|${look.color ?? ""}|${look.highlight ?? ""}|${look.underline ? "u" : ""}${look.strike ? "s" : ""}`;
+  const key = `${look.face}|${look.size}|${look.capitals ?? ""}|${look.color ?? ""}|${look.highlight ?? ""}|${look.underline ? "u" : ""}${look.strike ? "s" : ""}`;
   let hit = interned.get(key);
   if (!hit) {
     if (interned.size > 50_000) interned.clear();
@@ -229,8 +229,8 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
   const out: Item[] = [];
   for (const item of items) {
     const face = faceFor(item);
-    const full = smallCaps.get(item);
-    const size = half(full ?? item.size);
+    const size = half(item.size);
+    const capitals = smallCaps.get(item);
     const from = out.length;
     // The glyphs, when they spell the item's words: a text item may run on
     // past its glyphs in the stream (Chrome draws a link's words apart from
@@ -248,6 +248,7 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
       intern({
         face,
         size,
+        ...(capitals !== undefined ? { capitals: half(capitals) } : {}),
         ...(m?.color ? { color: m.color } : {}),
         ...(m?.highlight ? { highlight: m.highlight } : {}),
         ...(m?.underline ? { underline: true as const } : {}),
@@ -266,12 +267,7 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
         out.push(part);
       }
     }
-    if (full === undefined) continue;
-    for (const part of out.slice(from)) {
-      part.smallCaps = true;
-      const lower = part.str.toLowerCase();
-      if (lower.length === part.str.length) part.str = lower;
-    }
+    if (capitals !== undefined) for (const part of out.slice(from)) part.smallCaps = true;
   }
   items.splice(0, items.length, ...out);
 }
@@ -279,11 +275,12 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
 // Small capitals a browser or Word draws for a face with none: each
 // lowercase letter a capital at about 0.7 of the size (Chrome sets each
 // letter as an item), on the baseline of the capital before it. Read as
-// they stand, they are capitals set small: "I. INTRODUCTION" set a paper's
-// headings in 6.5 pt (synth-paper-html). Such an item reads as its
-// lowercase letters in small caps at the capitals' size, the size the map
-// gives. A run starts at a capital it touches, in the capital's face, and
-// goes on through the words after it at its size, an em apart at most.
+// capitals set small, they set a paper's headings in 6.5 pt
+// (synth-paper-html). Such an item is small caps, and its look keeps the
+// capitals' size (Look.capitals), the size the map gives: the block's
+// font counts its letters at that size. A run starts at a capital it
+// touches, in the capital's face, and goes on through the words after it
+// at its size, an em apart at most.
 function drawnSmallCaps(items: Item[], faceFor: (item: Item) => string): Map<Item, number> {
   const out = new Map<Item, number>();
   const caps = (i: Item) => !i.math && !i.mono && /\p{Lu}/u.test(i.str) && !/\p{Ll}/u.test(i.str);

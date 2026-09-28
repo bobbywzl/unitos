@@ -594,12 +594,15 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, slide
     depths[k] = depth + Math.max(0, bySize.get(depth)!.findIndex((v) => Math.abs(v - s.rawSize!) < v * 0.1));
   });
   const minDepth = Math.min(...depths.filter((d): d is number => d !== null));
-  // The level most numbered headings of each size take.
+  // The level most numbered headings of each size take, a paper's parts
+  // voting as its sections: "CCS Concepts" and "Keywords", set the size of
+  // "Abstract", stand at its level.
+  const part = (s: Segment) => s.type === "HEADING" && Number.isFinite(minDepth) && PART_RE.test(s.text.trim());
   const votes = new Map<number, Map<number, number>>();
   segments.forEach((s, k) => {
     const depth = depths[k];
-    if (depth === null) return;
-    const level = numberedBase + depth - minDepth;
+    if (depth === null && !part(s)) return;
+    const level = depth === null ? numberedBase : numberedBase + depth - minDepth;
     const row = votes.get(clusterOf(s)) ?? new Map<number, number>();
     row.set(level, (row.get(level) ?? 0) + 1);
     votes.set(clusterOf(s), row);
@@ -617,7 +620,7 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, slide
     const level =
       slides ? Math.min(3, 2 + Math.max(0, clusterOf(s, slideSizes.get(s.page) ?? [])))
       : depth !== null ? numberedBase + depth - minDepth
-      : Number.isFinite(minDepth) && PART_RE.test(s.text.trim()) ? numberedBase
+      : part(s) ? numberedBase
       : sized ? [...sized].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]
       : Math.min(3, base + Math.max(0, idx));
     const capped = Math.min(6, Math.max(1, level));

@@ -269,6 +269,13 @@ function htmlRows(html: string): { rows: Row[]; caption: Span[] | null } | null 
     if (tag === "strong" || tag === "b") next.bold = true;
     if (tag === "em" || tag === "i") next.italic = true;
     if (tag === "u") next.underline = true;
+    if (tag === "s" || tag === "strike" || tag === "del") next.strike = true;
+    // A span's own color and fill (a Word table's colored words, R2-TABLE's cell html).
+    const style = (el as HTMLElement).style;
+    const color = style ? inkOf(style.color) : undefined;
+    const fill = style ? fillOf(style.backgroundColor) : undefined;
+    if (color) next.color = color;
+    if (fill) next.highlight = fill;
     if (tag === "sub") next.sub = true;
     if (tag === "sup") next.sup = true;
     if (tag === "code" || tag === "kbd" || tag === "tt" || tag === "samp") next.code = true;
@@ -338,20 +345,23 @@ function parseTable(block: ParsedBlock, pageAt: (o: number) => number, inRange: 
   const lines = block.text.split("\n");
   const fromHtml = block.html ? htmlRows(block.html) : null;
   const rows: Row[] = fromHtml?.rows ?? lines.map((line) => ({ cells: line.split("\t").map((cell) => ({ spans: cell ? [{ text: cell }] : [] })) }));
-  // Row r is text line r: it is on the page its line begins on.
+  // A line of the text is a row, the caption's line first when the text
+  // holds one: row r is on the page its line begins on, and the caption on
+  // its own line's page.
   const lineStarts: number[] = [];
   let offset = 0;
   for (const line of lines) {
     lineStarts.push(offset);
     offset += line.length + 1;
   }
-  const kept = rows.filter((_, r) => inRange(pageAt(lineStarts[Math.min(r, lineStarts.length - 1)] ?? 0)));
-  if (!kept.some((row) => row.cells.some((cell) => cell.spans.some((s) => s.text.trim())))) return null;
-  // Footnote references in cells: a line of the text is a row (the caption's
-  // line first, when the text holds one) and a tab ends a cell; a mark's unit
-  // is its cell's place among the kept rows' cells.
-  const marks: NoteMark[] = [];
   const captionLine = fromHtml?.caption && lines.length === rows.length + 1 ? 1 : 0;
+  const onPage = (line: number) => inRange(pageAt(lineStarts[Math.min(line, lineStarts.length - 1)] ?? 0));
+  const kept = rows.filter((_, r) => onPage(r + captionLine));
+  if (!kept.some((row) => row.cells.some((cell) => cell.spans.some((s) => s.text.trim())))) return null;
+  const caption = fromHtml?.caption && (captionLine === 0 || onPage(0)) ? { caption: fromHtml.caption } : {};
+  // Footnote references in cells: a tab ends a cell; a mark's unit is its
+  // cell's place among the kept rows' cells.
+  const marks: NoteMark[] = [];
   for (const ref of block.footnoteRefs ?? []) {
     const line = block.text.slice(0, ref.start).split("\n").length - 1;
     const lineStart = lineStarts[line] ?? 0;
@@ -359,7 +369,7 @@ function parseTable(block: ParsedBlock, pageAt: (o: number) => number, inRange: 
     const cellStart = lineStart + before.lastIndexOf("\t") + 1;
     const mark = { at: ref.start - cellStart, end: ref.end - cellStart, id: `b${ref.targetOrder}` };
     if (line < captionLine) {
-      marks.push({ unit: -1, ...mark });
+      if ("caption" in caption) marks.push({ unit: -1, ...mark });
       continue;
     }
     const row = rows[line - captionLine];
@@ -368,7 +378,7 @@ function parseTable(block: ParsedBlock, pageAt: (o: number) => number, inRange: 
     const unit = kept.slice(0, kept.indexOf(row)).reduce((n, r) => n + r.cells.length, 0) + slot;
     marks.push({ unit, ...mark });
   }
-  return { kind: "table", ...(fromHtml?.caption ? { caption: fromHtml.caption } : {}), rows: kept, ...(marks.length > 0 ? { marks } : {}) };
+  return { kind: "table", ...caption, rows: kept, ...(marks.length > 0 ? { marks } : {}) };
 }
 
 function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => boolean): DocBlock | null {
@@ -500,42 +510,58 @@ function alignValue(value: unknown): Align | undefined {
   return value === "center" || value === "right" || value === "justify" ? value : undefined;
 }
 
+/** A caption's label and number: "Fig. 3.", "Figure 2:", "Table IV", "表 1". */
+const CAPTION_LABEL_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.|scheme|chart|exhibit|plate|図表?|表)\s*[\dIVXLivxl]+/i;
+
+/** A paragraph this long is the body's: the front matter's lines are shorter. */
+const BODY_CHARS = 200;
+
+/** A note symbol the converter set as an inline formula ("\\dagger"). */
+const NOTE_SYMBOLS: Record<string, string> = { "\\dagger": "†", "\\ddagger": "‡", "\\S": "§", "\\P": "¶", "\\|": "‖", "\\parallel": "∥", "\\star": "⋆", "\\ast": "∗", "*": "*" };
+
 /** A footnote the converter could not link to its mark: a paragraph set
     in one small size throughout that opens with its label raised ("² Two of
     the top ten…"), as the parse view reads it, or with a note symbol on the
     line ("* All costs are in U.S. dollars.", a table's note under MMWR's
-    tables). */
+    tables; the converter may set the symbol as an inline formula). Only
+    once the body has begun (ImportReader.begun), or right under a table: an
+    affiliation under the authors opens with a raised number in a small size
+    too. */
 function unlinkedNote(node: RichNode): { label: string; rest: RichNode } | null {
   const content = node.content ?? [];
   // Page starts before the label stay with the words.
   const at = content.findIndex((c) => c.type !== "pageStart");
   const first = content[at];
-  if (first?.type !== "text") return null;
   if (!content.every((c) => c.type !== "text" || c.marks?.some((m) => m.type === "textStyle" && m.attrs?.fontSize))) return null;
+  const after = (from: number) => {
+    const next = content[from];
+    return next?.type === "text" ? [{ ...next, text: (next.text ?? "").trimStart() }, ...content.slice(from + 1)] : content.slice(from);
+  };
+  if (first?.type === "inlineMath") {
+    const label = NOTE_SYMBOLS[String(first.attrs?.latex ?? "").trim()];
+    return label && content.some((c) => c.type === "text" && c.text?.trim()) ? { label, rest: { ...node, content: [...content.slice(0, at), ...after(at + 1)] } } : null;
+  }
+  if (first?.type !== "text") return null;
   const text = first.text ?? "";
   if (first.marks?.some((m) => m.type === "superscript")) {
     const label = text.trim();
-    if (!/^(?:\d{1,3}|[*∗†‡§¶‖#]{1,4})$/.test(label)) return null;
-    const next = content[at + 1];
-    const after = next?.type === "text" ? [{ ...next, text: (next.text ?? "").trimStart() }, ...content.slice(at + 2)] : content.slice(at + 1);
-    return { label, rest: { ...node, content: [...content.slice(0, at), ...after] } };
+    if (!/^(?:\d{1,3}|[*∗†‡§¶‖∥⋆#]{1,4})$/.test(label)) return null;
+    return { label, rest: { ...node, content: [...content.slice(0, at), ...after(at + 1)] } };
   }
-  const symbol = /^([*∗†‡§¶‖])\1?(?=\s)/.exec(text);
+  const symbol = /^([*∗†‡§¶‖∥⋆])\1?(?=\s)/.exec(text);
   if (!symbol) return null;
   const rest = text.slice(symbol[0].length).trimStart();
   return { label: symbol[0], rest: { ...node, content: [...content.slice(0, at), ...(rest ? [{ ...first, text: rest }] : []), ...content.slice(at + 1)] } };
 }
 
-/** A paragraph set as a caption: centered, every run in a size under the
-    body's (the converter's caption, SPEC.md §30: 9 pt, or the page's own
-    caption size). Right before a table, it is the table's caption. */
-function isCaption(node: RichNode, bodySize: number): boolean {
+/** A paragraph set the way the converter sets a table's caption
+    (lib/docs/import.ts table(), SPEC.md §30): centered, every run given its
+    size (9 pt, which is the body's own size on a page set in 9 pt). It is
+    the caption only right before its table (ImportReader.settle). */
+function isCaption(node: RichNode): boolean {
   const runs = (node.content ?? []).filter((c) => c.type === "text");
-  const small = (c: RichNode) => {
-    const size = sizeInPt(c.marks?.find((m) => m.type === "textStyle")?.attrs?.fontSize);
-    return size !== null && size < bodySize;
-  };
-  return node.attrs?.textAlign === "center" && runs.length > 0 && runs.every(small);
+  const sized = (c: RichNode) => sizeInPt(c.marks?.find((m) => m.type === "textStyle")?.attrs?.fontSize) !== null;
+  return node.attrs?.textAlign === "center" && runs.length > 0 && runs.every(sized);
 }
 
 /** A paragraph's indentation from the page editor's attributes: a first
@@ -549,6 +575,8 @@ function indentOf(attrs: Record<string, unknown> | undefined): "first" | "hangin
 class ImportReader {
   readonly blocks: DocBlock[] = [];
   private page = 1;
+  /** The body has begun: a paragraph of BODY_CHARS or more is placed (past the title, the authors, and their affiliations). */
+  private begun = false;
   private readonly inRange: (p: number) => boolean;
   /** Each footnote's number as the page editor draws it (1, 2, … in the
       order of the references) and the page its reference stands on: the
@@ -651,7 +679,19 @@ class ImportReader {
     });
   }
 
+  /** A caption-set paragraph right before a table is the table's caption,
+      which table() takes. Elsewhere it is a caption only when it opens with
+      a caption's label ("Fig. 3.", "Table 2:", a figure's caption the
+      converter could not attach); else it is a paragraph (a centered small
+      line under a title). */
+  settle() {
+    const last = this.blocks.at(-1);
+    if (last?.kind === "paragraph" && last.role === "caption" && !CAPTION_LABEL_RE.test(last.spans.map((span) => span.text).join(""))) delete last.role;
+  }
+
   private push(block: DocBlock, into?: Spans) {
+    this.settle();
+    if (block.kind === "paragraph" && block.spans.reduce((n, span) => n + span.text.length, 0) >= BODY_CHARS) this.begun = true;
     if (into && into.breaks.length > 0) block.breaks = into.breaks.map((at) => ({ unit: 0, at }));
     if (into && into.marks.length > 0) block.marks = into.marks.map((m) => ({ unit: 0, ...m }));
     this.blocks.push(block);
@@ -675,7 +715,8 @@ class ImportReader {
     switch (node.type) {
       case "paragraph":
       case "heading": {
-        const note = node.type === "paragraph" ? unlinkedNote(node) : null;
+        // A table's note stands right under the table, wherever the body stands.
+        const note = node.type === "paragraph" && (this.begun || this.blocks.at(-1)?.kind === "table") ? unlinkedNote(node) : null;
         if (note) {
           const into = new Spans();
           this.inline(note.rest, into);
@@ -700,7 +741,7 @@ class ImportReader {
         const words = wordsOf(into.spans.map((span) => span.text).join("")).map((w) => w.w);
         const linked = into.spans.some((span) => span.href?.startsWith("#heading="));
         const like = this.headings.has(words.join(" ")) || (/^\d+$/.test(words.at(-1) ?? "") && this.headings.has(words.slice(0, -1).join(" ")));
-        const role = linked || like ? ("contents" as const) : isCaption(node, this.styles.normal.size) ? ("caption" as const) : undefined;
+        const role = linked || like ? ("contents" as const) : isCaption(node) ? ("caption" as const) : undefined;
         const block: DocBlock = { kind: "paragraph", spans: into.spans, ...(indent ? { indent } : {}), ...(role ? { role } : {}), ...drawn };
         if (like && !linked) this.headingLike.add(block);
         if (linked || like) this.entryDepth.set(block, Math.max(0, Math.round((Number(node.attrs?.indentLeft ?? 0) || 0) / INDENT_PT)));
@@ -759,6 +800,7 @@ class ImportReader {
     let breaks: Break[] = [];
     let marks: NoteMark[] = [];
     const flush = () => {
+      if (items.length > 0) this.settle();
       if (items.length > 0) this.blocks.push({ kind: "list", items, font, ...(breaks.length > 0 ? { breaks } : {}), ...(marks.length > 0 ? { marks } : {}) });
       [items, breaks, marks] = [[], [], []];
     };
@@ -855,6 +897,7 @@ export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[]
   const styles = readStyles({ attrs: doc.attrs ?? {} });
   const reader = new ImportReader(pages, styles, printed ? printedLabels(doc, printed) : undefined, headings);
   for (const node of doc.content ?? []) reader.node(node, false);
+  reader.settle();
   const blocks = reader.blocks;
   for (let i = 0; i < blocks.length; ) {
     let j = i;

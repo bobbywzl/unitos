@@ -439,6 +439,24 @@ function braces(atoms: Atom[], rules: Rule[], used: Set<Rule>): Atom[] {
   return out;
 }
 
+/** Where the labels of the formula's braces stand (\underbrace{…}_{n
+    \text{ times}}): beyond the brace, an em and a half out, across its
+    width. A glyph there the formula lacks is its label, lost (a brace read
+    with no label passed the check, synth-math-tex (65), (66)). */
+export function braceLabelBoxes(atoms: Atom[]): Box[] {
+  const tips = atoms.filter((a) => /^hbrace-/.test(a.entry?.piece ?? "")).sort(byX);
+  const out: Box[] = [];
+  for (const t of tips) {
+    if (!isPiece(t, "hbrace-down-left") && !isPiece(t, "hbrace-up-left")) continue;
+    const over = isPiece(t, "hbrace-down-left");
+    const end = tips.find((u) => u.x1 > t.x1 && Math.abs(u.yb - t.yb) < 0.1 * t.size && isPiece(u, over ? "hbrace-down-right" : "hbrace-up-right"));
+    if (!end) continue;
+    const em = t.size;
+    out.push(over ? { x1: t.x1, x2: end.x2, y1: t.top, y2: t.top + 1.5 * em } : { x1: t.x1, x2: end.x2, y1: t.bottom - 1.5 * em, y2: t.bottom });
+  }
+  return out;
+}
+
 // ── Rules: radicals, fractions, overlines ──────────────────────────────────
 
 function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
@@ -614,6 +632,9 @@ function ruledArray(atoms: Atom[], rules: Rule[]): Atom[] {
   const content = band.slice(lo, hi + 1);
   const mains = content.filter((a) => a.size >= em * 0.95);
   const lines = rowLines(mains.length ? mains : content, em);
+  // One row between rules is a table's row, not an array (arXiv
+  // 2410.04586's table of marks read as one-row arrays).
+  if (lines.length < 2) return atoms;
   const rows = splitRows(content, lines);
   const x1 = Math.min(...content.map((a) => a.x1));
   const x2 = Math.max(...content.map((a) => a.x2));

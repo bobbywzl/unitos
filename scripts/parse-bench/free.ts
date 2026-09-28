@@ -23,8 +23,8 @@ const keyOf = (text: string) => normText(text).replace(/\d+/g, "#");
 const lettersOf = (text: string) => normText(text).replace(/[^\p{L}]/gu, "");
 /** A long table's foot on each page it breaks at (LaTeX's longtable, Word). */
 const CONTINUED_RE = /^\(?continued (?:on (?:the )?next page|overleaf)\)?\.?$/i;
-/** A line that is a page number, and the number: "12", "- 12 -", "Page 3 of 12". */
-const NUMBER_LINE_RE = /^[-–— ]*(?:(?:page|p\.)\s*)?(\d{1,4})(?:\s*(?:of|\/)\s*\d{1,4})?[-–— ]*$/i;
+/** A line that is a page number, and the number: "12", "12.", "- 12 -", "Page 3 of 12". */
+const NUMBER_LINE_RE = /^[-–— ]*(?:(?:page|p\.)\s*)?(\d{1,4})\.?(?:\s*(?:of|\/)\s*\d{1,4})?[-–— ]*$/i;
 
 type Layout = { lines: Line[]; furniture: Line[]; sizes: Map<number, { width: number; height: number }> };
 
@@ -263,9 +263,20 @@ function countWords(texts: string[]): Map<string, number> {
     spacing ("2", "k1", "t" where the formula reads "2k1t"), so the formulas'
     glyphs cover the PDF's short words, as the reference metrics let a
     reference's math do, and are never extra words. */
-function printedWords(cand: Flat, contents: boolean): { words: string[]; glyphs: Map<string, number> } {
+function printedWords(cand: Flat, contents: boolean): { words: string[]; glyphs: Map<string, number>; raised: { joined: string; parts: string[] }[] } {
   const kept = (b: number) => contents || cand.blocks[b].role !== "contents";
-  const words = cand.toks.filter((t) => kept(cand.units[t.unit].block)).map((t) => t.w);
+  const toks = cand.toks.filter((t) => kept(cand.units[t.unit].block));
+  const words = toks.map((t) => t.w);
+  // A word a raised mark ends ("Storage" and its note's "2"): the text layer
+  // may read the mark into the word or apart from it.
+  const raised: { joined: string; parts: string[] }[] = [];
+  for (const t of toks) {
+    const unit = cand.units[t.unit];
+    const at = unit.raised.find(([a]) => a > t.start && a < t.end)?.[0];
+    if (at === undefined) continue;
+    const parts = wordsOf(unit.text.slice(t.start, at)).concat(wordsOf(unit.text.slice(at, t.end))).map((w) => w.w);
+    if (parts.length > 1) raised.push({ joined: t.w, parts });
+  }
   cand.blocks.forEach((block, b) => {
     if (block.kind === "list" && kept(b)) for (const item of block.items) words.push(...wordsOf(item.marker).map((w) => w.w));
   });
@@ -274,7 +285,7 @@ function printedWords(cand: Flat, contents: boolean): { words: string[]; glyphs:
     const reading = m.text?.trim() ? m.text : m.latex !== undefined || m.mathml !== undefined ? mathLeaves(m, m.display).join(" ") : "";
     for (const w of wordsOf(`${reading} ${m.label ?? ""}`)) for (const ch of w.w) glyphs.set(ch, (glyphs.get(ch) ?? 0) + 1);
   }
-  return { words, glyphs };
+  return { words, glyphs, raised };
 }
 
 /** The reference-free checks: text coverage against pdftotext (every word of
@@ -294,7 +305,7 @@ const BLIND = 0.5;
     the contents list from the headings: a contents list's words are left
     out (they repeat the headings). */
 export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word = false): FreeScores {
-  const { words: printed, glyphs: formulaGlyphs } = printedWords(cand, !word);
+  const { words: printed, glyphs: formulaGlyphs, raised } = printedWords(cand, !word);
   const candBag = countWords([]);
   for (const w of printed) candBag.set(w, (candBag.get(w) ?? 0) + 1);
   const expected = new Map<string, number>();
@@ -349,6 +360,16 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
       else expected.set(w.w, (expected.get(w.w) ?? 0) + 1);
     }
   });
+  // A word with its raised mark counts as the text layer reads it: whole, or
+  // as the word and the mark apart.
+  for (const { joined, parts } of raised) {
+    const short = (candBag.get(joined) ?? 0) > (expected.get(joined) ?? 0);
+    if (!short || !parts.every((w) => (expected.get(w) ?? 0) > (candBag.get(w) ?? 0))) continue;
+    candBag.set(joined, (candBag.get(joined) ?? 0) - 1);
+    for (const w of parts) candBag.set(w, (candBag.get(w) ?? 0) + 1);
+  }
+  // The candidate's word count, a split mark counted apart.
+  const printedCount = [...candBag.values()].reduce((a, n) => a + n, 0);
   let hits = 0;
   let total = 0;
   const covered = new Map<string, number>();
@@ -381,9 +402,9 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
   for (const t of cand.toks) if (t.note) noted.set(t.w, (noted.get(t.w) ?? 0) + 1);
   let forgiven = 0;
   for (const [w, n] of noted) forgiven += Math.min(n, Math.max(0, (candBag.get(w) ?? 0) - (expected.get(w) ?? 0)));
-  const blind = total < BLIND * printed.length;
+  const blind = total < BLIND * printedCount;
   const recall = total > 0 && !blind ? (hits + formulaHits) / total : null;
-  const precision = printed.length - forgiven > 0 && !blind ? hits / (printed.length - forgiven) : null;
+  const precision = printedCount - forgiven > 0 && !blind ? hits / (printedCount - forgiven) : null;
   const f1 = recall === null || precision === null ? null : recall + precision > 0 ? (2 * recall * precision) / (recall + precision) : 0;
   const furniture = leaksOf(pdf, pdf.furniture, cand);
   const furnitureSet = new Set(pdf.furniture);
@@ -422,7 +443,7 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
       precision,
       f1,
       expected: total,
-      words: printed.length,
+      words: printedCount,
       blind,
       missing: most(expected, new Map([...new Set([...candBag.keys(), ...covered.keys()])].map((w) => [w, (candBag.get(w) ?? 0) + (covered.get(w) ?? 0)]))),
       extra: most(candBag, expected),

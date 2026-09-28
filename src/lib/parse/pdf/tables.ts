@@ -105,10 +105,10 @@ function openMiddle(a: number, b: number, lines: Line[]): number {
   return best ? (best.x1 + best.x2) / 2 : (a + b) / 2;
 }
 
-// A currency sign set apart from its amount ("$  282,836", a statement's
-// signs in a column of their own) is the amount's: the separators after a
-// column that holds signs and nothing else go (10-K p. 54 read seven
-// columns for its label and three years).
+// A currency sign set apart from its amount (a statement's dollar signs in
+// a column of their own) is the amount's: the separators after a column
+// that holds signs and nothing else go (the 10-K's income statement, p.
+// 54, read seven columns for its labels and three years).
 const CURRENCY_RE = /^[$€£¥]$/;
 export function withoutSignColumns(lines: Line[], separators: number[]): number[] {
   const cells = lines.map((l) => cellsBySeparators(l, separators));
@@ -707,6 +707,13 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     // label, its boxes, a blank to fill), and on a scan's text layer prose
     // wrapped beside a drawing's labels.
     if (isProseColumns(multiCell.map((k) => lines[k]), ctx.ocr) || isFormLines(members.map((k) => lines[k]))) {
+      i++;
+      continue;
+    }
+    // Two lines, one of them set far larger than the body, are display
+    // type: a chapter's title in spaced capitals ("CHAPTER THREE" over its
+    // name, NASA SP-4408 p. 87) read as two columns of one word each.
+    if (members.length <= 2 && members.some((k) => lines[k].size > ctx.bodySize * 1.4)) {
       i++;
       continue;
     }

@@ -22,7 +22,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Anna B. Jakobsen #"
+     "text": "Anna B. Jakobsen",
+     "bold": true
+    },
+    {
+     "text": " #"
     }
    ]
   },
@@ -38,7 +42,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Anders B. Clausen #"
+     "text": "Anders B. Clausen",
+     "bold": true
+    },
+    {
+     "text": " #"
     }
    ]
   },
@@ -54,7 +62,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Jaco van de Pol #"
+     "text": "Jaco van de Pol",
+     "bold": true
+    },
+    {
+     "text": " #"
     }
    ]
   },
@@ -70,7 +82,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Irfansha Shaik #"
+     "text": "Irfansha Shaik",
+     "bold": true
+    },
+    {
+     "text": " #"
     }
    ]
   },
@@ -1776,5 +1792,5 @@
  ],
  "license": "open",
  "provenance": "latexml",
- "notes": "arXiv 2506.06752v1 (quantum computing, algorithms; LIPIcs, algorithms), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Fixed where LaTeXML differs from the PDF: \"Coupling map\" → \"Input: Coupling map\"."
+ "notes": "arXiv 2506.06752v1 (quantum computing, algorithms; LIPIcs, algorithms), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Fixed where LaTeXML differs from the PDF: \"Coupling map\" → \"Input: Coupling map\". The author names are set bold on the page (the PDF's font is a bold face); round 2 marks them, by hand: the builder reads the author area from pdftotext, which gives no weight."
 }

@@ -254,7 +254,8 @@ function blockFont(text: string, runs: Run[]): TextFont | undefined {
   };
   const prose = counted.some(({ r, n }) => n > 0 && !r.mono && r.look?.face);
   const family = top((r) => (r.look?.face && (!prose || !r.mono) ? r.look.face : undefined));
-  const size = top((r) => (r.sup || r.sub ? undefined : r.look?.size));
+  // Small capitals count at their capitals' size (look.ts drawnSmallCaps).
+  const size = top((r) => (r.sup || r.sub ? undefined : (r.look?.capitals ?? r.look?.size)));
   if (!family || size === undefined) return undefined;
   const all = counted.reduce((sum, { n }) => sum + n, 0);
   const share = (flag: (r: Run) => boolean | undefined) => counted.reduce((sum, { r, n }) => sum + (flag(r) ? n : 0), 0) / all;

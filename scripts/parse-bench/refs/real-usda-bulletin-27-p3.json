@@ -11,7 +11,7 @@
  ],
  "license": "public-domain",
  "provenance": "hand",
- "notes": "F. C. Cook, Bouillon Cubes: Their Contents and Food Value Compared with Meat Extracts and Home-Made Preparations of Meat, U.S. Department of Agriculture Bulletin No. 27 (1913), a work of the United States government; the Internet Archive's scan with its OCR text layer (page 1 of the PDF is the archive's own notice). Scored: the first printed page. The words are the text layer's characters, OCR errors kept (\"foy\", \"beimg\", \"shght\", \"Physiolegical\"). The masthead (ornaments, the department's name in display type, \"No. 27\") is one figure: its OCR words are noise. The printer's mark at the foot of the page, read by the OCR as \"Geass ay\", is furniture. The last paragraph runs to page 4.",
+ "notes": "F. C. Cook, Bouillon Cubes: Their Contents and Food Value Compared with Meat Extracts and Home-Made Preparations of Meat, U.S. Department of Agriculture Bulletin No. 27 (1913), a work of the United States government; the Internet Archive's scan with its OCR text layer (page 1 of the PDF is the archive's own notice). Scored: the first printed page. The words are the text layer's characters, OCR errors kept (\"foy\", \"beimg\", \"shght\", \"Physiolegical\"). The masthead (ornaments, the department's name in display type, \"No. 27\") is one figure: its OCR words are noise. The printer's mark at the foot of the page, read by the OCR as \"Geass ay\", is furniture. The last paragraph runs to page 4. Alignment (round 2, measured with PyMuPDF): blocks 5, 8 are centered: each line's middle lies within 4 pt of its column's middle and both its ends stand more than 8 pt inside the column's margins (a column's margin is where three or more of its lines end, or its furthest line end).",
  "furniture": [
   "Geass ay"
  ],
@@ -66,7 +66,8 @@
     {
      "text": "INTRODUCTION."
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "paragraph",
@@ -91,7 +92,8 @@
     {
      "text": "COMMERCIAL BOUILLON CUBES."
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "paragraph",

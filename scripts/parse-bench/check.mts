@@ -421,6 +421,14 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   const blindPdf: PdfText = { ...pdf, raw: [["small"]], lines: [] };
   const blind = freeScores(blindPdf, flatten({ blocks: [para("Words the text layer reads none of on this page.")] })).coverage;
   check("free: a text layer that reads fewer than half the candidate's words scores no coverage", blind.blind && blind.f1 === null && blind.recall === null, JSON.stringify(blind));
+  // A table cell's word with its raised note mark, which the text layer reads apart.
+  const markPdf: PdfText = { ...pdf, raw: [["Storage 2", "The yard grew."]], lines: [] };
+  const cell: DocBlock = { kind: "table", rows: [{ cells: [{ spans: [{ text: "Storage" }, { text: "2", sup: true }] }] }] };
+  const marked = freeScores(markPdf, flatten({ blocks: [cell, para("The yard grew.")] })).coverage;
+  check("free: a word and its raised mark count whether the text layer joins them or not", near(marked.recall, 1) && near(marked.precision, 1), `recall ${marked.recall}, precision ${marked.precision}`);
+  // A page number printed with a period ("54."): the candidate's line of it is a page-number line.
+  const numbered = freeScores({ ...pdf, raw: [["The yard grew."]], lines: [] }, flatten({ blocks: [para("The yard grew."), para("54.")] }));
+  check("free: a line that is a page number and a period counts as a page-number line", numbered.numberLines.count === 1, `count ${numbered.numberLines.count}`);
 }
 {
   const ROLE_REF: RefBlock[] = [
@@ -499,6 +507,12 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     near(off.f1.strike, 0) && near(off.f1.color, 0) && near(off.f1.highlight, 0),
     JSON.stringify(off.f1),
   );
+  // A paragraph set gray as a whole: its gray is the block's color, which the fonts metric scores, whether
+  // the words carry it (the reference, an import's marks) or the block's font does (a parse).
+  const GRAY_REF: RefBlock[] = [{ kind: "paragraph", spans: [{ text: "Prepared in March from the gauge log.", color: "#595959" }], font: { shape: "sans", size: 9, color: "#595959" } }];
+  const grayCand: DocBlock[] = [{ kind: "paragraph", spans: [{ text: "Prepared in March from the gauge log." }], font: { shape: "sans", size: 9, color: "#595959" } }];
+  const gray = score({ blocks: GRAY_REF, fonts: { body: { shape: "sans", size: 10.5 } } }, [], { blocks: grayCand }).scores.styles;
+  check("styles: a block's own color on its words is no colored run", gray.f1.color === null, JSON.stringify(gray.f1));
   const parsed = fromParse({
     title: null,
     blocks: [
@@ -691,6 +705,7 @@ check("words: a CJK character is a word", wordsOf("河流学 is fun").map((w) =>
 check("words: Kangxi radicals read as ideographs", wordsOf("⼀").map((w) => w.w).join("") === "一");
 const garbleKinds = (t: string) => garblesOf(t).map((g) => g.kind);
 check("garbles: CMSY leftovers are found", garbleKinds("n6= m, ω7→ X(ω), A =⇒ B").length === 3);
+check("garbles: a 6 after a relation is a number (a fraction read flat)", garbleKinds("z = x − μ σ = 6 = 1.5").length === 0, garbleKinds("z = x − μ σ = 6 = 1.5").join(","));
 check("garbles: real math and dates are not", garbleKinds("x+6=0, a 7-day week, 2016=2016").length === 0, garbleKinds("x+6=0, a 7-day week, 2016=2016").join(", "));
 check("garbles: control and private-use characters are found", garbleKinds("a\u0001b  �").length === 3);
 
@@ -796,6 +811,64 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     "import: a small paragraph opening with a note symbol is a footnote",
     read[1]?.kind === "footnote" && read[1].label === "*" && read[1].spans.map((s) => s.text).join("") === "All flows are in cubic meters a second.",
     JSON.stringify(read[1]),
+  );
+}
+{
+  // A table cell's colored, highlighted, and struck words (a Word table's cell html).
+  const html = '<table><tr><td><span style="color:#00b050"><strong>A</strong></span> grade</td><td><span style="background-color:#ffff00">late</span> <s>old</s></td></tr></table>';
+  const table = fromParse({ title: null, blocks: [{ type: "TABLE", text: "A grade\tlate old", html, page: 1 }] }).blocks[0];
+  const cells = table?.kind === "table" ? table.rows[0].cells.map((c) => c.spans.map((x) => `${x.text.trim()}${x.color ?? ""}${x.highlight ? `^${x.highlight}` : ""}${x.strike ? "~" : ""}`).filter((t) => t).join("|")).join(" / ") : "";
+  check("parse: a table cell's color, highlight, and strikethrough are read", cells === "A#00b050|grade / late^#ffff00|old~", cells);
+}
+{
+  // A table that runs onto the next page: its text opens with the caption's line, so row r is line r + 1; the
+  // caption is on its own line's page.
+  const text = "Table 3: Unary commands\nBackslash\tbslash\nColon\tcolon";
+  const html = "<table><caption>Table 3: Unary commands</caption><tr><td>Backslash</td><td>bslash</td></tr><tr><td>Colon</td><td>colon</td></tr></table>";
+  const second = fromParse({ title: null, blocks: [{ type: "TABLE", text, html, page: 1, pageStarts: [{ offset: text.indexOf("Backslash"), page: 2 }] }] }, [2, 2]).blocks[0];
+  const got = second?.kind === "table" ? `${second.caption ? "caption " : ""}${second.rows.map((r) => r.cells[0].spans.map((x) => x.text).join("")).join(",")}` : JSON.stringify(second);
+  check("parse: a table's rows on a page past its caption's are judged by their own lines, the caption by its own", got === "Backslash,Colon", got);
+}
+{
+  // An affiliation under the authors opens with a raised number in a small size, as an unlinked footnote does:
+  // it is a note only once the body has begun. A note symbol the converter set as a formula is the label.
+  const small = (text: string, raised = false) => ({ type: "text", text, marks: [{ type: "textStyle", attrs: { fontSize: "8pt" } }, ...(raised ? [{ type: "superscript" }] : [])] });
+  const body = "The river rose through the night and the gauge at the upper dam read above the flood line for six hours, so the crews opened the spillway and walked the levee from the dam to the bridge until the water fell again.";
+  const doc: RichNode = {
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [small("1", true), small("Institute of River Studies, Lakeside.")] },
+      { type: "paragraph", content: [{ type: "text", text: body }] },
+      { type: "paragraph", content: [small("2", true), small(" Readings are hourly.")] },
+      { type: "paragraph", content: [{ type: "inlineMath", attrs: { latex: "\\ddagger" } }, small(" Contact the gauge office.")] },
+    ],
+  };
+  const shape = fromImport(doc).blocks.map((b) => (b.kind === "footnote" ? `footnote ${b.label}` : b.kind)).join(", ");
+  check("import: an affiliation before the body is no footnote; notes after it are, a formula's symbol their label", shape === "paragraph, paragraph, footnote 2, footnote ‡", shape);
+}
+{
+  // A caption at the body's own size (a page set in 9 pt) still captions its table; a centered small line
+  // under a title, far from any table, is a paragraph.
+  const sized = (text: string) => ({ type: "text", text, marks: [{ type: "textStyle", attrs: { fontSize: "9pt" } }] });
+  const table: RichNode = { type: "table", content: [{ type: "tableRow", content: [{ type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "Q" }] }] }] }] };
+  const doc: RichNode = {
+    type: "doc",
+    attrs: { namedStyleNormal: JSON.stringify({ font: "Times New Roman", size: 9 }) },
+    content: [
+      { type: "paragraph", attrs: { textAlign: "center" }, content: [sized("for the year of the survey")] },
+      { type: "paragraph", content: [{ type: "text", text: "The gauge log runs from March." }] },
+      { type: "paragraph", attrs: { textAlign: "center" }, content: [sized("Fig. 3. The upper gauge.")] },
+      { type: "paragraph", content: [{ type: "text", text: "The lake rose in April." }] },
+      { type: "paragraph", attrs: { textAlign: "center" }, content: [sized("Table 2: Lake levels")] },
+      table,
+    ],
+  };
+  const read = fromImport(doc).blocks;
+  const shape = read.map((b) => `${b.kind}${b.kind === "paragraph" && b.role ? `/${b.role}` : ""}${b.kind === "table" && b.caption ? `+caption` : ""}`).join(" ");
+  check(
+    "import: a caption-set line is a table's caption right before it, at any size; elsewhere a caption only with its label",
+    shape === "paragraph paragraph paragraph/caption paragraph table+caption",
+    shape,
   );
 }
 {

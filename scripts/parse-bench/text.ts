@@ -49,7 +49,9 @@ const GARBLES: { kind: string; re: RegExp }[] = [
   { kind: "private-use character", re: /[\uE000-\uF8FF\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu },
   { kind: "lone combining mark", re: /(?<![\p{L}\p{N}\p{M}])\p{M}/gu },
   { kind: "accent apart from its letter", re: /[´¨ˆ˜˙ˇ˘˚¸˛](?=\p{L})|(?<=\p{L})[´¨ˆ˜˙ˇ˘˚¸˛]/gu },
-  { kind: "negation slash read as 6", re: /(?<![\d.,+\-−*/^_=(\[{])6\s?[=∈∋⊂⊃⊆⊇≡∼≈≃≅≤≥<>|∥⊢⊨≺≻⪯⪰∃]/gu },
+  // Not a 6 that stands after a relation or an operator, a space between (a
+  // fraction read flat: "σ = 6 = 1.5").
+  { kind: "negation slash read as 6", re: /(?<![\d.,+\-−*/^_=(\[{]\s?)6\s?[=∈∋⊂⊃⊆⊇≡∼≈≃≅≤≥<>|∥⊢⊨≺≻⪯⪰∃]/gu },
   { kind: "maps-to read as 7→", re: /7(?:→|−+→)/gu },
   { kind: "long arrow in two glyphs", re: /=⇒|⇐=|⇐⇒|←−|−→/gu },
 ];
@@ -67,6 +69,6 @@ export function garblesOf(text: string): Garble[] {
 
 // ── Lines that are furniture ────────────────────────────────────────────────
 
-/** A line that is only a page number: "12", "xii", "- 12 -", "Page 3",
+/** A line that is only a page number: "12", "12.", "xii", "- 12 -", "Page 3",
     "Page 3 of 12", "3 of 12", "3/12". */
-export const PAGE_NUMBER_RE = /^[-–— ]*(?:(?:page|p\.)\s*)?(?:\d{1,4}|[ivxlc]{1,7})(?:\s*(?:of|\/)\s*\d{1,4})?[-–— ]*$/i;
+export const PAGE_NUMBER_RE = /^[-–— ]*(?:(?:page|p\.)\s*)?(?:\d{1,4}|[ivxlc]{1,7})\.?(?:\s*(?:of|\/)\s*\d{1,4})?[-–— ]*$/i;

@@ -11,7 +11,7 @@
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
 import { isUnicodeMathFont } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
-import type { Atom } from "@/lib/parse/pdf/math/layout";
+import { braceLabelBoxes, type Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Box, Item, Line, MathZone, Run } from "@/lib/parse/pdf/types";
 import type { MathSpan } from "@/lib/parse/types";
@@ -376,9 +376,11 @@ export function paintsRule(b: Box, rules: Rule[]): boolean {
 }
 
 /** A glyph of the page drawn inside the formula's atoms' box — its origin
-    inside — that is not the formula's own (spaces aside); or a small one
-    just past its right end, over its baseline: the end of a script or a
-    stacked label the formula lost (the period of "a.s." over an arrow). */
+    inside — that is not the formula's own (spaces aside); one where a
+    brace's label stands (layout.ts braceLabelBoxes); or a small one just
+    past its right end, over its baseline: the end of a script the formula
+    lost (a closing bracket of an exponent, synth-notes-tex; a limit of a
+    second integral, arXiv 2411.09614). */
 function strayInside(atoms: Atom[], own: Set<Glyph>, page: Glyph[]): boolean {
   if (atoms.length === 0) return false;
   const em = Math.max(...atoms.map((a) => a.size));
@@ -387,10 +389,12 @@ function strayInside(atoms: Atom[], own: Set<Glyph>, page: Glyph[]): boolean {
   const y1 = Math.min(...atoms.map((a) => a.bottom));
   const y2 = Math.max(...atoms.map((a) => a.top));
   const base = Math.min(...atoms.filter((a) => a.size >= em * 0.9).map((a) => a.yb));
+  const labels = braceLabelBoxes(atoms);
   return page.some((g) => {
     if (own.has(g) || g.hidden || g.unicode.trim() === "") return false;
     const cx = g.x + g.w / 2;
     if (cx > x1 && cx < x2 && g.y > y1 && g.y < y2) return true;
+    if (labels.some((b) => cx > b.x1 && cx < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
     return g.size < em * 0.8 && cx >= x2 && cx < x2 + em * 0.3 && g.y > base + em * 0.2 && g.y < y2;
   });
 }

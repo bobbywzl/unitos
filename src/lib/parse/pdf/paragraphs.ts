@@ -134,12 +134,17 @@ function columnLines(lines: Line[]): Map<[number, number], number> {
 
 /** Line k is centered in its column, set in from its edge by as much as
     it stops short of the other: a caption's, a title page's, or a form's
-    centered line. A block quotation set in on the left only is not. */
+    centered line. A block quotation set in on the left only is not. A
+    line set larger than the body (a title, a heading) may nearly fill its
+    column: set in by half an em, it is centered within a quarter of one (a
+    paper's title across both columns, 13.7 pt in on the left and 15.4 pt
+    on the right, real-acm-damon25-3736236 p1). */
 export function isCentered(lines: Line[], k: number, ctx: PageContext): boolean {
   const line = lines[k];
   const { left, right } = columnEdges(lines, k, ctx);
   const inset = line.x - left;
-  return (right > line.xEnd && inset > line.size * 2 && Math.abs(inset - (right - line.xEnd)) <= line.size) || sharesMiddle(lines, k, ctx);
+  const [least, slack] = line.size >= ctx.bodySize * 1.2 ? [line.size * 0.5, line.size * 0.25] : [line.size * 2, line.size];
+  return (right > line.xEnd && inset > least && Math.abs(inset - (right - line.xEnd)) <= slack) || sharesMiddle(lines, k, ctx);
 }
 
 // The lines over and under line k, in its column, that share its middle
@@ -173,18 +178,34 @@ function sharesMiddle(lines: Line[], k: number, ctx: PageContext): boolean {
     }
   }
   const xs = run.map((l) => l.x);
-  return run.length > 1 && Math.max(...xs) - Math.min(...xs) > Math.max(...run.map((l) => l.size)) * 2;
+  if (run.length > 1 && Math.max(...xs) - Math.min(...xs) > Math.max(...run.map((l) => l.size)) * 2) return true;
+  // A title's line, set larger than the body, and one beside it share their
+  // middle within a tenth of their size and start apart: on a slide the
+  // title's two lines start 18.8 pt apart at 52 pt, their middles 0.05 pt
+  // (real-gslides-oer-5rs p2).
+  if (line.size < ctx.bodySize * 1.2) return false;
+  return run.some((o) => {
+    const size = Math.min(o.size, line.size);
+    return o !== line && Math.abs((o.x + o.xEnd) / 2 - middle) <= size * 0.1 && Math.abs(o.x - line.x) > size * 0.1;
+  });
 }
 
-// Line k runs from its column's left edge to its right edge, within its size.
+// Line k is one of a block's full lines: it runs from its column's left
+// edge to its right edge, and so does a line next to it. The widest line
+// of a centered title is its column's width, and alone.
 function fillsColumn(lines: Line[], k: number, ctx: PageContext): boolean {
-  const line = lines[k];
-  const { left, right } = columnEdges(lines, k, ctx);
-  return right > 0 && Math.abs(line.x - left) <= line.size && Math.abs(right - line.xEnd) <= line.size;
+  const full = (n: number) => {
+    const l = lines[n];
+    if (!l || l.cells.length !== 1) return false;
+    const { left, right } = columnEdges(lines, n, ctx);
+    return right > 0 && Math.abs(l.x - left) <= Math.max(1, l.size * 0.1) && Math.abs(right - l.xEnd) <= l.size * 0.6;
+  };
+  return full(k) && ((full(k - 1) && lineColumn(lines[k - 1]) === lineColumn(lines[k])) || (full(k + 1) && lineColumn(lines[k + 1]) === lineColumn(lines[k])));
 }
 
 /** How lines [from, to) are aligned in their column, when not flush left:
-    "center" when every line is centered; "right" when every line ends at
+    "center" when every line is centered, or a title's lines are centered on
+    one another; "right" when every line ends at
     the column's right edge and they start at different places, or one
     line starts well in from its left (a date line, a signature, an address
     set flush right); "justify" when two lines or more fill the column to
@@ -194,7 +215,7 @@ function fillsColumn(lines: Line[], k: number, ctx: PageContext): boolean {
 export function lineAlign(lines: Line[], from: number, to: number, ctx: PageContext): "center" | "right" | "justify" | null {
   const group = lines.slice(from, to);
   if (group.length === 0 || group.some((l) => l.cells.length !== 1)) return null;
-  if (group.every((_, k) => isCentered(lines, from + k, ctx))) return "center";
+  if (group.every((_, k) => isCentered(lines, from + k, ctx)) || centeredTitle(group, ctx)) return "center";
   const edges = group.map((_, k) => columnEdges(lines, from + k, ctx));
   const atRight = (l: Line, k: number) => edges[k].right > 0 && Math.abs(edges[k].right - l.xEnd) <= l.size * 0.33;
   // Flush right starts its lines anywhere but at the column's left edge: a
@@ -209,6 +230,19 @@ export function lineAlign(lines: Line[], from: number, to: number, ctx: PageCont
   const last = group.length - 1;
   if (last >= 1 && group.slice(0, last).every(atRight) && justifiedPage(lines, ctx)) return "justify";
   return null;
+}
+
+// A title's lines, set larger than the body, centered on one another:
+// their middles agree within a tenth of their size, and they start at
+// different places. On a slide or a title page the widest line is the
+// column, and no edge tells (real-gslides-oer-5rs p2's title, its lines'
+// middles 0.05 pt apart).
+function centeredTitle(group: Line[], ctx: PageContext): boolean {
+  if (group.length < 2 || group.some((l) => l.size < ctx.bodySize * 1.2)) return false;
+  const size = Math.min(...group.map((l) => l.size));
+  const middles = group.map((l) => (l.x + l.xEnd) / 2);
+  const starts = group.map((l) => l.x);
+  return Math.max(...middles) - Math.min(...middles) <= size * 0.1 && Math.max(...starts) - Math.min(...starts) > size * 0.1;
 }
 
 // A page set justified: of its lines of prose that end within three ems of
@@ -410,6 +444,13 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       next.size > body * (ctx.ocr ? 1.3 : 1.14) ||
       endsShort ||
       labelled ||
+      // Centered lines set wholly bold, each short of its column, are lines
+      // of their own: a statement's company, title, and units lines ran
+      // into one paragraph (real-sec-10k-goog-2024-p54).
+      (centered &&
+        boldShare(prev.runs, prev.text.length) > 0.9 &&
+        boldShare(next.runs, next.text.length) > 0.9 &&
+        prev.xEnd + prev.size * 1.28 + next.firstWordWidth < (lineColumn(prev)?.[1] ?? 0)) ||
       TOC_LABEL_RE.test(next.text.trim()) ||
       // A line stretched into cells tells no indent of its own.
       (isIndented(next, ctx) && prev.cells.length === 1 && !isIndented(prev, ctx) && !hanging && !centered) ||

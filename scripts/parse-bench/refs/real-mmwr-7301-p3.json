@@ -11,7 +11,7 @@
  ],
  "license": "public-domain",
  "provenance": "hand",
- "notes": "CDC's Morbidity and Mortality Weekly Report, vol. 73 no. 1 (January 11, 2024), \"Topical Antifungal Prescribing for Medicare Part D Beneficiaries — United States, 2021\"; a work of the United States government. Scored: two InDesign pages in two columns with full-width tables: Table 1 (group rows \"Antifungal drug\" and \"U.S. Census Bureau region\", a bold total row) and Table 2 (two header rows with spanning group headers), table notes as footnotes with their symbols, article footnotes with symbol labels, section headings (h2) and bold subheadings (h3), soft hyphens at discretionary breaks and hard hyphens at compound breaks. The first paragraph starts on page 2 and the last runs to page 5. The Discussion paragraph runs from page 3 to page 4 around both tables: it is one block, the tables follow it. A footnote follows the paragraph that cites it; a table's notes follow the table.",
+ "notes": "CDC's Morbidity and Mortality Weekly Report, vol. 73 no. 1 (January 11, 2024), \"Topical Antifungal Prescribing for Medicare Part D Beneficiaries — United States, 2021\"; a work of the United States government. Scored: two InDesign pages in two columns with full-width tables: Table 1 (group rows \"Antifungal drug\" and \"U.S. Census Bureau region\", a bold total row) and Table 2 (two header rows with spanning group headers), table notes as footnotes with their symbols, article footnotes with symbol labels, section headings (h2) and bold subheadings (h3), soft hyphens at discretionary breaks and hard hyphens at compound breaks. The first paragraph starts on page 2 and the last runs to page 5. The Discussion paragraph runs from page 3 to page 4 around both tables: it is one block, the tables follow it. A footnote follows the paragraph that cites it; a table's notes follow the table. Alignment (round 2, measured with PyMuPDF): blocks 3, 8 are centered: each line's middle lies within 4 pt of its column's middle and both its ends stand more than 8 pt inside the column's margins (a column's margin is where three or more of its lines end, or its furthest line end).",
  "furniture": [
   "Morbidity and Mortality Weekly Report",
   "3",
@@ -56,7 +56,8 @@
     {
      "text": "Results"
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "heading",
@@ -99,7 +100,8 @@
     {
      "text": "Discussion"
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "paragraph",

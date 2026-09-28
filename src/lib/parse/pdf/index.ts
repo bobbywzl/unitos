@@ -487,8 +487,10 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   const titleFont = titleSegment ? spansFromRuns(titleSegment.text, titleRuns?.length ? titleRuns : titleSegment.runs).font : undefined;
 
   // The reader shows the title above the blocks; the heading it came from
-  // would show it twice.
-  if (title && segments[0]?.type === "HEADING" && segments[0].text === title) segments = segments.slice(1);
+  // would show it twice, where it opens the document or stands under lines
+  // that are no heading (a journal's label over a paper's title).
+  const titleHeading = titleSegment ? segments.indexOf(titleSegment) : -1;
+  if (titleHeading >= 0 && segments.slice(0, titleHeading).every((s) => s.type !== "HEADING")) segments.splice(titleHeading, 1);
 
   // The segments are the blocks now, in their order: a contents entry links
   // to its heading by that order. Resolved before the title merge and the

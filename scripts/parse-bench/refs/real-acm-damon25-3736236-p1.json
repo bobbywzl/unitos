@@ -11,7 +11,7 @@
  ],
  "license": "open",
  "provenance": "hand",
- "notes": "Krause, Kowalick, Pietrzyk, Habich, Lehner, 'De2Dup: Extended Deduplication for Multi-Tenant Databases', DaMoN '25 (ACM, doi:10.1145/3736227.3736236), CC BY 4.0, the ACM-published PDF as deposited on Zenodo; acmart sigconf (pdfTeX, Linux Libertine and Biolinum, Libertine math). Scored: page 1: a title with a raised '2', a grid of five centered author blocks (three over two; each block one centered paragraph, the name linked to its ORCID, an e-mail address cut at its own hyphen), the abstract (one justified block: no break shows where the source may start a second paragraph), CCS concepts as one '•' item with bold terms and an arrow, keywords, the ACM reference format (its label a line of its own), the CC BY badge (an image) and the permission lines under a rule at the foot of the left column, then the numbered section heading and a list of '(1)'/'(2)' items with hanging indents in the right column; many end-of-line hyphens to drop (tech-nique, iden-tifying, ap-plicability, mech-anism, Wolf-gang, shar-ing, sce-narios, develop-ment, ten-ants, accel-erate). The last paragraph continues on page 2: only its words on page 1 are here.",
+ "notes": "Krause, Kowalick, Pietrzyk, Habich, Lehner, 'De2Dup: Extended Deduplication for Multi-Tenant Databases', DaMoN '25 (ACM, doi:10.1145/3736227.3736236), CC BY 4.0, the ACM-published PDF as deposited on Zenodo; acmart sigconf (pdfTeX, Linux Libertine and Biolinum, Libertine math). Scored: page 1: a title with a raised '2', a grid of five centered author blocks (three over two; each block one centered paragraph, the name linked to its ORCID, an e-mail address cut at its own hyphen), the abstract (one justified block: no break shows where the source may start a second paragraph), CCS concepts as one '•' item with bold terms and an arrow, keywords, the ACM reference format (its label a line of its own), the CC BY badge (an image) and the permission lines under a rule at the foot of the left column, then the numbered section heading and a list of '(1)'/'(2)' items with hanging indents in the right column; many end-of-line hyphens to drop (tech-nique, iden-tifying, ap-plicability, mech-anism, Wolf-gang, shar-ing, sce-narios, develop-ment, ten-ants, accel-erate). The last paragraph continues on page 2: only its words on page 1 are here. Alignment (round 2, measured with PyMuPDF): blocks 0 are centered: each line's middle lies within 4 pt of its column's middle and both its ends stand more than 8 pt inside the column's margins (a column's margin is where three or more of its lines end, or its furthest line end).",
  "furniture": [],
  "blocks": [
   {
@@ -29,7 +29,8 @@
      "text": "Dup: Extended Deduplication for Multi-Tenant Databases",
      "bold": true
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "paragraph",

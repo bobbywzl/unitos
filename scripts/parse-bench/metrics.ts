@@ -124,7 +124,9 @@ export function gridPlaces(rows: Row[]): { row: number; col: number }[][] {
   });
 }
 
-function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: { row?: number; col?: number; styled: boolean; breaks?: number[]; shift?: number }) {
+/** `color`: the color the block sets its words in (textColor); a span in it
+    is no colored run. */
+function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: { row?: number; col?: number; styled: boolean; breaks?: number[]; shift?: number; color?: string }) {
   let text = "";
   const u = flat.units.length;
   const first = flat.toks.length;
@@ -171,7 +173,7 @@ function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: 
     }
     for (const style of STYLES) if (span[style]) flags[style].fill(1, start, text.length);
     if (span.href) links.fill(1, start, text.length);
-    if (span.color) colors.fill(span.color, start, text.length);
+    if (span.color && !sameColor(span.color, opts.color)) colors.fill(span.color, start, text.length);
     if (span.highlight) fills.fill(span.highlight, start, text.length);
     if (span.sup && text.length > start) raised.push([start, text.length]);
   }
@@ -187,29 +189,41 @@ function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: 
   flat.unitsOf[block].push(u);
 }
 
+/** The color a block sets its words in: its own font's, else its role's
+    (a table's and a figure's are their caption's). A gray paragraph, a navy
+    title: the fonts metric scores that color, and a span in it is no
+    colored run, whether a style or the words' own marks set it. */
+function textColor(doc: Doc, block: DocBlock): string | undefined {
+  const role = fontRole(block);
+  const own = "font" in block ? block.font : undefined;
+  return own ? own.color : role ? doc.fonts?.[role]?.color : undefined;
+}
+
 /** A document as units, words, and formulas in reading order. */
 export function flatten(doc: Doc): Flat {
   const flat: Flat = { blocks: doc.blocks, units: [], toks: [], math: [], unitsOf: [] };
   doc.blocks.forEach((block, b) => {
     flat.unitsOf.push([]);
     const breaks = (unit: number, shift = 0) => (block.breaks ?? []).filter((x) => x.unit === unit).map((x) => x.at + shift);
+    const color = textColor(doc, block);
     switch (block.kind) {
       case "title":
       case "heading":
-        return addUnit(flat, b, 0, block.spans, { styled: false, breaks: breaks(0) });
+        return addUnit(flat, b, 0, block.spans, { styled: false, breaks: breaks(0), color });
       case "paragraph":
       case "quote":
-        return addUnit(flat, b, 0, block.spans, { styled: true, breaks: breaks(0) });
+        return addUnit(flat, b, 0, block.spans, { styled: true, breaks: breaks(0), color });
       case "footnote":
         return addUnit(flat, b, 0, [{ text: block.label ? `${block.label} ` : "" }, ...block.spans], {
           styled: true,
           breaks: breaks(0, block.label ? block.label.length + 1 : 0),
           shift: block.label ? block.label.length + 1 : 0,
+          color,
         });
       case "list":
-        return block.items.forEach((item, i) => addUnit(flat, b, i, item.spans, { styled: true, breaks: breaks(i) }));
+        return block.items.forEach((item, i) => addUnit(flat, b, i, item.spans, { styled: true, breaks: breaks(i), color }));
       case "table": {
-        if (block.caption) addUnit(flat, b, -1, block.caption, { styled: true });
+        if (block.caption) addUnit(flat, b, -1, block.caption, { styled: true, color });
         const places = gridPlaces(block.rows);
         let index = 0;
         // A header cell's words are bold as the table sets them: the table metric scores the header.
@@ -220,7 +234,7 @@ export function flatten(doc: Doc): Flat {
       }
       case "figure":
         if (block.mathImage !== undefined) flat.math.push({ block: b, unit: -1, at: flat.toks.length, display: true, image: block.mathImage });
-        else if (block.caption) addUnit(flat, b, 0, block.caption, { styled: true });
+        else if (block.caption) addUnit(flat, b, 0, block.caption, { styled: true, color });
         return;
       case "equation":
         flat.math.push({ block: b, unit: -1, at: flat.toks.length, display: true, latex: block.latex, mathml: block.mathml, label: block.label });

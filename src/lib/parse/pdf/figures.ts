@@ -57,7 +57,9 @@ export function isCaption(text: string, runs: Run[] | undefined): boolean {
 // figure's caption names.
 const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=[^]*\p{L})[^]{3,}/u;
 const NOTE_RE = /^(?:(?:notes?|sources?)\s*[:.]\s+\S|[（(](?:出典|注|資料|来源|來源)[）)]|(?:出典|注|来源|來源)[:：])/i;
-const isSubCaption = (text: string) => PANEL_RE.test(text.trim()) || NOTE_RE.test(text.trim());
+// Panel letters alone ("(c) (d)") are a chart's labels, no caption.
+const LETTERS_RE = /^(?:\s*(?:\(\p{L}\)|\p{L}[.)]))+\s*$/u;
+const isSubCaption = (text: string) => (PANEL_RE.test(text.trim()) && !LETTERS_RE.test(text)) || NOTE_RE.test(text.trim());
 
 type CaptionPart = { text: string; runs: Run[]; box: Box };
 
@@ -422,18 +424,24 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     });
 
   return merged.map(({ box: plot, drawn }) => {
-    const axis = drawn ? axisOf(plot) : [];
+    // A caption set on a bar across the drawing, or started across its
+    // edge, is the figure's caption: never its labels, its ticks, or its own
+    // caption, and the crop stops at it (a Japanese white paper's "図表
+    // Ⅰ-2-1-1 避難所データ…" bar over a picture was in no block; Nature's
+    // "Fig. 1 | Example spectra. …", its first line across the chart's foot,
+    // lost its next three lines to the chart and its superscripts to the
+    // ticks). A caption's row: the runs beside its label, scripts included.
+    const heads = runs.filter((r) => shareInside(r.box, grow(plot, textSize * 1.5)) > 0 && LABEL_START_RE.test(textOf(r)));
+    const bars = heads.map((h) => {
+      const row = runs.filter((r) => r.box.x1 >= h.box.x1 - 1 && (r.box.y1 + r.box.y2) / 2 >= h.box.y1 && (r.box.y1 + r.box.y2) / 2 <= h.box.y2);
+      return { row, box: row.reduce((b, r) => unionBox(b, r.box), h.box) };
+    });
+    const onBar = (r: TextRun) => bars.some((bar) => bar.row.includes(r));
+    const axis = drawn ? axisOf(plot).filter((r) => !onBar(r)) : [];
     for (const r of axis) taken.add(r);
     let box = axis.reduce((b, r) => unionBox(b, r.box), plot);
-    // A caption set on a bar across the drawing, or started across its
-    // edge, is the figure's caption: never its labels or its own caption,
-    // and the crop stops at it (a Japanese white paper's "図表Ⅰ-2-1-1 避難所
-    // データ…" bar over a picture was in no block; Nature's "Fig. 1 |
-    // Example spectra. …", its first line across the chart's foot, lost its
-    // next three lines to the chart).
-    const heads = runs.filter((r) => shareInside(r.box, box) > 0 && LABEL_START_RE.test(textOf(r)));
-    const onBar = (r: TextRun) => heads.some((h) => Math.abs(h.box.y1 - r.box.y1) < h.size * 0.35 && r.box.x1 >= h.box.x1);
-    for (const bar of heads.map((h) => runs.filter((r) => onBar(r) && Math.abs(h.box.y1 - r.box.y1) < h.size * 0.35).reduce((b, r) => unionBox(b, r.box), h.box))) {
+    for (const { box: bar } of bars) {
+      if (bar.x1 >= box.x2 || bar.x2 <= box.x1 || bar.y1 >= box.y2 || bar.y2 <= box.y1) continue;
       if ((bar.y1 + bar.y2) / 2 > (box.y1 + box.y2) / 2) box = { ...box, y2: Math.min(box.y2, bar.y1) };
       else box = { ...box, y1: Math.max(box.y1, bar.y2) };
     }
@@ -771,6 +779,29 @@ export function attachFigureRegions(
     own.add(figure);
     placed = [...placed];
     placed.splice(placeOf(placed, graphic, own), 0, figure);
+  }
+  // A table drawn as a picture, its words outlines and none in the text
+  // layer, is a figure, and the "TABLE 6." caption right over or under it
+  // is its caption (IEEE Access 3721067: four tables showed nothing, then
+  // an uncaptioned crop under a caption paragraph).
+  for (const figure of own) {
+    const at = figure.box;
+    if (figure.text !== "" || !at) continue;
+    const k = placed.indexOf(figure);
+    const cap = [placed[k - 1], placed[k + 1]].find(
+      (s) =>
+        s?.type === "PARAGRAPH" &&
+        s.box !== undefined &&
+        s.page === figure.page &&
+        TABLE_CAPTION_RE.test(s.text) &&
+        isCaption(s.text, s.runs) &&
+        s.box.x1 < at.x2 &&
+        s.box.x2 > at.x1 &&
+        Math.max(s.box.y1 - at.y2, at.y1 - s.box.y2) <= rowGap * 2,
+    );
+    if (!cap) continue;
+    Object.assign(figure, { text: cap.text, runs: cap.runs, captionBox: cap.box, lineSize: cap.lineSize });
+    placed = placed.filter((s) => s !== cap);
   }
   // Text inside a figure's box (a hidden chart title, a stray label) is part
   // of the graphic, and a panel's caption there part of its caption. A
