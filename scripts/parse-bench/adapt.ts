@@ -270,7 +270,8 @@ function htmlRows(html: string): { rows: Row[]; caption: Span[] | null; font?: F
     if (tag === "em" || tag === "i") next.italic = true;
     if (tag === "u") next.underline = true;
     if (tag === "s" || tag === "strike" || tag === "del") next.strike = true;
-    // A span's own color and fill (a Word table's colored words, R2-TABLE's cell html).
+    // A span's own color, fill, and small caps (a Word table's colored words; a
+    // table caption's html from tables.ts).
     const style = (el as HTMLElement).style;
     const color = style ? inkOf(style.color) : undefined;
     const fill = style ? fillOf(style.backgroundColor) : undefined;

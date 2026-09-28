@@ -184,7 +184,7 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   );
 }
 {
-  // An import's list in its own level formats (R2-LISTS: listLevels on the outermost list).
+  // An import's list in its own level formats (`listLevels` on the outermost list).
   const levels = JSON.stringify([
     { counter: "decimal", format: "%0." },
     { counter: "lower-alpha", format: "%1)." },

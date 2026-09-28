@@ -302,7 +302,25 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     blocks, linked to their marks; small caps, sub, and sup are styles;
 //     reading order is a recursive XY-cut; list markers are read by family;
 //     a drop cap joins its word. A Word file parses from its own structure.
+// 21: the parse loop's round 2 (SPEC.md §30, §31) — PDF: the page's look
+//     travels: each block's font (face, size, weight, color), the body's and
+//     the title's font and the title's alignment, and a run in another face,
+//     size, or color; underline, strikethrough, highlight, and text color
+//     come from the drawing; a line centered, flush right, or justified says
+//     so. Math set in KaTeX's fonts or an OpenType math font reads as TeX, as
+//     TeX's own fonts do; an array keeps its rules, and a label over a
+//     relation or under a brace joins its formula. A table's header cell
+//     spans the columns under it, a cell keeps its scripts, styles, and
+//     formulas, and a caption keeps its face and size. A figure's caption
+//     takes its panels' captions and its note or source line. A scan's
+//     footnotes, author notes, title notes, and notes in table cells link to
+//     their marks. Headings go to level six, a slide ranks its own sizes,
+//     running heads may mirror on facing pages, and an OCR layer's widths are
+//     fitted. A CID font reads through pdf.js's CMaps (Japanese, Chinese).
+//     The import draws the page's list markers at every level. Word: the
+//     same look, space after paragraphs, notes in table cells, and a contents
+//     field built from its headings.
 // Slides and sheets (SPEC.md §27) parse with their own parsers
 // (lib/parse/slides.ts, lib/parse/sheets.ts) and re-parse only on request:
 // they carry no version of their own.
-export const PARSER_VERSION = 20;
+export const PARSER_VERSION = 21;
