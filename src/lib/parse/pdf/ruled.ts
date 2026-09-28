@@ -894,10 +894,15 @@ function headerRow(lines: Line[], bounds: number[], built: Line[], rules: Rule[]
   for (const line of lines) {
     const phrases = phraseColumns(line, bounds);
     const middleOf = (p: { items: Item[] }) => (p.items[0].x + p.items[p.items.length - 1].x + p.items[p.items.length - 1].w) / 2;
-    // The column rules drawn through the line bound its cells: a head
-    // spans the columns between the two around it (PLOS's "Fig 2A,
-    // segment 1" over its "exp." and "theo.").
-    const through = cuts.filter((r) => r.y1 <= line.y + line.size * 0.3 && r.y2 >= line.y + line.size * 0.3).map((r) => r.x1);
+    // The column rules drawn through the line bound its cells when the line
+    // leaves out some the body draws: a head spans the columns between the
+    // two around it (PLOS's "Fig 2A, segment 1" over its "exp." and
+    // "theo."). A table ruled after its first column alone draws that rule
+    // through every row (arXiv 2302.12627's |l|ccc|): its heads are read by
+    // their words.
+    const drawnXs = [...new Set(cuts.map((r) => r.x1))];
+    const crossing = cuts.filter((r) => r.y1 <= line.y + line.size * 0.3 && r.y2 >= line.y + line.size * 0.3).map((r) => r.x1);
+    const through = drawnXs.some((x) => !crossing.includes(x)) ? crossing : [];
     for (const phrase of phrases) {
       // A rule drawn under a head spans the columns the head does (a
       // booktabs \cmidrule): its ends say which, where a head centered

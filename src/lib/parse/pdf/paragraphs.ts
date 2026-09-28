@@ -134,7 +134,10 @@ function columnLines(lines: Line[]): Map<[number, number], number> {
 
 /** Line k is centered in its column, set in from its edge by as much as
     it stops short of the other: a caption's, a title page's, or a form's
-    centered line. A block quotation set in on the left only is not. A
+    centered line. A block quotation set in on the left only is not. The
+    other edge is where the column's full lines end near k, or the
+    column's own extent: a ragged page's lines stop short of it, and a
+    centered line under a title read as set left (synth-agreement-html). A
     line set larger than the body (a title, a heading) may nearly fill its
     column: set in by half an em, it is centered within a quarter of one (a
     paper's title across both columns, 13.7 pt in on the left and 15.4 pt
@@ -143,8 +146,14 @@ export function isCentered(lines: Line[], k: number, ctx: PageContext): boolean 
   const line = lines[k];
   const { left, right } = columnEdges(lines, k, ctx);
   const inset = line.x - left;
-  const [least, slack] = line.size >= ctx.bodySize * 1.2 ? [line.size * 0.5, line.size * 0.25] : [line.size * 2, line.size];
-  return (right > line.xEnd && inset > least && Math.abs(inset - (right - line.xEnd)) <= slack) || sharesMiddle(lines, k, ctx) || centeredStack(lines, k);
+  const big = line.size >= ctx.bodySize * 1.2;
+  const column = lineColumn(line);
+  const centeredTo = (edge: number) => {
+    if (edge <= line.xEnd) return false;
+    const off = Math.abs(inset - (edge - line.xEnd));
+    return (inset > line.size * 2 && off <= line.size) || (big && inset > line.size * 0.5 && off <= line.size * 0.25);
+  };
+  return centeredTo(right) || (column !== undefined && column[1] > right && centeredTo(column[1])) || sharesMiddle(lines, k, ctx) || centeredStack(lines, k);
 }
 
 // A stack of short lines, each read in a column of its own, that share
