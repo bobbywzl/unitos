@@ -585,6 +585,65 @@ function accents(atoms: Atom[]): Atom[] {
   return out;
 }
 
+// ── Arrays with rules ──────────────────────────────────────────────────────
+
+/** An array with rules (\begin{array}{c|c} … \hline …): a vertical rule
+    inside the formula splits two columns, and a horizontal rule across
+    the rows it splits is an \hline, not a fraction bar (read as one, and
+    the column rule unread, the array failed to a crop, synth-math-tex
+    (60)). The atoms by the vertical rules, and those set on with them,
+    become one node; the rules it holds are read. */
+function ruledArray(atoms: Atom[], rules: Rule[]): Atom[] {
+  const vr = rules.filter((r) => r.dir === "v");
+  if (vr.length === 0 || atoms.length === 0) return atoms;
+  const em = maxSize(atoms);
+  const y1 = Math.min(...vr.map((r) => r.y1));
+  const y2 = Math.max(...vr.map((r) => r.y2));
+  const band = atoms.filter((a) => a.yb > y1 - 0.3 * em && a.yb < y2 + 0.3 * em).sort(byX);
+  // The array runs from the rules out to the first gap wider than a
+  // column's (an em and a half): the formula's other atoms stand apart.
+  const rx1 = Math.min(...vr.map((r) => r.x1));
+  const rx2 = Math.max(...vr.map((r) => r.x1));
+  let lo = band.findIndex((a) => a.x2 > rx1);
+  let hi = band.length - 1 - [...band].reverse().findIndex((a) => a.x1 < rx2);
+  if (lo < 0 || hi >= band.length || hi < lo) return atoms;
+  while (lo > 0 && band[lo].x1 - band[lo - 1].x2 < 1.5 * em) lo--;
+  while (hi < band.length - 1 && band[hi + 1].x1 - band[hi].x2 < 1.5 * em) hi++;
+  const content = band.slice(lo, hi + 1);
+  const mains = content.filter((a) => a.size >= em * 0.95);
+  const lines = rowLines(mains.length ? mains : content, em);
+  const rows = splitRows(content, lines);
+  const x1 = Math.min(...content.map((a) => a.x1));
+  const x2 = Math.max(...content.map((a) => a.x2));
+  // Columns: at each vertical rule, and at each gap of an em or more open
+  // in every row.
+  const ruleXs = [...new Set(vr.filter((r) => r.x1 > x1 && r.x1 < x2).map((r) => Math.round(r.x1)))].sort((p, q) => p - q);
+  if (ruleXs.length === 0) return atoms;
+  const cuts = [...ruleXs, ...columnCuts(rows, em).filter((c) => ruleXs.every((x) => Math.abs(x - c) > 0.5 * em))].sort((p, q) => p - q);
+  const spec = ["c", ...cuts.map((c) => (ruleXs.includes(c) ? "|c" : "c"))].join("");
+  // Horizontal rules across the columns: \hline over the row under them.
+  const hr = rules.filter((r) => r.dir === "h" && r.x1 <= x1 + 0.5 * em && r.x2 >= x2 - 0.5 * em && r.y1 > y1 - 0.3 * em && r.y1 < y2 + 0.3 * em);
+  const cellsOf = (row: Atom[]) => {
+    const parts: Atom[][] = cuts.map(() => []).concat([[]]);
+    for (const a of row) parts[cuts.filter((c) => cx(a) > c).length].push(a);
+    return parts.map((part) => linear(part.map((a) => ({ ...a })))).join(" & ");
+  };
+  const hline = (above: number, below: number) => hr.filter((r) => r.y1 < above && r.y1 > below).map(() => "\\hline ").join("");
+  let body = hline(Infinity, lines[0]);
+  rows.forEach((row, k) => {
+    body += cellsOf(row);
+    const next = lines[k + 1] ?? -Infinity;
+    const under = hline(lines[k], next);
+    if (k < rows.length - 1) body += ` \\\\ ${under}`;
+    else if (under) body += ` \\\\ ${under}`;
+  });
+  for (const r of [...hr, ...vr]) read.add(r);
+  const top = Math.max(...content.map((a) => a.top), y2);
+  const bottom = Math.min(...content.map((a) => a.bottom), y1);
+  const made = node(content, `\\begin{array}{${spec}} ${body.trim()} \\end{array}`, (top + bottom) / 2 - 0.25 * em, em, { top, bottom });
+  return [...atoms.filter((a) => !content.includes(a)), made];
+}
+
 // ── Rows: matrices, binomials, cases, aligned lines ────────────────────────
 
 // Baselines of main-size atoms at least 0.9 em apart, top first.
@@ -1074,7 +1133,7 @@ function unreadShape(atoms: Atom[], rules: Rule[], paths: Box[], used: Set<Box>)
   const x2 = Math.max(...atoms.map((a) => a.x2));
   const low = Math.min(...atoms.map((a) => a.bottom)) - em;
   const high = Math.max(...atoms.map((a) => a.top)) + em;
-  if (rules.some((r) => r.dir === "v" && r.x1 > x1 - 0.3 * em && r.x1 < x2 && r.y1 > low && r.y2 < high)) return true;
+  if (rules.some((r) => r.dir === "v" && !read.has(r) && r.x1 > x1 - 0.3 * em && r.x1 < x2 && r.y1 > low && r.y2 < high)) return true;
   // A picture starts at most an em and a half left of the glyphs it covers
   // (a radical's sign), and a clipped one runs past its clip. (The paths
   // that paint rules are left out by the caller.)
@@ -1112,9 +1171,17 @@ export function formulaToLatex(
   // Arrow runs before composites: a minus and an arrowhead inside a long
   // arrow would otherwise fuse into \longrightarrow.
   const fused = fuseComposites(arrowRuns(assemblePieces([...atoms, ...radicals])));
-  const copies = fused.map((a) => ({ ...a }));
+  const copies = ruledArray(
+    fused.map((a) => ({ ...a })),
+    rules,
+  );
   const bars = rules.filter((r) => r.dir === "h");
-  const latex = linear(structure(copies, bars));
+  const latex = linear(
+    structure(
+      copies,
+      bars.filter((r) => !read.has(r)),
+    ),
+  );
   if (bars.some((r) => !read.has(r))) lost++;
   if (unreadShape(fused, rules, paths, used)) lost++;
   return { latex: lost > 0 ? "" : latex, atoms: fused, unknown };

@@ -257,19 +257,37 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     parts.push({ box, image: false, thin });
   }
 
-  // Clusters: parts within 6 pt of each other.
+  // Clusters: parts within 6 pt of each other. Two such parts, each grown
+  // by 3 pt, meet in a cell of a 12 pt grid, so only a cell's parts are
+  // paired. A cell crowded past 200 parts is one drawing. Paired along x
+  // alone, a mesh plot's 108,035 paths took 46 s on one page (a NASA
+  // report, NASA-TM-20230014463 p25).
   const parent = parts.map((_, i) => i);
   const find = (i: number): number => {
     while (parent[i] !== i) i = parent[i] = parent[parent[i]];
     return i;
   };
-  const order = parts.map((_, i) => i).sort((a, b) => parts[a].box.x1 - parts[b].box.x1);
-  for (let a = 0; a < order.length; a++) {
-    const p = parts[order[a]].box;
-    for (let b = a + 1; b < order.length; b++) {
-      const q = parts[order[b]].box;
-      if (q.x1 > p.x2 + 6) break;
-      if (q.y1 <= p.y2 + 6 && p.y1 <= q.y2 + 6) parent[find(order[a])] = find(order[b]);
+  const cells = new Map<number, number[]>();
+  parts.forEach(({ box }, i) => {
+    for (let cx = Math.floor((box.x1 - 3) / 12); cx <= Math.floor((box.x2 + 3) / 12); cx++) {
+      for (let cy = Math.floor((box.y1 - 3) / 12); cy <= Math.floor((box.y2 + 3) / 12); cy++) {
+        const key = (cx + 1) * 8192 + cy + 1;
+        const cell = cells.get(key);
+        if (cell) cell.push(i);
+        else cells.set(key, [i]);
+      }
+    }
+  });
+  for (const cell of cells.values()) {
+    for (let a = 0; a < cell.length; a++) {
+      const p = parts[cell[a]].box;
+      for (let b = a + 1; b < cell.length; b++) {
+        const q = parts[cell[b]].box;
+        if (cell.length > 200 || (q.x1 <= p.x2 + 6 && p.x1 <= q.x2 + 6 && q.y1 <= p.y2 + 6 && p.y1 <= q.y2 + 6)) {
+          parent[find(cell[a])] = find(cell[b]);
+        }
+      }
+      if (cell.length > 200) break;
     }
   }
   const clusters = new Map<number, Part[]>();

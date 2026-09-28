@@ -358,9 +358,14 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
 }
 
 /** A path that paints one of the page's rules (a fraction bar filled as a
-    thin box) is that rule, read with it or not at all. */
+    thin box, an array's column line stroked) is that rule, read with it or
+    not at all. */
 export function paintsRule(b: Box, rules: Rule[]): boolean {
-  return rules.some((r) => Math.abs(b.x1 - r.x1) < 1 && Math.abs((b.y1 + b.y2) / 2 - r.y1) < r.thickness + 1 && b.y2 - b.y1 < r.thickness + 2);
+  return rules.some((r) =>
+    r.dir === "v"
+      ? Math.abs((b.x1 + b.x2) / 2 - r.x1) < r.thickness + 1 && b.x2 - b.x1 < r.thickness + 2 && Math.abs(b.y1 - r.y1) < 1 && Math.abs(b.y2 - r.y2) < 1
+      : Math.abs(b.x1 - r.x1) < 1 && Math.abs((b.y1 + b.y2) / 2 - r.y1) < r.thickness + 1 && b.y2 - b.y1 < r.thickness + 2,
+  );
 }
 
 /** A glyph of the page drawn inside the formula's atoms' box — its origin

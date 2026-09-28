@@ -152,16 +152,8 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
       return uriRegions.find((r) => cx >= r.x1 && cx <= r.x2 && cy >= r.y1 && cy <= r.y2)?.href ?? null;
     };
     const items: Item[] = [];
-    // Text set in a vertical font on a page of horizontal text (a
-    // chapter's tab at the page's edge, in a Japanese white paper) is no
-    // line of the text: read as horizontal, its characters joined the body's
-    // lines as a table's cells.
-    const styles = content.styles as Record<string, { vertical?: boolean }>;
-    const vertical = (raw: object) => "fontName" in raw && styles[String(raw.fontName)]?.vertical === true;
-    const verticalShare = content.items.filter(vertical).length / Math.max(1, content.items.length);
     for (const raw of content.items) {
       if (!("str" in raw) || typeof raw.str !== "string") continue;
-      if (verticalShare < 0.25 && vertical(raw)) continue;
       const fontName = String(raw.fontName ?? "");
       const flags = flagsOf(fontName);
       const t = raw.transform as number[];
