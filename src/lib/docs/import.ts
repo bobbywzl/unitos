@@ -1093,7 +1093,8 @@ class Converter {
       if (cell) cell.content = [{ type: "pageStart", attrs: { page: p.page } }, ...(cell.content ?? [])];
     }
     const nodes: RichNode[] = [];
-    if (built.caption) nodes.push(paragraphNode([...captionStarts, ...built.caption.map((n) => sized(n, SMALL_SIZE))], { textAlign: "center" }));
+    // The caption small: 9 pt, or the size the page sets it in when smaller.
+    if (built.caption) nodes.push(paragraphNode([...captionStarts, ...built.caption.map((n) => sizedAtMost(n, parseFloat(SMALL_SIZE)))], { textAlign: "center" }));
     nodes.push(built.table);
     this.place(index, nodes);
   }

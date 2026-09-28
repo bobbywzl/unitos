@@ -38,7 +38,8 @@
     {
      "text": "Request for Taxpayer Identification Number and Certification"
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "paragraph",
@@ -56,7 +57,8 @@
      "text": " for instructions and the latest information.",
      "bold": true
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "paragraph",

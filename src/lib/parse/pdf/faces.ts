@@ -15,20 +15,21 @@ export type Shape = "serif" | "sans" | "mono";
 
 const BY_SHAPE: Record<Shape, string> = { serif: "Times New Roman", sans: "Arial", mono: "Courier New" };
 
-// Faces by another name: metric twins, a producer's name for a face, and
-// TeX's fonts (Computer Modern, its Type 1 and Latin Modern twins, KaTeX's
-// copy, and the math and symbol fonts set with them: a formula's glyphs in
-// another face than its words' split the letter-spaced runs a line joins,
-// and "F(x)" read "F (x)"). The first match wins.
+// Faces by another name: metric twins, a producer's name for a face, a math
+// face for its text face (Cambria Math for Cambria), and TeX's fonts
+// (Computer Modern, its Type 1 and Latin Modern twins, KaTeX's copy, and the
+// math and symbol fonts set with them). A formula's glyphs in another face
+// than its words' split the letter-spaced runs a line joins, and "F(x)"
+// read "F (x)". The first match wins.
 const ALIASES: [RegExp, string][] = [
   [/^(?:Times|Tinos|LiberationSerif|NimbusRom|TeXGyreTermes|FreeSerif|STIX)/i, "Times New Roman"],
   [/^(?:Arial|Helvetica|Arimo|LiberationSans|NimbusSan|TeXGyreHeros|FreeSans)/i, "Arial"],
   [/^(?:Courier|Cousine|LiberationMono|NimbusMon|TeXGyreCursor|FreeMono)/i, "Courier New"],
   [/^(?:Calibri|Carlito)/i, "Calibri"],
-  [/^(?:Cambria(?!Math)|Caladea)/i, "Cambria"],
+  [/^(?:Cambria|Caladea)/i, "Cambria"],
   [/^(?:AGaramond|AdobeGaramond|Garamond)/i, "EB Garamond"],
   [/^DejaVuSans(?!Mono)/i, "Verdana"],
-  [/^(?:CM(?:R|BX|TI|SL|CSC|B|U|BXTI|BXSL|MI|MIB|SY|BSY|EX)\d|SF(?:RM|BX|TI|SL|CC|XC|BI)\d|LMRoman|LMMath|KaTeX_|CMUSerif|mw[ab]_cm|MSAM\d|MSBM\d|EU[FS][MB]\d|RSFS\d|LASYB?\d|ESINT\d)/i, "Computer Modern"],
+  [/^(?:CM(?:R|BX|TI|SL|CSC|B|U|BXTI|BXSL|MI|MIB|SY|BSY|EX)\d|SF(?:RM|BX|TI|SL|CC|XC|BI)\d|LMRoman|LMMath|LatinModern|KaTeX_|CMUSerif|mw[ab]_cm|MSAM\d|MSBM\d|EU[FS][MB]\d|RSFS\d|LASYB?\d|ESINT\d)/i, "Computer Modern"],
 ];
 
 // What may follow a face's name in a font's: a foundry's suffix ("PSMT",

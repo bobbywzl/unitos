@@ -349,16 +349,26 @@ export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number
   const regions: TableRegion[] = [];
   // A grid inside the rules of a wider table is part of that table: its
   // vertical rules run between some columns only, and the horizontal rules
-  // reach past them (arXiv 2504.02736's Table III read as a grid of two
-  // cells, the rest of it lost).
+  // reach past them, on the grid's own row lines (arXiv 2504.02736's Table
+  // III read as a grid of two cells, the rest of it lost). A frame drawn
+  // around a grid holds it and draws none of its rows (the invoice's order
+  // grid inside the frame around the sample).
   const wide = ruleStacks(joinedRules(drawing.rules.filter((r) => r.dir === "h")), 40).flatMap((stack) =>
-    stackRegions(stack.rules, stack.x1, stack.x2, items),
+    stackRegions(stack.rules, stack.x1, stack.x2, items).map((box) => ({ box, ys: stack.rules.map((r) => r.y1) })),
   );
   const grids = latticeGrids(drawing.rules, drawing.fills)
     .map((raw) => closeSlivers(raw, items))
     .filter((grid) => {
       const g = grid.box;
-      const inWider = wide.some((b) => b.y1 <= g.y1 + 3 && b.y2 >= g.y2 - 3 && b.x1 <= g.x1 + 3 && b.x2 >= g.x2 - 3 && b.x2 - b.x1 > g.x2 - g.x1 + 10);
+      const inWider = wide.some(
+        ({ box: b, ys }) =>
+          b.y1 <= g.y1 + 3 &&
+          b.y2 >= g.y2 - 3 &&
+          b.x1 <= g.x1 + 3 &&
+          b.x2 >= g.x2 - 3 &&
+          b.x2 - b.x1 > g.x2 - g.x1 + 10 &&
+          grid.ys.filter((y) => ys.some((r) => Math.abs(r - y) <= 2.5)).length * 2 >= grid.ys.length,
+      );
       return !inWider && isTableGrid(grid, items, drawing, pageWidth, pageHeight);
     });
   // A grid's head is text no grid holds: the lines above a form's grid are

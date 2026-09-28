@@ -4,6 +4,7 @@
 
 import { median } from "@/lib/parse/pdf/geometry";
 import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, charCount, isUnicodeMathFont, sameFlags } from "@/lib/parse/pdf/glyphs";
+import { sameButSize } from "@/lib/parse/pdf/look";
 import { hangingBox } from "@/lib/parse/pdf/math/layout";
 import { splitZones } from "@/lib/parse/pdf/math/zones";
 import type { Cell, Item, Line, Run } from "@/lib/parse/pdf/types";
@@ -39,7 +40,9 @@ function mergeSpacedItems(items: Item[]): Item[] {
       charCount(item.str) === 1 &&
       gap >= 0 &&
       gap < item.size * 0.45 &&
-      sameFlags(last, item)
+      // Glyphs whose looks differ in size alone join: a subscript and the
+      // "(" after it are one word ("fU(u)" read "fU (u)").
+      sameFlags(last, sameButSize(last.look, item.look) ? { ...item, look: last.look } : item)
     ) {
       last.str += item.str;
       last.w = item.x + item.w - last.x;

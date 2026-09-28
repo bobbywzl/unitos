@@ -302,8 +302,11 @@ class CellReader {
       this.line.push({ node: { type: "inlineMath", attrs: { latex } } });
       return;
     }
-    const paint = tag === "span" ? { color: colorOf(el, "color"), backgroundColor: colorOf(el, "background-color") } : null;
-    if (paint && (paint.color || paint.backgroundColor)) {
+    // A span's color, highlight, and size (a caption's words keep the size
+    // the page sets them in).
+    const size = tag === "span" ? pointsOf(styleOf(el, "font-size"), 72) : null;
+    const paint = tag === "span" ? { color: colorOf(el, "color"), backgroundColor: colorOf(el, "background-color"), fontSize: size ? `${size}pt` : null } : null;
+    if (paint && (paint.color || paint.backgroundColor || paint.fontSize)) {
       this.read(el, withTextStyle(marks, Object.fromEntries(Object.entries(paint).filter(([, v]) => v))));
       return;
     }
@@ -609,6 +612,16 @@ export function sized(node: RichNode, size: string): RichNode {
     return { ...node, marks };
   }
   return node.content ? { ...node, content: node.content.map((child) => sized(child, size)) } : node;
+}
+
+/** Words set no larger than `size` (points): words the page set smaller
+    keep their size (a caption set in 8 pt under a 9 pt body stays 8 pt). */
+export function sizedAtMost(node: RichNode, size: number): RichNode {
+  if (node.type === "text") {
+    const own = pointsOf(String(node.marks?.find((m) => m.type === "textStyle")?.attrs?.fontSize ?? ""), 72);
+    return sized(node, `${own !== null && own < size ? own : size}pt`);
+  }
+  return node.content ? { ...node, content: node.content.map((child) => sizedAtMost(child, size)) } : node;
 }
 
 /** What the parse kept of a table's look: its text size (pt) and its

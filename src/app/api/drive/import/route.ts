@@ -178,7 +178,7 @@ export async function POST(req: Request) {
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("Drive slides/sheets ingest failed:", err);
-        throw new Error(describeIngestError(err, t, "pdf"));
+        throw new Error(describeIngestError(err, t, "file"));
       }
     });
   }
@@ -201,7 +201,7 @@ export async function POST(req: Request) {
         } catch (err) {
           if (kind === "docx-file") {
             console.error("Drive Word ingest failed:", err);
-            throw new Error(describeIngestError(err, t, "pdf"));
+            throw new Error(describeIngestError(err, t, "file"));
           }
           console.warn("[drive] Google Doc's .docx export did not parse, reading its PDF export:", err);
         }

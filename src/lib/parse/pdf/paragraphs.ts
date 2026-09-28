@@ -146,14 +146,20 @@ export function isCentered(lines: Line[], k: number, ctx: PageContext): boolean 
 // and not their left edges: they are centered on that middle. A title
 // page's lines have no column but their widest line, and against it the
 // widest and the ones nearly as wide read flush left (synth-notes-html's
-// title, subtitle, and department). A line that fills its column shows no
-// centering and ends the run: an abstract's full lines under a centered
-// title and its authors shared their middle, and read as centered
-// (real-jnlp-31-47 p1).
+// title, subtitle, and department). The middle is the column's, within two
+// ems: a clause's heading under an item's last line shared that line's
+// middle, 70 pt left of the column's (synth-agreement-docx). A line that
+// fills its column shows no centering and ends the run: an abstract's full
+// lines under a centered title and its authors shared their middle, and
+// read as centered (real-jnlp-31-47 p1).
 function sharesMiddle(lines: Line[], k: number, ctx: PageContext): boolean {
   const line = lines[k];
   if (line.cells.length !== 1 || fillsColumn(lines, k, ctx)) return false;
   const middle = (line.x + line.xEnd) / 2;
+  const { left, right } = columnEdges(lines, k, ctx);
+  const column = lineColumn(line);
+  const center = right > 0 ? (left + right) / 2 : column ? (column[0] + column[1]) / 2 : middle;
+  if (Math.abs(center - middle) > line.size * 2) return false;
   const run = [line];
   for (const step of [-1, 1]) {
     let prev = line;

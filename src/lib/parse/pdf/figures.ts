@@ -21,12 +21,14 @@ import type { Box, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf
 
 // A caption's label and its stop: "Figure 2:", "Fig. 3a.", "Table A1 |", and
 // the roman numbers of REVTeX and IEEE ("TABLE II. Fitting parameters …",
-// arXiv 2502.02648, read as a paragraph with no caption).
-export const CAPTION_RE = /^(fig\.|figure|table|tab\.)\s*(\d+[a-z]?|[A-Z]\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-]\s*/i;
-// "Table 3", "Table A1", and IEEE's "TABLE IV".
-const TABLE_CAPTION_RE = /^(table|tab\.)\s*(\d+|[A-Z]\d+|[IVXL]+\b)/i;
+// arXiv 2502.02648, read as a paragraph with no caption). A Chinese or
+// Japanese label takes a space for its stop ("図表Ⅰ-2-1-1 避難所データ…").
+export const CAPTION_RE =
+  /^(?:(?:fig\.|figure|table|tab\.)\s*(?:\d+[a-z]?|[A-Z]\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-]\s*|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*\s)/i;
+// "Table 3", "Table A1", IEEE's "TABLE IV", and "表 2".
+const TABLE_CAPTION_RE = /^(?:(?:table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+\b)|表\s*[0-9Ⅰ-Ⅻ])/i;
 // A float's label at a line's start, with a stop after it or none.
-const LABEL_START_RE = /^(fig\.?|figure|table|tab\.)\s*(\d+|[A-Z]\d+|[IVXL]+\b)/i;
+const LABEL_START_RE = /^(?:(?:fig\.?|figure|table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+\b)|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ])/i;
 const LABEL_RE = /^(fig\.?|figure|table|tab\.)\s*(\d+|[A-Z]\d+)[a-z]?(?=\s)/i;
 
 /** A figure's or a table's caption: its label and a stop ("Figure 2:",
@@ -53,7 +55,7 @@ export function isCaption(text: string, runs: Run[] | undefined): boolean {
 // words were in no block). A letter alone is the panel's label, which the
 // figure's caption names.
 const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=[^]*\p{L})[^]{3,}/u;
-const NOTE_RE = /^(?:notes?|sources?)\s*[:.]\s+\S/i;
+const NOTE_RE = /^(?:(?:notes?|sources?)\s*[:.]\s+\S|[（(](?:出典|注|資料|来源|來源)[）)]|(?:出典|注|来源|來源)[:：])/i;
 const isSubCaption = (text: string) => PANEL_RE.test(text.trim()) || NOTE_RE.test(text.trim());
 
 type CaptionPart = { text: string; runs: Run[]; box: Box };
@@ -230,6 +232,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // a tick, a name in a diagram, a legend entry.
   const isPageText = (r: TextRun) => r.size >= textSize * 1.3 || r.chars >= 40;
   const runsIn = (box: Box) => runs.filter((r) => shareInside(r.box, box) >= 0.7);
+  const textOf = (r: TextRun) => r.items.map((i) => i.str).join(" ");
   // A box that holds the page's text (a panel behind a quotation, a banner
   // behind a paragraph): a background, never a graphic.
   const holdsText = (box: Box) => {
@@ -345,7 +348,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     let bottom = graphic.y1;
     for (const r of under) {
       if (bottom - r.box.y2 > r.size * (out.length === 0 ? 1.2 : 0.8)) break;
-      if (out.length >= 3 || r.size >= textSize * 1.3 || LABEL_START_RE.test(r.items.map((i) => i.str).join(" "))) break;
+      if (out.length >= 3 || r.size >= textSize * 1.3 || LABEL_START_RE.test(textOf(r))) break;
       out.push(r);
       bottom = r.box.y1;
     }
@@ -402,7 +405,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // paragraph).
   const axisOf = (plot: Box): TextRun[] =>
     runs.filter((r) => {
-      if (taken.has(r) || r.chars > 12 || shareInside(r.box, plot) >= 0.7) return false;
+      if (taken.has(r) || r.chars > 12 || shareInside(r.box, plot) >= 0.7 || LABEL_START_RE.test(textOf(r))) return false;
       if (/[.!?;:,]$/.test(r.items.map((i) => i.str).join("").trim())) return false;
       const reach = Math.max(r.size, textSize) * 1.2;
       const cx = (r.box.x1 + r.box.x2) / 2;
@@ -420,10 +423,22 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   return merged.map(({ box: plot, drawn }) => {
     const axis = drawn ? axisOf(plot) : [];
     for (const r of axis) taken.add(r);
-    const box = axis.reduce((b, r) => unionBox(b, r.box), plot);
+    let box = axis.reduce((b, r) => unionBox(b, r.box), plot);
+    // A caption set on a bar across the drawing, or started across its
+    // edge, is the figure's caption: never its labels or its own caption,
+    // and the crop stops at it (a Japanese white paper's "図表Ⅰ-2-1-1 避難所
+    // データ…" bar over a picture was in no block; Nature's "Fig. 1 |
+    // Example spectra. …", its first line across the chart's foot, lost its
+    // next three lines to the chart).
+    const heads = runs.filter((r) => shareInside(r.box, box) > 0 && LABEL_START_RE.test(textOf(r)));
+    const onBar = (r: TextRun) => heads.some((h) => Math.abs(h.box.y1 - r.box.y1) < h.size * 0.35 && r.box.x1 >= h.box.x1);
+    for (const bar of heads.map((h) => runs.filter((r) => onBar(r) && Math.abs(h.box.y1 - r.box.y1) < h.size * 0.35).reduce((b, r) => unionBox(b, r.box), h.box))) {
+      if ((bar.y1 + bar.y2) / 2 > (box.y1 + box.y2) / 2) box = { ...box, y2: Math.min(box.y2, bar.y1) };
+      else box = { ...box, y1: Math.max(box.y1, bar.y2) };
+    }
     const caption = captionOf(box);
     for (const r of caption) taken.add(r);
-    const labels = [...axis, ...runsIn(box).filter((r) => !(drawn ? isBodyLine(r) : isPageText(r)) && !taken.has(r))];
+    const labels = [...axis, ...runsIn(box).filter((r) => !(drawn ? isBodyLine(r) : isPageText(r)) && !taken.has(r) && !onBar(r))];
     // Page text that reaches over one side of the graphic (a slide's
     // quotation over the dark half of its photo) leaves that side out of
     // the crop, when at least half the graphic is left.

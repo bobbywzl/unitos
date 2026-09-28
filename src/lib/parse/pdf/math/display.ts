@@ -260,7 +260,8 @@ function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[],
 // ("A matrix in parentheses: ( )."). They join the text line's formula:
 // its glyphs and theirs are laid out and checked as one formula, which
 // keeps its characters as text when it fails, the rows in reading order.
-function joinInlineRows(lines: Line[], hosts: (Line | null)[], ctx: PageContext): Line[] {
+// The lines in their order, null for a row that joined.
+function joinInlineRows(lines: Line[], hosts: (Line | null)[], ctx: PageContext): (Line | null)[] {
   // A row line may hold the rows of two formulas, or two labels over two
   // arrows ("q" and "r" over the arrows of one sentence): parts two ems
   // apart are rows of their own, so the words between stay text.
@@ -279,7 +280,7 @@ function joinInlineRows(lines: Line[], hosts: (Line | null)[], ctx: PageContext)
     const host = hosts[n];
     if (host) rowsOf.set(host, [...(rowsOf.get(host) ?? []), ...parts(l)]);
   });
-  if (rowsOf.size === 0) return lines;
+  if (rowsOf.size === 0) return [...lines];
   const orphans = orphanGlyphs(lines, ctx.drawing);
   const joined = new Map<Line, Line>();
   const kept = new Set<Line>();
@@ -304,7 +305,8 @@ function joinInlineRows(lines: Line[], hosts: (Line | null)[], ctx: PageContext)
     for (const group of groups) line = joinRows(line, group, ctx, orphans);
     joined.set(host, line);
   }
-  return lines.filter((_, n) => !hosts[n] || kept.has(hosts[n])).map((l) => joined.get(l) ?? l);
+  // A row stays a line of its own when its text line kept its rows.
+  return lines.map((l, n) => (hosts[n] && !kept.has(hosts[n]) ? null : (joined.get(l) ?? l)));
 }
 
 // A text line with the rows of one formula joined into it (joinInlineRows).
@@ -401,9 +403,11 @@ function joinRows(host: Line, rows: Line[], ctx: PageContext, orphans: Glyph[]):
 // text layer may drop a piece ("(1." over an unread piece in a matrix of
 // correlations, arXiv 2302.12627 p. 23). KaTeX draws its tallest ones as
 // pictures: a narrow path as tall (a matrix of three rows lost its top
-// row, synth-math-html).
+// row, synth-math-html). Only on a page KaTeX set: a figure's strokes are
+// no delimiters (arXiv 2411.19946 p. 1).
 function fencesOf(ctx: PageContext): Box[] {
-  const drawn = ctx.drawing.paths.filter((p) => !p.clip && p.y2 - p.y1 > ctx.bodySize * 1.5 && p.x2 - p.x1 < Math.min(ctx.bodySize, (p.y2 - p.y1) * 0.35));
+  const katex = ctx.drawing.glyphs.some((g) => g.base.startsWith("KaTeX_"));
+  const drawn = katex ? ctx.drawing.paths.filter((p) => !p.clip && p.y2 - p.y1 > ctx.bodySize * 1.5 && p.x2 - p.x1 < Math.min(ctx.bodySize, (p.y2 - p.y1) * 0.35)) : [];
   const columns: Box[] = [];
   for (const g of ctx.drawing.glyphs) {
     const entry = g.family === "omx" ? mathGlyph("omx", g.code) : null;
@@ -468,8 +472,9 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   }
   // The rows of an inline structure are the text line's, not a display.
   const hosts = input.map((l, n) => (kinds0[n] !== "text" && kinds0[n] !== "label" ? inlineHost(l, input, kinds0, fences, ctx.bodySize * ctx.leading) : null));
-  const lines = joinInlineRows(input, hosts, ctx);
-  const kinds = kinds0.filter((_, n) => !hosts[n]);
+  const joined = joinInlineRows(input, hosts, ctx);
+  const lines = joined.filter((l): l is Line => l !== null);
+  const kinds = kinds0.filter((_, n) => joined[n] !== null);
   const columns = lines.map((l, n) => columnOf(lines, n, ctx));
   // A fraction's part set in words ("TeV" under "E_γ"): a short text line a
   // bar holds to a line of math beside it.
@@ -707,10 +712,10 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
   // an overline an em over the top one, an underline under the lowest.
   const low = Math.min(...glyphs.map((g) => g.y)) - size * 0.5;
   const high = Math.max(...glyphs.map((g) => g.y)) + size;
-  // A vertical rule inside is an array's column line, which the layout
-  // does not read; the paths on it are a radical's sign or a picture of an
-  // accent or a tall delimiter (KaTeX draws them so).
-  // An array's \hline runs past its cells by their padding.
+  // A vertical rule inside is an array's column line, and its \hline
+  // runs past the cells by their padding; the paths on it are a radical's
+  // sign or a picture of an accent or a tall delimiter (KaTeX draws them
+  // so).
   const columns = ctx.drawing.rules.filter((r) => r.dir === "v" && r.x1 > line.x && r.x1 < line.xEnd && r.y1 >= low - size && r.y2 <= high + size);
   const pad = columns.length > 0 ? Math.max(2, size * 0.6) : 2;
   const rules = [...ctx.drawing.rules.filter((r) => r.dir === "h" && r.x1 >= line.x - pad && r.x2 <= line.xEnd + pad && r.y1 >= low && r.y1 <= high), ...columns];

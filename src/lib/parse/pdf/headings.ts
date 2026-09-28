@@ -560,6 +560,22 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, slide
     : /^\d{1,2}[.)]\s/.test(text) ? 3
     : headingDepth(text);
   const depths = segments.map((s) => (s.type === "HEADING" ? depthOf(s.text) : null));
+  // A numbering that starts again at each level ("1" under "1", a Japanese
+  // white paper's parts under its section) sets its levels apart by size:
+  // at one depth, each smaller size is one level deeper.
+  const bySize = new Map<number, number[]>();
+  segments.forEach((s, k) => {
+    const depth = depths[k];
+    if (depth === null || s.rawSize === undefined) return;
+    const list = bySize.get(depth) ?? [];
+    if (!list.some((v) => Math.abs(v - s.rawSize!) < v * 0.1)) list.push(s.rawSize);
+    bySize.set(depth, list.sort((a, b) => b - a));
+  });
+  segments.forEach((s, k) => {
+    const depth = depths[k];
+    if (depth === null || s.rawSize === undefined) return;
+    depths[k] = depth + Math.max(0, bySize.get(depth)!.findIndex((v) => Math.abs(v - s.rawSize!) < v * 0.1));
+  });
   const minDepth = Math.min(...depths.filter((d): d is number => d !== null));
   // The level most numbered headings of each size take.
   const votes = new Map<number, Map<number, number>>();

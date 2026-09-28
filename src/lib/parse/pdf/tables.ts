@@ -295,11 +295,14 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
       before && !taken.has(before) && isCaption(before) && before.page === first ? before
       : after && !taken.has(after) && isCaption(after) && after.page === last ? after
       : null;
-    if (!caption) return;
-    taken.add(caption);
+    const kept = !caption && before && !taken.has(before) ? captionLine(before, first) : null;
+    if (!caption && !kept) return;
+    if (caption) taken.add(caption);
     // The caption is one line of the table's text: its breaks are spaces.
-    const text = caption.text.replace(/[\t\n]/g, " ");
-    const words = wordsHtml(text, caption.runs ?? [], mathSpans(text, caption.runs), 0, text.length);
+    const own = caption ? { text: caption.text, runs: caption.runs ?? [] } : kept;
+    if (!own) return;
+    const text = own.text.replace(/[\t\n]/g, " ");
+    const words = wordsHtml(text, own.runs, mathSpans(text, own.runs), 0, text.length);
     table.html = table.html.replace(/^<table[^>]*>/, (open) => `${open}<caption>${words}<span class="cell-gap">\n</span></caption>`);
     table.text = `${text}\n${table.text}`;
     table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
@@ -309,6 +312,23 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
 
 function isCaption(s: Segment): boolean {
   return s.type === "PARAGRAPH" && !s.footnote && s.text.length <= 1200 && TABLE_CAPTION_RE.test(s.text.trim());
+}
+
+// A caption the paragraph above a table kept as its last line, on the
+// table's page, taken off the paragraph (LibreOffice's Math Guide p. 59:
+// "Table 4: Relation commands" read as one paragraph with the sentence
+// above it).
+function captionLine(s: Segment, page: number): { text: string; runs: Run[] } | null {
+  const at = s.text.lastIndexOf("\n");
+  if (s.type !== "PARAGRAPH" || s.footnote || s.html || at <= 0) return null;
+  const tail = s.text.slice(at + 1);
+  const breaks = s.breaks ?? [];
+  if (tail.length > 300 || !TABLE_CAPTION_RE.test(tail.trim()) || breaks.some((b) => b.offset > at)) return null;
+  if ((breaks.at(-1)?.page ?? s.page) !== page) return null;
+  const runs = s.runs ?? [];
+  s.text = s.text.slice(0, at);
+  s.runs = runs.filter((r) => r.start < at).map((r) => ({ ...r, end: Math.min(r.end, at) }));
+  return { text: tail, runs: runs.filter((r) => r.end > at + 1).map((r) => ({ ...r, start: Math.max(0, r.start - at - 1), end: r.end - at - 1 })) };
 }
 
 // Leading rows whose words are bold: the header rows (never every row).
