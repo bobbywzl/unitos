@@ -166,10 +166,22 @@ export function ToolSymbol({ tool, plus, size }: { tool: ToolKind; plus?: boolea
   );
 }
 
-function headingLevel(html: string | null): 1 | 2 | 3 {
-  const m = html?.match(/^<h([1-3])/);
-  return m ? (Number(m[1]) as 1 | 2 | 3) : 2;
+function headingLevel(html: string | null): 1 | 2 | 3 | 4 | 5 | 6 {
+  const m = html?.match(/^<h([1-6])/);
+  return m ? (Number(m[1]) as 1 | 2 | 3 | 4 | 5 | 6) : 2;
 }
+
+// Each heading level's margins and size, h1 first. A PDF whose numbering
+// runs four levels deep ("1) Implementation:" under "A." under "III.")
+// gives h4, and each step down is smaller, down to the body's 17px.
+const HEADING_CLASSES = [
+  "mt-10 mb-3 text-[26px]",
+  "mt-8 mb-2.5 text-[22px]",
+  "mt-6 mb-2.5 text-[20px]",
+  "mt-5 mb-2 text-[18px]",
+  "mt-5 mb-2 text-[17px]",
+  "mt-4 mb-2 text-[17px]",
+];
 
 // Layout tokens: the class tokens on a text block's first tag. The parser
 // stores `<p class="kicker center">`, `<h2 class="center">`,
@@ -850,17 +862,9 @@ export function BlockView({
   switch (block.type) {
     case "HEADING": {
       const level = headingLevel(block.html);
-      const cls = layoutClass(
-        layoutTokens(block.html),
-        level === 1
-          ? "mt-10 mb-3 text-[26px]"
-          : level === 2
-            ? "mt-8 mb-2.5 text-[22px]"
-            : "mt-6 mb-2.5 text-[20px]",
-      );
-      if (level === 1) return <h1 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h1>;
-      if (level === 2) return <h2 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h2>;
-      return <h3 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h3>;
+      const cls = layoutClass(layoutTokens(block.html), HEADING_CLASSES[level - 1]);
+      const Heading = `h${level}` as const;
+      return <Heading data-block-id={block.id} className={`${shared} ${cls}`}>{content}</Heading>;
     }
     case "PARAGRAPH":
       // An empty paragraph (a blank document's first block, an inserted one

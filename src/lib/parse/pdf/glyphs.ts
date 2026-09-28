@@ -55,9 +55,12 @@ export function fontFlags(name: string | null): FontFlags {
   const family = mathFamily(n);
   return {
     // Computer Modern (CMBX, CMTI, CMTT), Nimbus (-Medi, -ReguItal) and Latin
-    // Modern names carry weight and shape in abbreviations, not words.
-    bold: /bold|black|heavy|semi ?bold|demi|medi(?:ital|obli)?$|^CMBX|^CMB\d|^CMSSBX|^CMBSY|^LM(?:Roman|Sans|Mono)\d*-Bold/i.test(n),
-    italic: /italic|oblique|ital$|obli$|^CMTI|^CMSL|^CMBXTI|^CMSSI|^CMITT|^CMSLTT|slanted/i.test(n),
+    // Modern names carry weight and shape in abbreviations, not words, and
+    // so do Libertine's and Biolinum's (acmart: LinLibertineTB bold,
+    // LinLibertineTI italic; a paper's 986 bold and 254 italic characters
+    // read as plain).
+    bold: /bold|black|heavy|semi ?bold|demi|medi(?:ital|obli)?$|^CMBX|^CMB\d|^CMSSBX|^CMBSY|^LM(?:Roman|Sans|Mono)\d*-Bold|^Lin(?:Libertine|Biolinum)T[BZ]I?$/i.test(n),
+    italic: /italic|oblique|ital$|obli$|^CMTI|^CMSL|^CMBXTI|^CMSSI|^CMITT|^CMSLTT|slanted|^Lin(?:Libertine|Biolinum)T[BZ]?I$/i.test(n),
     mono: /mono|courier|consolas|menlo|typewriter|^CMTT|^CMSLTT|^CMITT|cursor/i.test(n),
     // A small-caps font draws lowercase letters as small capitals; the text
     // layer gives them lowercase. Computer Modern's CMCSC, its T1 twins SFCC

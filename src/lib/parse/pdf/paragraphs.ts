@@ -66,19 +66,43 @@ export function isIndented(line: Line, ctx: PageContext): boolean {
   );
 }
 
-// The right edge of the column around line k: where the full lines near it
-// that start at the column's edge end (the nearest ones, so a full-width
-// caption on a two-column page does not widen the column).
-function columnRight(lines: Line[], k: number, ctx: PageContext): number {
+// The edges of the column line k was read in (columns.ts lineColumn): its
+// left edge, and where the full lines near k that start at that edge end
+// (the nearest ones, so a full-width caption on a two-column page does not
+// widen the column). A line of the page's right column is measured in that
+// column: against the first column's edge, no line there was centered. A
+// ruled table's line counts with its box where no line of words does (a
+// statement's title over its table read as not centered: the table is its
+// column's only full line, apple-fy24q4 p1). A line read alone across a
+// page's columns (a title over two columns) stands in the page's width.
+function columnEdges(lines: Line[], k: number, ctx: PageContext): { left: number; right: number } {
+  const line = lines[k];
+  const column = lineColumn(line);
+  const alone = column !== undefined && Math.abs(column[0] - line.x) < 0.5 && Math.abs(column[1] - line.xEnd) < 0.5;
+  const inner = column !== undefined && !alone && column[0] > ctx.columnLeft + line.size;
+  const left = inner ? column[0] : ctx.columnLeft;
+  // A full line at the column's left edge: in the page's first column any
+  // line there; in another column one read in it; for a line alone, a line
+  // at its own column's edge anywhere on the page.
+  const atLeft = (l: Line) => {
+    if (alone) return Math.abs(l.x - (lineColumn(l)?.[0] ?? ctx.columnLeft)) <= l.size;
+    if (inner && !l.table && lineColumn(l) !== column) return false;
+    return Math.abs(l.x - left) <= l.size;
+  };
   let right = 0;
-  for (let d = 1; d <= lines.length && right === 0; d *= 2) {
+  let table = 0;
+  // The lines near k, four each side, doubling until one is full; a line
+  // alone reads the whole page.
+  for (let d = alone ? lines.length : 1; right === 0; d *= 2) {
     for (let n = Math.max(0, k - 4 * d); n < Math.min(lines.length, k + 4 * d + 1); n++) {
       const l = lines[n];
-      if (n === k || l.cells.length !== 1 || [...l.text].length <= 30) continue;
-      if (Math.abs(l.x - ctx.columnLeft) <= l.size) right = Math.max(right, l.xEnd);
+      if (n === k || !atLeft(l)) continue;
+      if (l.table) table = Math.max(table, l.xEnd);
+      else if (l.cells.length === 1 && [...l.text].length > 30) right = Math.max(right, l.xEnd);
     }
+    if (4 * d >= lines.length) break;
   }
-  return right;
+  return { left, right: right || table };
 }
 
 /** Line k is centered in its column, set in from its edge by as much as
@@ -86,9 +110,33 @@ function columnRight(lines: Line[], k: number, ctx: PageContext): number {
     centered line. A block quotation set in on the left only is not. */
 export function isCentered(lines: Line[], k: number, ctx: PageContext): boolean {
   const line = lines[k];
-  const right = columnRight(lines, k, ctx);
-  const inset = line.x - ctx.columnLeft;
+  const { left, right } = columnEdges(lines, k, ctx);
+  const inset = line.x - left;
   return right > line.xEnd && inset > line.size * 2 && Math.abs(inset - (right - line.xEnd)) <= line.size;
+}
+
+/** How lines [from, to) are aligned in their column, when not flush left:
+    "center" when every line is centered; "right" when every line ends at
+    the column's right edge and one starts well in from its left (a date
+    line, a signature, an address set flush right); "justify" when two
+    lines or more fill the column to both edges but the last, which stops
+    short (Docs' justify). A line ends at the edge within a third of its
+    size: TeX lets a hyphen or a period hang into the margin. */
+export function lineAlign(lines: Line[], from: number, to: number, ctx: PageContext): "center" | "right" | "justify" | null {
+  const group = lines.slice(from, to);
+  if (group.length === 0 || group.some((l) => l.cells.length !== 1)) return null;
+  if (group.every((_, k) => isCentered(lines, from + k, ctx))) return "center";
+  const edges = group.map((_, k) => columnEdges(lines, from + k, ctx));
+  const atRight = (l: Line, k: number) => edges[k].right > 0 && Math.abs(edges[k].right - l.xEnd) <= l.size * 0.33;
+  if (group.every(atRight) && group.some((l, k) => l.x - edges[k].left > l.size * 4)) {
+    // Flush right starts its lines anywhere; a block set in at one x and
+    // justified starts them together.
+    const ragged = group.length === 1 || group.some((l) => Math.abs(l.x - group[0].x) > l.size);
+    if (ragged) return "right";
+  }
+  const last = group.length - 1;
+  if (last >= 1 && group.slice(0, last).every(atRight) && !atRight(group[last], last)) return "justify";
+  return null;
 }
 
 // Two lines pushed apart by tall glyphs: an inline fraction's denominator on

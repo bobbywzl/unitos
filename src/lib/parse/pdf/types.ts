@@ -17,7 +17,14 @@ export type Flags = {
   sup?: boolean;
   sub?: boolean;
   zone?: MathZone;
+  look?: Look;
 };
+// What the drawing shows of a run beyond its font's flags (look.ts): the
+// face as the page editor names it, the size in points to a half point, its
+// glyphs' fill color, the filled box behind it, and a rule under it or
+// through it. One object per look, so runs compare it by reference, as a
+// zone.
+export type Look = { face: string; size: number; color?: string; highlight?: string; underline?: true; strike?: true };
 // An inline formula (math/zones.ts): its glyphs, the size of the text it
 // sits in, and its LaTeX once read. Items and runs inside it point to it;
 // ok when the LaTeX passed the check against the glyphs. open: it ends in a
@@ -85,6 +92,7 @@ export type Segment = ParsedBlock & {
   captionBox?: Box; // a captioned FIGURE: where its caption sits (outside box)
   lineSize?: number; // the lines' median font size
   mathShare?: number; // share of glyphs from math fonts
+  align?: "center" | "right"; // a heading's alignment (a paragraph's is a token of its html)
 };
 
 export type PageContext = {

@@ -1,4 +1,5 @@
 import type { BlockType } from "@prisma/client";
+import type { CustomColor, HighlightStyle } from "@/lib/text-style";
 import type { Region } from "@/lib/video/types";
 
 // One entry in the document's reference list. Formal entries come from the
@@ -25,14 +26,37 @@ export type CitationSpan = {
 // runs (identifiers, badges) inside prose. "smallCaps" marks words set in a
 // small-caps font (a theorem label, a legal defined term). "sub" and "sup"
 // mark lowered and raised runs outside math (H₂O, 10³, "1st", a footnote
-// mark). Stored on Block.styles; quotedText re-resolves the span after edits
-// and re-parses, like every other anchor.
+// mark). A PDF's drawing gives "underline" (a rule under the run's
+// baseline), "strike" (a rule through its middle), "color:#rrggbb" (its
+// glyphs' fill; black, near-black, and a link's blue are none), and
+// "highlight:#rrggbb" (a filled box behind it), in the vocabulary of
+// lib/text-style.ts. "font:<face>" and "size:<points>" mark a run set in
+// another face or size than its block's (ParsedBlock.font). Stored on
+// Block.styles; quotedText re-resolves the span after edits and re-parses,
+// like every other anchor.
 export type StyleSpan = {
   start: number;
   end: number;
-  style: "bold" | "italic" | "underline" | "code" | "smallCaps" | "sub" | "sup";
+  style:
+    | "bold"
+    | "italic"
+    | "underline"
+    | "strike"
+    | "code"
+    | "smallCaps"
+    | "sub"
+    | "sup"
+    | CustomColor
+    | HighlightStyle
+    | `font:${string}`
+    | `size:${number}`;
   quotedText: string;
 };
+
+// The look of words as the page sets them (a PDF parse): the face as the
+// page editor names it (lib/parse/pdf/faces.ts), the size in points to a
+// half point, bold, italic, and the color (#rrggbb; none for black).
+export type TextFont = { family: string; size: number; bold?: true; italic?: true; color?: string };
 
 // One inline formula over block plain text: the text keeps the formula's
 // readable characters (σ(𝒜α)), latex is the formula (\sigma(\mathcal{A}_\alpha)).
@@ -93,6 +117,10 @@ export type ParsedBlock = {
   footnote?: { label: string };
   // PDF blocks: the footnote references in the text, in order.
   footnoteRefs?: FootnoteRef[];
+  // PDF text blocks: the look most of the block's characters take. The
+  // import reads it for the named styles, and for a block set in another
+  // face, size, or color than its named style.
+  font?: TextFont;
   // URL blocks, in memory only: the id of the element the block came from
   // (its own id, or the id of a wrapper whose first block it is), the target
   // a contents entry's targetFragment resolves against. Stripped before save.
@@ -138,6 +166,12 @@ export type ParsedDocument = {
   // only when the PDF names its pages otherwise than 1..n. A page the PDF
   // leaves unnamed reads as its number. Stored on Document.pageLabels.
   pageLabels?: string[];
+  // PDF parses: the body's look (the import's Normal text), and the title's
+  // look and alignment when the title came from the page (the import's
+  // Title).
+  bodyFont?: TextFont;
+  titleFont?: TextFont;
+  titleAlign?: "center" | "right";
 };
 
 /** Document.references as stored Json → typed entries. Defensive: bad rows drop. */
