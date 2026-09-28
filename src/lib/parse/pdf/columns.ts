@@ -51,19 +51,25 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
   const split = depth < 3 ? findSplit(items, graphics, page, pageWidth) : null;
   if (!split) return leaf(items, graphics, lines);
   const out: Piece[] = [];
+  let aboveWhole = false;
   for (const band of split.bands) {
     // A band where neither side is prose (a wide table's rows, a form under
     // two columns of text) reads in one pass, so its rows stay whole. A
     // band of a line or two a side (between an overfull line and a float)
-    // is columns still.
+    // is columns still, unless the band above it was read in one pass: then
+    // it holds the table's last rows (arXiv 2411.19946 p. 12: read apart,
+    // the right half of a table's last row left the table and ran into the
+    // paragraph under it).
+    const fewest: number = aboveWhole ? 1 : 3;
     const left = buildLines(band.left.items, page);
-    const right = left.length >= 3 ? buildLines(band.right.items, page) : [];
-    const whole = left.length >= 3 && right.length >= 3 && !isProse(left, 1) && !isProse(right, 1);
+    const right = left.length >= fewest ? buildLines(band.right.items, page) : [];
+    const whole = left.length >= fewest && right.length >= fewest && !isProse(left, 1) && !isProse(right, 1);
     if (whole) out.push(...leaf([...band.left.items, ...band.right.items], [...band.left.graphics, ...band.right.graphics]));
     else {
       out.push(...readRegion(band.left.items, band.left.graphics, page, pageWidth, depth + 1, left));
-      out.push(...readRegion(band.right.items, band.right.graphics, page, pageWidth, depth + 1, left.length >= 3 ? right : undefined));
+      out.push(...readRegion(band.right.items, band.right.graphics, page, pageWidth, depth + 1, left.length >= fewest ? right : undefined));
     }
+    aboveWhole = whole;
     if (band.separator) out.push(band.separator);
   }
   return out;

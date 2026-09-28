@@ -705,8 +705,36 @@ export function attachFigureRegions(
         }
       }
       const below = next[m];
-      const bottom = end ?? (below?.box ? below.box.y2 + ctx.bodySize * 0.6 : pageBottom);
+      let bottom = end ?? (below?.box ? below.box.y2 + ctx.bodySize * 0.6 : pageBottom);
       const drawnBelow = drawingIn(drawing, bottom, cap.box.y1, x1, x2);
+      // Debris is a figure's only where something is drawn near it: a
+      // graphic under the caption, or paths or an image among the lines.
+      // With nothing drawn, the lines are text. Those set in the caption's
+      // font right under it go on with it, and so does the next such line,
+      // as a figure's caption takes its second paragraph. NPS thesis pp.
+      // 12–13: a List of Figures entry's middle line became a crop of its
+      // own words. Nature p. 4: Fig. 3's caption stands under its chart, and
+      // its next lines, merged with the right column's, became one crop
+      // across both columns. Earth Observer p. 26: a caption beside its
+      // chart lost its last lines and its credit to a crop of them.
+      if (m > 0 && !onDrawing && !drawnBelow) {
+        let k = 0;
+        for (; k <= m && k < next.length; k++) {
+          const s = next[k];
+          if (s.type !== "PARAGRAPH" || !s.box || s.lineSize === undefined || cap.lineSize === undefined) break;
+          const gap = cap.box.y1 - s.box.y2;
+          if (Math.abs(s.lineSize - cap.lineSize) >= 0.6 || gap > cap.lineSize * ctx.leading * 0.9) break;
+          if (cap.lineSize >= ctx.bodySize * 0.98 && s.text.length >= 240 && gap > cap.lineSize * 0.35) break;
+          const offset = cap.text.length + 1;
+          cap.text = `${cap.text} ${s.text}`;
+          cap.runs = [...(cap.runs ?? []), ...(s.runs ?? []).map((r) => ({ ...r, start: r.start + offset, end: r.end + offset }))];
+          cap.box = unionBox(cap.box, s.box);
+          consumed.add(s);
+        }
+        next.splice(0, k);
+        m = 0;
+        bottom = next[0]?.box ? next[0].box.y2 + ctx.bodySize * 0.6 : pageBottom;
+      }
       if (m > 0 || cap.box.y1 - bottom > rowGap * 3 || drawnBelow) {
         box = { x1, x2, y1: bottom, y2: cap.box.y1 - ctx.bodySize * 0.2 };
         for (const s of next.slice(0, m)) {

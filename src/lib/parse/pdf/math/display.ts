@@ -230,10 +230,13 @@ function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[],
   // A label under an underbrace or over an overbrace of a text line's
   // formula ("n times"), words and all: the formula read without it was
   // wrong. The brace's pieces lie between the two lines, across the
-  // label's middle (the text layer may hold no item for them).
+  // label's middle (the text layer may hold no item for them), and the
+  // text line reaches over that middle: the other column's line beside a
+  // display is no host (arXiv 2411.19946 p. 4: display (6) and its labels
+  // ran into the left column's paragraph).
   const middle = (line.x + line.xEnd) / 2;
   const braced = lines.find((t, n) => {
-    if (kinds[n] !== "text" || Math.abs(t.y - line.y) > line.size * 2.5) return false;
+    if (kinds[n] !== "text" || Math.abs(t.y - line.y) > line.size * 2.5 || t.x > middle || t.xEnd < middle) return false;
     const tips = braces.filter((g) => g.y > Math.min(line.y, t.y) && g.y < Math.max(line.y, t.y));
     return tips.length >= 2 && middle > Math.min(...tips.map((g) => g.x)) && middle < Math.max(...tips.map((g) => g.x + g.w));
   });
@@ -791,9 +794,24 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
     const past = (g: Glyph) => edges.some((r) => g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2 && g.y < r.y1 && r.y1 - g.y < size * 1.3);
     const own = new Set(all);
     const labels = braceLabelBoxes(atoms);
+    // A glyph of TeX's fonts within an em past the right edge, on the
+    // formula's rows, is a part the formula lost: in four displays of arXiv
+    // 2506.08494 (pp. 4–7) the closing norm and its subscript stood past the
+    // line's last glyph, and each passed without them.
+    const beyond = (g: Glyph) => g.family !== null && !g.hidden && g.x + g.w / 2 >= box.x2 && g.x < box.x2 + size && g.y > box.y1 && g.y < box.y2;
+    // So is a brace within an em under or over it that it did not read, with
+    // the brace's label: display (6) of arXiv 2411.19946 p. 4 sets three
+    // braces one under another, and passed with the first alone.
+    const brace = (g: Glyph) =>
+      g.family === "omx" &&
+      /^hbrace-/.test(mathGlyph("omx", g.code)?.piece ?? "") &&
+      g.x + g.w / 2 > box.x1 &&
+      g.x + g.w / 2 < box.x2 &&
+      g.y > box.y1 - size &&
+      g.y < box.y2 + size;
     const stray = ctx.drawing.glyphs.some((g) => {
       if (own.has(g) || (g.family === null && g.unicode.trim() === "")) return false;
-      if (past(g)) return true;
+      if (past(g) || beyond(g) || brace(g)) return true;
       if (labels.some((b) => g.x + g.w / 2 > b.x1 && g.x + g.w / 2 < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
       if (g.x + g.w / 2 <= box.x1 || g.x + g.w / 2 >= box.x2) return false;
       const hangs = g.family === null && !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]$/u.test(g.unicode);
@@ -872,7 +890,17 @@ export function displayEquations(
     const size = s.lineSize ?? ctx.bodySize;
     return c !== null && Number.isFinite(c.right) && s.box!.x1 > c.left + size * 0.5 && Math.abs((s.box!.x1 + s.box!.x2) / 2 - (c.left + c.right) / 2) < size * 1.5;
   };
-  const labeled = (s: Segment) => LABEL_RE.test(s.text.trim().split(/\s+/).pop() ?? "");
+  // A printed label ends the display's text, or one of its lines: a matrix
+  // sets its label beside its middle row (nps-thesis-2020-shevock (35)).
+  const labeled = (s: Segment) =>
+    LABEL_RE.test(s.text.trim().split(/\s+/).pop() ?? "") ||
+    lines.some((l) => l.y >= s.box!.y1 && l.y <= s.box!.y2 && l.x >= s.box!.x1 - 0.5 && l.xEnd <= s.box!.x2 + 0.5 && unlabeled(l).label !== null);
+  // A missed display's rows the page set apart are its own: blocks all in
+  // math against it, their boxes touching (Word's 9×9 matrices (31), (32),
+  // and (35) of nps-thesis-2020-shevock were half a crop and half a
+  // paragraph of bracket pieces). They join its crop, never tangle it.
+  const row = (s: Segment) => missed !== undefined && formulaPart(s, 0) && (s.mathShare ?? 0) >= 0.9;
+  const against = (a: Segment, b: Segment) => a.box!.y1 - b.box!.y2 < em * 0.5;
   // The page's glyphs no line reads, once for all its displays.
   let orphans: Glyph[] | null = null;
   const out: Segment[] = [];
@@ -896,12 +924,14 @@ export function displayEquations(
     // it: on a TeX page, a part the display's lines left out (a denominator
     // in words) is still in the picture.
     if (!equation) {
-      while (
-        m < segments.length &&
-        ((!tex && isMathSegment(segments[m], ctx)) || isMissed(segments[m]) || part(segments[m])) &&
-        !(tex && displayOf(segments[m])) &&
-        near(segments[m - 1], segments[m])
-      ) {
+      // Once a row joined, only a block against the last joins: the rows
+      // touch, and the next display stands a skip apart.
+      let rows = false;
+      while (m < segments.length && !(tex && displayOf(segments[m]))) {
+        const s = segments[m];
+        const loose: boolean = !rows && ((!tex && isMathSegment(s, ctx)) || isMissed(s) || part(s)) && near(segments[m - 1], s);
+        if (!loose && !(row(s) && against(segments[m - 1], s))) break;
+        rows ||= !loose;
         m++;
       }
       if (missed && ((!centered(segments[k]) && !segments.slice(k, m).some(labeled)) || segments[m]?.type === "TABLE")) {
@@ -909,8 +939,12 @@ export function displayEquations(
         k++;
         continue;
       }
-      // Backward over equation-shaped lines already pushed.
-      while (out.length > 0 && part(out[out.length - 1]) && near(out[out.length - 1], segments[start])) {
+      // Backward over equation-shaped lines and rows already pushed.
+      while (out.length > 0) {
+        const s = out[out.length - 1];
+        const loose: boolean = !rows && part(s) && near(s, segments[start]);
+        if (!loose && !(row(s) && against(s, segments[start]))) break;
+        rows ||= !loose;
         start = segments.indexOf(out.pop()!);
       }
     }

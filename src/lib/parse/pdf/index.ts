@@ -549,10 +549,18 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
 
 type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign">;
 
-// A page's items and drawing moved by the page box's corner (dx, dy), so
-// (0, 0) is the box's bottom left. Each glyph and box moves once: an item
-// holds glyphs of the drawing, and one box may stand in two lists.
-function toPageBox(items: Item[], drawing: PageDrawing, dx: number, dy: number) {
+// A page's items and drawing moved by the page box's corner, so (0, 0) is
+// the box's bottom left. The corner is rounded to whole steps of 2^-20 pt:
+// such a shift is exact for every position on the page, so every distance
+// between two positions stays what it was. Shifted by 36.85 itself, a
+// bracket set exactly half an em left of its paragraph's other lines
+// (Japanese hanging punctuation) crossed the indent test's threshold by
+// rounding, and two first-line indents of the MIC white paper were lost.
+// Each glyph and box moves once: an item holds glyphs of the drawing, and
+// one box may stand in two lists.
+function toPageBox(items: Item[], drawing: PageDrawing, cornerX: number, cornerY: number) {
+  const dx = Math.round(cornerX * 2 ** 20) / 2 ** 20;
+  const dy = Math.round(cornerY * 2 ** 20) / 2 ** 20;
   for (const g of new Set([...drawing.glyphs, ...items.flatMap((i) => i.glyphs ?? [])])) {
     g.x -= dx;
     g.y -= dy;
