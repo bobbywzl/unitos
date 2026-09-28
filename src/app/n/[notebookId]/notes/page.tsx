@@ -70,8 +70,8 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
       documentId: n.documentId,
       sources: n.sources.map((src) => ({
         id: src.id,
-        documentId: src.documentId,
-        documentTitle: src.document.title,
+        documentId: src.documentId ?? "",
+        documentTitle: src.document?.title ?? "",
         quotedText: src.quotedText,
         orphaned: src.orphaned,
       })),

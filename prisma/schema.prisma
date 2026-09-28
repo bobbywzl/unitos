@@ -394,8 +394,10 @@ model Source {
   id          String   @id @default(cuid())
   noteId      String
   note        Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
-  documentId  String
-  document    Document @relation(fields: [documentId], references: [id])
+  // The document the source quotes. Null once that document is deleted: the
+  // note keeps the quote, orphaned (SPEC.md §5).
+  documentId  String?
+  document    Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
   // Anchor: dual strategy (see SPEC.md §5)
   blockId     String
   startOffset Int

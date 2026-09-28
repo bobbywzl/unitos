@@ -87,8 +87,8 @@ export default async function AnnotationsPage(props: { params: Promise<{ noteboo
       documentId: n.documentId,
       sources: n.sources.map((src) => ({
         id: src.id,
-        documentId: src.documentId,
-        documentTitle: src.document.title,
+        documentId: src.documentId ?? "",
+        documentTitle: src.document?.title ?? "",
         quotedText: src.quotedText,
         orphaned: src.orphaned,
       })),
@@ -157,6 +157,8 @@ export default async function AnnotationsPage(props: { params: Promise<{ noteboo
         });
         continue;
       }
+      // A source whose document was deleted has no document to stand under.
+      if (source.documentId === null || source.document === null) continue;
       if (!titles.has(source.documentId)) titles.set(source.documentId, source.document.title);
       const list = placed.get(source.documentId) ?? [];
       list.push({

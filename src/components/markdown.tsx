@@ -357,8 +357,10 @@ function QuoteBlock({ node, children: quoteChildren, ...props }: Override<"block
   const source = sources && sources.length > 0 && notebookId ? sourceOfQuote(hastText(node), sources) : null;
   if (!source) return <blockquote {...props}>{quoteChildren}</blockquote>;
   const href = `/n/${notebookId}?doc=${source.documentId}&src=${source.id}`;
+  // A source whose document was deleted keeps its quote and has nowhere to jump.
+  const deleted = source.documentId === "";
   const jump = (e: { currentTarget: Element }) => {
-    if (source.orphaned) return;
+    if (source.orphaned || deleted) return;
     // A click that ends a selection of the quote's own words belongs
     // to the selection. A selection left elsewhere on the page does
     // not hold the jump.
@@ -382,15 +384,17 @@ function QuoteBlock({ node, children: quoteChildren, ...props }: Override<"block
       {...props}
       className={source.orphaned ? "note-quote-orphaned" : "note-quote-linked"}
       onClick={jump}
-      data-tip={source.orphaned ? t("outline.quoteUnresolved") : t("outline.quoteJump")}
+      data-tip={
+        deleted ? t("outline.quoteDocumentDeleted") : source.orphaned ? t("outline.quoteUnresolved") : t("outline.quoteJump")
+      }
       data-track="note-quote-jump"
     >
       {quoteChildren}
       <span className="note-quote-source">
         <AnchorGlyph />
         <span className="truncate">
-          {source.documentTitle}
-          {source.orphaned ? ` · ${t("outline.unresolvedLabel")}` : ""}
+          {deleted ? t("outline.deletedDocument") : source.documentTitle}
+          {source.orphaned && !deleted ? ` · ${t("outline.unresolvedLabel")}` : ""}
         </span>
       </span>
     </blockquote>

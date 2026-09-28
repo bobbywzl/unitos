@@ -1002,8 +1002,8 @@ export default async function NotebookPage(props: {
       documentId: n.documentId,
       sources: n.sources.map((src) => ({
         id: src.id,
-        documentId: src.documentId,
-        documentTitle: src.document.title,
+        documentId: src.documentId ?? "",
+        documentTitle: src.document?.title ?? "",
         quotedText: src.quotedText,
         orphaned: resolutionById.get(src.id)?.orphaned ?? src.orphaned,
       })),

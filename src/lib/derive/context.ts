@@ -293,7 +293,7 @@ export async function corpusSection(
   for (const s of sections) {
     for (const n of s.notes) {
       const sources = n.sources
-        .map((src) => `"${src.quotedText.slice(0, 160)}" (${src.document.title})`)
+        .map((src) => `"${src.quotedText.slice(0, 160)}" (${src.document?.title ?? "a deleted document"})`)
         .join("; ");
       if (s.hidden) {
         const kind =
