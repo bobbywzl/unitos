@@ -111,6 +111,8 @@ function mathLetter(ch: string, mathvariant: string | null): string {
   return ch;
 }
 
+const VARIANT_SYMBOLS = /[ϵϕϑϱϖϰℓ]/u;
+
 function leaf(el: Element, out: Canon, accent: boolean) {
   const mathvariant = el.getAttribute("mathvariant");
   const variant = variantTag(mathvariant);
@@ -120,11 +122,14 @@ function leaf(el: Element, out: Canon, accent: boolean) {
     if (token) out.tokens.push(token);
   }
   // The glyphs a reader sees: a styled letter as its math letter, which the
-  // glyph checks count against the page's (words fold it back, NFKC).
+  // glyph checks count against the page's (words fold it back, NFKC). NFKC
+  // also folds ϵ, ϕ, ϑ, ϱ, ϖ, ϰ, and ℓ, symbols of their own that no
+  // mathvariant brings back: those stay, or an import's \epsilon counted
+  // as a missing ϵ.
   const reading = [...text]
     .filter((c) => !INVISIBLE.test(c))
     .map((c) => {
-      const plain = c.normalize("NFKC");
+      const plain = VARIANT_SYMBOLS.test(c) ? c : c.normalize("NFKC");
       return [...plain].length === 1 ? mathLetter(plain, mathvariant) : plain;
     })
     .join("");
@@ -158,7 +163,9 @@ function walk(el: Element | undefined, out: Canon, accent = false): void {
   if (!el) return;
   const name = el.localName;
   if (DROPPED.has(name)) return;
-  if (LEAVES.has(name)) return leaf(el, out, accent);
+  // KaTeX wraps a relation built of parts in an <mo> (\overset{\mathcal{D}}{=}
+  // is <mo><mover>…</mover></mo>): read its parts, not one flat leaf "=D".
+  if (LEAVES.has(name) && el.children.length === 0) return leaf(el, out, accent);
   const kids = [...el.children];
   const group = (open: string, node: Element | undefined, isAccentScript = false) => {
     out.tokens.push(open);
