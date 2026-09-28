@@ -113,7 +113,16 @@ export const spanSchema = z.object({
 });
 
 export const salienceOutputSchema = z.object({
-  spans: z.array(spanSchema).min(1).max(200),
+  spans: z
+    .array(
+      spanSchema.extend({
+        // The span's words, copied out: the offsets are what a model
+        // miscounts, and resolveSpan finds the quote again (SPEC.md §5).
+        quote: z.string().max(4_000).optional(),
+      }),
+    )
+    .min(1)
+    .max(200),
 });
 
 // EXTRACT (SPEC.md §4): the passages across the document most revealing about

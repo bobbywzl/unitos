@@ -14,13 +14,13 @@ export function saliencePrompt(ctx: PromptCtx): string {
     "Not salient: framing, background the reader already has, repetition of a point already marked, headings, references, an example that adds nothing to the claim it illustrates.",
     "",
     "Rules:",
-    "1. 10 to 40 spans for a typical document. Fewer for a short document. Cover the whole document, not just its opening: a finding in the last section counts as much as one in the first.",
+    "1. About one span for each paragraph that states a claim or a finding, two only where a paragraph holds two separate findings; none for a paragraph of framing or background. A document of 8 paragraphs gets 5 to 10 spans, a long one up to 40. Cover the whole document, not just its opening: a finding in the last section counts as much as one in the first.",
     "2. Each span is one contiguous character range inside one block.",
-    "3. start and end are character offsets into that block's text as given above.",
+    "3. start and end are character offsets into that block's text as given above, at word boundaries: a span starts at a word's first character and ends after a word's last character. quote is the span's exact words, copied from the block: it is how a miscounted offset is found again.",
     "4. Spans are short: a clause or one sentence, never a whole paragraph. Cut a span to the words that carry the claim or the number.",
     "5. Spans never overlap. Two spans that make the same point: keep one.",
     "6. Use block ids exactly as they appear in [block <id>] markers.",
     "",
-    'Return ONLY JSON: {"spans": [{"blockId": "<id>", "start": 0, "end": 42}, ...]}',
+    'Return ONLY JSON: {"spans": [{"blockId": "<id>", "start": 0, "end": 42, "quote": "<the exact words>"}, ...]}',
   ].join("\n");
 }
