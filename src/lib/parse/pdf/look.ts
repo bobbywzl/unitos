@@ -118,20 +118,21 @@ function onGlyphsBelow(byY: Glyph[], x1: number, x2: number, y: number): boolean
 }
 
 // A mark that starts or ends inside a word: the glyph beside its first or
-// last touches it, both letters. A table's rule drawn cell by cell put a
-// piece under one letter of a column header; TeX's rules under single
-// letters inside words.
+// last touches it, edge to edge within 0.15 em, both letters. A table's
+// rule drawn cell by cell put a piece under one letter of a column header;
+// TeX's rules under single letters inside words, and a radical's bar on
+// the line under "Theorem 6" underlined "heorem" (arxiv-2506-08494 p4).
 function cutsWord(byY: Glyph[], run: Glyph[]): boolean {
   const word = (g: Glyph) => /[\p{L}\p{N}]/u.test(g.unicode);
   const sorted = [...run].sort((a, b) => a.x - b.x);
   const first = sorted[0];
   const last = sorted[sorted.length - 1];
-  const touches = (edge: Glyph, x1: number, x2: number) =>
-    word(edge) && marked(byY, x1, x2, edge.y, -0.1, 0.1).some((g) => !run.includes(g) && word(g) && Math.abs(g.y - edge.y) < edge.size * 0.1);
-  return (
-    touches(first, first.x - first.size * 0.35, first.x - 0.01) ||
-    touches(last, last.x + last.w + 0.01, last.x + last.w + last.size * 0.35)
+  const near = marked(byY, first.x - first.size * 1.5, last.x + last.w + last.size * 1.5, first.y, -0.1, 0.1).filter(
+    (g) => !run.includes(g) && word(g),
   );
+  const touching = (edge: Glyph, gap: (g: Glyph) => number) =>
+    word(edge) && near.some((g) => Math.abs(g.y - edge.y) < edge.size * 0.1 && Math.abs(gap(g)) <= edge.size * 0.15);
+  return touching(first, (g) => first.x - (g.x + g.w)) || touching(last, (g) => g.x - (last.x + last.w));
 }
 
 /** Each text glyph's underline, strikethrough, and highlight on a page. */

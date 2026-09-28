@@ -614,6 +614,10 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   const unknown: Doc = { blocks: FONT_REF.blocks.map((b) => ({ ...b, font: undefined })) as DocBlock[] };
   const none = fonts(unknown);
   check("fonts: a candidate that says no font scores 0", near(none?.score ?? -1, 0) && none?.roles.body?.known === 0, JSON.stringify(none?.roles));
+  // A hand reference marks a bold paragraph on its words, not with a font: the paragraph's font is the body's, bold.
+  const BOLD_REF: Doc = { fonts: { body: serif(10) }, blocks: [{ kind: "paragraph", spans: [{ text: "Vision: a gauge on every bridge by spring.", bold: true }] }] };
+  const boldPara = score(BOLD_REF, [], { blocks: [{ kind: "paragraph", spans: [{ text: "Vision: a gauge on every bridge by spring.", bold: true }], font: serif(10, true) }] }).scores.fonts;
+  check("fonts: a reference block bold in its words and with no font of its own wants its role's font, bold", near(boldPara?.roles.body?.bold ?? -1, 1), JSON.stringify(boldPara?.roles));
   const noFonts = score({ blocks: FONT_REF.blocks }, [], same).scores;
   check("fonts: a reference without fonts leaves the part unscored", noFonts.fonts === null && noFonts.parts.fonts === null);
   // The import: named styles and marks as drawn.

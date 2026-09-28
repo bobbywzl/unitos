@@ -1471,7 +1471,9 @@ function fontRole(block: DocBlock): FontRole | null {
     footnote) against the candidate block that holds most of its words (of a
     table, its caption's words): the same shape; the size, the body's in
     points and every other role's as a ratio to the body, within a tenth; the
-    same weight; the same color. The candidate's body size is the size most
+    same weight; the same color (a reference block without a font of its own
+    takes its role's, bold and colored as most of its words are). The
+    candidate's body size is the size most
     of its body's characters take. A block whose counterpart says nothing of
     its font is not counted, and a role none of whose counterparts says
     anything scores 0. */
@@ -1499,11 +1501,35 @@ export function fontScores(fonts: Fonts | undefined, ref: Flat, cand: Flat, al: 
     }
     return [...votes].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
   };
+  // A reference block's font: its own, else its role's, bold where most of its words' characters are bold and
+  // in the color most of them take (a hand reference marks weight and color on the words, not on the block).
+  const wantOf = (rb: number, role: FontRole): Font | undefined => {
+    const block = ref.blocks[rb];
+    const own = "font" in block ? block.font : undefined;
+    const base = own ?? fonts[role];
+    if (own || !base) return base;
+    let total = 0;
+    let bold = 0;
+    const colors = new Map<string, number>();
+    for (const u of ref.unitsOf[rb]) {
+      if (block.kind === "table" && ref.units[u].index !== -1) continue;
+      for (let t = ref.units[u].first; t < ref.units[u].end; t++) {
+        const tok = ref.toks[t];
+        const n = tok.end - tok.start;
+        total += n;
+        if (tok.bold) bold += n;
+        if (tok.color && !tok.link) colors.set(tok.color, (colors.get(tok.color) ?? 0) + n);
+      }
+    }
+    const [top, most] = [...colors].sort((a, b) => b[1] - a[1])[0] ?? ["", 0];
+    const color = total > 0 && most * 2 > total ? top : base.color;
+    return { shape: base.shape, size: base.size, ...(base.bold || (total > 0 && bold * 2 > total) ? { bold: true as const } : {}), ...(color ? { color } : {}) };
+  };
   const roles: FontScores["roles"] = {};
   const misses: FontScores["misses"] = [];
   ref.blocks.forEach((block, rb) => {
     const role = fontRole(block);
-    const want = role ? (("font" in block ? block.font : undefined) ?? fonts[role]) : undefined;
+    const want = role ? wantOf(rb, role) : undefined;
     if (!role || !want) return;
     const cb = holder(rb);
     if (cb < 0) return;
