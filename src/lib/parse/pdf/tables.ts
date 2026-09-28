@@ -303,11 +303,23 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
     if (!own) return;
     const text = own.text.replace(/[\t\n]/g, " ");
     const words = wordsHtml(text, own.runs, mathSpans(text, own.runs), 0, text.length);
-    table.html = table.html.replace(/^<table[^>]*>/, (open) => `${open}<caption>${words}<span class="cell-gap">\n</span></caption>`);
+    // The caption's words keep the size the page sets them in: the import
+    // draws the caption at it when it is under 9 pt (arXiv 2503.22874 sets
+    // its captions in 8 pt under a 9 pt body).
+    const size = sizeOf(own.runs) ?? caption?.lineSize;
+    const sized = size && Number.isFinite(size) && size > 0 && size <= 72 ? `<span style="font-size:${Math.round(size * 2) / 2}pt">${words}</span>` : words;
+    table.html = table.html.replace(/^<table[^>]*>/, (open) => `${open}<caption>${sized}<span class="cell-gap">\n</span></caption>`);
     table.text = `${text}\n${table.text}`;
     table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
   });
   return segments.filter((s) => !taken.has(s));
+}
+
+// The size most of a run of text's characters are set in (Look.size).
+function sizeOf(runs: Run[]): number | undefined {
+  const count = new Map<number, number>();
+  for (const r of runs) if (r.look) count.set(r.look.size, (count.get(r.look.size) ?? 0) + r.end - r.start);
+  return [...count].sort((a, b) => b[1] - a[1])[0]?.[0];
 }
 
 function isCaption(s: Segment): boolean {

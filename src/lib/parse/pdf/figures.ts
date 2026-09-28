@@ -694,6 +694,23 @@ export function attachFigureRegions(
       captionBox = unionBox(captionBox, follow.box);
       consumed.add(follow);
     }
+    // A figure's own link printed under its caption (PLOS prints each
+    // figure's DOI there) ends the caption: a paragraph of its own, it ran
+    // into the next page's first words ("….g007 durations are …").
+    const link = next.find((s) => !consumed.has(s));
+    if (
+      link?.type === "PARAGRAPH" &&
+      link.box &&
+      link.page === cap.page &&
+      /^https?:\/\/\S+$/.test(link.text.trim()) &&
+      captionBox.y1 - link.box.y2 <= (cap.lineSize ?? ctx.bodySize) * ctx.leading * 2
+    ) {
+      const offset = text.length + 1;
+      text = `${text} ${link.text}`;
+      runs = [...(runs ?? []), ...(link.runs ?? []).map((r) => ({ ...r, start: r.start + offset, end: r.end + offset }))];
+      captionBox = unionBox(captionBox, link.box);
+      consumed.add(link);
+    }
     const figure: Segment = {
       type: "FIGURE",
       text,
