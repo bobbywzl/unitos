@@ -8,13 +8,15 @@ import { sameFlags } from "@/lib/parse/pdf/glyphs";
 import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
 import { mathSpans } from "@/lib/parse/pdf/math/zones";
-import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup } from "@/lib/parse/pdf/text";
+import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup, spansFromRuns } from "@/lib/parse/pdf/text";
 import type { Cell, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
 // ── Tables ──────────────────────────────────────────────────────────────────
 
 // A color the html may carry: the drawing's #rrggbb, nothing else.
 const HEX_RE = /^#[0-9a-f]{6}$/i;
+// A face the html may carry: a plain font name, as the page editor names it.
+const FACE_RE = /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/;
 
 // A paragraph of a cell that holds more than one, over the cell's text
 // (which joins them with a space), and how its lines sit in the cell:
@@ -203,6 +205,7 @@ function wordsHtml(text: string, runs: Run[], math: { start: number; end: number
     const paint = [
       look?.color && HEX_RE.test(look.color) ? `color:${look.color}` : "",
       look?.highlight && HEX_RE.test(look.highlight) ? `background-color:${look.highlight}` : "",
+      covering.some((r) => r.smallCaps) ? "font-variant:small-caps" : "",
     ].filter(Boolean);
     if (paint.length > 0) wrapped = `<span style="${paint.join(";")}">${wrapped}</span>`;
     html += wrapped;
@@ -319,11 +322,16 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
     if (!own) return;
     const text = own.text.replace(/[\t\n]/g, " ");
     const words = wordsHtml(text, own.runs, mathSpans(text, own.runs), 0, text.length);
-    // The caption's words keep the size the page sets them in: the import
-    // draws the caption at it when it is under 9 pt (arXiv 2503.22874 sets
-    // its captions in 8 pt under a 9 pt body).
+    // The caption's words keep the face and the size the page sets them in:
+    // the import draws the caption at that size when it is under 9 pt
+    // (arXiv 2503.22874 sets its captions in 8 pt under a 9 pt body).
     const size = sizeOf(own.runs) ?? caption?.lineSize;
-    const sized = size && Number.isFinite(size) && size > 0 && size <= 72 ? `<span style="font-size:${Math.round(size * 2) / 2}pt">${words}</span>` : words;
+    const face = spansFromRuns(text, own.runs).font?.family;
+    const look = [
+      size && Number.isFinite(size) && size > 0 && size <= 72 ? `font-size:${Math.round(size * 2) / 2}pt` : "",
+      face && FACE_RE.test(face) ? `font-family:${face}` : "",
+    ].filter(Boolean);
+    const sized = look.length > 0 ? `<span style="${look.join(";")}">${words}</span>` : words;
     if (linkOnly) {
       table.html = table.html.replace(/^(<table[^>]*><caption>)/, `$1${sized} `);
       table.text = `${text} ${table.text}`;

@@ -197,6 +197,13 @@ function styleOf(el: Element, name: string): string | null {
   return null;
 }
 
+/** A span's face: a plain font name (letters, digits, spaces, hyphens). */
+function faceOf(el: Element): string | null {
+  const raw = (el.getAttribute("style") ?? "").split(";").find((part) => part.split(":")[0]?.trim().toLowerCase() === "font-family");
+  const value = raw?.slice(raw.indexOf(":") + 1).trim() ?? "";
+  return /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/.test(value) ? value : null;
+}
+
 function colorOf(el: Element, name: "color" | "background-color"): string | null {
   const value = styleOf(el, name);
   return value && HEX.test(value) ? value : null;
@@ -302,12 +309,16 @@ class CellReader {
       this.line.push({ node: { type: "inlineMath", attrs: { latex } } });
       return;
     }
-    // A span's color, highlight, and size (a caption's words keep the size
-    // the page sets them in).
+    // A span's color, highlight, size, face, and small capitals (a caption's
+    // words keep the face and the size the page sets them in).
     const size = tag === "span" ? pointsOf(styleOf(el, "font-size"), 72) : null;
-    const paint = tag === "span" ? { color: colorOf(el, "color"), backgroundColor: colorOf(el, "background-color"), fontSize: size ? `${size}pt` : null } : null;
-    if (paint && (paint.color || paint.backgroundColor || paint.fontSize)) {
-      this.read(el, withTextStyle(marks, Object.fromEntries(Object.entries(paint).filter(([, v]) => v))));
+    const face = tag === "span" ? faceOf(el) : null;
+    const paint = tag === "span" ? { color: colorOf(el, "color"), backgroundColor: colorOf(el, "background-color"), fontSize: size ? `${size}pt` : null, fontFamily: face } : null;
+    const caps = tag === "span" && styleOf(el, "font-variant") === "small-caps";
+    if (paint && (paint.color || paint.backgroundColor || paint.fontSize || paint.fontFamily || caps)) {
+      const painted = withTextStyle(marks, Object.fromEntries(Object.entries(paint).filter(([, v]) => v)));
+      const withCaps = caps ? [...(paint.color || paint.backgroundColor || paint.fontSize || paint.fontFamily ? painted : marks), { type: "smallCaps" }] : painted;
+      this.read(el, withCaps);
       return;
     }
     // A footnote's number where the cell cites it (placeNotes): the page
