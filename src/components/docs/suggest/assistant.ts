@@ -85,7 +85,8 @@ function land(
   // suggestions on these words, or on the blocks around them, give way: a
   // new op on them takes their place. Another person's stack, as the
   // assistant's for someone else do. A style change on the blocks around
-  // gives way only to a new style.
+  // gives way only to a new style, and meets only a new style: a line this
+  // landing made a heading still takes a word fixed in it.
   const clear = (from: number, to: number, style = false): SkipReason | null => {
     const earlier = new Set<string>();
     let meets = false;
@@ -93,8 +94,9 @@ function land(
       for (const mark of node.marks) {
         const id = String(mark.attrs.id);
         if (!isSuggestionMark(mark) || suggestionAuthor(id) !== author) continue;
+        if (!(node.isInline || style || mark.type.name !== "modification")) continue;
         if (made.includes(id)) meets = true;
-        else if (node.isInline || style || mark.type.name !== "modification") earlier.add(id);
+        else earlier.add(id);
       }
     });
     if (meets) return "overlap";

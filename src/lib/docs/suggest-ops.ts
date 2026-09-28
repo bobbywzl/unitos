@@ -251,16 +251,19 @@ export function assistantSuggestionsIn(doc: RichNode, asker: string, scope: Read
 
 const TEXT_ROWS = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);
 
-/** What an op takes: words of one row, whole rows, or the gap after a row
-    (-1: the document's start). */
+/** What an op takes: words of one row, a row's style, whole rows, or the
+    gap after a row (-1: the document's start). */
 type Claim =
   | { kind: "words"; row: number; from: number; to: number }
+  | { kind: "style"; row: number }
   | { kind: "rows"; rows: number[] }
   | { kind: "gap"; after: number };
 
 /** Two ops that take the same or touching words, a word op and a block op
     on one row, two block ops on one row, and new blocks beside a block op's
-    rows conflict: the first stands, so one command's suggestions never merge. */
+    rows conflict: the first stands, so one command's suggestions never merge.
+    A style change and words changed on its row stand together: a line made
+    a heading keeps a word fixed in it. */
 function conflicts(a: Claim, b: Claim): boolean {
   if (b.kind === "gap" && a.kind !== "gap") return conflicts(b, a);
   if (a.kind === "gap") {
@@ -268,7 +271,8 @@ function conflicts(a: Claim, b: Claim): boolean {
     return b.kind === "rows" && b.rows.some((k) => k === a.after || k === a.after + 1);
   }
   if (a.kind === "words" && b.kind === "words") return a.row === b.row && a.from <= b.to && b.from <= a.to;
-  const rowsOf = (c: Claim) => (c.kind === "words" ? [c.row] : c.kind === "rows" ? c.rows : []);
+  if ((a.kind === "style" && b.kind === "words") || (a.kind === "words" && b.kind === "style")) return false;
+  const rowsOf = (c: Claim) => (c.kind === "rows" ? c.rows : c.kind === "gap" ? [] : [c.row]);
   return rowsOf(a).some((k) => rowsOf(b).includes(k));
 }
 
@@ -366,7 +370,7 @@ export function resolveOps(
     if (op.op === "set_style") {
       if (!place.style || place.where !== "body") return "notText";
       if (op.style === place.style) return null;
-      return { op: { i, op: op.op, blockId: row.id, style: op.style, baseStyle: place.style, why: op.why }, claim: { kind: "rows", rows: [k] }, chars: 0 };
+      return { op: { i, op: op.op, blockId: row.id, style: op.style, baseStyle: place.style, why: op.why }, claim: { kind: "style", row: k }, chars: 0 };
     }
     if (op.op === "rewrite_block") {
       if (scope.kind === "words" && !coversRow(row.text, spans.get(row.id))) return "outside";

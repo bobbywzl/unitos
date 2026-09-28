@@ -84,6 +84,12 @@ const RAIL_BUTTON_ON = "relative flex size-[38px] items-center justify-center ro
 // to the documents. md+ only — below md the tray is a sheet, never a screen.
 const STRIP_BUTTON =
   "absolute top-1/2 z-30 hidden size-8 -translate-y-1/2 items-center justify-center rounded-full bg-card text-sand-600 shadow-float hover:text-clay-800 md:flex print:hidden";
+// The sheet's height below md: 60% of the room between the header and the
+// bottom bar, at least 400px so the assistant's thread keeps a few lines
+// above its input, and never so tall that less than 150px of the page shows
+// above it. A set height, not a cap: the assistant pins its input to the
+// sheet's foot and scrolls its thread, which needs a height to fill.
+const SHEET_HEIGHT = "max-md:h-[min(max(60%,400px),calc(100%-150px))]";
 
 // Tray width bounds: the bar between the reader and the tray drags within
 // these, so it can never overextend — the tray keeps a readable minimum and
@@ -578,7 +584,10 @@ export function Workspace({
       data-note-floating={actions.floating ? "" : undefined}
       // One column that can never grow past the browser: a pane's widest
       // line stays inside its pane instead of pushing the rail off screen.
-      className="content-in grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-[68px_1fr] bg-paper print:block print:h-auto"
+      // Below md the height is the visible screen's (dvh), so the sheet,
+      // which sits in the layout, ends at the bottom bar even while a phone
+      // browser shows its toolbar.
+      className="content-in grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-[68px_1fr] bg-paper max-md:h-dvh print:block print:h-auto"
     >
       <header
         data-track-surface="topbar"
@@ -675,10 +684,16 @@ export function Workspace({
       <div className="relative flex min-h-0 min-w-0 pb-[calc(54px+env(safe-area-inset-bottom))] md:pb-0 print:block print:pb-0">
         {/* The strip: in a split view (globals.css .reader-strip) the reader
             keeps the strip's full width and the tray column follows past its
-            right edge; in Normal view it is a plain row, reader then tray. */}
+            right edge; in Normal view it is a plain row, reader then tray.
+            Below md it is a column: the reader, then the tray's sheet under
+            it, so the reader ends where the sheet starts and every line of
+            the document can scroll into view above it. It clips the sheet
+            while it slides up from the bar. */}
         <div
           ref={stripRef}
-          className={`flex min-h-0 min-w-0 flex-1 print:block ${split ? "reader-strip" : ""}`}
+          className={`flex min-h-0 min-w-0 flex-1 max-md:flex-col max-md:overflow-clip max-md:print:overflow-visible print:block ${
+            split ? "reader-strip" : ""
+          }`}
         >
         <div
           className={`relative min-w-0 flex-1 overflow-hidden print:overflow-visible ${
@@ -693,16 +708,17 @@ export function Workspace({
         </div>
 
         {/* The tray column: on md+ it slides shut to zero width when collapsed
-            and the reader takes the room; below md the aside inside is a
-            bottom sheet, shown while mobileTray is set. In a split view the
-            width changes at once — the strip's scroll is the motion. */}
+            and the reader takes the room; below md it is the bottom sheet's
+            row under the reader, SHEET_HEIGHT tall while mobileTray is set
+            and empty otherwise. In a split view the width changes at once —
+            the strip's scroll is the motion. */}
         <div
           ref={trayColumnRef}
           style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
           inert={(collapsed && !mobileTray) || undefined}
           className={`tray-column flex min-h-0 shrink-0 md:overflow-hidden ${
             resizing || split ? "tray-column-resizing" : ""
-          } ${collapsed ? "md:w-0" : "md:w-[var(--tray-w)]"}`}
+          } ${collapsed ? "md:w-0" : "md:w-[var(--tray-w)]"} ${mobileTray ? SHEET_HEIGHT : ""}`}
         >
           {/* The bar between the reader and the tray: drag to resize, arrow
               keys nudge, double-click resets. It floats over the tray's left
@@ -736,7 +752,7 @@ export function Workspace({
             data-track-surface="tray"
             className={`${
               mobileTray
-                ? "sheet-in fixed inset-x-0 bottom-[calc(54px+env(safe-area-inset-bottom))] z-30 flex max-h-[70dvh] rounded-t-[24px] border-t shadow-float md:static md:z-auto md:max-h-none md:rounded-none md:border-t-0 md:shadow-none"
+                ? "sheet-in z-30 flex rounded-t-[24px] border-t shadow-float md:z-auto md:rounded-none md:border-t-0 md:shadow-none"
                 : "hidden md:flex"
             } min-h-0 w-full min-w-0 shrink flex-col gap-3.5 border-line bg-sand-100 p-[18px] pb-4 md:w-[var(--tray-w)] md:shrink-0 md:border-l print:hidden`}
           >
