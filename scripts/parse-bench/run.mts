@@ -1,0 +1,413 @@
+// The parse benchmark (scratchpad parse-loop README): every corpus document
+// parsed in-process the way the add parses it (parsePdf, then the import
+// converter), scored against its reference (parse and import), and checked
+// without one (pdftotext). Nothing is stored but what the flags ask for.
+//
+//   npx tsx scripts/parse-bench/run.mts [--only id,id] [--category c] [--json out.json]
+//     [--baseline [file]] [--save-baseline [file]] [--detail id [--import]]
+//
+// Baselines: scripts/parse-bench/baseline.json holds the documents whose
+// reference is committed; .bench/baseline-private.json holds the rest. With
+// no file named, --baseline reads both and --save-baseline writes each
+// document into its own (merged with what the file holds). The exit code is
+// 1 when a metric dropped against the baseline.
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { performance } from "node:perf_hooks";
+import { richTextFromImport } from "@/lib/docs/import";
+import type { RichNode } from "@/lib/docs/schema";
+import { parsePdf } from "@/lib/parse/pdf";
+import type { ParsedBlock } from "@/lib/parse/types";
+import { resolveContentsLinks } from "@/lib/parse/url";
+import { fromImport, fromParse, type Doc } from "./adapt";
+import { freeScores, pdfText, type FreeScores, type PdfText } from "./free";
+import { loadCorpus, loadRef, refPath, REF_DIRS, ROOT, type CorpusEntry } from "./load";
+import { flatten, score, type Scores } from "./metrics";
+import type { RefDoc } from "./model";
+import { detailReport } from "./report";
+
+// ── Flags ───────────────────────────────────────────────────────────────────
+
+const argv = process.argv.slice(2);
+const flag = (name: string) => argv.includes(name);
+function value(name: string): string | undefined {
+  const i = argv.indexOf(name);
+  return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : undefined;
+}
+const only = value("--only")?.split(",").map((s) => s.trim()).filter(Boolean);
+const category = value("--category");
+const detail = value("--detail");
+const BASELINE_PUBLIC = join(import.meta.dirname, "baseline.json");
+const BASELINE_PRIVATE = join(ROOT, ".bench", "baseline-private.json");
+
+// ── Parsing, once per file ──────────────────────────────────────────────────
+
+type Parsed = { title: string | null; blocks: ParsedBlock[]; richText: RichNode | null; importError?: string; ms: number };
+const parses = new Map<string, Promise<Parsed>>();
+
+/** pdf.js prints font warnings (console.warn "Warning: …"); they are not
+    the run's output. */
+async function quietly<T>(work: () => Promise<T>): Promise<T> {
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (typeof args[0] === "string" && /^(Warning|Info):/.test(args[0])) return;
+    warn(...args);
+  };
+  try {
+    return await work();
+  } finally {
+    console.warn = warn;
+  }
+}
+
+function parseFile(path: string): Promise<Parsed> {
+  let hit = parses.get(path);
+  if (!hit) {
+    hit = quietly(async () => {
+      const t0 = performance.now();
+      const parsed = await parsePdf(new Uint8Array(readFileSync(path)));
+      const ms = performance.now() - t0;
+      // The add's converter call (lib/parse/ingest.ts ingestPdf, convertImport).
+      // A converter that throws costs the import's score, not the parse's.
+      try {
+        const { richText } = richTextFromImport({
+          kind: "pdf",
+          title: parsed.title ?? basename(path).replace(/\.pdf$/i, ""),
+          titleFromOriginal: Boolean(parsed.title),
+          blocks: resolveContentsLinks(parsed.blocks),
+          pageSize: parsed.pageSize,
+        });
+        return { title: parsed.title, blocks: parsed.blocks, richText, ms };
+      } catch (err) {
+        return { title: parsed.title, blocks: parsed.blocks, richText: null, importError: err instanceof Error ? err.message : String(err), ms };
+      }
+    });
+    parses.set(path, hit);
+  }
+  return hit;
+}
+
+const texts = new Map<string, PdfText>();
+function pdfTextOf(path: string, pages: [number, number] | undefined): PdfText {
+  const key = `${path}|${pages?.join("-") ?? ""}`;
+  let hit = texts.get(key);
+  if (!hit) texts.set(key, (hit = pdfText(path, pages)));
+  return hit;
+}
+
+// ── One document ────────────────────────────────────────────────────────────
+
+type Result = {
+  entry: CorpusEntry;
+  skipped?: string;
+  refProblems?: string[];
+  /** Where the corpus entry and its reference disagree. */
+  mismatch?: string;
+  importError?: string;
+  ref?: RefDoc;
+  committed: boolean;
+  pages?: [number, number];
+  ms: number;
+  parse?: Scores;
+  import?: Scores;
+  freeParse?: FreeScores;
+  freeImport?: FreeScores;
+  docs?: { parse: Doc; import: Doc };
+  pdf?: PdfText;
+};
+
+async function runEntry(entry: CorpusEntry): Promise<Result> {
+  const found = refPath(entry.id);
+  const loaded = found ? loadRef(found) : null;
+  const ref = loaded && "ref" in loaded ? loaded.ref : undefined;
+  const result: Result = {
+    entry,
+    committed: Boolean(found && ref && found.startsWith(REF_DIRS[0])),
+    ms: 0,
+    ref,
+    refProblems: loaded && "problems" in loaded ? loaded.problems : undefined,
+  };
+  const differ = [
+    ref && ref.id !== entry.id ? `the reference's id is ${ref.id}` : "",
+    ref?.pages && entry.pages && ref.pages.join() !== entry.pages.join() ? `pages ${entry.pages.join("–")} in the corpus, ${ref.pages.join("–")} in the reference (the reference's are scored)` : "",
+    ref?.source.pdf && entry.pdf && ref.source.pdf !== entry.pdf ? `the corpus names ${entry.pdf}, the reference ${ref.source.pdf}` : "",
+  ].filter(Boolean);
+  if (differ.length > 0) result.mismatch = differ.join("; ");
+  const file = entry.pdf ?? ref?.source.pdf;
+  if (!file) return { ...result, skipped: entry.docx ? "a Word file: no Word parser yet" : "no PDF named" };
+  const path = join(ROOT, file);
+  if (!existsSync(path)) return { ...result, skipped: `${file} is missing` };
+  const pages = ref?.pages ?? entry.pages;
+  result.pages = pages;
+  const parsed = await parseFile(path);
+  result.ms = parsed.ms;
+  result.importError = parsed.importError;
+  const docs = { parse: fromParse(parsed, pages), import: parsed.richText ? fromImport(parsed.richText, pages) : { blocks: [] } };
+  result.docs = docs;
+  if (ref) {
+    const reference: Doc = { blocks: ref.blocks };
+    result.parse = score(reference, ref.furniture, docs.parse).scores;
+    if (parsed.richText) result.import = score(reference, ref.furniture, docs.import).scores;
+  }
+  result.pdf = pdfTextOf(path, pages);
+  result.freeParse = freeScores(result.pdf, flatten(docs.parse));
+  if (parsed.richText) result.freeImport = freeScores(result.pdf, flatten(docs.import));
+  return result;
+}
+
+// ── Numbers for the table, the JSON, and the baselines ──────────────────────
+
+/** Metrics where a smaller number is better. */
+const LOWER_IS_BETTER = new Set(["furnitureLeaks", "splits", "merges", "tableOutside", "tableInside", "mathImages", "plainDisplay", "plainInline", "garbles", "numberLines"]);
+
+function numbers(s: Scores): Record<string, number | null> {
+  return {
+    composite: s.composite,
+    text: s.words.f1,
+    recall: s.words.recall,
+    precision: s.words.precision,
+    order: s.order,
+    furniture: s.furniture.clean,
+    furnitureLeaks: s.furniture.leaks,
+    blocks: s.blocks.f1,
+    paragraphs: s.blocks.paragraphs,
+    splits: s.blocks.splits.reduce((n, x) => n + x.pieces.length - 1, 0),
+    merges: s.blocks.merges.reduce((n, x) => n + x.parts.length - 1, 0),
+    headings: s.parts.headings,
+    listItems: s.lists.recall,
+    listDepth: s.lists.depth,
+    listMarkers: s.lists.markers,
+    tables: s.tables.f1,
+    tableOutside: s.tables.outside,
+    tableInside: s.tables.inside,
+    math: s.math.score,
+    displayMath: s.math.display,
+    inlineMath: s.math.inline,
+    mathImages: s.math.images,
+    plainDisplay: s.math.plainDisplay,
+    plainInline: s.math.plainInline,
+    garbles: s.garbles.excess,
+    bold: s.styles.bold,
+    italic: s.styles.italic,
+  };
+}
+
+function freeNumbers(f: FreeScores): Record<string, number | null> {
+  return {
+    composite: f.composite,
+    coverage: f.coverage.f1,
+    coverageRecall: f.coverage.recall,
+    coveragePrecision: f.coverage.precision,
+    furniture: f.furniture.clean,
+    furnitureLeaks: f.furniture.leaks,
+    numberLines: f.numberLines.count,
+    garbles: f.garbles.count,
+  };
+}
+
+const round = (x: number) => Math.round(x * 10_000) / 10_000;
+
+function baselineOf(r: Result): Record<string, number> {
+  const out: Record<string, number> = {};
+  const put = (mode: string, map: Record<string, number | null>) => {
+    for (const [k, v] of Object.entries(map)) if (v !== null && Number.isFinite(v)) out[`${mode}.${k}`] = round(v);
+  };
+  if (r.parse) put("parse", numbers(r.parse));
+  if (r.import) put("import", numbers(r.import));
+  if (r.freeParse) put("free.parse", freeNumbers(r.freeParse));
+  if (r.freeImport) put("free.import", freeNumbers(r.freeImport));
+  return out;
+}
+
+type BaselineFile = Record<string, Record<string, number>>;
+
+function readBaseline(path: string): BaselineFile {
+  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as BaselineFile) : {};
+}
+
+function writeBaseline(path: string, docs: BaselineFile) {
+  const merged = { ...readBaseline(path), ...docs };
+  const sorted: BaselineFile = {};
+  for (const id of Object.keys(merged).sort()) sorted[id] = merged[id];
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(sorted, null, 2)}\n`);
+}
+
+// ── The table ───────────────────────────────────────────────────────────────
+
+const fmt = (x: number | null | undefined, digits = 2) => (x === null || x === undefined ? "—" : x.toFixed(digits));
+const pad = (s: string, n: number) => (s.length >= n ? s.slice(0, n) : s + " ".repeat(n - s.length));
+const lpad = (s: string, n: number) => (s.length >= n ? s : " ".repeat(n - s.length) + s);
+
+function printTable(results: Result[]) {
+  const scored = results.filter((r) => r.parse);
+  const idWidth = Math.max(10, ...results.map((r) => r.entry.id.length)) + 1;
+  if (scored.length > 0) {
+    console.log("\nWith a reference — composite for the parse and the import, then the parse's metrics (0–1; counts where noted):");
+    const head = ["parse", "import", "text", "order", "furn", "blocks", "para", "head", "lists", "tables", "math", "img#", "garb#", "style", "ms"];
+    console.log(pad("id", idWidth) + pad("category", 11) + head.map((h) => lpad(h, 7)).join(""));
+    for (const r of scored) {
+      const s = r.parse as Scores;
+      const cells = [
+        fmt(s.composite, 1),
+        fmt(r.import?.composite, 1),
+        fmt(s.words.f1),
+        fmt(s.order),
+        fmt(s.furniture.clean),
+        fmt(s.blocks.f1),
+        fmt(s.blocks.paragraphs),
+        fmt(s.parts.headings),
+        fmt(s.lists.score),
+        fmt(s.tables.f1),
+        fmt(s.math.score),
+        String(s.math.images),
+        String(s.garbles.excess),
+        fmt(s.styles.score),
+        String(Math.round(r.ms)),
+      ];
+      console.log(pad(r.entry.id, idWidth) + pad(r.entry.category, 11) + cells.map((c) => lpad(c, 7)).join(""));
+    }
+  }
+  const free = results.filter((r) => r.freeParse);
+  if (free.length > 0) {
+    console.log("\nReference-free — composite for the parse and the import, then the parse's checks:");
+    const head = ["parse", "import", "cover", "recall", "prec", "furn", "leaks#", "num#", "garb#", "ms"];
+    console.log(pad("id", idWidth) + pad("category", 11) + head.map((h) => lpad(h, 8)).join(""));
+    for (const r of free) {
+      const f = r.freeParse as FreeScores;
+      const cells = [
+        fmt(f.composite, 1),
+        fmt(r.freeImport?.composite, 1),
+        fmt(f.coverage.f1),
+        fmt(f.coverage.recall),
+        fmt(f.coverage.precision),
+        fmt(f.furniture.clean),
+        String(f.furniture.leaks),
+        String(f.numberLines.count),
+        String(f.garbles.count),
+        String(Math.round(r.ms)),
+      ];
+      console.log(pad(r.entry.id, idWidth) + pad(r.entry.category, 11) + cells.map((c) => lpad(c, 8)).join(""));
+    }
+  }
+  const categories = new Map<string, { parse: number[]; import: number[]; free: number[] }>();
+  for (const r of results) {
+    const c = categories.get(r.entry.category) ?? { parse: [], import: [], free: [] };
+    if (r.parse) c.parse.push(r.parse.composite);
+    if (r.import) c.import.push(r.import.composite);
+    if (r.freeParse) c.free.push(r.freeParse.composite);
+    categories.set(r.entry.category, c);
+  }
+  const mean = (list: number[]) => (list.length > 0 ? list.reduce((a, b) => a + b, 0) / list.length : null);
+  console.log("\nBy category — mean composite (documents):");
+  for (const [name, c] of [...categories].sort()) {
+    console.log(
+      `  ${pad(name, 11)} parse ${lpad(fmt(mean(c.parse), 1), 5)}  import ${lpad(fmt(mean(c.import), 1), 5)}  (${c.parse.length} with a reference)   reference-free ${lpad(fmt(mean(c.free), 1), 5)} (${c.free.length})`,
+    );
+  }
+}
+
+// ── Main ────────────────────────────────────────────────────────────────────
+
+const t0 = performance.now();
+const { entries, problems } = loadCorpus();
+for (const p of problems) console.log(`corpus: ${p}`);
+const picked = entries.filter(
+  (e) => (!only || only.includes(e.id)) && (!category || e.category === category) && (!detail || e.id === detail),
+);
+if (picked.length === 0) {
+  console.log("No corpus document matches.");
+  process.exit(1);
+}
+const results: Result[] = [];
+for (const entry of picked) {
+  try {
+    results.push(await runEntry(entry));
+  } catch (err) {
+    results.push({ entry, committed: false, ms: 0, skipped: `failed: ${err instanceof Error ? err.message : String(err)}` });
+  }
+}
+
+for (const r of results) {
+  if (r.refProblems) console.log(`${r.entry.id}: the reference does not load, scored without it — ${r.refProblems.join("; ")}`);
+  if (r.mismatch) console.log(`${r.entry.id}: ${r.mismatch}`);
+  if (r.importError) console.log(`${r.entry.id}: the import converter failed, the import is not scored — ${r.importError}`);
+  if (r.skipped) console.log(`${r.entry.id}: skipped — ${r.skipped}`);
+}
+const listed = new Set(entries.map((e) => e.id));
+const orphans = REF_DIRS.flatMap((dir) => (existsSync(dir) ? readdirJson(dir) : [])).filter((id) => !listed.has(id));
+if (orphans.length > 0) console.log(`References with no corpus entry: ${orphans.join(", ")}`);
+
+if (detail) {
+  const r = results[0];
+  if (r?.docs) detailReport(r, flag("--import") ? "import" : "parse");
+} else {
+  printTable(results);
+}
+
+const json = value("--json");
+if (json) {
+  const out = results.map((r) => ({
+    id: r.entry.id,
+    category: r.entry.category,
+    skipped: r.skipped ?? null,
+    reference: Boolean(r.ref),
+    pages: r.pages ?? null,
+    parseMs: Math.round(r.ms),
+    parse: r.parse ? numbers(r.parse) : null,
+    import: r.import ? numbers(r.import) : null,
+    freeParse: r.freeParse ? freeNumbers(r.freeParse) : null,
+    freeImport: r.freeImport ? freeNumbers(r.freeImport) : null,
+  }));
+  writeFileSync(json, `${JSON.stringify(out, null, 2)}\n`);
+  console.log(`\nWrote ${json}`);
+}
+
+let dropped = 0;
+if (flag("--baseline")) {
+  const named = value("--baseline");
+  const base: BaselineFile = named ? readBaseline(named) : { ...readBaseline(BASELINE_PRIVATE), ...readBaseline(BASELINE_PUBLIC) };
+  const lines: string[] = [];
+  for (const r of results) {
+    const before = base[r.entry.id];
+    if (!before) continue;
+    const now = baselineOf(r);
+    for (const [key, was] of Object.entries(before)) {
+      const is = now[key];
+      if (is === undefined) {
+        lines.push(`  ${r.entry.id} ${key}: ${was} → (none)`);
+        continue;
+      }
+      const metric = key.slice(key.lastIndexOf(".") + 1);
+      const worse = LOWER_IS_BETTER.has(metric) ? is > was : is < was;
+      if (worse) lines.push(`  ${r.entry.id} ${key}: ${was} → ${is}`);
+    }
+  }
+  dropped = lines.length;
+  console.log(lines.length > 0 ? `\nDropped against the baseline (${lines.length}):\n${lines.join("\n")}` : "\nNo metric dropped against the baseline.");
+}
+
+if (flag("--save-baseline")) {
+  const named = value("--save-baseline");
+  const pub: BaselineFile = {};
+  const priv: BaselineFile = {};
+  for (const r of results) {
+    if (r.skipped) continue;
+    (named || !r.committed ? priv : pub)[r.entry.id] = baselineOf(r);
+  }
+  if (named) writeBaseline(named, priv);
+  else {
+    if (Object.keys(pub).length > 0) writeBaseline(BASELINE_PUBLIC, pub);
+    if (Object.keys(priv).length > 0) writeBaseline(BASELINE_PRIVATE, priv);
+  }
+  console.log(`Saved the baseline for ${Object.keys(pub).length + Object.keys(priv).length} documents.`);
+}
+
+console.log(`\n${results.length} documents in ${((performance.now() - t0) / 1000).toFixed(1)} s.`);
+process.exit(dropped > 0 ? 1 : 0);
+
+function readdirJson(dir: string): string[] {
+  return readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => f.slice(0, -5));
+}
