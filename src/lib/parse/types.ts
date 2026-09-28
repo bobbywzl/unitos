@@ -253,7 +253,17 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     video, iframe, and chart of the page against the blocks after the walk
 //     and rebuilds what no block carries where the page set it; a figure the
 //     model passes dropped between two kept blocks is restored.
+// 20: the parse loop's round 1 (SPEC.md §31) — PDF: a glyph's text comes
+//     from its character code, a TeX math glyph from TeX's font tables;
+//     inline formulas are LaTeX spans and a TeX page's display equations
+//     EQUATION blocks, each checked against the glyphs (a display that fails
+//     stays a crop); running heads, feet, and page numbers drop on evidence
+//     from other pages; a table the page's rules draw is found before the
+//     column split; a graphic keeps its labels; footnotes are their own
+//     blocks, linked to their marks; small caps, sub, and sup are styles;
+//     reading order is a recursive XY-cut; list markers are read by family;
+//     a drop cap joins its word. A Word file parses from its own structure.
 // Slides and sheets (SPEC.md §27) parse with their own parsers
 // (lib/parse/slides.ts, lib/parse/sheets.ts) and re-parse only on request:
 // they carry no version of their own.
-export const PARSER_VERSION = 19;
+export const PARSER_VERSION = 20;

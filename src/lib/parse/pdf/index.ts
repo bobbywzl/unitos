@@ -367,7 +367,11 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     const shown = displayLines(lines, ctx);
     const pageSegments = segmentPage(shown, ctx);
     const withEquations = displayEquations(pageSegments, shown, ctx, pageWidths[p], pageHeights[p]);
-    segments.push(...attachFigureRegions(withEquations, lines, ctx, pageWidths[p], pageHeights[p], graphics[p], p));
+    const withFigures = attachFigureRegions(withEquations, lines, ctx, pageWidths[p], pageHeights[p], graphics[p], p);
+    // Then a TeX page's displays its display lines missed, once the figures
+    // took their own words.
+    const missed = { graphics: graphics[p].map((g) => g.box) };
+    segments.push(...(ctx.tex ? displayEquations(withFigures, shown, ctx, pageWidths[p], pageHeights[p], missed) : withFigures));
   }
   // A FIGURE with a region and no caption is an embedded image; every other
   // empty segment drops.

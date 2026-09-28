@@ -126,6 +126,11 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       continue;
     }
     if (cur.length && gap > 0.6 * size && kinds[k] !== "math" && kinds[k - 1] !== "math") flush();
+    // TeX sets no space between a number and a letter of one formula: a
+    // number a word space before a math letter is the words' (a contents
+    // entry's "2.3 L² estimate" read "3\quad L^{2}", arXiv 2411.09614). An
+    // operator after a space still joins ("2 × 2").
+    if (kinds[k] === "math" && cur.length && gap > 0.2 * size && g.family !== null && mathGlyph(g.family, g.code)?.cls === "ord" && !cur.some((c) => kind(c, size) === "math")) flush();
     cur.push(g);
   }
   flush();

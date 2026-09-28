@@ -283,14 +283,17 @@ function treeDiff(a: unknown, b: unknown, path = "", out: { path: string; a: unk
   return out;
 }
 
-/** The grid text of a page-editor table, built the way the URL parse builds
-    a table's text (lib/parse/url.ts tableText): a rowspan's words repeat on
-    each row it covers, a colspan's extra columns are blank; a cell's
-    paragraphs join with a space. So the parse's text is this text exactly
-    when the converter kept every cell and repeated none. */
-function tableGrid(table: RichNode): { text: string; places: Map<RichNode, { row: number; column: number }> } {
+/** The text of a page-editor table two ways. The grid text is built the way
+    the URL parse builds a table's text (lib/parse/url.ts tableText): a
+    rowspan's words repeat on each row it covers, a colspan's extra columns
+    are blank. The cell text is each cell once, in its row, as a PDF's ruled
+    table writes its text (its html's words: lib/parse/pdf/ruled.ts). A
+    cell's paragraphs join with a space. So the parse's text is one of them
+    exactly when the converter kept every cell and repeated none. */
+function tableGrid(table: RichNode): { text: string; cellText: string; places: Map<RichNode, { row: number; column: number }> } {
   const rows = (table.content ?? []).filter((r) => r.type === "tableRow");
   const grid: string[][] = rows.map(() => []);
+  const cells: string[][] = rows.map(() => []);
   const places = new Map<RichNode, { row: number; column: number }>();
   rows.forEach((row, r) => {
     let c = 0;
@@ -302,6 +305,7 @@ function tableGrid(table: RichNode): { text: string; places: Map<RichNode, { row
         if (n.type === "paragraph" || n.type === "heading" || n.type === "codeBlock") paragraphs.push(norm(inlineText(n).replaceAll("\n", " ")));
       });
       const text = paragraphs.filter(Boolean).join(" ");
+      cells[r].push(text);
       const colspan = Math.max(1, Number(cell.attrs?.colspan) || 1);
       const rowspan = Math.max(1, Number(cell.attrs?.rowspan) || 1);
       for (let dr = 0; dr < rowspan && r + dr < grid.length; dr++) {
@@ -310,7 +314,11 @@ function tableGrid(table: RichNode): { text: string; places: Map<RichNode, { row
       c += colspan;
     }
   });
-  return { text: grid.map((row) => [...row].map((cell) => cell ?? "").join("\t")).join("\n"), places };
+  return {
+    text: grid.map((row) => [...row].map((cell) => cell ?? "").join("\t")).join("\n"),
+    cellText: cells.map((row) => row.join("\t")).join("\n"),
+    places,
+  };
 }
 /** A table's text with each cell's words normalized, rows and cells kept. */
 function normTable(text: string): string {
@@ -430,7 +438,7 @@ function mapDoc(doc: RichNode): DocMap {
   return { nodeById, tableOf, cellOf, tables };
 }
 
-function actualUnits(rows: Row[], map: DocMap): Unit[] {
+function actualUnits(rows: Row[], map: DocMap, importKind: ImportKind): Unit[] {
   const units: Unit[] = [];
   const seenTables = new Set<number>();
   rows.forEach((row, i) => {
@@ -438,7 +446,8 @@ function actualUnits(rows: Row[], map: DocMap): Unit[] {
     if (table !== undefined) {
       if (seenTables.has(table)) return;
       seenTables.add(table);
-      const text = normTable(tableGrid(map.tables[table - 1]).text);
+      const grid = tableGrid(map.tables[table - 1]);
+      const text = normTable(importKind === "pdf" ? grid.cellText : grid.text);
       units.push({ kind: "table", text, key: keyOf("table", text), block: -1, start: 0, offset: 0, row: i });
       return;
     }
@@ -592,7 +601,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
 
   // 3. The rows' words equal the parse's words, less list markers and table repeats.
   const { units: want, kickers, titleAt, meta } = expectedUnits(f);
-  const got = actualUnits(rows, map);
+  const got = actualUnits(rows, map, f.kind);
   const pairs = align(
     want.map((u) => u.key),
     got.map((u) => u.key),
@@ -617,6 +626,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
     const same = addedLeft.findIndex((a) => a.u.key === l.u.key);
     if (same >= 0) {
       moved.push(clip(l.u.text, 40));
+      l.u.row = addedLeft[same].u.row;
       addedLeft.splice(same, 1);
       continue;
     }
@@ -625,6 +635,8 @@ async function checkFixture(f: Fixture): Promise<Report> {
     if (l.u.kind === "list" && marker >= 0) {
       const row = addedLeft[marker].u.text;
       (ANY_MARKER.test(row) ? markerKept : markerOnly).push(`"${clip(l.u.text, 30)}" → "${clip(row, 30)}"`);
+      // Its row is known: a page start in it is looked for there.
+      l.u.row = addedLeft[marker].u.row;
       addedLeft.splice(marker, 1);
       continue;
     }
@@ -737,7 +749,11 @@ async function checkFixture(f: Fixture): Promise<Report> {
   walk(doc, (n) => {
     if (n.type === "footnoteReference") labelOf.set(String(n.attrs?.footnoteId), labels[labelOf.size] ?? "");
   });
-  const printed = (n: RichNode) => (n.type === "footnoteReference" ? (labelOf.get(String(n.attrs?.footnoteId)) ?? "") : inlineText(n));
+  // An inline equation's words are its TeX, not what the PDF prints: the
+  // words after a page start are compared up to the first one.
+  const FORMULA = "\u0000";
+  const printed = (n: RichNode) =>
+    n.type === "footnoteReference" ? (labelOf.get(String(n.attrs?.footnoteId)) ?? "") : n.type === "inlineMath" ? FORMULA : inlineText(n);
   walk(doc, (node) => {
     if (typeof node.attrs?.pageStart === "number") starts.push({ page: node.attrs.pageStart, on: node.type, before: "", after: node.type === "figure" ? `[figure] ${clip(String(node.attrs.caption ?? ""), 40)}` : clip(inlineText(node), 40), node });
     if (!node.content) return;
@@ -803,7 +819,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
       let checked = 0;
       for (const s of starts) {
         if (s.on === "figure") continue;
-        const words = norm(s.after).split(" ").slice(0, 3).join(" ");
+        const words = norm(s.after.split(FORMULA)[0]).split(" ").slice(0, 3).join(" ");
         if (words.length < 6) continue;
         checked++;
         const pageText = f.pdfPages[s.page - 1] ?? "";

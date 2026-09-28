@@ -96,9 +96,11 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     // Stretched to the first word, it takes no space before it.
     const lead: Item = { ...cap, str: cap.str.trim(), y: first.y, size: first.size, w: first.x - cap.x, bold: first.bold, italic: first.italic, mono: first.mono, smallCaps: first.smallCaps, href: first.href, font: first.font };
     out = out.map((i) => (i === cap ? lead : i));
-    // The paragraph's next line, under the lines beside it: where they
-    // would start without the cap (a CSS float stands in the first line's
-    // indent, and the lines beside it read as a list under it).
+    // The other lines beside it start where the paragraph's next line does,
+    // or where the cap does when none follows: set in by its width, they
+    // broke the paragraph where the lines came back to the column's edge
+    // (synth-paper-tex). A CSS float sits in the first line's indent, and
+    // the first line keeps it.
     const last = lines[lines.length - 1];
     const under = items.filter((i) => i.y < last.y - last.size * 0.5 && i.y >= last.y - last.size * 1.6 && i.x < last.x - last.size && i.x >= cap.x - cap.size);
     const x = Math.min(cap.x, ...under.map((i) => i.x));
@@ -494,6 +496,7 @@ export function buildLines(items: Item[], page: number): Line[] {
   };
   regrouped.sort((a, b) => baseline(b) - baseline(a));
   const lines = regrouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);
+  // The lines beside a drop cap start where its paragraph's lines do.
   for (const { item, x } of starts) {
     const line = lines.find((l) => l.x === item.x && Math.abs(l.y - item.y) < item.size * 0.3);
     if (line) {

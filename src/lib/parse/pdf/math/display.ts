@@ -10,9 +10,10 @@
 // blocks: its lines — a fraction's numerator and denominator, a sum's
 // limits, a matrix's rows, the label — join into one line (displayLines).
 // Elsewhere a display is found among the blocks by its math-font share, as
-// before, and stays a crop.
+// before, and stays a crop; so does a display those lines missed.
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
+import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { regionOf, unionBox } from "@/lib/parse/pdf/geometry";
 import { BULLET_RE } from "@/lib/parse/pdf/markers";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
@@ -37,6 +38,9 @@ const MATH_WORDS = new Set([
   "csc", "sinh", "cosh", "tanh", "arcsin", "arccos", "arctan", "det", "mod", "dim", "ker", "deg", "gcd", "hom", "arg",
   "pr", "var", "cov", "tr", "sgn", "diag", "rank", "span", "supp",
 ]);
+
+// A formula's relations and operators: a display states or applies one.
+const RELATION_RE = /[=<>≤≥≈∼≃≅≡≠∝≪≫≺≻→←↔⇒⇐⇔⟶⟹⟺↦∈∉∋⊂⊆⊃⊇∑∏∫∮⋀⋁⋃⋂+×∪∩⊕⊗∧∨]/;
 
 // ── Display lines on a TeX page ─────────────────────────────────────────────
 
@@ -79,6 +83,21 @@ function unlabeled(line: Line): { x: number; xEnd: number; runs: Run[]; text: st
   const kept = line.items.filter((i) => i.x >= x - 0.5 && i.x < labelX - 0.5);
   const xEnd = kept.length > 0 ? Math.max(...kept.map((i) => i.x + i.w)) : line.xEnd;
   return { x, xEnd, runs, text: line.text.slice(start, end), label };
+}
+
+// Measured values in the words outside a formula ("0.95", "(0.21)") and
+// marks (✓ ✗) anywhere: a table's row holds two or more.
+function tableValues(outside: string, text: string): number {
+  return outside.split(/\s+/).filter((t) => /^[-−+]?\d+[.,]\d+%?$|^\(\d[\d.,]*\)$/.test(t)).length + (text.match(/[✓✗]/g)?.length ?? 0);
+}
+
+// A text with its inline formulas and its scripts blanked: its words.
+function wordsOutside(text: string, runs: Run[]): string {
+  const blank = new Uint8Array(text.length);
+  for (const r of runs) if (r.zone || r.sup || r.sub) blank.fill(1, r.start, r.end);
+  let out = "";
+  for (let i = 0; i < text.length; i++) out += blank[i] ? " " : text[i];
+  return out;
 }
 
 function kindOf(line: Line, ctx: PageContext, column: { left: number; right: number }, fenced: boolean): LineKind {
@@ -125,9 +144,7 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
   // beside it ("P(S ∈ M)  0.00 (0.00)  0.00 (0.00)", arXiv 2302.12627
   // p. 23), unless a matrix's tall delimiters hold it. A fraction's digits
   // are whole numbers ("1" over "N²").
-  const values =
-    outside.split(/\s+/).filter((t) => /^[-−+]?\d+[.,]\d+%?$|^\(\d[\d.,]*\)$/.test(t)).length + (text.match(/[✓✗]/g)?.length ?? 0);
-  if (zoneChars > 0 && values >= 2 && !fenced) return "text";
+  if (zoneChars > 0 && tableValues(outside, text) >= 2 && !fenced) return "text";
   // A labeled line: a short formula beside it, whatever its fonts (¹⁴₆C,
   // a sans-serif A).
   if (label && words.length === 0 && text.replace(/\s/g, "").length <= 20) return "math";
@@ -563,10 +580,19 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
 }
 
 /** Display equations on a page: on a TeX page each joined display line's
-    block, elsewhere each math block with the equation-shaped blocks against
+    block, elsewhere each math block, with the equation-shaped blocks against
     it. Each becomes one EQUATION, or a FIGURE crop when its LaTeX fails the
-    check (or the page has no TeX math fonts to read it by). */
-export function displayEquations(segments: Segment[], lines: Line[], ctx: PageContext, pageWidth: number, pageHeight: number): Segment[] {
+    check (or the page has no TeX math fonts to read it by). With missed, a
+    TeX page's second pass, once the figures took their own words: each
+    display the display lines missed becomes a crop. */
+export function displayEquations(
+  segments: Segment[],
+  lines: Line[],
+  ctx: PageContext,
+  pageWidth: number,
+  pageHeight: number,
+  missed?: { graphics: Box[] },
+): Segment[] {
   const tex = ctx.tex;
   // A joined display line is one block: the block that reads as the line
   // and lies over it.
@@ -579,6 +605,45 @@ export function displayEquations(segments: Segment[], lines: Line[], ctx: PageCo
       : displays.find((l) => !used.has(l) && flat(l.text) === flat(s.text) && l.y >= s.box!.y1 && l.y <= s.box!.y2);
   const rowGap = ctx.bodySize * ctx.leading;
   const near = (a: Segment, b: Segment) => a.box!.y1 - b.box!.y2 < rowGap * 1.5;
+  // A display the display lines missed on a TeX page read as words, its
+  // scripts lost: one set small in an abstract (its lines all read as
+  // scripts), one with a word in roman beside its formula ("⋀ AtMostOne(…)
+  // (13)", arXiv 2506.06752 p. 8). The math share finds it as it does on
+  // any other page, and it becomes a crop: a picture of the right formula.
+  // Only a display does: it states a relation or applies an operator, it
+  // stands apart (centered in its column, or with a printed label: a
+  // formula at the column's edge is as often a sentence's end, "where q =
+  // 1 − p.", Grinstead–Snell p. 106), and it is no row a display line left
+  // out (a limit within an em and a half of one, inside its width). What
+  // the display lines read as text stays text, in the display and in the
+  // lines against it: a sentence (a word outside the formula in the
+  // display, two in a line against it, as a fraction's parts in words hold,
+  // "area of E"), a table's row (two values or marks), head, or caption, an
+  // item or a panel label (its marker, "(A) d = 3, e = 2"), and a figure's
+  // labels (by a graphic).
+  const inDisplay = (s: Segment) => {
+    const x = (s.box!.x1 + s.box!.x2) / 2;
+    const y = (s.box!.y1 + s.box!.y2) / 2;
+    return displays.some((l) => x > l.x && x < l.xEnd && y > l.yMin - l.size * 1.6 && y < l.yMax + l.size * 1.6);
+  };
+  const em = ctx.bodySize;
+  const byGraphic = (s: Segment) =>
+    missed!.graphics.some((g) => s.box!.x1 < g.x2 + em && s.box!.x2 > g.x1 - em && s.box!.y1 < g.y2 + em && s.box!.y2 > g.y1 - em);
+  const formulaPart = (s: Segment, words: number) => {
+    if (s.type !== "PARAGRAPH" || s.region || !s.box || BULLET_RE.test(s.text) || CAPTION_RE.test(s.text) || byGraphic(s)) return false;
+    const outside = wordsOutside(s.text, s.runs ?? []);
+    return (outside.match(/\p{Script=Latin}{3,}/gu) ?? []).length <= words && tableValues(outside, s.text) < 2;
+  };
+  const isMissed = (s: Segment) =>
+    missed !== undefined && formulaPart(s, 1) && isMathSegment(s, ctx) && (s.mathShare ?? 0) >= 0.25 && RELATION_RE.test(s.text) && !inDisplay(s);
+  const part = (s: Segment) => isEquationShaped(s, ctx) && (!missed || formulaPart(s, 2));
+  const centered = (s: Segment) => {
+    const n = lines.findIndex((l) => l.y >= s.box!.y1 && l.y <= s.box!.y2 && l.x >= s.box!.x1 - 0.5 && l.xEnd <= s.box!.x2 + 0.5);
+    const c = n >= 0 ? columnOf(lines, n, ctx) : null;
+    const size = s.lineSize ?? ctx.bodySize;
+    return c !== null && Number.isFinite(c.right) && s.box!.x1 > c.left + size * 0.5 && Math.abs((s.box!.x1 + s.box!.x2) / 2 - (c.left + c.right) / 2) < size * 1.5;
+  };
+  const labeled = (s: Segment) => LABEL_RE.test(s.text.trim().split(/\s+/).pop() ?? "");
   // The page's glyphs no line reads, once for all its displays.
   let orphans: Glyph[] | null = null;
   const out: Segment[] = [];
@@ -588,37 +653,36 @@ export function displayEquations(segments: Segment[], lines: Line[], ctx: PageCo
     // The EQUATION keeps its glyphs' box as a region: a check of the parse,
     // or a later repair, reads the glyphs under it.
     let equation: { latex: string; box: Box } | null = null;
-    if (tex) {
-      const line = displayOf(segments[k]);
-      if (!line) {
-        out.push(segments[k]);
-        k++;
-        continue;
-      }
+    const line = tex && !missed ? displayOf(segments[k]) : undefined;
+    if (line) {
       used.add(line);
       orphans ??= orphanGlyphs(lines, ctx.drawing);
       equation = equationOf(line, orphans, ctx);
+    } else if (missed ? !isMissed(segments[k]) : tex || !isMathSegment(segments[k], ctx)) {
+      out.push(segments[k]);
+      k++;
+      continue;
     }
     // A display that stays a crop takes the equation-shaped lines against
     // it: on a TeX page, a part the display's lines left out (a denominator
     // in words) is still in the picture.
     if (!equation) {
-      if (!tex && !isMathSegment(segments[k], ctx)) {
+      while (
+        m < segments.length &&
+        ((!tex && isMathSegment(segments[m], ctx)) || isMissed(segments[m]) || part(segments[m])) &&
+        !(tex && displayOf(segments[m])) &&
+        near(segments[m - 1], segments[m])
+      ) {
+        m++;
+      }
+      if (missed && ((!centered(segments[k]) && !segments.slice(k, m).some(labeled)) || segments[m]?.type === "TABLE")) {
         out.push(segments[k]);
         k++;
         continue;
       }
       // Backward over equation-shaped lines already pushed.
-      while (out.length > 0 && isEquationShaped(out[out.length - 1], ctx) && near(out[out.length - 1], segments[start])) {
+      while (out.length > 0 && part(out[out.length - 1]) && near(out[out.length - 1], segments[start])) {
         start = segments.indexOf(out.pop()!);
-      }
-      while (
-        m < segments.length &&
-        ((!tex && isMathSegment(segments[m], ctx)) || isEquationShaped(segments[m], ctx)) &&
-        !(tex && displayOf(segments[m])) &&
-        near(segments[m - 1], segments[m])
-      ) {
-        m++;
       }
     }
     const group = segments.slice(start, m);
@@ -636,6 +700,16 @@ export function displayEquations(segments: Segment[], lines: Line[], ctx: PageCo
     // loop finding).
     const above = out[out.length - 1];
     const below = segments[m];
+    // A missed display whose lines a block beside it overlaps (its
+    // numerators read into the paragraph over it) has no clean crop: its
+    // words stay (Grinstead–Snell p. 246).
+    const tangled = (s?: Segment) =>
+      s?.box !== undefined && s.page === group[0].page && s.box.x1 < box.x2 && s.box.x2 > box.x1 && s.box.y1 < box.y2 - size * 0.3 && s.box.y2 > box.y1 + size * 0.3;
+    if (missed && (tangled(above) || tangled(below))) {
+      out.push(...segments.slice(start, k + 1));
+      k++;
+      continue;
+    }
     if (above?.box && above.page === group[0].page && above.box.y1 > crop.y1) crop = { ...crop, y2: Math.min(crop.y2, above.box.y1 - 1) };
     if (below?.box && below.page === group[0].page && below.box.y2 < crop.y2) crop = { ...crop, y1: Math.max(crop.y1, below.box.y2 + 1) };
     if (equation) {
