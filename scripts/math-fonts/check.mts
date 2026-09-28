@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import katex from "katex";
 import { getDocumentProxy } from "unpdf";
-import "@/lib/pdf-runtime";
+import { PDF_CMAPS } from "@/lib/pdf-runtime";
 import { parsePdf } from "@/lib/parse/pdf";
 import { readDrawing, type Glyph } from "@/lib/parse/pdf/drawing";
 import type { MathFamily } from "@/lib/parse/pdf/glyphs";
@@ -64,7 +64,7 @@ function typeset(dir: string, name: string, preamble: string, pages: string[]): 
 }
 
 async function pageGlyphs(file: string): Promise<Glyph[][]> {
-  const pdf = await getDocumentProxy(new Uint8Array(readFileSync(file)));
+  const pdf = await getDocumentProxy(new Uint8Array(readFileSync(file)), PDF_CMAPS);
   const out: Glyph[][] = [];
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);

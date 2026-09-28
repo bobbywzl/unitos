@@ -9,9 +9,11 @@ const WORD_RE =
 export type Word = { w: string; start: number; end: number };
 
 /** One word as the metrics compare it: NFKC (ligatures, full-width forms,
-    Kangxi radicals), lower case, soft hyphens and zero-width characters out. */
+    Kangxi radicals), lower case, soft hyphens and zero-width characters out.
+    A dotless ı and a combining acute are í: TeX sets í so ("Domínguez"),
+    the parse composes the two, and pdftotext keeps them apart. */
 export function normWord(word: string): string {
-  return word.normalize("NFKC").toLowerCase().replace(/[\u00AD\u200B-\u200D\u2060\uFEFF]/g, "");
+  return word.replace(/\u0131\u0301/g, "\u00ED").normalize("NFKC").toLowerCase().replace(/[\u00AD\u200B-\u200D\u2060\uFEFF]/g, "");
 }
 
 /** The words of a text with their offsets in it. */
@@ -28,6 +30,7 @@ export function wordsOf(text: string): Word[] {
     soft hyphens and zero-width characters out, spaces collapsed, lower case. */
 export function normText(text: string): string {
   return text
+    .replace(/\u0131\u0301/g, "\u00ED")
     .normalize("NFKC")
     .replace(/[\u00AD\u200B-\u200D\u2060\uFEFF]/g, "")
     .replace(/[‘’‚‛′‵]/g, "'")

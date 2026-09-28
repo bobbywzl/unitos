@@ -31,6 +31,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, isAbsolute, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { getDocumentProxy } from "unpdf";
+import { PDF_CMAPS } from "@/lib/pdf-runtime";
 import { pageNames, renderBlockLines } from "@/lib/derive/context";
 import { deriveBlocks, inlineText, mathWords, type DerivedBlock } from "@/lib/docs/blocks";
 import { richTextFromImport } from "@/lib/docs/import";
@@ -1028,7 +1029,9 @@ async function checkFixture(f: Fixture): Promise<Report> {
         checked++;
         const pageText = f.pdfPages[s.page - 1] ?? "";
         const squash = (t: string) => t.replace(/[\s­-]+/g, "").toLowerCase();
-        if (!squash(pageText).includes(squash(words))) off.push(`p. ${s.page} "${words}"`);
+        // At most 40 letters: Japanese sets no spaces, so its three "words"
+        // ran on for a paragraph, past the page's end.
+        if (!squash(pageText).includes(squash(words).slice(0, 40))) off.push(`p. ${s.page} "${words}"`);
       }
       check(off.length === 0, "the words after each page start are on that page of the PDF", off.length ? `${off.length} of ${checked}: ${off.slice(0, 5).join(" | ")}` : `${checked} checked`);
     }
@@ -1523,7 +1526,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
 // ── Sources ─────────────────────────────────────────────────────────────────
 
 async function pdfPageTexts(bytes: Uint8Array): Promise<string[]> {
-  const pdf = await getDocumentProxy(new Uint8Array(bytes));
+  const pdf = await getDocumentProxy(new Uint8Array(bytes), PDF_CMAPS);
   const out: string[] = [];
   for (let p = 1; p <= pdf.numPages; p++) {
     const content = await (await pdf.getPage(p)).getTextContent();
