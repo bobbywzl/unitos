@@ -423,9 +423,15 @@ function drawingIn(drawing: Drawn, y1: number, y2: number, x1: number, x2: numbe
   return box;
 }
 
+// A clip paints nothing: Chromium clips a printed page's text to its column,
+// and every short paragraph over a caption read as a legend inside the
+// figure (synth-paper-html p1: "where x is the article … Fig. 1 shows the
+// whole model." went into Fig. 1's crop and left the text).
 function overlapsDrawing(box: Box, drawing: Drawn): boolean {
   return [...drawing.paths, ...drawing.images].some(
-    (b) => b.x1 < box.x2 && b.x2 > box.x1 && b.y1 < box.y2 && b.y2 > box.y1 && (b.x2 - b.x1 > 2 || b.y2 - b.y1 > 2),
+    (b) =>
+      !("clip" in b && b.clip) &&
+      b.x1 < box.x2 && b.x2 > box.x1 && b.y1 < box.y2 && b.y2 > box.y1 && (b.x2 - b.x1 > 2 || b.y2 - b.y1 > 2),
   );
 }
 

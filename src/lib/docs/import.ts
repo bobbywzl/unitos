@@ -400,9 +400,11 @@ function listLine(line: Source): ListLine {
   return out;
 }
 
-/** A printed bullet as the page editor's glyph: a round, a hollow, and a
-    square bullet are Google Docs' own (● ○ ■); any other as printed. */
-const BULLET_GLYPHS: Record<string, string> = { "•": "●", "·": "●", "∙": "●", "◦": "○", "▪": "■" };
+/** A printed bullet as the page editor draws it: a small hollow or square
+    one is Google Docs' own (○ ■), any other as printed but "•", which is
+    any bullet (the parse writes it where the page draws one the text does
+    not hold, and for a Word file's round one): the level's own. */
+const BULLET_GLYPHS: Record<string, string> = { "◦": "○", "▪": "■" };
 
 /** Each marker's level at its line's depth, in reading order. A bullet the
     parse keeps as printed (`printed`) draws its glyph. A numeral of one
@@ -412,13 +414,13 @@ const BULLET_GLYPHS: Record<string, string> = { "•": "●", "·": "●", "∙"
     under "1.": "%0.%1"), else prints them ("1.2" at the top: "1.%0"). A
     counter whose words the page cannot draw (lib/docs/schema.ts
     formatParts) is no marker. */
-function levelsOfLines(lines: ListLine[], printed: () => boolean): void {
+function levelsOfLines(lines: ListLine[], printed: boolean): void {
   const open: ListLine[] = [];
   for (const line of lines) {
     const prev = open[line.depth];
     open[line.depth] = line;
     open.length = line.depth + 1;
-    if (line.bullet && line.type === "bulletList" && printed()) line.level = { bullet: BULLET_GLYPHS[line.bullet] ?? line.bullet };
+    if (printed && line.type === "bulletList" && line.bullet && line.bullet !== "•") line.level = { bullet: BULLET_GLYPHS[line.bullet] ?? line.bullet };
     let count = line.count;
     if (!count) continue;
     const k = Math.min(line.depth, 8);
@@ -878,10 +880,11 @@ class Converter {
     this.lastList = { lines, nodes, at: this.out.length - nodes.length };
   }
 
-  /** A PDF's and a Word file's bullets are as printed ("•" where the page
-      draws one the text does not hold); a web page's and a text file's "-"
-      is any bullet. */
-  private readonly printed = () => this.input.kind === "docx" || this.input.kind === "pdf";
+  /** A PDF's and a Word file's bullets are as printed; a web page's and a
+      text file's "-" is any bullet. */
+  private get printed(): boolean {
+    return this.input.kind === "docx" || this.input.kind === "pdf";
+  }
 
   /** The lines as lists, each outermost list in its format, the last line
       spaced as a paragraph is. */

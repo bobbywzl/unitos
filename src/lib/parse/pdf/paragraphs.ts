@@ -146,7 +146,14 @@ export function lineAlign(lines: Line[], from: number, to: number, ctx: PageCont
   if (group.every((_, k) => isCentered(lines, from + k, ctx))) return "center";
   const edges = group.map((_, k) => columnEdges(lines, from + k, ctx));
   const atRight = (l: Line, k: number) => edges[k].right > 0 && Math.abs(edges[k].right - l.xEnd) <= l.size * 0.33;
-  const ragged = group.length === 1 ? group[0].x - edges[0].left > group[0].size * 4 : group.some((l) => Math.abs(l.x - group[0].x) > l.size);
+  // Flush right starts its lines anywhere but at the column's left edge: a
+  // justified paragraph's indented first line over lines that fill the
+  // column read as flush right (arxiv-2504-02736 p2).
+  const inset = (l: Line, k: number) => l.x - edges[k].left;
+  const ragged =
+    group.length === 1
+      ? inset(group[0], 0) > group[0].size * 4
+      : group.every((l, k) => inset(l, k) > l.size * 2) && group.some((l) => Math.abs(l.x - group[0].x) > l.size);
   if (group.every(atRight) && ragged) return "right";
   const last = group.length - 1;
   if (last >= 1 && group.slice(0, last).every(atRight) && justifiedPage(lines, ctx)) return "justify";

@@ -101,15 +101,29 @@ function owners(glyphs: Glyph[], x1: number, x2: number): Glyph[] {
   return x1 >= from - size * 0.5 && x2 <= to + size * 0.5 ? glyphs : [];
 }
 
-// Glyphs standing alone under a rule, the next line's words not running on
-// past its ends: a fraction's denominator, so the rule is its bar.
-function overDenominator(byY: Glyph[], x1: number, x2: number, y: number): boolean {
-  const under = marked(byY, x1, x2, y, -0.8, -0.01);
-  if (under.length === 0) return false;
-  const base = median(under.map((g) => g.y));
-  const size = median(under.map((g) => g.size));
-  const around = marked(byY, x1 - size * 1.5, x2 + size * 1.5, base, -0.2 * (size / size), 0.2);
-  return !around.some((g) => middle(g) < x1 || middle(g) > x2);
+// A rule that sits on the glyphs under it, within a quarter em of their
+// tops: a fraction's bar over its denominator, an overline over its letter
+// on the line below. An underline stands clear of the next line (TeX's
+// overlines underlined single letters of the line above them).
+function onGlyphsBelow(byY: Glyph[], x1: number, x2: number, y: number): boolean {
+  return marked(byY, x1, x2, y, -1.3, -0.01).some((g) => y - (g.y + g.size * 0.7) < g.size * 0.25);
+}
+
+// A mark that starts or ends inside a word: the glyph beside its first or
+// last touches it, both letters. A table's rule drawn cell by cell put a
+// piece under one letter of a column header; TeX's rules under single
+// letters inside words.
+function cutsWord(byY: Glyph[], run: Glyph[]): boolean {
+  const word = (g: Glyph) => /[\p{L}\p{N}]/u.test(g.unicode);
+  const sorted = [...run].sort((a, b) => a.x - b.x);
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  const touches = (edge: Glyph, x1: number, x2: number) =>
+    word(edge) && marked(byY, x1, x2, edge.y, -0.1, 0.1).some((g) => !run.includes(g) && word(g) && Math.abs(g.y - edge.y) < edge.size * 0.1);
+  return (
+    touches(first, first.x - first.size * 0.35, first.x - 0.01) ||
+    touches(last, last.x + last.w + 0.01, last.x + last.w + last.size * 0.35)
+  );
 }
 
 /** Each text glyph's underline, strikethrough, and highlight on a page. */
@@ -127,9 +141,9 @@ function drawnMarks(glyphs: Glyph[], drawing: PageDrawing): Map<Glyph, Marks> {
     // under the descenders); a strikethrough: through their x-height.
     const thin = (list: Glyph[]) => list.filter((g) => rule.thickness <= g.size * 0.15);
     const under = owners(thin(marked(byY, rule.x1, rule.x2, rule.y1, 0.02, 0.45)), rule.x1, rule.x2);
-    if (under.length > 0 && !overDenominator(byY, rule.x1, rule.x2, rule.y1)) set(under, { underline: true });
+    if (under.length > 0 && !onGlyphsBelow(byY, rule.x1, rule.x2, rule.y1) && !cutsWord(byY, under)) set(under, { underline: true });
     const through = owners(thin(marked(byY, rule.x1, rule.x2, rule.y1, -0.45, -0.15)), rule.x1, rule.x2);
-    if (through.length > 0) set(through, { strike: true });
+    if (through.length > 0 && !cutsWord(byY, through)) set(through, { strike: true });
   }
   for (const fill of drawing.fills) {
     if (!fill.color || luminance(fill.color) > 0.97) continue;
