@@ -40,18 +40,24 @@ const letters = (name: string) => name.replace(/[^\p{L}\p{N}]/gu, "").toLowerCas
 // The menu's faces, the longest name first (Roboto Mono before Roboto).
 const MENU = DOCS_FONTS.map((f) => ({ name: f.name, key: letters(f.name) })).sort((a, b) => b.key.length - a.key.length);
 
-// A CJK face sets every character at one width: MS Gothic read as monospace.
-const CJK_SANS = /Gothic|SimHei|YaHei|ZenHei|HeiTi|DengXian|UDShinGo|Meiryo|Malgun|Dotum|Gulim|SansCJK|SourceHanSans/i;
-const CJK_SERIF = /Mincho|SimSun|STSong|SongTi|宋|KaiTi|FangSong|MingLiU|Batang|Gungsuh|SerifCJK|SourceHanSerif/i;
+// A CJK face sets every character at one width, and pdf.js names its shape
+// monospace: MS Gothic, and a Japanese journal's Ryumin body, read as
+// Courier New. Gothic, Hei, and Dotum faces are sans; Mincho, Song, Ming,
+// Kai, and Batang faces serif.
+const CJK_SANS =
+  /Gothic|ShinGo|MidashiGo|FutoGo|KakuGo|KozGo|HiraKaku|HiraMaru|Jun\d|SimHei|YaHei|ZenHei|Heiti|STHei|DengXian|Meiryo|Malgun|Dotum|Gulim|SansCJK|SourceHanSans/i;
+const CJK_SERIF =
+  /Mincho|Ryumin|MidashiMin|FutoMin|HeiseiMin|KozMin|HiraMin|SimSun|STSong|SongTi|宋|MSung|KaiTi|FangSong|Ming(?:LiU|Std)|Batang|Gungsuh|Myeongjo|Myungjo|SerifCJK|SourceHanSerif/i;
 const MONO = /Mono|Courier|Consol|Typewriter|^CMTT/i;
 const SERIF = /Serif|Times|Garamond|Georgia|Palatino|Century|Schoolbook|Baskerville|Caslon|Bodoni|Didot|Minion|Utopia|Charter|Libertin|Cambria|Bookman/i;
 
 /** A font's shape by its name, else by pdf.js's reading of its flags (its
-    fallback name: "serif", "sans-serif", or "monospace"). */
-export function fontShape(name: string, fallback?: string | null): Shape {
+    fallback name: "serif", "sans-serif", or "monospace"). cjk: the font
+    sets CJK characters, and its one width says no monospace. */
+export function fontShape(name: string, fallback?: string | null, cjk = false): Shape {
   if (CJK_SANS.test(name)) return "sans";
   if (CJK_SERIF.test(name)) return "serif";
-  if (MONO.test(name) || fallback === "monospace") return "mono";
+  if (MONO.test(name) || (fallback === "monospace" && !cjk)) return "mono";
   if (fallback === "serif") return "serif";
   if (fallback === "sans-serif") return "sans";
   return SERIF.test(name) ? "serif" : "sans";
@@ -60,12 +66,13 @@ export function fontShape(name: string, fallback?: string | null): Shape {
 const cache = new Map<string, string>();
 
 /** The page editor's face for a PDF font: its name without the subset
-    prefix ("TimesNewRomanPS-BoldMT") and pdf.js's fallback name. */
-export function faceOf(name: string, fallback?: string | null): string {
-  const key = `${name}|${fallback ?? ""}`;
+    prefix ("TimesNewRomanPS-BoldMT"), pdf.js's fallback name, and whether
+    it sets CJK characters. */
+export function faceOf(name: string, fallback?: string | null, cjk = false): string {
+  const key = `${name}|${fallback ?? ""}|${cjk ? "cjk" : ""}`;
   let face = cache.get(key);
   if (face === undefined) {
-    face = menuFace(name) ?? ALIASES.find(([re]) => re.test(name))?.[1] ?? BY_SHAPE[fontShape(name, fallback)];
+    face = menuFace(name) ?? ALIASES.find(([re]) => re.test(name))?.[1] ?? BY_SHAPE[fontShape(name, fallback, cjk)];
     cache.set(key, face);
   }
   return face;

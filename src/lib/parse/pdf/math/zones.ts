@@ -319,13 +319,14 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
   // bar over its glyphs. A bar with the formula's glyphs over it only
   // is a display's fraction bar under its numerator's line (arXiv
   // 2506.08494 p. 2 read it as \underline).
-  // A vertical rule inside it is an array's column line: the layout
-  // reads none, so the formula fails.
+  // A vertical rule inside it is an array's column line, and an \hline
+  // runs past the array's cells by their padding: an unread one fails
+  // the formula.
   const near = drawing.rules.filter(
     (r) =>
       (r.dir === "h" &&
-        r.x1 >= x1 - 1 &&
-        r.x2 <= x2 + 1 &&
+        r.x1 >= x1 - em * 0.6 &&
+        r.x2 <= x2 + em * 0.6 &&
         r.y1 > low - em &&
         r.y1 < high + em &&
         glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2)) ||

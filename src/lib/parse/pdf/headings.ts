@@ -19,7 +19,13 @@ export const HEADING_NUM_STRICT_RE = /^(\d{1,2}((\.\d{1,2})+\.?|[.)])?|[A-Z](\.\
 export const LETTER_HEADING_RE = /^[A-Z]\s+[\p{Lu}]/u;
 // The number of a heading and its depth: "3" → 1, "3.2" → 2, "A.1" → 2.
 const HEADING_NUMBER_RE = /^(\d{1,2}|[A-Z])((?:\.\d{1,2})*)\.?[.)]?\s/;
+// A Japanese or Chinese document numbers its chapters "第2章" and its
+// sections "第1節", over the numbered parts "1", "2" (a white paper's
+// section and its first part read at one level).
+const CJK_PART_RE = /^第\s*[0-9０-９一二三四五六七八九十百]+\s*([章編部節])/;
 function headingDepth(text: string): number | null {
+  const cjk = CJK_PART_RE.exec(text);
+  if (cjk) return cjk[1] === "節" ? 0 : -1;
   const m = HEADING_NUMBER_RE.exec(text);
   if (!m) return null;
   return 1 + (m[2].match(/\./g)?.length ?? 0);

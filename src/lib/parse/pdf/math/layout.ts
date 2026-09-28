@@ -631,6 +631,10 @@ function ruledArray(atoms: Atom[], rules: Rule[]): Atom[] {
     return parts.map((part) => linear(part.map((a) => ({ ...a })))).join(" & ");
   };
   const hline = (above: number, below: number) => hr.filter((r) => r.y1 < above && r.y1 > below).map(() => "\\hline ").join("");
+  // Rules over the first row and under the last frame a table set with
+  // math in its cells (arXiv 2504.02736 p. 9), not an array: it is left
+  // to the tables.
+  if (hline(Infinity, lines[0]) && hline(lines[lines.length - 1], -Infinity)) return atoms;
   let body = hline(Infinity, lines[0]);
   rows.forEach((row, k) => {
     body += cellsOf(row);

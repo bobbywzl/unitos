@@ -698,7 +698,7 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
   // accent or a tall delimiter (KaTeX draws them so).
   const rules = ctx.drawing.rules.filter(
     (r) =>
-      (r.dir === "h" && r.x1 >= line.x - 2 && r.x2 <= line.xEnd + 2 && r.y1 >= low && r.y1 <= high) ||
+      (r.dir === "h" && r.x1 >= line.x - Math.max(2, size * 0.6) && r.x2 <= line.xEnd + Math.max(2, size * 0.6) && r.y1 >= low && r.y1 <= high) ||
       (r.dir === "v" && r.x1 > line.x && r.x1 < line.xEnd && r.y1 >= low - size && r.y2 <= high + size),
   );
   const paths = ctx.drawing.paths.filter(

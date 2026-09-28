@@ -180,6 +180,8 @@ function textColor(g: Glyph, hrefAt: HrefAt, highlight: string | undefined): str
 
 // The characters of a text that are no space.
 const letters = (text: string) => text.replace(/\s/g, "").length;
+// Han, kana, and Hangul.
+const CJK_RE = /[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\p{sc=Hangul}]/u;
 
 // ── Items ───────────────────────────────────────────────────────────────────
 
@@ -194,7 +196,9 @@ const sameMarks = (a: Marks, b: Marks) =>
     and the words after it as one run of one font). hrefAt: the link at a
     place (index.ts). */
 export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject, hrefAt: HrefAt) {
-  if (process.env.R2NOLOOK) return;
+  // The fonts that set CJK characters on the page (faces.ts: their one
+  // width is no monospace).
+  const cjk = new Set(items.flatMap((i) => (i.font && CJK_RE.test(i.str) ? [i.font] : [])));
   const faces = new Map<string, string>();
   const faceFor = (item: Item) => {
     if (!item.font || (item.glyphs?.length && item.glyphs.every((g) => g.mode === 3))) return "";
@@ -206,7 +210,7 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
       } catch {
         font = null;
       }
-      face = font?.name ? faceOf(font.name.replace(/^[A-Z]{6}\+/, ""), font.fallbackName) : "";
+      face = font?.name ? faceOf(font.name.replace(/^[A-Z]{6}\+/, ""), font.fallbackName, cjk.has(item.font)) : "";
       faces.set(item.font, face);
     }
     return face;
