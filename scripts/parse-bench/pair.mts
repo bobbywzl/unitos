@@ -167,8 +167,9 @@ async function importPicture(page: Page, n: number): Promise<Buffer | null> {
     const sheet = [...document.querySelectorAll<HTMLElement>(".docs-sheet")].filter((s) => s.getBoundingClientRect().top <= y).at(-1);
     (sheet ?? el)?.scrollIntoView({ block: "start" });
   }, n);
-  const missing = await settle(page);
-  if (missing > 0) console.log(`page ${n}: ${missing} figure image${missing === 1 ? "" : "s"} did not load; the picture shows the caption in its place`);
+  const around = await measure();
+  const missing = around ? await settle(page, around) : [];
+  if (missing.length > 0) console.log(`page ${n}: ${missing.length} figure image${missing.length === 1 ? "" : "s"} did not load (${missing.join("; ")}); the picture shows the caption in its place`);
   const box = await measure();
   if (!box) return null;
   const clip = { x: box.x, y: Math.max(0, box.top), width: box.width, height: Math.max(1, Math.ceil(box.bottom - Math.max(0, box.top))) };
@@ -188,9 +189,12 @@ async function importPicture(page: Page, n: number): Promise<Buffer | null> {
 
 /** Fonts loaded, the images in view loaded (a figure's crop is drawn by the
     figure route when first asked for, slowly on a busy machine), two frames
-    drawn. Returns how many images in view did not load. */
-async function settle(page: Page): Promise<number> {
-  return page.evaluate(async () => {
+    drawn. Returns the figures of the paired page (between the box's top and
+    bottom) whose image did not load, each named by its media id and its
+    caption's first words: the tall viewport holds other pages' images too.
+    No box: no figure is named. */
+async function settle(page: Page, box: { top: number; bottom: number } | null = null): Promise<string[]> {
+  return page.evaluate(async (box) => {
     await document.fonts.ready;
     const images = [...document.images].filter((img) => {
       const r = img.getBoundingClientRect();
@@ -204,8 +208,15 @@ async function settle(page: Page): Promise<number> {
       });
     await Promise.race([Promise.all(images.filter((img) => !img.complete).map(loaded)), new Promise((done) => setTimeout(done, 90_000))]);
     await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
-    return images.filter((img) => !img.complete || img.naturalWidth === 0).length;
-  });
+    if (!box) return [];
+    return [...document.querySelectorAll<HTMLElement>(".docs-prose [data-docs-figure]")]
+      .filter((figure) => {
+        const r = figure.getBoundingClientRect();
+        const img = figure.querySelector("img");
+        return r.bottom > box.top && r.top < box.bottom && (!img || !img.complete || img.naturalWidth === 0) && figure.querySelector(".docs-figure-crop") !== null;
+      })
+      .map((figure) => `${figure.dataset.mediaId ?? "?"} "${(figure.querySelector(".docs-figure-caption")?.textContent ?? "").trim().slice(0, 40)}"`);
+  }, box);
 }
 
 /** The PDF page and the import's page side by side, as one PNG. */

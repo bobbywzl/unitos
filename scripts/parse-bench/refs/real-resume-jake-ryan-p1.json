@@ -9,6 +9,10 @@
   1,
   1
  ],
+ "license": "open",
+ "provenance": "hand",
+ "notes": "Jake's Resume (github.com/jakegut/resume, MIT license, a fictional person), the most used student résumé template, its resume.tex built with pdflatex (TeX Live 2023). Scored: the name as the title (bold; CM has no bold small caps), a centered contact line with underlined links and '|' set in math, small-caps section headings with a rule under each (the rule is the heading's look, not a separator), each entry a borderless two-column tabular (name and place over role and dates, the right column flush right: a table, since the model has no tab stop), '•' bullet lists at depth 0 (the entries' own list has no marker), and four skill lines with bold labels (four paragraphs).",
+ "furniture": [],
  "blocks": [
   {
    "kind": "title",
@@ -628,9 +632,5 @@
     }
    ]
   }
- ],
- "furniture": [],
- "license": "open",
- "provenance": "hand",
- "notes": "Jake's Resume (github.com/jakegut/resume, MIT license, a fictional person), the most used student résumé template, its resume.tex built with pdflatex (TeX Live 2023). Scored: the name as the title (bold; CM has no bold small caps), a centered contact line with underlined links and '|' set in math, small-caps section headings with a rule under each (the rule is the heading's look, not a separator), each entry a borderless two-column tabular (name and place over role and dates, the right column flush right: a table, since the model has no tab stop), '•' bullet lists at depth 0 (the entries' own list has no marker), and four skill lines with bold labels (four paragraphs)."
+ ]
 }

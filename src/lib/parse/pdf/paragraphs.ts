@@ -91,16 +91,22 @@ function columnEdges(lines: Line[], k: number, ctx: PageContext): { left: number
   };
   let right = 0;
   let table = 0;
-  // The lines near k, four each side, doubling until one is full; a line
-  // alone reads the whole page.
-  for (let d = alone ? lines.length : 1; right === 0; d *= 2) {
+  // The lines near k, four each side, doubling until three are long; a
+  // line alone reads the whole page. One long line is no edge: a form's
+  // label line of 33 characters made its centered heading read as set
+  // right of the column's middle.
+  for (let d = alone ? lines.length : 1; ; d *= 2) {
+    let long = 0;
     for (let n = Math.max(0, k - 4 * d); n < Math.min(lines.length, k + 4 * d + 1); n++) {
       const l = lines[n];
       if (n === k || !atLeft(l)) continue;
       if (l.table) table = Math.max(table, l.xEnd);
-      else if (l.cells.length === 1 && [...l.text].length > 30) right = Math.max(right, l.xEnd);
+      else if (l.cells.length === 1 && [...l.text].length > 30) {
+        right = Math.max(right, l.xEnd);
+        long++;
+      }
     }
-    if (4 * d >= lines.length) break;
+    if (long >= 3 || 4 * d >= lines.length) break;
   }
   return { left, right: right || table };
 }

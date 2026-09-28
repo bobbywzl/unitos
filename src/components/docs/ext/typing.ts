@@ -10,6 +10,7 @@ import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { insertContext } from "@/components/docs/insert/context";
 import { isMac } from "@/components/docs/keys";
 import { viewingCopy } from "@/components/docs/page/download";
+import { levelStyle, presetNamed } from "@/components/docs/toolbar/lists";
 import { blockText, runAutocorrect } from "@/components/docs/typing/autocorrect";
 import { wordAt } from "@/components/docs/typing/chars";
 import { findPlugin } from "@/components/docs/typing/find";
@@ -48,14 +49,30 @@ const DocsTyping = Extension.create({
   addGlobalAttributes() {
     return [
       {
-        // A list's preset, as the Google Docs API names it (typing/lists.ts),
-        // on the outermost list. The toolbar area draws each preset's glyphs.
+        // The outermost list's preset, as the Google Docs API names it, or
+        // its own levels (toolbar/lists.ts). Its inline style draws each
+        // level's bullet or number (css/toolbar.css).
         types: ["bulletList", "orderedList", "taskList"],
         attributes: {
           listStyle: {
             default: null,
             parseHTML: (el) => el.getAttribute("data-list-style"),
-            renderHTML: (attrs) => (attrs.listStyle ? { "data-list-style": attrs.listStyle } : {}),
+            renderHTML: (attrs) => {
+              if (!attrs.listStyle) return {};
+              const preset = presetNamed(attrs.listStyle);
+              return preset ? { "data-list-style": attrs.listStyle, style: levelStyle(preset.levels) } : { "data-list-style": attrs.listStyle };
+            },
+          },
+          listLevels: {
+            default: null,
+            parseHTML: (el) => {
+              const levels = listLevelsOf(el.getAttribute("data-list-levels"));
+              return levels ? JSON.stringify(levels) : null;
+            },
+            renderHTML: (attrs) => {
+              const levels = listLevelsOf(attrs.listLevels);
+              return levels ? { "data-list-levels": attrs.listLevels, style: levelStyle(levels) } : {};
+            },
           },
         },
       },
