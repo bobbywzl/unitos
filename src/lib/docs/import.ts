@@ -17,6 +17,7 @@ import {
   paragraphNode,
   tableFromHtml,
   tableFromText,
+  type CellNotes,
   type Piece,
 } from "@/lib/docs/import-table";
 import type { PageStart, ParsedBlock, StyleSpan } from "@/lib/parse/types";
@@ -557,6 +558,9 @@ class Converter {
   private readonly footnoteIds = new Map<number, string>();
   private readonly numbers = new Map<ParsedBlock, Atom[]>();
   private readonly footnotes = new Map<string, RichNode>();
+  /** The numbers at the Title's end: the first page's footnotes the page
+      prints no mark for. */
+  private readonly titleNotes: RichNode[] = [];
 
   constructor(private readonly input: ImportInput) {
     this.paged = input.kind === "pdf" && input.blocks.some((b) => typeof b.page === "number");
@@ -586,6 +590,36 @@ class Converter {
       }
       if (atoms.length > 0) this.numbers.set(block, atoms);
     });
+    // A footnote the page prints no mark for (no label, no reference) on a
+    // PDF's first page is the title's own: an acknowledgment, LaTeX's
+    // \thanks set without a symbol. The page editor has no footnote without
+    // a number, so its number stands at the Title's end (arxiv-2506-08209's
+    // acknowledgment read as a paragraph of the body).
+    if (this.input.kind !== "pdf" || !this.input.titleFromOriginal || !(this.input.title ?? "").trim()) return;
+    blocks.forEach((block, index) => {
+      if (block.footnote?.label.trim() !== "" || (block.page ?? 1) > 1 || this.footnoteIds.has(index) || !block.text.trim()) return;
+      const footnoteId = newBlockId();
+      this.footnoteIds.set(index, footnoteId);
+      this.titleNotes.push({ type: "footnoteReference", attrs: { footnoteId } });
+    });
+  }
+
+  /** The footnotes a table's cells cite (a TABLE's footnoteRefs: a Word
+      table's note marks, a PDF table's cell that sets a page footnote's
+      label), each a footnote that stands after the table and that no
+      reference before named. tableFromHtml puts their numbers in the cells. */
+  private cellNotes(block: ParsedBlock, index: number): CellNotes & { targets: Map<string, number> } {
+    const refs: CellNotes["refs"] = [];
+    const targets = new Map<string, number>();
+    for (const ref of [...(block.footnoteRefs ?? [])].sort((a, b) => a.start - b.start)) {
+      const inWords = ref.start >= (refs.at(-1)?.end ?? 0) && ref.end > ref.start && ref.end <= block.text.length;
+      const taken = this.footnoteIds.has(ref.targetOrder) || [...targets.values()].includes(ref.targetOrder);
+      if (!this.input.blocks[ref.targetOrder]?.footnote || ref.targetOrder <= index || taken || !inWords) continue;
+      const footnoteId = newBlockId();
+      refs.push({ start: ref.start, end: ref.end, footnoteId });
+      targets.set(footnoteId, ref.targetOrder);
+    }
+    return { text: block.text, refs, targets };
   }
 
   run(): ImportResult {
@@ -711,7 +745,7 @@ class Converter {
       (heading !== undefined && alignOf(tokensOf(heading.html)) === "center");
     const attrs: Record<string, unknown> = { docStyle: "title" };
     if (centered) attrs.textAlign = "center";
-    this.push(paragraphNode(inline({ text: title, spans: [], starts }), attrs));
+    this.push(paragraphNode([...inline({ text: title, spans: [], starts }), ...this.titleNotes], attrs));
   }
 
   private block(block: ParsedBlock, index: number, isTitle: boolean) {
@@ -774,7 +808,7 @@ class Converter {
     const align = alignOf(tokensOf(block.html));
     const content = inline(this.sourceOf(block, starts));
     if (isTitle) {
-      this.place(index, [paragraphNode(content, align ? { docStyle: "title", textAlign: align } : { docStyle: "title" })]);
+      this.place(index, [paragraphNode([...content, ...this.titleNotes], align ? { docStyle: "title", textAlign: align } : { docStyle: "title" })]);
       return;
     }
     const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId() };
@@ -829,8 +863,15 @@ class Converter {
   }
 
   private table(block: ParsedBlock, index: number, starts: PageStart[]) {
-    const built = (block.html ? tableFromHtml(block.html, this.room) : null) ?? tableFromText(block.text, this.room);
+    const notes = this.cellNotes(block, index);
+    const built = (block.html ? tableFromHtml(block.html, this.room, notes) : null) ?? tableFromText(block.text, this.room);
     if (!built) return this.carry(starts);
+    // A footnote whose number the cell holds is the page editor's; one whose
+    // label stayed words stays a paragraph after the table.
+    walk(built.table, (node) => {
+      const target = node.type === "footnoteReference" ? notes.targets.get(String(node.attrs?.footnoteId)) : undefined;
+      if (target !== undefined) this.footnoteIds.set(target, String(node.attrs?.footnoteId));
+    });
     // A page start goes into the first cell of the row the page begins at.
     for (const p of starts) {
       const row = block.text.slice(0, p.offset).split("\n").length - 1;

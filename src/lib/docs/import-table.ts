@@ -111,7 +111,9 @@ export function paragraphNode(content: RichNode[], attrs: Record<string, unknown
 
 // ── A cell's content ────────────────────────────────────────────────────────
 
-type Inline = { text: string; marks: RichMark[] } | { br: true };
+/** Words with their marks, a line break, or an inline node the converter
+    put in the cell (a footnote's number). */
+type Inline = { text: string; marks: RichMark[] } | { br: true } | { node: RichNode };
 
 const MARK_OF_TAG: Record<string, string> = {
   strong: "bold",
@@ -154,6 +156,10 @@ function collapsed(line: Inline[]): Piece[] {
       trimEnd();
       pieces.push({ node: { type: "hardBreak" } });
       spaced = true;
+      continue;
+    }
+    if ("node" in item) {
+      pieces.push(item);
       continue;
     }
     let text = item.text.replaceAll(ZWSP, "").replace(/\s+/g, " ");
@@ -229,6 +235,13 @@ class CellReader {
       this.flush();
       this.read(el, marks);
       this.flush();
+      return;
+    }
+    // A footnote's number where the cell cites it (placeNotes): the page
+    // editor's own footnote html.
+    const footnoteId = tag === "sup" ? el.getAttribute("data-footnote-ref") : null;
+    if (footnoteId) {
+      this.line.push({ node: { type: "footnoteReference", attrs: { footnoteId } } });
       return;
     }
     const markType = MARK_OF_TAG[tag];
@@ -557,13 +570,49 @@ const spanOf = (el: Element, name: string, max: number) => {
   return Number.isInteger(n) && n >= 1 ? Math.min(n, max) : 1;
 };
 
+/** The footnotes a table's cells cite: the TABLE block's text and where
+    each footnote's label stands in it (ParsedBlock.footnoteRefs), with the
+    id of the footnote its number opens. */
+export type CellNotes = { text: string; refs: { start: number; end: number; footnoteId: string }[] };
+
+/** Each cited label in a cell becomes the page editor's footnote html, the
+    number CellReader draws. The offsets are the block's text, which is the
+    table html's DOM text (SPEC.md §5: a cell ends in its gap); a table whose
+    DOM text differs, or a label outside a cell's words (a caption), keeps
+    its label as words. */
+function placeNotes(table: Element, notes: CellNotes) {
+  if (table.textContent !== notes.text) return;
+  const texts: { node: Text; start: number }[] = [];
+  let at = 0;
+  const collect = (node: Node) => {
+    if (node.nodeType === 3) {
+      texts.push({ node: node as Text, start: at });
+      at += (node as Text).length;
+    } else node.childNodes.forEach(collect);
+  };
+  collect(table);
+  // From the last label back: splitting a text node keeps every offset before it.
+  for (const ref of [...notes.refs].sort((a, b) => b.start - a.start)) {
+    const host = texts.find((t) => t.start <= ref.start && ref.end <= t.start + t.node.length);
+    const parent = host?.node.parentElement;
+    if (!host || !parent?.closest("td, th") || parent.closest(".cell-gap")) continue;
+    const label = host.node.splitText(ref.start - host.start);
+    label.splitText(ref.end - ref.start);
+    const number = table.ownerDocument.createElement("sup");
+    number.setAttribute("data-footnote-ref", ref.footnoteId);
+    label.replaceWith(number);
+  }
+}
+
 /** A TABLE block's html as a page editor table, its columns fitted to a
-    text column `room` px wide; null when it holds no row. */
-export function tableFromHtml(html: string, room: number): ImportTable | null {
+    text column `room` px wide, a footnote cited in a cell its number there;
+    null when it holds no row. */
+export function tableFromHtml(html: string, room: number, notes?: CellNotes): ImportTable | null {
   const host = scratchDocument().createElement("div");
   host.innerHTML = html;
   const table = host.querySelector("table");
   if (!table) return null;
+  if (notes && notes.refs.length > 0) placeNotes(table, notes);
   const trs = [...table.querySelectorAll("tr")].filter((tr) => tr.closest("table") === table);
   if (trs.length === 0) return null;
   const cellsOf = (tr: Element) => [...tr.children].filter((c) => /^(td|th)$/i.test(c.tagName));
