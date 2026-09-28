@@ -241,15 +241,19 @@ function clipRuns(runs: Run[], from: number, to: number, shift: number): Run[] {
     .map((r) => ({ ...r, start: Math.max(r.start, from) + shift, end: Math.min(r.end, to) + shift }));
 }
 
-/** A footnote's words: the label, a space, and the words after it. */
+/** A footnote's words: the label, a space, and the words after it. The
+    label is a mark, never a formula: TeX sets † and ‡ in a math font, and
+    a label read as a formula lost its words in the import (arXiv
+    2503.22874's author notes). */
 function wordsOf(cut: Cut): { text: string; runs: Run[] } {
   const joined = joinGroup(cut.lines, true);
   const after = joined.text.slice(cut.label.length);
   const from = cut.label.length + (after.length - after.trimStart().length);
   const head = cut.label ? cut.label.length + 1 : 0;
+  const label = clipRuns(joined.runs, 0, cut.label.length, 0).map((r) => ({ ...r, zone: undefined }));
   return {
     text: (cut.label ? `${cut.label} ` : "") + joined.text.slice(from),
-    runs: [...clipRuns(joined.runs, 0, cut.label.length, 0), ...clipRuns(joined.runs, from, joined.text.length, head - from)],
+    runs: [...label, ...clipRuns(joined.runs, from, joined.text.length, head - from)],
   };
 }
 
@@ -448,22 +452,25 @@ function referencesTo(hosts: Segment[], label: string, free: (host: Segment, sta
     the document may read its label (a web page's formulas raise digits
     too). A footnote cited in a table's cell follows the table, which holds
     its reference; a table's own notes follow it with no reference; a
-    footnote whose reference is not found stays where its page's words
-    end. Runs after every pass
+    footnote whose reference is not found stays after the last block that
+    ends on its page, else where its page's words end. Runs after every pass
     that drops or moves blocks: a reference names its footnote's place in
     the blocks. */
 export function placeFootnotes(segments: Segment[], footnotes: Segment[]): Segment[] {
   if (footnotes.length === 0) return segments;
-  // The blocks that can hold a reference on each page, its tables, and the
-  // last block that begins on each page or before it.
+  // The blocks that can hold a reference on each page, its tables, the
+  // last block that begins on each page or before it, and the last block
+  // that ends on each page.
   const onPage = new Map<number, Segment[]>();
   const tablesOn = new Map<number, Segment[]>();
   const lastBy: number[] = [];
+  const endsOn = new Map<number, number>();
   segments.forEach((s, i) => {
     const first = firstPageOf(s);
     lastBy[first] = i;
     const into = holdsReferences(s) ? onPage : s.type === "TABLE" ? tablesOn : null;
     const last = s.breaks?.at(-1)?.page ?? first;
+    endsOn.set(last, i);
     for (let p = first; into && p <= last; p++) into.set(p, [...(into.get(p) ?? []), s]);
   });
   const used = new Map<Segment, Set<number>>();
@@ -496,13 +503,22 @@ export function placeFootnotes(segments: Segment[], footnotes: Segment[]): Segme
     }
     let index = -1;
     if (found) {
+      // A mark read as a formula (TeX sets § and ¶ in a math font) is words
+      // again: the import puts a footnote's number only where words stand.
+      const { host, start, end } = found;
+      host.runs = host.runs?.map((r) => (r.zone && r.start < end && start < r.end && isSymbols(host.text.slice(r.start, r.end).trim()) ? { ...r, zone: undefined } : r));
       used.set(found.host, (used.get(found.host) ?? new Set<number>()).add(found.start));
       refs.set(found.host, [...(refs.get(found.host) ?? []), { start: found.start, end: found.end, note }]);
       index = segments.indexOf(found.host);
     } else {
       const tables = tablesOn.get(page) ?? [];
       const table = (label ? tables.find((t) => levelLabel(label).test(t.text)) : undefined) ?? (tableNotes.has(note) ? tables.at(-1) : undefined);
+      // A note with no reference stands before a paragraph that runs on to
+      // the next page: after it, the import read the note on that next page
+      // (a scanned book's notes, whose marks its text layer cannot read).
+      const ending = endsOn.get(page);
       if (table) index = segments.indexOf(table);
+      else if (ending !== undefined) index = ending;
       else for (let p = 0; p <= page; p++) if (lastBy[p] !== undefined) index = Math.max(index, lastBy[p]);
     }
     after.set(index, [...(after.get(index) ?? []), { at: found?.start ?? Infinity, note }]);

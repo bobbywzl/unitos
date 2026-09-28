@@ -189,12 +189,6 @@ const half = (size: number) => Math.round(size * 2) / 2;
 const sameMarks = (a: Marks, b: Marks) =>
   a.color === b.color && a.highlight === b.highlight && a.underline === b.underline && a.strike === b.strike;
 
-/** Two looks that differ in size alone, or not at all. */
-export function sameButSize(a: Look | undefined, b: Look | undefined): boolean {
-  if (a === b) return true;
-  return a !== undefined && b !== undefined && a.face === b.face && sameMarks(a, b);
-}
-
 /** Each item's look (Item.look): its face (none for an OCR layer's
     words), its size, and what the drawing marks on its glyphs.
     An item whose glyphs look two ways is cut where the look changes, each

@@ -4,7 +4,6 @@
 
 import { median } from "@/lib/parse/pdf/geometry";
 import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, charCount, isUnicodeMathFont, sameFlags } from "@/lib/parse/pdf/glyphs";
-import { sameButSize } from "@/lib/parse/pdf/look";
 import { hangingBox } from "@/lib/parse/pdf/math/layout";
 import { splitZones } from "@/lib/parse/pdf/math/zones";
 import type { Cell, Item, Line, Run } from "@/lib/parse/pdf/types";
@@ -40,9 +39,7 @@ function mergeSpacedItems(items: Item[]): Item[] {
       charCount(item.str) === 1 &&
       gap >= 0 &&
       gap < item.size * 0.45 &&
-      // Glyphs whose looks differ in size alone join: a subscript and the
-      // "(" after it are one word ("fU(u)" read "fU (u)").
-      sameFlags(last, sameButSize(last.look, item.look) ? { ...item, look: last.look } : item)
+      sameFlags(last, item)
     ) {
       last.str += item.str;
       last.w = item.x + item.w - last.x;
@@ -220,6 +217,16 @@ function composeAccents(items: Item[]): Item[] {
 
 const QED_RE = /^[□■∎]$/;
 
+/** The least gap between two items of a line, in points, that reads as a
+    space: 0.12 of the line's size, or 0.2 after a script (an item set at
+    0.85 of the size or less, a tenth of the size or more off the next
+    item's baseline). TeX leaves \scriptspace (0.5 pt) after a script, and
+    a word space is 0.22 em or more, justified too: "fU(u)" read "fU (u)".
+    size: the line's text size. */
+export function spaceGap(prev: Item, next: Item, size: number): number {
+  return prev.size <= size * 0.85 && Math.abs(prev.y - next.y) >= size * 0.1 ? size * 0.2 : size * 0.12;
+}
+
 // A cell boundary: a wide gap, or an em between two numbers — number
 // columns sit closer than the word gap rule allows (a table of Brier
 // scores read as one cell per row: import compare loop finding).
@@ -291,12 +298,13 @@ function buildLine(rawItems: Item[], page: number): Line {
     // head into a table).
     const proofEnd = item === items[items.length - 1] && QED_RE.test(item.str.trim());
     const wide = prevItem !== null && !proofEnd && opensCell(prevItem, item, size);
+    const least = prevItem !== null ? spaceGap(prevItem, item, size) : size * 0.12;
     prevItem = item;
     let cell = cells[cells.length - 1];
     if (!cell || wide) {
       cell = { x: item.x, text: "", runs: [] };
       cells.push(cell);
-    } else if (gap > size * 0.12 && !cell.text.endsWith(" ")) {
+    } else if (gap > least && !cell.text.endsWith(" ")) {
       // Punctuation that attaches left ("PRESS" chip then ".") takes no space.
       const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
       if (!attach) cell.text += " ";
