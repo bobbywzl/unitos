@@ -21,6 +21,7 @@ import {
   isProseColumns,
   rowsOf,
   tableSegment,
+  withoutSignColumns,
   type CellParagraph,
   type TableCell,
   type TableRow,
@@ -224,7 +225,9 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[]): Box
   for (let k = 0; k + 1 < sorted.length; k++) {
     const band = { x1: x1 - 2, x2: x2 + 2, y1: sorted[k + 1].y1, y2: sorted[k].y1 };
     const lines = buildLines(items.filter((it) => inBox(it, band)), 0);
-    const breaks = lines.some((l) => isProseLine(l, x2 - x1) || CAPTION_START_RE.test(l.text)) || isProseColumns(lines, false);
+    const breaks =
+      lines.some((l) => isProseLine(l, x2 - x1) || CAPTION_START_RE.test(l.text)) ||
+      isProseColumns(lines.filter((l) => l.cells.length >= 2), false);
     if (breaks) {
       close();
       continue;
@@ -322,7 +325,12 @@ function gridHead(grid: Grid, body: Item[], items: Item[]): Item[] {
   // its column heads, and its first row).
   for (let k = lines.length - 1; k >= 0 && k >= lines.length - 6; k--) {
     const line = lines[k];
-    const aligned = !phraseColumns(line, grid.xs).some((p) => p.from === 0 && p.to > 0);
+    // A line over the first column alone, set well in from its left edge,
+    // is a title centered over the page (10-K p. 54's "(in millions, except
+    // per share amounts)" over a statement's label column), no row label.
+    const phrases = phraseColumns(line, grid.xs);
+    const titled = phrases.every((p) => p.to === 0) && line.x > grid.xs[0] + (grid.xs[1] - grid.xs[0]) * 0.25;
+    const aligned = !phrases.some((p) => p.from === 0 && p.to > 0) && !titled;
     const plain = !CAPTION_START_RE.test(line.text) && !/[.!?]$/.test(line.text.trim()) && !isProseLine(line, b.x2 - b.x1);
     // A line that runs on past the table's sides is the page's: a running
     // head with its page number beside the table (synth-notes-html p. 8's
@@ -379,9 +387,15 @@ export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number
   for (const grid of grids) {
     const body = items.filter((it) => inBox(it, grid.box));
     if (isGroupGrid(grid, body)) {
+      // Its head, found against the columns its text sets: a statement
+      // shades its rows, and its "Year Ended December 31," stands over the
+      // shading (10-K p. 54).
       const b = grid.box;
-      const inner = joinedRules(drawing.rules.filter((r) => r.dir === "h" && r.y1 < b.y2 - 1 && r.y1 > b.y1 + 1 && r.x1 >= b.x1 - 3 && r.x2 <= b.x2 + 3));
-      regions.push({ box: b, items: body, lines: buildLines(body, 0), grid: null, rules: inner, drawing });
+      const head = gridHead({ ...grid, xs: [b.x1, ...columnSeparators(buildLines(body, 0)), b.x2] }, body, loose);
+      const box = head.length > 0 ? { ...b, y2: Math.max(...head.map((it) => it.y + it.size)) } : b;
+      const inside = [...head, ...body];
+      const inner = joinedRules(drawing.rules.filter((r) => r.dir === "h" && r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3));
+      regions.push({ box, items: inside, lines: buildLines(inside, 0), grid: null, rules: inner, drawing });
       continue;
     }
     const head = gridHead(grid, body, loose);
@@ -523,8 +537,18 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
   const phrased = buildLines(region.items.flatMap(splitWide).flatMap((it) => splitAt(it, [...new Set(cuts(it))].sort((a, b) => a - b))), page);
   const full = region.rules.filter((r) => r.x2 - r.x1 >= width * 0.9).map((r) => r.y1);
   const headerRule = full.find((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2);
-  const head = headerRule === undefined ? [] : phrased.filter((l) => l.y > headerRule);
-  const body = headerRule === undefined ? phrased : phrased.filter((l) => l.y < headerRule);
+  let head = headerRule === undefined ? [] : phrased.filter((l) => l.y > headerRule);
+  let body = headerRule === undefined ? phrased : phrased.filter((l) => l.y < headerRule);
+  // With no rule under the head, the lines at the top with no words in the
+  // first column are the column heads (10-K p. 54's "Year Ended December
+  // 31," and its years over the value columns).
+  const labels = headerRule === undefined && body.length >= 3 ? columnSeparators(body)[0] : undefined;
+  if (labels !== undefined) {
+    let k = 0;
+    while (k < body.length - 2 && body[k].items.every((it) => it.x >= labels)) k++;
+    head = body.slice(0, k);
+    body = body.slice(k);
+  }
   // Header rows: lines between two partial rules are one row, each cell its
   // column's words; a cell whose words cross a column separator spans the
   // columns it covers, or the ones the partial rule under it spans.
@@ -542,10 +566,13 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
   // both (arXiv 1706.03762's Table 2).
   const ruledAt = [...new Set(drawn.map((r) => r.x1))];
   const open = (a: number, b: number) => !body.some((l) => l.items.some((it) => it.x < Math.max(a, b) && it.x + it.w > Math.min(a, b)));
-  const scanned = [
-    ...ruledAt,
-    ...columnSeparators(body.length >= 2 ? body : phrased, headGroups.at(-1) ?? []).filter((x) => !ruledAt.some((d) => open(x, d))),
-  ].sort((a, b) => a - b);
+  const scanned = withoutSignColumns(
+    body.length >= 2 ? body : phrased,
+    [
+      ...ruledAt,
+      ...columnSeparators(body.length >= 2 ? body : phrased, headGroups.at(-1) ?? []).filter((x) => !ruledAt.some((d) => open(x, d))),
+    ].sort((a, b) => a - b),
+  );
   const separators = [...scanned, ...headSeparators(headGroups.at(-1) ?? [], body, scanned, region.box)].sort((a, b) => a - b);
   const columnCount = separators.length + 1;
   const bounds = [region.box.x1, ...separators, region.box.x2];

@@ -225,10 +225,13 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
     items.flatMap((i) => (i.math ? [] : (i.glyphs ?? []))),
     drawing,
   );
+  const smallCaps = drawnSmallCaps(items, faceFor);
   const out: Item[] = [];
   for (const item of items) {
     const face = faceFor(item);
-    const size = half(item.size);
+    const full = smallCaps.get(item);
+    const size = half(full ?? item.size);
+    const from = out.length;
     // The glyphs, when they spell the item's words: a text item may run on
     // past its glyphs in the stream (Chrome draws a link's words apart from
     // the words after them), and the glyphs' marks would paint the rest.
@@ -256,15 +259,62 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
       // its glyphs take.
       item.look = lookOf(majority(marks));
       out.push(item);
-      continue;
+    } else {
+      for (const part of parts) {
+        part.look = lookOf(marks[glyphs.indexOf(part.glyphs![0])]);
+        part.href = hrefAt(part.x, part.y, part.w, part.size);
+        out.push(part);
+      }
     }
-    for (const part of parts) {
-      part.look = lookOf(marks[glyphs.indexOf(part.glyphs![0])]);
-      part.href = hrefAt(part.x, part.y, part.w, part.size);
-      out.push(part);
+    if (full === undefined) continue;
+    for (const part of out.slice(from)) {
+      part.smallCaps = true;
+      const lower = part.str.toLowerCase();
+      if (lower.length === part.str.length) part.str = lower;
     }
   }
   items.splice(0, items.length, ...out);
+}
+
+// Small capitals a browser or Word draws for a face with none: each
+// lowercase letter a capital at about 0.7 of the size (Chrome sets each
+// letter as an item), on the baseline of the capital before it. Read as
+// they stand, they are capitals set small: "I. INTRODUCTION" set a paper's
+// headings in 6.5 pt (synth-paper-html). Such an item reads as its
+// lowercase letters in small caps at the capitals' size, the size the map
+// gives. A run starts at a capital it touches, in the capital's face, and
+// goes on through the words after it at its size, an em apart at most.
+function drawnSmallCaps(items: Item[], faceFor: (item: Item) => string): Map<Item, number> {
+  const out = new Map<Item, number>();
+  const caps = (i: Item) => !i.math && !i.mono && /\p{Lu}/u.test(i.str) && !/\p{Ll}/u.test(i.str);
+  if (!items.some(caps)) return out;
+  // The items by baseline, each baseline's from left to right.
+  const sorted = items.filter((i) => i.str.trim() !== "").sort((a, b) => b.y - a.y);
+  const baselines: Item[][] = [];
+  for (const i of sorted) {
+    const last = baselines[baselines.length - 1];
+    if (last && Math.abs(last[0].y - i.y) <= Math.min(last[0].size, i.size) * 0.05) last.push(i);
+    else baselines.push([i]);
+  }
+  for (const line of baselines) {
+    line.sort((a, b) => a.x - b.x);
+    for (let k = 1; k < line.length; k++) {
+      const [p, c] = [line[k - 1], line[k]];
+      if (!caps(c)) continue;
+      const gap = c.x - (p.x + p.w);
+      if (gap < -c.size * 0.2) continue;
+      const run = out.get(p);
+      if (run !== undefined) {
+        if (Math.abs(p.size - c.size) <= 0.1 && gap <= c.size) out.set(c, run);
+        continue;
+      }
+      const ratio = c.size / p.size;
+      if (ratio >= 0.6 && ratio <= 0.85 && gap <= c.size * 0.15 && /\p{Lu}\P{L}*$/u.test(p.str) && !p.math && faceFor(p) === faceFor(c)) {
+        out.set(c, p.size);
+      }
+    }
+  }
+  return out;
 }
 
 // The marks most glyphs take.

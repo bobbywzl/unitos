@@ -1,7 +1,7 @@
 import { PDF_CMAPS } from "@/lib/pdf-runtime";
 import { getDocumentProxy } from "unpdf";
 import { pageLines } from "@/lib/parse/pdf/columns";
-import { fitOcrWidths } from "@/lib/parse/pdf/lines";
+import { fitOcrItems } from "@/lib/parse/pdf/lines";
 import { resolveContentsLinks } from "@/lib/parse/pdf/contents";
 import { itemGlyphs, readDrawing, type FontLookup, type Glyph, type PageDrawing } from "@/lib/parse/pdf/drawing";
 import { attachFigureRegions, pageGraphics, type Graphic } from "@/lib/parse/pdf/figures";
@@ -264,7 +264,7 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     // third wider than their text, and the gaps between them read as a
     // table's cells (its prose read as tables, a quotation as rows).
     const ocr = isOcrLayer(drawing.glyphs);
-    if (ocr) fitOcrWidths(items);
+    if (ocr) fitOcrItems(items);
     pageHeights.push(viewport.height);
     pageWidths.push(viewport.width);
     // The tables the page's rules draw leave the text flow before the column

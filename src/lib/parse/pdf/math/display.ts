@@ -217,7 +217,22 @@ function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean): boole
 // the table's place, synth-paper-html), and the text line has words (a
 // table's or a figure's place in the text is none).
 function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[], pitch: number, join: boolean): Line | null {
-  if (join && line.items.some((i) => !i.zone && (i.str.match(/\p{L}{2,}/gu) ?? []).some((w) => !MATH_WORDS.has(w.toLowerCase())))) return null;
+  if (join && line.items.some((i) => !i.zone && (i.str.match(/\p{L}{2,}/gu) ?? []).some((w) => !MATH_WORDS.has(w.toLowerCase())))) {
+    // Words under an underbrace or over an overbrace of a formula are its
+    // label ("n times"): the formula read without them was wrong.
+    const center = (line.x + line.xEnd) / 2;
+    return (
+      lines.find((t, n) => {
+        if (kinds[n] !== "text" || Math.abs(t.y - line.y) > line.size * 2.5) return false;
+        const tips = t.items.flatMap((i) => i.glyphs ?? []).filter((g) => g.family === "omx" && /^hbrace-/.test(mathGlyph("omx", g.code)?.piece ?? ""));
+        if (tips.length < 2) return false;
+        const x1 = Math.min(...tips.map((g) => g.x));
+        const x2 = Math.max(...tips.map((g) => g.x + g.w));
+        const y = tips[0].y;
+        return center > x1 && center < x2 && (line.y < t.y ? line.y < y : line.y > y);
+      }) ?? null
+    );
+  }
   const text = (t: Line, n: number) => kinds[n] === "text" && (!join || (!t.table && t.text.trim() !== ""));
   for (const f of fences) {
     if (line.y > f.y2 || line.y < f.y1) continue;

@@ -74,7 +74,7 @@ function headingOf(run: Line[], raw: string, rawRuns: Run[]): Segment {
     type: "HEADING",
     text,
     page: run[0].page,
-    rawSize: run[0].size,
+    rawSize: Math.max(...run.map((l) => l.size)),
     runs,
     headingNum: m ? Number(m[1]) : undefined,
     ...geom(run),
@@ -163,6 +163,22 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
     )
       break;
     run.push(next);
+    j++;
+  }
+  // A chapter's label over its title, set smaller and centered with it, is
+  // one heading with it ("CHAPTER Two" over "FIRST STEPS", a scanned book).
+  const title = lines[j];
+  if (
+    run.length === 1 &&
+    title !== undefined &&
+    runOf[j] === -1 &&
+    LABEL_RE.test(line.text.trim()) &&
+    title.cells.length === 1 &&
+    title.size > line.size * 1.1 &&
+    line.y - title.y <= title.size * 2.2 &&
+    Math.abs((title.x + title.xEnd) / 2 - (line.x + line.xEnd) / 2) <= line.size * 2
+  ) {
+    run.push(title);
     j++;
   }
   // Four lines or more at one left edge that each end short of the
@@ -561,19 +577,20 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, slide
     : headingDepth(text);
   const depths = segments.map((s) => (s.type === "HEADING" ? depthOf(s.text) : null));
   // A numbering that starts again at each level ("1" under "1", a Japanese
-  // white paper's parts under its section) sets its levels apart by size:
-  // at one depth, each smaller size is one level deeper.
+  // white paper's parts under its "第1節" section) sets its levels apart by
+  // size: at one depth, each smaller size is one level deeper.
   const bySize = new Map<number, number[]>();
+  const restarts = segments.some((s) => s.type === "HEADING" && CJK_PART_RE.test(s.text));
   segments.forEach((s, k) => {
     const depth = depths[k];
-    if (depth === null || s.rawSize === undefined) return;
+    if (!restarts || depth === null || s.rawSize === undefined) return;
     const list = bySize.get(depth) ?? [];
     if (!list.some((v) => Math.abs(v - s.rawSize!) < v * 0.1)) list.push(s.rawSize);
     bySize.set(depth, list.sort((a, b) => b - a));
   });
   segments.forEach((s, k) => {
     const depth = depths[k];
-    if (depth === null || s.rawSize === undefined) return;
+    if (!restarts || depth === null || s.rawSize === undefined) return;
     depths[k] = depth + Math.max(0, bySize.get(depth)!.findIndex((v) => Math.abs(v - s.rawSize!) < v * 0.1));
   });
   const minDepth = Math.min(...depths.filter((d): d is number => d !== null));

@@ -120,15 +120,19 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
 
 // ── OCR layers ──────────────────────────────────────────────────────────────
 
-/** An OCR layer's words at the width the scan shows them. From one word's
-    start to the next on its line is the word's width and a space (a
-    quarter em): when the median ratio of that advance to the text layer's
-    width and a space is off by a tenth or more, each word with a next one
-    on its line takes that scale, a space short of the next word (a
-    justified line's spaces stretch, so the median runs high). A line's
-    last word keeps its width: the page's notes, set smaller than its body
-    at the same size, run past the column at the body's scale. */
-export function fitOcrWidths(items: Item[]) {
+/** An OCR layer's words as the scan shows them. A letter or two read out
+    of a picture, over four times the page's text size, is no word (a
+    rocket's drawing read as a 73 pt "i" took a chapter's title as its
+    scripts). From one word's start to the next on its line is the word's
+    width and a space (a quarter em): when the median ratio of that advance
+    to the text layer's width and a space is off by a tenth or more, each
+    word with a next one on its line takes that scale, a space short of the
+    next word (a justified line's spaces stretch, so the median runs high).
+    A line's last word keeps its width: the page's notes, set smaller than
+    its body at the same size, run past the column at the body's scale. */
+export function fitOcrItems(items: Item[]) {
+  const text = median(items.map((i) => i.size));
+  for (let k = items.length - 1; k >= 0; k--) if (charCount(items[k].str) <= 2 && items[k].size > text * 4) items.splice(k, 1);
   const words = items.filter((i) => i.str.trim()).sort((a, b) => b.y - a.y || a.x - b.x);
   const next = (k: number) => {
     const [a, b] = [words[k], words[k + 1]];

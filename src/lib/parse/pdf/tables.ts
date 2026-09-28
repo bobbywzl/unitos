@@ -105,6 +105,19 @@ function openMiddle(a: number, b: number, lines: Line[]): number {
   return best ? (best.x1 + best.x2) / 2 : (a + b) / 2;
 }
 
+// A currency sign set apart from its amount ("$  282,836", a statement's
+// signs in a column of their own) is the amount's: the separators after a
+// column that holds signs and nothing else go (10-K p. 54 read seven
+// columns for its label and three years).
+const CURRENCY_RE = /^[$€£¥]$/;
+export function withoutSignColumns(lines: Line[], separators: number[]): number[] {
+  const cells = lines.map((l) => cellsBySeparators(l, separators));
+  return separators.filter((_, c) => {
+    const texts = cells.map((row) => row[c]?.text.trim() ?? "");
+    return !(texts.some((t) => CURRENCY_RE.test(t)) && texts.every((t) => t === "" || CURRENCY_RE.test(t)));
+  });
+}
+
 // Items joined into one cell's text and style runs, a space where the gap
 // between two items reads as one.
 function cellOfItems(items: Item[], size: number): Cell {
@@ -456,7 +469,7 @@ export function rowsOf(cellsOf: Cell[][], rowStarts: number[], columnCount: numb
 // One table out of a run of gap-aligned lines. Columns come from the coverage
 // scan; rows from the run's rhythm (rowStartsOf).
 export function tableFromRun(run: Line[], leading: number): Segment {
-  const separators = columnSeparators(run);
+  const separators = withoutSignColumns(run, columnSeparators(run));
   const columnCount = separators.length + 1;
   const page = run[0].page;
   // No gutter runs the whole way down when the wide gaps sit at a different
