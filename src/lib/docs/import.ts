@@ -20,7 +20,7 @@ import {
   inlineNodes,
   keptHref,
   paragraphNode,
-  sized,
+  sizedAtMost,
   tableFromHtml,
   tableFromText,
   type CellNotes,

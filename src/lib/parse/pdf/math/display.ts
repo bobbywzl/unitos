@@ -208,15 +208,17 @@ function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean): boole
 
 // A row of a formula set inside a text line (an inline matrix, cases, an
 // array): it sits between the tall delimiters the text line holds, or
-// closer to the text line than the next line of text would, beside its
-// words (a paragraph's last line, all math, under a line that starts with
-// a formula is no row of it). The text line it belongs to, or null.
-function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[], pitch: number): Line | null {
-  // A row of words in a text font is none (a table's caption over its
-  // rules joined the table's place, synth-paper-html), and a table's
-  // place in the text is no text line.
-  if (line.items.some((i) => !i.zone && (i.str.match(/\p{L}{2,}/gu) ?? []).some((w) => !MATH_WORDS.has(w.toLowerCase())))) return null;
-  const text = (t: Line, n: number) => kinds[n] === "text" && !t.table && t.text.trim() !== "";
+// within a line height and a half of the text line, beside its words. The
+// text line it belongs to, or null. join: the text line takes the row
+// into its formula, so more must hold: the row sits closer to the text
+// line than the next line of text would (a paragraph's last line, all
+// math, under a line that starts with a formula is no row of it), it
+// holds no words in a text font (a table's caption over its rules joined
+// the table's place, synth-paper-html), and the text line has words (a
+// table's or a figure's place in the text is none).
+function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[], pitch: number, join: boolean): Line | null {
+  if (join && line.items.some((i) => !i.zone && (i.str.match(/\p{L}{2,}/gu) ?? []).some((w) => !MATH_WORDS.has(w.toLowerCase())))) return null;
+  const text = (t: Line, n: number) => kinds[n] === "text" && (!join || (!t.table && t.text.trim() !== ""));
   for (const f of fences) {
     if (line.y > f.y2 || line.y < f.y1) continue;
     if (!((line.x >= f.x2 - 1 && line.x - f.x2 < line.size * 3) || (line.xEnd <= f.x1 + 1 && f.x1 - line.xEnd < line.size * 3))) continue;
@@ -243,7 +245,7 @@ function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[],
   );
   if (under) return under;
   const hosts = lines.filter((t, n) => {
-    if (!text(t, n) || Math.abs(t.y - line.y) > Math.min(line.size * 1.6, pitch * 0.9)) return false;
+    if (!text(t, n) || Math.abs(t.y - line.y) > (join ? Math.min(line.size * 1.6, pitch * 0.9) : line.size * 1.6)) return false;
     if (t.x > line.x + 1 || t.xEnd < line.xEnd - 1) return false;
     // None of the text line's words under or over the row: its words, not
     // its cells, which reach over the formula they end in (an inline
@@ -470,8 +472,12 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
     const table = cells.length >= 3 && numbers >= 2;
     if (table && !fenced(l)) kinds0[n] = "text";
   }
-  // The rows of an inline structure are the text line's, not a display.
-  const hosts = input.map((l, n) => (kinds0[n] !== "text" && kinds0[n] !== "label" ? inlineHost(l, input, kinds0, fences, ctx.bodySize * ctx.leading) : null));
+  // The rows of an inline structure are the text line's, not a display:
+  // they join its formula, or stay lines of text.
+  const pitch0 = ctx.bodySize * ctx.leading;
+  const row = input.map((l, n) => kinds0[n] !== "text" && kinds0[n] !== "label" && inlineHost(l, input, kinds0, fences, pitch0, false) !== null);
+  const hosts = input.map((l, n) => (row[n] ? inlineHost(l, input, kinds0, fences, pitch0, true) : null));
+  for (let n = 0; n < input.length; n++) if (row[n]) kinds0[n] = "text";
   const joined = joinInlineRows(input, hosts, ctx);
   const lines = joined.filter((l): l is Line => l !== null);
   const kinds = kinds0.filter((_, n) => joined[n] !== null);

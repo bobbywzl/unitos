@@ -19,12 +19,13 @@ import type { Box, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf
 // finding: charts read as tables of ticks, equations as tables, figures shown
 // as whole pages.
 
-// A caption's label and its stop: "Figure 2:", "Fig. 3a.", "Table A1 |", and
-// the roman numbers of REVTeX and IEEE ("TABLE II. Fitting parameters …",
-// arXiv 2502.02648, read as a paragraph with no caption). A Chinese or
-// Japanese label takes a space for its stop ("図表Ⅰ-2-1-1 避難所データ…").
+// A caption's label and its stop: "Figure 2:", "Fig. 3a.", PLOS's "Fig 1.",
+// "Table A1 |", and the roman numbers of REVTeX and IEEE ("TABLE II.
+// Fitting parameters …", arXiv 2502.02648, read as a paragraph with no
+// caption). A Chinese or Japanese label takes a space for its stop
+// ("図表Ⅰ-2-1-1 避難所データ…").
 export const CAPTION_RE =
-  /^(?:(?:fig\.|figure|table|tab\.)\s*(?:\d+[a-z]?|[A-Z]\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-]\s*|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*\s)/i;
+  /^(?:(?:fig\.?|figure|table|tab\.)\s*(?:\d+[a-z]?|[A-Z]\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-]\s*|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*\s)/i;
 // "Table 3", "Table A1", IEEE's "TABLE IV", and "表 2".
 const TABLE_CAPTION_RE = /^(?:(?:table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+\b)|表\s*[0-9Ⅰ-Ⅻ])/i;
 // A float's label at a line's start, with a stop after it or none.
