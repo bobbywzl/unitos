@@ -9,7 +9,8 @@ import {
   LINE_BREAK,
   OBJECT_CHAR,
 } from "@/components/docs/typing/chars";
-import { isList, isListItem, listForPrefix, listLabel } from "@/components/docs/typing/lists";
+import { listMarker } from "@/components/docs/toolbar/lists";
+import { isList, isListItem, listForPrefix } from "@/components/docs/typing/lists";
 import { substitutionMap, typingPrefs, type TypingPrefs } from "@/components/docs/typing/prefs";
 import { spellingFix } from "@/components/docs/typing/spelling";
 import { blockCorrection, correctionDeleted, SPELLING_META } from "@/components/docs/typing/trace";
@@ -382,12 +383,12 @@ export function previousTextblock(doc: PMNode, pos: number): { node: PMNode; sta
   return $at.parent.isTextblock ? { node: $at.parent, start: $at.start() } : null;
 }
 
-/** The label a list would give its next top-level item: "4." after 3. */
+/** The label a list would give its next top-level item, as the page draws
+    it: "4." after 3, "15" after an exercise list's 14. */
 function nextLabel(list: PMNode): string | null {
   if (list.type.name !== "orderedList") return null;
   const start = typeof list.attrs.start === "number" ? list.attrs.start : 1;
-  const style = typeof list.attrs.listStyle === "string" ? list.attrs.listStyle : null;
-  return listLabel(style, start + list.childCount);
+  return listMarker({ type: list.type.name, attrs: list.attrs }, [start + list.childCount]);
 }
 
 const detectList: Rule = ({ state, prefs, block, start, text, trigger, at, virtual }) => {

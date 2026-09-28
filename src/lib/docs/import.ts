@@ -118,7 +118,8 @@ type Atom = { start: number; end: number; node: RichNode };
 
 /** The space after a paragraph of the body, in points: Google Docs' "Add
     space after paragraph". Normal text has none, and an article without it
-    reads as one wall of words. */
+    reads as one wall of words. A PDF's paragraphs take the page's own
+    (ParsedBlock.spaceAfter). */
 const PARAGRAPH_SPACE_PT = 10;
 /** A small line (the kicker, a label, a caption) and a display line, as
     text sizes. */
@@ -334,9 +335,12 @@ function styleLooks(input: ImportInput): Partial<Record<DocStyle, NamedStyle>> {
     counts.set(key, { font: b.font, n: (counts.get(key)?.n ?? 0) + b.text.length });
     tally.set(style, counts);
   }
+  // Where the page's spacing is measured, the gap before a heading is the
+  // space after the block above it (ParsedBlock.spaceAfter), no more.
+  const spaced = input.blocks.some((b) => b.spaceAfter !== undefined);
   for (const [style, counts] of tally) {
     const top = [...counts.values()].sort((a, b) => b.n - a.n)[0];
-    looks[style] = lookOf(style, top.font);
+    looks[style] = { ...lookOf(style, top.font), ...(spaced ? { spaceBefore: 0 } : {}) };
   }
   return looks;
 }
@@ -635,9 +639,16 @@ class Converter {
   private titleMark = "";
   /** The named styles the page's look sets (styleLooks). */
   private readonly looks: Partial<Record<DocStyle, NamedStyle>>;
+  /** The page's most common space after a paragraph, for a paragraph whose
+      own it did not measure (a page's last); null where it measured none
+      (a web page, a text file). */
+  private readonly spacing: number | null;
 
   constructor(private readonly input: ImportInput) {
     this.looks = styleLooks(input);
+    const counts = new Map<number, number>();
+    for (const b of input.blocks) if (b.type === "PARAGRAPH" && b.spaceAfter !== undefined) counts.set(b.spaceAfter, (counts.get(b.spaceAfter) ?? 0) + 1);
+    this.spacing = [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null;
     this.paged = input.kind === "pdf" && input.blocks.some((b) => typeof b.page === "number");
     this.pageSetup = pageSetupFor(input);
     const { pageless, width, margins } = this.pageSetup;
@@ -832,6 +843,22 @@ class Converter {
     return marks;
   }
 
+  /** The space after a block in points: the page's (ParsedBlock.spaceAfter),
+      the page's most common for a block it measured none for, or Docs'
+      "Add space after paragraph" where the parse measures no spacing. */
+  private spaceAfter(block: ParsedBlock): number {
+    return block.spaceAfter ?? this.spacing ?? PARAGRAPH_SPACE_PT;
+  }
+
+  /** A list's last line takes the space after its block. */
+  private spaceLast(nodes: RichNode[], block: ParsedBlock) {
+    const last = lastParagraph(nodes);
+    if (!last?.attrs) return;
+    const after = this.spaceAfter(block);
+    if (after > 0) last.attrs.spaceAfter = after;
+    else delete last.attrs.spaceAfter;
+  }
+
   private sourceOf(block: ParsedBlock, starts: PageStart[], style: DocStyle = this.styleOf(block)): Source {
     // The block's look where it differs from its style, then its runs'
     // marks over it (a run's face or size over its block's).
@@ -921,7 +948,7 @@ class Converter {
     const align = role === "caption" && alignOf(tokens) !== "right" ? "center" : alignOf(tokens);
     if (align) attrs.textAlign = align;
     if (role === "meta") attrs.docStyle = "subtitle";
-    else if (role !== "kicker") attrs.spaceAfter = PARAGRAPH_SPACE_PT;
+    else if (role !== "kicker" && this.spaceAfter(block) > 0) attrs.spaceAfter = this.spaceAfter(block);
     const indent = INDENT_TOKENS.find((k) => tokens.includes(k));
     if (indent) Object.assign(attrs, INDENTS[indent]);
     const size =
@@ -941,6 +968,8 @@ class Converter {
     }
     const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId() };
     if (align) attrs.textAlign = align;
+    // The page's own space after the heading, where it measured one.
+    if (block.spaceAfter !== undefined) attrs.spaceAfter = block.spaceAfter;
     this.place(index, [content.length > 0 ? { type: "heading", attrs, content } : { type: "heading", attrs }]);
   }
 
@@ -963,7 +992,7 @@ class Converter {
     // their markers ("1 Introduction", "2.1 Background").
     const contents =
       tokensOf(block.html).includes("contents") || (block.links ?? []).some((l) => l.targetOrder !== undefined);
-    if (!contents && this.resume(lines, index)) return;
+    if (!contents && this.resume(lines, block, index)) return;
     // A line goes at most one level deeper than the line before it.
     let depth = -1;
     for (const l of lines) depth = l.depth = Math.min(l.depth, depth + 1);
@@ -972,25 +1001,18 @@ class Converter {
       // A contents list, or lines the page editor's lists cannot draw:
       // a paragraph per line, the words as they stand, indented as printed.
       const nodes = lines.map((l) => paragraphNode(inline(l.whole), l.indent > 0 ? { indentLeft: l.indent * INDENT_PT } : {}));
-      const last = lastParagraph(nodes);
-      if (last?.attrs) last.attrs.spaceAfter = PARAGRAPH_SPACE_PT;
+      this.spaceLast(nodes, block);
       this.place(index, nodes);
       this.lastList = null;
       return;
     }
     const nodes = this.lists(lines);
+    this.spaceLast(nodes, block);
     this.place(index, nodes);
     this.lastList = { lines, nodes, at: this.out.length - nodes.length };
   }
 
-  /** A PDF's and a Word file's bullets are as printed; a web page's and a
-      text file's "-" is any bullet. */
-  private get printed(): boolean {
-    return this.input.kind === "docx" || this.input.kind === "pdf";
-  }
-
-  /** The lines as lists, each outermost list in its format, the last line
-      spaced as a paragraph is. */
+  /** The lines as lists, each outermost list in its format. */
   private lists(lines: ListLine[]): RichNode[] {
     const tops: Top[] = [];
     const nodes = listsAt(lines, 0, 0, tops).nodes;
@@ -998,17 +1020,18 @@ class Converter {
       const attrs = listFormat(top.node.type, top.seen);
       if (attrs) top.node.attrs = { ...top.node.attrs, ...attrs };
     }
-    const last = lastParagraph(nodes);
-    if (last?.attrs) last.attrs.spaceAfter = PARAGRAPH_SPACE_PT;
     return nodes;
   }
 
   /** A list that resumes a level in after a line or two between its items
-      (a centered label under an item, a display): its lines go on the list
-      before it, whose last item holds the blocks between, so each item
-      keeps its level. False when the list before is not the last thing
-      placed but those blocks, or the lines do not go on it. */
-  private resume(lines: ListLine[], index: number): boolean {
+      (a centered label under an item's fill-in line): its lines go on the
+      list before it, and the last item of that list holds the blocks
+      between, as they stand (the label stays centered), so every item keeps
+      its level. The page editor's lists nest: an item a level in needs an
+      item above it, and a list lifted to the top put the first resumed item
+      a level out and the rest under it. False when the list before is not
+      the last thing placed but those blocks, or the lines do not go on it. */
+  private resume(lines: ListLine[], block: ParsedBlock, index: number): boolean {
     const last = this.lastList;
     if (!last || lines[0].depth < 1 || this.quote) return false;
     const between = this.out.slice(last.at + last.nodes.length);
@@ -1025,6 +1048,7 @@ class Converter {
     tail.more = [...(tail.more ?? []), ...between];
     this.out.splice(last.at);
     const nodes = this.lists(all);
+    this.spaceLast(nodes, block);
     // A link to the resumed block lands on its first line.
     const first = lines[0].node;
     if (first?.attrs) {
@@ -1035,6 +1059,12 @@ class Converter {
     for (const node of nodes) this.push(node);
     this.lastList = { lines: all, nodes, at: this.out.length - nodes.length };
     return true;
+  }
+
+  /** A PDF's and a Word file's bullets are as printed; a web page's and a
+      text file's "-" is any bullet. */
+  private get printed(): boolean {
+    return this.input.kind === "docx" || this.input.kind === "pdf";
   }
 
   private table(block: ParsedBlock, index: number, starts: PageStart[]) {

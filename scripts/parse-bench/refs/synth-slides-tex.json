@@ -12,7 +12,8 @@
           "text": "Sparse Attention for Long Scientific Documents",
           "bold": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -21,7 +22,11 @@
           "text": "Reading a whole paper at once"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "font": {
+        "shape": "sans",
+        "size": 9.96
+      }
     },
     {
       "kind": "paragraph",
@@ -39,7 +44,11 @@
           "text": "Analytical Engines Ltd."
         }
       ],
-      "align": "center"
+      "align": "center",
+      "font": {
+        "shape": "sans",
+        "size": 9.96
+      }
     },
     {
       "kind": "paragraph",
@@ -48,7 +57,11 @@
           "text": "September 2026"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "font": {
+        "shape": "sans",
+        "size": 9.96
+      }
     },
     {
       "kind": "heading",
@@ -420,6 +433,21 @@
     "7/8",
     "8/8"
   ],
+  "fonts": {
+    "body": {
+      "shape": "sans",
+      "size": 10.91
+    },
+    "title": {
+      "shape": "sans",
+      "size": 14.35,
+      "bold": true
+    },
+    "h2": {
+      "shape": "sans",
+      "size": 14.35
+    }
+  },
   "license": "open",
   "provenance": "generated",
   "notes": "One page per slide. The slide title is a level 2 heading. The theme draws the bullets as shapes, so a bullet list has no marker in the text layer; the reference names the marker •. The footline on every slide is furniture."

@@ -1,6 +1,7 @@
 // The benchmark's own checks: each metric on tiny hand-built pairs, the
 // adapters on tiny parses and imports, and the math canonical form on pairs
 // that must and must not score 1. Run: npx tsx scripts/parse-bench/check.mts
+import { readFileSync } from "node:fs";
 import type { RichNode } from "@/lib/docs/schema";
 import type { ParsedBlock } from "@/lib/parse/types";
 import type { Glyph } from "@/lib/parse/pdf/drawing";
@@ -10,6 +11,7 @@ import { glyphScores, placeEquations, type PageGlyphs } from "./glyphs";
 import { mathTokens, sequenceSimilarity } from "./math";
 import { flatten, score, type Scores } from "./metrics";
 import type { RefBlock, Span } from "./model";
+import { CORPUS_PATH } from "./load";
 import { garblesOf, wordsOf } from "./text";
 
 let failed = 0;
@@ -186,6 +188,26 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     list?.kind === "list" && list.items.map((it) => it.marker).join(",") === "3.,a).,b).",
     list?.kind === "list" ? list.items.map((it) => it.marker).join(",") : JSON.stringify(list),
   );
+}
+{
+  // An item's later paragraph (a centered label under the item's fill-in line) reads as its own paragraph,
+  // with its alignment, between two lists; the items after it keep their depth.
+  const line = (text: string, textAlign?: string): RichNode => ({ type: "paragraph", ...(textAlign ? { attrs: { textAlign } } : {}), content: [{ type: "text", text }] });
+  const item = (...content: RichNode[]): RichNode => ({ type: "listItem", content });
+  const doc: RichNode = {
+    type: "doc",
+    content: [{ type: "bulletList", content: [item(line("Birds"), { type: "bulletList", content: [item(line("Owls"), line("(kind)", "center")), item(line("Wrens"))] })] }],
+  };
+  const shape = fromImport(doc)
+    .blocks.map((b) =>
+      b.kind === "list"
+        ? `list ${b.items.map((it) => `${it.depth}:${it.spans.map((s) => s.text).join("")}`).join(" ")}`
+        : b.kind === "paragraph"
+          ? `paragraph/${b.align ?? "left"} ${b.spans.map((s) => s.text).join("")}`
+          : b.kind,
+    )
+    .join("; ");
+  check("import: an item's later paragraph reads as its own, and the items after it keep their depth", shape === "list 0:Birds 1:Owls; paragraph/center (kind); list 1:Wrens", shape);
 }
 {
   const s = run(edit((b) => (b[4] = { kind: "figure", mathImage: "∫ 1 0 f(x) dx = 1 (1.1)" })));
@@ -390,6 +412,15 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   const item: DocBlock = { kind: "list", items: [{ depth: 1, marker: "-", spans: [{ text: "Sand settles behind every bar." }] }] };
   const word = freeScores(wordPdf, flatten({ blocks: [item, para("THE RIVER COMPARED WITH LAKES")] })).coverage;
   check("free: a hollow bullet's o and a hyphen in capitals are no missing words", near(word.recall, 1) && near(word.precision, 1), `recall ${word.recall}, precision ${word.precision}`);
+  // A Word file's contents list, built from its headings where LibreOffice's PDF leaves the field empty.
+  const contents: DocBlock = { kind: "list", role: "contents", items: [{ depth: 0, marker: "1", spans: [{ text: "Dam wall readings" }] }] };
+  const withContents = flatten({ blocks: [item, para("THE RIVER COMPARED WITH LAKES"), contents] });
+  const asWord = freeScores(wordPdf, withContents, undefined, true).coverage;
+  const asPdf = freeScores(wordPdf, withContents).coverage;
+  check("free: a Word file's contents list is no extra word; a PDF's is", near(asWord.precision, 1) && (asPdf.precision ?? 1) < 1, `word ${asWord.precision}, pdf ${asPdf.precision}`);
+  const blindPdf: PdfText = { ...pdf, raw: [["small"]], lines: [] };
+  const blind = freeScores(blindPdf, flatten({ blocks: [para("Words the text layer reads none of on this page.")] })).coverage;
+  check("free: a text layer that reads fewer than half the candidate's words scores no coverage", blind.f1 === null && blind.recall === null, JSON.stringify(blind));
 }
 {
   const ROLE_REF: RefBlock[] = [
@@ -431,6 +462,170 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   };
   const i = score({ blocks: ROLE_REF.slice(0, 2) }, [], fromImport(indented)).scores;
   check("roles: an import's first-line indent and small caps score 1", near(i.roles.indent, 1) && near(i.styles.f1.smallCaps, 1) && near(i.roles.align, 1), `${JSON.stringify(i.roles)} smallCaps ${i.styles.f1.smallCaps}`);
+}
+
+// ── The page's look: styles, alignment, fonts ──────────────────────────────
+
+{
+  // Strikethrough, a text color, a highlight; a link's underline and color are the link's.
+  const LOOK_REF: RefBlock[] = [
+    {
+      kind: "paragraph",
+      spans: [
+        { text: "The gauge read " },
+        { text: "four meters", strike: true },
+        { text: " five meters at dawn, " },
+        { text: "above the flood line", color: "#cc0000" },
+        { text: ", and the " },
+        { text: "levee held", highlight: "#ffff00" },
+        { text: " through the night. See the " },
+        { text: "river report", href: "https://example.com/river" },
+        { text: " for the hourly readings." },
+      ],
+    },
+  ];
+  const look = (spans: Span[]) => score({ blocks: LOOK_REF }, [], { blocks: [{ kind: "paragraph", spans }] }).scores.styles;
+  const same = look((LOOK_REF[0] as { spans: Span[] }).spans.map((s) => (s.href ? { ...s, underline: true, color: "#1155cc" } : s)));
+  check(
+    "styles: strike, color, and highlight score 1; a link's underline and blue are no style",
+    near(same.f1.strike, 1) && near(same.f1.color, 1) && near(same.f1.highlight, 1) && same.f1.underline === null,
+    JSON.stringify(same.f1),
+  );
+  const off = look(
+    (LOOK_REF[0] as { spans: Span[] }).spans.map((s) => (s.strike ? { text: s.text } : s.color ? { ...s, color: "#0000cc" } : s.highlight ? { ...s, highlight: "#fde047" } : s)),
+  );
+  check(
+    "styles: a lost strike scores 0, a red read as blue and a yellow read as a paler yellow are wrong",
+    near(off.f1.strike, 0) && near(off.f1.color, 0) && near(off.f1.highlight, 0),
+    JSON.stringify(off.f1),
+  );
+  const parsed = fromParse({
+    title: null,
+    blocks: [
+      {
+        type: "PARAGRAPH",
+        text: "old new red marked",
+        page: 1,
+        styles: [
+          { start: 0, end: 3, style: "strike", quotedText: "old" },
+          { start: 8, end: 11, style: "color:#cc0000", quotedText: "red" },
+          { start: 12, end: 18, style: "highlight:#ffff00", quotedText: "marked" },
+          { start: 4, end: 7, style: "color:#1a1a1a", quotedText: "new" },
+        ],
+      },
+    ],
+  }).blocks[0];
+  const got = parsed.kind === "paragraph" ? parsed.spans.map((s) => `${s.text.trim()}${s.strike ? "~" : ""}${s.color ?? ""}${s.highlight ? `^${s.highlight}` : ""}`).join("|") : "";
+  check("parse: strike, color, and highlight styles are read; near-black is no color", got === "old~|new|red#cc0000||marked^#ffff00", got);
+  const imported = fromImport({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "old", marks: [{ type: "strike" }] },
+          { type: "text", text: " red", marks: [{ type: "textStyle", attrs: { color: "#CC0000" } }] },
+          { type: "text", text: " marked", marks: [{ type: "textStyle", attrs: { backgroundColor: "rgb(255, 255, 0)" } }] },
+        ],
+      },
+    ],
+  }).blocks[0];
+  const read = imported.kind === "paragraph" ? imported.spans.map((s) => `${s.text.trim()}${s.strike ? "~" : ""}${s.color ?? ""}${s.highlight ? `^${s.highlight}` : ""}`).join("|") : "";
+  check("import: the strike mark, a text color, and a background color are read", read === "old~|red#cc0000|marked^#ffff00", read);
+}
+{
+  // Alignment: titles, headings, and paragraphs; justified only where a wrap shows it.
+  const long = "The channel widens below the second bend, where the current slows and drops the gravel it carried from the hills.";
+  const ALIGN_REF: RefBlock[] = [
+    { kind: "title", spans: [{ text: "River notes" }], align: "center" },
+    { kind: "paragraph", spans: [{ text: "Summer survey" }], align: "center" },
+    { kind: "paragraph", spans: [{ text: long }], align: "justify" },
+    { kind: "paragraph", spans: [{ text: "A short line of the same column." }], align: "justify" },
+  ];
+  const run = (blocks: DocBlock[], ref = ALIGN_REF) => score({ blocks: ref }, [], { blocks }).scores.roles.align;
+  const right: DocBlock[] = [
+    { kind: "title", spans: [{ text: "River notes" }], align: "center" },
+    { kind: "heading", level: 2, spans: [{ text: "Summer survey" }], align: "center" },
+    { kind: "paragraph", spans: [{ text: long }], align: "justify" },
+    { kind: "paragraph", spans: [{ text: "A short line of the same column." }] },
+  ];
+  check("roles: a centered title and a centered line read as a heading keep their alignment; a short line may drop justify", near(run(right), 1), `align ${run(right)}`);
+  const flat = right.map((b) => ("align" in b ? { ...b, align: undefined } : b)) as DocBlock[];
+  check("roles: a lost center and a lost justify count", near(run(flat), 0), `align ${run(flat)}`);
+  const unjustified = ALIGN_REF.map((b) => (b.kind === "paragraph" && b.align === "justify" ? { ...b, align: undefined } : b)) as RefBlock[];
+  check("roles: justify is not scored where the reference justifies nothing", near(run(right, unjustified), 1), `align ${run(right, unjustified)}`);
+  const heading = fromParse({ title: "River notes", titleAlign: "center", blocks: [{ type: "HEADING", text: "Summer survey", html: '<h2 class="center">Summer survey</h2>', page: 1 }] }).blocks;
+  check("parse: the title's and a heading's alignment are read", heading[0].kind === "title" && heading[0].align === "center" && heading[1].kind === "heading" && heading[1].align === "center", JSON.stringify(heading));
+}
+{
+  // Headings: an invented heading counts against them.
+  const s = run(edit((b) => (b[8] = { kind: "heading", level: 2, spans: (b[8] as { spans: Span[] }).spans })));
+  check("headings: a paragraph read as a heading lowers the heading score", s.headings.cand === 3 && s.headings.right === 2 && (s.parts.headings ?? 1) < 1, `${s.headings.right} of ${s.headings.cand}, score ${s.parts.headings}`);
+}
+{
+  // Fonts: each role's shape, size (the body's in points, the others' as a ratio to the body), bold, and color.
+  const serif = (size: number, bold = false, color?: string) => ({ shape: "serif" as const, size, ...(bold ? { bold: true as const } : {}), ...(color ? { color } : {}) });
+  const sans = (size: number, bold = false) => ({ shape: "sans" as const, size, ...(bold ? { bold: true as const } : {}) });
+  const FONT_REF: Doc = {
+    fonts: { body: serif(10), title: serif(20, true), h2: serif(12, true, "#1f3864"), caption: serif(8), footnote: serif(8) },
+    blocks: [
+      { kind: "title", spans: [{ text: "Notes on river flow" }] },
+      { kind: "heading", level: 2, spans: [{ text: "Channels and banks" }] },
+      { kind: "paragraph", spans: [{ text: "A channel carries water from its source to its mouth, and its banks shape the flow." }] },
+      { kind: "paragraph", spans: [{ text: "The author line of the survey" }], font: serif(11) },
+      { kind: "figure", caption: [{ text: "Figure 1: The gauge at the upper bridge." }] },
+      { kind: "footnote", label: "1", spans: [{ text: "Measured at dawn in the dry season." }] },
+    ],
+  };
+  const fonts = (cand: Doc) => score(FONT_REF, [], cand).scores.fonts;
+  const same: Doc = structuredClone(FONT_REF);
+  same.blocks.forEach((b) => {
+    const role = b.kind === "title" ? "title" : b.kind === "heading" ? "h2" : b.kind === "figure" ? "caption" : b.kind === "footnote" ? "footnote" : "body";
+    if ("font" in b && b.font) return;
+    Object.assign(b, { font: FONT_REF.fonts?.[role] });
+  });
+  const exact = fonts(same);
+  check("fonts: every role's font right scores 1", near(exact?.score ?? 0, 1), JSON.stringify(exact?.roles));
+  // The same page drawn a tenth larger throughout: the ratios hold, the body's size does not.
+  const scaled: Doc = structuredClone(same);
+  scaled.blocks.forEach((b) => "font" in b && b.font && (b.font = { ...b.font, size: b.font.size * 1.25 }));
+  const big = fonts(scaled);
+  check("fonts: a body a quarter larger is wrong, every other role's ratio right", near(big?.roles.body?.size ?? -1, 0) && near(big?.roles.h2?.size ?? -1, 1) && near(big?.roles.title?.size ?? -1, 1), JSON.stringify(big?.roles));
+  const shapes: Doc = structuredClone(same);
+  shapes.blocks.forEach((b) => "font" in b && b.font && (b.font = sans(b.font.size, Boolean(b.font.bold))));
+  const wrongShape = fonts(shapes);
+  check("fonts: sans where the page sets serif is wrong in every role, and the heading's color is lost", near(wrongShape?.shape ?? -1, 0) && near(wrongShape?.roles.h2?.color ?? -1, 0), JSON.stringify(wrongShape?.roles));
+  const unknown: Doc = { blocks: FONT_REF.blocks.map((b) => ({ ...b, font: undefined })) as DocBlock[] };
+  const none = fonts(unknown);
+  check("fonts: a candidate that says no font scores 0", near(none?.score ?? -1, 0) && none?.roles.body?.known === 0, JSON.stringify(none?.roles));
+  const noFonts = score({ blocks: FONT_REF.blocks }, [], same).scores;
+  check("fonts: a reference without fonts leaves the part unscored", noFonts.fonts === null && noFonts.parts.fonts === null);
+  // The import: named styles and marks as drawn.
+  const styles = { namedStyleNormal: JSON.stringify({ font: "Times New Roman", size: 10 }), namedStyleH2: JSON.stringify({ size: 12, bold: true, color: "#1f3864" }) };
+  const doc: RichNode = {
+    type: "doc",
+    attrs: styles,
+    content: [
+      { type: "heading", attrs: { level: 2, textAlign: "center" }, content: [{ type: "text", text: "Channels and banks" }] },
+      { type: "paragraph", attrs: { textAlign: "justify" }, content: [{ type: "text", text: "A channel carries water from its source to its mouth, and its banks shape the flow." }] },
+      { type: "paragraph", content: [{ type: "text", text: "Small print", marks: [{ type: "textStyle", attrs: { fontSize: "8pt", fontFamily: "Courier New" } }] }] },
+    ],
+  };
+  const drawn = fromImport(doc);
+  const faces = drawn.blocks.map((b) => ("font" in b && b.font ? `${b.font.shape} ${b.font.size}${b.font.bold ? " bold" : ""}${b.font.color ? ` ${b.font.color}` : ""}` : "?")).join(" | ");
+  check(
+    "import: a block's font is its named style under its marks, its alignment its own",
+    faces === "serif 12 bold #1f3864 | serif 10 | mono 8" && drawn.fonts?.body.size === 10 && drawn.blocks[0].kind === "heading" && drawn.blocks[0].align === "center" && drawn.blocks[1].kind === "paragraph" && drawn.blocks[1].align === "justify",
+    `${faces}; body ${JSON.stringify(drawn.fonts?.body)}`,
+  );
+  const parsedFonts = fromParse({
+    title: "Notes on river flow",
+    titleFont: { family: "Times New Roman", size: 20, bold: true },
+    bodyFont: { family: "Times New Roman", size: 10 },
+    blocks: [{ type: "PARAGRAPH", text: "A channel carries water.", page: 1, font: { family: "Courier New", size: 9, color: "#CC0000" } }],
+  });
+  const parsedFaces = parsedFonts.blocks.map((b) => ("font" in b && b.font ? `${b.font.shape} ${b.font.size}${b.font.bold ? " bold" : ""}${b.font.color ? ` ${b.font.color}` : ""}` : "?")).join(" | ");
+  check("parse: the title's, the body's, and a block's fonts are read by shape", parsedFaces === "serif 20 bold | mono 9 #cc0000" && parsedFonts.fonts?.body.shape === "serif", parsedFaces);
 }
 
 // ── Glyph checks ────────────────────────────────────────────────────────────
@@ -647,6 +842,13 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     first.kind === "paragraph" && first.spans.map((s) => s.text).join("") === "page two begins" && first.spans[0].italic === true,
     first.kind === "paragraph" ? first.spans.map((s) => s.text).join("") : first.kind,
   );
+}
+
+{
+  // The repository is public: the committed corpus list names none of the owner's files (load.ts).
+  const listed = JSON.parse(readFileSync(CORPUS_PATH, "utf8")) as { id: string; license?: string; pdf?: string; docx?: string }[];
+  const owner = listed.filter((e) => e.license === "private" || [e.pdf, e.docx].some((f) => f?.startsWith(".bench/private/")));
+  check("corpus.json names none of the owner's files", owner.length === 0, `${owner.length} entries`);
 }
 
 console.log(failed === 0 ? "\nAll checks pass." : `\n${failed} checks fail.`);

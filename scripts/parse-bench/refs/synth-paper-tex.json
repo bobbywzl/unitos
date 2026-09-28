@@ -11,7 +11,8 @@
         {
           "text": "Sparse Attention for Long Scientific Documents"
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -20,7 +21,11 @@
           "text": "Ada Lovelace, Charles Babbage, and Mary Somerville"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "font": {
+        "shape": "serif",
+        "size": 10.96
+      }
     },
     {
       "kind": "footnote",
@@ -61,7 +66,13 @@
           "text": "Transformers read long documents slowly because attention compares every pair of tokens. We study a sparse pattern in which each token attends to a window of its neighbors and to a small set of global tokens. On two benchmarks of scientific articles the model matches or exceeds dense attention while using a quarter of the memory, and an ablation shows that 64 global tokens capture most of the gain.",
           "bold": true
         }
-      ]
+      ],
+      "align": "justify",
+      "font": {
+        "shape": "serif",
+        "size": 9.96,
+        "bold": true
+      }
     },
     {
       "kind": "paragraph",
@@ -75,7 +86,13 @@
           "text": "Attention, long documents, sparsity, summarization, transformers.",
           "bold": true
         }
-      ]
+      ],
+      "align": "justify",
+      "font": {
+        "shape": "serif",
+        "size": 9.96,
+        "bold": true
+      }
     },
     {
       "kind": "heading",
@@ -88,7 +105,8 @@
           "text": "INTRODUCTION",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -97,6 +115,7 @@
           "text": "SCIENTIFIC articles run to thousands of tokens, and their key results often sit far from the questions they answer. A model that summarizes an article has to connect a claim in the abstract with the table that supports it on page nine. Dense attention [1] does this directly, but its cost grows with the square of the length, so most systems truncate the input to a few thousand tokens."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -113,6 +132,7 @@
           "text": " This paper measures how far such a pattern goes on scientific text, where long-range references are common."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -131,6 +151,7 @@
           "text": "Our contributions are threefold. First, we describe a window-and-global pattern with a simple implementation. Second, we evaluate it on two benchmarks of long articles. Third, we show which parts of the pattern account for the gain."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -144,7 +165,8 @@
           "text": "RELATED WORK",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "heading",
@@ -163,6 +185,7 @@
           "text": "Several families of methods reduce the cost of attention. Kernel methods approximate the softmax with random features, low-rank methods project the keys to a shorter sequence, and sparse methods restrict the pairs that interact [2]–[4]. We follow the last family, since it keeps exact attention within the chosen pairs."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -182,6 +205,7 @@
           "text": "Benchmarks built from arXiv and PubMed articles pair each paper with its abstract [5]. Their inputs average more than 5,000 tokens, which makes them a natural test for long-context models."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -195,7 +219,8 @@
           "text": "METHOD",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -232,6 +257,7 @@
           "text": ", dense attention computes"
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -252,7 +278,8 @@
         {
           "text": " is the head dimension. Sparse attention replaces the score matrix with"
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
@@ -272,7 +299,8 @@
         {
           "text": " attends only to its neighborhood"
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
@@ -299,7 +327,8 @@
         {
           "text": " of global positions. Global tokens attend to every position in both directions."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "heading",
@@ -317,7 +346,8 @@
         {
           "text": "The pattern needs no custom kernel. Listing 1 builds the mask from a band and a set of global rows and columns, and applies it before the softmax."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "code",
@@ -339,7 +369,8 @@
         {
           "text": "We train with the usual token-level cross-entropy,"
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
@@ -366,7 +397,8 @@
         {
           "text": " its abstract. Fig. 1 shows the whole model."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "figure",
@@ -387,7 +419,8 @@
           "text": "EXPERIMENTS",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "heading",
@@ -420,6 +453,7 @@
           "text": " and there are 64 global tokens unless stated otherwise."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -675,6 +709,7 @@
           "sup": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -693,6 +728,7 @@
           "text": "Table II varies the number of global tokens. The gain saturates near 64 tokens, while memory keeps growing, so we use 64 in all other experiments."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -848,7 +884,8 @@
           "text": "CONCLUSION",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -857,6 +894,7 @@
           "text": "A window of local attention and a few global tokens are enough to read long scientific articles. The pattern is easy to implement, fits in the memory of a single accelerator, and beats dense attention on truncated inputs. Future work will test it on documents with tables and equations, where references across pages are denser still."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -867,7 +905,8 @@
           "text": "ACKNOWLEDGMENT",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -876,6 +915,7 @@
           "text": "The authors thank the reviewers for their comments."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -886,7 +926,8 @@
           "text": "REFERENCES",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "list",
@@ -1000,6 +1041,36 @@
     "1",
     "2"
   ],
+  "fonts": {
+    "body": {
+      "shape": "serif",
+      "size": 9.96
+    },
+    "title": {
+      "shape": "serif",
+      "size": 23.91
+    },
+    "footnote": {
+      "shape": "serif",
+      "size": 7.97
+    },
+    "h2": {
+      "shape": "serif",
+      "size": 9.96
+    },
+    "h3": {
+      "shape": "serif",
+      "size": 9.96
+    },
+    "h4": {
+      "shape": "serif",
+      "size": 9.96
+    },
+    "caption": {
+      "shape": "serif",
+      "size": 7.97
+    }
+  },
   "license": "open",
   "provenance": "generated",
   "notes": "In LaTeX, IEEEtran's small caps are Times capitals scaled down, so the text layer and the reference hold capitals; in HTML they keep their letters' case. The affiliations are footnotes with no mark (label \"\"). The paragraph after I. INTRODUCTION opens with a drop cap. Table I spans both columns."

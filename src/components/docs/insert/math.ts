@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import type { Mark, Node as PMNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type NodeView } from "@tiptap/pm/view";
 import { BlockMath, InlineMath } from "@tiptap/extension-mathematics";
 import katex from "katex";
@@ -136,25 +136,51 @@ function blockTails(block: PMNode): Tail[] {
       marks += 1;
       room += width;
     }
-    if (text[marks] === " ") room += SPACE_ROOM;
+    // The space may open the next run ("." in italics, then " Hint").
+    const after = marks < text.length ? text[marks] : block.maybeChild(index + 2)?.text?.[0];
+    if (after === " ") room += SPACE_ROOM;
     if (marks > 0) tails.push({ at: offset, size: child.nodeSize, marks, room: Math.round(room * 100) / 100 });
   });
   tailsOf.set(block, tails);
   return tails;
 }
 
+/** The margins of a textblock's tails; `pos` is where the block starts. */
+function blockDecorations(block: PMNode, pos: number): Decoration[] {
+  return blockTails(block).flatMap((t) => {
+    const end = pos + 1 + t.at + t.size;
+    return [
+      Decoration.node(end - t.size, end, { style: `margin-inline-end: ${t.room}em` }),
+      Decoration.inline(end, end + t.marks, { style: `margin-inline-start: -${t.room}em` }),
+    ];
+  });
+}
+
 function tailDecorations(doc: PMNode): DecorationSet {
   const decorations: Decoration[] = [];
   doc.descendants((node, pos) => {
     if (!node.isTextblock) return true;
-    for (const t of blockTails(node)) {
-      const end = pos + 1 + t.at + t.size;
-      decorations.push(Decoration.node(end - t.size, end, { style: `margin-inline-end: ${t.room}em` }));
-      decorations.push(Decoration.inline(end, end + t.marks, { style: `margin-inline-start: -${t.room}em` }));
-    }
+    decorations.push(...blockDecorations(node, pos));
     return false;
   });
   return decorations.length ? DecorationSet.create(doc, decorations) : DecorationSet.empty;
+}
+
+/** A change redoes the margins of the textblocks it touched; the rest map. */
+function changedTails(tr: Transaction, set: DecorationSet): DecorationSet {
+  let next = set.map(tr.mapping, tr.doc);
+  tr.mapping.maps.forEach((map, i) => {
+    const rest = tr.mapping.slice(i + 1);
+    map.forEach((_from, _to, start, end) => {
+      tr.doc.nodesBetween(rest.map(start, -1), rest.map(end, 1), (node, pos) => {
+        if (!node.isTextblock) return true;
+        const inside = next.find(pos + 1, pos + node.nodeSize - 1).filter((d) => d.from > pos && d.to < pos + node.nodeSize);
+        next = next.remove(inside).add(tr.doc, blockDecorations(node, pos));
+        return false;
+      });
+    });
+  });
+  return next;
 }
 
 const tailKey = new PluginKey<DecorationSet>("docsMathTail");
@@ -164,7 +190,7 @@ function mathTailPlugin(): Plugin<DecorationSet> {
     key: tailKey,
     state: {
       init: (_config, state) => tailDecorations(state.doc),
-      apply: (tr, set, _old, state) => (tr.docChanged ? tailDecorations(state.doc) : set),
+      apply: (tr, set) => (tr.docChanged ? changedTails(tr, set) : set),
     },
     props: { decorations: (state) => tailKey.getState(state) },
   });

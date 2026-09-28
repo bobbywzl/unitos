@@ -18,12 +18,13 @@ import { chromium, type Browser } from "playwright-core";
 import { loadRef } from "../load";
 import type { RefDoc } from "../model";
 import { checkRendering, furnitureOf, readPdf, TEX_FALLBACK_LETTERS, type Agreement } from "./check";
-import { renderDocx } from "./render-docx";
-import { renderHtml } from "./render-html";
-import { renderTex } from "./render-tex";
-import { flatten, referenceBlocks, type Leaf, type Renderer, type Spec } from "./spec";
+import { docxLooks, renderDocx } from "./render-docx";
+import { renderHtml, withDrawn } from "./render-html";
+import { renderTex, texLooks } from "./render-tex";
+import { flatten, referenceBlocks, type Leaf, type LeafLook, type Renderer, type Spec } from "./spec";
 import { agreement } from "./specs/agreement";
 import { gdocs } from "./specs/gdocs";
+import { look } from "./specs/look";
 import { math } from "./specs/math";
 import { newsletter } from "./specs/newsletter";
 import { notes } from "./specs/notes";
@@ -32,7 +33,7 @@ import { report } from "./specs/report";
 import { slides } from "./specs/slides";
 import { tables } from "./specs/tables";
 
-const SPECS: Spec[] = [notes, math, paper, tables, slides, agreement, report, gdocs, newsletter];
+const SPECS: Spec[] = [notes, math, paper, tables, slides, agreement, report, gdocs, newsletter, look];
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const OUT = ".bench/synthetic";
@@ -58,7 +59,7 @@ async function main() {
         if (only && !only.has(id) && !only.has(spec.name)) continue;
         const dir = join(ROOT, OUT, "build", id);
         mkdirSync(dir, { recursive: true });
-        const { leaves, bands, fallback } = await render(spec, renderer, id, dir, browser);
+        const { leaves, looks, bands, fallback } = await render(spec, renderer, id, dir, browser);
         // The PDF, its source, and the source's pictures, so the source builds where it is kept.
         for (const file of [`${id}.pdf`, `${id}.${EXTENSION[renderer]}`, ...readdirSync(dir).filter((f) => f.startsWith(`${id}-figure-`))]) {
           copyFileSync(join(dir, file), join(ROOT, OUT, file));
@@ -69,12 +70,14 @@ async function main() {
         // A long table's "continued" line prints in the body, above the foot band: furniture when it prints.
         const body = pages.flatMap((page) => page.body).join(" ");
         const continued = leaves.flatMap(({ block }) => (block.kind === "table" && block.layout?.continued && body.includes(block.layout.continued) ? [block.layout.continued] : []));
+        const { blocks, fonts } = referenceBlocks(leaves, looks);
         const ref: RefDoc = {
           id,
           category: spec.category,
           source: renderer === "docx" ? { pdf: `${OUT}/${id}.pdf`, docx: `${OUT}/${id}.docx` } : { pdf: `${OUT}/${id}.pdf` },
-          blocks: referenceBlocks(leaves),
+          blocks,
           furniture: [...furnitureOf(pages), ...new Set(continued)],
+          ...(fonts ? { fonts } : {}),
           license: "open",
           provenance: "generated",
           ...(spec.notes ? { notes: spec.notes } : {}),
@@ -91,25 +94,26 @@ async function main() {
   printTable(rows);
 }
 
-/** A rendering's leaves and what its check needs; the renderer writes <id>.pdf into its build folder. */
-type Rendered = { leaves: Leaf[]; bands: { top: number; bottom: number }; fallback: string };
+/** A rendering's leaves, what the page shows of each (its font and alignment), and what its check needs; the
+    renderer writes <id>.pdf into its build folder. */
+type Rendered = { leaves: Leaf[]; looks: LeafLook[]; bands: { top: number; bottom: number }; fallback: string };
 
 async function render(spec: Spec, renderer: Renderer, id: string, dir: string, browser: Browser): Promise<Rendered> {
   const { tex, html, docx } = spec.renderings;
   if (renderer === "tex" && tex) {
     const leaves = flatten(spec, { footnotes: "after", smallCaps: tex.smallCaps, captionJoin: tex.captionJoin });
     await renderTex({ name: id, layout: tex, leaves, dir, browser });
-    return { leaves, bands: tex.bands, fallback: TEX_FALLBACK_LETTERS };
+    return { leaves, looks: texLooks(tex, leaves), bands: tex.bands, fallback: TEX_FALLBACK_LETTERS };
   }
   if (renderer === "html" && html) {
     const leaves = flatten(spec, { footnotes: "end", smallCaps: "keep" });
-    await renderHtml({ name: id, title: spec.title, layout: html, leaves, dir, browser });
-    return { leaves, bands: html.bands, fallback: "" };
+    const { looks, drawn } = await renderHtml({ name: id, title: spec.title, layout: html, leaves, dir, browser });
+    return { leaves: withDrawn(leaves, drawn), looks, bands: html.bands, fallback: "" };
   }
   if (renderer === "docx" && docx) {
     const leaves = flatten(spec, { footnotes: "after", smallCaps: "keep" });
     await renderDocx({ name: id, title: spec.title, layout: docx, leaves, dir, browser });
-    return { leaves, bands: docx.bands, fallback: "" };
+    return { leaves, looks: docxLooks(docx, leaves), bands: docx.bands, fallback: "" };
   }
   throw new Error(`${id}: no ${renderer} layout`);
 }

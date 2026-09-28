@@ -2,6 +2,7 @@
 // number, a citation label) with their depth, and indented bands whose gaps
 // split them into items (bullet glyphs are often vector art, not text).
 
+import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
 import { BULLET_RE, GLYPH_BULLET_RE, follows, isGlyphMarker, opensSequence, readMarker, type Marker } from "@/lib/parse/pdf/markers";
 import { isCentered, isFirstLineIndent, isIndented, opensWithLabel, proseEdge, pushedApart } from "@/lib/parse/pdf/paragraphs";
@@ -129,10 +130,12 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
   const line = lines[i];
   const items: Item[] = [itemOf(line, first)];
   // The column's right edge, where a wrapped line runs to: the prose lines
-  // around the list end there. With none near (a centered line), no line
-  // wraps.
+  // around the list end there, else the column the list was read in (a
+  // form's items, with no prose line near the first: an item's last word
+  // on its next line read as a paragraph of its own). A short centered
+  // line never reaches it.
   const prose = proseEdge(lines, i, i + 1);
-  const edge = prose > 0 ? Math.max(line.xEnd, prose) : Infinity;
+  const edge = prose > 0 ? Math.max(line.xEnd, prose) : (lineColumn(line)?.[1] ?? Infinity);
   let j = i + 1;
   while (j < lines.length) {
     const next = lines[j];
@@ -337,6 +340,13 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
   if (i === 0 && items.length >= 2 && !BULLET_RE.test(items[0].text) && BULLET_RE.test(items[1].text)) {
     const tail = items.shift()!;
     segments.push({ type: "PARAGRAPH", text: tail.text, page: line.page, runs: tail.runs, ...geom(tail.lines) });
+  }
+  // Labels that end in a colon, one to a line with no marker, are a form's
+  // fields (a fill-in rule drawn after each): each is a paragraph, not an
+  // item of an invented list.
+  if (items.length >= 2 && items.every((item) => item.lines.length === 1 && !BULLET_RE.test(item.text) && /:$/.test(item.text.trim()))) {
+    const field = (item: (typeof items)[number]): Segment => ({ type: "PARAGRAPH", text: item.text, page: item.lines[0].page, runs: item.runs, ...geom(item.lines) });
+    return { segments: [...segments, ...items.map(field)], next: j };
   }
   const glyphItem = items.length === 1 && GLYPH_BULLET_RE.test(items[0].text) && !/^\s*\*/.test(items[0].text);
   if (items.length >= 2 || glyphItem) {

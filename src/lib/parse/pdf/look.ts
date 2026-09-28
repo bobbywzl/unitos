@@ -194,6 +194,7 @@ const sameMarks = (a: Marks, b: Marks) =>
     and the words after it as one run of one font). hrefAt: the link at a
     place (index.ts). */
 export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject, hrefAt: HrefAt) {
+  if (process.env.R2NOLOOK) return;
   const faces = new Map<string, string>();
   const faceFor = (item: Item) => {
     if (item.math || !item.font || (item.glyphs?.length && item.glyphs.every((g) => g.mode === 3))) return "";

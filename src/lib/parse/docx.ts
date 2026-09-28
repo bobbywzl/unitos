@@ -4,6 +4,7 @@ import { faceOf } from "@/lib/parse/pdf/faces";
 import { isInk, takeBodyFont } from "@/lib/parse/pdf/look";
 import {
   attr,
+  boolAttr,
   child,
   children,
   cleanText,
@@ -172,12 +173,17 @@ function readStyles(zip: OfficeZip, rels: Map<string, Relationship>): Styles {
   const theme = relsOfType(rels, "theme")[0];
   const { major, minor } = theme ? parseTheme(zip, theme.target) : { major: "", minor: "" };
   const byId = new Map<string, StyleDef>();
+  const typeOf = new Map<string, string>();
   let defaultParagraph: string | null = null;
   for (const style of descendants(doc, "style")) {
     const id = attr(style, "styleId");
-    if (!id || byId.has(id)) continue;
+    const type = attr(style, "type") ?? "paragraph";
+    // A style defined twice (a generator's own after its defaults): the
+    // later definition is the one Word and LibreOffice draw.
+    if (!id || (typeOf.has(id) && typeOf.get(id) !== type)) continue;
+    typeOf.set(id, type);
     const isDefault = attr(style, "default") === "1" || attr(style, "default") === "true";
-    if (isDefault && (attr(style, "type") ?? "paragraph") === "paragraph") defaultParagraph ??= id;
+    if (isDefault && type === "paragraph") defaultParagraph ??= id;
     byId.set(id, {
       id,
       name: (attr(child(style, "name"), "val") ?? id).toLowerCase(),
@@ -350,6 +356,18 @@ type ParaProps = {
   /** The outline level the paragraph's style or its own properties set (9:
       body text, as the TOC Heading style sets it), null for none. */
   outline: number | null;
+  /** The space before and after the paragraph in twips (w:spacing through
+      the layers; none set is none), whether it leaves them out beside a
+      paragraph of its own style (w:contextualSpacing), its style, and its
+      line spacing (w:line: 240ths of a line when the rule is auto, twips
+      when it is exact or at least). */
+  before: number;
+  after: number;
+  contextual: boolean;
+  styleId: string | null;
+  line: { value: number; rule: "auto" | "exact" | "atLeast" };
+  /** The paragraph starts a page (w:pageBreakBefore). */
+  pageBefore: boolean;
 };
 
 const ROLE_BY_NAME: Record<string, Role> = {
@@ -401,6 +419,12 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     base,
     markDeleted: child(child(pPr, "rPr"), "del") !== null,
     outline: null,
+    before: 0,
+    after: 0,
+    contextual: false,
+    styleId,
+    line: { value: 240, rule: "auto" },
+    pageBefore: false,
   };
   let outline: number | null = null;
   for (const layer of [styles.docPPr, ...table.map((s) => s.pPr), ...chain.map((s) => s.pPr), pPr]) {
@@ -422,6 +446,16 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
       if (b) out.border[side] = !["none", "nil"].includes(attr(b, "val") ?? "none");
     }
     out.left = indentOf(child(layer, "ind")) ?? out.left;
+    const spacing = child(layer, "spacing");
+    out.before = spaceOf(spacing, "before") ?? out.before;
+    out.after = spaceOf(spacing, "after") ?? out.after;
+    const line = spaceOf(spacing, "line");
+    if (line !== null && line > 0) {
+      const rule = attr(spacing, "lineRule");
+      out.line = { value: line, rule: rule === "exact" ? "exact" : rule === "atLeast" ? "atLeast" : "auto" };
+    }
+    out.contextual = flag(child(layer, "contextualSpacing")) ?? out.contextual;
+    out.pageBefore = flag(child(layer, "pageBreakBefore")) ?? out.pageBefore;
   }
   // An outline level makes a heading of a style Word does not name one (a
   // "Chapter" style at level 1).
@@ -433,6 +467,43 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
 /** A left indent (w:ind left, or start), in twips. */
 function indentOf(ind: Element | null): number | null {
   return intAttr(ind, "left") ?? intAttr(ind, "start");
+}
+
+/** The most space the page editor sets before or after a paragraph, 1584
+    pt, in twips. */
+const MAX_SPACE_TWIPS = 31_680;
+/** Word's auto spacing (w:beforeAutospacing, a web page's paragraphs): 14 pt. */
+const AUTO_SPACE_TWIPS = 280;
+/** A single line's height over its size (Arial and Times New Roman 1.15,
+    Calibri 1.22). */
+const SINGLE_LINE = 1.15;
+
+/** A space w:spacing sets, in twips: Word's auto spacing, else the length,
+    else a count of lines (hundredths of a 12 pt line; Word writes the
+    length beside it). A value past the page editor's most is none. */
+function spaceOf(spacing: Element | null, side: "before" | "after" | "line"): number | null {
+  if (!spacing) return null;
+  if (side !== "line" && boolAttr(spacing, `${side}Autospacing`)) return AUTO_SPACE_TWIPS;
+  const lines = side === "line" ? null : intAttr(spacing, `${side}Lines`);
+  const value = intAttr(spacing, side) ?? (lines === null ? null : lines * 2.4);
+  return value !== null && value >= 0 && value <= MAX_SPACE_TWIPS ? Math.round(value) : null;
+}
+
+/** The space between two paragraphs in twips: the upper one's space after
+    and the lower one's space before (Word adds the two), each left out
+    beside a paragraph of its own style when it says so
+    (w:contextualSpacing). */
+function spaceBetween(above: ParaProps, below: ParaProps): number {
+  const same = above.styleId === below.styleId;
+  return (same && above.contextual ? 0 : above.after) + (same && below.contextual ? 0 : below.before);
+}
+
+/** A blank paragraph's height in twips: one line at its mark's size (half
+    points) and its line spacing. */
+function blankTwips(props: ParaProps, size: number): number {
+  const single = size * 10 * SINGLE_LINE;
+  const { value, rule } = props.line;
+  return Math.round(rule === "exact" ? value : rule === "atLeast" ? Math.max(value, single) : (single * value) / 240);
 }
 
 // ── Numbering ───────────────────────────────────────────────────────────────
@@ -939,13 +1010,21 @@ type Piece =
   | { kind: "figure"; pictures: Picture[]; icon: boolean }
   | { kind: "rule" };
 
-/** Where a run's content goes while a paragraph is read. */
-type Sink = { line: () => Line; cut: (piece: Piece) => void; floating: Picture[] };
+/** Where a run's content goes while a paragraph is read, and a page break
+    met in it. */
+type Sink = { line: () => Line; cut: (piece: Piece) => void; floating: Picture[]; page?: () => void };
 
 /** A list line: its left indent in twips (its depth is the indent's rank in
     the list), its marker, its words. */
 type ListLine = { indent: number; marker: string; words: Words };
-type OpenList = { lines: ListLine[]; contents: boolean; notes: Note[] };
+/** A list being read: its lines, whether it is a contents list, the notes
+    its lines cite, its first line's paragraph (the space above the list),
+    and the gap running on from its last line. */
+type OpenList = { lines: ListLine[]; contents: boolean; notes: Note[]; first?: ParaProps; trail?: Spacing };
+/** The gap under a text block so far: the paragraph it runs on from (the
+    block's last, or a blank paragraph under it), the twips the blank
+    paragraphs under the block add, and whether a page ends in it. */
+type Spacing = { props: ParaProps; blank: number; pageEnd?: boolean };
 /** A table cell: its html, its words, the columns and rows it spans, the
     note marks in its words (offsets into them), and its fill. */
 type TableCell = { html: string; text: string; colspan: number; rowspan: number; notes?: (Span & { note: Note })[]; fill?: HexColor | null };
@@ -990,6 +1069,12 @@ class DocxReader {
   private code: string[] | null = null;
   /** A paragraph whose mark is a tracked deletion: its words join the next. */
   private carry: Line | null = null;
+  /** The last text block read, and the gap under it so far (spaced). */
+  private lastSpaced: (Spacing & { block: ParsedBlock }) | null = null;
+  /** Where the page breaks of the paragraph last read fall (pieces), and
+      whether a page ends after the paragraph before this one. */
+  private pageBreaks = { before: false, after: false };
+  private pageEndAfter = false;
   private pendingBookmarks: string[] = [];
   /** Text boxes met in a paragraph, read after it. */
   private boxes: Element[] = [];
@@ -1092,6 +1177,7 @@ class DocxReader {
       joined.add(line.words);
     });
     const block = this.textBlock("LIST", joined, list.contents ? '<ul class="contents"></ul>' : undefined);
+    if (list.first && list.trail) this.spaced(block, list.first, list.trail);
     if (list.contents) for (const entry of entries) this.contentsLines.push({ block, ...entry });
     this.push(block, list.notes);
   }
@@ -1161,6 +1247,12 @@ class DocxReader {
     const props = paraProps(child(p, "pPr"), this.styles, table);
     const tocBefore = this.fields.some((f) => f.toc);
     const pieces = this.pieces(p, props.base, this.rels);
+    // A page ends in the gap above the paragraph: after the paragraph before
+    // it, or at a page break before its words. One ends after it at a page
+    // break after its words, or at a section break that starts a new page.
+    if (this.pageEndAfter || this.pageBreaks.before || props.pageBefore) this.pageEnd();
+    const section = child(child(p, "pPr"), "sectPr");
+    this.pageEndAfter = this.pageBreaks.after || (section !== null && !["continuous", "nextColumn"].includes(attr(child(section, "type"), "val") ?? "nextPage"));
     const inToc = tocBefore || this.fields.some((f) => f.toc);
     // A deleted paragraph mark (a tracked change, accepted): the words run
     // on into the next paragraph.
@@ -1197,6 +1289,8 @@ class DocxReader {
         this.list = { lines: [], contents: true, notes: [] };
       }
       this.list.lines.push({ indent: (props.toc ?? 1) * INDENT_STEP_TWIPS, marker: "", words });
+      this.list.first ??= props;
+      this.list.trail = { props, blank: 0 };
       this.contentsEntries += 1;
       return;
     }
@@ -1222,6 +1316,8 @@ class DocxReader {
         }
         // A list line is one line: a line break inside an item is a space.
         this.list.lines.push({ indent, marker: marker === "□" ? "☐" : marker, words: { ...words, text: words.text.replace(/\n/g, " ") } });
+        this.list.first ??= props;
+        this.list.trail = { props, blank: 0 };
         this.list.notes.push(...words.notes.map((n) => n.note));
         return;
       }
@@ -1247,6 +1343,13 @@ class DocxReader {
       if ((props.border.bottom || props.border.top) && !props.border.left && !props.border.right) {
         this.close();
         this.push({ type: "SEPARATOR", text: "---" });
+        return;
+      }
+      // Else it is space in the gap it stands in: one line at its mark's size.
+      const gap = this.list?.trail ?? this.lastSpaced;
+      if (gap) {
+        gap.blank += spaceBetween(gap.props, props) + blankTwips(props, applyRPr(props.base, child(child(p, "pPr"), "rPr"), this.styles).size);
+        gap.props = props;
       }
       return;
     }
@@ -1286,6 +1389,7 @@ class DocxReader {
       const block = this.textBlock("HEADING", words, `<h${level}${align}>${escapeHtml(words.text)}</h${level}>`, { headingBold: true });
       if (props.role === "title") this.titles.add(block);
       if (props.outline === 9) this.unlisted.add(block);
+      this.spaced(block, props, { props, blank: 0 });
       return block;
     }
     const tokens: string[] = [];
@@ -1295,7 +1399,31 @@ class DocxReader {
     // down its left side.
     else if (props.role === "quote" || (props.border.left && props.left > 0 && !props.border.right)) tokens.push("quote");
     if (props.align) tokens.push(props.align);
-    return this.textBlock("PARAGRAPH", words, tokens.length > 0 ? `<p class="${tokens.join(" ")}">${escapeHtml(words.text)}</p>` : undefined);
+    const block = this.textBlock("PARAGRAPH", words, tokens.length > 0 ? `<p class="${tokens.join(" ")}">${escapeHtml(words.text)}</p>` : undefined);
+    this.spaced(block, props, { props, blank: 0 });
+    return block;
+  }
+
+  /** A text block (a heading, a paragraph, a list) into the document's
+      spacing, before it is pushed: the text block right above it (no
+      table, figure, equation, or rule between; its notes aside) takes its
+      space after (ParsedBlock.spaceAfter) in points — the space between
+      their paragraphs and the blank paragraphs between them. A heading's
+      space before is so the space after of the block above it. The block
+      starts the next gap; a block with no text block under it has none. */
+  private spaced(block: ParsedBlock, first: ParaProps, trail: Spacing) {
+    const above = this.lastSpaced;
+    if (above && !above.pageEnd && this.blocks.findLast((b) => !b.footnote) === above.block) {
+      above.block.spaceAfter = points(Math.min(MAX_SPACE_TWIPS, above.blank + spaceBetween(above.props, first)));
+    }
+    this.lastSpaced = { ...trail, block };
+  }
+
+  /** A page ends in the gap open now: the block above it has no space
+      after, as where a page ends in a PDF. */
+  private pageEnd() {
+    const gap = this.list?.trail ?? this.lastSpaced;
+    if (gap) gap.pageEnd = true;
   }
 
   /** Pictures as a figure: each at its width in the text column. */
@@ -1315,6 +1443,8 @@ class DocxReader {
   private pieces(p: Element, base: Look, rels: Rels): Piece[] {
     const pieces: Piece[] = [];
     let line = new Line();
+    // A page break: the words piece it falls in, and where in its words.
+    const breaks: { piece: number; at: number }[] = [];
     const sink: Sink = {
       line: () => line,
       cut: (piece) => {
@@ -1322,9 +1452,19 @@ class DocxReader {
         line = new Line();
       },
       floating: [],
+      page: () => breaks.push({ piece: pieces.length, at: line.text.length }),
     };
     this.inline(p, base, null, rels, sink);
     pieces.push({ kind: "words", line });
+    const wordsIn = (list: Piece[]) => list.some((piece) => piece.kind === "words" && !piece.line.empty);
+    const textOf = (k: number) => {
+      const piece = pieces[k];
+      return piece.kind === "words" ? piece.line.text : "";
+    };
+    this.pageBreaks = {
+      before: breaks.some((b) => !wordsIn(pieces.slice(0, b.piece)) && !textOf(b.piece).slice(0, b.at).trim()),
+      after: breaks.some((b) => !wordsIn(pieces.slice(b.piece + 1)) && !textOf(b.piece).slice(b.at).trim()),
+    };
     if (sink.floating.length > 0) pieces.push({ kind: "figure", pictures: sink.floating, icon: false });
     const words = pieces.some((piece) => piece.kind === "words" && !piece.line.empty);
     return pieces.filter((piece) => (piece.kind === "words" ? !piece.line.empty || piece.line.bookmarks.length > 0 || pieces.length === 1 : !(piece.kind === "figure" && piece.icon && words)));
@@ -1492,6 +1632,7 @@ class DocxReader {
           // break is a line break.
           const type = attr(node, "type");
           if (shown && (!type || type === "textWrapping")) line.add("\n", look, target);
+          if (shown && type === "page") sink.page?.();
           break;
         }
         case "noBreakHyphen":
@@ -2003,6 +2144,14 @@ export async function parseDocx(bytes: Uint8Array, filename: string, opts: DocxP
     });
     block.text = lines.join("\n");
     if (links.length > 0) block.links = links;
+  }
+  // A space after is the gap to the text block under the block (its notes
+  // aside): none where a caption joined the table or figure under it.
+  let under: ParsedBlock | undefined;
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i];
+    if (b.spaceAfter !== undefined && !(under && (under.type === "PARAGRAPH" || under.type === "HEADING" || under.type === "LIST"))) delete b.spaceAfter;
+    if (!b.footnote) under = b;
   }
 
   // Links to places in the document point at the blocks those places are

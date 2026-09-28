@@ -1,10 +1,13 @@
 import { JSDOM } from "jsdom";
+import type { DocStyle } from "@/components/docs/extensions";
+import { firstFamily, fontStack } from "@/components/docs/fonts";
 import { listMarker } from "@/components/docs/toolbar/lists";
+import { readStyles, sizeInPt, type NamedStyle } from "@/components/docs/toolbar/styles";
 import type { RichMark, RichNode } from "@/lib/docs/schema";
-import type { ParsedBlock } from "@/lib/parse/types";
+import type { ParsedBlock, TextFont } from "@/lib/parse/types";
 import { parseRegion, type Region } from "@/lib/video/types";
 import { splitTag } from "./math";
-import type { RefBlock, Span } from "./model";
+import type { Align, Font, Fonts, RefBlock, Span } from "./model";
 import { wordsOf } from "./text";
 
 // The adapters: a parse (parsePdf's title and blocks) and an import (the
@@ -34,13 +37,15 @@ export type DocBlock = RefBlock & {
   /** A figure or an equation of a PDF: its page and its region there (percent of the page). */
   at?: { page: number; region: Region };
 };
-export type Doc = { blocks: DocBlock[] };
+/** A document as the model holds it. `fonts`: a reference's fonts by role;
+    a candidate's body font, the size its other roles are measured against. */
+export type Doc = { blocks: DocBlock[]; fonts?: Fonts };
 export type Pages = [number, number] | undefined;
 type Look = Omit<Span, "text">;
 type Item = Extract<RefBlock, { kind: "list" }>["items"][number];
 type Row = Extract<RefBlock, { kind: "table" }>["rows"][number];
 
-const FLAGS = ["bold", "italic", "underline", "code", "smallCaps", "sub", "sup"] as const;
+const FLAGS = ["bold", "italic", "underline", "strike", "code", "smallCaps", "sub", "sup"] as const;
 
 /** A unit's spans as they are added: neighbors with one look join, and a
     page break and a footnote mark are kept as offsets. */
@@ -58,7 +63,14 @@ class Spans {
   add(span: Span) {
     if (!span.text && span.latex === undefined) return;
     const last = this.spans.at(-1);
-    const same = last && last.latex === undefined && span.latex === undefined && last.href === span.href && FLAGS.every((f) => last[f] === span[f]);
+    const same =
+      last &&
+      last.latex === undefined &&
+      span.latex === undefined &&
+      last.href === span.href &&
+      last.color === span.color &&
+      last.highlight === span.highlight &&
+      FLAGS.every((f) => last[f] === span[f]);
     if (last && same) last.text += span.text;
     else this.spans.push({ ...span });
     this.length += span.text.length;
@@ -75,6 +87,57 @@ class Spans {
 
 function inRangeOf(pages: Pages) {
   return (page: number) => !pages || (page >= pages[0] && page <= pages[1]);
+}
+
+// ── Colors and fonts ────────────────────────────────────────────────────────
+
+/** A color's channels from "#rgb", "#rrggbb", or "rgb(…)" ("rgba(…)" with
+    no transparency), or null. */
+function rgbOf(value: unknown): number[] | null {
+  if (typeof value !== "string") return null;
+  const v = value.trim().toLowerCase();
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/.exec(v);
+  if (hex) return (hex[1].length === 3 ? [...hex[1]].map((c) => c + c) : (hex[1].match(/../g) ?? [])).map((h) => Number.parseInt(h, 16));
+  const fn = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*([\d.]+)\s*)?\)$/.exec(v);
+  if (!fn || (fn[4] !== undefined && Number(fn[4]) === 0)) return null;
+  const rgb = [Number(fn[1]), Number(fn[2]), Number(fn[3])];
+  return rgb.every((c) => c <= 255) ? rgb : null;
+}
+
+const hexOf = (rgb: number[]) => `#${rgb.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+
+/** The words' color as "#rrggbb"; none for black and near-black (every
+    channel at most 0x50: a page's ink such as #202124 or #434343). */
+export function inkOf(value: unknown): string | undefined {
+  const rgb = rgbOf(value);
+  return rgb && !rgb.every((c) => c <= 0x50) ? hexOf(rgb) : undefined;
+}
+
+/** A fill behind words as "#rrggbb"; none for white and near-white (every
+    channel at least 0xf5: the page's own ground). */
+export function fillOf(value: unknown): string | undefined {
+  const rgb = rgbOf(value);
+  return rgb && !rgb.every((c) => c >= 0xf5) ? hexOf(rgb) : undefined;
+}
+
+/** A face's shape as the page editor draws it: the generic family its font
+    stack ends with (components/docs/fonts.ts; a face it does not know draws
+    sans-serif). */
+export function shapeOf(family: string): Font["shape"] {
+  const generic = fontStack(family).split(",").at(-1)?.trim();
+  return generic === "serif" ? "serif" : generic === "monospace" ? "mono" : "sans";
+}
+
+/** The parse's font (lib/parse/types.ts TextFont) in the model's terms. */
+function fontOf(font: TextFont | undefined): Font | undefined {
+  if (!font || !(font.size > 0)) return undefined;
+  const color = inkOf(font.color);
+  return { shape: shapeOf(font.family), size: font.size, ...(font.bold ? { bold: true as const } : {}), ...(color ? { color } : {}) };
+}
+
+/** A block's alignment from its html's layout tokens (lib/parse/pdf). */
+function alignOf(tokens: string[]): Align | undefined {
+  return tokens.includes("center") ? "center" : tokens.includes("right") ? "right" : tokens.includes("justify") ? "justify" : undefined;
 }
 
 // ── Figures that show math ──────────────────────────────────────────────────
@@ -158,8 +221,13 @@ function textSpans(block: ParsedBlock, from: number, to: number, pageAt: (o: num
     }
     const span: Span = { text: block.text.slice(a, b) };
     for (const s of block.styles ?? []) {
+      if (s.start > a || s.end < b) continue;
       const flag = FLAGS.find((f) => f === s.style);
-      if (flag && s.start <= a && s.end >= b) span[flag] = true;
+      if (flag) span[flag] = true;
+      const color = s.style.startsWith("color:") ? inkOf(s.style.slice("color:".length)) : undefined;
+      const fill = s.style.startsWith("highlight:") ? fillOf(s.style.slice("highlight:".length)) : undefined;
+      if (color) span.color = color;
+      if (fill) span.highlight = fill;
     }
     const href = block.links?.find((l) => l.href && l.start <= a && l.end >= b)?.href;
     if (href) span.href = href;
@@ -318,24 +386,29 @@ function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => b
     ...(into.marks.length > 0 ? { marks: into.marks.map((m) => ({ unit: 0, ...m })) } : {}),
   });
   const at = block.region && block.page ? { at: { page: block.page, region: block.region } } : {};
+  // The look most of the block's characters take (lib/parse/pdf, R2's fonts).
+  const face = fontOf(block.font);
+  const font = face ? { font: face } : {};
+  const tokens = classTokens(block.html);
+  const align = alignOf(tokens);
   if (block.footnote) {
     // A footnote's text opens with its label, which the model keeps apart.
     const label = block.footnote.label;
     const from = label && text.startsWith(label) ? label.length + (/^\s*/.exec(text.slice(label.length))?.[0].length ?? 0) : 0;
     const into = spansOf(from);
-    return into.hasText ? { kind: "footnote", label, spans: into.spans, id: `b${index}`, ...breaks(into) } : null;
+    return into.hasText ? { kind: "footnote", label, spans: into.spans, id: `b${index}`, ...font, ...breaks(into) } : null;
   }
   switch (block.type) {
     case "HEADING": {
       const into = spansOf();
       const n = Number(/^<h([1-6])/i.exec(block.html ?? "")?.[1] ?? 2);
-      return into.hasText ? { kind: "heading", level: level(n), spans: into.spans, ...breaks(into) } : null;
+      return into.hasText ? { kind: "heading", level: level(n), spans: into.spans, ...(align ? { align } : {}), ...font, ...breaks(into) } : null;
     }
     case "LIST": {
       // A contents list: its class, or lines that link to headings (the converter's test).
       const contents = /\bclass="[^"]*\bcontents\b/.test(block.html ?? "") || (block.links ?? []).some((l) => l.targetOrder !== undefined);
       const list = parseList(block, pageAt, inRange, contents);
-      return list && contents ? { ...list, role: "contents" } : list;
+      return list ? { ...list, ...font, ...(contents ? { role: "contents" as const } : {}) } : null;
     }
     case "TABLE":
       return parseTable(block, pageAt, inRange);
@@ -345,7 +418,7 @@ function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => b
       if (!whole) return null;
       if (isMathText(text)) return { kind: "figure", mathImage: text.trim(), ...at };
       const into = spansOf();
-      return into.hasText ? { kind: "figure", caption: into.spans, ...at } : { kind: "figure", ...at };
+      return into.hasText ? { kind: "figure", caption: into.spans, ...font, ...at } : { kind: "figure", ...at };
     }
     case "CODE": {
       const into = spansOf();
@@ -357,9 +430,7 @@ function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => b
     default: {
       const into = spansOf();
       if (!into.hasText) return null;
-      const tokens = classTokens(block.html);
       if (tokens.includes("quote")) return { kind: "quote", spans: into.spans, ...breaks(into) };
-      const align = tokens.includes("center") ? "center" : tokens.includes("right") ? "right" : undefined;
       const indent = tokens.includes("indent-first") ? "first" : tokens.includes("indent-hanging") ? "hanging" : tokens.includes("indent-block") ? "block" : undefined;
       return {
         kind: "paragraph",
@@ -367,6 +438,7 @@ function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => b
         ...(align ? { align } : {}),
         ...(indent ? { indent } : {}),
         ...(tokens.includes("caption") ? { role: "caption" as const } : {}),
+        ...font,
         ...breaks(into),
       };
     }
@@ -375,15 +447,22 @@ function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => b
 
 /** A parse as the reference model, cut to the scored pages. The title the
     parse found (it drops the heading it came from) is the first block. */
-export function fromParse(parsed: { title: string | null; blocks: ParsedBlock[] }, pages?: Pages): Doc {
+export function fromParse(
+  parsed: { title: string | null; blocks: ParsedBlock[]; bodyFont?: TextFont; titleFont?: TextFont; titleAlign?: "center" | "right" },
+  pages?: Pages,
+): Doc {
   const inRange = inRangeOf(pages);
   const blocks: DocBlock[] = [];
-  if (parsed.title?.trim() && inRange(1)) blocks.push({ kind: "title", spans: [{ text: parsed.title }] });
+  if (parsed.title?.trim() && inRange(1)) {
+    const font = fontOf(parsed.titleFont);
+    blocks.push({ kind: "title", spans: [{ text: parsed.title }], ...(parsed.titleAlign ? { align: parsed.titleAlign } : {}), ...(font ? { font } : {}) });
+  }
   parsed.blocks.forEach((block, index) => {
     const out = parseBlock(block, index, inRange);
     if (out) blocks.push(out);
   });
-  return { blocks };
+  const body = fontOf(parsed.bodyFont);
+  return body ? { blocks, fonts: { body } } : { blocks };
 }
 
 // ── An import ───────────────────────────────────────────────────────────────
@@ -396,13 +475,29 @@ const INDENT_PT = 36;
 function lookOf(marks: RichMark[] | undefined): Look {
   const look: Look = {};
   for (const mark of marks ?? []) {
-    if (mark.type === "bold" || mark.type === "italic" || mark.type === "underline" || mark.type === "code") look[mark.type] = true;
+    if (mark.type === "bold" || mark.type === "italic" || mark.type === "underline" || mark.type === "strike" || mark.type === "code") look[mark.type] = true;
     if (mark.type === "subscript") look.sub = true;
     if (mark.type === "superscript") look.sup = true;
     if (mark.type === "smallCaps" || (mark.type === "textStyle" && String(mark.attrs?.fontVariant ?? "").includes("small-caps"))) look.smallCaps = true;
     if (mark.type === "link" && typeof mark.attrs?.href === "string") look.href = mark.attrs.href;
+    if (mark.type === "textStyle") {
+      const color = inkOf(mark.attrs?.color);
+      const fill = fillOf(mark.attrs?.backgroundColor);
+      if (color) look.color = color;
+      if (fill) look.highlight = fill;
+    }
   }
   return look;
+}
+
+/** The page editor's own sizes where its CSS sets one (components/docs/css):
+    footnotes at 10 pt; a PDF figure's caption at 0.8rem, in gray. */
+const FOOTNOTE_PT = 10;
+const FIGURE_CAPTION: Omit<Font, "shape"> = { size: 9.6, color: "#666666" };
+
+/** An alignment the page editor draws: a paragraph's own, else its named style's. */
+function alignValue(value: unknown): Align | undefined {
+  return value === "center" || value === "right" || value === "justify" ? value : undefined;
 }
 
 /** A footnote the converter could not link to its mark: a paragraph set
@@ -431,12 +526,16 @@ function unlinkedNote(node: RichNode): { label: string; rest: RichNode } | null 
   return { label: symbol[0], rest: { ...node, content: [...content.slice(0, at), ...(rest ? [{ ...first, text: rest }] : []), ...content.slice(at + 1)] } };
 }
 
-/** A paragraph set as a caption: centered, every run in one small size (the
-    converter's caption, SPEC.md §30). Right before a table, it is the
-    table's caption. */
-function isCaption(node: RichNode): boolean {
+/** A paragraph set as a caption: centered, every run in a size under the
+    body's (the converter's caption, SPEC.md §30: 9 pt, or the page's own
+    caption size). Right before a table, it is the table's caption. */
+function isCaption(node: RichNode, bodySize: number): boolean {
   const runs = (node.content ?? []).filter((c) => c.type === "text");
-  return node.attrs?.textAlign === "center" && runs.length > 0 && runs.every((c) => c.marks?.some((m) => m.type === "textStyle" && m.attrs?.fontSize === "9pt"));
+  const small = (c: RichNode) => {
+    const size = sizeInPt(c.marks?.find((m) => m.type === "textStyle")?.attrs?.fontSize);
+    return size !== null && size < bodySize;
+  };
+  return node.attrs?.textAlign === "center" && runs.length > 0 && runs.every(small);
 }
 
 /** A paragraph's indentation from the page editor's attributes: a first
@@ -465,10 +564,44 @@ class ImportReader {
       document, on any page (a contents entry reads like one). */
   constructor(
     pages: Pages,
+    private readonly styles: Record<DocStyle, NamedStyle>,
     private readonly labels = new Map<string, string>(),
     private readonly headings = new Set<string>(),
   ) {
     this.inRange = inRangeOf(pages);
+  }
+
+  /** A text node's font as the page editor draws it: its named style (the
+      document's own, SPEC.md §29) under the textStyle marks most of its
+      characters carry, and bold where most of them are. `size`: the size
+      the page editor's CSS sets instead of the style's (a footnote's). */
+  faceOf(node: RichNode, style: DocStyle, size?: number): Font {
+    const named = this.styles[style];
+    const family = named.font ?? this.styles.normal.font ?? "Arial";
+    const tally = { family: new Map<string, number>(), size: new Map<number, number>(), color: new Map<string, number>(), bold: 0, total: 0 };
+    const add = <K>(map: Map<K, number>, key: K, n: number) => map.set(key, (map.get(key) ?? 0) + n);
+    const visit = (n: RichNode) => {
+      if (n.type === "text") {
+        const w = (n.text ?? "").length;
+        const attrs = n.marks?.find((m) => m.type === "textStyle")?.attrs;
+        add(tally.family, firstFamily(typeof attrs?.fontFamily === "string" ? attrs.fontFamily : null) ?? family, w);
+        add(tally.size, sizeInPt(attrs?.fontSize) ?? size ?? named.size, w);
+        add(tally.color, inkOf(attrs?.color ?? named.color) ?? "", w);
+        if (named.bold || n.marks?.some((m) => m.type === "bold")) tally.bold += w;
+        tally.total += w;
+      }
+      for (const child of n.content ?? []) visit(child);
+    };
+    visit(node);
+    const most = <K>(map: Map<K, number>, fallback: K): K => [...map].sort((a, b) => b[1] - a[1])[0]?.[0] ?? fallback;
+    const color = most(tally.color, inkOf(named.color) ?? "");
+    const bold = tally.total > 0 ? tally.bold * 2 > tally.total : named.bold;
+    return { shape: shapeOf(most(tally.family, family)), size: most(tally.size, size ?? named.size), ...(bold ? { bold: true as const } : {}), ...(color ? { color } : {}) };
+  }
+
+  /** A block's alignment as drawn: its own, else its named style's. */
+  private alignOf(node: RichNode, style: DocStyle): Align | undefined {
+    return alignValue(node.attrs?.textAlign) ?? alignValue(this.styles[style].align);
   }
 
   private here(): boolean {
@@ -533,7 +666,8 @@ class ImportReader {
     const into = new Spans();
     this.words(node, into);
     this.page = page;
-    if (into.hasText) this.push({ kind: "footnote", label: this.labels.get(id) ?? (note ? String(note.n) : ""), spans: into.spans, id }, into);
+    const font = this.faceOf(node, "normal", FOOTNOTE_PT);
+    if (into.hasText) this.push({ kind: "footnote", label: this.labels.get(id) ?? (note ? String(note.n) : ""), spans: into.spans, id, font }, into);
   }
 
   node(node: RichNode, quoted: boolean) {
@@ -545,16 +679,19 @@ class ImportReader {
         if (note) {
           const into = new Spans();
           this.inline(note.rest, into);
-          if (into.hasText) this.push({ kind: "footnote", label: note.label, spans: into.spans }, into);
+          if (into.hasText) this.push({ kind: "footnote", label: note.label, spans: into.spans, font: this.faceOf(note.rest, "normal") }, into);
           return;
         }
         const into = new Spans();
         this.inline(node, into);
         if (!into.hasText) return;
-        if (node.type === "heading") return this.push({ kind: "heading", level: level(Number(node.attrs?.level)), spans: into.spans }, into);
-        if (node.attrs?.docStyle === "title") return this.push({ kind: "title", spans: into.spans }, into);
+        const heading = node.type === "heading" ? level(Number(node.attrs?.level)) : null;
+        const style: DocStyle = heading ? `h${heading}` : node.attrs?.docStyle === "title" ? "title" : node.attrs?.docStyle === "subtitle" ? "subtitle" : "normal";
+        const align = this.alignOf(node, style);
+        const drawn = { ...(align ? { align } : {}), font: this.faceOf(node, style) };
+        if (heading) return this.push({ kind: "heading", level: heading, spans: into.spans, ...drawn }, into);
+        if (style === "title") return this.push({ kind: "title", spans: into.spans, ...drawn }, into);
         if (quoted) return this.push({ kind: "quote", spans: into.spans }, into);
-        const align = node.attrs?.textAlign === "center" || node.attrs?.textAlign === "right" ? node.attrs.textAlign : undefined;
         const indent = indentOf(node.attrs);
         // A contents entry: a paragraph that links to a heading, or one of
         // three or more in a row that read like headings, page numbers aside
@@ -563,8 +700,8 @@ class ImportReader {
         const words = wordsOf(into.spans.map((span) => span.text).join("")).map((w) => w.w);
         const linked = into.spans.some((span) => span.href?.startsWith("#heading="));
         const like = this.headings.has(words.join(" ")) || (/^\d+$/.test(words.at(-1) ?? "") && this.headings.has(words.slice(0, -1).join(" ")));
-        const role = linked || like ? ("contents" as const) : isCaption(node) ? ("caption" as const) : undefined;
-        const block: DocBlock = { kind: "paragraph", spans: into.spans, ...(align ? { align } : {}), ...(indent ? { indent } : {}), ...(role ? { role } : {}) };
+        const role = linked || like ? ("contents" as const) : isCaption(node, this.styles.normal.size) ? ("caption" as const) : undefined;
+        const block: DocBlock = { kind: "paragraph", spans: into.spans, ...(indent ? { indent } : {}), ...(role ? { role } : {}), ...drawn };
         if (like && !linked) this.headingLike.add(block);
         if (linked || like) this.entryDepth.set(block, Math.max(0, Math.round((Number(node.attrs?.indentLeft ?? 0) || 0) / INDENT_PT)));
         return this.push(block, into);
@@ -585,7 +722,8 @@ class ImportReader {
         const region = typeof node.attrs?.region === "string" ? parseRegion(JSON.parse(node.attrs.region)) : null;
         const at = region && typeof node.attrs?.page === "number" ? { at: { page: node.attrs.page, region } } : {};
         if (isMathText(caption)) return this.push({ kind: "figure", mathImage: caption.trim(), ...at });
-        return this.push(caption.trim() ? { kind: "figure", caption: [{ text: caption }], ...at } : { kind: "figure", ...at });
+        const font: Font = { shape: shapeOf(this.styles.normal.font ?? "Arial"), ...FIGURE_CAPTION };
+        return this.push(caption.trim() ? { kind: "figure", caption: [{ text: caption }], font, ...at } : { kind: "figure", ...at });
       }
       case "image":
         if (this.here()) this.push({ kind: "figure" });
@@ -610,10 +748,21 @@ class ImportReader {
     }
   }
 
+  /** A list's items, by depth. An item's first block is its words; a later
+      paragraph or heading in it is drawn as its own block, with its own
+      alignment (a centered label under an item's fill-in line), so it is
+      read as its own block between two lists, and the items after it keep
+      their depth. The item's other later blocks join its words. */
   private list(node: RichNode) {
-    const items: Item[] = [];
-    const breaks: Break[] = [];
-    const marks: NoteMark[] = [];
+    const font = this.faceOf(node, "normal");
+    let items: Item[] = [];
+    let breaks: Break[] = [];
+    let marks: NoteMark[] = [];
+    const flush = () => {
+      if (items.length > 0) this.blocks.push({ kind: "list", items, font, ...(breaks.length > 0 ? { breaks } : {}), ...(marks.length > 0 ? { marks } : {}) });
+      [items, breaks, marks] = [[], [], []];
+    };
+    const own = (child: RichNode) => child.type === "paragraph" || child.type === "heading";
     // Each line's number at each level, from the outermost list down: the
     // page editor draws a numbered line's marker from them and the outermost
     // list's level formats (listMarker).
@@ -621,19 +770,15 @@ class ImportReader {
       const start = Number(list.attrs?.start ?? 1) || 1;
       (list.content ?? []).forEach((item, index) => {
         const numbers = [...above, start + index];
+        const children = item.content ?? [];
+        const lead = children.findIndex((child) => !LISTS.has(child.type));
         const into = new Spans();
-        const nested: RichNode[] = [];
-        let first = true;
-        for (const child of item.content ?? []) {
-          if (LISTS.has(child.type)) {
-            nested.push(child);
-            continue;
-          }
-          if (!first) into.add({ text: " " });
-          first = false;
+        children.forEach((child, k) => {
+          if (LISTS.has(child.type) || (k > lead && own(child))) return;
+          if (k > lead) into.add({ text: " " });
           if (child.type === "paragraph") this.inline(child, into);
           else this.words(child, into);
-        }
+        });
         if (into.hasText) {
           const checked = item.attrs?.checked === true;
           const marker =
@@ -642,11 +787,17 @@ class ImportReader {
           for (const m of into.marks) marks.push({ unit: items.length, ...m });
           items.push(list.type === "taskList" ? { depth, marker, spans: into.spans, checked } : { depth, marker, spans: into.spans });
         }
-        for (const sub of nested) visit(sub, depth + 1, numbers);
+        children.forEach((child, k) => {
+          if (LISTS.has(child.type)) visit(child, depth + 1, numbers);
+          else if (k > lead && own(child)) {
+            flush();
+            this.node(child, false);
+          }
+        });
       });
     };
     visit(node, 0, []);
-    if (items.length > 0) this.blocks.push({ kind: "list", items, ...(breaks.length > 0 ? { breaks } : {}), ...(marks.length > 0 ? { marks } : {}) });
+    flush();
   }
 
   private table(node: RichNode) {
@@ -686,7 +837,7 @@ class ImportReader {
       this.blocks.pop();
       for (const m of caption.marks ?? []) marks.push({ ...m, unit: -1 });
     }
-    this.blocks.push({ kind: "table", ...(caption ? { caption: caption.spans } : {}), rows, ...(marks.length > 0 ? { marks } : {}) });
+    this.blocks.push({ kind: "table", ...(caption ? { caption: caption.spans, ...(caption.font ? { font: caption.font } : {}) } : {}), rows, ...(marks.length > 0 ? { marks } : {}) });
   }
 }
 
@@ -701,7 +852,8 @@ export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[]
   };
   visit(doc);
   headings.delete("");
-  const reader = new ImportReader(pages, printed ? printedLabels(doc, printed) : undefined, headings);
+  const styles = readStyles({ attrs: doc.attrs ?? {} });
+  const reader = new ImportReader(pages, styles, printed ? printedLabels(doc, printed) : undefined, headings);
   for (const node of doc.content ?? []) reader.node(node, false);
   const blocks = reader.blocks;
   for (let i = 0; i < blocks.length; ) {
@@ -710,7 +862,7 @@ export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[]
     if (j - i < 3) for (let k = i; k < j; k++) if (reader.headingLike.has(blocks[k])) delete blocks[k].role;
     i = Math.max(j, i + 1);
   }
-  return { blocks: contentsLists(blocks, reader.entryDepth) };
+  return { blocks: contentsLists(blocks, reader.entryDepth), fonts: { body: reader.faceOf({ type: "paragraph" }, "normal") } };
 }
 
 /** The converter writes a contents list as one paragraph per entry, each a
@@ -736,7 +888,8 @@ function contentsLists(blocks: DocBlock[], depths: Map<DocBlock, number>): DocBl
       for (const b of entry.breaks ?? []) if (b.at > cut) breaks.push({ unit, at: b.at - cut });
       for (const x of entry.marks ?? []) if (x.at >= cut) marks.push({ ...x, unit, at: x.at - cut, end: x.end - cut });
     }
-    out.push({ kind: "list", role: "contents", items, ...(breaks.length > 0 ? { breaks } : {}), ...(marks.length > 0 ? { marks } : {}) });
+    const font = blocks[i - 1]?.kind === "paragraph" ? (blocks[i - 1] as Extract<DocBlock, { kind: "paragraph" }>).font : undefined;
+    out.push({ kind: "list", role: "contents", items, ...(font ? { font } : {}), ...(breaks.length > 0 ? { breaks } : {}), ...(marks.length > 0 ? { marks } : {}) });
   }
   return out;
 }

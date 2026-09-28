@@ -261,9 +261,12 @@ function countWords(texts: string[]): Map<string, number> {
     spacing ("2", "k1", "t" where the formula reads "2k1t"), so the formulas'
     glyphs cover the PDF's short words, as the reference metrics let a
     reference's math do, and are never extra words. */
-function printedWords(cand: Flat): { words: string[]; glyphs: Map<string, number> } {
-  const words = cand.toks.map((t) => t.w);
-  for (const block of cand.blocks) if (block.kind === "list") for (const item of block.items) words.push(...wordsOf(item.marker).map((w) => w.w));
+function printedWords(cand: Flat, contents: boolean): { words: string[]; glyphs: Map<string, number> } {
+  const kept = (b: number) => contents || cand.blocks[b].role !== "contents";
+  const words = cand.toks.filter((t) => kept(cand.units[t.unit].block)).map((t) => t.w);
+  cand.blocks.forEach((block, b) => {
+    if (block.kind === "list" && kept(b)) for (const item of block.items) words.push(...wordsOf(item.marker).map((w) => w.w));
+  });
   const glyphs = new Map<string, number>();
   for (const m of cand.math) {
     const reading = m.text?.trim() ? m.text : m.latex !== undefined || m.mathml !== undefined ? mathLeaves(m, m.display).join(" ") : "";
@@ -278,8 +281,18 @@ function printedWords(cand: Flat): { words: string[]; glyphs: Map<string, number
     candidate's edges, lines that are only a page number, garbled glyphs (by
     string, and for a PDF in TeX's math fonts by the glyphs' codes), and
     display math as checked LaTeX (glyphs.ts). */
-export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores): FreeScores {
-  const { words: printed, glyphs: formulaGlyphs } = printedWords(cand);
+/** A text layer that reads fewer words than this share of the candidate's
+    reads blind (Japanese in Adobe-Japan1 fonts without a ToUnicode map, which
+    pdftotext reads only with poppler-data, which this sandbox lacks): its
+    coverage is not scored. */
+const BLIND = 0.5;
+
+/** `word`: the candidate is a Word file's, checked against LibreOffice's PDF
+    of it, which leaves an empty contents field empty where the parse builds
+    the contents list from the headings: a contents list's words are left
+    out (they repeat the headings). */
+export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word = false): FreeScores {
+  const { words: printed, glyphs: formulaGlyphs } = printedWords(cand, !word);
   const candBag = countWords([]);
   for (const w of printed) candBag.set(w, (candBag.get(w) ?? 0) + 1);
   const expected = new Map<string, number>();
@@ -366,8 +379,9 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores): Free
   for (const t of cand.toks) if (t.note) noted.set(t.w, (noted.get(t.w) ?? 0) + 1);
   let forgiven = 0;
   for (const [w, n] of noted) forgiven += Math.min(n, Math.max(0, (candBag.get(w) ?? 0) - (expected.get(w) ?? 0)));
-  const recall = total > 0 ? (hits + formulaHits) / total : null;
-  const precision = printed.length - forgiven > 0 ? hits / (printed.length - forgiven) : null;
+  const blind = total < BLIND * printed.length;
+  const recall = total > 0 && !blind ? (hits + formulaHits) / total : null;
+  const precision = printed.length - forgiven > 0 && !blind ? hits / (printed.length - forgiven) : null;
   const f1 = recall === null || precision === null ? null : recall + precision > 0 ? (2 * recall * precision) / (recall + precision) : 0;
   const furniture = leaksOf(pdf, pdf.furniture, cand);
   const furnitureSet = new Set(pdf.furniture);

@@ -4,7 +4,7 @@
 // drawn without vertical rules (booktabs). The rules and filled boxes come
 // from the page's drawing (drawing.ts); ruled.ts reads the tables.
 
-import type { Rule } from "@/lib/parse/pdf/drawing";
+import type { Fill, Rule } from "@/lib/parse/pdf/drawing";
 import type { Box } from "@/lib/parse/pdf/types";
 
 // ── The lattice ─────────────────────────────────────────────────────────────
@@ -21,14 +21,21 @@ const INTERSECT = 2;
 
 type Edge = { dir: "h" | "v"; pos: number; a: number; b: number };
 
-function edgesOf(rules: Rule[], fills: Box[]): Edge[] {
+function edgesOf(rules: Rule[], fills: Fill[]): Edge[] {
   const edges: Edge[] = [];
   for (const r of rules) {
     if (r.dir === "h") edges.push({ dir: "h", pos: r.y1, a: r.x1, b: r.x2 });
     else edges.push({ dir: "v", pos: r.x1, a: r.y1, b: r.y2 });
   }
   // A filled box's sides are edges too: a shaded cell, a cell drawn filled.
+  // A box of one color painted inside a box of that color shows no side:
+  // Word shades a cell's lines again over the cell's own shading, and
+  // apple-fy24q4's two-line row split at its lines.
+  const hidden = (f: Fill) =>
+    f.color !== undefined &&
+    fills.some((o) => o !== f && o.color === f.color && o.x1 <= f.x1 + 0.5 && o.x2 >= f.x2 - 0.5 && o.y1 <= f.y1 + 0.5 && o.y2 >= f.y2 - 0.5 && (o.x2 - o.x1) * (o.y2 - o.y1) > (f.x2 - f.x1) * (f.y2 - f.y1));
   for (const f of fills) {
+    if (hidden(f)) continue;
     edges.push(
       { dir: "h", pos: f.y1, a: f.x1, b: f.x2 },
       { dir: "h", pos: f.y2, a: f.x1, b: f.x2 },
@@ -169,7 +176,7 @@ function gridOf(cells: Box[]): Grid {
 }
 
 // The ruled grids of a page: two cells or more that share corners.
-export function latticeGrids(rules: Rule[], fills: Box[]): Grid[] {
+export function latticeGrids(rules: Rule[], fills: Fill[]): Grid[] {
   const cells = cellsOf(mergeEdges(edgesOf(rules, fills)));
   return groupCells(cells)
     .filter((group) => group.length >= 2)

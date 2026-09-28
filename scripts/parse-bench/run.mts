@@ -6,14 +6,19 @@
 // math fonts against its own glyphs, glyphs.ts). Nothing is stored but what
 // the flags ask for.
 //
-//   npx tsx scripts/parse-bench/run.mts [--quick] [--only id,id] [--category c] [--json out.json]
+//   npx tsx scripts/parse-bench/run.mts [--quick] [--sweep] [--only id,id] [--category c] [--json out.json]
 //     [--baseline [file[,file]]] [--save-baseline [file]] [--detail id [--import]]
 //
-// --quick runs the entries corpus.json marks quick: one document for each
-// kind of fault, the fast ones. The last line gives the run's time by stage.
+// The corpus is corpus.json and the owner's entries in
+// .bench/corpus-private.json when it exists (load.ts). --quick runs the
+// entries marked quick: one document for each kind of fault, the fast ones.
+// --sweep adds the entries marked sweep: whole documents read without a
+// reference, every page (--only and --detail run them by name). The last
+// line gives the run's time by stage.
 //
 // Baselines: scripts/parse-bench/baseline.json holds the documents whose
-// reference is committed; .bench/baseline-private.json holds the rest. With
+// reference is committed, and the open and public-domain documents read
+// without one; .bench/baseline-private.json holds the rest. With
 // no file named, --baseline reads both and --save-baseline writes each
 // document into its own (merged with what the file holds). The exit code is
 // 1 when a metric dropped against the baseline.
@@ -23,7 +28,7 @@ import { performance } from "node:perf_hooks";
 import { richTextFromImport } from "@/lib/docs/import";
 import type { RichNode } from "@/lib/docs/schema";
 import { parsePdf } from "@/lib/parse/pdf";
-import type { ParsedBlock } from "@/lib/parse/types";
+import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { resolveContentsLinks } from "@/lib/parse/url";
 import { fromImport, fromParse, printedNotes, type Doc } from "./adapt";
 import { forgetText, freeScores, pdfText, type FreeScores, type PdfText } from "./free";
@@ -49,7 +54,20 @@ const BASELINE_PRIVATE = join(ROOT, ".bench", "baseline-private.json");
 
 // ── Parsing, once per file ──────────────────────────────────────────────────
 
-type Parsed = { title: string | null; blocks: ParsedBlock[]; richText: RichNode | null; importError?: string; ms: number };
+/** The page's look the parse keeps: the body's font, the title's font and alignment. */
+type Look = Pick<ParsedDocument, "bodyFont" | "titleFont" | "titleAlign">;
+/** The size guard (lib/parse/ingest.ts IMPORT_MAX_ROWS, IMPORT_MAX_JSON_BYTES): past either, the add keeps a
+    block document, and the page editor never shows the import. */
+const GUARD = { rows: 1_500, json: 1_500_000 };
+type Parsed = {
+  title: string | null;
+  blocks: ParsedBlock[];
+  richText: RichNode | null;
+  importError?: string;
+  /** The import's rows and bytes when the size guard keeps it a block document. */
+  guarded?: { rows: number; json: number };
+  ms: number;
+} & Look;
 const parses = new Map<string, Promise<Parsed>>();
 
 /** The run's time by stage, in ms: each file's parse and conversion once,
@@ -77,7 +95,7 @@ async function quietly<T>(work: () => Promise<T>): Promise<T> {
 
 /** A Word file as the Word add parses it (lib/parse/ingest.ts ingestDocx):
     its title only when the file's own words give it; no picture stored. */
-async function parseWord(bytes: Uint8Array, path: string): Promise<{ title: string | null; blocks: ParsedBlock[]; pageSize?: undefined }> {
+async function parseWord(bytes: Uint8Array, path: string): Promise<{ title: string | null; blocks: ParsedBlock[]; pageSize?: undefined } & Look> {
   // Loaded when a Word file comes up, so the runner also runs on a tree without the Word parser.
   const { parseDocx } = await import("@/lib/parse/docx");
   const parsed = await parseDocx(bytes, basename(path), { storeImage: async () => "/api/images/bench" });
@@ -98,19 +116,22 @@ function parseFile(path: string): Promise<Parsed> {
       // The add's converter call (lib/parse/ingest.ts ingestPdf, ingestDocx,
       // convertImport). A converter that throws costs the import's score,
       // not the parse's.
+      const look: Look = { bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign };
       try {
-        const { richText } = richTextFromImport({
+        const { richText, size } = richTextFromImport({
           kind: word ? "docx" : "pdf",
           title: parsed.title ?? basename(path).replace(/\.(pdf|docx)$/i, ""),
           titleFromOriginal: Boolean(parsed.title),
           blocks: resolveContentsLinks(parsed.blocks),
           pageSize: parsed.pageSize,
+          ...look,
         });
         since("import", t1);
-        return { title: parsed.title, blocks: parsed.blocks, richText, ms };
+        const guarded = size.rows > GUARD.rows || size.json > GUARD.json ? { rows: size.rows, json: size.json } : undefined;
+        return { title: parsed.title, blocks: parsed.blocks, richText, ms, ...look, ...(guarded ? { guarded } : {}) };
       } catch (err) {
         since("import", t1);
-        return { title: parsed.title, blocks: parsed.blocks, richText: null, importError: err instanceof Error ? err.message : String(err), ms };
+        return { title: parsed.title, blocks: parsed.blocks, richText: null, importError: err instanceof Error ? err.message : String(err), ms, ...look };
       }
     });
     parses.set(path, hit);
@@ -135,6 +156,7 @@ type Result = {
   /** Where the corpus entry and its reference disagree. */
   mismatch?: string;
   importError?: string;
+  guarded?: { rows: number; json: number };
   ref?: RefDoc;
   committed: boolean;
   pages?: [number, number];
@@ -156,7 +178,7 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   const ref = loaded && "ref" in loaded ? loaded.ref : undefined;
   const result: Result = {
     entry,
-    committed: Boolean(found && ref && found.startsWith(REF_DIRS[0])),
+    committed: found ? Boolean(ref && found.startsWith(REF_DIRS[0])) : entry.license === "open" || entry.license === "public-domain",
     ms: 0,
     ref,
     refProblems: loaded && "problems" in loaded ? loaded.problems : undefined,
@@ -176,11 +198,12 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   const parsed = await parseFile(path);
   result.ms = parsed.ms;
   result.importError = parsed.importError;
+  result.guarded = parsed.guarded;
   let t0 = performance.now();
   const docs = { parse: fromParse(parsed, pages), import: parsed.richText ? fromImport(parsed.richText, pages, ref ? printedNotes(ref.blocks) : undefined) : { blocks: [] } };
   result.docs = docs;
   if (ref) {
-    const reference: Doc = { blocks: ref.blocks };
+    const reference: Doc = { blocks: ref.blocks, fonts: ref.fonts };
     result.parse = score(reference, ref.furniture, docs.parse).scores;
     if (parsed.richText) result.import = score(reference, ref.furniture, docs.import).scores;
   }
@@ -195,8 +218,9 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
     result.glyphs = { parse: glyphScores(glyphs, docs.parse, pages), import: parsed.richText ? glyphScores(glyphs, docs.import, pages) : undefined };
   }
   t0 = since("glyphs", t0);
-  result.freeParse = freeScores(result.pdf, flatten(docs.parse), result.glyphs?.parse);
-  if (parsed.richText) result.freeImport = freeScores(result.pdf, flatten(docs.import), result.glyphs?.import);
+  const word = /\.docx$/i.test(file);
+  result.freeParse = freeScores(result.pdf, flatten(docs.parse), result.glyphs?.parse, word);
+  if (parsed.richText) result.freeImport = freeScores(result.pdf, flatten(docs.import), result.glyphs?.import, word);
   since("free", t0);
   return result;
 }
@@ -220,6 +244,8 @@ function numbers(s: Scores): Record<string, number | null> {
     splits: s.blocks.splits.reduce((n, x) => n + x.pieces.length - 1, 0),
     merges: s.blocks.merges.reduce((n, x) => n + x.parts.length - 1, 0),
     headings: s.parts.headings,
+    headingRecall: s.headings.recall,
+    headingPrecision: s.headings.precision,
     listItems: s.lists.recall,
     listDepth: s.lists.depth,
     listMarkers: s.lists.markers,
@@ -243,9 +269,12 @@ function numbers(s: Scores): Record<string, number | null> {
     notesWords: s.notes?.words ?? null,
     notesExtra: s.notes?.extra ?? null,
     underline: s.styles.f1.underline,
+    strike: s.styles.f1.strike,
     smallCaps: s.styles.f1.smallCaps,
     sub: s.styles.f1.sub,
     sup: s.styles.f1.sup,
+    color: s.styles.f1.color,
+    highlight: s.styles.f1.highlight,
     roles: s.roles.score,
     align: s.roles.align,
     indent: s.roles.indent,
@@ -253,6 +282,11 @@ function numbers(s: Scores): Record<string, number | null> {
     checks: s.roles.checks,
     separators: s.roles.separators,
     quotes: s.roles.quotes,
+    fonts: s.fonts?.score ?? null,
+    fontShape: s.fonts?.shape ?? null,
+    fontSize: s.fonts?.size ?? null,
+    fontBold: s.fonts?.bold ?? null,
+    fontColor: s.fonts?.color ?? null,
   };
 }
 
@@ -322,7 +356,7 @@ function printTable(results: Result[]) {
   const idWidth = Math.max(10, ...results.map((r) => r.entry.id.length)) + 1;
   if (scored.length > 0) {
     console.log("\nWith a reference — composite for the parse and the import, then the parse's metrics (0–1; counts where noted):");
-    const head = ["parse", "import", "text", "order", "furn", "blocks", "para", "head", "lists", "tables", "math", "img#", "garb#", "style", "notes", "roles", "ms"];
+    const head = ["parse", "import", "text", "order", "furn", "blocks", "para", "head", "lists", "tables", "math", "img#", "garb#", "style", "notes", "roles", "fonts", "ms"];
     console.log(pad("id", idWidth) + pad("category", 11) + head.map((h) => lpad(h, 7)).join(""));
     for (const r of scored) {
       const s = r.parse as Scores;
@@ -343,6 +377,7 @@ function printTable(results: Result[]) {
         fmt(s.styles.score),
         fmt(s.parts.footnotes),
         fmt(s.parts.roles),
+        fmt(s.parts.fonts),
         String(Math.round(r.ms)),
       ];
       console.log(pad(r.entry.id, idWidth) + pad(r.entry.category, 11) + cells.map((c) => lpad(c, 7)).join(""));
@@ -394,10 +429,16 @@ function printTable(results: Result[]) {
 // ── Main ────────────────────────────────────────────────────────────────────
 
 const t0 = performance.now();
-const { entries, problems } = loadCorpus();
+const { entries, problems, withPrivate } = loadCorpus();
 for (const p of problems) console.log(`corpus: ${p}`);
+if (!withPrivate) console.log("No .bench/corpus-private.json: the public corpus only.");
 const picked = entries.filter(
-  (e) => (!only || only.includes(e.id)) && (!category || e.category === category) && (!detail || e.id === detail) && (!flag("--quick") || e.quick),
+  (e) =>
+    (!only || only.includes(e.id)) &&
+    (!category || e.category === category) &&
+    (!detail || e.id === detail) &&
+    (!flag("--quick") || e.quick) &&
+    (!e.sweep || flag("--sweep") || only?.includes(e.id) || detail === e.id),
 );
 if (picked.length === 0) {
   console.log("No corpus document matches.");
@@ -442,10 +483,17 @@ for (const r of results) {
   if (r.refProblems) console.log(`${r.entry.id}: the reference does not load, scored without it — ${r.refProblems.join("; ")}`);
   if (r.mismatch) console.log(`${r.entry.id}: ${r.mismatch}`);
   if (r.importError) console.log(`${r.entry.id}: the import converter failed, the import is not scored — ${r.importError}`);
+  if (r.guarded) {
+    console.log(
+      `${r.entry.id}: the size guard keeps it a block document (${r.guarded.rows.toLocaleString("en")} rows, ${Math.round(r.guarded.json / 1000).toLocaleString("en")} kB): the page editor never shows this import; its import scores are the converter's`,
+    );
+  }
   if (r.skipped) console.log(`${r.entry.id}: skipped — ${r.skipped}`);
 }
-const listed = new Set(entries.map((e) => e.id));
-const orphans = REF_DIRS.flatMap((dir) => (existsSync(dir) ? readdirJson(dir) : [])).filter((id) => !listed.has(id));
+// An entry's own reference or the one it names; without the private list,
+// the owner's references in .bench/refs have no entry to name them.
+const listed = new Set(entries.flatMap((e) => [e.id, ...(e.ref ? [e.ref] : [])]));
+const orphans = (withPrivate ? REF_DIRS : REF_DIRS.slice(0, 1)).flatMap((dir) => (existsSync(dir) ? readdirJson(dir) : [])).filter((id) => !listed.has(id));
 if (orphans.length > 0) console.log(`References with no corpus entry: ${orphans.join(", ")}`);
 
 if (detail) {
@@ -468,6 +516,7 @@ if (json) {
     import: r.import ? numbers(r.import) : null,
     freeParse: r.freeParse ? { ...freeNumbers(r.freeParse), ...glyphNumbers(r.glyphs?.parse) } : null,
     freeImport: r.freeImport ? { ...freeNumbers(r.freeImport), ...glyphNumbers(r.glyphs?.import) } : null,
+    sizeGuard: r.guarded ?? null,
   }));
   writeFileSync(json, `${JSON.stringify(out, null, 2)}\n`);
   console.log(`\nWrote ${json}`);

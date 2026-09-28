@@ -6,6 +6,54 @@ import { BULLET_RE, follows, readMarker } from "@/lib/parse/pdf/markers";
 import { joinWrapped } from "@/lib/parse/pdf/text";
 import type { PageBreak, Segment } from "@/lib/parse/pdf/types";
 
+// ── Joins on one page ───────────────────────────────────────────────────────
+
+// A table, a captioned figure, or a caption: set where it fits, it may stand
+// between a paragraph's halves. A display's crop (a figure with no "Figure
+// N" caption) stands where the sentence puts it.
+const isFloat = (s: Segment) =>
+  s.type === "TABLE" || ((s.type === "FIGURE" || s.type === "PARAGRAPH") && CAPTION_RE.test(s.text));
+
+// The second part goes on with the first on their page: the first ends
+// mid-sentence and the second opens lowercase or with a parenthesis ("…3D
+// fermionic TO" | "(fTO) characterized…", arxiv-2504-02736), or a column
+// break cuts a sentence before a capitalized word (the first ends in a
+// word, the second starts higher on the page and right of it).
+function continuesOnPage(prev: Segment, next: Segment): boolean {
+  if (prev.type !== "PARAGRAPH" || next.type !== "PARAGRAPH" || prev.page !== next.page) return false;
+  if (prev.listItem || next.listItem || prev.text.includes("\n")) return false;
+  if (/[a-z,;\-–—]$/.test(prev.text) && /^[a-z(]/.test(next.text)) return true;
+  if (prev.text.length <= 60 || !/\s[\p{L}\p{M}]+$/u.test(prev.text)) return false;
+  if (/^[a-z(]/.test(next.text)) return true;
+  const size = prev.lineSize ?? 10;
+  const columnBreak = prev.box !== undefined && next.box !== undefined && next.box.y2 > prev.box.y1 && next.box.x1 > prev.box.x2 - size;
+  return columnBreak && /^\p{Lu}/u.test(next.text);
+}
+
+// A paragraph's halves on one page join, and a float set between them (a
+// table atop the next column: arxiv-2504-02736 p3 and p4) follows the
+// paragraph.
+export function joinOnPage(input: Segment[]): Segment[] {
+  const segments = [...input];
+  for (let b = 1; b < segments.length; b++) {
+    if (!isFloat(segments[b]) || segments[b].page !== segments[b - 1].page) continue;
+    let k = b;
+    while (k < segments.length && segments[k].page === segments[b].page && isFloat(segments[k])) k++;
+    if (k < segments.length && continuesOnPage(segments[b - 1], segments[k])) segments.splice(b, 0, ...segments.splice(k, 1));
+  }
+  const out: Segment[] = [];
+  for (const segment of segments) {
+    const prev = out[out.length - 1];
+    if (prev && continuesOnPage(prev, segment)) {
+      shiftSpansInto(prev, segment, joinWrapped(prev, segment.text));
+      prev.spaceAfter = segment.spaceAfter;
+      continue;
+    }
+    out.push(segment);
+  }
+  return out;
+}
+
 // ── Cross-page merges ───────────────────────────────────────────────────────
 
 export function shiftSpansInto(target: Segment, source: Segment, offset: number) {

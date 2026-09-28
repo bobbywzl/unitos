@@ -117,7 +117,9 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       const after = glyphs[j];
       const afterGap = after ? gapOf(glyphs[j - 1], after) : Infinity;
       const nextMath = after !== undefined && kinds[j] !== "text";
-      const opname = OPNAMES.has(word) && (cur.length > 0 || nextMath);
+      // \liminf and \limsup set "inf" and "sup" a thin space after "lim".
+      const limit = word === "lim" && afterGap < 0.3 * size && /^(inf|sup)/.test(glyphs.slice(j, j + 3).map((x) => x.unicode).join(""));
+      const opname = (OPNAMES.has(word) && (cur.length > 0 || nextMath)) || limit;
       // "Var(" or "sgn x" set tight: a name; "sets:" is a word and its colon.
       const opens = after !== undefined && (kinds[j] === "math" || after.unicode === "(");
       // A bold letter stands a relation's space from its neighbors
@@ -291,55 +293,67 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
       if (!zone || seen.has(zone)) continue;
       seen.add(zone);
       orphans ??= orphanGlyphs(lines, drawing);
-      const x1 = Math.min(...zone.glyphs.map((g) => g.x));
-      const x2 = Math.max(...zone.glyphs.map((g) => g.x + g.w));
-      const low = Math.min(...zone.glyphs.map((g) => g.y));
-      const high = Math.max(...zone.glyphs.map((g) => g.y));
-      // The size the formula is set at: its line's text size, or its own
-      // largest glyph's where that is larger — KaTeX sets math a fifth
-      // larger than its prose (a radical's bar over a 13 pt digit in 11 pt
-      // prose), and a display's cell holds more scripts than base glyphs
-      // (a_{ij} read its scripts at the base's level).
-      const em = Math.max(zone.size, ...zone.glyphs.map((g) => g.size));
-      const on = (g: Glyph) => g.x + g.w / 2 > x1 && g.x + g.w / 2 < x2 && g.y > low - em * 0.6 && g.y < high + em * 1.2;
-      const extra = orphans.filter(on);
-      for (const g of extra) orphans.splice(orphans.indexOf(g), 1);
-      const glyphs = [...zone.glyphs, ...extra];
-      // The rules inside it: a fraction bar, a radical's or an overline's
-      // bar over its glyphs. A bar with the formula's glyphs over it only
-      // is a display's fraction bar under its numerator's line (arXiv
-      // 2506.08494 p. 2 read it as \underline).
-      // A vertical rule inside it is an array's column line: the layout
-      // reads none, so the formula fails.
-      const near = drawing.rules.filter(
-        (r) =>
-          (r.dir === "h" &&
-            r.x1 >= x1 - 1 &&
-            r.x2 <= x2 + 1 &&
-            r.y1 > low - em &&
-            r.y1 < high + em &&
-            glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2)) ||
-          (r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low - em && r.y2 < high + em * 1.2),
-      );
-      // The paths drawn on it: a radical's sign, a picture of an accent or
-      // a tall delimiter (KaTeX draws them so), which may start an em left
-      // of the glyphs.
-      const paths = drawing.paths.filter(
-        (b) => !b.clip && b.x1 >= x1 - em * 1.5 && b.x1 < x2 && b.y1 > low - em * 2 && b.y2 < high + em * 2 && !paintsRule(b, drawing.rules),
-      );
-      try {
-        const { latex, check, atoms } = layoutLatex(glyphs, near, { display: false, size: em }, paths);
-        zone.latex = latex;
-        // Every glyph drawn inside the formula is the formula's: a script
-        // another line took is missing from the LaTeX, which still passes
-        // the check (synth-math-html: a numerator's x^k read as x).
-        zone.ok = check.ok && !strayInside(atoms, new Set(glyphs), drawing.glyphs);
-        const last = atoms.filter((a) => a.size >= zone.size * 0.85).sort((a, b) => b.x2 - a.x2)[0];
-        zone.open = last !== undefined && (last.cls === "rel" || last.cls === "bin" || last.cls === "punct");
-      } catch {
-        zone.ok = false;
-      }
+      resolveZone(zone, drawing, orphans);
     }
+  }
+}
+
+/** One zone's LaTeX and check (resolveZones). orphans: the page's glyphs
+    no item reads; the zone takes those that sit on it. */
+export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph[]) {
+  const x1 = Math.min(...zone.glyphs.map((g) => g.x));
+  const x2 = Math.max(...zone.glyphs.map((g) => g.x + g.w));
+  const low = Math.min(...zone.glyphs.map((g) => g.y));
+  const high = Math.max(...zone.glyphs.map((g) => g.y));
+  // The size the formula is set at: its line's text size, or its own
+  // largest glyph's where that is larger — KaTeX sets math a fifth
+  // larger than its prose (a radical's bar over a 13 pt digit in 11 pt
+  // prose), and a display's cell holds more scripts than base glyphs
+  // (a_{ij} read its scripts at the base's level).
+  const em = Math.max(zone.size, ...zone.glyphs.map((g) => g.size));
+  const on = (g: Glyph) => g.x + g.w / 2 > x1 && g.x + g.w / 2 < x2 && g.y > low - em * 0.6 && g.y < high + em * 1.2;
+  const extra = orphans.filter(on);
+  for (const g of extra) orphans.splice(orphans.indexOf(g), 1);
+  const glyphs = [...zone.glyphs, ...extra];
+  // The rules inside it: a fraction bar, a radical's or an overline's
+  // bar over its glyphs. A bar with the formula's glyphs over it only
+  // is a display's fraction bar under its numerator's line (arXiv
+  // 2506.08494 p. 2 read it as \underline).
+  // A vertical rule inside it is an array's column line: the layout
+  // reads none, so the formula fails.
+  const near = drawing.rules.filter(
+    (r) =>
+      (r.dir === "h" &&
+        r.x1 >= x1 - 1 &&
+        r.x2 <= x2 + 1 &&
+        r.y1 > low - em &&
+        r.y1 < high + em &&
+        glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2)) ||
+      (r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low - em && r.y2 < high + em * 1.2),
+  );
+  // The paths drawn on it: a radical's sign, a picture of an accent or
+  // a tall delimiter (KaTeX draws them so), which may start an em left
+  // of the glyphs, or just right of them (a closing delimiter), and run
+  // past them (the rows it holds that the formula lacks).
+  const paths = drawing.paths.filter(
+    (b) =>
+      !b.clip &&
+      b.x1 >= x1 - em * 1.5 &&
+      b.x1 < x2 + em * 0.6 &&
+      ((b.y1 > low - em * 2 && b.y2 < high + em * 2) || (b.x2 - b.x1 < em * 0.6 && b.y2 > low && b.y1 < high + em)) &&
+      !paintsRule(b, drawing.rules),
+  );
+  try {
+    const { latex, check, atoms } = layoutLatex(glyphs, near, { display: false, size: em }, paths);
+    zone.latex = latex;
+    // Every glyph drawn inside the formula is the formula's: a script
+    // another line took is missing from the LaTeX, which still passes
+    // the check (synth-math-html: a numerator's x^k read as x).
+    zone.ok = check.ok && !strayInside(atoms, new Set(glyphs), drawing.glyphs);
+    const last = atoms.filter((a) => a.size >= zone.size * 0.85).sort((a, b) => b.x2 - a.x2)[0];
+    zone.open = last !== undefined && (last.cls === "rel" || last.cls === "bin" || last.cls === "punct");
+  } catch {
+    zone.ok = false;
   }
 }
 

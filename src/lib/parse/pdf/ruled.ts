@@ -309,7 +309,10 @@ function gridHead(grid: Grid, body: Item[], items: Item[]): Item[] {
   let edge = b.y2;
   let top: Line | null = null;
   let stop: Line | null = null;
-  for (let k = lines.length - 1; k >= 0 && k >= lines.length - 4; k--) {
+  // Six lines at most: a head of four over a first row the grid's shading
+  // leaves out (apple-fy24q4 p. 4's "Three Months Ended" over its dates,
+  // its column heads, and its first row).
+  for (let k = lines.length - 1; k >= 0 && k >= lines.length - 6; k--) {
     const line = lines[k];
     const aligned = !phraseColumns(line, grid.xs).some((p) => p.from === 0 && p.to > 0);
     const plain = !CAPTION_START_RE.test(line.text) && !/[.!?]$/.test(line.text.trim()) && !isProseLine(line, b.x2 - b.x1);
@@ -463,7 +466,7 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
   const built: Line[] = [];
   const segment = (rows: TableRow[], headerRows: number, edges: number[]) => {
     resolveZones(built, region.drawing);
-    const look = { size: Math.round(median(region.items.map((it) => it.size)) * 2) / 2, columns: edges.slice(1).map((x, k) => x - edges[k]) };
+    const look = { size: Math.round(textSize(region.items) * 2) / 2, columns: edges.slice(1).map((x, k) => x - edges[k]) };
     return tableSegment(rows, headerRows, page, where, look);
   };
   if (region.grid) {
@@ -480,7 +483,12 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
       groups[groups.length - 1].push(line);
       last = covers;
     });
-    const head = groups.map((g) => headerRow(g, grid.xs, built));
+    const head = groups.map((g, k) => headerRow(g, grid.xs, built, [], filledBelow(groups.slice(k + 1), grid.xs)));
+    // A lone label under the column heads ("ASSETS:" under a balance
+    // sheet's dates) is a row across the table, not a head its column
+    // spans down to (apple-fy24q4 p. 2).
+    const label = head.length >= 2 ? head[head.length - 1] : null;
+    if (label && label.cells[0].text && label.cells.slice(1).every((c) => !c.text)) label.cells = [{ ...label.cells[0], colspan: grid.xs.length - 1 }];
     const rows = [...head, ...gridRows(grid, region.items.filter((it) => centerOf(it).y <= grid.box.y2), page, built, region.drawing)];
     const headerRows = boldHeaderRows(rows);
     spanHeadColumns(rows, headerRows);
@@ -488,9 +496,13 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
   }
   const width = region.box.x2 - region.box.x1;
   // A line's phrases are its words: pdf.js reads phrases across a column
-  // gap into one string (arXiv 2504.02736's Table III read its three heads
-  // "Kitaev", "complex fermion", "bosonic" as one).
-  const phrased = buildLines(region.items.flatMap(splitWide), page);
+  // gap into one string, and a column rule drawn through the string cuts
+  // it (arXiv 2504.02736's Table III read its three heads "Kitaev",
+  // "complex fermion", "bosonic" as one, 4 pt apart).
+  const drawn = columnRules(region);
+  const cuts = (it: Item) =>
+    drawn.filter((r) => r.x1 > it.x + it.w * 0.05 && r.x1 < it.x + it.w * 0.95 && r.y1 <= centerOf(it).y && r.y2 >= centerOf(it).y).map((r) => r.x1);
+  const phrased = buildLines(region.items.flatMap(splitWide).flatMap((it) => splitAt(it, [...new Set(cuts(it))].sort((a, b) => a - b))), page);
   const full = region.rules.filter((r) => r.x2 - r.x1 >= width * 0.9).map((r) => r.y1);
   const headerRule = full.find((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2);
   const head = headerRule === undefined ? [] : phrased.filter((l) => l.y > headerRule);
@@ -505,16 +517,22 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
     if (k === 0 || cut) headGroups.push([]);
     headGroups[headGroups.length - 1].push(line);
   });
-  // The columns: the gaps no body line crosses, nor the column heads over
-  // them (the last head row). A head row parts a column its values' merged
-  // cells cross: "EN-DE" and "EN-FR" under "Training Cost (FLOPs)" over
-  // "3.3 · 10^18" set across both (arXiv 1706.03762's Table 2).
-  const scanned = columnSeparators(body.length >= 2 ? [...body, ...(headGroups.at(-1) ?? [])] : phrased);
+  // The columns: the column rules drawn, and the gaps no body line crosses,
+  // each set where the column heads (the last head row) leave it room. A
+  // head row parts a column its values' merged cells cross: "EN-DE" and
+  // "EN-FR" under "Training Cost (FLOPs)" over "3.3 · 10^18" set across
+  // both (arXiv 1706.03762's Table 2).
+  const ruledAt = [...new Set(drawn.map((r) => r.x1))];
+  const open = (a: number, b: number) => !body.some((l) => l.items.some((it) => it.x < Math.max(a, b) && it.x + it.w > Math.min(a, b)));
+  const scanned = [
+    ...ruledAt,
+    ...columnSeparators(body.length >= 2 ? body : phrased, headGroups.at(-1) ?? []).filter((x) => !ruledAt.some((d) => open(x, d))),
+  ].sort((a, b) => a - b);
   const separators = [...scanned, ...headSeparators(headGroups.at(-1) ?? [], body, scanned, region.box)].sort((a, b) => a - b);
   const columnCount = separators.length + 1;
   const bounds = [region.box.x1, ...separators, region.box.x2];
   const rows: TableRow[] = [];
-  for (const group of headGroups) rows.push(headerRow(group, bounds, built, partial));
+  headGroups.forEach((group, k) => rows.push(headerRow(group, bounds, built, partial, filledBelow(headGroups.slice(k + 1), bounds))));
   const headerRows = rows.length;
   spanHeadColumns(rows, headerRows);
   if (body.length > 0) {
@@ -526,6 +544,28 @@ export function tableFromRegion(region: TableRegion, page: number): Segment {
     rows.push(...spanCenteredLabels(bodyRows, starts.map((k) => body[k].y), full));
   }
   return segment(rows, headerRows || (rows.length > 1 && boldHeaderRows(rows) > 0 ? 1 : 0), bounds);
+}
+
+// The column rules a region draws: vertical rules inside it, at one x
+// (their pieces share the x of the longest), that run through two fifths of
+// its height or more; a table ruled between its columns draws them row by
+// row. Each piece keeps its own extent: it cuts only what it crosses.
+function columnRules(region: TableRegion): Rule[] {
+  const b = region.box;
+  const inside = region.drawing.rules.filter((r) => r.dir === "v" && r.x1 > b.x1 + 2 && r.x1 < b.x2 - 2 && r.y2 > b.y1 && r.y1 < b.y2);
+  const groups: Rule[][] = [];
+  for (const r of [...inside].sort((p, q) => p.x1 - q.x1)) {
+    const group = groups[groups.length - 1];
+    if (group && r.x1 - group[0].x1 <= 1.5) group.push(r);
+    else groups.push([r]);
+  }
+  const length = (g: Rule[]) => g.reduce((sum, r) => sum + Math.min(r.y2, b.y2) - Math.max(r.y1, b.y1), 0);
+  return groups
+    .filter((g) => length(g) >= (b.y2 - b.y1) * 0.4)
+    .flatMap((g) => {
+      const x = g.reduce((best, r) => (r.y2 - r.y1 > best.y2 - best.y1 ? r : best)).x1;
+      return g.map((r) => ({ ...r, x1: x, x2: x }));
+    });
 }
 
 // An item cut at its wide gaps: two glyphs more than 0.8 of the size apart,
@@ -709,7 +749,7 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
 // One header row out of lines: the words of each column joined, a phrase
 // over several columns one cell spanning them. bounds are the column edges,
 // the table's left edge first.
-function headerRow(lines: Line[], bounds: number[], built: Line[], rules: Rule[] = []): TableRow {
+function headerRow(lines: Line[], bounds: number[], built: Line[], rules: Rule[] = [], below: boolean[] = []): TableRow {
   type Piece = { from: number; to: number; items: Item[] };
   const pieces: Piece[] = [];
   const columns = bounds.length - 1;
@@ -741,6 +781,20 @@ function headerRow(lines: Line[], bounds: number[], built: Line[], rules: Rule[]
       last.items.push(...p.items);
     } else merged.push(p);
   }
+  // A head centered over columns spans them: it grows a column on each
+  // side while it stays centered over what it spans and the heads under it
+  // fill those columns (apple-fy24q4 p. 4: "Three Months Ended" over its
+  // four columns). below: the columns the head rows under this one fill.
+  merged.forEach((p, k) => {
+    const middle = (Math.min(...p.items.map((it) => it.x)) + Math.max(...p.items.map((it) => it.x + it.w))) / 2;
+    const free = (c: number) => c >= 0 && c < columns && below[c] && (merged[k - 1]?.to ?? -1) < c && (merged[k + 1]?.from ?? columns) > c;
+    while (free(p.from - 1) && free(p.to + 1)) {
+      const [x1, x2] = [bounds[p.from - 1], bounds[p.to + 2]];
+      if (Math.abs((x1 + x2) / 2 - middle) > (x2 - x1) * 0.1) break;
+      p.from--;
+      p.to++;
+    }
+  });
   const cells: TableCell[] = [];
   let col = 0;
   for (const p of merged) {
@@ -762,6 +816,13 @@ function headerRow(lines: Line[], bounds: number[], built: Line[], rules: Rule[]
   return { cells };
 }
 
+// The columns head rows fill: a column one of their phrases covers.
+function filledBelow(groups: Line[][], bounds: number[]): boolean[] {
+  const filled = new Array<boolean>(bounds.length - 1).fill(false);
+  for (const line of groups.flat()) for (const p of phraseColumns(line, bounds)) for (let c = p.from; c <= p.to; c++) filled[c] = true;
+  return filled;
+}
+
 // A cell's lines as one run of text: wrapped lines joined, a line-end
 // hyphen decided as in a paragraph, never a line break (a newline ends a
 // table row in the table's text).
@@ -778,7 +839,7 @@ function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawin
   const pieces = items.flatMap((it) => splitAt(it, inner.filter((x) => x > it.x + it.w * 0.05 && x < it.x + it.w * 0.95)));
   const rowCount = grid.ys.length - 1;
   const rows: TableRow[] = Array.from({ length: rowCount }, () => ({ cells: [] }));
-  const size = median(items.map((it) => it.size));
+  const size = textSize(items);
   const cellLines = grid.cells.map((cell) => fractionCell(buildLines(pieces.filter((it) => inBox(it, cell)), page), drawing.rules, size));
   // The cells' padding: the least a line stands from its cell's left edge,
   // and from its right edge (Word's 5.4 pt); more is a line set in.
@@ -787,9 +848,19 @@ function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawin
     left: least(grid.cells.flatMap((cell, k) => cellLines[k].map((l) => l.x - cell.x1))),
     right: least(grid.cells.flatMap((cell, k) => cellLines[k].map((l) => cell.x2 - l.xEnd))),
   };
+  // A column set flush right (numbers): most of its lines end at one edge,
+  // short of the cell's padding when a narrow column sits beside it
+  // (apple-fy24q4's values set in as if indented).
+  const flush = new Map<number, number>();
+  for (let col = 0; col + 1 < grid.xs.length; col++) {
+    const lines = grid.cells.flatMap((cell, k) => (cell.col === col && cell.colspan === 1 ? cellLines[k] : []));
+    const edge = Math.max(...lines.map((l) => l.xEnd));
+    if (lines.length >= 2 && lines.filter((l) => edge - l.xEnd <= l.size * 0.3).length * 5 >= lines.length * 3) flush.set(col, edge);
+  }
   grid.cells.forEach((cell, k) => {
     built.push(...cellLines[k]);
-    const words = cellLines[k].length > 0 ? cellParagraphs(cellLines[k], cell, inset) : { text: "", runs: [] };
+    const edge = cell.colspan === 1 ? flush.get(cell.col) : undefined;
+    const words = cellLines[k].length > 0 ? cellParagraphs(cellLines[k], cell, inset, edge) : { text: "", runs: [] };
     const out: TableCell = words.text.trim() === "" ? { text: "", runs: [] } : words;
     if (cell.colspan > 1) out.colspan = cell.colspan;
     if (cell.rowspan > 1) out.rowspan = cell.rowspan;
@@ -798,6 +869,13 @@ function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawin
     rows[cell.row].cells.push(out);
   });
   return rows.filter((r) => r.cells.length > 0);
+}
+
+// A table's text size: the size three quarters of its words are set in or
+// smaller. A table of fractions sets most of its digits at script size.
+function textSize(items: Item[]): number {
+  const sizes = items.map((it) => it.size).sort((a, b) => a - b);
+  return sizes[Math.floor((sizes.length - 1) * 0.75)] ?? 10;
 }
 
 // A fraction alone in a cell: its numerator and its denominator read as two
@@ -842,8 +920,9 @@ function cellFill(cell: Box, table: Box, fills: Fill[]): string | undefined {
 // lowercase; else the next line opens a paragraph (a signature cell's
 // "By:" lines, each on a line of its own, read as one line).
 // Each paragraph keeps how its lines sit in the cell: centered, flush
-// right, or set in from the cell's left edge. inset: the cells' padding.
-function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: number }): TableCell {
+// right, or set in from the cell's left edge. inset: the cells' padding;
+// flush: the right edge of a column set flush right.
+function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: number }, flush?: number): TableCell {
   const left = box.x1 + inset.left;
   const right = box.x2 - inset.right;
   const groups: Line[][] = [];
@@ -866,7 +945,7 @@ function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: n
     const indent = Math.min(...group.map((l) => l.x)) - left;
     if (indent <= size * 0.5) return {};
     if (group.every((l) => Math.abs((l.x + l.xEnd) / 2 - middle) <= Math.max(size * 0.6, (box.x2 - box.x1) * 0.04))) return { align: "center" };
-    if (group.every((l) => right - l.xEnd <= size * 0.3)) return { align: "right" };
+    if (group.every((l) => (flush ?? right) - l.xEnd <= size * 0.3)) return { align: "right" };
     return { indent: Math.round(indent) };
   };
   const cell: TableCell = { text: "", runs: [], paragraphs: [] };
@@ -884,15 +963,23 @@ function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: n
 }
 
 // An item that runs across column lines, cut into one piece per cell. A
-// character sits where its glyph is (or, with no glyph per character, where
-// its share of the item's width puts it); a cut moves to the word gap
-// nearest it, so a word is never cut in two.
+// character sits where its glyph is (a font draws no glyph for a space, so
+// the glyphs stand for the characters or for the characters less the
+// spaces; else a character's share of the item's width puts it); a cut
+// moves to the word gap nearest it, so a word is never cut in two. A piece
+// spans its own glyphs: the gap between two pieces is the page's (arXiv
+// 2504.02736's Table III heads, 4 pt apart across a column rule).
 function splitAt(it: Item, cuts: number[]): Item[] {
   if (cuts.length === 0 || it.str.length < 2) return [it];
   const n = it.str.length;
-  const glyphs = it.glyphs?.length === n ? it.glyphs : null;
+  const chars: number[] = [];
+  for (let i = 0; i < n; i += String.fromCodePoint(it.str.codePointAt(i) ?? 0).length) chars.push(i);
+  const drawn = chars.filter((i) => it.str[i].trim());
+  const glyphs = it.glyphs ?? [];
+  const mapped = glyphs.length === chars.length ? chars : glyphs.length === drawn.length ? drawn : null;
+  const placed = (mapped ?? []).map((i, k) => ({ i, g: glyphs[k] }));
   const charsBefore = (x: number) =>
-    glyphs ? glyphs.filter((g) => g.x + g.w / 2 < x).length : Math.round(((x - it.x) / it.w) * n);
+    mapped ? (placed.find((p) => p.g.x + p.g.w / 2 >= x)?.i ?? n) : Math.round(((x - it.x) / it.w) * n);
   const out: Item[] = [];
   let from = 0;
   for (const x of [...cuts, it.x + it.w]) {
@@ -911,9 +998,15 @@ function splitAt(it: Item, cuts: number[]): Item[] {
     }
     to = Math.max(from, Math.min(n, to));
     const str = it.str.slice(from, to);
-    const x1 = glyphs && from < n ? glyphs[from].x : it.x + (from / n) * it.w;
-    const x2 = glyphs && to > 0 ? glyphs[to - 1].x + glyphs[to - 1].w : it.x + (to / n) * it.w;
-    if (str.trim().length > 0) out.push({ ...it, str, x: x1, w: x2 - x1, glyphs: glyphs?.slice(from, to) });
+    const words = str.trim();
+    if (words.length > 0) {
+      const lead = str.length - str.trimStart().length;
+      const own = placed.filter((p) => p.i >= from && p.i < to);
+      const [first, last] = [own[0]?.g, own[own.length - 1]?.g];
+      const x1 = first ? first.x : it.x + ((from + lead) / n) * it.w;
+      const x2 = last ? last.x + last.w : it.x + ((from + lead + words.length) / n) * it.w;
+      out.push({ ...it, str: words, x: x1, w: x2 - x1, glyphs: mapped ? own.map((p) => p.g) : undefined });
+    }
     from = to;
   }
   return out;

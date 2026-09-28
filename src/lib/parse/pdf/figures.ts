@@ -231,16 +231,10 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   const isPageText = (r: TextRun) => r.size >= textSize * 1.3 || r.chars >= 40;
   const runsIn = (box: Box) => runs.filter((r) => shareInside(r.box, box) >= 0.7);
   // A box that holds the page's text (a panel behind a quotation, a banner
-  // behind a paragraph) or a caption's first words: a background, never a
-  // graphic. A chart's white ground can reach over the caption under it
-  // (arXiv 2502.02648 p7: FIG. 5's first line sat inside its chart).
+  // behind a paragraph): a background, never a graphic.
   const holdsText = (box: Box) => {
     const inside = runsIn(box);
-    return (
-      inside.some(isPageText) ||
-      inside.filter((r) => r.chars >= 20).length >= 3 ||
-      inside.some((r) => LABEL_START_RE.test(r.items.map((i) => i.str).join(" ")))
-    );
+    return inside.some(isPageText) || inside.filter((r) => r.chars >= 20).length >= 3;
   };
 
   type Part = { box: Box; image: boolean; thin: boolean };

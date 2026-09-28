@@ -22,7 +22,12 @@
           "text": "Kestrel Energy Group"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "font": {
+        "shape": "serif",
+        "size": 13,
+        "color": "#595959"
+      }
     },
     {
       "kind": "paragraph",
@@ -3863,6 +3868,30 @@
     "Page 2 of 3",
     "Page 3 of 3"
   ],
+  "fonts": {
+    "body": {
+      "shape": "serif",
+      "size": 10
+    },
+    "title": {
+      "shape": "serif",
+      "size": 20,
+      "bold": true
+    },
+    "h2": {
+      "shape": "serif",
+      "size": 14,
+      "bold": true
+    },
+    "footnote": {
+      "shape": "serif",
+      "size": 8
+    },
+    "caption": {
+      "shape": "serif",
+      "size": 10
+    }
+  },
   "license": "open",
   "provenance": "generated",
   "notes": "Table 3 runs across pages: its header row repeats at the top of each page (and in LaTeX “Continued on next page” closes each broken part); the reference holds the header once. Negative numbers are in parentheses."

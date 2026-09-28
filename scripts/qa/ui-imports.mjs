@@ -2604,6 +2604,37 @@ RISKS.AUDIT = async (theme) => {
   const chromeShot = await shot(page, `AUDIT-pdf-chrome-${theme}`);
   check("AUDIT", chrome.titleRow && chrome.toolbar && chrome.ruler && chrome.vruler && chrome.sheets >= 15 && Math.abs(chrome.width - 816) <= 2 && Math.abs(chrome.height - 1056) <= 2, `(${theme}) the PDF reads as a Doc: title row, toolbar, rulers, pages at the paper's size`, `${JSON.stringify(chrome)} ${chromeShot}`);
   check("AUDIT", /PDF · 15 pages/.test(chrome.line), `(${theme}) the import line says "PDF · 15 pages"`, chrome.line);
+  // A formula's closing mark stays on its line (insert/math.ts): at ten text
+  // widths, no line opens with the "." or ")" that follows an inline equation.
+  const lone = await page.evaluate(async () => {
+    const MARKS = ".,;:!?)]}’”%…-";
+    const style = document.createElement("style");
+    document.head.appendChild(style);
+    let tails = 0;
+    let alone = 0;
+    for (let pad = 0; pad <= 45; pad += 5) {
+      style.textContent = `.docs-prose > * { margin-right: ${pad}px !important }`;
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      tails = 0;
+      for (const m of document.querySelectorAll(".docs-prose .docs-math:not([data-math-block])")) {
+        const walker = document.createTreeWalker(m.closest("p, h1, h2, h3, h4, h5, h6, li, td, th") ?? document.body, NodeFilter.SHOW_TEXT);
+        let t = null;
+        for (let n = walker.nextNode(); n && !t; n = walker.nextNode()) if (!m.contains(n) && m.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING) t = n;
+        if (!t?.data || !MARKS.includes(t.data[0])) continue;
+        tails++;
+        const r = document.createRange();
+        r.setStart(t, 0);
+        r.setEnd(t, 1);
+        const mark = r.getClientRects()[0];
+        const rects = m.getClientRects();
+        const last = rects[rects.length - 1];
+        if (mark && last && mark.top >= last.bottom - 2) alone++;
+      }
+    }
+    style.remove();
+    return { tails, alone };
+  });
+  check("AUDIT", lone.tails > 0 && lone.alone === 0, `(${theme}) no line opens with the closing mark after an inline equation, at ten text widths`, `${lone.tails} equations with a closing mark; ${lone.alone} marks alone`);
   // The tabs & outlines panel lists the Title and the headings.
   const openOutline = page.locator('[data-track="docs:outline-open"]').first();
   if (await openOutline.count()) {

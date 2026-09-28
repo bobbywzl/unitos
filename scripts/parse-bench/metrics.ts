@@ -1,6 +1,6 @@
 import { isMathText, type Doc, type DocBlock } from "./adapt";
 import { mathLeaves, mathTokens, normLabel, sequenceSimilarity, textMathTokens } from "./math";
-import type { RefBlock, Span } from "./model";
+import type { Font, FontRole, Fonts, RefBlock, Span } from "./model";
 import { garblesOf, wordsOf, type Garble } from "./text";
 
 // The metrics: a reference and a candidate (a parse or an import, through
@@ -11,15 +11,20 @@ import { garblesOf, wordsOf, type Garble } from "./text";
 //   furniture   share of furniture strings never at the candidate's edges more often than at the reference's
 //   blocks      F1 of reference blocks found with their kind and candidate blocks of the right kind
 //   paragraphs  1 − (units split + units merged) / reference units (a paragraph, a heading, a list item)
-//   headings    share of reference headings found as headings at their level, after the best level shift
+//   headings    F1 of reference headings found as headings at their level (after the best level shift)
+//               and candidate headings that are such a heading (an invented heading counts)
 //   lists       mean of list item recall, depth accuracy, and marker accuracy (the marker as drawn)
 //   tables      F1 of table words in their cell, rows and columns mapped one to one (leaks both ways reported)
 //   math        mean of display and inline similarity of canonical forms (images and words read as math reported)
 //   garbles     1 − garbled glyphs past the reference's own over (5 + words / 100)
-//   styles      mean F1 of the styles the reference marks (bold, italic, underline, small caps, sub, sup)
+//   styles      mean F1 of the styles the reference marks (bold, italic, underline, strikethrough,
+//               small caps, sub, sup, text color, highlight)
 //   footnotes   mean of notes found, notes linked from their mark, and the notes' words F1
-//   roles       mean of alignment, indentation, and captions F1, checkbox states, separators and
-//               quotations found, and printed equation labels right
+//   roles       mean of alignment (titles, headings, paragraphs; justified where a wrap shows it),
+//               indentation, and captions F1, checkbox states, separators and quotations found,
+//               and printed equation labels right
+//   fonts       per role (body, title, each heading level, caption, footnote): the face's shape,
+//               its size (the body's in points, the others' as a ratio to the body), bold, color
 
 /** The composite's weights: what each part of a perfect parse is worth. A
     part that does not apply (no table on either side) drops out and the
@@ -38,6 +43,7 @@ export const WEIGHTS = {
   styles: 5, // style F1
   footnotes: 5, // footnotes found, linked, and their words right
   roles: 5, // alignment, indentation, captions, checkboxes, separators, quotations, equation labels
+  fonts: 5, // each role's face: shape, size, bold, color
 } as const;
 export type Part = keyof typeof WEIGHTS;
 
@@ -71,11 +77,17 @@ export type Unit = {
   /** Its raised runs [start, end) in `text`: a reference's footnote marks are among them. */
   raised: [number, number][];
 };
-/** The styles scored on the characters of matched words. */
-export const STYLES = ["bold", "italic", "underline", "smallCaps", "sub", "sup"] as const;
+/** The styles scored on the characters of matched words: these on or off,
+    and a text color and a highlight by their color. */
+export const STYLES = ["bold", "italic", "underline", "strike", "smallCaps", "sub", "sup"] as const;
 export type Style = (typeof STYLES)[number];
-/** A word; `note`: a candidate's footnote mark or label (the page editor draws its own numbers there). */
-export type Tok = { w: string; unit: number; start: number; end: number; note?: true } & Record<Style, boolean>;
+export type Scored = Style | "color" | "highlight";
+export const SCORED: Scored[] = [...STYLES, "color", "highlight"];
+/** A word; `note`: a candidate's footnote mark or label (the page editor
+    draws its own numbers there); `link`: most of it in a link, whose
+    underline and color are the link's; its color and highlight, where most
+    of its characters take one. */
+export type Tok = { w: string; unit: number; start: number; end: number; note?: true; link: boolean; color?: string; highlight?: string } & Record<Style, boolean>;
 /** A formula: display (a block of its own) or inline (in a unit, before word `at`). */
 export type MathItem = {
   block: number;
@@ -118,13 +130,34 @@ function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: 
   const first = flat.toks.length;
   const length = spans.reduce((n, s) => n + s.text.length, 0);
   const flags = Object.fromEntries(STYLES.map((style) => [style, new Uint8Array(length)])) as Record<Style, Uint8Array>;
+  const links = new Uint8Array(length);
+  const colors: (string | undefined)[] = new Array(length);
+  const fills: (string | undefined)[] = new Array(length);
   const raised: [number, number][] = [];
   let stretch = 0;
+  // The value most of a word's characters take, or none.
+  const most = (values: (string | undefined)[], start: number, end: number) => {
+    const count = new Map<string, number>();
+    for (let k = start; k < end; k++) if (values[k]) count.set(values[k] as string, (count.get(values[k] as string) ?? 0) + 1);
+    const [value, n] = [...count].sort((a, b) => b[1] - a[1])[0] ?? ["", 0];
+    return n * 2 > end - start ? value : undefined;
+  };
   const flush = (to: number) => {
     for (const w of wordsOf(text.slice(stretch, to))) {
       const [start, end] = [w.start + stretch, w.end + stretch];
-      const share = (style: Style) => flags[style].subarray(start, end).reduce((n, f) => n + f, 0) * 2 > end - start;
-      flat.toks.push({ w: w.w, unit: u, start, end, ...(Object.fromEntries(STYLES.map((style) => [style, share(style)])) as Record<Style, boolean>) });
+      const share = (arr: Uint8Array) => arr.subarray(start, end).reduce((n, f) => n + f, 0) * 2 > end - start;
+      const color = most(colors, start, end);
+      const highlight = most(fills, start, end);
+      flat.toks.push({
+        w: w.w,
+        unit: u,
+        start,
+        end,
+        link: share(links),
+        ...(color ? { color } : {}),
+        ...(highlight ? { highlight } : {}),
+        ...(Object.fromEntries(STYLES.map((style) => [style, share(flags[style])])) as Record<Style, boolean>),
+      });
     }
   };
   for (const span of spans) {
@@ -137,6 +170,9 @@ function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: 
       continue;
     }
     for (const style of STYLES) if (span[style]) flags[style].fill(1, start, text.length);
+    if (span.href) links.fill(1, start, text.length);
+    if (span.color) colors.fill(span.color, start, text.length);
+    if (span.highlight) fills.fill(span.highlight, start, text.length);
     if (span.sup && text.length > start) raised.push([start, text.length]);
   }
   flush(text.length);
@@ -634,11 +670,27 @@ export function blockScores(ref: Flat, cand: Flat, al: Alignment): BlockScores {
   };
 }
 
-export type HeadingScores = { ref: number; found: number; atLevel: number; shift: number; score: number | null; misses: { ref: number; cand: number }[] };
+export type HeadingScores = {
+  ref: number;
+  found: number;
+  atLevel: number;
+  shift: number;
+  /** Candidate headings (a table's caption aside), and those that are a reference heading at its level. */
+  cand: number;
+  right: number;
+  recall: number | null;
+  precision: number | null;
+  score: number | null;
+  misses: { ref: number; cand: number }[];
+  /** Candidate headings no reference heading stands for, or at another level. */
+  invented: number[];
+};
 
-/** Headings: the share of reference headings found as headings at their
-    level, after the one level shift that fits best (a parse that sets every
-    section one level deeper keeps the hierarchy). */
+/** Headings: reference headings found as headings at their level, after the
+    one level shift that fits best (a parse that sets every section one level
+    deeper keeps the hierarchy), and candidate headings that are one of them:
+    a heading the page does not set (a bold line of the body, a figure's
+    label) is wrong. The score is their F1. */
 export function headingScores(ref: Flat, cand: Flat, al: Alignment): HeadingScores {
   const pairs: { ref: number; cand: number; rl: number; cl: number }[] = [];
   const misses: HeadingScores["misses"] = [];
@@ -658,7 +710,24 @@ export function headingScores(ref: Flat, cand: Flat, al: Alignment): HeadingScor
     if (n > atLevel || (n === atLevel && Math.abs(s) < Math.abs(shift))) [shift, atLevel] = [s, n];
   }
   for (const p of pairs) if (p.cl !== p.rl + shift) misses.push({ ref: p.ref, cand: p.cand });
-  return { ref: total, found: pairs.length, atLevel: Math.max(0, atLevel), shift, score: share(Math.max(0, atLevel), total), misses };
+  const rightAt = new Set(pairs.filter((p) => p.cl === p.rl + shift).map((p) => p.cand));
+  const candidates = cand.blocks.flatMap((block, cb) => (block.kind === "heading" && !al.caption[cb] ? [cb] : []));
+  const invented = candidates.filter((cb) => !rightAt.has(cb));
+  const recall = share(Math.max(0, atLevel), total);
+  const precision = share(candidates.length - invented.length, candidates.length) ?? (total > 0 ? 0 : null);
+  return {
+    ref: total,
+    found: pairs.length,
+    atLevel: Math.max(0, atLevel),
+    shift,
+    cand: candidates.length,
+    right: candidates.length - invented.length,
+    recall,
+    precision,
+    score: f1Of(precision, recall),
+    misses,
+    invented,
+  };
 }
 
 export type ListScores = {
@@ -1053,9 +1122,9 @@ export type StyleScores = {
   /** The mean of every style's F1 the reference marks (the composite's part). */
   score: number | null;
   /** Each style's F1; null where the reference never marks it. */
-  f1: Record<Style, number | null>;
+  f1: Record<Scored, number | null>;
   /** Characters of matched words: styled on both sides, only in the candidate, only in the reference. */
-  counts: Record<Style, { both: number; candOnly: number; refOnly: number }>;
+  counts: Record<Scored, { both: number; candOnly: number; refOnly: number }>;
 };
 
 const meanOf = (list: (number | null)[]) => {
@@ -1063,29 +1132,46 @@ const meanOf = (list: (number | null)[]) => {
   return known.length > 0 ? known.reduce((a, b) => a + b, 0) / known.length : null;
 };
 
-/** Bold, italic, underline, small caps, sub, and sup: F1 over the
-    characters of matched words, where both words count for styles (not in a
-    title, a heading, or code). A style the reference never marks is not
-    scored: its author did not mark it. */
+/** Two colors a reader takes for one: no channel apart by more than 0x30. */
+export function sameColor(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return a === b;
+  const channels = (hex: string) => [1, 3, 5].map((k) => Number.parseInt(hex.slice(k, k + 2), 16));
+  const [x, y] = [channels(a), channels(b)];
+  return x.every((c, k) => Math.abs(c - y[k]) <= 0x30);
+}
+
+/** Bold, italic, underline, strikethrough, small caps, sub, sup, text
+    color, and highlight: F1 over the characters of matched words, where both
+    words count for styles (not in a title, a heading, or code). A color or
+    a highlight is right in the same color; in another, it is wrong on both
+    sides. A link's underline and color are the link's, not scored. A style
+    the reference never marks is not scored: its author did not mark it. */
 export function styleScores(ref: Flat, cand: Flat, al: Alignment): StyleScores {
-  const counts = Object.fromEntries(STYLES.map((style) => [style, { both: 0, candOnly: 0, refOnly: 0 }])) as StyleScores["counts"];
+  const counts = Object.fromEntries(SCORED.map((style) => [style, { both: 0, candOnly: 0, refOnly: 0 }])) as StyleScores["counts"];
+  const tally = (style: Scored, r: boolean, c: boolean, right: boolean, weight: number) => {
+    if (r && c && right) counts[style].both += weight;
+    else {
+      if (c) counts[style].candOnly += weight;
+      if (r) counts[style].refOnly += weight;
+    }
+  };
   al.aTo.forEach((j, i) => {
     if (j < 0) return;
     const r = ref.toks[i];
     const c = cand.toks[j];
     if (!ref.units[r.unit].styled || !cand.units[c.unit].styled) return;
     const weight = r.end - r.start;
-    for (const style of STYLES) {
-      if (r[style] && c[style]) counts[style].both += weight;
-      else if (c[style]) counts[style].candOnly += weight;
-      else if (r[style]) counts[style].refOnly += weight;
-    }
+    const link = r.link || c.link;
+    for (const style of STYLES) if (style !== "underline" || !link) tally(style, r[style], c[style], true, weight);
+    if (!link) tally("color", Boolean(r.color), Boolean(c.color), sameColor(r.color, c.color), weight);
+    tally("highlight", Boolean(r.highlight), Boolean(c.highlight), sameColor(r.highlight, c.highlight), weight);
   });
   const f = ({ both, candOnly, refOnly }: { both: number; candOnly: number; refOnly: number }) =>
     both + candOnly + refOnly > 0 ? (2 * both) / (2 * both + candOnly + refOnly) : null;
-  const marks = (style: Style) => ref.toks.some((t) => t[style] && ref.units[t.unit].styled);
-  const f1 = Object.fromEntries(STYLES.map((style) => [style, marks(style) ? f(counts[style]) : null])) as Record<Style, number | null>;
-  return { bold: f1.bold, italic: f1.italic, score: meanOf(STYLES.map((style) => f1[style])), f1, counts };
+  const marks = (style: Scored) =>
+    ref.toks.some((t) => ref.units[t.unit].styled && (style === "color" ? Boolean(t.color) && !t.link : style === "highlight" ? Boolean(t.highlight) : t[style] && (style !== "underline" || !t.link)));
+  const f1 = Object.fromEntries(SCORED.map((style) => [style, marks(style) ? f(counts[style]) : null])) as Record<Scored, number | null>;
+  return { bold: f1.bold, italic: f1.italic, score: meanOf(SCORED.map((style) => f1[style])), f1, counts };
 }
 
 export type NoteScores = {
@@ -1202,7 +1288,7 @@ export function noteScores(ref: Flat, cand: Flat, al: Alignment): NoteScores | n
 }
 
 export type RoleScores = {
-  /** Centered and right-aligned paragraphs: F1 of those aligned alike, where the reference aligns any. */
+  /** Centered, right-aligned, and justified titles, headings, and paragraphs: F1 of those aligned alike, where the reference aligns any. */
   align: number | null;
   /** First-line, hanging, and block indents of paragraphs: F1 of those indented alike, where the reference marks any. */
   indent: number | null;
@@ -1217,23 +1303,46 @@ export type RoleScores = {
   score: number | null;
 };
 
-/** F1 of a paragraph property both sides may set: a reference paragraph
-    with it is right when its counterpart paragraph has the same; a
-    candidate paragraph with it is right when its main reference paragraph
-    has the same. */
-function propertyF1(ref: Flat, cand: Flat, al: Alignment, of: (b: DocBlock) => string | undefined): number | null {
-  const refSet = ref.blocks.flatMap((block, rb) => (of(block) ? [rb] : []));
+/** F1 of a block property both sides may set: a reference block with it
+    is right when its counterpart has the same; a candidate block with it is
+    right when its main reference block has the same. */
+function propertyF1(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b: number) => string | undefined): number | null {
+  const refSet = ref.blocks.flatMap((_, rb) => (of(ref, rb) ? [rb] : []));
   if (refSet.length === 0) return null;
-  const candSet = cand.blocks.flatMap((block, cb) => (of(block) && !al.caption[cb] ? [cb] : []));
-  const recall = refSet.filter((rb) => al.owner[rb] >= 0 && of(cand.blocks[al.owner[rb]]) === of(ref.blocks[rb])).length / refSet.length;
-  const precision = candSet.length > 0 ? candSet.filter((cb) => al.main[cb] >= 0 && of(ref.blocks[al.main[cb]]) === of(cand.blocks[cb])).length / candSet.length : 0;
+  const candSet = cand.blocks.flatMap((_, cb) => (of(cand, cb) && !al.caption[cb] ? [cb] : []));
+  const recall = refSet.filter((rb) => al.owner[rb] >= 0 && of(cand, al.owner[rb]) === of(ref, rb)).length / refSet.length;
+  const precision = candSet.length > 0 ? candSet.filter((cb) => al.main[cb] >= 0 && of(ref, al.main[cb]) === of(cand, cb)).length / candSet.length : 0;
   return f1Of(precision, recall);
+}
+
+/** A paragraph shorter than this may fit on one line, where justified and
+    flush left draw alike. */
+const JUSTIFY_CHARS = 100;
+
+/** A title's, a heading's, or a paragraph's alignment as the metric compares
+    it. Justified counts only where the reference justifies any paragraph
+    (a reference that marks none leaves it unscored) and on a paragraph of
+    JUSTIFY_CHARS or more, where a wrap shows it; elsewhere it is flush left.
+    A line centered on the page is centered whether it reads as a heading or
+    a paragraph. */
+function alignKey(justified: boolean) {
+  return (flat: Flat, b: number): string | undefined => {
+    const block = flat.blocks[b];
+    if (block.kind !== "title" && block.kind !== "heading" && block.kind !== "paragraph") return undefined;
+    if (block.align !== "justify") return block.align;
+    const chars = flat.unitsOf[b].reduce((n, u) => n + flat.units[u].text.length, 0);
+    return justified && block.kind === "paragraph" && chars >= JUSTIFY_CHARS ? "justify" : undefined;
+  };
 }
 
 /** The roles and marks the page's layout carries: alignment, indentation,
     captions, checkbox states, separators, quotations. */
 export function roleScores(ref: Flat, cand: Flat, al: Alignment, blocks: BlockScores, lists: ListScores, math: MathScores): RoleScores {
-  const paragraph = (key: "align" | "indent") => (b: DocBlock) => (b.kind === "paragraph" ? b[key] : undefined);
+  const indent = (flat: Flat, b: number) => {
+    const block = flat.blocks[b];
+    return block.kind === "paragraph" ? block.indent : undefined;
+  };
+  const justified = ref.blocks.some((block) => block.kind === "paragraph" && block.align === "justify");
   // Captions: a figure's caption unit, a table's (index -1), a caption paragraph.
   const isCaption = (flat: Flat, u: number) => {
     const unit = flat.units[u];
@@ -1261,14 +1370,111 @@ export function roleScores(ref: Flat, cand: Flat, al: Alignment, blocks: BlockSc
     return x && x.ref > 0 ? x.found / x.ref : null;
   };
   const roles = {
-    align: propertyF1(ref, cand, al, paragraph("align")),
-    indent: propertyF1(ref, cand, al, paragraph("indent")),
+    align: propertyF1(ref, cand, al, alignKey(justified)),
+    indent: propertyF1(ref, cand, al, indent),
     captions: refCaption > 0 ? f1Of(candCaption > 0 ? candHits / candCaption : 0, hits / refCaption) : null,
     checks: lists.checks.ref > 0 ? lists.checks.right / lists.checks.ref : null,
     separators: kind("separator"),
     quotes: kind("quote"),
   };
   return { ...roles, score: meanOf([...Object.values(roles), math.labels.score]) };
+}
+
+export type FontScores = {
+  /** Each role's reference blocks, those whose counterpart says its font, and of those the ones right in each property. */
+  roles: Partial<Record<FontRole, { blocks: number; known: number; shape: number; size: number; bold: number; color: number }>>;
+  /** Each property's mean over the roles (a role none of whose counterparts says its font scores 0). */
+  shape: number | null;
+  size: number | null;
+  bold: number | null;
+  color: number | null;
+  /** The mean of the four (the composite's part). */
+  score: number | null;
+  misses: { ref: number; cand: number; role: FontRole; want: Font; got: Font | null; why: string }[];
+};
+
+/** A size within a tenth of another. */
+const nearSize = (a: number, b: number) => b > 0 && Math.abs(a / b - 1) <= 0.1;
+
+/** The role a reference block's font is scored by, when it has one. */
+function fontRole(block: DocBlock): FontRole | null {
+  switch (block.kind) {
+    case "title":
+      return "title";
+    case "heading":
+      return `h${block.level}`;
+    case "paragraph":
+    case "list":
+      return "body";
+    case "footnote":
+      return "footnote";
+    case "figure":
+    case "table":
+      return block.caption ? "caption" : null;
+    default:
+      return null;
+  }
+}
+
+/** Fonts: each reference block of a role (the body's paragraphs and list
+    items, the title, each heading level, a figure's or a table's caption, a
+    footnote) against the candidate block that holds most of its words (of a
+    table, its caption's words): the same shape; the size, the body's in
+    points and every other role's as a ratio to the body, within a tenth; the
+    same weight; the same color. The candidate's body size is the size most
+    of its body's characters take. A block whose counterpart says nothing of
+    its font is not counted, and a role none of whose counterparts says
+    anything scores 0. */
+export function fontScores(fonts: Fonts | undefined, ref: Flat, cand: Flat, al: Alignment): FontScores | null {
+  if (!fonts) return null;
+  const tally = new Map<number, number>();
+  cand.blocks.forEach((block, cb) => {
+    const body = (block.kind === "paragraph" && !block.role) || block.kind === "list";
+    if (!body || !block.font) return;
+    const chars = cand.unitsOf[cb].reduce((n, u) => n + cand.units[u].text.length, 0);
+    tally.set(block.font.size, (tally.get(block.font.size) ?? 0) + chars);
+  });
+  const candBody = [...tally].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  // The candidate block holding most of a reference block's matched words (of a table, its caption's).
+  const holder = (rb: number): number => {
+    const block = ref.blocks[rb];
+    if (block.kind !== "table") return al.owner[rb];
+    const votes = new Map<number, number>();
+    for (const u of ref.unitsOf[rb]) {
+      if (ref.units[u].index !== -1) continue;
+      for (let i = ref.units[u].first; i < ref.units[u].end; i++) {
+        const j = al.aTo[i];
+        if (j >= 0) votes.set(cand.units[cand.toks[j].unit].block, (votes.get(cand.units[cand.toks[j].unit].block) ?? 0) + 1);
+      }
+    }
+    return [...votes].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
+  };
+  const roles: FontScores["roles"] = {};
+  const misses: FontScores["misses"] = [];
+  ref.blocks.forEach((block, rb) => {
+    const role = fontRole(block);
+    const want = role ? (("font" in block ? block.font : undefined) ?? fonts[role]) : undefined;
+    if (!role || !want) return;
+    const cb = holder(rb);
+    if (cb < 0) return;
+    const r = (roles[role] ??= { blocks: 0, known: 0, shape: 0, size: 0, bold: 0, color: 0 });
+    r.blocks++;
+    const other = cand.blocks[cb];
+    const got = "font" in other && other.font ? other.font : null;
+    if (!got) return;
+    r.known++;
+    const size =
+      role === "body" ? nearSize(got.size, want.size) : candBody !== null && nearSize(got.size / candBody, want.size / fonts.body.size);
+    const checks = { shape: got.shape === want.shape, size, bold: Boolean(got.bold) === Boolean(want.bold), color: sameColor(got.color, want.color) };
+    for (const key of ["shape", "size", "bold", "color"] as const) if (checks[key]) r[key]++;
+    const wrong = (Object.keys(checks) as (keyof typeof checks)[]).filter((key) => !checks[key]);
+    if (wrong.length > 0) misses.push({ ref: rb, cand: cb, role, want, got, why: wrong.join(", ") });
+  });
+  const list = Object.values(roles);
+  if (list.length === 0) return null;
+  const share = (key: "shape" | "size" | "bold" | "color") => list.reduce((n, r) => n + (r.known > 0 ? r[key] / r.known : 0), 0) / list.length;
+  const [shape, size, bold, color] = [share("shape"), share("size"), share("bold"), share("color")];
+  return { roles, shape, size, bold, color, score: (shape + size + bold + color) / 4, misses };
 }
 
 /** The composite: each applicable part's score (0–1) by its weight, out of 100. */
@@ -1301,6 +1507,7 @@ export type Scores = {
   styles: StyleScores;
   notes: NoteScores | null;
   roles: RoleScores;
+  fonts: FontScores | null;
 };
 
 /** A candidate scored against a reference: every metric and the composite. */
@@ -1320,6 +1527,7 @@ export function score(reference: Doc, furniture: string[], candidate: Doc): { sc
   const styles = styleScores(ref, cand, al);
   const notes = noteScores(ref, cand, al);
   const roles = roleScores(ref, cand, al, blocks, lists, math);
+  const fonts = fontScores(reference.fonts, ref, cand, al);
   const parts: Record<Part, number | null> = {
     text: words.f1,
     order,
@@ -1334,6 +1542,7 @@ export function score(reference: Doc, furniture: string[], candidate: Doc): { sc
     styles: styles.score,
     footnotes: notes?.score ?? null,
     roles: roles.score,
+    fonts: fonts?.score ?? null,
   };
   const scores: Scores = {
     composite: composite(parts),
@@ -1350,6 +1559,7 @@ export function score(reference: Doc, furniture: string[], candidate: Doc): { sc
     styles,
     notes,
     roles,
+    fonts,
   };
   return { scores, ref, cand, al };
 }

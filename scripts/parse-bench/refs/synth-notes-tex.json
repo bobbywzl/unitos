@@ -12,7 +12,8 @@
           "text": "Probability and Measure",
           "bold": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -21,7 +22,11 @@
           "text": "Lecture notes for a first graduate course"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "font": {
+        "shape": "serif",
+        "size": 11.96
+      }
     },
     {
       "kind": "paragraph",
@@ -30,7 +35,11 @@
           "text": "Ada L. Mercer"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "font": {
+        "shape": "serif",
+        "size": 10.91
+      }
     },
     {
       "kind": "paragraph",
@@ -67,7 +76,8 @@
           "text": "Random variables and expectation",
           "bold": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -83,6 +93,7 @@
           "text": " they lead to."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -120,6 +131,7 @@
           "text": "; when they hold outside a set of probability zero we add the words “almost surely”, or a.s. for short."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -130,7 +142,8 @@
           "text": "2.1. Random variables and their distribution",
           "bold": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -139,6 +152,7 @@
           "text": "A random variable is a numerical quantity whose value is decided by the outcome of an experiment. To compute the probability that it falls in an interval, the set of outcomes that make it do so has to be an event. This single requirement is the whole definition."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -157,7 +171,8 @@
         {
           "text": "We state the requirement for maps between two measurable spaces, since the same notion covers random vectors, random sequences, and random functions."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -261,6 +276,7 @@
           "sup": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -318,6 +334,7 @@
           "text": ". Checking this one family of events is usually far easier than checking every Borel set."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -356,6 +373,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -597,7 +615,8 @@
           "text": ".",
           "italic": true
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -673,6 +692,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -719,7 +739,8 @@
           "text": " distinct.",
           "italic": true
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -728,6 +749,7 @@
           "text": "Simple functions approximate every non-negative random variable from below, and this is how the expectation will be built in Section 2.2."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -774,6 +796,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -841,6 +864,7 @@
           "text": ", which gives the convergence. □"
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -866,7 +890,8 @@
         {
           "text": " to the real line, and most questions about one random variable concern only the measure it carries."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -949,6 +974,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -971,6 +997,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1079,6 +1106,7 @@
           "text": ", Theorem 1.2.2]."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1116,6 +1144,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1162,7 +1191,8 @@
           "text": ", and it is constant elsewhere.",
           "italic": true
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -1210,6 +1240,7 @@
           "text": ", and gives no mass to any other single point."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1254,6 +1285,7 @@
           "text": " estimates the mean; Section 2.4 makes independence precise."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1340,6 +1372,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1350,7 +1383,8 @@
           "text": "2.2. Expectation",
           "bold": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -1359,6 +1393,7 @@
           "text": "The expectation of a random variable is its average value, weighted by probability. For a simple function the weights are explicit, and every other case is reduced to this one by approximation, following the construction of the Lebesgue integral."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1391,7 +1426,8 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -1428,6 +1464,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1465,6 +1502,7 @@
           "text": ","
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1492,7 +1530,8 @@
         {
           "text": "; both carry over to every integrable random variable."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "heading",
@@ -1524,7 +1563,8 @@
         {
           "text": " from below by simple functions and define"
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
@@ -1572,7 +1612,8 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -1605,6 +1646,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1619,6 +1661,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1811,6 +1854,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1849,7 +1893,8 @@
           "text": ".",
           "italic": true
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -1883,6 +1928,7 @@
           "sup": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1940,7 +1986,8 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -1971,6 +2018,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -1997,7 +2045,8 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "heading",
@@ -2015,7 +2064,8 @@
           "text": " spaces",
           "bold": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -2024,6 +2074,7 @@
           "text": "Many limit theorems reduce to bounds on tail probabilities and on moments. This section collects the inequalities used most often."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -2042,7 +2093,8 @@
         {
           "text": "The first bound needs nothing but monotonicity."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -2083,6 +2135,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -2110,6 +2163,7 @@
           "text": ". □"
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -2161,6 +2215,7 @@
           "text": "."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -2207,6 +2262,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -2387,7 +2443,8 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -2428,6 +2485,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -2487,6 +2545,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -2503,6 +2562,7 @@
           "text": ", Section 5] for details)."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -2565,7 +2625,8 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -2587,6 +2648,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -2722,7 +2784,8 @@
           "text": " and interchange the expectation and the integral.",
           "italic": true
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -2770,6 +2833,7 @@
           "text": ", Chapter 9]."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -2780,7 +2844,8 @@
           "text": "2.4. Independence",
           "bold": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -2796,6 +2861,7 @@
           "text": "-algebras, and then for random variables."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -2825,6 +2891,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -2895,7 +2962,8 @@
           "text": " they generate are.",
           "italic": true
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -2971,6 +3039,7 @@
           "sup": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -3031,6 +3100,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -3245,6 +3315,7 @@
           "text": "Each entry counts the pairs of faces with the given sum and divides by the 36 equally likely pairs; the independence of the two dice is what makes the pairs equally likely."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -3291,6 +3362,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -3332,6 +3404,7 @@
           "text": " to the integrable case. □"
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -3362,6 +3435,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -3512,6 +3586,7 @@
           "text": "The next result is the main tool for showing that an event happens only finitely often. Its first half needs no independence at all, which makes it one of the most used facts in the subject."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -3545,6 +3620,7 @@
           "italic": true
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -3643,6 +3719,7 @@
           "text": " give"
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -3691,7 +3768,8 @@
         {
           "text": " has probability one as well. □"
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "paragraph",
@@ -3742,6 +3820,7 @@
           "text": ", Section 8.5]."
         }
       ],
+      "align": "justify",
       "indent": "first"
     },
     {
@@ -3752,7 +3831,8 @@
           "text": "Bibliography",
           "bold": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "list",
@@ -3821,6 +3901,36 @@
     "7",
     "8"
   ],
+  "fonts": {
+    "body": {
+      "shape": "serif",
+      "size": 9.96
+    },
+    "title": {
+      "shape": "serif",
+      "size": 14.35,
+      "bold": true
+    },
+    "h1": {
+      "shape": "serif",
+      "size": 14.35,
+      "bold": true
+    },
+    "h2": {
+      "shape": "serif",
+      "size": 9.96,
+      "bold": true
+    },
+    "h3": {
+      "shape": "serif",
+      "size": 9.96,
+      "bold": true
+    },
+    "footnote": {
+      "shape": "serif",
+      "size": 7.97
+    }
+  },
   "license": "open",
   "provenance": "generated",
   "notes": "The chapter's “CHAPTER 2” line is its own centered paragraph above the level 1 heading. A run-in heading is a heading block; the rest of its line is the next paragraph. A proof ends with the box □. In LaTeX a footnote block stands after the block with its mark (the mark is part of that block's text); in HTML the footnotes stand at the end."

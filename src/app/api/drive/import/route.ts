@@ -184,20 +184,20 @@ export async function POST(req: Request) {
   }
 
   // kind is "docx", "docx-file", "pdf", or "export".
-  const pdfName = name;
+  const fileName = name;
   return progressResponse(async (onProgress) => {
     onProgress("fetch");
     // A Word file (SPEC.md §30): a .docx in Drive downloads as it is, and a
     // Google Doc arrives as Drive's .docx export; the Word parser reads
     // either from the file's own structure. A Google Doc whose .docx export
     // fails — Drive refuses it, or the parser cannot read it — reads from
-    // Drive's PDF export below, as every Google Doc did before.
+    // Drive's PDF export below.
     if (kind === "docx" || kind === "docx-file") {
       const word = await driveWordFile(kind, data.fileId, token, grant, t, parse);
       let ingested: Awaited<ReturnType<typeof parse.ingestDocx>> | null = null;
       if (word) {
         try {
-          ingested = await parse.ingestDocx(word, kind === "docx" ? `${pdfName}.docx` : pdfName, onProgress, {}, user?.id ?? null);
+          ingested = await parse.ingestDocx(word, kind === "docx" ? `${fileName}.docx` : fileName, onProgress, {}, user?.id ?? null);
         } catch (err) {
           if (kind === "docx-file") {
             console.error("Drive Word ingest failed:", err);
@@ -218,7 +218,7 @@ export async function POST(req: Request) {
     // A PDF, a Google Drawing, or a Google Doc read from its PDF export:
     // PDF bytes, ingested the one way this app reads a PDF.
     const bytes = kind === "pdf" ? await fetchDrivePdf(data.fileId, token, grant, t) : await fetchExportedPdf(data.fileId, token, grant, t);
-    const filename = kind === "pdf" ? pdfName : `${pdfName}.pdf`;
+    const filename = kind === "pdf" ? fileName : `${fileName}.pdf`;
     let ingested: Awaited<ReturnType<typeof parse.ingestPdf>>;
     try {
       ingested = await parse.ingestPdf(

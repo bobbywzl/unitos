@@ -51,8 +51,8 @@ const DocsTyping = Extension.create({
     return [
       {
         // The outermost list's preset, as the Google Docs API names it, or
-        // its own levels (toolbar/lists.ts). Its inline style draws each
-        // level's bullet or number (css/toolbar.css).
+        // its own levels (toolbar/lists.ts): its inline style sets each
+        // level's bullet or number, which the list sheet draws (listSheet).
         types: ["bulletList", "orderedList", "taskList"],
         attributes: {
           listStyle: {

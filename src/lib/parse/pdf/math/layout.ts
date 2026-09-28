@@ -845,26 +845,29 @@ function linearAt(input: Atom[]): string {
     return { end, word };
   };
   // A label stacked over a relation (\overset{a.s.}{\to}, an L with its
-  // exponent over an arrow) or under it is the relation's before any symbol
-  // takes its scripts: small glyphs over its width, their baseline half an
-  // em over its own or more (a superscript stands a third of an em up, and
-  // beside). The label's first letter starts left of the arrow, and the
-  // symbol before took it for its superscript.
-  const labels = new Map<Atom, { over: Atom[]; under: Atom[] }>();
+  // exponent over an arrow) is the relation's before any symbol takes its
+  // scripts: small glyphs over its width, their baseline half an em over
+  // its own or more (a superscript stands a third of an em up, and beside),
+  // and the glyphs set on with them. The label's first letter starts left
+  // of the arrow, and the symbol before took it for its superscript.
+  const labels = new Map<Atom, Atom[]>();
   for (const a of main) {
     if (a.cls !== "rel") continue;
-    const stacked = (over: boolean) =>
-      small.filter(
-        (s) =>
-          !s.claimed &&
-          cx(s) > a.x1 - 0.1 * em &&
-          cx(s) < a.x2 + 0.1 * em &&
-          (over ? s.yb - a.yb > 0.4 * baseSize && s.bottom > a.yb : a.yb - s.yb > 0.25 * baseSize && s.top < a.yb),
-      );
-    const over = stacked(true);
-    const under = stacked(false);
-    for (const s of [...over, ...under]) s.claimed = true;
-    if (over.length || under.length) labels.set(a, { over, under });
+    const label = small.filter(
+      (s) => !s.claimed && cx(s) > a.x1 - 0.1 * em && cx(s) < a.x2 + 0.1 * em && s.yb - a.yb > 0.4 * baseSize && s.bottom > a.yb,
+    );
+    for (let grew = label.length > 0; grew; ) {
+      grew = false;
+      for (const s of small) {
+        if (s.claimed || label.includes(s)) continue;
+        if (label.some((l) => Math.abs(l.yb - s.yb) < 0.1 * em && (Math.abs(s.x1 - l.x2) < 0.3 * em || Math.abs(l.x1 - s.x2) < 0.3 * em))) {
+          label.push(s);
+          grew = true;
+        }
+      }
+    }
+    for (const s of label) s.claimed = true;
+    if (label.length) labels.set(a, label);
   }
   // The limit under \lim, \sup, \max in display is claimed before any
   // script: wider than the name, it starts left of it ("N → ∞" under "lim"
@@ -900,6 +903,10 @@ function linearAt(input: Atom[]): string {
   let prev: Atom | null = null;
   for (let k = 0; k < main.length; k++) {
     const a = main[k];
+    // A piece no composite took (a map arrow's bar whose arrow the line
+    // cut off, a radical's parts) reads as nothing: the formula would lose
+    // the symbol and still pass the check.
+    if (a.cls === "piece") lost++;
     const gap = prev ? a.x1 - prev.x2 : 0;
     const spaced = prev !== null && gap > 0.9 * em;
     let tex = a.tex;
@@ -913,8 +920,10 @@ function linearAt(input: Atom[]): string {
       // A name set tight against its argument's bracket is an operator
       // ("softmax(", "Var(").
       const applied = main[k + 1]?.cls === "open" && trail < 0.3 * em;
+      // A word with a script set on it names a thing (SF_+): no text.
+      const scripted = small.some((s) => !s.claimed && s.x1 >= last.x2 - 0.05 * em && s.x1 < last.x2 + 0.15 * em);
       if (OPNAMES.has(word)) tex = `\\${word}`;
-      else if (word.length === 1) tex = `\\mathrm{${word}}`;
+      else if (word.length === 1 || scripted) tex = `\\mathrm{${word}}`;
       else if (!applied && (((!prev || gap > 0.25 * em) && (!main[k + 1] || trail > 0.25 * em)) || /^[a-z]{4,}$/.test(word))) {
         // A word set apart by spaces is text; the spaces stay inside it
         // ("\text{in }\Omega", not "inΩ"), unless a quad already holds them.
@@ -955,11 +964,13 @@ function linearAt(input: Atom[]): string {
       else if (!style.display && a.fracPart >= style.size * 0.9) tex = tex.replace(/^\\frac/, "\\dfrac");
     }
     const next = main[k + 1];
-    if (tex === "|" && prev && next && a.x1 - prev.x2 > 0.22 * em && next.x1 - a.x2 > 0.22 * em) tex = "\\mid";
+    // A bar with a relation's space on both sides is \mid, unless it closes
+    // a bar opened before it (|X|^q = 0 read as |X\mid^q).
+    const open = main.slice(0, k).filter((b) => b.tex === "|").length % 2 === 1;
+    if (tex === "|" && !open && prev && next && a.x1 - prev.x2 > 0.22 * em && next.x1 - a.x2 > 0.22 * em) tex = "\\mid";
     if (tex === ":" && prev && a.x1 - prev.x2 < 0.25 * em && next && next.x1 - a.x2 > 0.3 * em) tex = "\\colon";
     const label = labels.get(a);
-    if (label?.over.length) tex = `\\overset{${linear(label.over.map((s) => ({ ...s, claimed: false })))}}{${tex}}`;
-    if (label?.under.length) tex = `\\underset{${linear(label.under.map((s) => ({ ...s, claimed: false })))}}{${tex}}`;
+    if (label) tex = `\\overset{${linear(label.map((s) => ({ ...s, claimed: false })))}}{${tex}}`;
     const right = next ? next.x1 : Infinity;
     let mine = small.filter((s) => !s.claimed && s.x1 >= last.x2 - 0.25 * em && s.x1 < right - 0.05 * em);
     // A relation, an operator, punctuation, or an opening bracket takes a
@@ -1067,7 +1078,20 @@ function unreadShape(atoms: Atom[], rules: Rule[], paths: Box[], used: Set<Box>)
   // A picture starts at most an em and a half left of the glyphs it covers
   // (a radical's sign), and a clipped one runs past its clip. (The paths
   // that paint rules are left out by the caller.)
-  return paths.some((p) => !used.has(p) && p.x1 > x1 - 1.5 * em && p.x1 < x2 && p.x2 > x1 && p.y1 > low && p.y2 < high);
+  if (paths.some((p) => !used.has(p) && p.x1 > x1 - 1.5 * em && p.x1 < x2 && p.x2 > x1 && p.y1 > low && p.y2 < high)) return true;
+  // A delimiter drawn as a picture beside the glyphs: narrow, tall, set
+  // close on the left or the right. KaTeX draws a tall bar or bracket so,
+  // and a determinant read as its bare matrix (synth-math-html). One on
+  // each side holds the formula, whatever their height (a matrix's rows a
+  // display lost its top row from); one alone is the formula's when it is
+  // about as tall as the formula (the bar of a determinant before "= ad"
+  // is none of that formula's).
+  const bottom = Math.min(...atoms.map((a) => a.bottom));
+  const top = Math.max(...atoms.map((a) => a.top));
+  const beside = (p: Box) => !used.has(p) && p.x2 - p.x1 < 0.6 * em && p.y2 - p.y1 > Math.min(1.2 * em, (top - bottom) * 0.8) && p.y1 < top && p.y2 > bottom;
+  const left = paths.filter((p) => beside(p) && p.x2 <= x1 + 0.1 * em && p.x2 > x1 - 0.6 * em);
+  const right = paths.filter((p) => beside(p) && p.x1 >= x2 - 0.1 * em && p.x1 < x2 + 0.6 * em);
+  return (left.length > 0 && right.length > 0) || [...left, ...right].some((p) => p.y2 - p.y1 < top - bottom + em);
 }
 
 /** A formula's LaTeX from its glyphs and the shapes drawn with them (rules,
@@ -1096,12 +1120,20 @@ export function formulaToLatex(
   return { latex: lost > 0 ? "" : latex, atoms: fused, unknown };
 }
 
-/** An item set in TeX's extension font (a big operator, a sized delimiter),
-    in esint's (an integral), or a radical sign: its glyphs hang from their
-    origin by the depth the
-    font's metrics give, so a line takes it by its box — the top and bottom
-    of its glyphs, and whether it is a display operator (limits over and
-    under it). null for any other item. */
+/** A glyph set in TeX's extension font (a big operator, a sized
+    delimiter), in esint's (an integral), or a radical sign: it hangs from
+    its origin by the depth the font's metrics give — its top and bottom,
+    and whether it is a display operator (limits over and under it). null
+    for any other glyph. */
+export function hangingGlyph(g: Glyph): { top: number; bottom: number; display: boolean } | null {
+  const entry = g.family !== null && (hangingFamily(g.family) || g.family === "oms") ? mathGlyph(g.family, g.code) : null;
+  if (!entry || (g.family === "oms" && entry.cls !== "radical")) return null;
+  const [height, depth] = g.box ?? entry.box;
+  return { top: g.y + height * g.size, bottom: g.y - depth * g.size, display: Boolean(entry.display) };
+}
+
+/** An item of hanging glyphs only (hangingGlyph): a line takes it by its
+    box, the top and bottom of its glyphs. null for any other item. */
 export function hangingBox(item: Item): { top: number; bottom: number; display: boolean } | null {
   const glyphs = item.glyphs ?? [];
   if (glyphs.length === 0) return null;
@@ -1109,12 +1141,11 @@ export function hangingBox(item: Item): { top: number; bottom: number; display: 
   let bottom = Infinity;
   let display = false;
   for (const g of glyphs) {
-    const entry = g.family !== null && (hangingFamily(g.family) || g.family === "oms") ? mathGlyph(g.family, g.code) : null;
-    if (!entry || (g.family === "oms" && entry.cls !== "radical")) return null;
-    const [height, depth] = g.box ?? entry.box;
-    top = Math.max(top, g.y + height * g.size);
-    bottom = Math.min(bottom, g.y - depth * g.size);
-    display ||= Boolean(entry.display);
+    const box = hangingGlyph(g);
+    if (!box) return null;
+    top = Math.max(top, box.top);
+    bottom = Math.min(bottom, box.bottom);
+    display ||= box.display;
   }
   return { top, bottom, display };
 }

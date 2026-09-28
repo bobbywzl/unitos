@@ -138,13 +138,46 @@ const clip = (s: string, n = 70) => {
   const t = s.replace(/\s+/g, " ").trim();
   return t.length > n ? `${t.slice(0, n)}…` : t;
 };
+/** The html's entities as characters (the parse escapes &, <, >, and ";
+    lib/parse/pdf/text.ts escapeHtml). */
+const unescapeHtml = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+const INLINE_MATH_HTML = /<span data-type="inline-math" data-latex="([^"]*)">([^<]*)<\/span>/g;
+/** A table's inline formulas over its text, from its html (whose DOM text
+    is its text, SPEC.md §5): the converter makes a cell's formulas, and its
+    caption's, inline equations (lib/docs/import-table.ts). */
+function tableMath(b: ParsedBlock): { start: number; end: number; words: string }[] {
+  const out: { start: number; end: number; words: string }[] = [];
+  let at = 0;
+  for (const m of (b.html ?? "").matchAll(/<span data-type="inline-math" data-latex="([^"]*)">([^<]*)<\/span>|<[^>]+>|[^<]+/g)) {
+    if (m[1] === undefined) {
+      if (!m[0].startsWith("<")) at += unescapeHtml(m[0]).length;
+      continue;
+    }
+    const tex = unescapeHtml(m[1]).trim();
+    const end = at + unescapeHtml(m[2]).length;
+    if (tex && tex.length <= 2000) out.push({ start: at, end, words: mathWords(tex) });
+    at = end;
+  }
+  return out;
+}
+/** Where a table's caption line ends in its text (-1 with no caption line):
+    a PDF's or a Word file's table opens its text with its caption's line; a
+    web page's table keeps its caption out of its text (the Wikipedia matrix
+    page's "Overview of a matrix size"). */
+function captionEnd(b: ParsedBlock): number {
+  const m = b.type === "TABLE" ? /<caption[^>]*>([\s\S]*?)<\/caption>/i.exec(b.html ?? "") : null;
+  const end = b.text.indexOf("\n");
+  if (!m || end < 0) return -1;
+  return norm(b.text.slice(0, end)) === norm(unescapeHtml(m[1].replace(/<[^>]+>/g, ""))) ? end : -1;
+}
 /** The inline formulas of a block the converter makes inline equations
     (lib/docs/import.ts mathAtoms): TeX of 1 to 2,000 characters, in order,
     none overlapping the one before; the others stay words. */
 function keptMath(b: ParsedBlock): { start: number; end: number; words: string }[] {
   const out: { start: number; end: number; words: string }[] = [];
-  // A table, a figure, an equation, and code keep their words as the parse has them.
-  if (["TABLE", "FIGURE", "EQUATION", "CODE", "SEPARATOR"].includes(b.type)) return out;
+  if (b.type === "TABLE") return tableMath(b);
+  // A figure, an equation, and code keep their words as the parse has them.
+  if (["FIGURE", "EQUATION", "CODE", "SEPARATOR"].includes(b.type)) return out;
   for (const m of [...(b.math ?? [])].sort((x, y) => x.start - y.start)) {
     const tex = m.latex.trim();
     if (!tex || tex.length > 2000 || m.start < (out.at(-1)?.end ?? 0) || m.end <= m.start || m.end > b.text.length) continue;
@@ -162,6 +195,8 @@ function keptMath(b: ParsedBlock): { start: number; end: number; words: string }
 let footnoteRefs = new Map<ParsedBlock, { start: number; end: number }[]>();
 let footnotesLinked: ParsedBlock[] = [];
 let footnoteLabels: string[] = [];
+/** Each linked footnote's number: its block (-1 the Title) and offset. */
+let footnotePlaces = new Map<ParsedBlock, { at: number; start: number }>();
 let titleMark = "";
 function linkFootnotes(f: Fixture) {
   const blocks = f.blocks;
@@ -201,6 +236,7 @@ function linkFootnotes(f: Fixture) {
   const order = [...taken].sort(([, a], [, b]) => a.at - b.at || a.start - b.start);
   footnotesLinked = order.map(([target]) => blocks[target]);
   footnoteLabels = order.map(([, place]) => place.label);
+  footnotePlaces = new Map(order.map(([target, place]) => [blocks[target], place]));
 }
 /** The Title's words: the title less the mark its footnote's number stands for. */
 function titleWords(words: string): string {
@@ -212,7 +248,10 @@ function titleWords(words: string): string {
     reference's label, and a linked footnote's own label with the spaces
     after it (a footnote's number adds no words). */
 function keptAtoms(b: ParsedBlock): { start: number; end: number; words: string }[] {
-  const out = [...keptMath(b), ...(footnoteRefs.get(b) ?? []).map((r) => ({ ...r, words: "" }))];
+  // A table's caption line is the caption paragraph above the table.
+  const caption = captionEnd(b);
+  const out = [...keptMath(b).filter((m) => m.start > caption), ...(footnoteRefs.get(b) ?? []).map((r) => ({ ...r, words: "" }))];
+  if (caption >= 0) out.push({ start: 0, end: caption + 1, words: "" });
   if (footnotesLinked.includes(b)) {
     const label = b.footnote?.label ?? "";
     const rest = b.text.startsWith(label) ? b.text.slice(label.length) : b.text;
@@ -651,6 +690,21 @@ function lookChecks(f: Fixture, doc: RichNode, check: (ok: boolean, name: string
     const tokens = f.blocks.filter((b) => b.type === "PARAGRAPH" && b.text.trim() && tokensOf(b).includes(value) && !tokensOf(b).includes("caption")).length;
     if (tokens > 0) check(aligned(value) >= tokens, `every "${value}" paragraph is set so`, `${tokens} in the parse, ${aligned(value)} in the import`);
   }
+  // A paragraph's space after is the page's (ParsedBlock.spaceAfter): the
+  // document's own paragraphs, a table's cells and a list's lines aside,
+  // each found by its words when no other paragraph opens with them.
+  const after = new Map<string, number[]>();
+  for (const node of doc.content ?? []) {
+    if (node.type !== "paragraph" || node.attrs?.docStyle) continue;
+    const key = norm((node.content ?? []).map((c) => c.text ?? "").join("")).slice(0, 40);
+    after.set(key, [...(after.get(key) ?? []), Number(node.attrs?.spaceAfter ?? 0)]);
+  }
+  const spaced = f.blocks.filter((b) => b.type === "PARAGRAPH" && b.spaceAfter !== undefined && b.text.length < 200_000 && !tokensOf(b).some((t) => ["kicker", "meta", "quote"].includes(t)) && !b.footnote && !(b.math ?? []).length);
+  const off = spaced.filter((b) => {
+    const values = after.get(norm(b.text).slice(0, 40));
+    return values !== undefined && values.length === 1 && values[0] !== b.spaceAfter;
+  });
+  if (spaced.length > 0) check(off.length === 0, "every paragraph's space after is the page's", `${spaced.length} measured${off.length ? `; ${off.length} otherwise, e.g. "${clip(off[0].text, 40)}" ${off[0].spaceAfter} pt` : ""}`);
   if (f.titleAlign && f.titleFromOriginal) {
     let title: RichNode | null = null;
     walk(doc, (node) => {
@@ -806,14 +860,21 @@ async function checkFixture(f: Fixture): Promise<Report> {
     }
     lostHard.push(l);
   }
-  // A table's <caption> is in the parse's html, not in its text: the
-  // converter keeps it as a paragraph above the table.
+  // A table's <caption> (in the parse's html; a PDF's or a Word file's table
+  // opens its text with the caption's line too) is a paragraph above the
+  // table in the page editor.
   const captions = new Set(
-    f.blocks.filter((b) => b.type === "TABLE").flatMap((b) => [...(b.html ?? "").matchAll(/<caption[^>]*>([\s\S]*?)<\/caption>/gi)].map((m) => norm(m[1].replace(/<[^>]+>/g, " ")))),
+    f.blocks
+      .filter((b) => b.type === "TABLE")
+      .flatMap((b) =>
+        [...(b.html ?? "").matchAll(/<caption[^>]*>([\s\S]*?)<\/caption>/gi)].map((m) =>
+          norm(unescapeHtml(m[1].replace(INLINE_MATH_HTML, (_, tex: string) => mathWords(unescapeHtml(tex))).replace(/<\/?(?:p|div|br)\b[^>]*>/g, " ").replace(/<[^>]+>/g, ""))),
+        ),
+      ),
   );
   const tableCaptions = addedLeft.filter((a) => captions.has(norm(a.u.text)));
   for (const c of tableCaptions) addedLeft.splice(addedLeft.indexOf(c), 1);
-  if (tableCaptions.length) note("a table's caption (in the parse's html, not its text) is a paragraph", `${tableCaptions.length}: ${tableCaptions.slice(0, 3).map((c) => `"${clip(c.u.text, 40)}"`).join(" | ")}`);
+  if (tableCaptions.length) note("a table's caption is a paragraph above its table", `${tableCaptions.length}: ${tableCaptions.slice(0, 3).map((c) => `"${clip(c.u.text, 40)}"`).join(" | ")}`);
   const wordsOk = lostHard.length === 0 && addedLeft.length === 0;
   const describeLost = lostHard.slice(0, 6).map(({ u }) => {
     const b = u.block >= 0 ? f.blocks[u.block] : null;
@@ -987,8 +1048,13 @@ async function checkFixture(f: Fixture): Promise<Report> {
     for (const u of want) {
       if (u.block < 0 || u.row < 0) continue;
       const b = f.blocks[u.block];
-      let page = typeof b.page === "number" ? b.page : null;
-      for (const s of b.pageStarts ?? []) if (s.offset <= u.offset && page !== null) page = Math.max(page, s.page);
+      // A linked footnote's rows read the page of its number, where the page
+      // editor draws it: an endnote printed on the last page is cited earlier.
+      const place = footnotePlaces.get(b);
+      if (place?.at === -1) continue;
+      const from = place ? { block: f.blocks[place.at], offset: place.start } : { block: b, offset: u.offset };
+      let page = typeof from.block.page === "number" ? from.block.page : null;
+      for (const s of from.block.pageStarts ?? []) if (s.offset <= from.offset && page !== null) page = Math.max(page, s.page);
       const row = rows[u.row];
       if (page === null || row.page === page) continue;
       // A code block holds no page start: a page that begins inside it
@@ -1105,6 +1171,25 @@ async function checkFixture(f: Fixture): Promise<Report> {
   const parseTables = f.blocks.filter((b) => b.type === "TABLE").length;
   check(parseTables === map.tables.length, "every parse table is a table", `${parseTables} parse tables, ${map.tables.length} tables`);
 
+  // arXiv 1706.03762's Table 2: a head centered over two columns spans them
+  // ("Training Cost (FLOPs)" over its "EN-DE" and "EN-FR"), and a cost keeps
+  // its power as an inline equation (1.0·10²⁰, not "1.0 · 1020").
+  if (f.name.startsWith("1706.03762")) {
+    const cellText = (cell: RichNode) => norm((cell.content ?? []).map((n) => inlineText(n)).join(" "));
+    const table = map.tables.find((t) => (t.content ?? []).some((row) => (row.content ?? []).some((c) => cellText(c) === "Training Cost (FLOPs)")));
+    const rows = table?.content ?? [];
+    const at = rows.findIndex((row) => (row.content ?? []).some((c) => cellText(c) === "Training Cost (FLOPs)"));
+    const head = at >= 0 ? (rows[at].content ?? []).find((c) => cellText(c) === "Training Cost (FLOPs)") : undefined;
+    const under = at >= 0 ? (rows[at + 1]?.content ?? []).map(cellText) : [];
+    let power = false;
+    if (table) walk(table, (n) => (power ||= n.type === "inlineMath" && String(n.attrs?.latex ?? "").replace(/\s+/g, "") === "1.0\\cdot10^{20}"));
+    check(
+      Number(head?.attrs?.colspan) === 2 && under.join("|") === "EN-DE|EN-FR|EN-DE|EN-FR" && power,
+      "Table 2's cost head spans its two columns, a cost an inline equation",
+      table ? `colspan ${String(head?.attrs?.colspan ?? 1)}, the row under it: ${under.join(" | ")}, 1.0·10²⁰ ${power ? "an equation" : "words"}` : "no table with the cost head",
+    );
+  }
+
   // Every marker family the parse keeps as printed draws as its list: a box
   // a checklist item (☑ and ☒ ticked), "1.1" and "(i)" nested counters, a
   // reference's "[1]" a number, each drawn as printed.
@@ -1219,9 +1304,30 @@ async function checkFixture(f: Fixture): Promise<Report> {
   const STYLES = ["bold", "italic", "underline", "code", "smallCaps", "sub", "sup"];
   const inRows = (style: string, b?: Block) =>
     STYLES.includes(style) || style.startsWith("highlight:") || (style.startsWith("color:") && b?.type !== "HEADING");
+  // A span's words line by line: a row's span ends at a line break, and a
+  // drawn list line's marker is the list's, no words (a theorem's italic
+  // ran on over the next item's "(b)"). A contents list and lines a list
+  // cannot draw keep their markers as words.
+  const drawnList = (b: Block) =>
+    b.type === "LIST" &&
+    !tokensOf(b).includes("contents") &&
+    !(b.links ?? []).some((l) => l.targetOrder !== undefined) &&
+    b.text.split("\n").every((line) => !line.trim() || ANY_MARKER.test(`${line} `));
+  const lineWords = (b: Block, s: { start: number }, words: string) =>
+    words
+      .split("\n")
+      .map((line, k) => {
+        const atStart = k > 0 || !b.text.slice(b.text.lastIndexOf("\n", s.start - 1) + 1, s.start).trim();
+        return atStart && drawnList(b) ? `${line} `.replace(ANY_MARKER, "") : line;
+      })
+      .filter((w) => norm(w));
   const styleWant = f.blocks
     .filter((b) => b.type !== "FIGURE" && b.type !== "CODE")
-    .flatMap((b) => (b.styles ?? []).filter((s) => inRows(s.style, b)).flatMap((s) => outsideMath(b, s).map((words) => `${s.style} ${norm(words)}`)));
+    .flatMap((b) =>
+      (b.styles ?? [])
+        .filter((s) => inRows(s.style, b))
+        .flatMap((s) => outsideMath(b, s).flatMap((words) => lineWords(b, s, words)).map((words) => `${s.style} ${norm(words)}`)),
+    );
   const styleHave = rows.flatMap((r) => r.styles.filter((s) => inRows(s.style)).map((s) => `${s.style} ${norm(s.quotedText)}`));
   if (styleWant.length) {
     const lostStyles = lossOf(styleWant, styleHave).filter((s) => s.split(" ").slice(1).join(" ").length > 0);
@@ -1581,8 +1687,8 @@ function syntheticPdf(): Fixture {
       { ...span(s26, "sans words"), style: "font:Arial" },
       { ...span(s26, "small words"), style: "size:9" },
     ] },
-    { type: "PARAGRAPH", text: "September 28, 2026", html: '<p class="right">', page: 16, font: { family: "Times New Roman", size: 11 } },
-    { type: "PARAGRAPH", text: "A note set small in a sans face.", page: 16, font: { family: "Arial", size: 9 } },
+    { type: "PARAGRAPH", text: "September 28, 2026", html: '<p class="right">', page: 16, font: { family: "Times New Roman", size: 11 }, spaceAfter: 0 },
+    { type: "PARAGRAPH", text: "A note set small in a sans face.", page: 16, font: { family: "Arial", size: 9 }, spaceAfter: 14 },
   ];
   // Footnotes: a reference raised in a paragraph and one in a list line,
   // each footnote after its block, its label first; a table's note with no

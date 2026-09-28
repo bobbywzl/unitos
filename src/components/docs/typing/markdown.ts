@@ -1,4 +1,6 @@
 import type { Fragment, Mark, Node as PMNode } from "@tiptap/pm/model";
+import { listMarker } from "@/components/docs/toolbar/lists";
+import { isList } from "@/components/docs/typing/lists";
 import { CHIP_NODE_TYPES } from "@/lib/docs/schema";
 
 // Paste from Markdown and Copy as Markdown (SPEC.md §29, typing), the two
@@ -193,6 +195,30 @@ function inlineMd(node: PMNode): string {
   return out;
 }
 
+/** Markdown's own list markers: a bullet, a checklist box, "N." and "N)". */
+const MD_MARKER = /^(?:-|- \[[ x]\]|\d{1,9}[.)])$/;
+
+/** A list's lines, a numbered line after its marker as the page draws it
+    ("1.", "(a)", "a).", "[12]"; toolbar/lists.ts listMarker from the
+    outermost list `outer` and the numbers `above` it), a bullet as "-" and
+    a checklist line as "- [ ]", as Markdown writes them. `words` marks a
+    line whose marker Markdown reads as words. */
+function listLines(list: PMNode, indent: string, outer: PMNode, above: number[], out: { text: string; words: boolean }[]): void {
+  const start = Number(list.attrs.start) || 1;
+  list.forEach((item, _offset, i) => {
+    const numbers = [...above, start + i];
+    const marker =
+      list.type.name === "orderedList" ? listMarker({ type: outer.type.name, attrs: outer.attrs }, numbers)
+      : list.type.name === "taskList" ? `- [${item.attrs.checked ? "x" : " "}]`
+      : "-";
+    item.forEach((child, _o, j) => {
+      if (j === 0) out.push({ text: `${indent}${marker} ${blockMd(child)}`, words: !MD_MARKER.test(marker) });
+      else if (isList(child)) listLines(child, `${indent}   `, outer, numbers, out);
+      else out.push({ text: blockMd(child, `${indent}   `), words: false });
+    });
+  });
+}
+
 function blockMd(node: PMNode, indent = ""): string {
   switch (node.type.name) {
     case "heading":
@@ -217,19 +243,10 @@ function blockMd(node: PMNode, indent = ""): string {
     case "bulletList":
     case "orderedList":
     case "taskList": {
-      const lines: string[] = [];
-      let n = Number(node.attrs.start) || 1;
-      node.forEach((item) => {
-        const marker =
-          node.type.name === "orderedList" ? `${n++}.` : node.type.name === "taskList" ? `- [${item.attrs.checked ? "x" : " "}]` : "-";
-        let first = true;
-        item.forEach((child) => {
-          if (first) lines.push(`${indent}${marker} ${blockMd(child)}`);
-          else lines.push(blockMd(child, `${indent}   `));
-          first = false;
-        });
-      });
-      return lines.join("\n");
+      const lines: { text: string; words: boolean }[] = [];
+      listLines(node, indent, node, [], lines);
+      // A line whose marker Markdown reads as words keeps its own line.
+      return lines.map((l, k) => `${l.text}${lines[k + 1]?.words ? "  " : ""}`).join("\n");
     }
     case "table": {
       const rows: string[] = [];

@@ -240,9 +240,11 @@ export type ListCounter = (typeof LIST_COUNTERS)[number];
     numbers ("%0.", "(%1)", "[%0]", "%0.%1."; %k is level k's number). */
 export type ListLevel = { bullet: string } | { counter: ListCounter; format: string };
 
-/** A list line's marker drawn ("(a)", "a).", "A-", "1."): a few characters,
-    none a space, a quote, a backslash, or a percent sign. */
-const MARKER_TEXT = /^[^\s"\\%\p{C}]{0,6}$/u;
+/** The words around a list line's numbers ("(", ")", "A-", "1."): up to six
+    letters, digits, and punctuation marks, none a quote, a backslash, or a
+    percent sign. A bullet: one to three visible characters of that kind. */
+const MARKER_TEXT = /^(?:(?!["\\%])[\p{L}\p{N}\p{P}]){0,6}$/u;
+const BULLET_TEXT = /^[^\s"\\%\p{C}]{1,3}$/u;
 
 /** A level's glyph format as the page can draw it: the text before the
     numbers, between them, and after. One number is the level's own (%k);
@@ -282,7 +284,7 @@ export function listLevelsOf(value: unknown): ListLevel[] | null {
   const levels: ListLevel[] = [];
   for (const [k, item] of list.entries()) {
     const { bullet, counter, format } = (item ?? {}) as { bullet?: unknown; counter?: unknown; format?: unknown };
-    if (typeof bullet === "string" && bullet.length > 0 && bullet.length <= 3 && MARKER_TEXT.test(bullet)) levels.push({ bullet });
+    if (typeof bullet === "string" && BULLET_TEXT.test(bullet)) levels.push({ bullet });
     else if (LIST_COUNTERS.includes(counter as ListCounter) && typeof format === "string" && formatParts(format, k)) {
       levels.push({ counter: counter as ListCounter, format });
     } else return null;

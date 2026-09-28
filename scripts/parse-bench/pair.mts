@@ -242,7 +242,7 @@ async function composePair(browser: Browser, pdfPng: Buffer, importPng: Buffer |
 async function main() {
   const { entries } = loadCorpus();
   const entry = entries.find((e) => e.id === id);
-  if (!entry) throw new Error(`${id} is not in corpus.json`);
+  if (!entry) throw new Error(`${id} is not in the corpus (corpus.json, .bench/corpus-private.json)`);
   const found = refPath(entry.id);
   const loaded = found ? loadRef(found) : null;
   const ref = loaded && "ref" in loaded ? loaded.ref : undefined;

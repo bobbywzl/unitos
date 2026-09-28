@@ -126,8 +126,10 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   const g = best.g;
 
   // Rows that span the gutter: the items that cross it, the items on either
-  // side of it with no more than a word's gap between them (a full-width
-  // caption whose word gap fell on the gutter was read as two halves), and
+  // side of it with no more than a word's gap between them, up to 1.2 em (a
+  // full-width caption whose word gap fell on the gutter was read as two
+  // halves; REVTeX sets "FIG. 2." 0.86 em from its words, arXiv 2502.02648;
+  // a two-column gutter is 1.4 em or more), and
   // the items that run on from those along their baseline (a line of word
   // items has one word over the gutter and the rest on either side).
   const byY = [...items].sort((a, b) => a.y - b.y);
@@ -146,7 +148,7 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
       const item = byY[k];
       const size = Math.max(s.size, item.size);
       const gap = Math.max(item.x - (s.x + s.w), s.x - (item.x + item.w));
-      if (item !== s && Math.abs(item.y - s.y) < size * 0.5 && gap < size * 0.8) out.push(item);
+      if (item !== s && Math.abs(item.y - s.y) < size * 0.5 && gap < size * 1.2) out.push(item);
     }
     return out;
   };

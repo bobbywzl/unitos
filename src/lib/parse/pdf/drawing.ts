@@ -398,8 +398,12 @@ export function readDrawing(
         const box = pathBox(args, state.ctm);
         if (clipping && box) state.clip = state.clip ? intersect(state.clip, box) : box;
         clipping = false;
+        // A painted path shows only inside the clip in effect, as an image
+        // does: a chart's white ground ran 30 pt past its clip, and its
+        // figure reached across the page's gutter (arXiv 2502.02648 p5).
         if (box && (box.x2 - box.x1 < pageWidth * 0.9 || box.y2 - box.y1 < pageHeight * 0.9)) {
-          paths.push(args?.[0] === OP.endPath ? { ...box, clip: true } : box);
+          const shown = args?.[0] === OP.endPath ? { ...box, clip: true as const } : shownPart(box, state.clip);
+          if (shown) paths.push(shown);
         }
         if (annotation === 0) readPath(args, state, rules, fills);
         break;

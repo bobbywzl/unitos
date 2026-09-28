@@ -121,6 +121,11 @@ export type ParsedBlock = {
   // import reads it for the named styles, and for a block set in another
   // face, size, or color than its named style.
   font?: TextFont;
+  // PDF text blocks: the space between the block and the next text block in
+  // its column on the same page, beyond the text's line pitch, in points (a
+  // blank line, a Word paragraph's space after); absent where a figure, a
+  // table, or the page's end follows. The import's space after.
+  spaceAfter?: number;
   // URL blocks, in memory only: the id of the element the block came from
   // (its own id, or the id of a wrapper whose first block it is), the target
   // a contents entry's targetFragment resolves against. Stripped before save.

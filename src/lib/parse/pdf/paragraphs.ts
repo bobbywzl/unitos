@@ -9,7 +9,7 @@ import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
 import { BULLET_RE, GLYPH_BULLET_RE, isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { boldShare, endsBold, fillsMargin, joinGroup, startsWithBoldLead } from "@/lib/parse/pdf/text";
-import type { Line, PageContext, Step } from "@/lib/parse/pdf/types";
+import type { Line, PageContext, Segment, Step } from "@/lib/parse/pdf/types";
 
 // The column's right edge near a band of lines [from, to): the widest prose
 // line (single cell, longer than 40 characters, in the same column) within
@@ -78,7 +78,7 @@ export function isIndented(line: Line, ctx: PageContext): boolean {
 function columnEdges(lines: Line[], k: number, ctx: PageContext): { left: number; right: number } {
   const line = lines[k];
   const column = lineColumn(line);
-  const alone = column !== undefined && Math.abs(column[0] - line.x) < 0.5 && Math.abs(column[1] - line.xEnd) < 0.5;
+  const alone = column !== undefined && (columnLines(lines).get(column) ?? 0) <= 1;
   const inner = column !== undefined && !alone && column[0] > ctx.columnLeft + line.size;
   const left = inner ? column[0] : ctx.columnLeft;
   // A full line at the column's left edge: in the page's first column any
@@ -87,6 +87,9 @@ function columnEdges(lines: Line[], k: number, ctx: PageContext): { left: number
   const atLeft = (l: Line) => {
     if (alone) return Math.abs(l.x - (lineColumn(l)?.[0] ?? ctx.columnLeft)) <= l.size;
     if (inner && !l.table && lineColumn(l) !== column) return false;
+    // A line across both columns (a caption over them) is no edge of the
+    // first: against it the first column's lines stopped short.
+    if (column && l.xEnd > column[1] + l.size) return false;
     return Math.abs(l.x - left) <= l.size;
   };
   let right = 0;
@@ -109,6 +112,24 @@ function columnEdges(lines: Line[], k: number, ctx: PageContext): { left: number
     if (long >= 3 || 4 * d >= lines.length) break;
   }
   return { left, right: right || table };
+}
+
+// How many of a page's lines were read in each column: a line alone in its
+// column was read across the page's columns (a spanning title). A full
+// line of a column spans the column's extent too, so the extent does not
+// tell them apart.
+const columnCounts = new WeakMap<Line[], Map<[number, number], number>>();
+function columnLines(lines: Line[]): Map<[number, number], number> {
+  let counts = columnCounts.get(lines);
+  if (!counts) {
+    counts = new Map();
+    for (const l of lines) {
+      const column = lineColumn(l);
+      if (column) counts.set(column, (counts.get(column) ?? 0) + 1);
+    }
+    columnCounts.set(lines, counts);
+  }
+  return counts;
 }
 
 /** Line k is centered in its column, set in from its edge by as much as
@@ -432,4 +453,25 @@ function layoutTokens(lines: Line[], from: number, to: number, ctx: PageContext,
   else if (-shift >= size * 0.5 && -shift <= size * 4) tokens.push("indent-hanging");
   else if (Math.abs(shift) <= size * 0.5 && restX > left + size) tokens.push("indent-block");
   return tokens;
+}
+
+/** The space after each text block of a page (ParsedBlock.spaceAfter): the
+    gap from its lines to the next text block's under it in its column,
+    beyond the text's line pitch, in points; none where a figure, a table,
+    or the page's end follows. A Google Docs export marks a gap with a blank
+    line and sets none between a label and its lines: the import's fixed
+    10 pt after every paragraph set each line of such a page apart. */
+export function measureSpacing(segments: Segment[], ctx: PageContext) {
+  const text = (s: Segment) => s.type === "PARAGRAPH" || s.type === "HEADING" || s.type === "LIST";
+  for (let k = 0; k + 1 < segments.length; k++) {
+    const [a, b] = [segments[k], segments[k + 1]];
+    if (!text(a) || !text(b) || !a.box || !b.box || a.page !== b.page) continue;
+    const size = b.lineSize ?? ctx.bodySize;
+    // b stands under a, and their columns meet.
+    if (b.box.y2 > a.box.y1 + size || b.box.x1 > a.box.x2 || b.box.x2 < a.box.x1) continue;
+    // A line's box reaches 0.3 of its size under its baseline and 0.85
+    // over it (geometry.ts): lines at the text's pitch leave the rest.
+    const gap = a.box.y1 - b.box.y2 - (ctx.leading - 1.15) * size;
+    if (gap > -size) a.spaceAfter = Math.max(0, Math.round(gap));
+  }
 }

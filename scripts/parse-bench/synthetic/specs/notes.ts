@@ -674,6 +674,19 @@ export const notes: Spec = {
       front: "plain",
       smallCaps: "keep",
       bands: { top: 106, bottom: 85 },
+      // amsbook's sizes in Computer Modern as pdflatex prints them.
+      fonts: {
+        body: { shape: "serif", size: 9.96 },
+        title: { shape: "serif", size: 14.35, bold: true },
+        subtitle: { shape: "serif", size: 11.96 },
+        author: { shape: "serif", size: 10.91 },
+        h1: { shape: "serif", size: 14.35, bold: true },
+        h2: { shape: "serif", size: 9.96, bold: true },
+        h3: { shape: "serif", size: 9.96, bold: true },
+        footnote: { shape: "serif", size: 7.97 },
+      },
+      centered: [1, 2],
+      justified: true,
     },
     // The same notes printed from HTML: Latin Modern text with real small caps, KaTeX math, and running heads
     // that alternate the page number and the book's title with the chapter's.

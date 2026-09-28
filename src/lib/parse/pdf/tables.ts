@@ -40,8 +40,12 @@ function clusterColumns(lines: Line[]): number[] {
 
 // Column separators as x positions no text crosses. A coverage scan instead of
 // x-start clustering: right-aligned number columns start at a different x on
-// every row, but nothing ever crosses the gutter between columns.
-export function columnSeparators(run: Line[]): number[] {
+// every row, but nothing ever crosses the gutter between columns. A
+// separator sits in the middle of its gutter, or of the widest stretch of it
+// the lines of `heads` leave open: a column head wider than its values
+// reaches into the gutter (MMWR p. 21's Table 3 cut "(95% CI)" off its head
+// at the gutter's middle).
+export function columnSeparators(run: Line[], heads: Line[] = []): number[] {
   const minX = Math.min(...run.map((l) => l.x));
   const maxX = Math.max(...run.map((l) => l.xEnd));
   const step = 2;
@@ -77,11 +81,28 @@ export function columnSeparators(run: Line[]): number[] {
     if (open && bandStart === null) bandStart = s;
     if (!open && bandStart !== null) {
       const width = (s - bandStart) * step;
-      if (width >= 5) separators.push(minX + ((bandStart + s) / 2) * step);
+      if (width >= 5) separators.push(openMiddle(minX + bandStart * step, minX + s * step, heads));
       bandStart = null;
     }
   }
   return separators;
+}
+
+// The middle of the widest stretch of a gutter from a to b that no item of
+// the lines crosses, 2 pt wide at the least; else the gutter's middle.
+function openMiddle(a: number, b: number, lines: Line[]): number {
+  const taken = lines
+    .flatMap((l) => l.items.map((it) => ({ x1: it.x, x2: it.x + it.w })))
+    .filter((r) => r.x2 > a && r.x1 < b)
+    .sort((p, q) => p.x1 - q.x1);
+  if (taken.length === 0) return (a + b) / 2;
+  let best: { x1: number; x2: number } | null = null;
+  let from = a;
+  for (const r of [...taken, { x1: b, x2: b }]) {
+    if (r.x1 - from >= 2 && (!best || r.x1 - from > best.x2 - best.x1)) best = { x1: from, x2: r.x1 };
+    from = Math.max(from, r.x2);
+  }
+  return best ? (best.x1 + best.x2) / 2 : (a + b) / 2;
 }
 
 // Items joined into one cell's text and style runs, a space where the gap

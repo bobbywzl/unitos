@@ -93,8 +93,14 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     const first = lines[0];
     if (!first || Math.abs(first.y + first.size * 0.7 - top) > first.size * 0.5) continue;
     if (lines.filter((l) => l.y >= cap.y - l.size * 0.5).length < 2) continue;
-    // Stretched to the first word, it takes no space before it.
-    const lead: Item = { ...cap, str: cap.str.trim(), y: first.y, size: first.size, w: first.x - cap.x, bold: first.bold, italic: first.italic, mono: first.mono, smallCaps: first.smallCaps, href: first.href, font: first.font, look: first.look };
+    // Stretched to the first word, it takes no space before it, unless the
+    // page sets one: a letter that is a word of its own ("A", "I") stands a
+    // word space from the next word, a drop cap's first letter none
+    // (lettrine: "A" 3.6 pt from "long", "T" 0 pt from "he"). Its str then
+    // ends in the space. A float's lines all start at one x, the first line
+    // too, and say nothing: the letter joins.
+    const spaced = first.x - (cap.x + cap.w) >= first.size * 0.3 && lines.some((l) => Math.abs(l.x - first.x) > first.size * 0.1);
+    const lead: Item = { ...cap, str: cap.str.trim() + (spaced ? " " : ""), y: first.y, size: first.size, w: first.x - cap.x, bold: first.bold, italic: first.italic, mono: first.mono, smallCaps: first.smallCaps, href: first.href, font: first.font, look: first.look };
     out = out.map((i) => (i === cap ? lead : i));
     // The other lines beside it start where the paragraph's next line does,
     // or where the cap does when none follows: set in by its width, they
@@ -107,6 +113,38 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     for (const item of lines.slice(1)) starts.push({ item, x });
   }
   return { items: out, starts };
+}
+
+// ── OCR layers ──────────────────────────────────────────────────────────────
+
+/** An OCR layer's words at the width the scan shows them. From one word's
+    start to the next on its line is the word's width and a space (a
+    quarter em): when the median ratio of that advance to the text layer's
+    width and a space is off by a tenth or more, each word with a next one
+    on its line takes that scale, a space short of the next word (a
+    justified line's spaces stretch, so the median runs high). A line's
+    last word keeps its width: the page's notes, set smaller than its body
+    at the same size, run past the column at the body's scale. */
+export function fitOcrWidths(items: Item[]) {
+  const words = items.filter((i) => i.str.trim()).sort((a, b) => b.y - a.y || a.x - b.x);
+  const next = (k: number) => {
+    const [a, b] = [words[k], words[k + 1]];
+    return b && Math.abs(a.y - b.y) <= a.size * 0.2 && a.w > 0 ? b : undefined;
+  };
+  const ratios: number[] = [];
+  words.forEach((a, k) => {
+    const b = next(k);
+    // A column's gutter or a table's cell gap is no word space.
+    const ratio = b ? (b.x - a.x) / (a.w + a.size * 0.25) : 0;
+    if (ratio > 0.5 && ratio < 2.5) ratios.push(ratio);
+  });
+  if (ratios.length < 20) return;
+  const scale = median(ratios);
+  if (Math.abs(scale - 1) < 0.1) return;
+  words.forEach((a, k) => {
+    const b = next(k);
+    if (b && b.x - a.x < (a.w + a.size * 0.25) * 2.5) a.w = Math.max(a.w, Math.min(a.w * scale, b.x - a.x - a.size * 0.2));
+  });
 }
 
 // ── Line building ───────────────────────────────────────────────────────────
@@ -452,6 +490,11 @@ export function buildLines(items: Item[], page: number): Line[] {
         ? grouped[k].some((i) => i !== item && i.size >= stats[k].size * 0.75)
         : item.size < stats[k].size * 0.75;
       if (hasBase && cost(item, pool[0]) >= gapTo(item, k)) continue;
+      // A group of prose is a line of its own, whatever its size against the
+      // line beside it: an 11 pt author line under a 24 pt title took the
+      // title's line as its scripts ("…DocumentsAda Lovelace",
+      // synth-paper-tex).
+      if (!hasBase && stats[k].prose) continue;
       moved[pool[0]].push(item);
       kept[k] = kept[k].filter((i) => i !== item);
     }

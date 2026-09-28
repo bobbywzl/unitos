@@ -1,6 +1,7 @@
 import { PDF_CMAPS } from "@/lib/pdf-runtime";
 import { getDocumentProxy } from "unpdf";
 import { pageLines } from "@/lib/parse/pdf/columns";
+import { fitOcrWidths } from "@/lib/parse/pdf/lines";
 import { resolveContentsLinks } from "@/lib/parse/pdf/contents";
 import { itemGlyphs, readDrawing, type FontLookup, type Glyph, type PageDrawing } from "@/lib/parse/pdf/drawing";
 import { attachFigureRegions, pageGraphics, type Graphic } from "@/lib/parse/pdf/figures";
@@ -21,12 +22,12 @@ import { assignHeadingLevels } from "@/lib/parse/pdf/headings";
 import { lookItems, takeBodyFont } from "@/lib/parse/pdf/look";
 import { displayEquations, displayLines, isTexPage } from "@/lib/parse/pdf/math/display";
 import { mathSpans, resolveZones } from "@/lib/parse/pdf/math/zones";
-import { firstPageOf, mergeAcrossPages, shiftSpansInto } from "@/lib/parse/pdf/merge";
-import { isOcrLayer } from "@/lib/parse/pdf/paragraphs";
+import { firstPageOf, joinOnPage, mergeAcrossPages, shiftSpansInto } from "@/lib/parse/pdf/merge";
+import { isOcrLayer, measureSpacing } from "@/lib/parse/pdf/paragraphs";
 import { placeTables, ruledTables, takeTables } from "@/lib/parse/pdf/ruled";
 import { segmentPage } from "@/lib/parse/pdf/segment";
 import { attachTableCaptions, isWrappedRowLine } from "@/lib/parse/pdf/tables";
-import { collectHyphenation, joinWrapped, spansFromRuns } from "@/lib/parse/pdf/text";
+import { collectHyphenation, spansFromRuns } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, Segment, UriRegion } from "@/lib/parse/pdf/types";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 
@@ -250,6 +251,12 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     // color, a highlight, an underline, a strikethrough (look.ts). An item
     // that looks two ways is cut where its look changes.
     lookItems(items, drawing, (id) => page.commonObjs.get(id) as { name?: string; fallbackName?: string } | null, hrefAt);
+    // An OCR layer sets each word where the scan shows it, in a stock font
+    // whose advances need not span the word: a scanned book's words run a
+    // third wider than their text, and the gaps between them read as a
+    // table's cells (its prose read as tables, a quotation as rows).
+    const ocr = isOcrLayer(drawing.glyphs);
+    if (ocr) fitOcrWidths(items);
     pageHeights.push(viewport.height);
     pageWidths.push(viewport.width);
     // The tables the page's rules draw leave the text flow before the column
@@ -273,7 +280,7 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     // segmented. Any other page lets its glyphs go (a scanned book of 517
     // pages held its 1.67M glyphs, 300 MB, to the end of the parse).
     const tex = isTexPage(drawing.glyphs);
-    pageFlags.push({ tex, ocr: isOcrLayer(drawing.glyphs) });
+    pageFlags.push({ tex, ocr });
     if (!tex) {
       for (const line of pages[pages.length - 1]) {
         for (const item of line.items) {
@@ -367,16 +374,30 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     const frames = pageDrawings[p].paths.filter(
       (b) => b.x2 - b.x1 >= pageWidths[p] * 0.4 && b.y2 - b.y1 >= bodySize * 3,
     );
-    const ctx = { bodySize, leading, columnLeft, hasBold, pageMinX, labelColumn, frames, drawing: pageDrawings[p], ...pageFlags[p] };
+    // A page measures its lines against its own body where that is set
+    // larger than the document's: a survey's 7 pt bibliography and tables
+    // outnumber its 9 pt text, and every line of that text read as larger
+    // than the body, so as a heading (arxiv-2609-29669). An OCR layer sizes
+    // its words page by page from the scan (a scanned book's body reads
+    // 8 pt on one page and 7 pt on the next): its page is measured against
+    // its own body, and its headings' sizes ranked at the document's scale.
+    const prose = lines.filter((l) => !l.table && l.cells.length === 1 && l.text.length > 40).map((l) => l.size);
+    const pageBody = prose.length >= 5 ? median(prose) : bodySize;
+    const ocr = pageFlags[p].ocr;
+    const ctx = { bodySize: ocr ? pageBody : Math.max(bodySize, pageBody), leading, columnLeft, hasBold, pageMinX, labelColumn, frames, drawing: pageDrawings[p], ...pageFlags[p] };
     // A TeX page's display equations join into one line each (math/display.ts).
     const shown = displayLines(lines, ctx);
     const pageSegments = segmentPage(shown, ctx);
+    if (ocr) for (const s of pageSegments) if (s.rawSize !== undefined) s.rawSize *= bodySize / pageBody;
     const withEquations = displayEquations(pageSegments, shown, ctx, pageWidths[p], pageHeights[p]);
     const withFigures = attachFigureRegions(withEquations, lines, ctx, pageWidths[p], pageHeights[p], graphics[p], p);
     // Then a TeX page's displays its display lines missed, once the figures
     // took their own words.
     const missed = { graphics: graphics[p].map((g) => g.box) };
-    segments.push(...(ctx.tex ? displayEquations(withFigures, shown, ctx, pageWidths[p], pageHeights[p], missed) : withFigures));
+    const done = ctx.tex ? displayEquations(withFigures, shown, ctx, pageWidths[p], pageHeights[p], missed) : withFigures;
+    // The space after each text block, from the page's own gaps.
+    measureSpacing(done, ctx);
+    segments.push(...done);
   }
   // A FIGURE with a region and no caption is an embedded image; every other
   // empty segment drops.
@@ -399,33 +420,17 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
       ),
   );
 
-  // Same-page paragraph fragments that end mid-sentence join the next paragraph.
-  const fused: Segment[] = [];
-  for (const segment of segments) {
-    const prev = fused[fused.length - 1];
-    if (
-      segment.type === "PARAGRAPH" &&
-      prev &&
-      prev.type === "PARAGRAPH" &&
-      segment.page === prev.page &&
-      !prev.listItem &&
-      !segment.listItem &&
-      !prev.text.includes("\n") &&
-      /[a-z,;\-–—]$/.test(prev.text) &&
-      /^[a-z(]/.test(segment.text)
-    ) {
-      shiftSpansInto(prev, segment, joinWrapped(prev, segment.text));
-      continue;
-    }
-    fused.push(segment);
-  }
-
-  segments = mergeAcrossPages(fused);
+  // A paragraph's halves join, on its page (a column break, a float
+  // between) and across pages.
+  segments = mergeAcrossPages(joinOnPage(segments));
   // A table's caption is the table's, once its rows joined across pages.
   segments = attachTableCaptions(segments);
 
   // A long title wraps across layout lines: consecutive equal-size HEADING
-  // segments at the top of page 0 are one title, not several headings.
+  // segments at the top of page 0 are one title, not several headings. A
+  // line set apart under it (a cover's author, 45 pt under a 14 pt title)
+  // is no wrap; a double-spaced title's lines sit twice its size apart.
+  const wrapGap = Math.max(1.7, leading * 1.15) - 1.15;
   while (
     segments.length >= 2 &&
     segments[0].page === 0 &&
@@ -434,7 +439,8 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     segments[1].type === "HEADING" &&
     segments[0].rawSize !== undefined &&
     segments[1].rawSize !== undefined &&
-    Math.abs(segments[0].rawSize - segments[1].rawSize) < 0.5
+    Math.abs(segments[0].rawSize - segments[1].rawSize) < 0.5 &&
+    !(segments[0].box && segments[1].box && segments[0].box.y1 - segments[1].box.y2 > segments[0].rawSize * wrapGap)
   ) {
     const offset = segments[0].text.length + 1;
     segments[0].text = `${segments[0].text} ${segments[1].text}`;
@@ -442,23 +448,26 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     segments.splice(1, 1);
   }
 
+  // Front matter: on the first page, a heading between the title and the
+  // abstract (its heading, or a paragraph that opens with it) names an
+  // author or a place, and is a paragraph (a paper's authors, set large and
+  // bold, read as headings: arxiv-2506-06752).
+  const titleAt = segments.indexOf(titleOf(segments, bodySize) as Segment);
+  const abstractAt = segments.findIndex((s) => s.page === 0 && (s.type === "HEADING" || s.type === "PARAGRAPH") && ABSTRACT_RE.test(s.text));
+  if (titleAt >= 0 && abstractAt > titleAt) {
+    for (const s of segments.slice(titleAt + 1, abstractAt)) {
+      if (s.type !== "HEADING") continue;
+      s.type = "PARAGRAPH";
+      s.html = s.align ? `<p class="${s.align}"></p>` : undefined;
+    }
+  }
+
   // A slide deck: every page wider than tall, two or more of them (a slide
   // program's 960 × 540, beamer's 364 × 272).
   const slides = pageWidths.length >= 2 && pageWidths.every((w, p) => w > pageHeights[p]);
   assignHeadingLevels(segments, bodySize, slides);
 
-  // Title: the biggest heading on the first page.
-  let title: string | null = null;
-  let titleSize = 0;
-  for (const s of segments) {
-    if (s.page !== 0 || s.type !== "HEADING" || s.rawSize === undefined) continue;
-    // A title is set larger than the body text; a body-size bold heading on
-    // the first page ("Problem 1: …") is the first section, not the title.
-    if (s.rawSize > titleSize && s.rawSize >= bodySize * 1.14 && s.text.length > 4) {
-      title = s.text;
-      titleSize = s.rawSize;
-    }
-  }
+  const title = titleOf(segments, bodySize)?.text ?? null;
 
   // The title's look and alignment (the import's Title), read before the
   // heading it came from leaves the blocks: the look of its largest letters
@@ -501,6 +510,7 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     if (s.footnote) block.footnote = s.footnote;
     if (s.footnoteRefs) block.footnoteRefs = s.footnoteRefs;
     if (font && (s.type === "PARAGRAPH" || s.type === "HEADING" || s.type === "LIST")) block.font = font;
+    if (s.spaceAfter !== undefined) block.spaceAfter = s.spaceAfter;
     return block;
   });
 
@@ -517,6 +527,22 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
 }
 
 type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign">;
+
+// The title: the biggest heading on the first page. A title is set larger
+// than the body text; a body-size bold heading on the first page ("Problem
+// 1: …") is the first section, not the title.
+function titleOf(segments: Segment[], bodySize: number): Segment | undefined {
+  let title: Segment | undefined;
+  for (const s of segments) {
+    if (s.page !== 0 || s.type !== "HEADING" || s.rawSize === undefined) continue;
+    if (s.rawSize > (title?.rawSize ?? 0) && s.rawSize >= bodySize * 1.14 && s.text.length > 4) title = s;
+  }
+  return title;
+}
+
+// An abstract's heading, or the paragraph it runs into ("Abstract—…",
+// "Abstract. …").
+const ABSTRACT_RE = /^\s*abstract\b/i;
 
 // A size in points, to a hundredth: A4 is 595.28 × 841.89.
 function points(value: number): number {

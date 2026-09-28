@@ -83,7 +83,7 @@ export const NUMBER_PRESETS: ListPreset[] = [
 
 /** The presets a typed prefix gives (typing/lists.ts) that the palettes do
     not show. */
-export const TYPED_PRESETS: ListPreset[] = [
+const TYPED_PRESETS: ListPreset[] = [
   { style: "BULLET_DASH", kind: "bulletList", levels: bullets("---------") },
   { style: "BULLET_PLUS", kind: "bulletList", levels: bullets("+++++++++") },
   { style: "NUMBERED_DECIMAL_ALPHA_ROMAN_TWO_PARENS", kind: "orderedList", levels: numbered(RR(DEC), RR(LA), RR(LR), R(DEC), R(LA), R(LR), P(DEC), P(LA), P(LR)) },
@@ -99,14 +99,14 @@ const PRESETS = [...BULLET_PRESETS, ...NUMBER_PRESETS, ...TYPED_PRESETS];
 
 /** A bulleted or numbered list's preset by its listStyle; the default for
     none or an unknown one. */
-export function listPreset(ordered: boolean, style: unknown): ListPreset {
+function listPreset(ordered: boolean, style: unknown): ListPreset {
   const presets = ordered ? NUMBER_PRESETS : BULLET_PRESETS;
   return PRESETS.find((p) => p.kind === presets[0].kind && p.style === (style ?? null)) ?? presets[0];
 }
 
 /** A list's nine levels: its own (listLevels), else its preset's
     (listStyle), else its kind's default. */
-export function levelsOf(list: { type: string; attrs?: Record<string, unknown> | null }): ListLevel[] {
+function levelsOf(list: { type: string; attrs?: Record<string, unknown> | null }): ListLevel[] {
   return listLevelsOf(list.attrs?.listLevels) ?? listPreset(list.type === "orderedList", list.attrs?.listStyle).levels;
 }
 
@@ -160,7 +160,7 @@ const ROMAN: [number, string][] = [
 
 /** Number n as the counter style draws it: 28 → "28", "28", "ab", "AB",
     "xxviii", "XXVIII" (letters go on "y", "z", "aa"; numerals up to 3999). */
-export function counterText(counter: ListCounter, n: number): string {
+function counterText(counter: ListCounter, n: number): string {
   if (counter === "decimal") return String(n);
   if (counter === "decimal-leading-zero") return n >= 0 && n < 10 ? `0${n}` : String(n);
   if (counter === "lower-alpha" || counter === "upper-alpha") {

@@ -7,7 +7,7 @@ import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
 import { charCount } from "@/lib/parse/pdf/glyphs";
 import { BULLET_RE, isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { isCentered, lineAlign, readParagraph } from "@/lib/parse/pdf/paragraphs";
-import { boldShare, escapeHtml, joinGroup, startsWithBoldLead } from "@/lib/parse/pdf/text";
+import { boldShare, escapeHtml, fillsMargin, joinGroup, lineAsPart, startsWithBoldLead } from "@/lib/parse/pdf/text";
 import type { Item, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 
 // Numbered heading: the number must close with "." or ")" or dot into a
@@ -88,6 +88,7 @@ export function readHeading(lines: Line[], i: number, ctx: PageContext, runOf: n
     numberedHeading(lines, i, ctx, runOf) ??
     sectionHeading(lines, i, ctx) ??
     capsHeading(lines, i, ctx) ??
+    abstractHeading(lines, i, ctx) ??
     boldHeading(lines, i, ctx, runOf) ??
     partHeading(lines, i, ctx);
   // A heading of its own lines keeps where it stands: centered or flush
@@ -117,6 +118,15 @@ function partHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
 // A line set large by a math glyph (an integral sign with its limit) is
 // part of an equation, not a heading, and a bulleted line is an item (a
 // slide's bullets, set larger than the deck's body, read as headings).
+// A date on a line of its own ("March 15, 2023", "15 March 2023", "September
+// 2026", "2023-03-15"): a cover sets it under the title at the title's size
+// and weight, and it read as the title's second line.
+const MONTH = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?";
+export const DATE_RE = new RegExp(
+  `^(?:${MONTH}\\s+(?:\\d{1,2}(?:st|nd|rd|th)?,?\\s+)?\\d{4}|\\d{1,2}(?:st|nd|rd|th)?\\s+${MONTH},?\\s+\\d{4}|\\d{4}-\\d{2}-\\d{2})$`,
+  "i",
+);
+
 function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
   const line = lines[i];
   if (line.cells.length !== 1 || line.size <= ctx.bodySize * 1.14 || lineMathShare(line) >= 0.5) return null;
@@ -142,11 +152,23 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
       next.cells.length !== 1 ||
       Math.abs(next.size - line.size) > (ocr ? line.size * 0.2 : 0.5) ||
       run[run.length - 1].y - next.y > line.size * 1.7 ||
-      (Math.abs(next.x - line.x) > 12 && !centered)
+      (Math.abs(next.x - line.x) > 12 && !centered) ||
+      DATE_RE.test(next.text.trim())
     )
       break;
     run.push(next);
     j++;
+  }
+  // Four lines or more at one left edge that each end short of the
+  // longest while the next line's first word would fit are a block of
+  // lines, not a heading: an author list set large read as one six-line
+  // heading (arxiv-2609-29669). Each line is a paragraph. A centered
+  // title's lines end short too.
+  const edge = Math.max(...run.map((l) => l.xEnd));
+  const flush = run.every((l) => Math.abs(l.x - line.x) <= line.size * 0.5);
+  if (run.length >= 4 && flush && run.slice(0, -1).every((l, k) => !fillsMargin(l, run[k + 1], edge))) {
+    const one = (l: Line): Segment => ({ type: "PARAGRAPH", ...lineAsPart(l), page: l.page, ...geom([l]) });
+    return { segments: run.map(one), next: j };
   }
   const { text, runs } = joinGroup(run);
   const flat = text.replace(/\n/g, " ");
@@ -154,8 +176,9 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
   // A quotation set large, in its quote marks, is a quote (a slide's 20 pt
   // quotation read as a heading).
   const quoted = /^[“"‘]/.test(flat.trim()) && /(?:[”"’][.!?]?|[.!?][”"’])$/.test(flat.trim());
-  if (prose || quoted || [...flat.trim()].length <= 1) {
-    const html = quoted ? { html: '<p class="quote"></p>' } : {};
+  if (prose || quoted || [...flat.trim()].length <= 1 || DATE_RE.test(flat.trim())) {
+    const tokens = [quoted ? "quote" : "", lineAlign(lines, i, j, ctx) === "center" ? "center" : ""].filter(Boolean);
+    const html = tokens.length > 0 ? { html: `<p class="${tokens.join(" ")}"></p>` } : {};
     return { segments: [{ type: "PARAGRAPH", text: flat, ...html, page: line.page, runs, ...geom(run) }], next: j };
   }
   return { segments: [headingOf(run, flat, runs)], next: j };
@@ -319,6 +342,15 @@ function capsHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
   const below = lines[i + 1];
   if (!below || !isCentered(lines, i, ctx) || !apartAbove(lines[i - 1], line, ctx) || !apartBelow(line, below, ctx)) return null;
   return { segments: [headingOf([line], text, line.runs)], next: i + 1 };
+}
+
+// "Abstract" alone on its line, in any weight: a paper's abstract heading
+// (LIPIcs sets it closer to its text than a section's gap and read as a
+// paragraph, arxiv-2506-06752).
+function abstractHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
+  const line = lines[i];
+  if (line.cells.length !== 1 || !/^abstract[.:]?$/i.test(line.text.trim()) || line.size < ctx.bodySize * 0.85) return null;
+  return { segments: [headingOf([line], line.text.trim(), line.runs)], next: i + 1 };
 }
 
 // Numbered heading at body size: "3.1 Results" — short, isolated, and
@@ -491,6 +523,10 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
 // from 20 to 40 pt, and a slide's subheadings ("Mission" under "OSDR Mission
 // and Vision") read at its title's level. There a slide's biggest heading is
 // h2 and a smaller one h3.
+// A paper's unnumbered parts stand at its sections' level whatever their
+// size: LIPIcs sets "Abstract" smaller than its numbered sections.
+const PART_RE = /^(?:abstract|acknowledge?ments?|references|bibliography|appendix|appendices|contents|conclusions?)$/i;
+
 export function assignHeadingLevels(segments: Segment[], bodySize: number, slides = false) {
   const clusters = (list: Segment[]) => {
     const sizes: number[] = [];
@@ -542,6 +578,7 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, slide
     const level =
       slides ? Math.min(3, 2 + Math.max(0, clusterOf(s, slideSizes.get(s.page) ?? [])))
       : depth !== null ? numberedBase + depth - minDepth
+      : Number.isFinite(minDepth) && PART_RE.test(s.text.trim()) ? numberedBase
       : sized ? [...sized].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]
       : Math.min(3, base + Math.max(0, idx));
     const capped = Math.min(6, Math.max(1, level));

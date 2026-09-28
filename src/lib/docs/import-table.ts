@@ -359,11 +359,14 @@ function listNode(el: Element, marks: RichMark[]): RichNode | null {
   return { type: ordered ? "orderedList" : "bulletList", ...(attrs ? { attrs } : {}), content: items };
 }
 
-function cellBlocks(cell: Element): RichNode[] {
+function cellBlocks(cell: Element, gapped: boolean): RichNode[] {
   // A space at every block boundary, as the parse's table text reads it
-  // (lib/parse/dom-text.ts), so a cell's words are the parse's words.
+  // (lib/parse/dom-text.ts), so a cell's words are the parse's words. A
+  // table whose cells end in their gaps (gapped: a PDF's, a Word file's)
+  // has its text as its DOM text already: a raised "4" after a bold "g"
+  // reads "g4", never "g 4".
   const clone = cell.cloneNode(true) as Element;
-  separateBlocks(clone);
+  if (!gapped) separateBlocks(clone);
   const reader = new CellReader(paragraphAttrs(cell));
   reader.read(clone, []);
   reader.flush();
@@ -706,12 +709,13 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
   // Header rows (<thead>) that open the table repeat on every page the
   // table runs on, as Google Docs' pinned header rows do.
   let pinning = true;
+  const gapped = table.querySelector(".cell-gap") !== null;
   const rows = trs.map((tr) => {
     pinning = pinning && tr.parentElement?.tagName.toLowerCase() === "thead";
     const cells = cellsOf(tr).map((cell) => {
       const fill = colorOf(cell, "background-color");
       return {
-        node: { type: cell.tagName.toLowerCase() === "th" ? "tableHeader" : "tableCell", content: cellBlocks(cell), ...(fill ? { attrs: { backgroundColor: fill } } : {}) },
+        node: { type: cell.tagName.toLowerCase() === "th" ? "tableHeader" : "tableCell", content: cellBlocks(cell, gapped), ...(fill ? { attrs: { backgroundColor: fill } } : {}) },
         colspan: spanOf(cell, "colspan", widest),
         rowspan: spanOf(cell, "rowspan", trs.length),
       };
@@ -731,7 +735,7 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
   const reader = new CellReader();
   if (captionEl) {
     const clone = captionEl.cloneNode(true) as Element;
-    separateBlocks(clone);
+    if (!gapped) separateBlocks(clone);
     reader.read(clone, []);
     reader.flush();
   }
