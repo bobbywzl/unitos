@@ -57,3 +57,6 @@ scripts/qa/out/
 scripts/qa/fixtures/office/gslides.pptx
 scripts/qa/fixtures/office/gsheets.xlsx
 scripts/qa/fixtures/office/*.zip
+
+# parse benchmark: downloaded and generated documents, private test files
+/.bench/
