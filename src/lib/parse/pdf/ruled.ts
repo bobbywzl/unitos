@@ -128,10 +128,16 @@ function isGroupGrid(grid: Grid, items: Item[]): boolean {
   }
   const baselines = (cell: Box) => [...new Set(items.filter((it) => inBox(it, cell)).map((it) => Math.round(it.y)))];
   const same = (a: number[], b: number[]) => a.every((y) => b.some((v) => Math.abs(v - y) <= 2)) && b.every((y) => a.some((v) => Math.abs(v - y) <= 2));
+  // A line wraps when it runs to the cell's right quarter, or when the next
+  // line's first word had no room left on it (a form's label in a narrow
+  // cell: the SF 298's "8. PERFORMING / ORGANIZATION REPORT / NUMBER" on
+  // the baselines of the name and address beside it).
   const wrapped = (cell: Box) => {
     const lines = buildLines(items.filter((it) => inBox(it, cell)), 0);
     const reach = cell.x2 - (cell.x2 - cell.x1) * 0.25;
-    return lines.length >= 2 && lines.slice(0, -1).every((l) => l.xEnd >= reach && /\p{L}{2}/u.test(l.text));
+    const right = cell.x2 - Math.max(0, Math.min(...lines.map((l) => l.x)) - cell.x1);
+    const full = (l: Line, next: Line) => l.xEnd >= reach || l.xEnd + l.size * 0.28 + next.firstWordWidth > right;
+    return lines.length >= 2 && lines.slice(0, -1).every((l, k) => full(l, lines[k + 1]) && /\p{L}{2}/u.test(l.text));
   };
   for (let r = 0; r + 1 < grid.ys.length; r++) {
     const cells = grid.cells.filter((cell) => cell.row === r).sort((a, b) => a.col - b.col);

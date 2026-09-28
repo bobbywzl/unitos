@@ -20,9 +20,20 @@ const SMALL = 0.9;
 /** The most a footnote area's lines stand apart, in their size: footnotes
     are set tight, a gap this wide means the lines above are not theirs. */
 const GAP = 2.5;
-/** The note symbols, in their order of use (*, †, ‡, §, ¶, ‖, then doubled). */
-const SYMBOLS = "*∗†‡§¶‖";
-const SYMBOL_LABEL_RE = /^([*∗†‡§¶‖]{1,4})/;
+/** The note symbols, in their order of use (*, †, ‡, §, ¶, ‖, then doubled).
+    MNRAS sets ⋆ for the first and ∥ for the sixth: its six author notes
+    read as one note and a line of the body (arXiv 2503.22874). */
+const SYMBOLS = "*∗⋆†‡§¶‖∥";
+const SYMBOL = `[${SYMBOLS}]`;
+const SYMBOL_LABEL_RE = new RegExp(`^(${SYMBOL}{1,4})`);
+/** A raised label: a number, a letter, or note symbols. */
+const RAISED_LABEL_RE = new RegExp(`^[\\p{L}\\p{N}${SYMBOLS}]{1,4}$`, "u");
+/** A table row's first cell that is a note's label. */
+const CELL_LABEL_RE = new RegExp(`^(?:${SYMBOL}{1,4}|\\d{1,3}|\\p{L})$`, "u");
+/** A note symbol set level after a word ("testing***" in MMWR). */
+const LEVEL_SYMBOLS_RE = new RegExp(`(?<=[^\\s${SYMBOLS}])${SYMBOL}{1,4}(?!${SYMBOL})`, "g");
+/** A note symbol after a space, where lastIndex stands. */
+const SPACED_SYMBOLS_RE = new RegExp(`\\s{1,2}(${SYMBOL}{1,4})(?![${SYMBOLS}\\p{L}\\p{N}])`, "uy");
 /** A rule set as glyphs: SCOTUS draws its footnote rule as "——————". */
 const RULE_GLYPHS_RE = /^[—―─_‒–-]{3,}$/;
 
@@ -39,7 +50,7 @@ function labelOf(line: Line, ruled: boolean): string | null {
   const first = line.runs[0];
   if (first?.sup && first.start === 0) {
     const label = line.text.slice(0, first.end).trim();
-    if (/^[\p{L}\p{N}*∗†‡§¶‖]{1,4}$/u.test(label)) return label;
+    if (RAISED_LABEL_RE.test(label)) return label;
   }
   const symbol = SYMBOL_LABEL_RE.exec(line.text)?.[1];
   if (symbol) return symbol;
@@ -76,7 +87,7 @@ function smallRun(column: Line[], start: number, size: number): number {
     const line = column[end];
     if (!line.text.trim() || line.size > size || NUMBER_LINE_RE.test(line.text.trim())) break;
     if (end > start && column[end - 1].y - line.y > line.size * GAP) break;
-    if (line.cells.length > 1 && !/^(?:[*∗†‡§¶‖]{1,4}|\d{1,3}|\p{L})$/u.test(line.cells[0].text.trim())) break;
+    if (line.cells.length > 1 && !CELL_LABEL_RE.test(line.cells[0].text.trim())) break;
     end++;
   }
   return end;
@@ -184,13 +195,30 @@ function wordsOf(cut: Cut): { text: string; runs: Run[] } {
   };
 }
 
-/** The labels a page's body lines raise: the texts of their raised runs, and
-    their note symbols set level after a word ("testing***" in MMWR). */
+/** The note symbols set after a raised run and a space: TeX sets an author's
+    note mark in a math font after the affiliation's number ("Sahu¹ ⋆",
+    "Qi,³ ⁴ ∗"), and a math glyph is never flagged raised (lines.ts), so the
+    mark reads level. MNRAS's and REVTeX's author notes lost their marks. */
+function marksAfterRaised(text: string, runs: Run[]): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  for (const r of runs) {
+    if (!r.sup) continue;
+    SPACED_SYMBOLS_RE.lastIndex = r.end;
+    const m = SPACED_SYMBOLS_RE.exec(text);
+    if (m) out.push({ start: r.end + m[0].length - m[1].length, end: r.end + m[0].length });
+  }
+  return out;
+}
+
+/** The labels a page's body lines raise: the texts of their raised runs,
+    their note symbols set level after a word ("testing***" in MMWR), and
+    the symbols set after a raised run. */
 function raisedLabels(lines: Line[]): Set<string> {
   const labels = new Set<string>();
   for (const line of lines) {
     for (const r of line.runs) if (r.sup) labels.add(line.text.slice(r.start, r.end).trim());
-    for (const m of line.text.matchAll(/(?<=[^\s*∗†‡§¶‖])[*∗†‡§¶‖]{1,4}(?![*∗†‡§¶‖])/g)) labels.add(m[0]);
+    for (const m of line.text.matchAll(LEVEL_SYMBOLS_RE)) labels.add(m[0]);
+    for (const m of marksAfterRaised(line.text, line.runs)) labels.add(line.text.slice(m.start, m.end));
   }
   return labels;
 }
@@ -316,7 +344,7 @@ const isSymbols = (label: string) => [...label].every((ch) => SYMBOLS.includes(c
 function levelLabel(label: string): RegExp {
   const escaped = label.replaceAll("*", "\\*");
   return isSymbols(label)
-    ? new RegExp(`(?<=[^\\s*∗†‡§¶‖])${escaped}(?![*∗†‡§¶‖])`, "g")
+    ? new RegExp(`(?<=[^\\s${SYMBOLS}])${escaped}(?!${SYMBOL})`, "g")
     : new RegExp(`(?<=[\\p{Ll})\\]])${escaped}(?![\\p{L}\\p{N}])`, "gu");
 }
 
@@ -324,7 +352,7 @@ function levelLabel(label: string): RegExp {
     that reads its label and stands before a space or a stop (the 2 of
     "SRe²L", a method's name, is no reference), one after a word before one
     after a digit ("10³" is none either); for a note symbol, then, the symbol
-    set level after a word. */
+    set level after a word or after a raised run and a space. */
 function referencesTo(hosts: Segment[], label: string, free: (host: Segment, start: number) => boolean): Found[] {
   const afterWord: Found[] = [];
   const afterDigit: Found[] = [];
@@ -342,8 +370,10 @@ function referencesTo(hosts: Segment[], label: string, free: (host: Segment, sta
   const level: Found[] = [];
   if (isSymbols(label)) {
     for (const host of hosts) {
-      for (const m of host.text.matchAll(levelLabel(label))) {
-        if (m.index !== undefined && free(host, m.index)) level.push({ host, start: m.index, end: m.index + label.length });
+      const spaced = marksAfterRaised(host.text, host.runs ?? []).filter((m) => host.text.slice(m.start, m.end) === label);
+      const starts = [...[...host.text.matchAll(levelLabel(label))].map((m) => m.index ?? -1), ...spaced.map((m) => m.start)];
+      for (const start of starts.sort((a, b) => a - b)) {
+        if (start >= 0 && free(host, start)) level.push({ host, start, end: start + label.length });
       }
     }
   }
