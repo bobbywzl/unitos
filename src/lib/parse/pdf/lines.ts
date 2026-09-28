@@ -221,7 +221,7 @@ const QED_RE = /^[□■∎]$/;
     space: 0.12 of the line's size, or 0.2 after a script (an item set at
     0.85 of the size or less, a tenth of the size or more off the next
     item's baseline). TeX leaves \scriptspace (0.5 pt) after a script, and
-    a word space is 0.22 em or more, justified too: "fU(u)" read "fU (u)".
+    a word space is 0.22 em or more, justified too: "hk(z)" read "hk (z)".
     size: the line's text size. */
 export function spaceGap(prev: Item, next: Item, size: number): number {
   return prev.size <= size * 0.85 && Math.abs(prev.y - next.y) >= size * 0.1 ? size * 0.2 : size * 0.12;

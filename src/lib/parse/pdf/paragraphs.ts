@@ -144,7 +144,36 @@ export function isCentered(lines: Line[], k: number, ctx: PageContext): boolean 
   const { left, right } = columnEdges(lines, k, ctx);
   const inset = line.x - left;
   const [least, slack] = line.size >= ctx.bodySize * 1.2 ? [line.size * 0.5, line.size * 0.25] : [line.size * 2, line.size];
-  return (right > line.xEnd && inset > least && Math.abs(inset - (right - line.xEnd)) <= slack) || sharesMiddle(lines, k, ctx);
+  return (right > line.xEnd && inset > least && Math.abs(inset - (right - line.xEnd)) <= slack) || sharesMiddle(lines, k, ctx) || centeredStack(lines, k);
+}
+
+// A stack of short lines, each read in a column of its own, that share
+// their middle: an author's block in a paper's grid of authors (name,
+// affiliation, city, address). Three lines or more, their middles within
+// half an em, each within three ems under the one before, starting at
+// different places; the grid's other cells come between them in reading
+// order (real-acm-damon25-3736236 p1).
+function centeredStack(lines: Line[], k: number): boolean {
+  const alone = (l: Line) => {
+    const column = lineColumn(l);
+    return column !== undefined && (columnLines(lines).get(column) ?? 0) <= 1 && l.cells.length === 1 && !l.table;
+  };
+  const line = lines[k];
+  if (!alone(line)) return false;
+  const middle = (line.x + line.xEnd) / 2;
+  const stack = [line];
+  for (const step of [-1, 1]) {
+    let prev = line;
+    for (let n = k + step; n >= 0 && n < lines.length && Math.abs(n - k) <= 16; n += step) {
+      const o = lines[n];
+      if (Math.abs(o.y - prev.y) > Math.max(o.size, prev.size) * 3) break;
+      if (!alone(o) || Math.abs((o.x + o.xEnd) / 2 - middle) > Math.min(o.size, line.size) * 0.5) continue;
+      stack.push(o);
+      prev = o;
+    }
+  }
+  const xs = stack.map((l) => l.x);
+  return stack.length >= 3 && Math.max(...xs) - Math.min(...xs) > line.size * 0.5;
 }
 
 // The lines over and under line k, in its column, that share its middle

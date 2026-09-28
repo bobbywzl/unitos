@@ -97,6 +97,37 @@ export function joinWrapped(target: { text: string; runs?: Run[] }, next: string
   return offset;
 }
 
+// ── Links that wrap ─────────────────────────────────────────────────────────
+
+/** A URL a text ends in: from "http(s)://" or "www." to its end. */
+const URL_END_RE = /(?:https?:\/\/|www\.)\S*$/;
+/** A URL's last character that a wrap leaves at a line's end with the URL
+    going on: a path's slash, a hyphen, a query's "=" or "&". */
+const URL_OPEN_RE = /[/\-_=&?#%]$/;
+/** A first word that reads as the rest of a URL: a path, a query, a dot
+    between letters or digits, or letters and digits mixed ("k3AzU"). */
+const URL_REST_RE = /[/?=&%#_~]|[\p{L}\p{N}]\.[\p{L}\p{N}]|\p{L}\p{N}|\p{N}\p{L}/u;
+
+/** Whether a URL that ends a text goes on in the next line's first word;
+    null when the text ends in no URL. The link's address is the strongest
+    witness: the address on either side holds the words on both sides of
+    the wrap, or the next line's first word is no part of the link. With no
+    link, the URL goes on when it ends open (a slash, a hyphen) or the next
+    word reads as a URL's rest. A long link read a space at each wrap after
+    its first line ("…choices/ whats-medicare", a Google Docs export's
+    links), and a URL at a line's end glued the next line's word
+    ("…dt09_147.asp(accessed", "…charter.pdf2. CDC."). */
+function urlGoesOn(text: string, href: string | null, next: string, nextHref: string | null): boolean | null {
+  const url = URL_END_RE.exec(text.slice(-2000))?.[0];
+  if (!url) return null;
+  const head = (next.trimStart().split(/\s/, 1)[0] ?? "").replace(/[.,;:)\]]+$/, "");
+  if (!head) return false;
+  const joined = (url.slice(-16) + head.slice(0, 16)).toLowerCase();
+  if ([href, nextHref].some((link) => link?.toLowerCase().includes(joined))) return true;
+  if (href && nextHref !== href) return false;
+  return URL_OPEN_RE.test(url) || URL_REST_RE.test(head);
+}
+
 // ── Text assembly across lines ──────────────────────────────────────────────
 
 // Joins line texts while shifting style runs. A wrap hyphen stays a hyphen:
@@ -197,9 +228,11 @@ export function joinGroup(lines: Line[], proseJoin = false): { text: string; run
     if (sep === " ") {
       const lastChar = prevText[prevText.length - 1] ?? "";
       const firstChar = nextText[0] ?? "";
+      const url = urlGoesOn(builder.text, builder.runs.at(-1)?.href ?? null, nextText, lines[i].runs[0]?.href ?? null);
       // CJK wraps anywhere and carries no space; a URL wraps without one.
       if (CJK_CHAR_RE.test(lastChar) && CJK_CHAR_RE.test(firstChar)) sep = "";
-      else if (/https?:\/\/\S*$/.test(prevText) || /^\S*(?:\/|\.[a-z]{2,4}\/)\S*$/.test(nextText.split(" ")[0]) && /\/\S*$/.test(prevText)) sep = "";
+      else if (url !== null) sep = url || CJK_CHAR_RE.test(firstChar) ? "" : " ";
+      else if (/^\S*(?:\/|\.[a-z]{2,4}\/)\S*$/.test(nextText.split(" ")[0]) && /\/\S*$/.test(prevText)) sep = "";
       else if (lineEndHyphen(prevText, nextText) === "drop") {
         builder.dropTrailingChar();
         sep = "";

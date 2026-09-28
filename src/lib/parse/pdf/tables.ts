@@ -299,7 +299,10 @@ const TABLE_CAPTION_RE = /^(?:table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+)\s*[.:|â€“â
 export function attachTableCaptions(segments: Segment[]): Segment[] {
   const taken = new Set<Segment>();
   segments.forEach((table, i) => {
-    if (table.type !== "TABLE" || !table.html || table.html.includes("<caption>")) return;
+    // A caption that is the table's link alone (ruled.ts) takes the
+    // caption's words before it.
+    const linkOnly = /^<table[^>]*><caption>/.test(table.html ?? "") && LINK_LINE_RE.test(table.text.slice(0, table.text.indexOf("\n")));
+    if (table.type !== "TABLE" || !table.html || (table.html.includes("<caption>") && !linkOnly)) return;
     const first = firstPageOf(table);
     const last = table.breaks?.at(-1)?.page ?? first;
     const before = segments[i - 1];
@@ -321,11 +324,24 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
     // its captions in 8 pt under a 9 pt body).
     const size = sizeOf(own.runs) ?? caption?.lineSize;
     const sized = size && Number.isFinite(size) && size > 0 && size <= 72 ? `<span style="font-size:${Math.round(size * 2) / 2}pt">${words}</span>` : words;
-    table.html = table.html.replace(/^<table[^>]*>/, (open) => `${open}<caption>${sized}<span class="cell-gap">\n</span></caption>`);
-    table.text = `${text}\n${table.text}`;
-    table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
+    if (linkOnly) {
+      table.html = table.html.replace(/^(<table[^>]*><caption>)/, `$1${sized} `);
+      table.text = `${text} ${table.text}`;
+      table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
+    } else captionTable(table, text, sized);
   });
   return segments.filter((s) => !taken.has(s));
+}
+
+// A link alone on its line: a URL or a DOI.
+export const LINK_LINE_RE = /^(?:https?:\/\/|doi:\s*|www\.)\S+$/i;
+
+/** The table's caption: its text opens with the caption's line, its html
+    with the caption (the words' html, then the line's gap). */
+export function captionTable(table: Segment, text: string, html: string) {
+  table.html = table.html?.replace(/^<table[^>]*>/, (open) => `${open}<caption>${html}<span class="cell-gap">\n</span></caption>`);
+  table.text = `${text}\n${table.text}`;
+  table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
 }
 
 // The size most of a run of text's characters are set in (Look.size).

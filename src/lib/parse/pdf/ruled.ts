@@ -15,10 +15,12 @@ import { buildLines } from "@/lib/parse/pdf/lines";
 import { resolveZones } from "@/lib/parse/pdf/math/zones";
 import {
   boldHeaderRows,
+  captionTable,
   cellsBySeparators,
   columnAt,
   columnSeparators,
   isProseColumns,
+  LINK_LINE_RE,
   rowsOf,
   tableSegment,
   withoutSignColumns,
@@ -26,7 +28,7 @@ import {
   type TableCell,
   type TableRow,
 } from "@/lib/parse/pdf/tables";
-import { isMonoLine, joinGroup } from "@/lib/parse/pdf/text";
+import { escapeHtml, isMonoLine, joinGroup } from "@/lib/parse/pdf/text";
 import type { Box, Cell, Item, Line, MathZone, Run, Segment, TableRegion } from "@/lib/parse/pdf/types";
 
 // What the ruled tables read of a page's drawing.
@@ -462,7 +464,21 @@ export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number
       regions.push(region);
     }
   }
+  // A table's own link under its last rule goes with it, out of the text
+  // flow (PLOS sets each table's DOI there, and it ran into the paragraph
+  // after the table: "….t001 their results").
+  const kept = new Set(regions.flatMap((r) => r.items));
+  for (const region of regions) region.items.push(...linkUnder(region, items.filter((it) => !kept.has(it))));
   return regions;
+}
+
+// The line right under a table that is a link alone, inside its width.
+function linkUnder(region: TableRegion, items: Item[]): Item[] {
+  const b = region.box;
+  const size = median(region.items.map((it) => it.size));
+  const below = items.filter((it) => centerOf(it).y < b.y1 && centerOf(it).y > b.y1 - size * 2.5 && it.x >= b.x1 - 2 && it.x + it.w <= b.x2 + 2);
+  const [line] = buildLines(below, 0);
+  return line && LINK_LINE_RE.test(line.text.trim()) ? line.items : [];
 }
 
 // The page's items with each table's text taken out and one item in its
@@ -536,6 +552,17 @@ export function placeTables(lines: Line[]): Line[] {
 // under the header rule, the header rows above it (split where a partial
 // rule runs between two of its lines), the body rows by the rhythm.
 export function tableFromRegion(region: TableRegion, page: number): Segment {
+  // The table's own link under its last rule (linkUnder) is its caption's
+  // line, the caption's words joining it (attachTableCaptions).
+  const link = region.items.filter((it) => centerOf(it).y < region.box.y1 - 1);
+  if (link.length === 0) return tableOfRegion(region, page);
+  const table = tableOfRegion({ ...region, items: region.items.filter((it) => !link.includes(it)) }, page);
+  const text = buildLines(link, page).map((l) => l.text.trim()).join(" ");
+  if (table.html) captionTable(table, text, escapeHtml(text));
+  return table;
+}
+
+function tableOfRegion(region: TableRegion, page: number): Segment {
   const lines = buildLines(region.items, page);
   const where = { ...geom(lines), box: region.box, mathShare: 0 };
   // The lines the cells' words come from: their formulas are read last,
