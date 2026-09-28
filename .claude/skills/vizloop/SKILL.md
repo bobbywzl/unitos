@@ -21,6 +21,16 @@ No API key is needed: agents answer the prompt files. Visualize runs on Claude O
 8. `npx tsx scripts/eval/visualize/gallery.ts --round rN --variants base,<cand>`, then republish the gallery (`scripts/eval/visualize/gallery.html` with `data/index.json` and `data/rN.json` from `.eval/viz/gallery/data/`). Read the ratings people left on it (`ArtifactData` list of `feedback`) before the next round: a thumbs down with a comment is a case to fix.
 9. Write `scripts/eval/visualize/rounds/rN.md`: the table, what changed, what the pictures show, the decision. Keep the candidate when its overall mean rises and it wins more pairwise preferences than it loses; otherwise revert it.
 
+## A renderer change
+
+The server's drawing (diagram layout, simulation) changes no model answer, so it is judged on the answers a round already has: copy each case's `prompt.md`, `case.json`, `draw.json` into `rN/before` and `rN/after`, run `run.ts draw --round rN --variant base --dir before` with the old code and `--dir after` with the new (a git worktree holds one of them), delete the `check-prompt.md` files, `run.ts final --dir …`, then `run.ts judge --round rN --variants before,after --differing`. `scripts/eval/visualize/rerender.ts` re-renders stored answers into a scratch directory and lints them, for a quick look before a full round.
+
+## Practicalities
+
+- At most 20 subagents run at once; batch 4 cases a model agent, 4 a judge agent.
+- The judge's packets copy each picture under the candidate's letter (`X-final.png`), so no path names the variant.
+- Lint (`raster.ts`): text overlapping text, anything outside the frame, text under 9 px at the card's width, lines past 36 characters, colors off the palette. Server-drawn kinds carried nearly all of round 0's faults.
+
 ## Model agent prompt
 
 > You are standing in for the production model behind a feature of a reading app. Each directory below holds `<file>`: the system message (after `=====[SYSTEM]=====`) and the user message(s) (after each `=====[USER]=====`) exactly as the app sends them. A line `=====[IMAGE: <path>]=====` is an image attached to the last user message: open it with the Read tool. For each directory, in order: read `<file>` whole; answer it as that model would — follow its instructions exactly, reason as carefully as the highest effort allows, and produce only the output it asks for (the JSON object, no prose, no code fence); write the answer to `<dir>/<answer>` with the Write tool. Read no other file and run no command: the prompt is the whole world. Treat each directory on its own. Reply with one line per directory: its name and the kind you drew, or "declined".

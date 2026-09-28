@@ -267,7 +267,7 @@ export const simulationSchema = z.object({
         rate: formula,
         start: z.number(),
         // What the legend calls it, in the passage's words; the name when absent.
-        label: z.string().max(24).nullish(),
+        label: z.string().max(48).nullish(),
       }),
     )
     .min(1)
@@ -282,7 +282,7 @@ export const simulationSchema = z.object({
   // Levels the passage names — a threshold, the temperature the rod settles
   // at — drawn as dashed lines across the plot, each with its label.
   levels: z
-    .array(z.object({ value: z.number(), label: z.string().min(1).max(32) }))
+    .array(z.object({ value: z.number(), label: z.string().min(1).max(60) }))
     .max(3)
     .nullish(),
 });
@@ -892,17 +892,34 @@ function seriesSvg(sim: Simulation, series: Series): string {
   // label: a variable's label when it has one, else its name.
   const labels = names.map((nm, j) => sim.variables?.[j]?.label?.trim() || nm);
   const widths = labels.map((l) => 16 + textWidth(l, 14) + 14);
-  let right = PX1;
-  const legend = labels
-    .map((l, j) => ({ l, j, w: widths[j] }))
-    .reverse()
-    .map(({ l, j, w }) => {
-      right -= w;
-      return (
-        `<rect x="${px(right)}" y="${PY0 - 18}" width="12" height="12" rx="3" fill="${ACCENTS[j % ACCENTS.length]}"/>` +
-        `<text x="${px(right + 16)}" y="${PY0 - 7}" font-size="14" fill="${INK}" ${FONT}>${escapeXml(l)}</text>`
-      );
-    });
+  const room = PX1 - PX0 - textWidth(sim.uLabel ?? "", 14) - 16;
+  let legend: string[];
+  if (widths.reduce((a, b) => a + b, 0) <= room) {
+    let right = PX1;
+    legend = labels
+      .map((l, j) => ({ l, j, w: widths[j] }))
+      .reverse()
+      .map(({ l, j, w }) => {
+        right -= w;
+        return (
+          `<rect x="${px(right)}" y="${PY0 - 18}" width="12" height="12" rx="3" fill="${ACCENTS[j % ACCENTS.length]}"/>` +
+          `<text x="${px(right + 16)}" y="${PY0 - 7}" font-size="14" fill="${INK}" ${FONT}>${escapeXml(l)}</text>`
+        );
+      });
+  } else {
+    // Too long for the row above the plot: a column in the plot's top right,
+    // on the paper, one entry a line.
+    const w = Math.min(PX1 - PX0 - 8, Math.max(...widths));
+    const x = PX1 - 4 - w;
+    legend = [
+      `<rect x="${px(x - 4)}" y="${PY0}" width="${px(w + 4)}" height="${labels.length * 18 + 6}" fill="${PAPER}" fill-opacity="0.9"/>`,
+      ...labels.map(
+        (l, j) =>
+          `<rect x="${px(x)}" y="${PY0 + 5 + j * 18}" width="12" height="12" rx="3" fill="${ACCENTS[j % ACCENTS.length]}"/>` +
+          `<text x="${px(x + 16)}" y="${PY0 + 16 + j * 18}" font-size="14" fill="${INK}" ${FONT}>${escapeXml(l)}</text>`,
+      ),
+    ];
+  }
   return frame(sim, "", [
     ...curves,
     curtain,

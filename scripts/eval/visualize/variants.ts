@@ -129,11 +129,11 @@ const V2_EDITS: [string, string][] = [
   ],
   [
     "  variables: for ode, each with name, rate (a formula in t and every variable's name), and start.",
-    "  variables: for ode, each with name, rate (a formula in t and every variable's name), start, and label: what the legend calls it, in the passage's words (susceptible, infected).",
+    "  variables: for ode, each with name, rate (a formula in t and every variable's name), start, and label: what the legend calls it, in the passage's words, 3 words at most (susceptible, infected).",
   ],
   [
     "  xLabel, uLabel: what x and u are in the passage's words — position along the rod, temperature.",
-    "  xLabel, uLabel: what x and u are in the passage's words — position along the rod, temperature.\n  tUnit: the unit of the law's time in the passage's words — s, min, days — shown on the clock.\n  levels: up to 3 values the passage names that the state is measured against — a threshold, the temperature the rod settles at, a target — each { value, label }, drawn as a dashed line across the plot with its label. A reference line is a level, never a variable with rate 0.",
+    "  xLabel, uLabel: what x and u are in the passage's words — position along the rod, temperature.\n  tUnit: the unit of the law's time in the passage's words — s, min, days — shown on the clock.\n  levels: up to 3 values the passage names that the state is measured against — a threshold, the temperature the rod settles at, a target — each { value, label } with a label of 5 words at most, drawn as a dashed line across the plot with its label. A reference line is a level, never a variable with rate 0.",
   ],
   // Diagrams: a rank of four boxes shrinks every word in a 320 px card; a
   // detail that restates the label is crowding; a self-loop was avoided.
