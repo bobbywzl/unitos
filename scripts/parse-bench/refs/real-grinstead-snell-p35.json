@@ -1,0 +1,516 @@
+{
+ "id": "real-grinstead-snell-p35",
+ "category": "textbook",
+ "source": {
+  "pdf": ".bench/real/grinstead-snell-ch1.pdf",
+  "url": "https://math.dartmouth.edu/~prob/prob/prob.pdf"
+ },
+ "pages": [
+  35,
+  36
+ ],
+ "license": "open",
+ "provenance": "hand",
+ "notes": "Grinstead and Snell's Introduction to Probability (The CHANCE Project, version of 4 July 2006; Copyright (C) 2006 Peter G. Doyle, a version of the 2nd edition, Copyright (C) 2003 Charles M. Grinstead and J. Laurie Snell), freely redistributable under the terms of the GNU Free Documentation License. The PDF here is chapter 1 cut from the book (its pages 9-48), so a page number here is the printed page number. Scored: the end of section 1.2 and the start of its exercises: numbered exercises with bold numbers and hanging indents, lettered sub-items, displays inside items (they split the list; the words after a display are a paragraph), italic running heads. Exercise 16 continues on page 37.",
+ "furniture": [
+  "1.2. DISCRETE PROBABILITY DISTRIBUTIONS",
+  "35",
+  "36",
+  "CHAPTER 1. DISCRETE PROBABILITY DISTRIBUTIONS"
+ ],
+ "blocks": [
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "We see that these two mathematicians arrived at two very different ways to solve the problem of points. Pascal’s method was to develop an algorithm and use it to calculate the fair division. This method is easy to implement on a computer and easy to generalize. Fermat’s method, on the other hand, was to change the problem into an equivalent problem for which he could use counting or combinatorial methods. We will see in Chapter 3 that, in fact, Fermat used what has become known as Pascal’s triangle! In our study of probability today we shall find that both the algorithmic approach and the combinatorial approach share equal billing, just as they did 300 years ago when probability got its start."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "Exercises"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "1",
+     "spans": [
+      {
+       "text": "Let "
+      },
+      {
+       "text": "Ω={a,b,c}",
+       "latex": "\\Omega=\\{a,b,c\\}"
+      },
+      {
+       "text": " be a sample space. Let "
+      },
+      {
+       "text": "m(a)=1/2",
+       "latex": "m(a)=1/2"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "m(b)=1/3",
+       "latex": "m(b)=1/3"
+      },
+      {
+       "text": ", and "
+      },
+      {
+       "text": "m(c)=1/6",
+       "latex": "m(c)=1/6"
+      },
+      {
+       "text": ". Find the probabilities for all eight subsets of "
+      },
+      {
+       "text": "Ω",
+       "latex": "\\Omega"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "2",
+     "spans": [
+      {
+       "text": "Give a possible sample space "
+      },
+      {
+       "text": "Ω",
+       "latex": "\\Omega"
+      },
+      {
+       "text": " for each of the following experiments:"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "(a)",
+     "spans": [
+      {
+       "text": "An election decides between two candidates A and B."
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "(b)",
+     "spans": [
+      {
+       "text": "A two-sided coin is tossed."
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "(c)",
+     "spans": [
+      {
+       "text": "A student is asked for the month of the year and the day of the week on which her birthday falls."
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "(d)",
+     "spans": [
+      {
+       "text": "A student is chosen at random from a class of ten students."
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "(e)",
+     "spans": [
+      {
+       "text": "You receive a grade in this course."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "3",
+     "spans": [
+      {
+       "text": "For which of the cases in Exercise 2 would it be reasonable to assign the uniform distribution function?"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "4",
+     "spans": [
+      {
+       "text": "Describe in words the events specified by the following subsets of"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "\\Omega=\\{HHH,\\ HHT,\\ HTH,\\ HTT,\\ THH,\\ THT,\\ TTH,\\ TTT\\}"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "(see Example 1.6)."
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 1,
+     "marker": "(a)",
+     "spans": [
+      {
+       "text": "E={HHH,HHT,HTH,HTT}",
+       "latex": "E=\\{\\text{HHH,HHT,HTH,HTT}\\}"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "(b)",
+     "spans": [
+      {
+       "text": "E={HHH,TTT}",
+       "latex": "E=\\{\\text{HHH,TTT}\\}"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "(c)",
+     "spans": [
+      {
+       "text": "E={HHT,HTH,THH}",
+       "latex": "E=\\{\\text{HHT,HTH,THH}\\}"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "(d)",
+     "spans": [
+      {
+       "text": "E={HHT,HTH,HTT,THH,THT,TTH,TTT}",
+       "latex": "E=\\{\\text{HHT,HTH,HTT,THH,THT,TTH,TTT}\\}"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "5",
+     "spans": [
+      {
+       "text": "What are the probabilities of the events described in Exercise 4?"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "6",
+     "spans": [
+      {
+       "text": "A die is loaded in such a way that the probability of each face turning up is proportional to the number of dots on that face. (For example, a six is three times as probable as a two.) What is the probability of getting an even number in one throw?"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "7",
+     "spans": [
+      {
+       "text": "Let "
+      },
+      {
+       "text": "A",
+       "latex": "A"
+      },
+      {
+       "text": " and "
+      },
+      {
+       "text": "B",
+       "latex": "B"
+      },
+      {
+       "text": " be events such that "
+      },
+      {
+       "text": "P(A∩B)=1/4",
+       "latex": "P(A\\cap B)=1/4"
+      },
+      {
+       "text": ", "
+      },
+      {
+       "text": "P(A)=1/3",
+       "latex": "P(\\tilde{A})=1/3"
+      },
+      {
+       "text": ", and "
+      },
+      {
+       "text": "P(B)=1/2",
+       "latex": "P(B)=1/2"
+      },
+      {
+       "text": ". What is "
+      },
+      {
+       "text": "P(A∪B)",
+       "latex": "P(A\\cup B)"
+      },
+      {
+       "text": "?"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "8",
+     "spans": [
+      {
+       "text": "A student must choose one of the subjects, art, geology, or psychology, as an elective. She is equally likely to choose art or psychology and twice as likely to choose geology. What are the respective probabilities that she chooses art, geology, and psychology?"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "9",
+     "spans": [
+      {
+       "text": "A student must choose exactly two out of three electives: art, French, and mathematics. He chooses art with probability 5/8, French with probability 5/8, and art and French together with probability 1/4. What is the probability that he chooses mathematics? What is the probability that he chooses either art or French?"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "10",
+     "spans": [
+      {
+       "text": "For a bill to come before the president of the United States, it must be passed by both the House of Representatives and the Senate. Assume that, of the bills presented to these two bodies, 60 percent pass the House, 80 percent pass the Senate, and 90 percent pass at least one of the two. Calculate the probability that the next bill presented to the two groups will come before the president."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "11",
+     "spans": [
+      {
+       "text": "What odds should a person give in favor of the following events?"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "(a)",
+     "spans": [
+      {
+       "text": "A card chosen at random from a 52-card deck is an ace."
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "(b)",
+     "spans": [
+      {
+       "text": "Two heads will turn up when a coin is tossed twice."
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "(c)",
+     "spans": [
+      {
+       "text": "Boxcars (two sixes) will turn up when two dice are rolled."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "12",
+     "spans": [
+      {
+       "text": "You offer 3 : 1 odds that your friend Smith will be elected mayor of your city. What probability are you assigning to the event that Smith wins?"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "13",
+     "spans": [
+      {
+       "text": "In a horse race, the odds that Romance will win are listed as 2 : 3 and that Downhill will win are 1 : 2. What odds should be given for the event that either Romance or Downhill wins?"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "14",
+     "spans": [
+      {
+       "text": "Let "
+      },
+      {
+       "text": "X",
+       "latex": "X"
+      },
+      {
+       "text": " be a random variable with distribution function "
+      },
+      {
+       "text": "mX(x)",
+       "latex": "m_{X}(x)"
+      },
+      {
+       "text": " defined by"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "m_{X}(-1)=1/5,\\quad m_{X}(0)=1/5,\\quad m_{X}(1)=2/5,\\quad m_{X}(2)=1/5\\,."
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 1,
+     "marker": "(a)",
+     "spans": [
+      {
+       "text": "Let "
+      },
+      {
+       "text": "Y",
+       "latex": "Y"
+      },
+      {
+       "text": " be the random variable defined by the equation "
+      },
+      {
+       "text": "Y=X+3",
+       "latex": "Y=X+3"
+      },
+      {
+       "text": ". Find the distribution function "
+      },
+      {
+       "text": "mY(y)",
+       "latex": "m_{Y}(y)"
+      },
+      {
+       "text": " of "
+      },
+      {
+       "text": "Y",
+       "latex": "Y"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "(b)",
+     "spans": [
+      {
+       "text": "Let "
+      },
+      {
+       "text": "Z",
+       "latex": "Z"
+      },
+      {
+       "text": " be the random variable defined by the equation "
+      },
+      {
+       "text": "Z=X2",
+       "latex": "Z=X^{2}"
+      },
+      {
+       "text": ". Find the distribution function "
+      },
+      {
+       "text": "mZ(z)",
+       "latex": "m_{Z}(z)"
+      },
+      {
+       "text": " of "
+      },
+      {
+       "text": "Z",
+       "latex": "Z"
+      },
+      {
+       "text": "."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "*15",
+     "spans": [
+      {
+       "text": "John and Mary are taking a mathematics course. The course has only three grades: A, B, and C. The probability that John gets a B is .3. The probability that Mary gets a B is .4. The probability that neither gets an A but at least one gets a B is .1. What is the probability that at least one gets a B but neither gets a C?"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "16",
+     "spans": [
+      {
+       "text": "In a fierce battle, not less than 70 percent of the soldiers lost one eye, not less than 75 percent lost one ear, not less than 80 percent lost one hand, and not"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

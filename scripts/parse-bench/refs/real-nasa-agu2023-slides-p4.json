@@ -1,0 +1,309 @@
+{
+ "id": "real-nasa-agu2023-slides-p4",
+ "category": "slides",
+ "source": {
+  "pdf": ".bench/real/nasa-agu2023-slides.pdf",
+  "url": "https://ntrs.nasa.gov/api/citations/20230017293/downloads/AGU2023_Learning_Workshop_slides_20231206_FINAL.pdf"
+ },
+ "pages": [
+  4,
+  7
+ ],
+ "license": "public-domain",
+ "provenance": "hand",
+ "notes": "NASA Open Science Data Repository workshop slides, AGU 2023 (NTRS 20230017293), a work of the United States government, printed from a slide program to PDF (960x540 pt pages). Scored: four slides: a title bar per slide (a heading), \"•\" bullet lists with wrapped items, a hub diagram whose labels are live text (a figure: its labels are not text), a grid of eight photos each with its caption under it (eight captioned figures, row by row), a quotation with bold words over a photo background (the photo is a figure; the black page-size backdrop is not), a citation line, section labels \"Mission\" and \"Vision\" (headings). Slide numbers are furniture.",
+ "furniture": [
+  "4",
+  "5",
+  "6",
+  "7"
+ ],
+ "blocks": [
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Space Biology Objectives"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Discover how biological systems respond to the space environment"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Identify the underlying mechanisms and develop models for biological systems in space"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Develop technologies to enable spaceflight research"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Promote open science through the GeneLab Data System and Ames Life Sciences Data Archive"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Provide mechanistic understanding to support human health in space"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Transfer the knowledge and technology of space-based research to benefit life on Earth"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "figure"
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Flight Hardware To Support Space Biology Research"
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "NASA: Bioculture System"
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "NASA: Rodent Habitat"
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "NASA-JAXA: Life Sciences Glovebox"
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "BioServe: BioCell and Fluid Processing Apparatus"
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "NASA: WetLab-2 (qPCR)"
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "NASA: Vented Fly Box"
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "JAXA: Mouse Habitat Unit"
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Redwire: Multi-Use Variable-G Platform"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Open Science"
+    }
+   ]
+  },
+  {
+   "kind": "quote",
+   "spans": [
+    {
+     "text": "“We define open science as a collaborative culture enabled by technology that empowers the "
+    },
+    {
+     "bold": true,
+     "text": "open sharing of data, information, and knowledge"
+    },
+    {
+     "text": " within the scientific community and the wider public to accelerate scientific research and understanding.”"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Ramachandran, R., Bugbee, K., & Murphy, K. J. "
+    },
+    {
+     "bold": true,
+     "text": "Moving from Open Data to Open Science"
+    },
+    {
+     "text": ". Earth and Space Science, Wiley Publication. https://doi.org/10.1029/2020EA001562"
+    }
+   ]
+  },
+  {
+   "kind": "figure"
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "OSDR Mission and Vision"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Mission"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "To enable biological discovery and health resilience for space exploration through open science."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Vision"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Design and deploy a unique repository, the Open Science Data Repository (OSDR), housing standardized metadata and data from spaceflight or spaceflight-relevant samples, following FAIR (Findable, Accessible, Interoperable, and Reusable) principles"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Engage with the scientific community by prioritizing the needs of the Open Science Analysis Working Group (AWG) members, and supporting open source, open science, citizen science, and education initiatives such as GeneLab for High Schools (GL4HS) and GeneLab for Colleges and Universities (GL4U)"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Partner with spaceflight-relevant projects through sample sharing or augmentation of experimental samples to expand analyses"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Process spaceflight-relevant samples answering knowledge gaps, establishing best-practices for sample processing and providing common omics processing platforms for the space biology community, leading to a more cohesive sets of independent datasets"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Curate, beyond best-practice, spaceflight-relevant datasets and make processed data publicly available as expediently as possible"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "•",
+     "spans": [
+      {
+       "text": "Provide open-access to computing resources and visualization tools for raw and processed data, democratizing the access to spaceflight-relevant data and disseminating knowledge of how life responds to the space environment. This platform will be an essential tool to discover new countermeasures for human exploration of space, and will inevitably benefit life on Earth as well."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

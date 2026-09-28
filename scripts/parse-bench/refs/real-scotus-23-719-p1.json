@@ -1,0 +1,218 @@
+{
+ "id": "real-scotus-23-719-p1",
+ "category": "legal",
+ "source": {
+  "pdf": ".bench/real/scotus-23-719.pdf",
+  "url": "https://www.supremecourt.gov/opinions/23pdf/23-719_19m2.pdf"
+ },
+ "pages": [
+  1,
+  3
+ ],
+ "license": "public-domain",
+ "provenance": "hand",
+ "notes": "Trump v. Anderson, 601 U. S. ___ (2024), per curiam slip opinion; a work of the United States government. Scored: the caption page and the start of the opinion: slip-opinion running heads that alternate (\"Cite as\" on odd pages, the case name on even pages) over a \"Per Curiam\" line, a notice paragraph, the court's name as the title, centered caption lines, a part numeral \"I\" as a heading, a block quotation, soft hyphens at line ends. The decorative rules made of underscores are no block. The last paragraph of page 3 continues on page 4.",
+ "furniture": [
+  "(Slip Opinion)",
+  "Cite as: 601 U. S. ____ (2024)",
+  "1",
+  "Per Curiam",
+  "2",
+  "TRUMP v. ANDERSON",
+  "Per Curiam",
+  "Cite as: 601 U. S. ____ (2024)",
+  "3",
+  "Per Curiam"
+ ],
+ "blocks": [
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "NOTICE: This opinion is subject to formal revision before publication in the United States Reports. Readers are requested to notify the Reporter of Decisions, Supreme Court of the United States, Washington, D. C. 20543, pio@supremecourt.gov, of any typographical or other formal errors."
+    }
+   ]
+  },
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "SUPREME COURT OF THE UNITED STATES"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "No. 23–719"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "DONALD J. TRUMP, PETITIONER "
+    },
+    {
+     "italic": true,
+     "text": "v."
+    },
+    {
+     "text": " NORMA ANDERSON, "
+    },
+    {
+     "smallCaps": true,
+     "text": "ET AL."
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "ON WRIT OF CERTIORARI TO THE SUPREME COURT OF COLORADO"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "[March 4, 2024]"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "smallCaps": true,
+     "text": "PER CURIAM."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "A group of Colorado voters contends that Section 3 of the Fourteenth Amendment to the Constitution prohibits former President Donald J. Trump, who seeks the Presidential nomination of the Republican Party in this year’s election, from becoming President again. The Colorado Supreme Court agreed with that contention. It ordered the Colorado secretary of state to exclude the former President from the Republican primary ballot in the State and to disregard any write-in votes that Colorado voters might cast for him."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Former President Trump challenges that decision on several grounds. Because the Constitution makes Congress, rather than the States, responsible for enforcing Section 3 against federal officeholders and candidates, we reverse."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "I"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Last September, about six months before the March 5, 2024, Colorado primary election, four Republican and two unaffiliated Colorado voters filed a petition against former President Trump and Colorado Secretary of State Jena Griswold in Colorado state court. These voters—whom we refer to as the respondents—contend that after former President Trump’s defeat in the 2020 Presidential election, he disrupted the peaceful transfer of power by intentionally organizing and inciting the crowd that breached the Capitol as Congress met to certify the election results on January 6, 2021. One consequence of those actions, the respondents maintain, is that former President Trump is constitutionally ineligible to serve as President again."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Their theory turns on Section 3 of the Fourteenth Amendment. Section 3 provides:"
+    }
+   ]
+  },
+  {
+   "kind": "quote",
+   "spans": [
+    {
+     "text": "“No person shall be a Senator or Representative in Congress, or elector of President and Vice President, or hold any office, civil or military, under the United States, or under any State, who, having previously taken an oath, as a member of Congress, or as an officer of the United States, or as a member of any State legislature, or as an executive or judicial officer of any State, to support the Constitution of the United States, shall have engaged in insurrection or rebellion against the same, or given aid or comfort to the enemies thereof. But Congress may by a vote of two-thirds of each House, remove such disability.”"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "According to the respondents, Section 3 applies to the former President because after taking the Presidential oath in 2017, he intentionally incited the breaching of the Capitol on January 6 in order to retain power. They claim that he is therefore not a qualified candidate, and that as a result, the Colorado secretary of state may not place him on the primary ballot. See Colo. Rev. Stat. §§1–1–113(1), 1–4–1101(1), 1–4–1201, 1–4–1203(2)(a), 1–4–1204 (2023)."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "After a five-day trial, the state District Court found that former President Trump had “engaged in insurrection” within the meaning of Section 3, but nonetheless denied the respondents’ petition. The court held that Section 3 did not apply because the Presidency, which Section 3 does not mention by name, is not an “office . . . under the United States” and the President is not an “officer of the United States” within the meaning of that provision. See App. to Pet. for Cert. 184a–284a."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In December, the Colorado Supreme Court reversed in part and affirmed in part by a 4 to 3 vote. Reversing the District Court’s operative holding, the majority concluded that for purposes of Section 3, the Presidency is an office under the United States and the President is an officer of the United States. The court otherwise affirmed, holding (1) that the Colorado Election Code permitted the respondents’ challenge based on Section 3; (2) that Congress need not pass implementing legislation for disqualifications under Section 3 to attach; (3) that the political question doctrine did not preclude judicial review of former President Trump’s eligibility; (4) that the District Court did not abuse its discretion in admitting into evidence portions of a congressional Report on the events of January 6; (5) that the District Court did not err in concluding that those events constituted an “insurrection” and that former President Trump “engaged in” that insurrection; and (6) that former President Trump’s speech to the crowd that breached the Capitol on January 6 was not protected by the First Amendment. See "
+    },
+    {
+     "italic": true,
+     "text": "id."
+    },
+    {
+     "text": ", at 1a–114a."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The Colorado Supreme Court accordingly ordered Secretary Griswold not to “list President Trump’s name on the 2024 presidential primary ballot” or “count any write-in votes cast for him.” "
+    },
+    {
+     "italic": true,
+     "text": "Id."
+    },
+    {
+     "text": ", at 114a. Chief Justice Boatright and Justices Samour and Berkenkotter each filed dissenting opinions. "
+    },
+    {
+     "italic": true,
+     "text": "Id."
+    },
+    {
+     "text": ", at 115a–124a, 125a–161a, 162a–183a."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Under the terms of the opinion of the Colorado Supreme Court, its ruling was automatically stayed pending this Court’s review. See "
+    },
+    {
+     "italic": true,
+     "text": "id."
+    },
+    {
+     "text": ", at 114a. We granted former President Trump’s petition for certiorari, which raised a single question: “Did the Colorado Supreme Court err in ordering President Trump excluded from the 2024 presidential primary ballot?” See 601 U. S. ___ (2024). Concluding that it"
+    }
+   ]
+  }
+ ]
+}

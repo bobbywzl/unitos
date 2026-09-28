@@ -1,0 +1,105 @@
+{
+ "id": "real-usda-bulletin-27-p3",
+ "category": "report",
+ "source": {
+  "pdf": ".bench/real/ia-bouillon-cubes-1913.pdf",
+  "url": "https://archive.org/details/bouilloncubesthe27cook"
+ },
+ "pages": [
+  3,
+  3
+ ],
+ "license": "public-domain",
+ "provenance": "hand",
+ "notes": "F. C. Cook, Bouillon Cubes: Their Contents and Food Value Compared with Meat Extracts and Home-Made Preparations of Meat, U.S. Department of Agriculture Bulletin No. 27 (1913), a work of the United States government; the Internet Archive's scan with its OCR text layer (page 1 of the PDF is the archive's own notice). Scored: the first printed page. The words are the text layer's characters, OCR errors kept (\"foy\", \"beimg\", \"shght\", \"Physiolegical\"). The masthead (ornaments, the department's name in display type, \"No. 27\") is one figure: its OCR words are noise. The printer's mark at the foot of the page, read by the OCR as \"Geass ay\", is furniture. The last paragraph runs to page 4.",
+ "furniture": [
+  "Geass ay"
+ ],
+ "blocks": [
+  {
+   "kind": "figure"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Contribution from the Bureau of Chemistry, Carl L. Alsberg, Chief, November 5, 1913."
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "BOUILLON CUBES: THEIR CONTENTS AND FOOD VALUE COMPARED WITH MEAT EXTRACTS AND HOME-MADE PREPARATIONS OF MEAT."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "By F. C. "
+    },
+    {
+     "smallCaps": true,
+     "text": "Cook,"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "italic": true,
+     "text": "Physiological Chemist, Animal Physiolegical Chemistry Laboratory."
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "INTRODUCTION."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "As the true dietary value of commercial meat preparations, especially bouillon cubes, fluid and semisolid meat extracts, commercially bottled meat juices, and similar preparations offered for sale, is not generally understood by the people, and as these articles are erroneously believed to be convenient forms of concentrated meat, the Bureau of Chemistry has undertaken to determine their actual food value. Complete analyses have been made of ten of the leading brands of bouillon cubes manufactured in the United States and Germany, and collected on the New York market in 1912. One purpose of this investigation was to determine whether the term “bouillon,” which is defined as a broth prepared from meat, may justly be used foy many of these cubes which, while not nutritious, have a certain value as a flavoring medium and as a stimulating and appetizing drink."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Bouillon cubes as sold by most grocers are wrapped in tin foil, paraffin paper, or both. They will keep indefinitely, although certain makes are likely to lose their form during warm weather."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "COMMERCIAL BOUILLON CUBES."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The results of the analyses of these cubes are expressed in the accompanying tables and diagrams in common terms, as salt, water, fat, plant extract, and meat extract. It will be observed that common salt is the greatest constituent, beimg from 49 to 72 per cent of the total weight of the cubes. The amount of meat extract present ranges from 8 per cent in the poorest brands to but 28 per cent in the best brands. The third important ingredient is plant or vegetable extract which constitutes from 3 to 30 per cent. This plant extract is useful because of its flavoring properties but has but shght, if any, nutritive value. The amount of meat stock or meat extract"
+    }
+   ]
+  }
+ ]
+}

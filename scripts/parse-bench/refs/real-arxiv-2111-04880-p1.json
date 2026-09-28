@@ -1,0 +1,281 @@
+{
+ "id": "real-arxiv-2111-04880-p1",
+ "category": "cjk",
+ "source": {
+  "pdf": ".bench/real/arxiv-2111.04880.pdf",
+  "url": "https://arxiv.org/abs/2111.04880"
+ },
+ "pages": [
+  1,
+  2
+ ],
+ "license": "open",
+ "provenance": "hand",
+ "notes": "许为 (XU Wei), 六论以用户为中心的设计：智能人机交互的人因工程途径 (User Centered Design (VI): Human Factors Engineering Approaches for Intelligent Human-Computer Interaction), arXiv:2111.04880, CC BY 4.0. A Chinese paper made in Word (SimSun, DengXian, Times): a Chinese title, an English title, a numbered list of research points, bold labels opening the abstract, keywords and classification lines (SimSun drawn as synthetic bold: the font name says regular), an English abstract, a footnote, numbered section headings, Chinese paragraphs that wrap with no spaces. The arXiv stamp in the left margin is furniture.",
+ "furniture": [
+  "1",
+  "2",
+  "arXiv:2111.04880[cs.HC] 03March2022"
+ ],
+ "blocks": [
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "六论以用户为中心的设计：智能人机交互的人因工程途径"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "许 为 *"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "(浙江大学 心理科学研究中心, 杭州 310058)"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "bold": true,
+     "text": "研究要点："
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "1.",
+     "spans": [
+      {
+       "text": "分析智能人机交互（iHCI）的人因工程特征"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "2.",
+     "spans": [
+      {
+       "text": "提出“面向用户的iHCI”的设计新理念和iHCI 人因工程新框架"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "3.",
+     "spans": [
+      {
+       "text": "采用新理念和新框架分析智能自动驾驶车人机共驾的人因问题以及协同认知生态系统，提出人因工程解决方案"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "4.",
+     "spans": [
+      {
+       "text": "分析iHCI 中的用户意图识别和人机协同合作问题，并提出今后人因工程研究的重点"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "bold": true,
+     "text": "摘要"
+    },
+    {
+     "text": " 本文从“以用户为中心的设计”理念出发，在分析智能人机交互（iHCI）的人因特征和提出的“面向用户的iHCI”新理念的基础上，进一步提出一个基于协同认知系统、情景意识认知理论、智能代理理论的iHCI 人因工程新框架。采用以上新理念和新框架，分析智能自动驾驶车人机共驾的人因问题以及协同认知生态系统，提出人因工程的初步解决方案。最后，分析iHCI 中的两个基本问题（用户意图识别、人机协同合作），指出今后人因工程研究的重点。"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "bold": true,
+     "text": "关键词"
+    },
+    {
+     "text": " 以用户为中心的设计, 智能人机交互，协同认知系统，人因工程，人机协同合作,用户意图识别，人机共驾"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "bold": true,
+     "text": "中图分类号："
+    },
+    {
+     "text": "B849 "
+    },
+    {
+     "bold": true,
+     "text": "文献标识码："
+    },
+    {
+     "text": "Ａ "
+    },
+    {
+     "bold": true,
+     "text": "文章编号："
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "User Centered Design（VI）：Human Factors Engineering Approaches for Intelligent Human-Computer Interaction"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "bold": true,
+     "text": "XU Wei"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "(Center for Psychological Sciences, Zhejiang University, Hangzhou 310058, China)"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Abstract"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Starting from the design philosophy of \"user-centered design\", this paper analyzes the human factors characteristics of intelligent human-computer interaction (iHCI) and proposes a concept of \"user-oriented iHCI\". The paper further proposes a new human factors framework for iHCI based on the theories of joint cognitive systems, situation awareness, and intelligent agents. With the help of the concept and framework, the paper analyzes the human factors issues in the ecosystem of autonomous vehicle co-driving and proposes an initial human factors solution. Finally, the paper analyzes the two important research areas in iHCI (i.e., user intention recognition, human-computer collaboration) and points out the key human factors questions for future research."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "bold": true,
+     "text": "Keywords:"
+    },
+    {
+     "text": " User centered design, intelligent human-computer interaction, joint cognitive systems, human factors engineering, human-machine collaboration, user intention recognition, human-machine co-driving"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "*",
+   "spans": [
+    {
+     "bold": true,
+     "text": "作者"
+    },
+    {
+     "text": "：许为，博士, 研究员; e-mail: weixu6@yahoo.com."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "1. 引言"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "基于人工智能(AI)技术的各类智能系统正在改变传统人机交互(human-computer interaction，HCI)领域的人机关系模式和研究范式(许为，2005)。智能系统中的智能体（intelligent agent，或称为智能代理）在特定操作场景中具备情境感知、用户意图识别、自主学习、自主决策、自主执行等能力，由此带来了一个新的研究领域：智能人机交互（intelligent HCI, 以下简称iHCI），同时也给人因工程（human factors engineering）研究带来了新机遇（许为, 葛列众，2018,2020；许为，2019a）。传统人机交互的人因工程研究主要针对人与非智能系统之间的交互，iHCI 的研究和设计需要一种新的研究范式和设计思维。"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "iHCI 是AI 技术与人机交互技术不断发展和融合的产物，目前已经进入人们日常的工作和生活中。例如，语音交互，人脸识别等。在交互模式上，iHCI 利用视觉、听觉等多模态交互，提高人机交互的自然性和有效性；从交互技术来看，iHCI 正在向用户生理和情感计算、用户意图识别等方面发展；在交互理念上，iHCI 注重人机协同合作等方面，强调“以用户为中心”的人机组队（human-machine teaming）合作（O’Neill et al., 2020；Babsal et al., 2019, 许为，2020）；从研究层面来看，iHCI 正在促使人、智能系统以及社会技术系统之间的紧密结合，解决智能技术的责任、伦理、道德等问题（吴亚东等，2020）。"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "本文从“以用户为中心的设计”理念出发（许为，2003），在分析iHCI 的人因工程特征和提出“面向用户的iHCI”设计新理念的基础上，进一步提出一个基于协同认知系统、情景意识认知理论以及智能代理理论的iHCI 人因工程新框架；并且以自动驾驶车人机共驾模式为例进一步分析该框架的应用；最后，讨论和分析iHCI 中的一些人因基本问题以及今后研究的重点。本文的目的是从人因工程的角度出发，倡导人因工程设计的新理念，提出针对iHCI 研究和应用的人因工程新思路，推动这方面工作的开展。"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "2. 智能人机交互及人因特征"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "不同于传统的人机交互，iHCI 研究的对象是人类用户与基于AI 技术的智能系统之间的交互。人因工程的总思路是通过基于“以人为中心设计”理念的一系列人与智能系统交互的研究、建模、设计、评估等活动，开发出符合用户需求、有用的、自然的、有效的、安全的iHCI 系统。iHCI 是人-AI 交互这一新型交叉学科领域中的重要研究内容之一（许为，葛列众，高在峰, 2021）。"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "从系统架构角度看，iHCI 主要有以下三种形态：（1）传统的非智能用户界面（系统前端）+ 智能后端系统，例如一个在线的智能化产品推荐系统或信息决策系统，它的用户界面可能是简单的图形用户界面（GUI），其智能后端系统拥有一个或多个提供智能化功能（信息推理和决策等）的智能体；（2）智能人机界面 + 非智能后端系统，例如一个传统数据库系统，它可以采用一个基于智能技术的语音交互人机界面作为用户输入, 该界面具有智能交互代理的职能，建立起用户与系统后端系统之间有效交互的桥梁；（3）智能人机界面 + 智能后端系统，例如拥有智能语音交互人机界面的智能化产品推荐系统或者信息决策系统。"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "以上这三种iHCI 形态的共同点就是系统都带有一个或多个智能体，用户使用这些系统时，他们与系统的智能体交互，而这些智能体拥有基于AI 技术的一些自主化特征，在某些使用场景中表现出类似人类认知的感知、学习、自适应、独立执行等能力。正是这些智能体带来的自主化特征给iHCI 带来了区别于传统人机交互的许多新特征。表1 从人因工程角度概括了从传统人机交互（HCI）向智能人机交互（iHCI）过渡中所表现出的这些新特征（许为, 2020; 许为, 葛列众, 2018, 2020; 许为, 葛列众, 高在峰, 2021）。"
+    }
+   ]
+  }
+ ]
+}

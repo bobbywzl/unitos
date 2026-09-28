@@ -1,0 +1,147 @@
+{
+ "id": "real-scotus-23-719-p8",
+ "category": "legal",
+ "source": {
+  "pdf": ".bench/real/scotus-23-719.pdf",
+  "url": "https://www.supremecourt.gov/opinions/23pdf/23-719_19m2.pdf"
+ },
+ "pages": [
+  8,
+  9
+ ],
+ "license": "public-domain",
+ "provenance": "hand",
+ "notes": "Trump v. Anderson, 601 U. S. ___ (2024), per curiam slip opinion; a work of the United States government. Scored: two pages with footnotes under a short rule, footnote marks set as superscript digits inside the text (kept as printed, \"cl. 2.1\"), italic case names, a paragraph that runs from page 8 to page 9 across the footnotes. The first paragraph starts on page 7 and the last runs to page 10: only their words on pages 8-9 are here. A footnote follows the paragraph that ends on its page.",
+ "furniture": [
+  "8",
+  "TRUMP v. ANDERSON",
+  "Per Curiam",
+  "Cite as: 601 U. S. ____ (2024)",
+  "9",
+  "Per Curiam"
+ ],
+ "blocks": [
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "provisions of the Amendment against the States. It would be incongruous to read this particular Amendment as granting the States the power—silently no less—to disqualify a candidate for federal office."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The only other plausible constitutional sources of such a delegation are the Elections and Electors Clauses, which authorize States to conduct and regulate congressional and Presidential elections, respectively. See Art. I, §4, cl. 1; Art. II, §1, cl. 2.1 But there is little reason to think that these Clauses implicitly authorize the States to enforce Section 3 against federal officeholders and candidates. Granting the States that authority would invert the Fourteenth Amendment’s rebalancing of federal and state power."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The text of Section 3 reinforces these conclusions. Its final sentence empowers Congress to “remove” any Section 3 “disability” by a two-thirds vote of each house. The text imposes no limits on that power, and Congress may exercise it any time, as the respondents concede. See Brief for Respondents 50. In fact, historically, Congress sometimes exercised this amnesty power postelection to ensure that some of the people’s chosen candidates could take office.2 But if States were free to enforce Section 3 by barring candidates from running in the first place, Congress would be forced to exercise its disability removal power before voting begins if it wished for its decision to have any effect on the current election cycle. Perhaps a State may burden congressional authority in such a way when it exercises its “exclusive” sovereign power over its own state offices. "
+    },
+    {
+     "italic": true,
+     "text": "Taylor"
+    },
+    {
+     "text": ", 178 U. S., at 571. But it is implausible to suppose that the Constitution affirmatively delegated to the States the authority to impose such a burden on congressional power with respect to candidates for federal office. Cf. "
+    },
+    {
+     "italic": true,
+     "text": "McCulloch"
+    },
+    {
+     "text": " v. "
+    },
+    {
+     "italic": true,
+     "text": "Maryland"
+    },
+    {
+     "text": ", 4 Wheat. 316, 436 (1819) (“States have no power . . . to retard, impede, burden, or in any manner control, the operations of the constitutional laws enacted by Congress”)."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "1",
+   "spans": [
+    {
+     "text": "The Elections Clause directs, in relevant part, that “[t]he Times, Places and Manner of holding Elections for Senators and Representatives, shall be prescribed in each State by the Legislature thereof.” Art. I, §4, cl. 1. The Electors Clause similarly provides that “[e]ach State shall appoint, in such Manner as the Legislature thereof may direct, a Number of Electors,” who in turn elect the President. Art. II, §1, cl. 2."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "2",
+   "spans": [
+    {
+     "text": "Shortly after the Fourteenth Amendment was ratified, for instance, Congress enacted a private bill to remove the Section 3 disability of Nelson Tift of Georgia, who had recently been elected to represent the State in Congress. See ch. 393, 15 Stat. 427. Tift took his seat in Congress immediately thereafter. See Cong. Globe, 40th Cong., 2d Sess., 4499–4500 (1868). Congress similarly acted postelection to remove the disabilities of persons elected to state and local offices. See Cong. Globe, 40th Cong., 3d Sess., 29–30, 120–121 (1868); ch. 5, 15 Stat. 435–436."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Nor have the respondents identified any tradition of state enforcement of Section 3 against federal officeholders or candidates in the years following ratification of the Fourteenth Amendment.3 Such a lack of historical precedent is generally a “‘telling indication’” of a “‘severe constitutional problem’” with the asserted power. "
+    },
+    {
+     "italic": true,
+     "text": "United States"
+    },
+    {
+     "text": " v. "
+    },
+    {
+     "italic": true,
+     "text": "Texas"
+    },
+    {
+     "text": ", 599 U. S. 670, 677 (2023) (quoting "
+    },
+    {
+     "italic": true,
+     "text": "Free Enterprise Fund"
+    },
+    {
+     "text": " v. "
+    },
+    {
+     "italic": true,
+     "text": "Public Company Accounting Oversight Bd."
+    },
+    {
+     "text": ", 561 U. S. 477, 505 (2010)). And it is an especially telling sign here, because as noted, States "
+    },
+    {
+     "italic": true,
+     "text": "did"
+    },
+    {
+     "text": " disqualify persons from holding state offices following ratification of the Fourteenth Amendment. That pattern of disqualification with respect to state, but not federal offices provides “persuasive evidence of a general understanding” that the States lacked enforcement power with respect to the latter. "
+    },
+    {
+     "italic": true,
+     "text": "U. S. Term Limits"
+    },
+    {
+     "text": ", 514"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "3",
+   "spans": [
+    {
+     "text": "We are aware of just one example of state enforcement against a would-be federal officer. In 1868, the Governor of Georgia refused to commission John Christy, who had won the most votes in a congressional election, because—in the Governor’s view—Section 3 made Christy ineligible to serve. But the Governor’s determination was not final; a committee of the House reviewed Christy’s qualifications itself and recommended that he not be seated. The full House never acted on the matter, and Christy was never seated. See 1 A. Hinds, Precedents of the House of Representatives §459, pp. 470–472 (1907)."
+    }
+   ]
+  }
+ ]
+}
