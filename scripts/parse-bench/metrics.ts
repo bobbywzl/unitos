@@ -1301,7 +1301,14 @@ export type RoleScores = {
   quotes: number | null;
   /** The mean of the roles the reference has, printed equation labels among them (the composite's part). */
   score: number | null;
+  /** The blocks alignment and indentation count wrong, for the detail report. */
+  misses: { align: PropertyMiss[]; indent: PropertyMiss[] };
 };
+
+/** A block a property counts wrong: the reference's value and the
+    candidate's ("left" or "none" where a side sets none, "not found" where
+    the block has no counterpart), and the block's first words. */
+export type PropertyMiss = { ref: string; cand: string; text: string };
 
 /** F1 of a block property both sides may set: a reference block with it
     is right when its counterpart has the same; a candidate block with it is
@@ -1313,6 +1320,33 @@ function propertyF1(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b: nu
   const recall = refSet.filter((rb) => al.owner[rb] >= 0 && of(cand, al.owner[rb]) === of(ref, rb)).length / refSet.length;
   const precision = candSet.length > 0 ? candSet.filter((cb) => al.main[cb] >= 0 && of(ref, al.main[cb]) === of(cand, cb)).length / candSet.length : 0;
   return f1Of(precision, recall);
+}
+
+/** The blocks propertyF1 counts wrong, each pair once: a reference block
+    whose counterpart differs, then a candidate block whose main reference
+    block differs. `none` names a side that sets none. */
+function propertyMisses(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b: number) => string | undefined, none: string): PropertyMiss[] {
+  const text = (flat: Flat, b: number) => flat.unitsOf[b].map((u) => flat.units[u].text).join(" ").replace(/\s+/g, " ").trim().slice(0, 60);
+  const out: PropertyMiss[] = [];
+  const seen = new Set<string>();
+  ref.blocks.forEach((_, rb) => {
+    const want = of(ref, rb);
+    if (!want) return;
+    const cb = al.owner[rb];
+    const got = cb >= 0 ? (of(cand, cb) ?? none) : "not found";
+    if (got === want) return;
+    seen.add(`${rb}:${cb}`);
+    out.push({ ref: want, cand: got, text: text(ref, rb) });
+  });
+  cand.blocks.forEach((_, cb) => {
+    const got = of(cand, cb);
+    if (!got || al.caption[cb]) return;
+    const rb = al.main[cb];
+    const want = rb >= 0 ? (of(ref, rb) ?? none) : "not found";
+    if (want === got || seen.has(`${rb}:${cb}`)) return;
+    out.push({ ref: want, cand: got, text: text(cand, cb) });
+  });
+  return out;
 }
 
 /** A paragraph shorter than this may fit on one line, where justified and
@@ -1369,15 +1403,17 @@ export function roleScores(ref: Flat, cand: Flat, al: Alignment, blocks: BlockSc
     const x = blocks.byKind[k];
     return x && x.ref > 0 ? x.found / x.ref : null;
   };
+  const align = alignKey(justified);
   const roles = {
-    align: propertyF1(ref, cand, al, alignKey(justified)),
+    align: propertyF1(ref, cand, al, align),
     indent: propertyF1(ref, cand, al, indent),
     captions: refCaption > 0 ? f1Of(candCaption > 0 ? candHits / candCaption : 0, hits / refCaption) : null,
     checks: lists.checks.ref > 0 ? lists.checks.right / lists.checks.ref : null,
     separators: kind("separator"),
     quotes: kind("quote"),
   };
-  return { ...roles, score: meanOf([...Object.values(roles), math.labels.score]) };
+  const misses = { align: roles.align === null ? [] : propertyMisses(ref, cand, al, align, "left"), indent: roles.indent === null ? [] : propertyMisses(ref, cand, al, indent, "none") };
+  return { ...roles, score: meanOf([...Object.values(roles), math.labels.score]), misses };
 }
 
 export type FontScores = {

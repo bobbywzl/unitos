@@ -364,7 +364,9 @@ export function paintsRule(b: Box, rules: Rule[]): boolean {
 }
 
 /** A glyph of the page drawn inside the formula's atoms' box — its origin
-    inside — that is not the formula's own (spaces aside). */
+    inside — that is not the formula's own (spaces aside); or a small one
+    just past its right end, over its baseline: the end of a script or a
+    stacked label the formula lost (the period of "a.s." over an arrow). */
 function strayInside(atoms: Atom[], own: Set<Glyph>, page: Glyph[]): boolean {
   if (atoms.length === 0) return false;
   const em = Math.max(...atoms.map((a) => a.size));
@@ -372,9 +374,12 @@ function strayInside(atoms: Atom[], own: Set<Glyph>, page: Glyph[]): boolean {
   const x2 = Math.max(...atoms.map((a) => a.x2)) - em * 0.05;
   const y1 = Math.min(...atoms.map((a) => a.bottom));
   const y2 = Math.max(...atoms.map((a) => a.top));
+  const base = Math.min(...atoms.filter((a) => a.size >= em * 0.9).map((a) => a.yb));
   return page.some((g) => {
+    if (own.has(g) || g.hidden || g.unicode.trim() === "") return false;
     const cx = g.x + g.w / 2;
-    return cx > x1 && cx < x2 && g.y > y1 && g.y < y2 && !own.has(g) && !g.hidden && g.unicode.trim() !== "";
+    if (cx > x1 && cx < x2 && g.y > y1 && g.y < y2) return true;
+    return g.size < em * 0.8 && cx >= x2 && cx < x2 + em * 0.3 && g.y > base + em * 0.2 && g.y < y2;
   });
 }
 

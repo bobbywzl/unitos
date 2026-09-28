@@ -187,8 +187,8 @@ const half = (size: number) => Math.round(size * 2) / 2;
 const sameMarks = (a: Marks, b: Marks) =>
   a.color === b.color && a.highlight === b.highlight && a.underline === b.underline && a.strike === b.strike;
 
-/** Each item's look (Item.look): its face (none for a math font's and an
-    OCR layer's words), its size, and what the drawing marks on its glyphs.
+/** Each item's look (Item.look): its face (none for an OCR layer's
+    words), its size, and what the drawing marks on its glyphs.
     An item whose glyphs look two ways is cut where the look changes, each
     part an item with its own link (Google Docs draws a highlighted phrase
     and the words after it as one run of one font). hrefAt: the link at a
@@ -197,7 +197,7 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
   if (process.env.R2NOLOOK) return;
   const faces = new Map<string, string>();
   const faceFor = (item: Item) => {
-    if (item.math || !item.font || (item.glyphs?.length && item.glyphs.every((g) => g.mode === 3))) return "";
+    if (!item.font || (item.glyphs?.length && item.glyphs.every((g) => g.mode === 3))) return "";
     let face = faces.get(item.font);
     if (face === undefined) {
       let font: ReturnType<FontObject> = null;

@@ -540,6 +540,9 @@ if (flag("--baseline")) {
         // A candidate that stops making tables where the reference has none
         // leaves the tables metric nothing to score: no drop.
         if (metric === "tables" && r.ref && !r.ref.blocks.some((b) => b.kind === "table")) continue;
+        // A text layer that reads blind leaves coverage unscored (free.ts BLIND): no drop.
+        const free = key.startsWith("free.parse.") ? r.freeParse : key.startsWith("free.import.") ? r.freeImport : undefined;
+        if (metric.startsWith("coverage") && free?.coverage.blind) continue;
         lines.push(`  ${r.entry.id} ${key}: ${was} → (none)`);
         continue;
       }

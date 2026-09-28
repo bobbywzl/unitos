@@ -118,6 +118,11 @@ function referenceDetail(ref: RefDoc, candidate: Doc) {
   console.log(
     `Roles: alignment ${r2(roles.align)}, indentation ${r2(roles.indent)}, captions ${r2(roles.captions)}, checkbox states ${r2(roles.checks)}, separators ${r2(roles.separators)}, quotations ${r2(roles.quotes)}, equation labels ${r2(s.math.labels.score)}.`,
   );
+  for (const [name, misses] of [["alignment", roles.misses.align], ["indentation", roles.misses.indent]] as const) {
+    if (misses.length === 0) continue;
+    console.log(`  ${name} wrong (${misses.length}; the reference's → the candidate's):`);
+    for (const miss of misses.slice(0, 10)) console.log(`    ${miss.ref} → ${miss.cand}: ${miss.text}`);
+  }
   if (s.fonts) {
     const f = s.fonts;
     console.log(`\nFonts: shape ${r2(f.shape)}, size ${r2(f.size)}, bold ${r2(f.bold)}, color ${r2(f.color)} (the reference's body: ${fontText(ref.fonts?.body ?? null)}).`);
@@ -192,7 +197,11 @@ function freeDetail(pdf: PdfText, candidate: Doc, word: boolean) {
   const c = flatten(candidate);
   const f = freeScores(pdf, c, undefined, word);
   console.log(`\nWithout a reference: composite ${f.composite.toFixed(1)}.`);
-  console.log(`Coverage against pdftotext: recall ${pct(f.coverage.recall)}, precision ${pct(f.coverage.precision)} (${f.coverage.expected} words expected, ${f.coverage.words} in the candidate).`);
+  console.log(
+    f.coverage.blind
+      ? `Coverage against pdftotext: not scored, the text layer reads blind (${f.coverage.expected} words, under half of the candidate's ${f.coverage.words}).`
+      : `Coverage against pdftotext: recall ${pct(f.coverage.recall)}, precision ${pct(f.coverage.precision)} (${f.coverage.expected} words expected, ${f.coverage.words} in the candidate).`,
+  );
   const list = (words: [string, number][]) => words.map(([w, n]) => `${w}×${n}`).join("  ") || "(none)";
   console.log(`  Missing most: ${list(f.coverage.missing)}`);
   console.log(`  Extra most:   ${list(f.coverage.extra)}`);

@@ -38,7 +38,6 @@
   { "id": "synth-newsletter-html", "category": "newsletter", "pdf": ".bench/synthetic/synth-newsletter-html.pdf", "license": "open" },
   { "id": "synth-agreement-docxfile", "category": "word", "docx": ".bench/synthetic/synth-agreement-docx.docx", "ref": "synth-agreement-docx", "license": "open" },
   { "id": "synth-gdocs-docxfile", "category": "word", "docx": ".bench/synthetic/synth-gdocs-docx.docx", "ref": "synth-gdocs-docx", "license": "open" },
-  { "id": "synth-look-docxfile", "category": "word", "docx": ".bench/synthetic/synth-look-docx.docx", "ref": "synth-look-docx", "license": "open" },
   { "id": "synth-report-docxfile", "category": "word", "docx": ".bench/synthetic/synth-report-docx.docx", "ref": "synth-report-docx", "license": "open", "quick": true },
   { "id": "synth-tables-docxfile", "category": "word", "docx": ".bench/synthetic/synth-tables-docx.docx", "ref": "synth-tables-docx", "license": "open" },
   { "id": "plos-pcbi-1013322", "category": "paper", "pdf": ".bench/real/plos-pcbi-1013322.pdf", "url": "https://journals.plos.org/ploscompbiol/article/file?id=10.1371/journal.pcbi.1013322&type=printable", "license": "open", "sweep": true },

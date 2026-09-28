@@ -222,6 +222,8 @@ export type FreeScores = {
     f1: number | null;
     expected: number;
     words: number;
+    /** The text layer reads fewer words than BLIND of the candidate's: coverage is not scored. */
+    blind: boolean;
     /** The words the candidate lacks most, and holds past the PDF's most, with their counts. */
     missing: [string, number][];
     extra: [string, number][];
@@ -421,6 +423,7 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
       f1,
       expected: total,
       words: printed.length,
+      blind,
       missing: most(expected, new Map([...new Set([...candBag.keys(), ...covered.keys()])].map((w) => [w, (candBag.get(w) ?? 0) + (covered.get(w) ?? 0)]))),
       extra: most(candBag, expected),
     },

@@ -24,7 +24,6 @@ import { renderTex, texLooks } from "./render-tex";
 import { flatten, referenceBlocks, type Leaf, type LeafLook, type Renderer, type Spec } from "./spec";
 import { agreement } from "./specs/agreement";
 import { gdocs } from "./specs/gdocs";
-import { look } from "./specs/look";
 import { math } from "./specs/math";
 import { newsletter } from "./specs/newsletter";
 import { notes } from "./specs/notes";
@@ -33,7 +32,7 @@ import { report } from "./specs/report";
 import { slides } from "./specs/slides";
 import { tables } from "./specs/tables";
 
-const SPECS: Spec[] = [notes, math, paper, tables, slides, agreement, report, gdocs, newsletter, look];
+const SPECS: Spec[] = [notes, math, paper, tables, slides, agreement, report, gdocs, newsletter];
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const OUT = ".bench/synthetic";

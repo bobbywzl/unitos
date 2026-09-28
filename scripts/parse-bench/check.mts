@@ -420,7 +420,7 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("free: a Word file's contents list is no extra word; a PDF's is", near(asWord.precision, 1) && (asPdf.precision ?? 1) < 1, `word ${asWord.precision}, pdf ${asPdf.precision}`);
   const blindPdf: PdfText = { ...pdf, raw: [["small"]], lines: [] };
   const blind = freeScores(blindPdf, flatten({ blocks: [para("Words the text layer reads none of on this page.")] })).coverage;
-  check("free: a text layer that reads fewer than half the candidate's words scores no coverage", blind.f1 === null && blind.recall === null, JSON.stringify(blind));
+  check("free: a text layer that reads fewer than half the candidate's words scores no coverage", blind.blind && blind.f1 === null && blind.recall === null, JSON.stringify(blind));
 }
 {
   const ROLE_REF: RefBlock[] = [
@@ -552,6 +552,8 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("roles: a centered title and a centered line read as a heading keep their alignment; a short line may drop justify", near(run(right), 1), `align ${run(right)}`);
   const flat = right.map((b) => ("align" in b ? { ...b, align: undefined } : b)) as DocBlock[];
   check("roles: a lost center and a lost justify count", near(run(flat), 0), `align ${run(flat)}`);
+  const misses = score({ blocks: ALIGN_REF }, [], { blocks: flat }).scores.roles.misses.align.map((m) => `${m.ref}→${m.cand}`);
+  check("roles: the detail lists each block aligned wrong", misses.join(",") === "center→left,center→left,justify→left", misses.join(","));
   const unjustified = ALIGN_REF.map((b) => (b.kind === "paragraph" && b.align === "justify" ? { ...b, align: undefined } : b)) as RefBlock[];
   check("roles: justify is not scored where the reference justifies nothing", near(run(right, unjustified), 1), `align ${run(right, unjustified)}`);
   const heading = fromParse({ title: "River notes", titleAlign: "center", blocks: [{ type: "HEADING", text: "Summer survey", html: '<h2 class="center">Summer survey</h2>', page: 1 }] }).blocks;
