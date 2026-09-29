@@ -114,10 +114,11 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
     // A URL's slashes are the math italic's (url.sty sets them in math): a
     // run whose only math is slashes is no formula (arXiv 2506.06352's
     // "arbital.com/p/…" read "\operatorname{com}/\mathrm{p}/", and its
-    // link was lost).
+    // link was lost), unless it is a number over a number ("1/2").
     const stacked = z.some((a) => z.some((b) => a !== b && a.size < size * 0.85 && b.size < size * 0.85 && Math.abs(a.y - b.y) > size * 0.4 && a.x < b.x + b.w && b.x < a.x + a.w));
     const math = z.filter((g) => kind(g, size) === "math");
-    if (!stacked && (math.length === 0 || math.every((g) => g.unicode === "/"))) return;
+    const url = math.every((g) => g.unicode === "/") && !/^[0-9]+\/[0-9]+$/.test(z.map((g) => g.unicode).join(""));
+    if (!stacked && (math.length === 0 || url)) return;
     // A lone raised symbol after a word (a footnote's dagger) is a mark,
     // not a formula: every glyph small, none on the line.
     if (!stacked && z.every((g) => g.size < size * 0.85)) return;

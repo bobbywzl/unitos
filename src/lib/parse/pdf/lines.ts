@@ -522,12 +522,19 @@ export function buildLines(items: Item[], page: number): Line[] {
   // near, never the prose beside it. (A glyph already on the right line
   // stayed put before only by luck: a footnote mark moved to the line above
   // and subscripts to the line below — import compare loop finding.)
+  // A script touches the glyph it is set on: it is its line's, never a
+  // label or a limit of another line's (arXiv 2502.02648's c_k, over the
+  // next line's ">", read "c^α" and "γ >k 1").
+  const all = grouped.flat();
+  const scripted = (item: Item) =>
+    all.some((i) => i !== item && i.size > item.size * 1.1 && Math.abs(i.y - item.y) < i.size * 0.6 && item.x - (i.x + i.w) > -0.05 * i.size && item.x - (i.x + i.w) < 0.15 * i.size);
   // A label stacked over a relation of the line under it (\overset{p}{\to},
   // a word over an arrow) is that line's, however near the line above: it
   // joined the line above as a stray letter.
   const labelOf = (item: Item, n: number) =>
     stats[n].y < item.y &&
     item.size <= stats[n].size * 0.8 &&
+    !scripted(item) &&
     grouped[n].some((i) =>
       (i.glyphs ?? []).some((g) => {
         if (g.family === null || g.size < stats[n].size * 0.9 || mathGlyph(g.family, g.code)?.cls !== "rel") return false;
@@ -544,13 +551,18 @@ export function buildLines(items: Item[], page: number): Line[] {
     const g = op.glyphs?.length === 1 ? op.glyphs[0] : null;
     return !box.display && g !== null && g.family !== null && mathGlyph(g.family, g.code)?.cls === "op" && !/[∫∮]/.test(op.str);
   });
+  // A limit is centered on its operator, with the glyphs on its baseline
+  // beside it (a subscript of the line above, "sup_n", over a sentence's
+  // sum is that line's).
   const inlineLimitOf = (item: Item) =>
     inlineOps.find(([op, box]) => {
-      const center = item.x + item.w / 2;
-      if (item.size > op.size * 0.8 || center < op.x - op.size * 0.25 || center > op.x + op.w + op.size * 0.25) return false;
+      if (item.size > op.size * 0.8 || item.x + item.w < op.x - op.size || item.x > op.x + op.w + op.size) return false;
       const above = item.y >= box.top - item.size * 0.2 && item.y - box.top < op.size * 0.7;
       const below = item.y <= box.bottom && box.bottom - item.y < op.size;
       if (!above && !below) return false;
+      const run = all.filter((i) => i.size <= op.size * 0.8 && Math.abs(i.y - item.y) < item.size * 0.1 && i.x + i.w > op.x - op.size && i.x < op.x + op.w + op.size);
+      const center = (Math.min(...run.map((i) => i.x)) + Math.max(...run.map((i) => i.x + i.w))) / 2;
+      if (Math.abs(center - (op.x + op.w / 2)) > op.size * 0.25 || scripted(item)) return false;
       const reach = Math.max(0, above ? item.y - box.top : box.bottom - item.y);
       return !stats.some((l) => l.size >= item.size / 0.8 && Math.abs(l.y - item.y) < Math.min(reach, l.size * 0.45));
     })?.[0];

@@ -2,7 +2,9 @@ import { z } from "zod";
 import type { BlockKind } from "@/lib/block-kind";
 import { blockTakes, isWebAddress, skippedWarning, type DocumentShape } from "@/lib/block-takes";
 import type { TFunc } from "@/lib/i18n/dictionaries";
+import type { TranscriptContext } from "@/lib/assistant/transcript";
 import { REPLICA_REFUSAL, replicaEdit } from "@/lib/replica";
+import { joinRefusal, splitRefusal } from "@/lib/transcript-lines";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
 
 // The assistant's actions (SPEC.md §7): what the model proposes, validated
@@ -96,6 +98,13 @@ export const actionSchema = z.discriminatedUnion("type", [
     blockIds: z.array(z.string().min(1).max(64)).min(1).max(BLOCK_IDS_MAX).optional(),
     description,
   }),
+  // A video's or an audio's transcript lines (SPEC.md §11): two lines
+  // joined, a line split at the words its second line starts with, a line
+  // given to another voice, a voice renamed on every line.
+  z.object({ type: z.literal("join_lines"), blockId: z.string().min(1), nextBlockId: z.string().min(1), description }),
+  z.object({ type: z.literal("split_line"), blockId: z.string().min(1), quote, description }),
+  z.object({ type: z.literal("set_speaker"), blockId: z.string().min(1), speakerId: z.string().min(1).max(64), description }),
+  z.object({ type: z.literal("rename_speaker"), speakerId: z.string().min(1).max(64), name: z.string().trim().min(1).max(60), description }),
   // A document without rich text: the edits of many blocks, found part by
   // part (lib/assistant/revise.ts), for the plan card.
   z.object({
@@ -186,6 +195,12 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
   move_block: "- move_block {blockId, afterBlockId, description} — move a block after another block; afterBlockId null moves it to the document's start.",
   suggest:
     "- suggest {instruction, blockIds?, description} — change the document's words or styles. The changes land in the document as suggestions the reader accepts or rejects. instruction: every change to make and where, in plain words, under 150 words; the suggestions write the new words, so never copy the changed text into it. blockIds: the blocks to change, only when the change concerns some blocks and not the selection or the whole document; a heading stands for its section. Leave blockIds out for the whole document.",
+  join_lines:
+    "- join_lines {blockId, nextBlockId, description} — two transcript lines of one voice, the second right after the first, become one line: its time runs from the first line's start to the second line's end.",
+  split_line:
+    "- split_line {blockId, quote, description} — one transcript line becomes two: quote is the exact words the second line starts with; the time divides where the words divide.",
+  set_speaker: "- set_speaker {blockId, speakerId, description} — give one transcript line to another voice of the recording: an id from Speakers.",
+  rename_speaker: "- rename_speaker {speakerId, name, description} — rename a voice on every line it says.",
   revise:
     "- revise {instruction, blockIds?, description} — a change to many blocks at once: the spelling or grammar across the document, its register, a section rewritten. The document is read part by part, and the edit of each block comes to the plan card. instruction: every change to make and where, in plain words, under 150 words; never the changed text itself. blockIds: the blocks to change, only when the change concerns some blocks; a heading stands for its section. Leave blockIds out for the whole document.",
 };
@@ -196,17 +211,22 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
     holds too, SPEC.md §30). */
 export type DocumentEdits = "blocks" | "suggestions" | "none";
 
+// The actions on a video's or an audio's transcript lines and voices.
+const MEDIA_ACTIONS: ReadonlySet<RawAction["type"]> = new Set(["join_lines", "split_line", "set_speaker", "rename_speaker"]);
 // The block actions change an article's blocks outright. In a document with
 // rich text the assistant's changes are suggestions instead.
-const BLOCK_ACTIONS: ReadonlySet<RawAction["type"]> = new Set(["edit_block", "insert_paragraph", "remove_block", "format_block", "style", "move_block", "revise"]);
+const BLOCK_ACTIONS: ReadonlySet<RawAction["type"]> = new Set(["edit_block", "insert_paragraph", "remove_block", "format_block", "style", "move_block", "revise", ...MEDIA_ACTIONS]);
 const fitsDocument = (type: RawAction["type"], edits: DocumentEdits): boolean =>
   type === "suggest" ? edits === "suggestions" : !BLOCK_ACTIONS.has(type) || edits === "blocks";
 
 /** The action types as the prompts list them, one line per type: on a
     document with rich text, suggest in place of the block actions; on a
-    document that takes no edits, neither. */
-export function actionLines(edits: DocumentEdits): string[] {
-  return (Object.keys(ACTION_LINES) as RawAction["type"][]).filter((type) => fitsDocument(type, edits)).map((type) => ACTION_LINES[type]);
+    document that takes no edits, neither; the transcript's actions on a
+    video's or an audio's document alone. */
+export function actionLines(edits: DocumentEdits, media = false): string[] {
+  return (Object.keys(ACTION_LINES) as RawAction["type"][])
+    .filter((type) => fitsDocument(type, edits) && (media || !MEDIA_ACTIONS.has(type)))
+    .map((type) => ACTION_LINES[type]);
 }
 
 export function buildAnchor(blockText: string, quoteText: string, blockId: string): AssistantAnchor | null {
@@ -228,8 +248,13 @@ export type PlanContext = {
   edits: DocumentEdits;
   // Document.format: "slides", "sheets", or null.
   format: string | null;
-  // A slide's and a sheet's html is its replica, which the plan checks an edit against.
-  blocks: { id: string; type: string; text: string; html: string | null }[];
+  // A slide's and a sheet's html is its replica, which the plan checks an
+  // edit against; a transcript line's times and voice, which a join or a
+  // split reads.
+  blocks: { id: string; type: string; text: string; html: string | null; startTime?: number | null; endTime?: number | null; speaker?: string | null }[];
+  // A video's or an audio's transcript (lib/assistant/transcript.ts): its
+  // voices, the lines its chapters start on, each line's anchored words.
+  transcript?: Pick<TranscriptContext, "speakers" | "chapterStarts" | "anchors"> | null;
   // Every document attached to the project, the open one included.
   attachedIds: Set<string>;
   sectionIds: Set<string>;
@@ -276,6 +301,8 @@ export function enrichActions(
     if (commands.length > 1) raw = [...raw.filter((a) => !commands.includes(a as CommandAction)), joinCommands(commands)];
   }
   const refuse = (description: string) => warnings.push(t("api.warnActionNotForDocument", { description }));
+  // The lines this plan's joins take away, one after another.
+  const joinedAway = new Set<string>();
   const missing = (description: string) => warnings.push(t("api.warnBlockNotFound", { description }));
 
   for (const action of raw) {
@@ -320,6 +347,51 @@ export function enrichActions(
         if (after === undefined) missing(action.description);
         else if (after ? !blockTakes.after(after.type, nextType(after.id), shape) : !blockTakes.start(ctx.blocks[0]?.type, shape)) refuse(action.description);
         else actions.push(action);
+        continue;
+      }
+      case "join_lines": {
+        const first = blockById.get(action.blockId);
+        const next = blockById.get(action.nextBlockId);
+        if (!first || !next) missing(action.description);
+        else if (!shape.media) refuse(action.description);
+        else {
+          // The line right after the first, past the ones this plan joined away.
+          const after = ctx.blocks.slice((indexById.get(first.id) ?? 0) + 1).find((b) => !joinedAway.has(b.id));
+          const why = joinRefusal(first, next, after?.id === next.id, ctx.transcript?.chapterStarts ?? new Set());
+          if (why) warnings.push(skippedWarning(t, why, action.description));
+          else {
+            joinedAway.add(next.id);
+            actions.push(action);
+          }
+        }
+        continue;
+      }
+      case "split_line": {
+        const line = blockById.get(action.blockId);
+        const offset = line ? line.text.indexOf(action.quote) : -1;
+        if (!line) missing(action.description);
+        else if (!shape.media) refuse(action.description);
+        else if (offset < 0 || line.text.indexOf(action.quote, offset + 1) >= 0) warnings.push(t("api.warnQuoteNotFound", { description: action.description }));
+        else {
+          const why = splitRefusal(line, offset, ctx.transcript?.anchors.get(line.id) ?? []);
+          if (why) warnings.push(skippedWarning(t, why, action.description));
+          else actions.push({ type: "split_line", blockId: line.id, offset, quote: action.quote, description: action.description });
+        }
+        continue;
+      }
+      case "set_speaker": {
+        const line = blockById.get(action.blockId);
+        if (!line) missing(action.description);
+        else if (!shape.media || line.type !== "TRANSCRIPT") refuse(action.description);
+        else if (!ctx.transcript?.speakers.some((s) => s.id === action.speakerId)) warnings.push(skippedWarning(t, "api.lineSpeakerUnknown", action.description));
+        else if ((line.speaker ?? null) !== action.speakerId) actions.push({ ...action, previous: line.speaker ?? null });
+        continue;
+      }
+      case "rename_speaker": {
+        const speaker = ctx.transcript?.speakers.find((s) => s.id === action.speakerId);
+        if (!shape.media) refuse(action.description);
+        else if (!speaker) warnings.push(skippedWarning(t, "api.lineSpeakerUnknown", action.description));
+        else if (speaker.name !== action.name) actions.push({ ...action, previousName: speaker.name });
         continue;
       }
       case "move_block": {
