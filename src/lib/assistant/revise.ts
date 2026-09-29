@@ -1,7 +1,7 @@
 import type { Block } from "@prisma/client";
 import type { Thinking } from "@/lib/assistant/thinking";
 import { blockKind, withListMarkers, type BlockKind } from "@/lib/block-kind";
-import { blockTakes, isWebAddress, type DocumentShape } from "@/lib/block-takes";
+import { blockTakes, isWebAddress, keepsLines, type DocumentShape } from "@/lib/block-takes";
 import type { ChatTurn } from "@/lib/conversation";
 import { SUGGEST_MAX_NEW_CHARS, SUGGEST_MAX_WINDOWS, SUGGEST_PARALLEL } from "@/lib/derive/config";
 import { runSuggest } from "@/lib/derive/suggest";
@@ -363,8 +363,10 @@ export function reviseActions(
   const next = (id: string) => blocks[(index.get(id) ?? -2) + 1]?.type;
   const takes = (action: AssistantAction): boolean => {
     switch (action.type) {
-      case "edit_block":
-        return blockTakes.words(byId.get(action.blockId)?.type ?? "", shape);
+      case "edit_block": {
+        const block = byId.get(action.blockId);
+        return Boolean(block) && blockTakes.words(block!.type, shape) && (block!.type !== "SLIDE" || keepsLines(block!.text, action.newText));
+      }
       case "remove_block":
         return blockTakes.removal(byId.get(action.blockId)?.type ?? "", shape);
       case "format_block":

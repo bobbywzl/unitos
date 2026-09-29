@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { BlockKind } from "@/lib/block-kind";
-import { blockTakes, isWebAddress, type DocumentShape } from "@/lib/block-takes";
+import { blockTakes, isWebAddress, keepsLines, type DocumentShape } from "@/lib/block-takes";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
 
@@ -338,6 +338,8 @@ export function enrichActions(
     if (action.type === "edit_block" || action.type === "remove_block") {
       if (!(action.type === "edit_block" ? blockTakes.words : blockTakes.removal)(block.type, shape)) {
         warnings.push(t("api.warnOnlyTextEdited", { description: action.description }));
+      } else if (action.type === "edit_block" && block.type === "SLIDE" && !keepsLines(block.text, action.newText)) {
+        warnings.push(t("api.warnSlideLines", { description: action.description }));
       } else actions.push(action);
       continue;
     }

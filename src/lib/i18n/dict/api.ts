@@ -115,6 +115,7 @@ const en = {
   warnActionNotForDocument: "Skipped: this action does not apply to this document. ({description})",
   warnActionUnreadable: "Skipped: the action could not be read. ({description})",
   warnLinkAddress: "Skipped: the link's address is not a web address. ({description})",
+  warnSlideLines: "Skipped: a slide keeps its lines: change words within a line. ({description})",
   reviseNoBlocks: "Nothing to revise: no block in the scope takes a change to its words.",
   reviseNoEdits: "The revision found nothing to change.",
 
@@ -446,6 +447,7 @@ const zh: Record<keyof typeof en, string> = {
   warnActionNotForDocument: "已跳过：此操作不适用于此文档。（{description}）",
   warnActionUnreadable: "已跳过：无法读取该操作。（{description}）",
   warnLinkAddress: "已跳过：链接地址不是网址。（{description}）",
+  warnSlideLines: "已跳过：幻灯片保留其行：请在一行内修改文字。（{description}）",
   reviseNoBlocks: "无可修订：范围内没有可以改动文字的块。",
   reviseNoEdits: "修订没有找到需要改动的地方。",
 

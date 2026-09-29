@@ -285,12 +285,14 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
   // the gutter: the region reads as what stands above the band, the band's
   // columns, and what stands under it. The IRS W-9 sets two columns of
   // instructions under a form of one; the Earth Observer sets a pull quote
-  // beside its article, 7% of their characters.
+  // beside its article, 7% of their characters. Each side's lines follow
+  // one another at the text's leading: a table's first column of labels,
+  // a row's height apart, is no column (arXiv 2609.29669's Table 2).
   const letters = (side: Side) => chars(side.items);
   const band = twoSided
     .filter((b) => letters(b.left) >= 90 && letters(b.right) >= 90)
     .sort((a, b) => letters(b.left) + letters(b.right) - letters(a.left) - letters(a.right))
-    .find((b) => isColumns(b.left.items, page, pageWidth, depth) && isColumns(b.right.items, page, pageWidth, depth));
+    .find((b) => [b.left.items, b.right.items].every((side) => isColumns(side, page, pageWidth, depth) && isDense(buildLines(side, page))));
   if (band) return { bands: stacked(band, items, graphics) };
   const blocks = twoSided.find((b) => isBlocks(b, page));
   return blocks ? { bands: stacked(blocks, items, graphics, "blocks") } : null;
@@ -356,6 +358,13 @@ function isColumn(items: Item[], page: number): boolean {
   }
   const sorted = [...byX.values()].sort((a, b) => b - a);
   return (sorted[0] ?? 0) + (sorted[1] ?? 0) >= all * 0.62 && isProse(lines, 6);
+}
+
+// Lines set at the text's leading: most follow the line above a line and a
+// half of their size apart or less.
+function isDense(lines: Line[]): boolean {
+  const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
+  return gaps.length > 0 && median(gaps) <= median(lines.map((l) => l.size)) * 1.6;
 }
 
 function isProse(lines: Line[], minLines: number): boolean {

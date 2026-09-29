@@ -35,7 +35,7 @@ export type SuggestCtx = {
     | { kind: "words"; words: { blockId: string; text: string }[] }
     | { kind: "blocks"; runs: { from: string; to: string }[]; window: number; windows: number; whole: boolean };
   // The scope's text blocks: each one's paragraph style ("code" for code), and a table cell or a footnote.
-  styles: { blockId: string; style: string; where: "body" | "cell" | "footnote" }[];
+  styles: { blockId: string; style: string; where: "body" | "cell" | "footnote" | "words" }[];
   caretBlockId: string | null;
   // The asker's pending suggestions in the scope, one line each (lib/docs/suggest-ops.ts).
   pending: string[];

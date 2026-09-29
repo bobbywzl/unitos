@@ -336,6 +336,11 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
     if (g.family !== null) continue;
     const font = unicodeFont(g.base);
     if (!font || g.unicode.trim() === "" || g.size <= 0) continue;
+    // Word maps some of Cambria Math's glyphs to their letter twice ("𝑝𝑝",
+    // pdftotext too): one glyph is one letter. Read as two, it took no
+    // family, and the NPS thesis's p_{00} read as a word before {}_{00}.
+    const [first, second, ...more] = g.unicode;
+    if (first === second && more.length === 0 && /\p{L}/u.test(first)) g.unicode = first;
     let tex: Tex | null | undefined;
     if (font.kind === "katex") tex = katexChar(g.unicode, font.face, font.style);
     else {

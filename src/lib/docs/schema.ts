@@ -310,6 +310,36 @@ export function formatParts(format: string, level: number): { before: string; se
   return legal ? { before, sep, after } : null;
 }
 
+/** Where a list's depths stand as its page sets them (an import's
+    listIndents, on the outermost list): one [left, first] pair a depth, in
+    points, as a paragraph's indents (lib/parse/types.ts Indent): the
+    wrapped lines' left, and the marker's place against it (negative: the
+    marker hangs before the words). At most nine; the depths past them go
+    on a half inch a depth. */
+export type ListIndent = [left: number, first: number];
+
+/** A list's depths from its `listIndents` (a JSON string), or null when it
+    is not one to nine pairs within the page. */
+export function listIndentsOf(value: unknown): ListIndent[] | null {
+  if (typeof value !== "string" || value.length > 400) return null;
+  let list: unknown;
+  try {
+    list = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(list) || list.length === 0 || list.length > 9) return null;
+  const ok = (pair: unknown): pair is ListIndent =>
+    Array.isArray(pair) &&
+    pair.length === 2 &&
+    pair.every((n) => typeof n === "number" && Number.isFinite(n)) &&
+    pair[0] >= 0 &&
+    pair[0] <= 432 &&
+    pair[0] + pair[1] >= 0 &&
+    pair[0] + pair[1] <= 432;
+  return list.every(ok) ? list : null;
+}
+
 /** A list's nine levels from its `listLevels` (a JSON string), or null
     when it is not nine levels the page can draw: a bullet of one to three
     characters, or a known counter with a format formatParts reads. */
@@ -358,10 +388,14 @@ function cleanAttr(name: string, value: unknown): unknown {
       return typeof value === "string" && DASHES.has(value) ? value : null;
     case "dropdownOptions":
       return safeDropdownOptions(value);
-    // A list's own levels, written the one way JSON writes them.
+    // A list's own levels and depths, written the one way JSON writes them.
     case "listLevels": {
       const levels = listLevelsOf(value);
       return levels ? JSON.stringify(levels) : null;
+    }
+    case "listIndents": {
+      const indents = listIndentsOf(value);
+      return indents ? JSON.stringify(indents) : null;
     }
     case "fontFamily":
       return typeof value === "string" && FONT_FAMILY.test(value) ? value : null;

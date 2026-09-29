@@ -46,6 +46,10 @@ export const blockTakes = {
   move: (type: string, doc: DocumentShape) => addsBlocks(doc) && !FIXED.has(type),
 };
 
+/** A slide's new words keep its lines: the same newlines and tabs, in the
+    same order (lib/replica.ts has the last word, against the replica). */
+export const keepsLines = (prev: string, next: string): boolean => prev.replace(/[^\n\t]/g, "") === next.replace(/[^\n\t]/g, "");
+
 /** A web link's address: http, https, or mailto. */
 export const isWebAddress = (href: string): boolean => /^(https?:\/\/|mailto:)\S+$/i.test(href.trim());
 
