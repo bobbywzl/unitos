@@ -99,12 +99,24 @@ function smallRun(column: Line[], start: number, size: number): number {
   let end = start;
   while (end < column.length) {
     const line = column[end];
-    if (!line.text.trim() || line.size > size || NUMBER_LINE_RE.test(line.text.trim())) break;
+    if (!line.text.trim() || textSize(line) > size || NUMBER_LINE_RE.test(line.text.trim())) break;
     if (end > start && column[end - 1].y - line.y > line.size * GAP) break;
     if (line.cells.length > 1 && !CELL_LABEL_RE.test(line.cells[0].text.trim())) break;
     end++;
   }
   return end;
+}
+
+/** The size most of a line's letters are set in: a symbol set larger than
+    the words (Springer's ✉ at 11.6 pt before an 8 pt contact line) leaves
+    the line at its words' size. */
+function textSize(line: Line): number {
+  const letters = new Map<number, number>();
+  for (const item of line.items) {
+    const n = item.str.match(/[\p{L}\p{N}]/gu)?.length ?? 0;
+    if (n > 0) letters.set(item.size, (letters.get(item.size) ?? 0) + n);
+  }
+  return letters.size > 0 ? [...letters].reduce((a, b) => (b[1] > a[1] ? b : a))[0] : line.size;
 }
 
 /** A page's horizontal rules with the segments that meet end to end joined:
@@ -265,9 +277,12 @@ function cutColumn(
 }
 
 /** The first words of a note on a paper's title: its subject
-    classification, keywords, date, and support. */
+    classification, keywords, date, support, and IEEE's editor ("The
+    associate editor coordinating the review of this manuscript and
+    approving it for publication was …", unmarked at the first column's
+    foot). */
 const TITLE_NOTE_RE =
-  /^(?:(?:19|20)\d\d )?Mathematics Subject Classification|^Key ?words(?: and phrases)?\b|^Date:|^Received\b|^(?:This (?:work|research) (?:was|is) )?(?:partially |partly )?(?:supported|funded) by\b/i;
+  /^(?:(?:19|20)\d\d )?Mathematics Subject Classification|^Key ?words(?: and phrases)?\b|^Date:|^Received\b|^(?:This (?:work|research) (?:was|is) )?(?:partially |partly )?(?:supported|funded) by\b|^The associate editor coordinating the review\b/i;
 
 /** The notes a first page sets at a column's foot about the title and its
     authors, with no mark in the text: amsart's subject classification,

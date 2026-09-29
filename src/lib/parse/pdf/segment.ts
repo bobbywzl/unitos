@@ -12,8 +12,8 @@ import { closeLists, joinMarkerCells, readAlgorithm, readList, readReferences } 
 import { markEdges, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { tableFromRegion } from "@/lib/parse/pdf/ruled";
 import { findTableRuns, isLabelLine, tableFromRun } from "@/lib/parse/pdf/tables";
-import { isMonoLine, lineAsPart } from "@/lib/parse/pdf/text";
-import type { Line, PageContext, Segment, Step } from "@/lib/parse/pdf/types";
+import { TextBuilder, isMonoLine, lineAsPart } from "@/lib/parse/pdf/text";
+import type { Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 
 // ── Page segmentation ───────────────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ const PROOF_END_RE = /^[□■∎]$/;
 
 export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
   const segments: Segment[] = [];
-  const lines = joinMarkerCells(pageLines);
+  const lines = gatherAuthorGrid(joinRaisedMarks(joinMarkerCells(pageLines)), ctx);
   markEdges(lines, ctx);
   // A document's first page opens no list the last document left open.
   if (lines[0]?.page === 0) closeLists();
@@ -99,6 +99,14 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
       continue;
     }
 
+    // An author's block of a title page's grid (gatherAuthorGrid).
+    const stack = stackOf.get(line);
+    if (stack && stack.every((l, k) => lines[i + k] === l)) {
+      segments.push({ type: "PARAGRAPH", ...blockText(stack), html: '<p class="center"></p>', page: line.page, ...geom(stack) });
+      i += stack.length;
+      continue;
+    }
+
     const step =
       readCodeListing(lines, i, ctx, runOf) ??
       readRuleLine(lines, i) ??
@@ -115,6 +123,110 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
   }
   markPullQuotes(segments);
   return withDrawnSeparators(segments, starts, lines, ctx, runOf);
+}
+
+// ── Raised marks ────────────────────────────────────────────────────────────
+
+// A note's mark raised over the end of a line may read as a line of its
+// own, over it: a Chinese paper's author "许 为" with its "*" (arXiv
+// 2111.04880), and the note linked to nothing. A line of one to four marks
+// (note symbols, or a number or letter), set at most two thirds of the
+// size of the line under it, less than that line's size over its baseline
+// and within an em after its end, is that line's raised mark.
+const MARKS_LINE_RE = /^(?:[*∗⋆†‡§¶‖∥]{1,4}|[\p{L}\p{N}]{1,2})$/u;
+function joinRaisedMarks(lines: Line[]): Line[] {
+  const out: Line[] = [];
+  for (let k = 0; k < lines.length; k++) {
+    const mark = lines[k];
+    const line = lines[k + 1];
+    const raised =
+      line !== undefined &&
+      mark.cells.length === 1 &&
+      line.cells.length === 1 &&
+      MARKS_LINE_RE.test(mark.text.trim()) &&
+      mark.size <= line.size * 0.67 &&
+      mark.y > line.y &&
+      mark.y - line.y < line.size &&
+      mark.x >= line.xEnd - 1 &&
+      mark.x - line.xEnd <= line.size;
+    if (!raised) {
+      out.push(mark);
+      continue;
+    }
+    // A word space between them stays: "许 为 *".
+    const gap = mark.x - line.xEnd > line.size * 0.2 ? " " : "";
+    const text = line.text + gap + mark.text.trim();
+    const runs = [...line.runs, ...mark.runs.slice(0, 1).map((r) => ({ ...r, sup: true, zone: undefined, start: text.length - mark.text.trim().length, end: text.length }))];
+    out.push({ ...line, text, runs, cells: [{ x: line.x, text, runs }], items: [...line.items, ...mark.items], xEnd: mark.xEnd, yMax: Math.max(line.yMax, mark.y) });
+    k++;
+  }
+  return out;
+}
+
+// ── Author grids ────────────────────────────────────────────────────────────
+
+// A title page's grid of authors: stacks of short centered lines side by
+// side, each an author's block (a name, an affiliation, a city, an
+// address). The column split reads a row of the grid across its stacks
+// line by line, and may read a stack of the last row in the page's second
+// column: the addresses ran together and "Wolfgang Lehner" read as a
+// heading atop the right column (real-acm-damon25-3736236 p1). Each stack
+// is one centered paragraph, the stacks in reading order where the row's
+// first line stands.
+const stackOf = new WeakMap<Line, Line[]>();
+
+function gatherAuthorGrid(lines: Line[], ctx: PageContext): Line[] {
+  if (lines[0]?.page !== 0) return lines;
+  const width = Math.max(...lines.map((l) => l.xEnd)) - ctx.pageMinX;
+  const short = (l: Line) =>
+    l.cells.length === 1 && !l.table && !l.display && [...l.text].length <= 50 && l.xEnd - l.x <= width * 0.45 && l.size <= ctx.bodySize * 1.5;
+  const middle = (l: Line) => (l.x + l.xEnd) / 2;
+  // Lines under one another, a line's height apart, that share their
+  // middle, top to bottom.
+  const stacks: Line[][] = [];
+  for (const line of lines.filter(short).sort((a, b) => b.y - a.y)) {
+    const near = (stack: Line[]) => {
+      const last = stack[stack.length - 1];
+      const step = last.y - line.y;
+      return step > line.size * 0.5 && step <= Math.max(line.size, last.size) * 1.6 && Math.abs(middle(last) - middle(line)) <= Math.max(1.5, line.size * 0.3);
+    };
+    const stack = stacks.find(near);
+    if (stack) stack.push(line);
+    else stacks.push([line]);
+  }
+  // A block holds three lines or more, centered: they start at different
+  // places. A row holds two blocks or more, side by side, tops level.
+  const blocks = stacks.filter((stack) => {
+    const xs = stack.map((l) => l.x);
+    return stack.length >= 3 && Math.max(...xs) - Math.min(...xs) > stack[0].size * 0.5;
+  });
+  const rows: Line[][][] = [];
+  for (const block of blocks.sort((a, b) => b[0].y - a[0].y || a[0].x - b[0].x)) {
+    const row = rows.find((r) => Math.abs(r[0][0].y - block[0].y) <= block[0].size);
+    if (row) row.push(block);
+    else rows.push([block]);
+  }
+  const grid = rows.filter((row) => {
+    if (row.length < 2) return false;
+    const spans = row.map((b) => [Math.min(...b.map((l) => l.x)), Math.max(...b.map((l) => l.xEnd))]).sort((a, b) => a[0] - b[0]);
+    return spans.every((span, k) => k === 0 || span[0] > spans[k - 1][1]);
+  });
+  if (grid.length === 0) return lines;
+  const taken = new Set(grid.flat(2));
+  const at = lines.findIndex((l) => taken.has(l));
+  const ordered = grid.flatMap((row) => [...row].sort((a, b) => a[0].x - b[0].x));
+  for (const block of ordered) stackOf.set(block[0], block);
+  const rest = lines.filter((l) => !taken.has(l));
+  const before = lines.slice(0, at).filter((l) => !taken.has(l)).length;
+  return [...rest.slice(0, before), ...ordered.flat(), ...rest.slice(before)];
+}
+
+// An author's block keeps its lines, each on a line of its own; an address
+// cut at its own hyphen ("…@mailbox.tu-" over "dresden.de") joins whole.
+function blockText(stack: Line[]): { text: string; runs: Run[] } {
+  const builder = new TextBuilder();
+  stack.forEach((line, k) => builder.append(lineAsPart(line), k > 0 && /\S-$/.test(stack[k - 1].text) ? "" : "\n"));
+  return builder;
 }
 
 // ── Pull quotes ─────────────────────────────────────────────────────────────
