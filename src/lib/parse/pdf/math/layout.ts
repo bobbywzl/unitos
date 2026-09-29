@@ -6,7 +6,7 @@
 // PDF points, y up; an em is a glyph's size.
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
-import type { MathFamily } from "@/lib/parse/pdf/glyphs";
+import { isItalicFont, type MathFamily } from "@/lib/parse/pdf/glyphs";
 import { mathGlyph, type MathGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Box, Item } from "@/lib/parse/pdf/types";
 
@@ -136,18 +136,23 @@ function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
       yb: g.y,
       top: g.y + height * g.size,
       bottom: g.y - depth * g.size,
-      upright: Boolean(entry.upright) && variant === null,
+      // A text italic's letter in a formula is a math letter (\mathit, or
+      // the letters of a math set whose italic is its text's).
+      upright: Boolean(entry.upright) && variant === null && !isItalicFont(g.base),
     });
   }
   return { atoms, unknown };
 }
 
-// A text font's letter, digit, or bracket inside a formula (\text{otherwise}
-// in a paper set in Times): upright, its box estimated from its shape, as
-// the font's metrics are not known. A Computer Modern font under another
-// name (arXiv 2502.02648's "mwa_cmmi10") is no text font: its letters are
-// math italic, and the formula stays a picture.
-const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]]$/;
+// A text font's letter, digit, sign, or bracket inside a formula
+// (\text{otherwise} in a paper set in Times; a math set that takes its
+// digits, "=", and letters from the text's fonts: Utopia's under
+// MathDesign, Liberation Serif's in LibreOffice and OpenStax), its box
+// estimated from its shape, as the font's metrics are not known. An upright
+// letter is \mathrm, an italic one a math letter. A Computer Modern font
+// under another name (arXiv 2502.02648's "mwa_cmmi10") is no text font: its
+// letters are math italic, and the formula stays a picture.
+const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−!/<>]$/;
 const CM_NAME_RE = /cm(r|mi|mib|sy|bsy|ex|bx|ti|ss|tt|sl)\d/i;
 
 function textAtom(g: Glyph): Atom | null {
@@ -161,15 +166,28 @@ function textAtom(g: Glyph): Atom | null {
         ? [0.1, 0.2]
         : /[.:]/.test(ch)
           ? [0.1, 0]
-          : /[()[\]]/.test(ch)
+          : /[()[\]/]/.test(ch)
             ? [0.75, 0.25]
-            : [0.69, 0];
-  const cls = /[,;]/.test(ch) ? "punct" : /[([]/.test(ch) ? "open" : /[)\]]/.test(ch) ? "close" : "ord";
+            : /[=+−<>]/.test(ch)
+              ? [0.58, 0.08]
+              : [0.69, 0];
+  const cls = /[,;]/.test(ch)
+    ? "punct"
+    : /[([]/.test(ch)
+      ? "open"
+      : /[)\]!]/.test(ch)
+        ? "close"
+        : /[=<>]/.test(ch)
+          ? "rel"
+          : /[+−]/.test(ch)
+            ? "bin"
+            : "ord";
   return {
     fam: null,
     code: g.code,
     entry: null,
-    tex: ch,
+    // KaTeX draws "-" in a formula as the minus sign.
+    tex: ch === "−" ? "-" : ch,
     cls,
     size: g.size,
     x1: g.x,
@@ -177,7 +195,7 @@ function textAtom(g: Glyph): Atom | null {
     yb: g.y,
     top: g.y + height * g.size,
     bottom: g.y - depth * g.size,
-    upright: /[A-Za-z]/.test(ch),
+    upright: /[A-Za-z]/.test(ch) && !isItalicFont(g.base),
   };
 }
 

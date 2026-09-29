@@ -282,11 +282,56 @@ function katexChar(char: string, face: string, style: string): Tex | null {
   }
 }
 
+// TeX's text fonts under other names — Latin Modern (lmodern), cm-super
+// (Computer Modern in T1), MathDesign's OT1 fonts — draw a formula's digits,
+// + = ( ), and upright letters as CMR does, their codes in TeX's text layout
+// (OT1, or T1, which shares OT1's letters, digits, and signs). A glyph whose
+// code draws the same character in OT1 reads as CMR's. Read as any other
+// text font, Latin Modern's "=" and digits ended every formula they stood
+// in: arXiv 2506.06752's "k − 1" read "k −", and the "=" of each ⟹ failed 9
+// of its 16 displays. A font a browser embeds under such a name numbers its
+// glyphs otherwise (synth-notes-html's LMRoman10-Bold sets "P" at 0x53): it
+// takes no family unless most of its glyphs agree.
+const TEX_TEXT_RE = /^(LMRoman(?!Caps)|LMSans|SF(?:RM|BX|BI|TI|SL|SS|SX|SI)\d|MathDesign-.+-OT1-)/;
+function texTextFonts(glyphs: Glyph[]) {
+  const fonts = new Map<string, { agree: Glyph[]; count: number }>();
+  for (const g of glyphs) {
+    if (g.family !== null || g.unicode.trim() === "" || !TEX_TEXT_RE.test(g.base)) continue;
+    let font = fonts.get(g.font);
+    if (!font) fonts.set(g.font, (font = { agree: [], count: 0 }));
+    font.count++;
+    if (texOf(g.unicode, ["ot1"])?.code === g.code) font.agree.push(g);
+  }
+  for (const { agree, count } of fonts.values()) {
+    if (agree.length < count * 0.8) continue;
+    for (const g of agree) {
+      g.family = "ot1";
+      // The alphabet the name says, as CMSS and CMBX say it (layout.ts). A
+      // leaning sans letter is a math letter: Beamer sets math in LMSans
+      // Oblique ("w = 256", synth-slides-tex).
+      if (/^(LMSans|SFS[SXI])/.test(g.base)) {
+        if (!isItalicFont(g.base)) g.variant = "sf";
+      } else if (/Bold|Demi|^SFB[XI]/.test(g.base)) g.variant = "bf";
+    }
+  }
+}
+
+/** A font whose letters lean: italic, oblique, or slanted (fontFlags). A
+    formula's letter in one is a math letter, not \mathrm (layout.ts). */
+const italics = new Map<string, boolean>();
+export function isItalicFont(base: string): boolean {
+  let italic = italics.get(base);
+  if (italic === undefined) italics.set(base, (italic = fontFlags(base).italic));
+  return italic;
+}
+
 /** The page's glyphs with each glyph of a math font set in Unicode given
     the TeX family and code of the same symbol (its own box where its font
-    draws it otherwise, and its alphabet). A glyph no table knows keeps no
-    family: a formula it is in fails the check. */
+    draws it otherwise, and its alphabet), and each glyph of a TeX text font
+    under another name the family of CMR's (texTextFonts). A glyph no table
+    knows keeps no family: a formula it is in fails the check. */
 export function unicodeMath(glyphs: Glyph[]): Glyph[] {
+  texTextFonts(glyphs);
   for (const g of glyphs) {
     if (g.family !== null) continue;
     const font = unicodeFont(g.base);

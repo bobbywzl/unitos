@@ -565,6 +565,9 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     if (s.footnoteRefs) block.footnoteRefs = s.footnoteRefs;
     if (font && (s.type === "PARAGRAPH" || s.type === "HEADING" || s.type === "LIST")) block.font = font;
     if (s.spaceAfter !== undefined) block.spaceAfter = s.spaceAfter;
+    if (s.indent) block.indent = s.indent;
+    if (s.listIndents) block.listIndents = s.listIndents;
+    if (s.itemSpace !== undefined) block.itemSpace = s.itemSpace;
     return block;
   });
 

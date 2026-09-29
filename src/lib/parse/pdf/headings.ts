@@ -6,7 +6,7 @@ import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
 import { charCount } from "@/lib/parse/pdf/glyphs";
 import { BULLET_RE, isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
-import { isCentered, lineAlign, readParagraph } from "@/lib/parse/pdf/paragraphs";
+import { isCentered, leftEdge, lineAlign, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { boldShare, escapeHtml, fillsMargin, joinGroup, lineAsPart, startsWithBoldLead } from "@/lib/parse/pdf/text";
 import type { Item, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 
@@ -257,10 +257,13 @@ function runInHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
   const rest = line.text.slice(end);
   const cut = end + (rest.length - rest.trimStart().length);
   if (cut >= line.text.length) return { segments: [heading], next: i + 1 };
-  // The paragraph's first line: the line after the lead, where it stood.
+  // The paragraph's first line: the line after the lead, set at the
+  // column's edge. The lead's indent is the heading's: the paragraph drew a
+  // first-line indent under its heading (the math notes' run-in heads).
   const text = line.text.slice(cut);
   const runs = line.runs.filter((r) => r.end > cut).map((r) => ({ ...r, start: Math.max(0, r.start - cut), end: r.end - cut }));
-  const first: Line = { ...line, text, runs, cells: [{ x: line.x, text, runs }] };
+  const x = leftEdge(line, ctx);
+  const first: Line = { ...line, x, text, runs, cells: [{ x, text, runs }] };
   const paragraph = readParagraph([...lines.slice(0, i), first, ...lines.slice(i + 1)], i, ctx, runOf);
   return { segments: [heading, ...paragraph.segments], next: paragraph.next };
 }

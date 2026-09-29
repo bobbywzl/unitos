@@ -206,10 +206,49 @@ const ATOM_TYPES: ReadonlySet<string> = new Set(["figure", "pageStart"]);
 /** The only attributes an import's node or mark keeps: a figure object's
     media is its FigureMedia row, never markup in the rich text. */
 const ONLY_ATTRS: Record<string, ReadonlySet<string>> = {
-  figure: new Set(["blockId", "mediaId", "caption", "page", "region", "pageStart"]),
+  figure: new Set(["blockId", "mediaId", "caption", "captionStyles", "page", "region", "pageStart"]),
   pageStart: new Set(["page"]),
   citation: new Set(["refId"]),
 };
+
+/** The styles a figure object's caption keeps from its page (a PDF's bold
+    label, italic words, raised and lowered characters): its captionStyles,
+    a JSON list of {start, end, style} over the caption's characters. The
+    caption stays a plain string (FigureMedia.caption, the row's words). */
+export const CAPTION_STYLES = ["bold", "italic", "underline", "strike", "smallCaps", "sub", "sup"] as const;
+export type CaptionStyle = { start: number; end: number; style: (typeof CAPTION_STYLES)[number] };
+
+/** A caption's styles from its captionStyles, or null when the value is
+    not such a list. */
+export function captionStylesOf(value: unknown): CaptionStyle[] | null {
+  if (typeof value !== "string" || value.length > 4000) return null;
+  let list: unknown;
+  try {
+    list = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(list) || list.length === 0 || list.length > 100) return null;
+  const styles: CaptionStyle[] = [];
+  for (const item of list) {
+    const { start, end, style } = (item ?? {}) as { start?: unknown; end?: unknown; style?: unknown };
+    if (!Number.isInteger(start) || !Number.isInteger(end) || !CAPTION_STYLES.includes(style as CaptionStyle["style"])) return null;
+    const [from, to] = [start as number, end as number];
+    if (from < 0 || to <= from || to > MAX_CAPTION_CHARS) return null;
+    styles.push({ start: from, end: to, style: style as CaptionStyle["style"] });
+  }
+  return styles;
+}
+
+/** A caption cut where its styles begin and end: each part's words and the
+    styles over them. Styles past the caption's end are left out. */
+export function captionParts(caption: string, styles: CaptionStyle[]): { text: string; styles: CaptionStyle["style"][] }[] {
+  const cuts = [...new Set([0, caption.length, ...styles.flatMap((s) => [s.start, s.end]).filter((at) => at < caption.length)])].sort((a, b) => a - b);
+  return cuts.slice(0, -1).map((from, k) => ({
+    text: caption.slice(from, cuts[k + 1]),
+    styles: [...new Set(styles.filter((s) => s.start <= from && s.end >= cuts[k + 1]).map((s) => s.style))],
+  }));
+}
 
 /** A dropdown chip's options, a JSON list of {label, color}: kept only as
     short labels with hex colors. */
@@ -334,6 +373,10 @@ function cleanAttr(name: string, value: unknown): unknown {
       return typeof value === "string" && BLOCK_ID.test(value) ? value : null;
     case "caption":
       return typeof value === "string" ? clip(value, MAX_CAPTION_CHARS) : null;
+    case "captionStyles": {
+      const styles = captionStylesOf(value);
+      return styles ? JSON.stringify(styles) : null;
+    }
     case "region":
       return safeRegion(value);
     // A PDF page: a figure's, a page start's, and the page a code block, an

@@ -57,13 +57,17 @@
   max-width: 100%;
 }
 /* A PDF figure: the crop of its page (a white plate in both themes) over
-   its caption, as the block reader draws it. */
+   its caption. The crop draws at the size the PDF prints it (the width and
+   height it carries, lib/figure-crop.ts), which also holds its place before
+   it loads; the caption keeps to the figure's width, upright, in the marks
+   the page sets it in (a bold label). */
+.docs-prose .docs-figure-crop {
+  margin: 0 auto;
+}
 .docs-prose .docs-figure-crop img {
   display: block;
   max-width: 100%;
-  /* The width and height it carries hold its place before it loads. */
   height: auto;
-  max-height: 28rem;
   margin: 0 auto;
   object-fit: contain;
   border-radius: 10px;
@@ -71,7 +75,6 @@
 .docs-prose .docs-figure-crop .docs-figure-caption {
   margin-top: 6px;
   font-size: 0.8rem;
-  font-style: italic;
 }
 .docs-prose .docs-figure-crop .docs-figure-empty {
   padding: 18px 0;
