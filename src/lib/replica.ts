@@ -315,11 +315,16 @@ export type SheetCut = z.infer<typeof sheetCutSchema>;
 
 /** Rows (or columns) of `before` and `after` aligned, each a list of cells.
     The ones both keep as they are anchor the rest; between two anchors, old
-    and new pair up in order, each with the one most like it (the most cells
-    the same) — its words change later — the extra old ones go, and the
-    extra new ones come. `kept` has an entry per new line: the old line it
-    keeps, or null for a new one; `gone` lists the old lines that go. */
-function alignLines(before: string[][], after: string[][]): { kept: (number | null)[]; gone: number[] } {
+    and new pair up in order, each with the one most like it (`alike`: by
+    default, the most cells the same) — its words change later — the extra
+    old ones go, and the extra new ones come. `kept` has an entry per new
+    line: the old line it keeps, or null for a new one; `gone` lists the old
+    lines that go. */
+function alignLines(
+  before: string[][],
+  after: string[][],
+  alike = (x: string[], y: string[]) => x.reduce((sum, cell, c) => sum + (cell === y[c] ? 1 : 0), 0),
+): { kept: (number | null)[]; gone: number[] } {
   const a = before.map((line) => line.join("\t"));
   const b = after.map((line) => line.join("\t"));
   const n = a.length;
@@ -332,7 +337,6 @@ function alignLines(before: string[][], after: string[][]): { kept: (number | nu
     else if (lcs[i + 1][j] >= lcs[i][j + 1]) i++;
     else j++;
   }
-  const alike = (x: string[], y: string[]) => x.reduce((sum, cell, c) => sum + (cell === y[c] ? 1 : 0), 0);
   const kept: (number | null)[] = [];
   const gone: number[] = [];
   let i = 0;
@@ -633,6 +637,213 @@ export function sheetWithText(html: string, prev: string, next: string, cut: She
   return "refused" in edited ? edited : { html: cellClasses(reshaped.html, edited.html), cut: reshaped.cut };
 }
 
+// ── A slide's lines ────────────────────────────────────────────────────────
+
+// The line that opens a slide's speaker notes (lib/parse/slides.ts).
+const NOTES_LABEL = "Speaker notes:";
+const LINE_GAP = '<span class="cell-gap">\n</span>';
+const linesOf = (text: string) => (text === "" ? [] : text.split("\n"));
+// A bullet that is a number: "3. ", "3) ".
+const NUMBERED = /^(\d+)([.)])(\s*)/;
+
+/** A slide's lines as its text reads them (a newline gap between two), each
+    with its paragraph when the line is one whole paragraph of a text box or
+    of the speaker notes — not a table's row, not a line of a paragraph a
+    break divides, not the notes' label. */
+function readSlideLines(html: string) {
+  const dom = new JSDOM(`${PREFIX}${html}</body></html>`, { includeNodeLocations: true });
+  const document = dom.window.document;
+  const place = (node: Node) => {
+    const loc = dom.nodeLocation(node) as Location | null;
+    if (!loc) throw new Error("a slide's node has no place");
+    return { start: loc.startOffset - PREFIX.length, end: loc.endOffset - PREFIX.length, inner: (loc.endTag?.startOffset ?? loc.endOffset) - PREFIX.length };
+  };
+  const read: { text: string; nodes: Text[]; tabbed: boolean; before: Element | null; after: Element | null }[] = [
+    { text: "", nodes: [], tabbed: false, before: null, after: null },
+  ];
+  const walker = document.createTreeWalker(document.body, 4 /* NodeFilter.SHOW_TEXT */);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const node = n as Text;
+    const parent = node.parentElement;
+    if (!parent || parent.closest("[data-anchor-skip]")) continue;
+    const gap = parent.closest(".cell-gap");
+    const line = read[read.length - 1];
+    if (gap && node.data === "\n") {
+      line.after = gap;
+      read.push({ text: "", nodes: [], tabbed: false, before: gap, after: null });
+      continue;
+    }
+    line.text += node.data;
+    if (gap) line.tabbed = true;
+    else line.nodes.push(node);
+  }
+  const whole = (p: Element | null | undefined): p is Element => Boolean(p?.matches("p.sp") && !p.closest("table") && !p.querySelector(".cell-gap"));
+  const lines = read.map((line) => {
+    let para: Element | null = null;
+    if (!line.tabbed && line.nodes.length > 0) {
+      const p = line.nodes[0].parentElement?.closest("p.sp");
+      if (whole(p) && line.nodes.every((node) => node.parentElement?.closest("p.sp") === p)) para = p;
+    } else if (!line.tabbed) {
+      const p = line.before ? line.before.nextElementSibling : line.after?.previousElementSibling;
+      if (whole(p) && !p.textContent) para = p;
+    }
+    return { text: line.text, para };
+  });
+  return {
+    text: lines.map((l) => l.text).join("\n"),
+    lines: lines.length === 1 && lines[0].text === "" ? [] : lines,
+    place,
+    frame: document.querySelector(".slide-frame"),
+    notes: document.querySelector(".slide-frame > .slide-notes"),
+  };
+}
+
+/** A new paragraph for `words`, built like the paragraph of its box whose
+    bullet the words open with, the nearest to `anchor` first (in a box
+    without bullets, the nearest): its style, its bullet (a number takes the
+    words' own), its first run's style. Null when no paragraph of the box
+    has the words' bullet. */
+function newParagraph(anchor: Element, words: string): string | null {
+  const box = [...(anchor.parentElement?.children ?? [])].filter((el) => el.matches("p.sp"));
+  const at = box.indexOf(anchor);
+  const near = box.map((p, i) => ({ p, far: Math.abs(i - at) })).sort((x, y) => x.far - y.far).map((x) => x.p);
+  const bulletOf = (p: Element) => p.querySelector(":scope > .sb")?.textContent ?? "";
+  const ownBullet = (p: Element): string | null => {
+    const bullet = bulletOf(p);
+    const number = NUMBERED.exec(bullet);
+    if (!number) return words.startsWith(bullet) ? bullet : null;
+    const own = NUMBERED.exec(words);
+    return own && own[2] === number[2] && own[3] === number[3] ? own[0] : null;
+  };
+  const model = near.find((p) => bulletOf(p) && ownBullet(p) !== null) ?? near.find((p) => !bulletOf(p));
+  if (!model) return null;
+  const p = model.cloneNode(false) as Element;
+  const bullet = model.querySelector(":scope > .sb");
+  let rest = words;
+  if (bullet && bulletOf(model)) {
+    const own = ownBullet(model) ?? "";
+    const b = bullet.cloneNode(false) as Element;
+    b.textContent = own;
+    p.append(b);
+    rest = words.slice(own.length);
+  }
+  if (rest) {
+    const run = model.querySelector(":scope > span:not(.sb), :scope > a");
+    const style = run?.getAttribute("style");
+    if (run) {
+      const r = model.ownerDocument.createElement("span");
+      if (style !== null && style !== undefined) r.setAttribute("style", style);
+      r.textContent = rest;
+      p.append(r);
+    } else p.append(rest);
+  }
+  p.classList.remove("sp-empty");
+  if (!words) p.classList.add("sp-empty");
+  return p.outerHTML;
+}
+
+/** Two lines' likeness: the words they share. */
+function sharedWords(x: string[], y: string[]): number {
+  const count = new Map<string, number>();
+  for (const w of x[0].split(/\s+/)) if (w) count.set(w, (count.get(w) ?? 0) + 1);
+  let shared = 0;
+  for (const w of y[0].split(/\s+/)) {
+    const c = count.get(w);
+    if (c) {
+      shared += 1;
+      count.set(w, c - 1);
+    }
+  }
+  return shared;
+}
+
+/** The slide's replica with lines added or removed to match `next`'s lines,
+    the kept lines' words as they were; null when no line comes or goes; or
+    why not. The slide's own lines and its speaker notes' lines align apart
+    (alignLines, lines paired by the words they share). A line that goes
+    takes its paragraph and the gap beside it; a text box whose every line
+    goes stays, empty. A new line comes after the kept line before it, else
+    before the kept line after it, built like a paragraph of that box
+    (newParagraph). Notes taken away whole take their label; notes given to
+    a slide without them come after it, a paragraph per line. */
+function slideShape(html: string, prev: string, next: string): { html: string } | { refused: ReplicaRefusal } | null {
+  const slide = readSlideLines(html);
+  if (slide.text !== prev) return { refused: "stale" };
+  const was = linesOf(prev);
+  const now = linesOf(next);
+  const wasLabel = slide.notes ? was.lastIndexOf(NOTES_LABEL) : -1;
+  const nowLabel = now.lastIndexOf(NOTES_LABEL);
+  // Speaker notes hold a line at the least.
+  if (nowLabel >= 0 && nowLabel === now.length - 1) return { refused: "lines" };
+  const splices: Splice[] = [];
+  const cut = (el: Element) => {
+    const at = slide.place(el);
+    splices.push({ start: at.start, end: at.end, source: "" });
+  };
+  const used = new Set<Element>();
+  const lineGap = (el: Element | null | undefined) => (el?.matches(".cell-gap") && el.textContent === "\n" && !used.has(el) ? el : null);
+  const parts = [{ from: 0, was: wasLabel >= 0 ? was.slice(0, wasLabel) : was, now: nowLabel >= 0 ? now.slice(0, nowLabel) : now }];
+  if (wasLabel >= 0 && nowLabel >= 0) parts.push({ from: wasLabel + 1, was: was.slice(wasLabel + 1), now: now.slice(nowLabel + 1) });
+  else if (wasLabel >= 0 && slide.notes) {
+    cut(slide.notes);
+    const gap = lineGap(slide.notes.previousElementSibling);
+    if (gap) cut(gap);
+  } else if (nowLabel >= 0 && slide.frame) {
+    const end = slide.place(slide.frame).inner;
+    const body = now.slice(nowLabel + 1).map((line) => `<p class="sp">${escapeHtml(line)}</p>`).join(LINE_GAP);
+    splices.push({
+      start: end,
+      end,
+      source: `${nowLabel > 0 ? LINE_GAP : ""}<div class="slide-notes"><span class="slide-notes-label">${NOTES_LABEL}</span>${LINE_GAP}<div class="slide-notes-body">${body}</div></div>`,
+    });
+  } else if (nowLabel >= 0) return { refused: "lines" };
+  for (const part of parts) {
+    const { kept, gone } = alignLines(part.was.map((l) => [l]), part.now.map((l) => [l]), sharedWords);
+    for (const i of gone) {
+      const para = slide.lines[part.from + i]?.para;
+      if (!para) return { refused: "lines" };
+      cut(para);
+      let gap: Element | null = null;
+      for (let el: Element | null = para; el && !gap && el !== slide.frame; el = el.parentElement) gap = lineGap(el.previousElementSibling) ?? lineGap(el.nextElementSibling);
+      if (gap) {
+        used.add(gap);
+        cut(gap);
+      }
+    }
+    for (let j = 0; j < kept.length; ) {
+      if (kept[j] !== null) {
+        j += 1;
+        continue;
+      }
+      let k = j;
+      while (k < kept.length && kept[k] === null) k += 1;
+      const before = j > 0 ? slide.lines[part.from + kept[j - 1]!]?.para : null;
+      const after = k < kept.length ? slide.lines[part.from + kept[k]!]?.para : null;
+      const anchor = before ?? after;
+      if (!anchor) return { refused: "lines" };
+      const made = part.now.slice(j, k).map((line) => newParagraph(anchor, line));
+      if (made.some((m) => m === null)) return { refused: "fixed" };
+      const at = slide.place(anchor);
+      splices.push(
+        before
+          ? { start: at.end, end: at.end, source: made.map((m) => `${LINE_GAP}${m}`).join("") }
+          : { start: at.start, end: at.start, source: made.map((m) => `${m}${LINE_GAP}`).join("") },
+      );
+      j = k;
+    }
+  }
+  return splices.length > 0 ? { html: applied(html, splices) } : null;
+}
+
+/** A slide's replica with `next` for its words, lines added or removed
+    first (slideShape), then the words changed within lines; or why not. */
+export function slideWithText(html: string, prev: string, next: string): { html: string } | { refused: ReplicaRefusal } {
+  const shaped = slideShape(html, prev, next);
+  if (shaped === null) return replicaWithText(html, prev, next);
+  if ("refused" in shaped) return shaped;
+  return replicaWithText(shaped.html, readReplica(shaped.html).text, next);
+}
+
 // ── A converted table ──────────────────────────────────────────────────────
 
 /** A converted table's html (a handwritten document's TABLE, SPEC.md §16):
@@ -789,7 +1000,7 @@ function tableEdit(html: string, prev: string, next: string): { html: string } |
     the edit. */
 export function replicaEdit(type: string, html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null } | { refused: ReplicaRefusal } {
   if (type === "SHEET") return sheetWithText(html, prev, next, cut);
-  const edited = type === "TABLE" ? tableEdit(html, prev, next) : replicaWithText(html, prev, next);
+  const edited = type === "TABLE" ? tableEdit(html, prev, next) : slideWithText(html, prev, next);
   return "refused" in edited ? edited : { html: edited.html, cut: null };
 }
 

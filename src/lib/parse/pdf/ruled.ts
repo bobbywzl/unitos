@@ -45,6 +45,9 @@ const inBox = (it: Item, b: Box) => {
 // A line as far from both sides of its cell, within a quarter of its size.
 const balancedIn = (l: Line, b: Box) => Math.abs(l.x - b.x1 - (b.x2 - l.xEnd)) <= l.size * 0.25;
 
+// A fill as light as the page: white, or a color too light to see on it.
+const WHITE_RE = /^#(?:f[5-9a-f]){3}$/i;
+
 // A sliver between two grid lines closer than this, with no text in it, is
 // no column or row: a frame drawn double, a shaded cell set inside its border.
 const SLIVER = 6;
@@ -142,19 +145,12 @@ function partOf(grid: Grid, r0: number, r1: number): Grid {
 // paragraph abut like cells and hold its sentences.
 function isTableGrid(grid: Grid, items: Item[], drawing: TableDrawing, pageWidth: number, pageHeight: number): boolean {
   const b = grid.box;
-  if (grid.ys.length < 3 || grid.xs.length < 2) return false;
-  // Cells of several columns stand side by side on a row at least: boxes
-  // stacked one to a row are a paragraph's lines painted white (a Chinese
-  // paper's last three references read as a table).
-  const beside = grid.ys.slice(1).some((_, r) => grid.cells.filter((c) => c.row <= r && c.row + c.rowspan > r).length >= 2);
-  if (grid.xs.length >= 3 && !beside) return false;
-  // One column of shaded rows is a table when its text sets columns, and
-  // not two of prose (a statement shades each row across the page: the
-  // 10-K, p. 72).
-  if (grid.xs.length === 2) {
-    const lines = buildLines(items.filter((it) => inBox(it, b)), 0);
-    if (columnSeparators(lines).length === 0 || isProseColumns(lines.filter((l) => l.cells.length >= 2), false)) return false;
-  }
+  if (grid.ys.length < 3 || grid.xs.length < 3) return false;
+  // A grid the page does not show is no table: no rule on it, every box
+  // filled in the page's white (Word paints a paragraph's lines white, and
+  // a Chinese paper's last three references read as a table).
+  const on = (r: Box) => r.x1 < b.x2 + 1 && r.x2 > b.x1 - 1 && r.y1 < b.y2 + 1 && r.y2 > b.y1 - 1;
+  if (!drawing.rules.some(on) && drawing.fills.filter(on).every((f) => f.color !== undefined && WHITE_RE.test(f.color))) return false;
   const edges = [b.x1 <= pageWidth * 0.02, b.x2 >= pageWidth * 0.98, b.y1 <= pageHeight * 0.02, b.y2 >= pageHeight * 0.98];
   if (edges.filter(Boolean).length >= 2) return false;
   if (drawing.images.some((img) => img.x1 < b.x2 && img.x2 > b.x1 && img.y1 < b.y2 && img.y2 > b.y1)) return false;
@@ -469,7 +465,7 @@ function checkboxes(drawing: PageDrawing, items: Item[]): { squares: PathBox[]; 
     drawing.rules.some((r) => r.dir === "v" && near(r.x1, p.x1) && across(r, p.y1, p.y2)) &&
     drawing.rules.some((r) => r.dir === "v" && near(r.x1, p.x2) && across(r, p.y1, p.y2));
   // A square filled in a color is a chart's legend key, no box to tick.
-  const filled = (p: Box) => drawing.fills.some((f) => f.color !== undefined && !/^#(?:f[5-9a-f]){3}$/i.test(f.color) && near(f.x1, p.x1) && near(f.x2, p.x2) && near(f.y1, p.y1) && near(f.y2, p.y2));
+  const filled = (p: Box) => drawing.fills.some((f) => f.color !== undefined && !WHITE_RE.test(f.color) && near(f.x1, p.x1) && near(f.x2, p.x2) && near(f.y1, p.y1) && near(f.y2, p.y2));
   const found = drawing.paths.filter((p) => {
     const [w, h] = [p.x2 - p.x1, p.y2 - p.y1];
     return !p.clip && w >= 4 && w <= 16 && Math.abs(w - h) <= w * 0.15 && ruled(p) && !filled(p) && !items.some((it) => inBox(it, p));
@@ -542,7 +538,7 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
   const loose = items.filter((it) => !grids.some((grid) => inBox(it, grid.box)));
   for (const grid of grids) {
     const body = items.filter((it) => inBox(it, grid.box));
-    if (grid.xs.length === 2 || isGroupGrid(grid, body)) {
+    if (isGroupGrid(grid, body)) {
       // Its head, found against the columns its text sets: a statement
       // shades its rows, and its year head stands over the shading (the
       // 10-K's income statement, p. 54). Its rows hold several lines: the
@@ -554,10 +550,6 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
       const box = head.length > 0 ? { ...b, y2: Math.max(...head.map((it) => it.y + it.size)) } : b;
       const inside = [...head, ...body];
       const inner = joinedRules(drawing.rules.filter((r) => r.dir === "h" && r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3));
-      // The grid's top parts the head over it from its rows, as a rule
-      // drawn there would (the rules under a head's parts span some
-      // columns only).
-      if (head.length > 0) inner.push({ dir: "h", x1: b.x1, x2: b.x2, y1: b.y2, y2: b.y2, thickness: 0 });
       regions.push({ box, items: inside, lines: buildLines(inside, 0), grid: null, rules: inner, drawing });
       continue;
     }
@@ -1248,7 +1240,7 @@ function cellFill(cell: Box, table: Box, fills: Fill[]): string | undefined {
     if (f.x1 < table.x1 - 2 || f.x2 > table.x2 + 2 || f.y1 < table.y1 - 2 || f.y2 > table.y2 + 2) continue;
     const overlap = (Math.min(f.x2, cell.x2) - Math.max(f.x1, cell.x1)) * (Math.min(f.y2, cell.y2) - Math.max(f.y1, cell.y1));
     if (overlap < (cell.x2 - cell.x1) * (cell.y2 - cell.y1) * 0.6) continue;
-    return f.color && !/^#(?:f[5-9a-f]){3}$/i.test(f.color) ? f.color : undefined;
+    return f.color && !WHITE_RE.test(f.color) ? f.color : undefined;
   }
   return undefined;
 }
