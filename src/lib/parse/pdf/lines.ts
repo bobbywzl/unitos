@@ -5,6 +5,7 @@
 import { median } from "@/lib/parse/pdf/geometry";
 import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, charCount, isUnicodeMathFont, sameFlags } from "@/lib/parse/pdf/glyphs";
 import { hangingBox } from "@/lib/parse/pdf/math/layout";
+import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import { splitZones } from "@/lib/parse/pdf/math/zones";
 import type { Cell, Item, Line, Run } from "@/lib/parse/pdf/types";
 
@@ -391,9 +392,14 @@ function buildLine(rawItems: Item[], page: number): Line {
   // its gap to the line below grew, splitting paragraphs and fusing others
   // (import compare loop finding).
   // A big operator's or delimiter's origin is its top (math/layout.ts
-  // hangingBox): no baseline.
+  // hangingBox): no baseline. The full size is the baseline glyphs' own: a
+  // line of a tall delimiter and its script (a closing ‖ and its subscript,
+  // arXiv 2506.08494) had none at the delimiter's size, and its baseline
+  // fell to the page's foot (median of none).
   const onBase = items.filter((i) => !hangingBox(i));
-  const large = (onBase.length > 0 ? onBase : items).filter((i) => i.size >= size * 0.75);
+  const pool = onBase.length > 0 ? onBase : items;
+  const baseSize = Math.max(...pool.map((i) => i.size));
+  const large = pool.filter((i) => i.size >= baseSize * 0.75);
   const ys = items.map((i) => i.y);
   return {
     cells,
@@ -514,11 +520,30 @@ export function buildLines(items: Item[], page: number): Line[] {
   // near, never the prose beside it. (A glyph already on the right line
   // stayed put before only by luck: a footnote mark moved to the line above
   // and subscripts to the line below — import compare loop finding.)
+  // A label stacked over a relation of the line under it (\overset{p}{\to},
+  // "a.s." over an arrow) is that line's, however near the line above: it
+  // joined the line above as a stray letter (the owner's notes).
+  const labelOf = (item: Item, n: number) =>
+    stats[n].y < item.y &&
+    item.size <= stats[n].size * 0.8 &&
+    grouped[n].some((i) =>
+      (i.glyphs ?? []).some((g) => {
+        if (g.family === null || g.size < stats[n].size * 0.9 || mathGlyph(g.family, g.code)?.cls !== "rel") return false;
+        const rise = (item.y - g.y) / g.size;
+        const center = item.x + item.w / 2;
+        return rise > 0.45 && rise < 0.95 && center > g.x - g.size * 0.1 && center < g.x + g.w + g.size * 0.1;
+      }),
+    );
   for (let k = 0; k < grouped.length; k++) {
     for (const item of grouped[k]) {
       const glyph = item.str.trim();
       const accent = glyph.length === 1 && SPACING_ACCENTS[glyph] !== undefined;
       if (limitOf(item, stats)) continue;
+      if (k + 1 < grouped.length && labelOf(item, k + 1)) {
+        moved[k + 1].push(item);
+        kept[k] = kept[k].filter((i) => i !== item);
+        continue;
+      }
       // An accent belongs over a letter of about its own size: a line of
       // subscripts beside it is no candidate (import compare loop finding).
       const candidates = neighbors(k).filter(

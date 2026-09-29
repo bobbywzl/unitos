@@ -50,6 +50,14 @@ export const SPACING_ACCENTS: Record<string, string> = {
 
 export type FontFlags = Omit<Flags, "href"> & { math: boolean };
 
+// Adobe's names run weight and shape together after the family, abbreviated:
+// "Bd" bold, "Blk" black, "It" italic, "Obl" oblique ("HelveticaNeueLTStd-
+// BdIt", "MyriadPro-SemiboldSemiCnIt", "FormataOTFMdIt", "HelveticaLTStd-
+// Obl"). The W-9's bold and italic, MMWR's italic, and PLOS's formulas'
+// letters read as plain.
+const ADOBE_BOLD_RE = /(?:^|[-a-z])(?:Bd|Blk)(?:Cn|SemiCn|It|Obl)*$/;
+const ADOBE_ITALIC_RE = /(?:^|[-a-z])(?:It|Obl)$/;
+
 export function fontFlags(name: string | null): FontFlags {
   const n = (name ?? "").replace(/^[A-Z]{6}\+/, ""); // subset prefix "HAAAAA+"
   const family = mathFamily(n);
@@ -58,9 +66,12 @@ export function fontFlags(name: string | null): FontFlags {
     // Modern names carry weight and shape in abbreviations, not words, and
     // so do Libertine's and Biolinum's (acmart: LinLibertineTB bold,
     // LinLibertineTI italic; a paper's 986 bold and 254 italic characters
-    // read as plain).
-    bold: /bold|black|heavy|semi ?bold|demi|medi(?:ital|obli)?$|^CMBX|^CMB\d|^CMSSBX|^CMBSY|^LM(?:Roman|Sans|Mono)\d*-Bold|^Lin(?:Libertine|Biolinum)T[BZ]I?$/i.test(n),
-    italic: /italic|oblique|ital$|obli$|^CMTI|^CMSL|^CMBXTI|^CMSSI|^CMITT|^CMSLTT|slanted|^Lin(?:Libertine|Biolinum)T[BZ]?I$/i.test(n),
+    // read as plain), and Adobe's.
+    bold:
+      /bold|black|heavy|semi ?bold|demi|medi(?:ital|obli)?$|^CMBX|^CMB\d|^CMSSBX|^CMBSY|^LM(?:Roman|Sans|Mono)\d*-Bold|^Lin(?:Libertine|Biolinum)T[BZ]I?$/i.test(n) ||
+      ADOBE_BOLD_RE.test(n),
+    italic:
+      /italic|oblique|ital$|obli$|^CMTI|^CMSL|^CMBXTI|^CMSSI|^CMITT|^CMSLTT|slanted|^Lin(?:Libertine|Biolinum)T[BZ]?I$/i.test(n) || ADOBE_ITALIC_RE.test(n),
     mono: /mono|courier|consolas|menlo|typewriter|^CMTT|^CMSLTT|^CMITT|cursor/i.test(n),
     // A small-caps font draws lowercase letters as small capitals; the text
     // layer gives them lowercase. Computer Modern's CMCSC, its T1 twins SFCC
@@ -358,16 +369,13 @@ function texTextFonts(glyphs: Glyph[]) {
 
 /** A font's lean and weight by its name (fontFlags), read once a font: a
     formula's letter in an italic one is a math letter, not \mathrm, and in
-    a bold one \mathbf (layout.ts). Adobe's names end in "It" or "Obl"
-    (PLOS sets its formulas' letters in MinionPro-It, which read as
-    \mathrm). */
+    a bold one \mathbf (layout.ts). */
 const looks = new Map<string, { italic: boolean; bold: boolean }>();
-const ADOBE_ITALIC_RE = /(?:^|[-a-z])(?:It|Obl)$/;
 function fontLook(base: string): { italic: boolean; bold: boolean } {
   let look = looks.get(base);
   if (look === undefined) {
     const { italic, bold } = fontFlags(base);
-    looks.set(base, (look = { italic: italic || ADOBE_ITALIC_RE.test(base), bold }));
+    looks.set(base, (look = { italic, bold }));
   }
   return look;
 }

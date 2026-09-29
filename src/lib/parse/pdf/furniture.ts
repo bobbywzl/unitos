@@ -178,13 +178,24 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
     if (fits) dropped.set(c.row, "place");
   }
 
-  // 3. A strong candidate with a cell that reads like dropped furniture:
-  // the journal's foot opening the first page's head, next to the preprint
-  // date.
+  // 3. A strong candidate with a cell that reads like dropped furniture or
+  // like a cell of it: the journal's foot opening the first page's head,
+  // next to the preprint date; the W-9's "Form W-9 (Rev. 3-2024)", beside
+  // each later page's number in its head, beside its catalog number at the
+  // first page's foot.
   const byKey = new Map<string, Row>();
-  for (const d of dropped.keys()) if (/\p{L}.*\p{L}/u.test(d.key) && d.key.length >= 8) byKey.set(d.key, d);
+  const keep = (key: string, d: Row) => {
+    if (/\p{L}.*\p{L}/u.test(key) && key.length >= 8 && !byKey.has(key)) byKey.set(key, d);
+  };
+  for (const d of dropped.keys()) {
+    keep(d.key, d);
+    for (const line of d.lines) for (const cell of line.cells) keep(keyOf(cell.text), d);
+  }
   for (const c of strong) {
-    if (dropped.has(c.row) || !outside(c)) continue;
+    // Set smaller than the body, a row needs no place outside the other
+    // pages' text: the W-9's later pages run their text lower than its first
+    // page's foot.
+    if (dropped.has(c.row) || (!outside(c) && c.row.size >= bodySize * 0.95)) continue;
     const cells = c.row.lines.flatMap((l) => l.cells.map((cell) => byKey.get(keyOf(cell.text))));
     if (cells.some((d) => d !== undefined && closeSize(c.row, d))) dropped.set(c.row, "cell");
   }

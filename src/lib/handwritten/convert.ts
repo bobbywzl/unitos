@@ -303,12 +303,16 @@ export async function runConversion(
       if (!current?.handwritten || current.conversionStartedAt?.getTime() !== startedAt.getTime()) return false;
       // Convert again redoes the text: previous converted blocks go, the PAGE
       // blocks stay — page anchors never move. Anchors on replaced text blocks
-      // re-resolve by quote or orphan visibly (SPEC.md §5).
+      // re-resolve by quote or orphan visibly (SPEC.md §5). The text goes
+      // after the last page's order: a page removed leaves a gap in the
+      // orders, never text among the pages.
       await tx.block.deleteMany({ where: { documentId, type: { not: "PAGE" } } });
+      const lastPage = await tx.block.findFirst({ where: { documentId, type: "PAGE" }, orderBy: { order: "desc" }, select: { order: true } });
+      const afterPages = (lastPage?.order ?? -1) + 1;
       await tx.block.createMany({
         data: rows.map((b, i) => ({
           documentId,
-          order: pages.length + i,
+          order: afterPages + i,
           type: b.type,
           text: b.text,
           html: b.html,
