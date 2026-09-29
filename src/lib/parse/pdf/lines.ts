@@ -137,8 +137,11 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     ends a space short of it (NASA SP-4408's scan boxes overlap, "Igor"
     ending at 170.7 and "Lissov" starting at 167.0: 228 blocks on 161 pages
     read runs of words with no space, 49 on 47 now, where the text layer
-    itself sets none). */
+    itself sets none). The layer's stock font is no face of the page: a
+    scan set in Courier is no listing (a 1922 report read as code, its words
+    run together at the font's character widths). */
 export function fitOcrItems(items: Item[]) {
+  for (const item of items) item.mono = false;
   const text = median(items.map((i) => i.size));
   for (let k = items.length - 1; k >= 0; k--) if (charCount(items[k].str) <= 2 && items[k].size > text * 4) items.splice(k, 1);
   const words = items.filter((i) => i.str.trim()).sort((a, b) => b.y - a.y || a.x - b.x);

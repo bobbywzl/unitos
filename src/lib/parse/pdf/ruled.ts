@@ -142,9 +142,14 @@ function partOf(grid: Grid, r0: number, r1: number): Grid {
 // paragraph abut like cells and hold its sentences.
 function isTableGrid(grid: Grid, items: Item[], drawing: TableDrawing, pageWidth: number, pageHeight: number): boolean {
   const b = grid.box;
-  // One column of shaded rows is a table when its text sets columns (a
-  // statement shades each row across the page: the 10-K, p. 72).
-  if (grid.ys.length < 3 || grid.xs.length < 2 || (grid.xs.length === 2 && columnSeparators(buildLines(items.filter((it) => inBox(it, b)), 0)).length === 0)) return false;
+  if (grid.ys.length < 3 || grid.xs.length < 2) return false;
+  // One column of shaded rows is a table when its text sets columns, and
+  // not two of prose (a statement shades each row across the page: the
+  // 10-K, p. 72).
+  if (grid.xs.length === 2) {
+    const lines = buildLines(items.filter((it) => inBox(it, b)), 0);
+    if (columnSeparators(lines).length === 0 || isProseColumns(lines.filter((l) => l.cells.length >= 2), false)) return false;
+  }
   const edges = [b.x1 <= pageWidth * 0.02, b.x2 >= pageWidth * 0.98, b.y1 <= pageHeight * 0.02, b.y2 >= pageHeight * 0.98];
   if (edges.filter(Boolean).length >= 2) return false;
   if (drawing.images.some((img) => img.x1 < b.x2 && img.x2 > b.x1 && img.y1 < b.y2 && img.y2 > b.y1)) return false;

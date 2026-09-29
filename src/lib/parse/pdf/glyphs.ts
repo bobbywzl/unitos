@@ -88,6 +88,106 @@ export function fontFlags(name: string | null): FontFlags {
   };
 }
 
+// ── Symbol fonts ────────────────────────────────────────────────────────────
+// A symbol font with no Unicode map: pdf.js reads each code as the letter
+// of its number (a slide's Wingdings bullets ➢ and ✓ read "Ø" and "ü", and
+// their lists were lost; a paper's ✉ in MarVoSym read "B") or as a
+// private-use character U+F000 past it (a newsletter's end mark ■ in
+// Wingdings, a report's α in Symbol). The code names the symbol each font
+// draws.
+
+type SymbolFont = "symbol" | "wingdings" | "dingbats" | "marvosym";
+const SYMBOL_FONTS: [RegExp, SymbolFont][] = [
+  [/^(?:Symbol(?:MT)?|StandardSym(?:L|bolsPS))$/i, "symbol"],
+  [/^Wingdings(?:-Regular)?$/i, "wingdings"],
+  [/^(?:ITC)?(?:Zapf)?Dingbats$/i, "dingbats"],
+  [/^MarVoSym$/i, "marvosym"],
+];
+
+/** The symbol font a font's name (its subset prefix removed) names. */
+export function symbolFont(base: string): SymbolFont | null {
+  return SYMBOL_FONTS.find(([re]) => re.test(base))?.[1] ?? null;
+}
+
+// Adobe's Symbol, codes 0x20–0x7E and 0xA0–0xFE; "\0" is no character.
+const SYMBOL_CHARS = Array.from(
+  " !∀#∃%&∋()∗+,−./0123456789:;<=>?≅ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ[∴]⊥_‾αβχδεφγηιϕκλμνοπθρστυϖωξψζ{|}∼" +
+    "€ϒ′≤⁄∞ƒ♣♦♥♠↔←↑→↓°±″≥×∝∂•÷≠≡≈…⏐⎯↵ℵℑℜ℘⊗⊕∅∩∪⊃⊇⊄⊂⊆∈∉∠∇®©™∏√⋅¬∧∨⇔⇐⇑⇒⇓◊⟨®©™∑⎛⎜⎝⎡⎢⎣⎧⎨⎩⎪\0⟩∫⌠⎮⌡⎞⎟⎠⎤⎥⎦⎫⎬⎭",
+);
+// Wingdings, codes 0x20–0xFF. Where a common character draws the same
+// shape, it stands for the later Unicode twin: ➢ for the arrowhead bullet,
+// ✓ for the check, ☐ for the empty box, → for the arrows.
+const WINGDINGS_CHARS = Array.from(
+  " ✏✂✁👓🔔📖🕯☎✆✉🖃📪📫📬📭📁📂📄🗏🗐🗄⌛🖮🖰🖲🖳🖴🖫🖬✇✍" +
+  "🖎✌👌👍👎☜☞☝☟🖐☺😐☹💣☠🏳🏱✈☼💧❄🕆✞🕈✠✡☪☯ॐ☸♈♉" +
+  "♊♋♌♍♎♏♐♑♒♓🙰🙵●❍■□◻❑❒⬧⧫◆❖⬥⌧⮹⌘🏵🏶🙶🙷\0" +
+  "⓪①②③④⑤⑥⑦⑧⑨⑩⓿❶❷❸❹❺❻❼❽❾❿🙢🙠🙡🙣🙞🙜🙝🙟·•" +
+  "▪○◯◯◉◎◯▪☐\0✦★✶✴✹✵⯐⌖⟡⌑⯑✪✰🕐🕑🕒🕓🕔🕕🕖🕗🕘" +
+  "🕙🕚🕛⮰⮱⮲⮳⮴⮵⮶⮷🙪🙫🙕🙔🙗🙖🙐🙑🙒🙓⌫⌦⮘➢⮙⮛⮈⮊⮉⮋←" +
+  "→↑↓↖↗↙↘⬅➔⬆⬇⬉⬈⬋⬊⇦⇨⇧⇩⬄⇳⬀⬁⬃⬂🢬🢭✗✓☒☑\0",
+);
+// MarVoSym: \Letter.
+const MARVOSYM_CHARS: Record<number, string> = { 0x42: "✉" };
+// ZapfDingbats: runs of the Dingbats block, and the symbols Unicode had
+// coded before it.
+const DINGBATS_CHARS: Record<number, string> = {
+  0x25: "☎", 0x2a: "☛", 0x2b: "☞", 0x48: "★", 0x6c: "●", 0x6e: "■", 0x73: "▲", 0x74: "▼", 0x75: "◆", 0x77: "◗",
+  0xa8: "♣", 0xa9: "♦", 0xaa: "♥", 0xab: "♠", 0xd5: "→", 0xd6: "↔", 0xd7: "↕",
+};
+function dingbat(code: number): string | undefined {
+  const at = (first: number, start: number) => String.fromCodePoint(start + code - first);
+  if (DINGBATS_CHARS[code]) return DINGBATS_CHARS[code];
+  if (code >= 0x21 && code <= 0x7e) return at(0x20, 0x2700);
+  if (code >= 0xa1 && code <= 0xa7) return at(0xa0, 0x2760);
+  if (code >= 0xac && code <= 0xb5) return at(0xac, 0x2460);
+  if (code >= 0xb6 && code <= 0xd4) return at(0xb6, 0x2776);
+  if (code >= 0xd8 && code <= 0xef) return at(0xd8, 0x2798);
+  if (code >= 0xf1 && code <= 0xfe) return at(0xf1, 0x27b1);
+  return undefined;
+}
+
+function symbolChar(font: SymbolFont, code: number): string | undefined {
+  let ch: string | undefined;
+  if (font === "symbol") ch = code >= 0x20 && code <= 0x7e ? SYMBOL_CHARS[code - 0x20] : code >= 0xa0 ? SYMBOL_CHARS[code - 0xa0 + 95] : undefined;
+  else if (font === "wingdings") ch = code >= 0x20 ? WINGDINGS_CHARS[code - 0x20] : undefined;
+  else if (font === "dingbats") ch = dingbat(code);
+  else ch = MARVOSYM_CHARS[code];
+  return ch && ch !== "\0" ? ch : undefined;
+}
+
+// Windows' letters at codes 0x80–0x9F, as pdf.js reads them.
+const WIN_ANSI_HIGH = Array.from("€\0‚ƒ„…†‡ˆ‰Š‹Œ\0Ž\0\0‘’“”•–—˜™š›œ\0žŸ");
+// A glyph pdf.js read as its code's letter or a private-use character.
+const readAsCode = (g: Glyph) =>
+  g.unicode === String.fromCharCode(g.code) ||
+  g.unicode === String.fromCharCode(0xf000 + g.code) ||
+  (g.code >= 0x80 && g.code < 0xa0 && g.unicode === WIN_ANSI_HIGH[g.code - 0x80]);
+
+// The code a character stands for where it reads the code, not the
+// symbol: a private-use character U+F000 past it; a Latin-1 letter in a
+// font that draws no letters (a subset's own map wrote a Wingdings
+// arrowhead, code 0x21 in the subset, as "Ø", its code in the whole font)
+// and a Latin letter in Symbol, which draws Greek ones; any other where a
+// glyph shows pdf.js read its code so (read).
+function codeOf(ch: string, font: SymbolFont, read: Set<string>): number | null {
+  const cp = ch.codePointAt(0) ?? 0;
+  if (cp >= 0xf020 && cp <= 0xf0ff) return cp - 0xf000;
+  if (cp > 0x20 && cp <= 0xff) return font !== "symbol" || /[A-Za-z]/.test(ch) || read.has(ch) ? cp : null;
+  const high = WIN_ANSI_HIGH.indexOf(ch);
+  return high >= 0 && read.has(ch) ? 0x80 + high : null;
+}
+
+/** A symbol font's text as the page draws it: each character that reads
+    the font's code becomes the symbol the font draws at that code. A
+    character a Unicode map read stays. glyphs: the item's glyphs. */
+export function symbolText(font: SymbolFont, str: string, glyphs: Glyph[] | undefined): string {
+  const read = new Set((glyphs ?? []).filter(readAsCode).map((g) => g.unicode));
+  return Array.from(str, (ch) => {
+    const code = codeOf(ch, font, read);
+    return (code !== null ? symbolChar(font, code) : undefined) ?? ch;
+  }).join("");
+}
+
 // ── Math families ───────────────────────────────────────────────────────────
 // TeX's math fonts keep one layout of character codes per family, whatever
 // the size or the producer: the code names the symbol (math-fonts.ts). The

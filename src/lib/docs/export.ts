@@ -324,6 +324,11 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
   const lineSpacing = num(a.lineSpacing);
   const firstLine = num(a.indentFirstLine) ?? 0;
   let children = inline(node.content, ctx, run, typeof a.blockId === "string" ? ctx.cuts.get(a.blockId) : undefined);
+  // A run-in heading (an import's bold lead) is Word's style separator: its
+  // paragraph mark hidden, Word draws it at the start of the next
+  // paragraph, a space before its words, and its contents list it.
+  const runIn = node.type === "heading" && a.runIn === true;
+  if (runIn) children = [...children, new TextRun(" ")];
   if (node.type === "heading" && typeof a.blockId === "string") children = [bookmark(ctx, bookmarkName("h", a.blockId), children)];
   const stops = typeof a.tabStops === "string" ? a.tabStops.split(" ").map((stop) => stop.split(":")) : [];
   // A side's line and its padding stand in the indent, as the page draws
@@ -359,6 +364,7 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
     keepLines: a.keepLinesTogether === true || undefined,
     widowControl: a.preventSingleLines !== false,
     pageBreakBefore: a.pageBreakBefore === true || undefined,
+    run: runIn ? { vanish: true, specVanish: true } : undefined,
     children,
     ...extra,
   });

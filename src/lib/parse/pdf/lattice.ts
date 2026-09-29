@@ -190,7 +190,8 @@ function gridOf(cells: Box[]): Grid {
 // it meets start at (or end at), three at least, and the row rules run on
 // to one end where no rule closes them. The ends close the rows: an edge
 // there, from the lowest of those rows to the highest (the W-9 draws no
-// right border around its fields 1 to 7, and they read as pieces).
+// right border around its fields 1 to 7, and they read as pieces). Rules
+// only: a filled box's sides are a frame or a shaded cell, never open.
 function openSides(edges: Edge[]): Edge[] {
   const hs = edges.filter((e) => e.dir === "h");
   const vs = edges.filter((e) => e.dir === "v");
@@ -219,8 +220,7 @@ function openSides(edges: Edge[]): Edge[] {
 
 // The ruled grids of a page: two cells or more that share corners.
 export function latticeGrids(rules: Rule[], fills: Fill[]): Grid[] {
-  const edges = mergeEdges(edgesOf(rules, fills));
-  const cells = cellsOf([...edges, ...openSides(edges)]);
+  const cells = cellsOf([...mergeEdges(edgesOf(rules, fills)), ...openSides(mergeEdges(edgesOf(rules, [])))]);
   return groupCells(cells)
     .filter((group) => group.length >= 2)
     .map(gridOf);

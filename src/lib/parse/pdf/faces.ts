@@ -50,21 +50,50 @@ const CJK_SANS =
 const CJK_SERIF =
   /Mincho|Ryumin|MidashiMin|FutoMin|HeiseiMin|KozMin|HiraMin|SimSun|STSong|SongTi|宋|MSung|KaiTi|FangSong|Ming(?:LiU|Std)|Batang|Gungsuh|Myeongjo|Myungjo|SerifCJK|SourceHanSerif/i;
 const MONO = /Mono|Courier|Consol|Typewriter|^CMTT/i;
-const SERIF = /Serif|Times|Garamond|Georgia|Palatino|Century|Schoolbook|Baskerville|Caslon|Bodoni|Didot|Minion|Utopia|Charter|Libertin|Cambria|Bookman/i;
+// Names that say sans come before those that say serif: MicrosoftSansSerif
+// is a sans. Biolinum is Libertine's sans; newtx's math fonts (txsys,
+// txmiaX, NewTXMI) are the serif's, as Libertine's are.
+const SANS = /Sans|Grotesk|Grotesque|Helvetica|Arial|Myriad|Frutiger|Univers(?!ity)|Futura|Avenir|Segoe|Tahoma|Verdana|Calibri|Candara|Corbel|Aptos|Biolinum|Optima|Gill/i;
+const SERIF =
+  /Serif|Times|Garamond|Georgia|Palatino|Palladio|Pagella|Century|Schoolbook|Baskerville|Caslon|Bodoni|Didot|Minion|Utopia|Charter|Charis|Gentium|Libertin|Cambria|Bookman|Bonum|Antiqua|Constantia|Crimson|Sabon|Bembo|Janson|Plantin|Perpetua|Goudy|Warnock|^tx(?:mi|sy|ex)|^NewTX(?!TT)/i;
 
-/** A font's shape by its name, else by pdf.js's reading of its flags (its
-    fallback name: "serif", "sans-serif", or "monospace"). cjk: the font
-    sets CJK characters, and its one width says no monospace. */
-export function fontShape(name: string, fallback?: string | null, cjk = false): Shape {
+/** A font's shape by its name alone; null where the name says none. */
+function nameShape(name: string): Shape | null {
   if (CJK_SANS.test(name)) return "sans";
   if (CJK_SERIF.test(name)) return "serif";
-  if (MONO.test(name) || (fallback === "monospace" && !cjk)) return "mono";
-  if (fallback === "serif") return "serif";
-  if (fallback === "sans-serif") return "sans";
-  return SERIF.test(name) ? "serif" : "sans";
+  if (MONO.test(name)) return "mono";
+  if (SANS.test(name)) return "sans";
+  if (SERIF.test(name)) return "serif";
+  return null;
+}
+
+/** A font's shape by its name, else by pdf.js's reading of its flags (its
+    fallback name: "serif", "sans-serif", or "monospace"). The name comes
+    first: a producer leaves the flags out or sets them wrong (acmart's
+    LinLibertineT and an Elsevier paper's CharisSIL say sans-serif, and
+    their bodies read as Arial; a subset of a few glyphs of one width says
+    monospace). cjk: the font sets CJK characters, and its one width says
+    no monospace. */
+export function fontShape(name: string, fallback?: string | null, cjk = false): Shape {
+  return nameShape(name) ?? (fallback === "monospace" && !cjk ? "mono" : fallback === "serif" ? "serif" : "sans");
 }
 
 const cache = new Map<string, string>();
+const named = new Map<string, string | null>();
+
+/** The face a font's name gives: the menu's face it spells, the face a twin
+    or a producer's name stands for, or the face of the shape its name says;
+    null where the name says none (a subset's hashed name, "AdvOTdd63dae3"). */
+function namedFace(name: string): string | null {
+  let face = named.get(name);
+  if (face === undefined) {
+    const shape = nameShape(name);
+    face = menuFace(name) ?? ALIASES.find(([re]) => re.test(name))?.[1] ?? (shape ? BY_SHAPE[shape] : null);
+    if (named.size > 10_000) named.clear();
+    named.set(name, face);
+  }
+  return face;
+}
 
 /** The page editor's face for a PDF font: its name without the subset
     prefix ("TimesNewRomanPS-BoldMT"), pdf.js's fallback name, and whether
@@ -73,7 +102,8 @@ export function faceOf(name: string, fallback?: string | null, cjk = false): str
   const key = `${name}|${fallback ?? ""}|${cjk ? "cjk" : ""}`;
   let face = cache.get(key);
   if (face === undefined) {
-    face = menuFace(name) ?? ALIASES.find(([re]) => re.test(name))?.[1] ?? BY_SHAPE[fontShape(name, fallback, cjk)];
+    face = namedFace(name) ?? BY_SHAPE[fontShape(name, fallback, cjk)];
+    if (cache.size > 10_000) cache.clear();
     cache.set(key, face);
   }
   return face;
