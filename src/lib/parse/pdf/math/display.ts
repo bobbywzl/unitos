@@ -33,13 +33,13 @@ const LABEL_RE = /^\((\d{1,3}(?:\.\d{1,3}){0,2}[a-z]?|[A-Z]\.?\d{1,3}(?:\.\d{1,3
 // A proof's end mark: flush right on a display's last line or under it,
 // it goes in as the display's \tag*{$\square$}, where KaTeX draws it too.
 const QED_RE = /^[□■∎]$/;
-// Words a display sets in text (\text{if}), and operator names.
-const MATH_WORDS = new Set([
-  "if", "and", "or", "for", "all", "otherwise", "where", "with", "in", "on", "as", "then", "else",
+// Operator names, and the words a display sets in text (\text{if}).
+const OPERATOR_NAMES = new Set([
   "lim", "sup", "inf", "max", "min", "limsup", "liminf", "log", "ln", "lg", "exp", "sin", "cos", "tan", "cot", "sec",
   "csc", "sinh", "cosh", "tanh", "arcsin", "arccos", "arctan", "det", "mod", "dim", "ker", "deg", "gcd", "hom", "arg",
   "pr", "var", "cov", "tr", "sgn", "diag", "rank", "span", "supp",
 ]);
+const MATH_WORDS = new Set([...OPERATOR_NAMES, "if", "and", "or", "for", "all", "otherwise", "where", "with", "in", "on", "as", "then", "else"]);
 
 // A formula's relations and operators: a display states or applies one.
 const RELATION_RE = /[=<>≤≥≈∼≃≅≡≠∝≪≫≺≻→←↔⇒⇐⇔⟶⟹⟺↦∈∉∋⊂⊆⊃⊇∑∏∫∮⋀⋁⋃⋂+×∪∩⊕⊗∧∨]/;
@@ -166,6 +166,44 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
   const setIn = x > column.left + line.size * 1.5 && xEnd < column.right - line.size * 1.5;
   if (words.length <= 2 && letters <= zoneChars && setIn) return "math";
   return "text";
+}
+
+// A line of a sentence is prose, whatever its math: a display is centered
+// in its column, labeled, or held by tall delimiters. The line opens with
+// a word of the text and holds another or ends a sentence ("case p =
+// 2/3."), and it starts at the text's own edge (the column's, a
+// paragraph's indent, an item's) or nearer the column's left edge than its
+// right; or it goes on from a full line of prose over it, starting where
+// that line starts. arXiv 2302.12627 p. 6: "For any 𝒮m ⊆ 𝒮̂, define 𝒰 =
+// 𝒮mc ∩ 𝒮̂ and" was a crop; pp. 8–9: "where Bn = {…} and" a display of
+// \textit words; Grinstead–Snell: an exercise's last line, "D(X).", a
+// display.
+function isProseLine(lines: Line[], n: number, kinds: LineKind[], columns: { left: number; right: number }[], ctx: PageContext): boolean {
+  const line = lines[n];
+  const column = columns[n];
+  const { x, xEnd, runs, text, label } = unlabeled(line);
+  if (label || !Number.isFinite(column.right)) return false;
+  const size = line.size;
+  if (x > column.left + size * 0.5 && Math.abs((x + xEnd) / 2 - (column.left + column.right) / 2) < size * 1.5) return false;
+  const above = lines.slice(0, n).findLast((o) => o.y > line.y && o.x < line.xEnd && o.xEnd > line.x);
+  if (
+    above !== undefined &&
+    kinds[lines.indexOf(above)] === "text" &&
+    Math.abs(above.x - x) < 1 &&
+    column.right - above.xEnd < size &&
+    above.y - line.y < ctx.bodySize * ctx.leading * 1.4
+  ) {
+    return true;
+  }
+  const outside = wordsOutside(text, runs);
+  const words = (outside.match(/\p{L}{2,}/gu) ?? []).filter((w) => !OPERATOR_NAMES.has(w.toLowerCase()) && !/^\p{Lu}{2,3}$/u.test(w));
+  if (words.length === 0 || !outside.startsWith(words[0])) return false;
+  if (words.length < 2 && !/[.,]\s*$/.test(text)) return false;
+  return (
+    x <= column.left + size * 2 ||
+    x - column.left <= column.right - xEnd ||
+    lines.some((o, m) => m !== n && Math.abs(m - n) <= 12 && kinds[m] === "text" && o.text.length >= 20 && Math.abs(o.x - x) < 1)
+  );
 }
 
 // The operator names that take limits ("lim", "max") among an item's
@@ -485,6 +523,63 @@ function fencesOf(ctx: PageContext): Box[] {
   return [...columns.filter((c) => c.y2 - c.y1 > ctx.bodySize * 1.5), ...drawn.map(({ x1, y1, x2, y2 }) => ({ x1, y1, x2, y2 }))];
 }
 
+// A tall delimiter drawn in pieces may put its top piece on a line of its
+// own, over the formula it fences, and the line reads as a display of its
+// own: it joins the display whose baseline the delimiter spans (arXiv
+// 2302.12627 p. 6: the braces of w(𝒮m) = 2{sup … − sup …} were two crops
+// of their own over the display's crop).
+function withFencePieces(lines: Line[], fences: Box[]): Line[] {
+  const pieceOf = (l: Line): Box | undefined => {
+    if (!l.display) return undefined;
+    const glyphs = l.items.flatMap((i) => i.glyphs ?? []).filter((g) => g.unicode.trim() !== "" || g.family !== null);
+    if (glyphs.length === 0 || l.items.some((i) => !i.glyphs?.length)) return undefined;
+    const pieces = glyphs.every((g) => g.family === "omx" && mathGlyph("omx", g.code)?.piece !== undefined);
+    return pieces ? fences.find((f) => glyphs.every((g) => g.x >= f.x1 - 1 && g.x <= f.x2 + 1 && g.y >= f.y1 - g.size && g.y <= f.y2 + g.size)) : undefined;
+  };
+  const pieces = new Map<Line, Line[]>();
+  const taken = new Set<Line>();
+  for (const l of lines) {
+    const fence = pieceOf(l);
+    if (!fence) continue;
+    const middle = (fence.y1 + fence.y2) / 2;
+    const host = lines
+      .filter((h) => h !== l && h.display && pieceOf(h) === undefined && h.y > fence.y1 && h.y < fence.y2 && h.x - h.size <= fence.x1 && fence.x2 <= h.xEnd + h.size)
+      .sort((a, b) => Math.abs(a.y - middle) - Math.abs(b.y - middle))[0];
+    if (!host) continue;
+    pieces.set(host, [...(pieces.get(host) ?? []), l]);
+    taken.add(l);
+  }
+  if (taken.size === 0) return lines;
+  return lines.filter((l) => !taken.has(l)).map((l) => (pieces.has(l) ? withPieces(l, pieces.get(l)!) : l));
+}
+
+// A line with the pieces' lines added: each piece a cell at its place
+// among the line's cells, its runs with it.
+function withPieces(host: Line, pieces: Line[]): Line {
+  const cells = [...host.cells, ...pieces.flatMap((p) => p.cells)].sort((a, b) => a.x - b.x);
+  let text = "";
+  const runs: Run[] = [];
+  for (const [n, cell] of cells.entries()) {
+    if (n > 0) text += "\t";
+    const offset = text.length;
+    text += cell.text;
+    for (const r of cell.runs) runs.push({ ...r, start: r.start + offset, end: r.end + offset });
+  }
+  const all = [host, ...pieces];
+  return {
+    ...host,
+    cells,
+    text,
+    runs,
+    items: all.flatMap((l) => l.items).sort((a, b) => a.x - b.x),
+    x: Math.min(...all.map((l) => l.x)),
+    xEnd: Math.max(...all.map((l) => l.xEnd)),
+    mathChars: all.reduce((n, l) => n + l.mathChars, 0),
+    yMin: Math.min(...all.map((l) => l.yMin)),
+    yMax: Math.max(...all.map((l) => l.yMax)),
+  };
+}
+
 // The edges of a line's column: where the prose lines near it that share
 // its width start and end (two columns on a page have two left edges).
 function columnOf(lines: Line[], n: number, ctx: PageContext): { left: number; right: number } {
@@ -510,7 +605,9 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   if (!ctx.tex) return input;
   const fences = fencesOf(ctx);
   const fenced = (l: Line) => fences.some((f) => l.y <= f.y2 && l.y >= f.y1 && f.x1 < l.xEnd + l.size * 2 && f.x2 > l.x - l.size * 2);
-  const kinds0 = input.map((l, n) => kindOf(l, ctx, columnOf(input, n, ctx), fenced(l)));
+  const columns0 = input.map((_, n) => columnOf(input, n, ctx));
+  const kinds0 = input.map((l, n) => kindOf(l, ctx, columns0[n], fenced(l)));
+  for (let n = 0; n < input.length; n++) if (kinds0[n] === "math" && !fenced(input[n]) && isProseLine(input, n, kinds0, columns0, ctx)) kinds0[n] = "text";
   // A table's rows are no display: three cells or more, two of them
   // measured values or marks, with no tall delimiters around them (a
   // matrix's rows have them). Simulation tables with a formula in each row
@@ -654,7 +751,15 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
     };
     const alone = (l: Line) => spaced(l) && (centered(l) || (set(l) && detached(l)));
     const math = band.some((l) => kindIn(l) === "math" && (labels > 0 || band.length > 1 || alone(l)));
-    const bar = band.length > 1 && band.some((l) => kindIn(l) === "fragment") && (labels > 0 || band.some(set)) && rules.some((r) => r.dir === "h" && band.some((a) => band.some((b) => r.y1 < a.y && r.y1 > b.y && r.x1 < a.xEnd && r.x2 > a.x)));
+    // A band of small lines alone is no display (a figure's labels over
+    // the rules of its drawing, arXiv 2411.19946 pp. 1, 3): a display has
+    // glyphs at the text's size.
+    const bar =
+      band.length > 1 &&
+      band.some((l) => kindIn(l) === "fragment") &&
+      band.some((l) => l.items.some((i) => i.size >= ctx.bodySize * 0.85)) &&
+      (labels > 0 || band.some(set)) &&
+      rules.some((r) => r.dir === "h" && band.some((a) => band.some((b) => r.y1 < a.y && r.y1 > b.y && r.x1 < a.xEnd && r.x2 > a.x)));
     k += band.length;
     if (last && continues.has(band[0]) && !(labeled(last.band) && labeled(band))) {
       const whole = join([...last.band, ...band]);
@@ -673,7 +778,7 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       last = null;
     }
   }
-  return out;
+  return withFencePieces(out, fences);
 }
 
 // The band's lines as one line: its items, its texts in reading order.
@@ -898,7 +1003,9 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
       if (past(g) || beyond(g) || brace(g) || limit(g)) return true;
       if (labels.some((b) => g.x + g.w / 2 > b.x1 && g.x + g.w / 2 < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
       if (g.x + g.w / 2 <= box.x1 || g.x + g.w / 2 >= box.x2) return false;
-      const hangs = g.family === null && (isUnreadMath(g) || !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]$/u.test(g.unicode));
+      // A text font's ligature ("ﬁ") is letters: it hangs from nothing (the
+      // line over arXiv 2506.06752 (14) failed it).
+      const hangs = g.family === null && (isUnreadMath(g) || !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]+$/u.test(g.unicode.normalize("NFKC")));
       return g.y >= box.y1 - size * 0.05 && g.y < box.y2 + (hangs ? g.size : 0);
     });
     if (stray) return null;

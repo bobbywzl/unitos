@@ -202,6 +202,11 @@ function tableDecorations(doc: PMNode): DecorationSet {
     if (indent && align === "left") style.push(`--docs-table-indent: ${Math.min(indent, 400)}pt`);
     const padding = typeof node.attrs.cellPadding === "string" ? CELL_PADDING.exec(node.attrs.cellPadding) : null;
     if (padding) style.push(`--docs-cell-padding: ${padding.slice(1).map((v) => `${v}pt`).join(" ")}`);
+    const size = node.attrs.cellSize;
+    if (typeof size === "number" && size >= 4 && size <= 72) {
+      attrs["data-cell-size"] = "";
+      style.push(`--docs-cell-size: ${size}pt`);
+    }
     if (style.length > 0) attrs.style = style.join("; ");
     decorations.push(Decoration.node(pos, pos + node.nodeSize, attrs));
     return false;
@@ -289,6 +294,9 @@ export const DocsTable = Extension.create({
           // left" in points (an import's Word cell margins); a cell's own
           // padding wins.
           cellPadding: { default: null, rendered: false },
+          // The table's text size in points (an import's): its cells'
+          // paragraphs take it, so a line is as tall as its words.
+          cellSize: { default: null, rendered: false },
         },
       },
     ];

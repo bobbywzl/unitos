@@ -6,7 +6,7 @@
 // PDF points, y up; an em is a glyph's size.
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
-import { isBoldFont, isItalicFont, isTextMath, isUnreadMath, type MathFamily } from "@/lib/parse/pdf/glyphs";
+import { isBoldFont, isItalicFont, isTextMath, isUnnamedFont, isUnreadMath, type MathFamily } from "@/lib/parse/pdf/glyphs";
 import { mathGlyph, type MathGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Box, Item } from "@/lib/parse/pdf/types";
 
@@ -187,7 +187,8 @@ function textAtom(g: Glyph): Atom | null {
   const ch = g.unicode;
   // A math font's glyph no table reads (MathTime's big parenthesis) is no
   // text: read as a small one, it made a row of its own over its formula.
-  if (!TEXT_CHAR_RE.test(ch) || CM_NAME_RE.test(g.base) || isUnreadMath(g)) return null;
+  // Nor is a glyph of a font with no name: bbm's 𝕜 reads "k" (glyphs.ts).
+  if (!TEXT_CHAR_RE.test(ch) || CM_NAME_RE.test(g.base) || isUnreadMath(g) || isUnnamedFont(g.base)) return null;
   const [height, depth] = /[gjpqy]/.test(ch)
     ? [0.45, 0.22]
     : /[acemnorsuvwxz]/.test(ch)
@@ -812,6 +813,15 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       const mains = content.filter((a) => a.size >= stackSize * 0.95 && a.fam !== "omx");
       const lines = rowLines(mains, stackSize);
       if (lines.length < 2) continue;
+      // A matrix whose rows are labeled beside it, a label in a column left
+      // of its bracket on each row's baseline (a Markov chain's states):
+      // KaTeX has no \bordermatrix, and read with the formula the middle
+      // row's label is a factor ("N = 2(…)", Grinstead–Snell p. 419). The
+      // formula fails.
+      const labels = out.filter(
+        (a) => a !== open && !content.includes(a) && !isTall(a, em) && a.x2 <= open.x1 + 0.1 * em && open.x1 - a.x2 < 1.5 * em,
+      );
+      if (new Set(labels.map((a) => lines.findIndex((y) => Math.abs(a.yb - y) < 0.25 * stackSize)).filter((n) => n >= 0)).size >= 2) lost++;
       const rows = splitRows(content, lines);
       const cuts = columnCuts(rows, stackSize);
       const axis = (open.top + open.bottom) / 2;
@@ -872,10 +882,16 @@ function alignedRows(atoms: Atom[], em: number): string | null {
 function limitParts<T extends { x1: number; x2: number }>(glyphs: Atom[], owners: T[], fits: (o: T, b: Atom) => boolean, reach: number, em: number): Map<T, Atom[]> {
   const runs: Atom[][] = [];
   for (const b of [...glyphs].sort(byX)) {
-    const on = (r: Atom[]) => {
-      const last = r[r.length - 1];
-      return Math.abs(r[0].yb - b.yb) < 0.3 * b.size || (b.size < last.size * 0.95 && Math.abs(b.yb - last.yb) < 0.7 * last.size);
-    };
+    // On the baseline of a glyph of the run, or a script of one set just
+    // after it: a limit's letter takes its sub- and superscript at one x
+    // (Θ₁⁽ᵐ⁾ under a sup, arXiv 2302.12627 p. 6: the second Θ's scripts
+    // left the limit, and the display failed).
+    const on = (r: Atom[]) =>
+      r.some(
+        (c) =>
+          Math.abs(c.yb - b.yb) < 0.3 * Math.min(b.size, c.size) ||
+          (b.size < c.size * 0.95 && Math.abs(b.yb - c.yb) < 0.7 * c.size && b.x1 >= c.x1 && b.x1 - c.x2 < 0.3 * em),
+      );
     const run = runs.find((r) => on(r) && b.x1 - Math.max(...r.map((c) => c.x2)) < 0.6 * em);
     if (run) run.push(b);
     else runs.push([b]);

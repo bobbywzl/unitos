@@ -1309,9 +1309,11 @@ class Converter {
     const notes = this.cellNotes(block, index);
     const built = (block.html ? tableFromHtml(block.html, this.room, notes) : null) ?? tableFromText(block.text, this.room);
     if (!built) return this.carry(starts);
-    // The cells' padding as the page sets it (css/import.css draws it).
+    // The cells' padding as the page sets it, and the table's text size
+    // (css/import.css draws them).
     const padding = CELL_PADDING.exec(block.html ?? "")?.[1];
-    if (padding) built.table.attrs = { ...built.table.attrs, cellPadding: padding };
+    const size = cellSize(built.table);
+    if (padding || size) built.table.attrs = { ...built.table.attrs, ...(padding ? { cellPadding: padding } : {}), ...(size ? { cellSize: size } : {}) };
     // A footnote whose number the cell holds is the page editor's; one whose
     // label stayed words stays a paragraph after the table.
     walk(built.table, (node) => {
@@ -1468,6 +1470,24 @@ class Converter {
       size: { nodes, json: new TextEncoder().encode(JSON.stringify(richText)).length, rows },
     };
   }
+}
+
+/** A table's text size in points, when every word of it carries one (the
+    size lib/docs/import-table.ts sets its runs in): the size most of its
+    letters take. Its cells' paragraphs take it, so a line is as tall as
+    its words: at Normal text's size, a 9 pt table under 10.5 pt text drew
+    each row 2 pt taller than the page's. */
+function cellSize(table: RichNode): number | null {
+  const letters = new Map<number, number>();
+  let bare = false;
+  walk(table, (node) => {
+    if (node.type !== "text" || !node.text?.trim()) return;
+    const size = parseFloat(String(node.marks?.find((m) => m.type === "textStyle")?.attrs?.fontSize ?? ""));
+    if (!(size > 0)) bare = true;
+    else letters.set(size, (letters.get(size) ?? 0) + node.text.length);
+  });
+  const top = [...letters].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return !bare && top !== undefined && top >= 4 && top <= 72 ? top : null;
 }
 
 function walk(node: RichNode, visit: (node: RichNode) => void) {

@@ -162,7 +162,13 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       const near = (/^CMBX/i.test(g.base) || isTextMath(g) ? 0.3 : 0.12) * size;
       const letter = word.length === 1 && ((cur.length > 0 && gap < near) || (nextMath && afterGap < near));
       const name = word.length <= 4 && opens && afterGap < 0.12 * size;
-      if (opname || letter || name) cur.push(...glyphs.slice(k, j));
+      // A short upright name with a script set on it, inside a formula
+      // (\mathrm{sw}^{1}_{p,p'} after ¬, arXiv 2506.06752 (15)): set tight
+      // on both sides, where a word stands a word space from the math. A
+      // word that opens no formula: an author's name with its marks
+      // ("Sahu¹⋆") is no formula.
+      const scripted = word.length <= 4 && cur.length > 0 && gap < 0.12 * size && after !== undefined && after.size < size * 0.85 && afterGap < 0.12 * size;
+      if (opname || letter || name || scripted) cur.push(...glyphs.slice(k, j));
       else flush();
       k = j - 1;
       continue;
