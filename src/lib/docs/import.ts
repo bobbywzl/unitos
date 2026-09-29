@@ -178,11 +178,14 @@ const INDENTS: Record<(typeof INDENT_TOKENS)[number], Indent> = {
 
 /** A list's depths as the outermost list's listIndents (lib/docs/schema.ts
     listIndentsOf): each depth's [left, first], within the text column as a
-    paragraph's indents are; null when the page sets none. */
+    paragraph's indents are, and where the words after a marker that does
+    not hang start (hang); null when the page sets none. */
 function listIndentsAttr(indents: Indent[] | undefined): string | null {
   const pairs = (indents ?? []).slice(0, 9).map((indent) => {
     const attrs = indentAttrs(indent);
-    return [attrs.indentLeft ?? 0, attrs.indentFirstLine ?? 0];
+    const [left, first] = [attrs.indentLeft ?? 0, attrs.indentFirstLine ?? 0];
+    const hang = first >= 0 && indent.hang !== undefined && Number.isFinite(indent.hang) ? Math.min(MAX_INDENT_PT, Math.round(indent.hang * 2) / 2) : 0;
+    return hang > 0 ? [left, first, hang] : [left, first];
   });
   return pairs.length > 0 && pairs.length === Math.min(9, indents?.length ?? 0) ? JSON.stringify(pairs) : null;
 }

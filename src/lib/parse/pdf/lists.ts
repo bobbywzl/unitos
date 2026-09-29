@@ -294,6 +294,9 @@ function listEdge(items: Item[], lines: Line[], from: number, to: number, ctx: P
 // left, as under a hanging marker. A flush list's wraps come back under its
 // markers (a form's checkbox items), a hanging list's stand under its words
 // (a book's exercises): the import drew every list hanging half an inch in.
+// Where the wraps come back under the markers, the first line's words stand
+// hang after the marker's start: a word space after a TeX label, a tab
+// after a Word number.
 function listIndentsOf(items: Item[], depths: number[], levels: number[], edge: number): Indent[] {
   return levels.map((x, d) => {
     const at = items.filter((_, k) => depths[k] === d);
@@ -301,7 +304,9 @@ function listIndentsOf(items: Item[], depths: number[], levels: number[], edge: 
     const marker = median(at.map((item) => item.markerX));
     const wraps = at.flatMap((item) => item.lines.slice(1).map((l) => l.x));
     const left = median(wraps.length > 0 ? wraps : at.map((item) => item.bodyX));
-    return { left: Math.round(left - edge), first: Math.round(marker - left) };
+    const first = Math.round(marker - left);
+    const hang = first >= 0 ? Math.round(median(at.map((item) => item.bodyX - item.markerX))) : 0;
+    return { left: Math.round(left - edge), first, ...(hang > 0 ? { hang } : {}) };
   });
 }
 

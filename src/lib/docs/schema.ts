@@ -316,12 +316,13 @@ export function formatParts(format: string, level: number): { before: string; se
     listIndents, on the outermost list): one [left, first] pair a depth, in
     points, as a paragraph's indents (lib/parse/types.ts Indent): the
     wrapped lines' left, and the marker's place against it (negative: the
-    marker hangs before the words). At most nine; the depths past them go
-    on a half inch a depth. */
-export type ListIndent = [left: number, first: number];
+    marker hangs before the words). A marker that does not hang may say
+    where the words after it start, from its own start (hang). At most
+    nine; the depths past them go on a half inch a depth. */
+export type ListIndent = [left: number, first: number, hang?: number];
 
 /** A list's depths from its `listIndents` (a JSON string), or null when it
-    is not one to nine pairs within the page. */
+    is not one to nine depths within the page. */
 export function listIndentsOf(value: unknown): ListIndent[] | null {
   if (typeof value !== "string" || value.length > 400) return null;
   let list: unknown;
@@ -333,12 +334,13 @@ export function listIndentsOf(value: unknown): ListIndent[] | null {
   if (!Array.isArray(list) || list.length === 0 || list.length > 9) return null;
   const ok = (pair: unknown): pair is ListIndent =>
     Array.isArray(pair) &&
-    pair.length === 2 &&
+    (pair.length === 2 || pair.length === 3) &&
     pair.every((n) => typeof n === "number" && Number.isFinite(n)) &&
     pair[0] >= 0 &&
     pair[0] <= 432 &&
     pair[0] + pair[1] >= 0 &&
-    pair[0] + pair[1] <= 432;
+    pair[0] + pair[1] <= 432 &&
+    (pair.length === 2 || (pair[1] >= 0 && pair[2] > 0 && pair[2] <= 432));
   return list.every(ok) ? list : null;
 }
 

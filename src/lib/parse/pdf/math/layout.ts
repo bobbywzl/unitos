@@ -857,6 +857,62 @@ function alignedRows(atoms: Atom[], em: number): string | null {
 
 // ── Limits of big operators ─────────────────────────────────────────────────
 
+// The small glyphs over or under operators or names, each owner's limit.
+// A limit is a run along a baseline, its own scripts included (the prime
+// of g′ ∈ S(g)), or rows of runs (\substack), and it may hold words a
+// space apart ("p prime" is wider than ∏): a gap does not tell one limit
+// from two, as TeX sets a thin space at least between two owners. TeX
+// centers a limit on its owner, so a run is cut where each part sits
+// centered on its own: grown whole, two sums side by side read as one sum
+// with both lower limits (\sum_{j=1\ p,q=1}^{k}\sum^{n}, arXiv 2506.08494
+// p. 16), and two lim as one (arXiv 2411.09614 p. 18), which the check
+// cannot see. A run no part of which sits centered is its one owner's (an
+// integral shifts its limits by its slant; a subarray aligns its rows
+// left), or no one's.
+function limitParts<T extends { x1: number; x2: number }>(glyphs: Atom[], owners: T[], fits: (o: T, b: Atom) => boolean, reach: number, em: number): Map<T, Atom[]> {
+  const runs: Atom[][] = [];
+  for (const b of [...glyphs].sort(byX)) {
+    const on = (r: Atom[]) => {
+      const last = r[r.length - 1];
+      return Math.abs(r[0].yb - b.yb) < 0.3 * b.size || (b.size < last.size * 0.95 && Math.abs(b.yb - last.yb) < 0.7 * last.size);
+    };
+    const run = runs.find((r) => on(r) && b.x1 - Math.max(...r.map((c) => c.x2)) < 0.6 * em);
+    if (run) run.push(b);
+    else runs.push([b]);
+  }
+  const span = (p: Atom[]) => ({ x1: Math.min(...p.map((c) => c.x1)), x2: Math.max(...p.map((c) => c.x2)) });
+  const taken = new Map<T, Atom[]>();
+  const give = (o: T, p: Atom[]) => taken.set(o, [...(taken.get(o) ?? []), ...p]);
+  for (const r of runs) {
+    const whole = span(r);
+    const fit = owners.filter((o) => r.some((c) => fits(o, c)) && whole.x2 > o.x1 - reach && whole.x1 < o.x2 + reach);
+    if (!fit.length) continue;
+    // A run is cut only between two glyphs a tenth of an em apart.
+    const cuts = [0, ...r.flatMap((c, i) => (i > 0 && c.x1 - span(r.slice(0, i)).x2 >= 0.1 * em ? [i] : [])), r.length];
+    const parts: { o: T; i: number; j: number; off: number }[] = [];
+    for (const o of fit) {
+      let best: { o: T; i: number; j: number; off: number } | null = null;
+      for (const i of cuts) {
+        for (const j of cuts) {
+          const part = r.slice(i, j);
+          if (!part.length || !part.every((c) => fits(o, c))) continue;
+          const s = span(part);
+          if (s.x1 > cx(o) || s.x2 < cx(o)) continue;
+          const off = Math.abs(cx(s) - cx(o));
+          if (!best || off < best.off - 0.01 * em || (off <= best.off + 0.01 * em && j - i > best.j - best.i)) best = { o, i, j, off };
+        }
+      }
+      if (best && best.off < 0.2 * em) parts.push(best);
+    }
+    // Two parts that share a glyph: the better centered stands.
+    const kept: typeof parts = [];
+    for (const p of parts.sort((a, b) => a.off - b.off)) if (kept.every((q) => p.j <= q.i || q.j <= p.i)) kept.push(p);
+    for (const p of kept) give(p.o, r.slice(p.i, p.j));
+    if (!kept.length && fit.length === 1) give(fit[0], r);
+  }
+  return taken;
+}
+
 function limits(atoms: Atom[], em: number): Atom[] {
   const out = [...atoms];
   // A text-size operator takes limits too (\sum\limits in a list item):
@@ -864,29 +920,10 @@ function limits(atoms: Atom[], em: number): Atom[] {
   const ops = atoms.filter((a) => a.cls === "op" && (a.entry?.display || hangingFamily(a.fam)) && a.size >= em * 0.75);
   const over = (op: Atom, b: Atom) => b.bottom >= op.top - 0.1 * em && b.size < op.size;
   const under = (op: Atom, b: Atom) => b.top <= op.bottom + 0.1 * em && b.size < op.size;
-  // The small glyphs over or under an operator, in runs along their
-  // baselines: a limit is a run ("p prime" is wider than ∏), or rows of
-  // runs (\substack). TeX sets a thin space at least between two
-  // operators, so their limits are two runs, each the nearer operator's:
-  // grown along the baseline, two sums side by side read as one sum with
-  // both lower limits (\sum_{j=1\ p,q=1}^{k}\sum^{n}, arXiv 2506.08494
-  // p. 16), which the check cannot see.
-  const runs: Atom[][] = [];
-  for (const b of atoms.filter((c) => !ops.includes(c) && ops.some((o) => over(o, c) || under(o, c))).sort(byX)) {
-    const run = runs.find((r) => Math.abs(r[0].yb - b.yb) < 0.3 * b.size && b.x1 - Math.max(...r.map((c) => c.x2)) < 0.15 * em);
-    if (run) run.push(b);
-    else runs.push([b]);
-  }
-  const owner = new Map<Atom[], Atom>();
-  for (const r of runs) {
-    const x1 = Math.min(...r.map((c) => c.x1));
-    const x2 = Math.max(...r.map((c) => c.x2));
-    const fits = ops.filter((o) => (r.every((c) => over(o, c)) || r.every((c) => under(o, c))) && x2 > o.x1 - 0.3 * em && x1 < o.x2 + 0.3 * em);
-    const o = fits.sort((p, q) => Math.abs((x1 + x2) / 2 - cx(p)) - Math.abs((x1 + x2) / 2 - cx(q)))[0];
-    if (o) owner.set(r, o);
-  }
+  const fits = (op: Atom, b: Atom) => over(op, b) || under(op, b);
+  const taken = limitParts(atoms.filter((c) => !ops.includes(c) && ops.some((o) => fits(o, c))), ops, fits, 0.3 * em, em);
   for (const op of ops) {
-    const mine = runs.filter((r) => owner.get(r) === op).flat();
+    const mine = taken.get(op) ?? [];
     const up = mine.filter((b) => over(op, b));
     const low = mine.filter((b) => under(op, b) && !up.includes(b));
     if (up.length) op.upper = stackedLimit(up);
@@ -1034,33 +1071,21 @@ function linearAt(input: Atom[]): string {
   // script: wider than the name, it starts left of it ("N → ∞" under "lim"
   // read as a subscript of the "=" before it).
   const nameLimits = new Map<Atom, Atom[]>();
+  const names: { a: Atom; x1: number; x2: number }[] = [];
   for (let k = 0; k < main.length; k++) {
     if (!main[k].upright || !/^[A-Za-z]$/.test(main[k].tex)) continue;
     const { end, word } = wordAt(k);
-    if (LIMIT_OPS.has(word)) {
-      const a = main[k];
-      const mid = (a.x1 + main[end].x2) / 2;
-      const half = (main[end].x2 - a.x1) / 2 + 0.4 * em;
-      // A limit hangs wholly under the name's baseline; an inline subscript
-      // reaches above it. Its baseline alone says so where its box is a
-      // guess (a text font's "t" under Times' "lim" read as the subscript of
-      // the "=" before it, Springer). It grows along its own baseline.
-      const under = small.filter((s) => !s.claimed && (s.top < a.yb - 0.15 * em || s.yb < a.yb - 0.45 * em));
-      const low = under.filter((s) => Math.abs(cx(s) - mid) < half);
-      for (let added = low.length > 0; added; ) {
-        added = false;
-        for (const s of under) {
-          if (low.includes(s)) continue;
-          if (low.some((c) => Math.abs(c.yb - s.yb) < 0.3 * c.size && (Math.abs(s.x1 - c.x2) < 0.6 * em || Math.abs(c.x1 - s.x2) < 0.6 * em))) {
-            low.push(s);
-            added = true;
-          }
-        }
-      }
-      for (const s of low) s.claimed = true;
-      if (low.length) nameLimits.set(a, low);
-    }
+    if (LIMIT_OPS.has(word)) names.push({ a: main[k], x1: main[k].x1, x2: main[end].x2 });
     k = end;
+  }
+  // A limit hangs wholly under the name's baseline; an inline subscript
+  // reaches above it. Its baseline alone says so where its box is a guess
+  // (a text font's "t" under Times' "lim" read as the subscript of the "="
+  // before it, Springer).
+  const below = (n: { a: Atom }, s: Atom) => s.top < n.a.yb - 0.15 * em || s.yb < n.a.yb - 0.45 * em;
+  for (const [n, part] of limitParts(small.filter((c) => !c.claimed && names.some((m) => below(m, c))), names, below, 0.4 * em, em)) {
+    for (const c of part) c.claimed = true;
+    nameLimits.set(n.a, part);
   }
   const out: string[] = [];
   let prev: Atom | null = null;

@@ -240,17 +240,18 @@ const DEPTH_PT = 36;
     style (listSheet): each depth's words at its left (--docs-indent-n), its
     first line at left + first (--docs-first-n), and its marker in a box from
     there to the words (--docs-hang-n): the page's hang where the marker
-    hangs before the words, else the room to the next half-inch stop, as
-    Docs and Word set a tab after a marker. A marker wider than its box
-    moves the first line's words on; none stands left of its line's start,
-    so none stands in the margin. The depths past the list's own go on a
-    half inch a depth, set as the last one. */
+    hangs before the words, else the words' place after the marker as the
+    page sets it, else the next half-inch stop, as Docs and Word set a tab
+    after a marker. A marker wider than its box moves the first line's words
+    on; none stands left of its line's start, so none stands in the margin.
+    The depths past the list's own go on a half inch a depth, set as the
+    last one. */
 export function indentStyle(indents: ListIndent[]): string {
   const last = indents.length - 1;
   return Array.from({ length: 9 }, (_, k) => {
-    const [own, first] = indents[Math.min(k, last)];
+    const [own, first, after] = indents[Math.min(k, last)];
     const left = own + DEPTH_PT * Math.max(0, k - last);
-    const hang = first < 0 ? -first : DEPTH_PT - ((left + first) % DEPTH_PT);
+    const hang = first < 0 ? -first : (after ?? DEPTH_PT - ((left + first) % DEPTH_PT));
     return `--docs-indent-${k + 1}: ${left}pt; --docs-first-${k + 1}: ${first}pt; --docs-hang-${k + 1}: ${hang}pt`;
   }).join("; ");
 }
