@@ -149,14 +149,11 @@ function liftFloatsOffParagraphBreaks(segments: Segment[]): Segment[] {
     // compare loop finding: a rubric list split in two by a figure).
     const listBreak = prev.type === "LIST" && !prev.tocEntries;
     if (!listBreak && (prev.type !== "PARAGRAPH" || /[.!?:…"”)]$/.test(prev.text.trim()))) continue;
-    // The floats may fill a page of their own (LaTeX's float page: the
-    // references ran on from p. 6 to p. 8 around a page of tables, arXiv
-    // 2503.22874).
     let k = b;
-    while (k < out.length && isFloat(out[k]) && out[k].page <= prev.page + 2) k++;
+    while (k < out.length && out[k].page === out[b].page && isFloat(out[k])) k++;
     if (k === b || k >= out.length) continue;
     const tail = out[k];
-    if (tail.page > prev.page + 2 || tail.page < out[k - 1].page) continue;
+    if (tail.page !== out[b].page) continue;
     // A references entry's end at the page's top goes with the list after it.
     const lift = listBreak && hangingTail(tail, out[k + 1]) ? 2 : 1;
     if (lift === 1 && (listBreak ? tail.type !== "LIST" || Boolean(tail.tocEntries) : tail.type !== "PARAGRAPH" || !/^[a-z($€£0-9"'“]/.test(tail.text))) continue;

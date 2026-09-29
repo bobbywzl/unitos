@@ -166,6 +166,17 @@ const INDENTS: Record<(typeof INDENT_TOKENS)[number], Indent> = {
   "indent-block": { left: INDENT_PT, first: 0 },
 };
 
+/** A list's depths as the outermost list's listIndents (lib/docs/schema.ts
+    listIndentsOf): each depth's [left, first], within the text column as a
+    paragraph's indents are; null when the page sets none. */
+function listIndentsAttr(indents: Indent[] | undefined): string | null {
+  const pairs = (indents ?? []).slice(0, 9).map((indent) => {
+    const attrs = indentAttrs(indent);
+    return [attrs.indentLeft ?? 0, attrs.indentFirstLine ?? 0];
+  });
+  return pairs.length > 0 && pairs.length === Math.min(9, indents?.length ?? 0) ? JSON.stringify(pairs) : null;
+}
+
 /** A paragraph's borders as the page editor's (a Word file's rule under a
     heading, its bar beside a quote), each side as the parse writes it. */
 const BORDER_ATTRS = { top: "borderTop", right: "borderRight", bottom: "borderBottom", left: "borderLeft" } as const;
@@ -673,7 +684,7 @@ class Converter {
   private quote: RichNode | null = null;
   /** The last list block drawn as lists: its lines, and its nodes from
       out[at], for a list that resumes after it. */
-  private lastList: { lines: ListLine[]; nodes: RichNode[]; at: number; itemSpace: number } | null = null;
+  private lastList: { lines: ListLine[]; nodes: RichNode[]; at: number; itemSpace: number; indents: Indent[] | undefined } | null = null;
   /** The last page whose start is placed, and page starts a block could not
       hold, for the next block. */
   private page = 0;
@@ -1092,11 +1103,11 @@ class Converter {
       this.lastList = null;
       return;
     }
-    const nodes = this.lists(lines);
+    const nodes = this.lists(lines, block.listIndents);
     this.lineLook(lines.flatMap((l) => (l.node ? [l.node] : [])), block);
     this.spaceLast(nodes, block);
     this.place(index, nodes);
-    this.lastList = { lines, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block) };
+    this.lastList = { lines, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block), indents: block.listIndents };
   }
 
   /** The space between a list's items, in points (ParsedBlock.itemSpace). */
@@ -1119,13 +1130,15 @@ class Converter {
     }
   }
 
-  /** The lines as lists, each outermost list in its format. */
-  private lists(lines: ListLine[]): RichNode[] {
+  /** The lines as lists, each outermost list in its format and, but a
+      checklist, at its page's depths (ParsedBlock.listIndents). */
+  private lists(lines: ListLine[], indents: Indent[] | undefined): RichNode[] {
     const tops: Top[] = [];
     const nodes = listsAt(lines, 0, 0, tops).nodes;
+    const listIndents = listIndentsAttr(indents);
     for (const top of tops) {
-      const attrs = listFormat(top.node.type, top.seen);
-      if (attrs) top.node.attrs = { ...top.node.attrs, ...attrs };
+      const attrs = { ...listFormat(top.node.type, top.seen), ...(listIndents && top.node.type !== "taskList" ? { listIndents } : {}) };
+      if (Object.keys(attrs).length > 0) top.node.attrs = { ...top.node.attrs, ...attrs };
     }
     return nodes;
   }
@@ -1158,7 +1171,7 @@ class Converter {
     }
     tail.more = [...(tail.more ?? []), ...between];
     this.out.splice(last.at);
-    const nodes = this.lists(all);
+    const nodes = this.lists(all, last.indents ?? block.listIndents);
     this.lineLook(lines.flatMap((l) => (l.node ? [l.node] : [])), block);
     this.spaceLast(nodes, block);
     // A link to the resumed block lands on its first line.
@@ -1169,7 +1182,7 @@ class Converter {
       if (typeof first.attrs.blockId === "string") this.firstIds.set(index, first.attrs.blockId);
     }
     for (const node of nodes) this.push(node);
-    this.lastList = { lines: all, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block) };
+    this.lastList = { lines: all, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block), indents: last.indents ?? block.listIndents };
     return true;
   }
 

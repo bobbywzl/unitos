@@ -384,7 +384,9 @@ const INITIAL_RE = /(?:^|\s)\p{Lu}\.(?=\s|$)/u;
 const LABEL_RE = /^(?:chapter|part|book|appendix|section|lecture)\s+\S+$/i;
 // A division's label alone on its line, set bold: an exhibit, a schedule, a
 // section of a contract or a form ("EXHIBIT B", "SECTION A", "ARTICLE IV").
-const DIVISION_RE = /^(?:exhibit|schedule|annex|appendix|part|article|section)\s+[\p{L}\p{N}]{1,4}\.?$/iu;
+const DIVISION_RE = /^(exhibit|schedule|annex|appendix|part|article|section)\s+[\p{L}\p{N}]{1,4}\.?$/iu;
+// A division's depth by its kind: an exhibit holds sections.
+const DIVISION_DEPTH: Record<string, number> = { exhibit: 1, schedule: 1, annex: 1, appendix: 1, part: 2, article: 2, section: 2 };
 function capsHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
   const line = lines[i];
   const text = line.text.trim();
@@ -614,6 +616,16 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, slide
     : /^\d{1,2}[.)]\s/.test(text) ? 3
     : headingDepth(text);
   const depths = segments.map((s) => (s.type === "HEADING" ? depthOf(s.text) : null));
+  // A division's label stands at its kind's depth, and the title under it one
+  // deeper (the legal packet's exhibits, sections, and their titles all read
+  // at one level).
+  segments.forEach((s, k) => {
+    const kind = s.type === "HEADING" ? DIVISION_RE.exec(s.text.trim())?.[1].toLowerCase() : undefined;
+    if (!kind) return;
+    depths[k] = DIVISION_DEPTH[kind];
+    const next = segments[k + 1];
+    if (next?.type === "HEADING" && next.page === s.page && depths[k + 1] === null && !DIVISION_RE.test(next.text.trim())) depths[k + 1] = DIVISION_DEPTH[kind] + 1;
+  });
   // A numbering that starts again at each level ("1" under "1", a Japanese
   // white paper's parts under its "第1節" section) sets its levels apart by
   // size: at one depth, each smaller size is one level deeper.

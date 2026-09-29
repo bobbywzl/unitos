@@ -11,7 +11,7 @@
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
 import { isUnicodeMathFont } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
-import { braceLabelBoxes, type Atom } from "@/lib/parse/pdf/math/layout";
+import { braceLabelBoxes, hangingGlyph, type Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import { wholeChars } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, MathZone, Run } from "@/lib/parse/pdf/types";
@@ -184,8 +184,12 @@ function charSpans(item: Item): [number, number][] {
 
 // A part of an item: its glyphs [from, to) and their string. The spaces
 // after a part stay with it, so the line puts exactly one space between it
-// and the next part.
-function part(item: Item, spans: [number, number][], from: number, to: number, zone: MathZone | undefined): Item {
+// and the next part. A part of a formula is raised or lowered as its glyphs
+// stand against the formula's baseline (base): a formula that fails the
+// check keeps its scripts as the words' sub and sup (the owner's notes:
+// x_n read "xn" and ℝ^d "ℝd" on 32 pages); one that passes drops them
+// (resolveZones), its LaTeX holds them.
+function part(item: Item, spans: [number, number][], from: number, to: number, zone: MathZone | undefined, base: number | undefined): Item {
   const glyphs = item.glyphs!.slice(from, to);
   const start = from === 0 ? 0 : spans[from][0];
   const end = to === spans.length ? item.str.length : spans[to][0];
@@ -194,16 +198,18 @@ function part(item: Item, spans: [number, number][], from: number, to: number, z
   const xEnd = to === spans.length ? item.x + item.w : last.x + last.w;
   const out: Item = { ...item, str: item.str.slice(start, end), x, w: Math.max(0, xEnd - x), glyphs, zone };
   if (zone) {
-    out.sup = false;
-    out.sub = false;
+    // The thresholds lines.ts markShifts reads a text's scripts by.
+    const rise = base === undefined || glyphs.some((g) => g.size > zone.size * 0.9) ? 0 : glyphs[0].y - base;
+    out.sup = rise >= zone.size * 0.15;
+    out.sub = rise <= -zone.size * 0.1;
   }
   return out;
 }
 
 /** The line's items with its formulas cut out: an item inside a formula
-    carries its zone (its sub- and superscript flags off: they belong to
-    the formula's LaTeX), an item a formula starts or ends in splits
-    there. cells: where each cell of the line starts in items. */
+    carries its zone (and its raise: part), an item a formula starts or
+    ends in splits there. cells: where each cell of the line starts in
+    items. */
 export function splitZones(items: Item[], cells: number[]): Item[] {
   const out: Item[] = [];
   const bounds = [...cells, items.length];
@@ -231,6 +237,9 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
       .filter((g) => g.family !== null || g.unicode.trim() !== "")
       .sort((a, b) => a.x - b.x || b.y - a.y);
     const zoneOf = new Map<Glyph, MathZone>();
+    // Each formula's baseline: where most of its full-size glyphs stand (a
+    // big operator or a tall delimiter hangs from its origin, apart).
+    const baseOf = new Map<MathZone, number>();
     // An item with no glyphs is text a formula cannot run through.
     const breaks = cellItems.filter((it) => !it.glyphs?.length).map((it) => it.x);
     for (const z of zonesOf(glyphs, size)) {
@@ -239,6 +248,11 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
       if (breaks.some((x) => x > x1 && x < x2)) continue;
       const zone: MathZone = { glyphs: z, size, latex: "", ok: false, open: false };
       for (const g of z) zoneOf.set(g, zone);
+      const ys = z.filter((g) => g.size > size * 0.9 && !hangingGlyph(g)).map((g) => Math.round(g.y * 10) / 10);
+      const counts = new Map<number, number>();
+      for (const y of ys) counts.set(y, (counts.get(y) ?? 0) + 1);
+      const base = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (base !== undefined) baseOf.set(zone, base);
     }
     for (const item of cellItems) {
       const glyphs = item.glyphs ?? [];
@@ -258,7 +272,8 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
       let from = 0;
       for (let k = 1; k <= glyphs.length; k++) {
         if (k < glyphs.length && (zones[k] === zones[from] || spans[k][0] === spans[from][0])) continue;
-        out.push(part(item, spans, from, k, zones[from]));
+        const zone = zones[from];
+        out.push(part(item, spans, from, k, zone, zone && baseOf.get(zone)));
         from = k;
       }
     }
@@ -287,7 +302,8 @@ export function orphanGlyphs(lines: Line[], drawing: PageDrawing): Glyph[] {
 
 /** Each zone on the page's lines gets its LaTeX, checked against its
     glyphs (and the page's glyphs no item reads that sit on it); a zone
-    that fails stays plain text. */
+    that fails stays plain text, its scripts raised and lowered (part), and
+    one that passes drops its scripts' sub and sup: its LaTeX holds them. */
 export function resolveZones(lines: Line[], drawing: PageDrawing) {
   // Read at the first zone: most pages of prose have none.
   let orphans: Glyph[] | null = null;
@@ -299,6 +315,14 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
       seen.add(zone);
       orphans ??= orphanGlyphs(lines, drawing);
       resolveZone(zone, drawing, orphans);
+    }
+  }
+  if (seen.size === 0) return;
+  for (const line of lines) {
+    for (const r of [...line.runs, ...line.cells.flatMap((c) => c.runs)]) {
+      if (!r.zone?.ok) continue;
+      r.sup = false;
+      r.sub = false;
     }
   }
 }

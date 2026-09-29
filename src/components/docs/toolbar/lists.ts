@@ -2,7 +2,7 @@ import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { Command, EditorState } from "@tiptap/pm/state";
 import { isList } from "@/components/docs/typing/lists";
-import { formatParts, listLevelsOf, type ListCounter, type ListLevel, type RichNode } from "@/lib/docs/schema";
+import { formatParts, listLevelsOf, type ListCounter, type ListIndent, type ListLevel, type RichNode } from "@/lib/docs/schema";
 
 // Google Docs' lists (SPEC.md §29). Each of a list's nine nesting levels
 // draws a bullet, or a counter in its glyph format: the text around the
@@ -226,6 +226,24 @@ export function levelStyle(levels: ListLevel[]): string {
     .join("; ");
 }
 
+/** Half an inch: a list depth's step where its page sets none. */
+const DEPTH_PT = 36;
+
+/** A list's depths as its inline style (listSheet): --docs-indent-n, where
+    depth n's words stand. Under a marker that hangs before the words, at
+    the depth's left; where the words follow the marker (a first-line
+    indent), about two ems past the marker's place, left + first (the
+    marker and its space: the page editor hangs every marker before the
+    words, so the wrapped lines stand there too). The depths past the
+    list's own go on a half inch a depth. */
+export function indentStyle(indents: ListIndent[]): string {
+  const at = ([left, first]: ListIndent) => (first < 0 ? `${left}pt` : `calc(${left + first}pt + 2em)`);
+  const last = indents.length - 1;
+  return Array.from({ length: 9 }, (_, k) =>
+    `--docs-indent-${k + 1}: ${k <= last ? at(indents[k]) : `calc(${at(indents[last])} + ${DEPTH_PT * (k - last)}pt)`}`,
+  ).join("; ");
+}
+
 /** The list rules under `root` (".docs-prose" in the page editor, "body"
     in the web page download): Google Docs' defaults (● ○ ■, 1. a. i.), each
     depth's level, a bullet as list-style-type, and a number as ::marker's
@@ -243,6 +261,13 @@ export function listSheet(root: string): string {
     `${root} ul:not([data-type="taskList"]) > li { list-style-type: var(--docs-level-bullet); }`,
     `${root} ol > li { list-style-type: var(--docs-level-number); }`,
     `${root} :is(ol > li, ol > [data-suggestion-block] > li)::marker { content: var(--docs-level-marker); }`,
+    // Each depth's words: where the outermost list's page sets them
+    // (listIndents), else a half inch a depth. A checklist keeps its own.
+    ...Array.from(
+      { length: 9 },
+      (_, k) =>
+        `${root} ${"li ".repeat(k)}:is(ul, ol):not([data-type="taskList"]) { padding-left: calc(var(--docs-indent-${k + 1}, ${DEPTH_PT * (k + 1)}pt) - var(--docs-indent-${k}, ${DEPTH_PT * k}pt)); }`,
+    ),
   ].join("\n");
 }
 
