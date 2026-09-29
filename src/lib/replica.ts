@@ -498,31 +498,54 @@ function sheetShape(html: string, prev: string, next: string, cut: SheetCut | nu
 const wordsOf = (el: Element): string =>
   [...el.childNodes].map((n) => (n.nodeType === 3 ? (n.textContent ?? "") : n.nodeType === 1 && !(n as Element).matches(".cell-gap, [data-anchor-skip]") ? wordsOf(n as Element) : "")).join("");
 
-/** Words that run over their empty neighbours (`sheet-over`, text beside an
-    empty cell as the parser draws it) are clipped while the cell to their
-    right has words — `sheet-clip`, marked `data-over` — and run over again
-    once it is empty. Only the class and the mark change, in place, so an
-    edit taken back gives the same bytes. */
-function overflow(html: string): string {
+/** The classes a cell's words set, after an edit (`was`: the replica with
+    the old words, cell for cell). Words that turn into a number line up
+    right (`sheet-num`) unless the cell's style sets its alignment, and
+    words that are no longer a number lose it; words that run over their
+    empty neighbours (`sheet-over`, text beside an empty cell as the parser
+    draws it) are clipped while the cell to their right has words —
+    `sheet-clip`, marked `data-over` — and run over again once it is empty.
+    Only a class and the mark change, in place, so an edit taken back gives
+    the same bytes. */
+function cellClasses(was: string, html: string): string {
   const dom = new JSDOM(`${PREFIX}${html}</body></html>`, { includeNodeLocations: true });
+  const before = new JSDOM(`${PREFIX}${was}</body></html>`).window.document.querySelectorAll("tbody td");
+  // The cell styles that set the alignment themselves.
+  const aligned = new Set([...html.matchAll(/\.(x\d+)\{[^}]*text-align:/g)].map((m) => m[1]));
   const splices: { start: number; end: number; source: string }[] = [];
-  for (const td of dom.window.document.querySelectorAll("td.sheet-over, td[data-over]")) {
-    const right = td.nextElementSibling;
-    const empty = right?.localName !== "td" || wordsOf(right) === "";
-    const over = td.classList.contains("sheet-over");
+  dom.window.document.querySelectorAll("tbody td").forEach((td, i) => {
     const loc = dom.nodeLocation(td) as Location | null;
     const at = loc?.attrs?.class;
-    if (empty === over || !at) continue;
+    if (!at) return;
     const start = at.startOffset - PREFIX.length;
     const end = at.endOffset - PREFIX.length;
-    const cls = html.slice(start, end);
-    if (over) splices.push({ start, end, source: `${cls.replace(/\bsheet-over\b/, "sheet-clip")} data-over="1"` });
-    else {
-      const mark = loc!.attrs!["data-over"];
-      splices.push({ start, end, source: cls.replace(/\bsheet-clip\b/, "sheet-over") });
-      if (mark) splices.push({ start: mark.startOffset - PREFIX.length - 1, end: mark.endOffset - PREFIX.length, source: "" });
+    const tokens = html.slice(start + 7, end - 1).split(" ").filter(Boolean);
+    const prior = tokens.join(" ");
+    const words = wordsOf(td);
+    const old = before[i] ? wordsOf(before[i]) : words;
+    const number = NUMBER.test(words.trim());
+    if (old !== words && number !== NUMBER.test(old.trim())) {
+      const own = tokens.some((t) => t === "sheet-num" || t === "sheet-mid" || aligned.has(t));
+      if (!number && tokens.includes("sheet-num")) tokens.splice(tokens.indexOf("sheet-num"), 1);
+      else if (number && !own) tokens.splice(/^x\d+$/.test(tokens[0] ?? "") ? 1 : 0, 0, "sheet-num");
     }
-  }
+    const mark = loc!.attrs!["data-over"];
+    const over = tokens.indexOf("sheet-over");
+    const clip = tokens.indexOf("sheet-clip");
+    const right = td.nextElementSibling;
+    const empty = right?.localName !== "td" || wordsOf(right) === "";
+    let marked = Boolean(mark);
+    if (over >= 0 && !empty) {
+      tokens[over] = "sheet-clip";
+      marked = true;
+    } else if (mark && clip >= 0 && empty) {
+      tokens[clip] = "sheet-over";
+      marked = false;
+    }
+    if (tokens.join(" ") === prior && marked === Boolean(mark)) return;
+    splices.push({ start, end, source: `class="${tokens.join(" ")}"${marked && !mark ? ' data-over="1"' : ""}` });
+    if (mark && !marked) splices.push({ start: mark.startOffset - PREFIX.length - 1, end: mark.endOffset - PREFIX.length, source: "" });
+  });
   let out = html;
   for (const { start, end, source } of splices.sort((x, y) => y.start - x.start)) out = out.slice(0, start) + source + out.slice(end);
   return out;
@@ -536,14 +559,14 @@ export function sheetWithText(html: string, prev: string, next: string, cut: She
   const shape = (text: string) => text.split("\n").map((r) => r.split("\t").length).join(",");
   if (shape(prev) === shape(next)) {
     const edited = replicaWithText(html, prev, next);
-    return "refused" in edited ? edited : { html: overflow(edited.html), cut: null };
+    return "refused" in edited ? edited : { html: cellClasses(html, edited.html), cut: null };
   }
   if (readReplica(html).text !== prev) return { refused: "stale" };
   const reshaped = sheetShape(html, prev, next, cut);
   if ("refused" in reshaped) return reshaped;
   // The kept cells' new words, then.
   const edited = replicaWithText(reshaped.html, readReplica(reshaped.html).text, next);
-  return "refused" in edited ? edited : { html: overflow(edited.html), cut: reshaped.cut };
+  return "refused" in edited ? edited : { html: cellClasses(reshaped.html, edited.html), cut: reshaped.cut };
 }
 
 /** A slide's or a sheet's replica with `next` for its words: what the text

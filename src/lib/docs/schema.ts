@@ -283,9 +283,11 @@ export type ListLevel = { bullet: string } | { counter: ListCounter; format: str
 
 /** The words around a list line's numbers ("(", ")", "A-", "1."): up to six
     letters, digits, and punctuation marks, none a quote, a backslash, or a
-    percent sign. A bullet: one to three visible characters of that kind. */
+    percent sign. A bullet: up to three visible characters of that kind;
+    none ("") draws no marker, as Google Docs' glyph type NONE (an import's
+    list without markers: a bibliography, an algorithm's steps). */
 const MARKER_TEXT = /^(?:(?!["\\%])[\p{L}\p{N}\p{P}]){0,6}$/u;
-const BULLET_TEXT = /^[^\s"\\%\p{C}]{1,3}$/u;
+const BULLET_TEXT = /^[^\s"\\%\p{C}]{0,3}$/u;
 
 /** A level's glyph format as the page can draw it: the text before the
     numbers, between them, and after. One number is the level's own (%k);
@@ -341,7 +343,7 @@ export function listIndentsOf(value: unknown): ListIndent[] | null {
 }
 
 /** A list's nine levels from its `listLevels` (a JSON string), or null
-    when it is not nine levels the page can draw: a bullet of one to three
+    when it is not nine levels the page can draw: a bullet of up to three
     characters, or a known counter with a format formatParts reads. */
 export function listLevelsOf(value: unknown): ListLevel[] | null {
   if (typeof value !== "string" || value.length > 2000) return null;

@@ -207,15 +207,16 @@ export function listMarker(outer: { type: string; attrs?: Record<string, unknown
 const cssString = (text: string) => `"${text.replace(/["\\\n\r\f]/g, (c) => `\\${c.charCodeAt(0).toString(16)} `)}"`;
 
 /** A list's levels as its inline style (listSheet): level n's bullet
-    in --docs-bullet-n, its counter in --docs-number-n (list-style-type, for
-    a browser that draws no ::marker content), and its marker in
-    --docs-marker-n (::marker's content: its format's words around the
-    level's counter, or around every level's for legal numbers). */
+    in --docs-bullet-n (none for an empty bullet: no marker), its counter
+    in --docs-number-n (list-style-type, for a browser that draws no
+    ::marker content), and its marker in --docs-marker-n (::marker's
+    content: its format's words around the level's counter, or around every
+    level's for legal numbers). */
 export function levelStyle(levels: ListLevel[]): string {
   return levels
     .map((level, k) => {
       const n = k + 1;
-      if ("bullet" in level) return `--docs-bullet-${n}: ${cssString(`${level.bullet}\u2003`)}`;
+      if ("bullet" in level) return `--docs-bullet-${n}: ${level.bullet ? cssString(`${level.bullet}\u2003`) : "none"}`;
       const parts = formatParts(level.format, k);
       if (!parts) return "";
       const count = parts.sep === null ? `counter(list-item, ${level.counter})` : `counters(list-item, ${cssString(parts.sep)}, ${level.counter})`;
@@ -234,33 +235,43 @@ const DEPTH_PT = 36;
     the depth's left; where the words follow the marker (a first-line
     indent), about two ems past the marker's place, left + first (the
     marker and its space: the page editor hangs every marker before the
-    words, so the wrapped lines stand there too). The depths past the
-    list's own go on a half inch a depth. */
-export function indentStyle(indents: ListIndent[]): string {
-  const at = ([left, first]: ListIndent) => (first < 0 ? `${left}pt` : `calc(${left + first}pt + 2em)`);
+    words, so the wrapped lines stand there too). A depth whose level draws
+    no marker (`levels`: an empty bullet) stands as a paragraph: its words
+    at its left, its first line at left + first (--docs-first-n). The depths
+    past the list's own go on a half inch a depth. */
+export function indentStyle(indents: ListIndent[], levels: ListLevel[] | null = null): string {
+  const unmarked = (k: number) => {
+    const level = levels?.[k];
+    return level !== undefined && "bullet" in level && level.bullet === "";
+  };
+  const at = ([left, first]: ListIndent, k: number) => (first < 0 || unmarked(k) ? `${left}pt` : `calc(${left + first}pt + 2em)`);
   const last = indents.length - 1;
-  return Array.from({ length: 9 }, (_, k) =>
-    `--docs-indent-${k + 1}: ${k <= last ? at(indents[k]) : `calc(${at(indents[last])} + ${DEPTH_PT * (k - last)}pt)`}`,
-  ).join("; ");
+  return Array.from({ length: 9 }, (_, k) => {
+    const words = `--docs-indent-${k + 1}: ${k <= last ? at(indents[k], k) : `calc(${at(indents[last], last)} + ${DEPTH_PT * (k - last)}pt)`}`;
+    return k <= last && unmarked(k) && indents[k][1] !== 0 ? `${words}; --docs-first-${k + 1}: ${indents[k][1]}pt` : words;
+  }).join("; ");
 }
 
 /** The list rules under `root` (".docs-prose" in the page editor, "body"
     in the web page download): Google Docs' defaults (● ○ ■, 1. a. i.), each
     depth's level, a bullet as list-style-type, and a number as ::marker's
     content, with its counter as list-style-type where a browser draws no
-    ::marker content. A line a suggestion adds or removes whole sits in the
-    suggestion's wrapper (css/suggest.css). */
+    ::marker content; a line of a depth that draws no marker sets its first
+    line at its page's place (indentStyle). A line a suggestion adds or
+    removes whole sits in the suggestion's wrapper (css/suggest.css). */
 export function listSheet(root: string): string {
   const li = (n: number) => `${root} ${Array.from({ length: n }, () => "li").join(" ")}`;
   return [
     `${root} { ${levelStyle(BULLET_PRESETS[0].levels)}; ${levelStyle(NUMBER_PRESETS[0].levels)}; }`,
     ...Array.from(
       { length: 9 },
-      (_, k) => `${li(k + 1)} { --docs-level-bullet: var(--docs-bullet-${k + 1}); --docs-level-number: var(--docs-number-${k + 1}); --docs-level-marker: var(--docs-marker-${k + 1}); }`,
+      (_, k) =>
+        `${li(k + 1)} { --docs-level-bullet: var(--docs-bullet-${k + 1}); --docs-level-number: var(--docs-number-${k + 1}); --docs-level-marker: var(--docs-marker-${k + 1}); --docs-level-first: var(--docs-first-${k + 1}, 0pt); }`,
     ),
     `${root} ul:not([data-type="taskList"]) > li { list-style-type: var(--docs-level-bullet); }`,
     `${root} ol > li { list-style-type: var(--docs-level-number); }`,
     `${root} :is(ol > li, ol > [data-suggestion-block] > li)::marker { content: var(--docs-level-marker); }`,
+    `${root} :is(ul, ol):not([data-type="taskList"]) > li > p:first-child { text-indent: var(--docs-level-first); }`,
     // Each depth's words: where the outermost list's page sets them
     // (listIndents), else a half inch a depth. A checklist keeps its own.
     ...Array.from(
@@ -287,7 +298,7 @@ export function markersAsWords(node: RichNode, outer: RichNode | null = null, ab
     const content = (item.content ?? []).map((child, k) => {
       if (LIST_TYPES.has(child.type)) return markersAsWords(child, top, numbers);
       const words = markersAsWords(child);
-      return k === 0 ? { ...words, content: [{ type: "text", text: `${marker} ` }, ...(words.content ?? [])] } : words;
+      return k === 0 && marker ? { ...words, content: [{ type: "text", text: `${marker} ` }, ...(words.content ?? [])] } : words;
     });
     return { ...item, content };
   });

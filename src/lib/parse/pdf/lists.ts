@@ -507,13 +507,21 @@ const ALGORITHM_HEAD_RE = /^(?:Input|Output|Require|Ensure|Data|Result|Parameter
     from its "for … do"); the lines that say what it takes and gives stand
     at the first depth. Read as paragraphs and a band set in, arXiv
     2506.06752's Algorithm 1 kept depth 0 for depths 1 to 3. The lines go
-    on at the text's leading to a gap wider than a line and a half. */
+    on at the text's leading to a gap wider than a line and a half. A
+    sentence that opens a line with "Algorithm 2 in Section S1…" (arXiv
+    2302.12627) is no caption: a caption's label is bold or its line
+    stands apart from the line above, and its lines stop short of the
+    column's edge, where prose runs to it. */
 export function readAlgorithm(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
   const line = lines[i];
   const caption = lines[i - 1];
   const size = line.size;
   if (!caption || caption.page !== line.page || !ALGORITHM_RE.test(caption.text.trim()) || runOf[i] !== -1 || line.cells.length !== 1) return null;
   if (caption.y - line.y <= 0 || caption.y - line.y > size * ctx.leading * 2.5) return null;
+  const label = /^\s*Algorithm\s+\d+/.exec(caption.text)![0].length;
+  const above = lines[i - 2];
+  const apart = above === undefined || above.page !== caption.page || lineColumn(above) !== lineColumn(caption) || above.y - caption.y > caption.size * ctx.leading * 1.5;
+  if (!apart && !caption.runs.some((r) => r.bold && r.start <= label - 1 && r.end >= label)) return null;
   const run: Line[] = [line];
   for (let j = i + 1; j < lines.length; j++) {
     const next = lines[j];
@@ -524,6 +532,8 @@ export function readAlgorithm(lines: Line[], i: number, ctx: PageContext, runOf:
     run.push(next);
   }
   if (run.length < 2) return null;
+  const right = Math.max(proseEdge(lines, i, i + run.length), lineColumn(line)?.[1] ?? 0);
+  if (right > 0 && run.slice(0, -1).filter((l) => l.xEnd >= right - size * 1.5).length * 3 > run.length - 1) return null;
   const head = (l: Line) => ALGORITHM_HEAD_RE.test(l.text.trim());
   const levels: number[] = [];
   for (const x of run.filter((l) => !head(l)).map((l) => l.x).sort((a, b) => a - b)) {

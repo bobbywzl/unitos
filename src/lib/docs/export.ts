@@ -20,6 +20,7 @@ import {
   InsertedTextRun,
   InternalHyperlink,
   LevelFormat,
+  LevelSuffix,
   LineRuleType,
   Packer,
   PageBreak,

@@ -76,7 +76,8 @@ const DocsTyping = Extension.create({
             },
           },
           // Where its depths stand as its page sets them (an import's):
-          // the list sheet draws each depth's words there (listSheet).
+          // the list sheet draws each depth's words there, and the first
+          // line of a depth that draws no marker (listSheet).
           listIndents: {
             default: null,
             parseHTML: (el) => {
@@ -85,7 +86,7 @@ const DocsTyping = Extension.create({
             },
             renderHTML: (attrs) => {
               const indents = listIndentsOf(attrs.listIndents);
-              return indents ? { "data-list-indents": attrs.listIndents, style: indentStyle(indents) } : {};
+              return indents ? { "data-list-indents": attrs.listIndents, style: indentStyle(indents, listLevelsOf(attrs.listLevels)) } : {};
             },
           },
         },

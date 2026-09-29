@@ -47,7 +47,8 @@ import type { Region } from "@/lib/video/types";
 //   HEADING    a heading of its level; one that repeats the title is the Title
 //   LIST       lists from the marker lines, nested two spaces a level, the
 //              markers drawn by the list (a Markdown task line a checklist
-//              line), its depths, alignment, and the space between its
+//              line; a line with no marker an item of a level that draws
+//              none), its depths, alignment, and the space between its
 //              items as the page sets them; a contents list is one
 //              paragraph per entry, each entry a link to its heading
 //   TABLE      a table (lib/docs/import-table.ts)
@@ -468,6 +469,9 @@ type ListLine = {
   indent: number;
   /** The list the line belongs to; null when its start is no marker. */
   type: ListType | null;
+  /** The line's start is no marker: an item of a level that draws none (a
+      bibliography's entry, an algorithm's step; unmarkedLines). */
+  unmarked?: boolean;
   checked: boolean;
   /** A bullet's glyph as the line prints it. */
   bullet?: string;
@@ -542,7 +546,7 @@ function listLine(line: Source): ListLine {
   } else {
     const found = counterAt(text);
     const count = found && countOf(found.token);
-    if (!found || !count) return out;
+    if (!found || !count) return { ...out, unmarked: true };
     out.type = "orderedList";
     out.count = { ...count, before: found.before, after: found.after };
     if (/^[ivx]$/i.test(found.token)) {
@@ -591,6 +595,16 @@ function levelsOfLines(lines: ListLine[], printed: boolean): void {
         : `${parents.join(".")}.%${k}${count.after}`;
     if (formatParts(format, k)) line.level = { counter: count.counter, format };
     else line.type = null;
+  }
+}
+
+/** Lines with no marker as items of a bulleted list whose level is an empty
+    bullet: the page draws no marker there (lib/docs/schema.ts ListLevel). */
+function unmarkedLines(lines: ListLine[]): void {
+  for (const line of lines) {
+    if (!line.unmarked) continue;
+    line.type = "bulletList";
+    line.level = { bullet: "" };
   }
 }
 
@@ -1095,6 +1109,7 @@ class Converter {
     let depth = -1;
     for (const l of lines) depth = l.depth = Math.min(l.depth, depth + 1);
     levelsOfLines(lines, this.printed);
+    unmarkedLines(lines);
     if (contents || lines.some((l) => l.type === null)) {
       // A contents list, or lines the page editor's lists cannot draw:
       // a paragraph per line, the words as they stand, indented as printed
@@ -1137,13 +1152,17 @@ class Converter {
   }
 
   /** The lines as lists, each outermost list in its format and, but a
-      checklist, at its page's depths (ParsedBlock.listIndents). */
+      checklist, at its page's depths (ParsedBlock.listIndents). A list
+      with no marker on any line draws none at every level, so a line moved
+      a level in or out stays unmarked. */
   private lists(lines: ListLine[], indents: Indent[] | undefined): RichNode[] {
     const tops: Top[] = [];
     const nodes = listsAt(lines, 0, 0, tops).nodes;
     const listIndents = listIndentsAttr(indents);
+    const unmarked = lines.every((l) => l.unmarked);
     for (const top of tops) {
-      const attrs = { ...listFormat(top.node.type, top.seen), ...(listIndents && top.node.type !== "taskList" ? { listIndents } : {}) };
+      const seen = unmarked ? Array.from({ length: 9 }, () => ({ bullet: "" })) : top.seen;
+      const attrs = { ...listFormat(top.node.type, seen), ...(listIndents && top.node.type !== "taskList" ? { listIndents } : {}) };
       if (Object.keys(attrs).length > 0) top.node.attrs = { ...top.node.attrs, ...attrs };
     }
     return nodes;
@@ -1168,6 +1187,7 @@ class Converter {
     for (const l of lines) depth = l.depth = Math.min(l.depth, depth + 1);
     const all = [...last.lines, ...lines];
     levelsOfLines(all, this.printed);
+    unmarkedLines(lines);
     if (lines.some((l) => l.type === null)) return false;
     // The list's last line is no longer its last: it takes the space
     // between the items.

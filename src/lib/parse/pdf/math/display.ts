@@ -562,10 +562,23 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       (o, n) => o !== l && kinds[n] !== "text" && (kinds[n] !== "fragment" || band.includes(o)) && Math.abs(o.y - l.y) <= Math.max(o.size, l.size) * 1.6,
     );
   const out: Line[] = [];
+  // A row that opens with a relation or an operator ("= …", "+ …") goes on
+  // the display over it, however far its sums set the rows apart (the
+  // owner's notes drew 6 such rows as displays of their own), when the two
+  // read as one formula, or when neither reads alone (Springer's rows of a
+  // lone "+" stood apart from the crop they end). A row that reads alone
+  // under a display that does not stays an equation of its own (arXiv
+  // 2410.04586 p. 7: "= ez^e[…]" under a crop of double sums).
+  const continues = new Set<Line>();
+  let last: { line: Line; band: Line[] } | null = null;
+  let orphans: Glyph[] | null = null;
+  const reads = (l: Line) => equationOf(l, (orphans ??= orphanGlyphs(lines, ctx.drawing)), ctx) !== null;
+  const labeled = (band: Line[]) => band.some((l) => kinds[lines.indexOf(l)] === "label" || unlabeled(l).label !== null);
   let k = 0;
   while (k < lines.length) {
     if (kinds[k] === "text") {
       out.push(lines[k]);
+      last = null;
       k++;
       continue;
     }
@@ -586,12 +599,10 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       const held = fences.some((f) => [prev, next].every((l) => l.y >= f.y1 && l.y <= f.y2 && l.x >= f.x2 - 1 && l.x - f.x2 < l.size * 3));
       const x1 = Math.min(...band.map((l) => l.x));
       const x2 = Math.max(...band.map((l) => l.xEnd));
-      // A row that opens with a relation or an operator ("= …", "+ …") goes
-      // on the display over it, however far its sums set the rows apart:
-      // the owner's notes drew 6 such rows as displays of their own, and
-      // Springer's rows of a lone "+" stood apart from the crop they end.
-      const goesOn = kinds[j] === "math" && CONTINUES_RE.test(unlabeled(next).text.trim()) && prev.y - next.y <= size * 3.5 && next.x >= x1 - size;
-      if ((prev.y - next.y > size * reach && !limit && !held && !goesOn) || prev.y < next.y) break;
+      if ((prev.y - next.y > size * reach && !limit && !held) || prev.y < next.y) {
+        if (kinds[j] === "math" && CONTINUES_RE.test(unlabeled(next).text.trim()) && prev.y - next.y <= size * 3.5 && next.x >= x1 - size) continues.add(next);
+        break;
+      }
       // A display's lines sit side by side at most a few ems apart (a
       // fraction's numerator beside a big operator); a label at the margin
       // stands farther.
@@ -609,6 +620,7 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
     // A fragment that opened the band holds only if the band holds it.
     while (band.length > 1 && kinds[lines.indexOf(band[0])] === "fragment" && !attached(band[0], around(band[0], band), rules, edge(band[0]), braces)) {
       out.push(band.shift()!);
+      last = null;
       k++;
     }
     const kindIn = (l: Line) => kinds[lines.indexOf(l)];
@@ -639,9 +651,23 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
     const alone = (l: Line) => spaced(l) && (centered(l) || (set(l) && detached(l)));
     const math = band.some((l) => kindIn(l) === "math" && (labels > 0 || band.length > 1 || alone(l)));
     const bar = band.length > 1 && band.some((l) => kindIn(l) === "fragment") && (labels > 0 || band.some(set)) && rules.some((r) => r.dir === "h" && band.some((a) => band.some((b) => r.y1 < a.y && r.y1 > b.y && r.x1 < a.xEnd && r.x2 > a.x)));
-    if (math || bar) out.push(join(band));
-    else out.push(...band);
     k += band.length;
+    if (last && continues.has(band[0]) && !(labeled(last.band) && labeled(band))) {
+      const whole = join([...last.band, ...band]);
+      if (reads(whole) || (!reads(last.line) && !reads(join(band)))) {
+        out[out.length - 1] = whole;
+        last = { line: whole, band: [...last.band, ...band] };
+        continue;
+      }
+    }
+    if (math || bar) {
+      const line = join(band);
+      out.push(line);
+      last = { line, band };
+    } else {
+      out.push(...band);
+      last = null;
+    }
   }
   return out;
 }
@@ -851,20 +877,23 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
     // stands: a limit on a line of its own that the display's lines left out
     // (its words set in a text italic, "g′ ∈ fullS(g)") passed with its
     // operators bare, arXiv 2506.06752 (10).
+    // So is a glyph under an operator name that takes limits: Springer's
+    // (29) passed with its two "lim"s bare.
     const ops = atoms.filter((a) => a.cls === "op" && (a.entry?.display || hangingFamily(a.fam)));
-    const limit = (g: Glyph) =>
-      g.size < size * 0.85 &&
-      ops.some((op) => {
-        const cx = g.x + g.w / 2;
-        return cx > op.x1 - size * 0.2 && cx < op.x2 + size * 0.2 && ((g.y < op.bottom && g.y > op.bottom - size * 0.9) || (g.y > op.top && g.y < op.top + size * 0.45));
-      });
+    const names = line.items.flatMap((item) => limitNames(item.glyphs ?? []));
+    const limit = (g: Glyph) => {
+      const cx = g.x + g.w / 2;
+      return (
+        g.size < size * 0.85 &&
+        (ops.some((op) => cx > op.x1 - size * 0.2 && cx < op.x2 + size * 0.2 && ((g.y < op.bottom && g.y > op.bottom - size * 0.9) || (g.y > op.top && g.y < op.top + size * 0.45))) ||
+          names.some((n) => cx > n.x1 - n.size * 0.5 && cx < n.x2 + n.size * 0.5 && g.y < n.y - n.size * 0.3 && g.y > n.y - n.size * 1.3))
+      );
+    };
     const stray = ctx.drawing.glyphs.some((g) => {
       if (own.has(g) || (g.family === null && g.unicode.trim() === "")) return false;
       if (past(g) || beyond(g) || brace(g) || limit(g)) return true;
       if (labels.some((b) => g.x + g.w / 2 > b.x1 && g.x + g.w / 2 < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
       if (g.x + g.w / 2 <= box.x1 || g.x + g.w / 2 >= box.x2) return false;
-      // A small glyph just under the formula is a limit or a script it lost.
-      if (g.size < size * 0.85 && g.y <= box.y1 && g.y > box.y1 - size * 0.75) return true;
       const hangs = g.family === null && (isUnreadMath(g) || !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]$/u.test(g.unicode));
       return g.y > box.y1 && g.y < box.y2 + (hangs ? g.size : 0);
     });
