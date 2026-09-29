@@ -95,8 +95,11 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       if (mark || punct || bracket) z = z.slice(1);
       else break;
     }
-    // A list item's marker at the cell's start ("(a)", "(ii)", "3.") is the
-    // item's, not its first formula's ("(a) x ≥ 0" read as one formula).
+    // A list item's marker at the cell's start ("(a)", "(ii)", "3.", a
+    // bullet a math font draws: acmart's itemize, "• scan(Pred)" read
+    // \bullet\text{ scan}, two bullets in the import) is the item's, not
+    // its first formula's ("(a) x ≥ 0" read as one formula).
+    if (z[0] === glyphs[0] && /^[•∙◦⋆∗·]$/.test(z[0].unicode) && z[1] !== undefined && gapOf(z[0], z[1]) > 0.15 * size) z = z.slice(1);
     if (z[0] === glyphs[0]) {
       for (let n = 2; n < Math.min(7, z.length); n++) {
         const head = z.slice(0, n).map((g) => g.unicode).join("");
@@ -123,8 +126,11 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
     const url = math.every((g) => g.unicode === "/") && !/^[0-9]+\/[0-9]+$/.test(z.map((g) => g.unicode).join(""));
     if (!stacked && (math.length === 0 || url)) return;
     // A lone raised symbol after a word (a footnote's dagger) is a mark,
-    // not a formula: every glyph small, none on the line.
+    // not a formula: every glyph small, none on the line. So is an operator
+    // alone, its operands in a text font (MathTime's "−" of "−x_max" in
+    // IEEE Access, Springer's "·" between its keywords).
     if (!stacked && z.every((g) => g.size < size * 0.85)) return;
+    if (z.length === 1 && z[0].family !== null && /^(bin|rel|punct)$/.test(mathGlyph(z[0].family, z[0].code)?.cls ?? "")) return;
     zones.push(z);
   };
   for (let k = 0; k < glyphs.length; k++) {

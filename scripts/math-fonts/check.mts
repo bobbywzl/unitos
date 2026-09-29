@@ -79,16 +79,21 @@ function canon(tex: string): string {
 // A page's displays that once passed the check wrong: each EQUATION on the
 // page (or each whose LaTeX pick matches) reads as one of the right
 // formulas, its \tag aside; a crop or words pass.
-type DisplayCase = { page: number; pick?: RegExp; right: string[] };
+// inline: the case reads the blocks' inline formulas, not their EQUATIONs.
+type DisplayCase = { page: number; pick?: RegExp; right: string[]; inline?: boolean };
 
-function wrongDisplays(blocks: { type: string; text: string; page?: number }[], cases: DisplayCase[]): string[] {
+function wrongDisplays(blocks: { type: string; text: string; page?: number; math?: { latex: string }[] }[], cases: DisplayCase[]): string[] {
   const out: string[] = [];
   for (const b of blocks) {
-    if (b.type !== "EQUATION") continue;
-    const latex = b.text.replace(/\s*\\tag\*?\{[^}]*\}\s*$/, "");
-    for (const c of cases) {
-      if (c.page !== b.page || (c.pick && !c.pick.test(latex))) continue;
-      if (!c.right.some((f) => canon(f) === canon(latex))) out.push(`p. ${b.page}: ${b.text}`);
+    const formulas = [
+      ...(b.type === "EQUATION" ? [{ latex: b.text.replace(/\s*\\tag\*?\{[^}]*\}\s*$/, ""), inline: false }] : []),
+      ...(b.math ?? []).map((m) => ({ latex: m.latex, inline: true })),
+    ];
+    for (const f of formulas) {
+      for (const c of cases) {
+        if (c.page !== b.page || Boolean(c.inline) !== f.inline || (c.pick && !c.pick.test(f.latex))) continue;
+        if (!c.right.some((r) => canon(r) === canon(f.latex))) out.push(`p. ${b.page}: ${f.latex}`);
+      }
     }
   }
   return out;
@@ -264,6 +269,15 @@ try {
   const norm = "\\left\\|\\prod_{j=1}^{n}f_j(\\xi_j)\\right\\|";
   const corpus: { file: string; cases: DisplayCase[] }[] = [
     {
+      // Inline: "|x| = {" before the cases' rows lost its brace, the rows
+      // passing as \begin{aligned}; a √ over a fraction lost its root.
+      file: "synthetic/synth-math-tex.pdf",
+      cases: [
+        { page: 6, inline: true, pick: /x,/, right: ["|x|=\\begin{cases} x, & x\\ge 0, \\\\ -x, & x<0 \\end{cases}"] },
+        { page: 7, inline: true, pick: /n-1/, right: ["\\sqrt{\\frac{\\sum_{i=1}^n(x_i-\\bar{x})^2}{n-1}}"] },
+      ],
+    },
+    {
       file: "real/springer-bmb-01377.pdf",
       cases: [
         { page: 6, right: [`\\frac{\\partial p}{\\partial t}${bold},t)=(\\mathcal{D}+\\mathcal{R})p${bold},t).`, `\\varphi${bold})=\\lim_{t\\to\\infty}p${bold},t)`, `0=(\\mathcal{D}+\\mathcal{R})\\varphi${bold}).`] },
@@ -307,6 +321,16 @@ try {
     const parsed = await parsePdf(new Uint8Array(readFileSync(pdf)), { pages: pageCases.map((c) => c.page) });
     wrong.push(...wrongDisplays(parsed.blocks, pageCases));
   }
+  // A list's bullet a math font draws (acmart's itemize, newtxmath's •) is
+  // the item's marker, never its formula's: "• scan(Pred)" read
+  // \bullet\text{ scan}, and the import drew two bullets.
+  const acm = join(import.meta.dirname, "..", "..", ".bench", "real", "acm-damon25-3736236.pdf");
+  if (existsSync(acm)) {
+    const parsed = await parsePdf(new Uint8Array(readFileSync(acm)), { pages: [3] });
+    for (const b of parsed.blocks) {
+      for (const m of b.math ?? []) if (/^\s*\\(bullet|cdot|circ|ast|star)\b/.test(m.latex)) wrong.push(`p. ${b.page}: a formula takes the item's bullet: ${m.latex}`);
+    }
+  } else console.log("displays: .bench/real/acm-damon25-3736236.pdf not there, skipped");
   for (const w of wrong) console.log(`WRONG DISPLAY ${w}`);
   console.log(`displays that once passed wrong: ${wrong.length === 0 ? "none reads wrong" : `${wrong.length} read wrong`}`);
   if (wrong.length > 0) failed = true;
