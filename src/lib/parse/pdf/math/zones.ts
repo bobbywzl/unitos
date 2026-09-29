@@ -9,7 +9,7 @@
 // page's rules are known (resolveZones).
 
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
-import { isTextMath, isUnicodeMathFont } from "@/lib/parse/pdf/glyphs";
+import { isTextMath, isUnicodeMathFont, isUnreadMath } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { braceLabelBoxes, hangingGlyph, type Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
@@ -35,7 +35,9 @@ const OPNAMES = new Set([
 // letters too (synth-math-html's \dfrac{1}{2} had no glyph to start a
 // formula, and \text{if } cut its formula in two).
 const isMathGlyph = (g: Glyph) =>
-  (g.family !== null && MATH_FAMILIES.has(g.family)) || (g.family === "ot1" && (g.code <= 0x0a || isUnicodeMathFont(g.base)));
+  (g.family !== null && MATH_FAMILIES.has(g.family)) ||
+  (g.family === "ot1" && (g.code <= 0x0a || isUnicodeMathFont(g.base))) ||
+  (g.family === null && isUnreadMath(g));
 
 function kind(g: Glyph, size: number): Kind {
   if (isMathGlyph(g)) return "math";

@@ -59,6 +59,7 @@ function readReplica(html: string): { text: string; pieces: Piece[]; gaps: strin
   };
   const pieces: Piece[] = [{ nodes: [], cell: null, fixed: false }];
   const gaps: string[] = [];
+  let lastGap = -1;
   let text = "";
   // With merged cells in the table, an empty piece may be a cell a merge
   // covers (its gap rides in a cell beside it): no empty piece takes words.
@@ -83,14 +84,16 @@ function readReplica(html: string): { text: string; pieces: Piece[]; gaps: strin
       if (cell.getAttribute("title")?.startsWith("=") || (merged && piece.nodes.length === 0)) piece.fixed = true;
     }
     gaps.push(node.data);
+    lastGap = at(gap).start;
     pieces.push({ nodes: [], cell: null, fixed: false });
   }
   // A sheet's last cell has no gap after it: empty, its words go at its end.
   const last = pieces[pieces.length - 1];
-  const lastCell = last.nodes.length === 0 && gaps.length > 0 ? document.querySelector("tbody > tr:last-child > td:last-child") : null;
-  if (lastCell && !lastCell.textContent) {
-    last.cell = (dom.nodeLocation(lastCell)?.endTag?.startOffset ?? PREFIX.length) - PREFIX.length;
-    last.fixed = merged || lastCell.getAttribute("title")?.startsWith("=") === true;
+  const lastCell = last.nodes.length === 0 ? document.querySelector("tbody > tr:last-child > td:last-child") : null;
+  const lastCellAt = lastCell && !lastCell.textContent ? dom.nodeLocation(lastCell) : null;
+  if (lastCellAt?.endTag && lastCellAt.startOffset - PREFIX.length > lastGap) {
+    last.cell = lastCellAt.endTag.startOffset - PREFIX.length;
+    last.fixed = merged || lastCell!.getAttribute("title")?.startsWith("=") === true;
   }
   return { text, pieces, gaps };
 }

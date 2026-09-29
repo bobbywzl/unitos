@@ -408,6 +408,16 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   return glyphs;
 }
 
+/** A glyph of a math font read by its character that no table reads (a
+    big operator, a sized delimiter, a piece of one: texWorldChar): it is
+    math, and the formula it stands in fails the check. Read as text, it
+    cut its formula in two, and each half passed (Springer's matrices read
+    "−1 1 0" as −11 0). OpenSymbol's bullets are no math. */
+export function isUnreadMath(g: Glyph): boolean {
+  const font = unicodeFont(g.base);
+  return font?.kind === "tex" && g.unicode.trim() !== "" && !(font.bullets && /^[•–—…‰·]$/.test(g.unicode));
+}
+
 const textMath = new WeakSet<Glyph>();
 /** A text font's italic letter or digit on a page whose math fonts set
     none (unicodeMath): a formula's own where it stands against math. */
