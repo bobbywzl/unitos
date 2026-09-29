@@ -53,6 +53,7 @@ type Piece = {
   cell: number | null;
   // A formula's cell, or a cell a merge covers: its words stay.
   fixed: boolean;
+  formula: boolean;
 };
 
 // The runs whose words stay: a bullet, the speaker notes' label, a chart's data.
@@ -68,7 +69,7 @@ function readReplica(html: string): { text: string; pieces: Piece[]; gaps: strin
     if (!loc) throw new Error("a replica's node has no place");
     return { start: loc.startOffset - PREFIX.length, end: loc.endOffset - PREFIX.length };
   };
-  const pieces: Piece[] = [{ nodes: [], cell: null, fixed: false }];
+  const pieces: Piece[] = [{ nodes: [], cell: null, fixed: false, formula: false }];
   const gaps: string[] = [];
   let lastGap = -1;
   let text = "";
@@ -92,19 +93,24 @@ function readReplica(html: string): { text: string; pieces: Piece[]; gaps: strin
     const cell = gap.parentElement?.closest("td, th") ?? null;
     if (cell) {
       piece.cell = at(gap).start;
-      if (cell.getAttribute("title")?.startsWith("=") || (merged && piece.nodes.length === 0)) piece.fixed = true;
+      piece.formula = cell.getAttribute("title")?.startsWith("=") === true;
+      if (piece.formula || (merged && piece.nodes.length === 0)) piece.fixed = true;
     }
     gaps.push(node.data);
     lastGap = at(gap).start;
-    pieces.push({ nodes: [], cell: null, fixed: false });
+    pieces.push({ nodes: [], cell: null, fixed: false, formula: false });
   }
-  // A sheet's last cell has no gap after it: empty, its words go at its end.
+  // A sheet's last cell has no gap after it: a formula's keeps its words;
+  // an empty one takes words at its end.
   const last = pieces[pieces.length - 1];
+  const final = last.nodes.at(-1)?.node.parentElement?.closest("td");
+  if (final?.getAttribute("title")?.startsWith("=")) last.fixed = last.formula = true;
   const lastCell = last.nodes.length === 0 ? document.querySelector("tbody > tr:last-child > td:last-child") : null;
   const lastCellAt = lastCell && !lastCell.textContent ? (dom.nodeLocation(lastCell) as Location | null) : null;
   if (lastCellAt?.endTag && lastCellAt.startOffset - PREFIX.length > lastGap) {
     last.cell = lastCellAt.endTag.startOffset - PREFIX.length;
-    last.fixed = merged || lastCell!.getAttribute("title")?.startsWith("=") === true;
+    last.formula = lastCell!.getAttribute("title")?.startsWith("=") === true;
+    last.fixed = merged || last.formula;
   }
   return { text, pieces, gaps };
 }
@@ -512,4 +518,43 @@ export function replicaEdit(type: string, html: string, prev: string, next: stri
   if (type === "SHEET") return sheetWithText(html, prev, next, cut);
   const edited = replicaWithText(html, prev, next);
   return "refused" in edited ? edited : { html: edited.html, cut: null };
+}
+
+/** What a sheet keeps as it is, for the assistant: its frozen rows and
+    columns, the cells a formula computes (named as the text reads them:
+    the row is the line, the column A, B, … the cell in it), and — with a
+    merge or a drawing — its rows and columns. Null when it keeps nothing. */
+function sheetKeeps(html: string): string | null {
+  const replica = readReplica(html);
+  const formulas: string[] = [];
+  let row = 0;
+  let col = 0;
+  replica.pieces.forEach((piece, i) => {
+    if (piece.formula) formulas.push(`${columnLetter(col)}${row + 1}`);
+    if (replica.gaps[i] === "\n") {
+      row += 1;
+      col = 0;
+    } else col += 1;
+  });
+  const sheet = /<div class="sheet [^>]*>/.exec(html)?.[0] ?? "";
+  const frozenRows = Number(/data-frozen-rows="(\d+)"/.exec(sheet)?.[1] ?? 0);
+  const frozenCols = Number(/data-frozen-cols="(\d+)"/.exec(sheet)?.[1] ?? 0);
+  const frozen = [
+    frozenRows === 1 ? "row 1" : frozenRows > 1 ? `rows 1–${frozenRows}` : "",
+    frozenCols === 1 ? "column A" : frozenCols > 1 ? `columns A–${columnLetter(frozenCols - 1)}` : "",
+  ].filter(Boolean);
+  const parts: string[] = [];
+  if (frozen.length > 0) parts.push(`${frozen.join(" and ")} (frozen)`);
+  if (formulas.length > 0) parts.push(`${formulas.slice(0, 40).join(", ")}${formulas.length > 40 ? `, and ${formulas.length - 40} more` : ""} (formulas)`);
+  if (/<td[^>]* (?:colspan|rowspan)=|class="sheet-drawing"|<td style="display:none">/.test(html)) parts.push("its rows and columns (merged cells or a drawing)");
+  return parts.length > 0 ? parts.join("; ") : null;
+}
+
+/** The assistant's lines on the sheets of a document: one per SHEET block
+    that keeps anything as it is (sheetKeeps). */
+export function sheetKeepLines(blocks: { id: string; type: string; html: string | null }[]): string[] {
+  return blocks.flatMap((b) => {
+    const keeps = b.type === "SHEET" && b.html ? sheetKeeps(b.html) : null;
+    return keeps ? [`[block ${b.id}]: ${keeps}`] : [];
+  });
 }

@@ -529,11 +529,14 @@ export function rowsOf(cellsOf: Cell[][], rowStarts: number[], columnCount: numb
 }
 
 // A run's columns: the gutters its lines leave open. The lines over its
-// first line of cells are heads, a head over several columns among them
-// ("Year Ended December 31," over a statement's years): they part no
-// gutter (the 10-K's OI&E statement read two years as one column, p. 78).
+// first line that starts at the table's left edge are heads, a head over
+// several columns among them ("Year Ended December 31," over a
+// statement's years, "As of December 31, 2023" over its assets and
+// liabilities): they part no gutter (the 10-K's OI&E statement read two
+// years as one column, p. 78).
 function runSeparators(run: Line[]): number[] {
-  const first = Math.max(0, run.findIndex((l) => l.cells.length >= 2));
+  const left = Math.min(...run.map((l) => l.x));
+  const first = Math.max(0, run.findIndex((l) => l.x <= left + 3));
   return withoutSignColumns(run, columnSeparators(run.slice(first), run.slice(0, first)));
 }
 
@@ -653,11 +656,13 @@ export function isProseColumns(lines: Line[], ocr: boolean): boolean {
   return lines.length > 0 && prose * 2 >= lines.length;
 }
 
-// A lead-in: a sentence of four words or more that ends in a colon over the
-// table ("Components of OI&E were as follows (in millions):"), no head of it.
+// A lead-in: a sentence of eight words or more that ends in a colon over the
+// table ("Components of OI&E were as follows (in millions):"), no head or
+// row of it. A group's name in a statement is shorter ("Derivatives not
+// designated as hedging instruments:").
 export function leadIn(text: string): boolean {
   const words = text.trim();
-  return words.endsWith(":") && words.split(/\s+/).length >= 4;
+  return words.endsWith(":") && words.split(/\s+/).length >= 8;
 }
 
 // A line that opens with a bullet is a list's item, no cell's wrapped line:
@@ -728,7 +733,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
         continue;
       }
       if (next.size > ctx.bodySize * 1.15) break;
-      if (bulleted(next)) break;
+      if (bulleted(next) || leadIn(next.text)) break;
       const columns = clusterColumns(members.map((k) => lines[k]));
       const aligned = isAlignedLine(next, columns);
       const leftOnly = isLeftOnly(next, columns);
@@ -811,6 +816,23 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     if (members.length <= 2 && members.some((k) => lines[k].size > ctx.bodySize * 1.4)) {
       i++;
       continue;
+    }
+    // A run with no gutter down it, over lines of one cell too, is no table:
+    // tableFromRun joined all its lines into one paragraph (a statement's
+    // last rows, the sentence under them, and the next statement: the 10-K,
+    // p. 71). Its leading lines of cells are one when a gutter runs down
+    // them; the other lines go back to the other readers. Lines of cells
+    // alone stay one paragraph (an author line whose names stand apart).
+    const columned = (ks: number[]) => runSeparators(ks.map((k) => lines[k])).length > 0;
+    const single = members.findIndex((k) => lines[k].cells.length < 2);
+    if (single >= 0 && !columned(members)) {
+      const lead = members.slice(0, single);
+      if (lead.length < 2 || !columned(lead)) {
+        i++;
+        continue;
+      }
+      members.splice(lead.length);
+      j = lead[lead.length - 1] + 1;
     }
     // Backward: wrapped header lines directly above (at most 3).
     const firstEdge = runSeparators(members.map((k) => lines[k]))[0];

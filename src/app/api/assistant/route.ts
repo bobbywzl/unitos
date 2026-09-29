@@ -44,6 +44,7 @@ import { featureCall } from "@/lib/feature-models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
+import { sheetKeepLines } from "@/lib/replica";
 import { parseBody } from "@/lib/validate";
 
 // A revise action reads the document part by part after the answer (lib/assistant/revise.ts).
@@ -187,7 +188,12 @@ async function handle(req: Request, t: TFunc) {
           // An import another account's project holds takes no edits.
           const edits: DocumentEdits =
             !open || !takesSuggestions(open) ? "blocks" : (await importShared(data.documentId!)) ? "none" : "suggestions";
-          return { sections, attachedDocs: attached.map((nd) => nd.document), edits, format: open?.format ?? null };
+          // What each sheet keeps as it is, for the rules on sheets.
+          const sheets =
+            open?.format === "sheets"
+              ? sheetKeepLines(await db.block.findMany({ where: { documentId: data.documentId!, type: "SHEET" }, orderBy: { order: "asc" }, select: { id: true, type: true, html: true } }))
+              : [];
+          return { sections, attachedDocs: attached.map((nd) => nd.document), edits, format: open?.format ?? null, sheets };
         })()
       : null;
   const messages: ModelMessage[] = [{ role: "system", content: system }];
@@ -252,6 +258,7 @@ async function handle(req: Request, t: TFunc) {
             otherDocuments: act.attachedDocs.filter((d) => d.id !== data.documentId),
             edits: act.edits,
             caretBlockId: data.caretBlockId,
+            sheets: act.sheets,
           }
         : undefined,
     });

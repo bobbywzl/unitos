@@ -699,19 +699,17 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, slide
     for (const s of segments) if (s.type === "HEADING" && !slideSizes.has(s.page)) slideSizes.set(s.page, clusters(segments.filter((t) => t.page === s.page)));
   }
   // Each size's level: the one most of its numbered headings take; a size
-  // none numbers stands a level under the larger sizes where one does
+  // none numbers stands a level under the nearest larger size one does
   // (OpenStax's "Z-Scores" under "6.1 | …": the floor at h3 set them at one
-  // level), else by its rank under the biggest, h3 at most.
+  // level), else by its rank under the biggest, h3 at most. Every smaller
+  // size takes that one level: a scan's words read in many sizes (USDA p. 3
+  // set "INTRODUCTION." at h6).
   const sizeLevels: number[] = [];
-  let voted = false;
+  let votedLevel: number | null = null;
   sizes.forEach((_, idx) => {
     const row = votes.get(idx);
-    if (row) voted = true;
-    sizeLevels[idx] = row
-      ? [...row].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]
-      : voted
-        ? Math.max(...sizeLevels.slice(0, idx)) + 1
-        : Math.min(3, base + idx);
+    if (row) votedLevel = [...row].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+    sizeLevels[idx] = row && votedLevel !== null ? votedLevel : votedLevel !== null ? votedLevel + 1 : Math.min(3, base + idx);
   });
   segments.forEach((s, k) => {
     if (s.type !== "HEADING") return;

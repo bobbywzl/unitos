@@ -223,6 +223,42 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("import: an item's later paragraph reads as its own, and the items after it keep their depth", shape === "list 0:Birds 1:Owls; paragraph/center (kind); list 1:Wrens", shape);
 }
 {
+  // A display equation in a list item (a list the converter resumed after it), the paragraph after it, and a
+  // table, a code block, a rule, and a picture in an item read as at the top level, between two lists.
+  const line = (text: string): RichNode => ({ type: "paragraph", content: [{ type: "text", text }] });
+  const item = (...content: RichNode[]): RichNode => ({ type: "listItem", content });
+  const cell = (text: string): RichNode => ({ type: "tableCell", content: [line(text)] });
+  const doc: RichNode = {
+    type: "doc",
+    content: [
+      {
+        type: "orderedList",
+        content: [
+          item(line("Toss a coin three times."), { type: "blockMath", attrs: { latex: "\\Omega=\\{HHH,HHT\\}" } }, line("(see Example 1.6)."), {
+            type: "orderedList",
+            content: [item(line("Two heads."))],
+          }),
+          item(
+            line("Count the cases."),
+            { type: "table", content: [{ type: "tableRow", content: [cell("Heads"), cell("Tails")] }] },
+            { type: "codeBlock", content: [{ type: "text", text: "count(cases)" }] },
+            { type: "horizontalRule" },
+            { type: "image", attrs: { src: "coin.png" } },
+          ),
+        ],
+      },
+    ],
+  };
+  const shape = fromImport(doc)
+    .blocks.map((b) => (b.kind === "list" ? `list ${b.items.map((it) => `${it.depth}:${it.spans.map((s) => s.text).join("")}`).join(" ")}` : b.kind))
+    .join("; ");
+  check(
+    "import: a display, a table, a code block, a rule, and a picture in a list item read as at the top level",
+    shape === "list 0:Toss a coin three times.; equation; paragraph; list 1:Two heads. 0:Count the cases.; table; code; separator; figure",
+    shape,
+  );
+}
+{
   const s = run(edit((b) => (b[4] = { kind: "figure", mathImage: "∫ 1 0 f(x) dx = 1 (1.1)" })));
   check("an equation shown as an image counts and scores 0", s.math.images === 1 && near(s.math.display, 0), `display ${s.math.display}`);
   const words = run(edit((b) => (b[3] = para("Let X be the discharge measured at the gauge each morning."))));
@@ -1055,6 +1091,21 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   const drawn = flatten({ blocks: [{ kind: "heading", level: 1, spans: [{ text: "Results" }], borders: ["bottom"] }, { kind: "paragraph", spans: [{ text: "The market moved." }], borders: ["left"] }, para("Revenue grew.")] });
   const bare = flatten({ blocks: [{ kind: "heading", level: 1, spans: [{ text: "Results" }] }, para("The market moved."), para("Revenue grew.")] });
   check("look: a Word file's borders drawn score 1, none drawn 0", near(borderScore(word, drawn), 1) && near(borderScore(word, bare), 0), `${borderScore(word, drawn)} ${borderScore(word, bare)}`);
+  // An import's Title and quote blocks draw their borders: a Word Title's rule under it, a quote's bar beside it.
+  const paragraph = (text: string, attrs: Record<string, unknown>): RichNode => ({ type: "paragraph", attrs, content: [{ type: "text", text }] });
+  const report = (bar: boolean): RichNode => ({
+    type: "doc",
+    content: [
+      paragraph("Annual report", { docStyle: "title", borderBottom: "0.75 solid #4472c4 4" }),
+      { type: "heading", attrs: { level: 1, borderBottom: "0.5 solid #000000 1" }, content: [{ type: "text", text: "Results" }] },
+      { type: "blockquote", content: [paragraph("The market moved.", bar ? { borderLeft: "1.5 solid #000000 0" } : {})] },
+      paragraph("Revenue grew.", {}),
+    ],
+  });
+  const titled = [{ words: "annual report", sides: ["bottom" as const] }, ...word];
+  const withBar = borderScore(titled, flatten(fromImport(report(true))));
+  const noBar = borderScore(titled, flatten(fromImport(report(false))));
+  check("look: an import's Title and quote count their borders", near(withBar, 1) && (noBar ?? 1) < 1, `${withBar} ${noBar}`);
 }
 
 {

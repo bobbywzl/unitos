@@ -461,7 +461,7 @@ function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => b
     default: {
       const into = spansOf();
       if (!into.hasText) return null;
-      if (tokens.includes("quote")) return { kind: "quote", spans: into.spans, ...breaks(into) };
+      if (tokens.includes("quote")) return { kind: "quote", spans: into.spans, ...bordered, ...breaks(into) };
       const indent = tokens.includes("indent-first") ? "first" : tokens.includes("indent-hanging") ? "hanging" : tokens.includes("indent-block") ? "block" : undefined;
       return {
         kind: "paragraph",
@@ -810,7 +810,7 @@ class ImportReader {
         };
         if (heading) return placed({ kind: "heading", level: heading, spans: into.spans, ...drawn });
         if (style === "title") return placed({ kind: "title", spans: into.spans, ...drawn });
-        if (quoted) return placed({ kind: "quote", spans: into.spans });
+        if (quoted) return placed({ kind: "quote", spans: into.spans, ...bordersOf(node.attrs) });
         // A contents entry: a paragraph that links to a heading, or one of
         // three or more in a row that read like headings, page numbers aside
         // (a contents list the converter could not link; a running head that
@@ -866,11 +866,12 @@ class ImportReader {
     }
   }
 
-  /** A list's items, by depth. An item's first block is its words; a later
-      paragraph or heading in it is drawn as its own block, with its own
-      alignment (a centered label under an item's fill-in line), so it is
-      read as its own block between two lists, and the items after it keep
-      their depth. The item's other later blocks join its words. */
+  /** A list's items, by depth. An item's first block is its words; each
+      later block in it but a list (a paragraph, a display equation, a
+      table, a figure, a code block, a rule) is drawn as its own block, with
+      its own look (a centered label under an item's fill-in line), so it
+      is read as at the top level, between two lists, and the items after
+      it keep their depth. */
   private list(node: RichNode) {
     const font = this.faceOf(node, "normal");
     let items: Item[] = [];
@@ -901,7 +902,6 @@ class ImportReader {
       }
       [items, breaks, marks, looks] = [[], [], [], []];
     };
-    const own = (child: RichNode) => child.type === "paragraph" || child.type === "heading";
     // Each line's number at each level, from the outermost list down: the
     // page editor draws a numbered line's marker from them and the outermost
     // list's level formats (listMarker).
@@ -912,12 +912,8 @@ class ImportReader {
         const children = item.content ?? [];
         const lead = children.findIndex((child) => !LISTS.has(child.type));
         const into = new Spans();
-        children.forEach((child, k) => {
-          if (LISTS.has(child.type) || (k > lead && own(child))) return;
-          if (k > lead) into.add({ text: " " });
-          if (child.type === "paragraph") this.inline(child, into);
-          else this.words(child, into);
-        });
+        if (children[lead]?.type === "paragraph") this.inline(children[lead], into);
+        else if (children[lead]) this.words(children[lead], into);
         if (into.hasText) {
           const first = children[lead]?.type === "paragraph" ? children[lead] : undefined;
           const space = this.spacingOf(first, "normal");
@@ -931,7 +927,7 @@ class ImportReader {
         }
         children.forEach((child, k) => {
           if (LISTS.has(child.type)) visit(child, depth + 1, numbers);
-          else if (k > lead && own(child)) {
+          else if (k > lead) {
             flush();
             this.node(child, false);
           }

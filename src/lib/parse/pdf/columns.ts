@@ -57,7 +57,14 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
   let aboveWhole = false;
   const own = extent ?? extentOf(items);
   for (const band of split.bands) {
-    if (band.kind) {
+    const note = band.kind === "columns" ? sideNote(band, page) : null;
+    if (note) {
+      // A note reads after the paragraph beside its top.
+      for (const list of [note.before, note.note, note.after]) if (list.length > 0) out.push(...readRegion(list, [], page, pageWidth, depth + 1));
+      aboveWhole = false;
+      continue;
+    }
+    if (band.kind && band.kind !== "columns") {
       // A part reads as a region of its own, a block in the region's column.
       for (const side of [band.left, band.right]) {
         if (side.items.length + side.graphics.length > 0) out.push(...readRegion(side.items, side.graphics, page, pageWidth, depth + 1, undefined, band.kind === "blocks" ? own : extent));
@@ -119,7 +126,7 @@ type Side = { items: Item[]; graphics: Placed[] };
 // under it. A part (what stands above or under one band) reads as a region
 // of its own; blocks are a band's sides set side by side in the region's
 // column (stacked).
-type Band = { left: Side; right: Side; separator: Piece | null; kind?: "part" | "blocks" };
+type Band = { left: Side; right: Side; separator: Piece | null; kind?: "part" | "blocks" | "columns" };
 
 // The gutter of a region, and its bands, when the region reads as columns:
 // few characters cross the gutter, and in the bands with something on both
@@ -293,7 +300,7 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
     .filter((b) => letters(b.left) >= 90 && letters(b.right) >= 90)
     .sort((a, b) => letters(b.left) + letters(b.right) - letters(a.left) - letters(a.right))
     .find((b) => [b.left.items, b.right.items].every((side) => isColumns(side, page, pageWidth, depth) && isDense(buildLines(side, page))));
-  if (band) return { bands: stacked(band, items, graphics) };
+  if (band) return { bands: stacked(band, items, graphics, "columns") };
   const blocks = twoSided.find((b) => isBlocks(b, page));
   return blocks ? { bands: stacked(blocks, items, graphics, "blocks") } : null;
 }
@@ -301,7 +308,7 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
 // A region cut above and under one band: what stands above it, the band,
 // and what stands under it, each read as a region of its own; the band's
 // sides are columns, or blocks in the region's column.
-function stacked(band: Band, items: Item[], graphics: Placed[], kind?: "blocks"): Band[] {
+function stacked(band: Band, items: Item[], graphics: Placed[], kind: "blocks" | "columns"): Band[] {
   const own = new Set([...band.left.items, ...band.right.items]);
   const ownGraphics = new Set([...band.left.graphics, ...band.right.graphics]);
   const top = Math.max(...[...own].map((i) => i.y));
@@ -314,6 +321,29 @@ function stacked(band: Band, items: Item[], graphics: Placed[], kind?: "blocks")
     { ...band, separator: null, kind },
     part(rest.filter((i) => i.y <= top), restGraphics.filter((p) => !high(p))),
   ].filter((b) => b.left.items.length + b.left.graphics.length + b.right.items.length + b.right.graphics.length > 0);
+}
+
+// A note beside a column: the band's narrow side, a seventh of its
+// characters or less, set in another size or in italic, with no graphic (a
+// pull quote, a side note). It reads after the wide side's paragraph that
+// holds its top, as the reader meets it (the Earth Observer's pull quote
+// stands beside the article's first paragraph).
+function sideNote(band: Band, page: number): { before: Item[]; note: Item[]; after: Item[] } | null {
+  const [note, wide] = chars(band.left.items) < chars(band.right.items) ? [band.left, band.right] : [band.right, band.left];
+  if (note.graphics.length > 0 || wide.graphics.length > 0 || chars(note.items) * 7 > chars(note.items) + chars(wide.items)) return null;
+  const size = (list: Item[]) => median(list.map((i) => i.size));
+  const italic = (list: Item[]) => list.filter((i) => i.italic).length * 2 > list.length;
+  if (Math.abs(size(note.items) - size(wide.items)) < size(wide.items) * 0.1 && italic(note.items) === italic(wide.items)) return null;
+  // The paragraph's end: the first line at or under the note's top whose
+  // gap to the next line is wider than the lines' pitch.
+  const lines = buildLines(wide.items, page);
+  const top = Math.max(...note.items.map((i) => i.y));
+  const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
+  const pitch = median(gaps);
+  const end = lines.findIndex((l, k) => l.y <= top && (k === lines.length - 1 || gaps[k] > pitch * 1.3));
+  if (end < 0) return null;
+  const cut = lines[end].y - lines[end].size * 0.5;
+  return { before: wide.items.filter((i) => i.y > cut), note: note.items, after: wide.items.filter((i) => i.y <= cut) };
 }
 
 // Blocks side by side, not a table's columns: two sides a wide gutter

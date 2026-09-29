@@ -43,6 +43,7 @@ import type { TFunc } from "@/lib/i18n/dictionaries";
 import { actionsSchema, enrichActions, planShape, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
+import { sheetKeepLines } from "@/lib/replica";
 import { SUGGEST_COMMANDS, type SuggestCommand } from "@/lib/prompts/suggest";
 import { parseBody } from "@/lib/validate";
 import { ultraActive } from "@/lib/tiers";
@@ -396,6 +397,7 @@ async function handle(req: Request, t: TFunc) {
     history,
     command: data.command,
     edits,
+    sheets: document.format === "sheets" ? sheetKeepLines(document.blocks) : undefined,
   });
 
   const messages: ModelMessage[] = [

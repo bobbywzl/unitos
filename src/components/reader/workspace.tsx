@@ -420,8 +420,9 @@ export function Workspace({
     };
   }, [collapsed, split, revealTray]);
 
-  // Issue cards jump to their note: open the tray on notes, open the note if
-  // it is collapsed (the card listens for dissect:open-note), scroll, flash.
+  // Issue cards jump to their note: open the tray on notes (below md, the
+  // sheet), open the note if it is collapsed (the card listens for
+  // dissect:open-note), scroll, flash.
   useEffect(() => {
     const flash = (el: HTMLElement) => {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -433,28 +434,37 @@ export function Workspace({
       setCollapsed(false);
       setTab("notes");
       rememberTray({ collapsed: false, tab: "notes" });
+      openSheet();
       revealTray();
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent("dissect:open-note", { detail: { noteId } }));
         // The next frame: the opened card has its full height to center on.
         requestAnimationFrame(() => {
-          const el = document.querySelector<HTMLElement>(`[data-note-id="${noteId}"]`);
+          const el = trayRef.current?.querySelector<HTMLElement>(`[data-note-id="${noteId}"]`);
           if (el) flash(el);
         });
       }, 100);
     };
-    // Clicking a highlight in the text focuses its card in the Annotations
+    // A mark the reader has no card for focuses its card in the Annotations
     // tab, opening the card if it is collapsed (dissect:open-annotation).
+    // The reader answers that open-annotation with focus-annotation again,
+    // since it still has no card: the answer is ignored, or the two events
+    // would go back and forth for as long as the mark is there.
+    let reopening: string | null = null;
     const onFocusAnnotation = (e: Event) => {
       const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
+      if (sourceId === reopening) return;
       setCollapsed(false);
       setTab("annotations");
       rememberTray({ collapsed: false, tab: "annotations" });
+      openSheet();
       revealTray();
       setTimeout(() => {
+        reopening = sourceId;
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
+        reopening = null;
         requestAnimationFrame(() => {
-          const el = document.querySelector<HTMLElement>(
+          const el = trayRef.current?.querySelector<HTMLElement>(
             `[data-annotation-source-id="${sourceId}"]`,
           );
           if (el) flash(el);
@@ -466,6 +476,7 @@ export function Workspace({
       setCollapsed(false);
       setTab("annotations");
       rememberTray({ collapsed: false, tab: "annotations" });
+      openSheet();
       revealTray();
     };
     // The Extract tab opens the corpus extract page (SPEC.md §13).
@@ -483,7 +494,7 @@ export function Workspace({
       window.removeEventListener("dissect:show-annotations", onShowAnnotations);
       window.removeEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     };
-  }, [revealTray, rememberTray]);
+  }, [revealTray, rememberTray, openSheet]);
 
   // Post-hydration restore on purpose: localStorage is client-only, so the
   // SSR pass must render the default width. Window resizes re-clamp, so the
@@ -592,6 +603,9 @@ export function Workspace({
     <div
       // A note floats over the article: the article column moves left (globals.css, .reader-column).
       data-note-floating={actions.floating ? "" : undefined}
+      // The sheet is open (below md): the Reader view button moves to the
+      // reader's bottom right (reader-panes.tsx).
+      data-sheet-open={mobileTray ? "" : undefined}
       // One column that can never grow past the browser: a pane's widest
       // line stays inside its pane instead of pushing the rail off screen.
       // Below md the height is the visible screen's (dvh), so the sheet,
@@ -759,6 +773,7 @@ export function Workspace({
             />
           </div>
           <aside
+            ref={trayRef}
             data-track-surface="tray"
             className={`${
               mobileTray

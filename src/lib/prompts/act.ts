@@ -38,6 +38,8 @@ export type ActCtx = {
   // on a document with rich text (SPEC.md §29), or no change at all on an
   // import a project of another account holds too (SPEC.md §30).
   edits?: DocumentEdits;
+  // What each sheet of the document keeps as it is (sheetKeepLines).
+  sheets?: string[];
 };
 
 /** The selection block for a text selection: what the route puts in the
@@ -62,6 +64,7 @@ export function actPrompt(ctx: ActCtx): string {
     `Sections in the corpus (id — title):\n${ctx.sections.length > 0 ? ctx.sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
     "",
     `Other attached documents (id — title):\n${ctx.otherDocuments.length > 0 ? ctx.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
+    ...(ctx.sheets?.length ? ["", `Sheets (what each keeps as it is):\n${ctx.sheets.join("\n")}`] : []),
     "",
     `The reader's notes across the corpus (section: note):\n${
       ctx.notes.length > 0
@@ -77,7 +80,7 @@ export function actPrompt(ctx: ActCtx): string {
     "2. A command that only asks for analysis, an answer, or a summary: put it in reply and return no actions.",
     "3. Use the smallest set of actions that fulfils the command. Never change text the command did not ask to change.",
     "4. description: one plain sentence of what the action does, for the reader's approval list.",
-    "5. TABLE, FIGURE, and VIDEO blocks cannot be edited or removed. A SLIDE block's words change with edit_block within its lines: the new text keeps every line and every bullet, and the line Speaker notes: as it is. A SHEET block cannot be edited. A SLIDE or a SHEET block is never removed, and the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
+    "5. TABLE, FIGURE, and VIDEO blocks cannot be edited or removed. A SLIDE block's words change with edit_block within its lines: the new text keeps every line and every bullet, and the line Speaker notes: as it is. A SHEET block changes with edit_block: the new text is the whole sheet, a line per row and a tab between cells, every row with as many cells as the first; an edit changes words in cells and adds or removes rows or columns, never rows and columns both. What a sheet keeps as it is (its frozen rows and columns, the cells formulas compute) is listed under Sheets. A SLIDE or a SHEET block is never removed, and the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
     "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click.",
     `7. Write reply, every description, and every why in ${language}.`,
     `8. reply: start with the answer, in one sentence. Then the evidence: what the document says, each claim citing its block. As few words as the answer needs, under 100 unless the command needs more. ${STYLE_RULE} Say plainly when the document does not answer, then say what the document does say about it. Never add a fact the document does not state. A sentence that could be written about any other document is deleted; a sentence that restates the selection in other words is deleted.`,

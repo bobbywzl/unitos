@@ -109,6 +109,8 @@ type PageActions = {
   otherDocuments: { id: string; title: string }[];
   edits?: DocumentEdits;
   caretBlockId?: string | null;
+  // What each sheet of the document keeps as it is (sheetKeepLines).
+  sheets?: string[];
 };
 
 // This page scope: the actions the assistant may propose, and the fence the
@@ -123,6 +125,7 @@ function actLines(act: PageActions): string[] {
     "You can propose changes to the open document and the notes. The reader approves every action before it runs.",
     `Sections in the project (id — title):\n${act.sections.length > 0 ? act.sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
     `Other attached documents (id — title):\n${act.otherDocuments.length > 0 ? act.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
+    ...(act.sheets?.length ? [`Sheets (what each keeps as it is):\n${act.sheets.join("\n")}`] : []),
     ...(act.caretBlockId ? [`The caret stands in [block ${act.caretBlockId}]. "Here" means right after it.`] : []),
     "Action types:",
     ...actionLines(act.edits ?? "blocks"),
@@ -132,7 +135,7 @@ function actLines(act: PageActions): string[] {
     "3. Use block ids exactly as given in the [block <id>] tags. Every quote must be an exact substring of the named block's text.",
     "4. Use the smallest set of actions that fulfils the message. Never change text the message did not ask to change.",
     "5. description: one plain sentence of what the action does, for the reader's approval list.",
-    "6. TABLE, FIGURE, and VIDEO blocks cannot be edited or removed. A SLIDE block's words change with edit_block within its lines: the new text keeps every line and every bullet, and the line Speaker notes: as it is. A SHEET block cannot be edited. A SLIDE or a SHEET block is never removed, and the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
+    "6. TABLE, FIGURE, and VIDEO blocks cannot be edited or removed. A SLIDE block's words change with edit_block within its lines: the new text keeps every line and every bullet, and the line Speaker notes: as it is. A SHEET block changes with edit_block: the new text is the whole sheet, a line per row and a tab between cells, every row with as many cells as the first; an edit changes words in cells and adds or removes rows or columns, never rows and columns both. What a sheet keeps as it is (its frozen rows and columns, the cells formulas compute) is listed under Sheets. A SLIDE or a SHEET block is never removed, and the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
     act.edits === "suggestions"
       ? "7. A change to the document's words or styles is one suggest action, whatever its size: the whole document, a section, or a paragraph. The answer is one sentence on what will change; never write the changed text in the answer: the suggestions carry it."
       : act.edits === "blocks"

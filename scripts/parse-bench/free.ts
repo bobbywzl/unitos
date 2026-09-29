@@ -455,16 +455,16 @@ export function wordBorders(path: string): { words: string; sides: Side[] }[] {
   return out;
 }
 
-/** The candidate's paragraphs and headings drawn with a border, and the
-    Word file's, paired by the words they open with: F1 of those with the
-    same sides. A report's Heading 1 draws a rule under it and a quote a
-    bar beside it. */
+/** The candidate's paragraphs, headings, titles, and quote blocks drawn
+    with a border, and the Word file's, paired by the words they open with:
+    F1 of those with the same sides. A report's Heading 1 draws a rule under
+    it and a quote block a bar beside it. */
 export function borderScore(word: { words: string; sides: Side[] }[], cand: Flat): number | null {
   const key = (sides: Side[] | undefined) => [...(sides ?? [])].sort().join(" ");
   const opening = (b: number) => wordsOf(cand.unitsOf[b].map((u) => cand.units[u].text).join(" ")).slice(0, 8).map((w) => w.w).join(" ");
   const theirs = new Map<string, string>();
   cand.blocks.forEach((block, b) => {
-    if (block.kind === "paragraph" || block.kind === "heading" || block.kind === "title") theirs.set(opening(b), key(block.borders));
+    if (block.kind === "paragraph" || block.kind === "heading" || block.kind === "title" || block.kind === "quote") theirs.set(opening(b), key(block.borders));
   });
   const mine = new Map(word.map((p) => [p.words, key(p.sides)]));
   const want = word.filter((p) => p.sides.length > 0);
