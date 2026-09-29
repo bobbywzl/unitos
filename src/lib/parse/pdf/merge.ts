@@ -54,13 +54,35 @@ export function joinOnPage(input: Segment[]): Segment[] {
   for (const segment of segments) {
     const prev = out[out.length - 1];
     if (prev && continuesOnPage(prev, segment)) {
+      firstLineLayout(prev, segment);
       shiftSpansInto(prev, segment, joinWrapped(prev, segment.text));
-      prev.spaceAfter = segment.spaceAfter;
+      joinLayout(prev, segment);
       continue;
     }
     out.push(segment);
   }
   return out;
+}
+
+const INDENT_TOKEN_RE = /\s*\bindent-(?:first|hanging|block)\b/g;
+
+// A paragraph's first line read alone, joined to the lines after it: the
+// paragraph's lines stand where the later part's do, and the first line's
+// inset against them is its first-line indent. Kept as the first part's,
+// the one line's inset set the whole paragraph in (a right column's first
+// line, 22 pt in: Elsevier).
+function firstLineLayout(first: Segment, rest: Segment) {
+  const size = first.lineSize ?? 10;
+  if (!first.box || first.box.y2 - first.box.y1 > size * 1.6) return;
+  const at = (first.indent?.left ?? 0) + (first.indent?.first ?? 0);
+  const body = rest.indent?.left ?? 0;
+  const shift = at - body;
+  const indent = Math.abs(shift) >= 1 ? { left: body, first: shift } : body > 0 ? { left: body, first: 0 } : undefined;
+  const token = !indent ? null : indent.first > 0 ? "indent-first" : indent.first < 0 ? "indent-hanging" : "indent-block";
+  const html = first.html?.replace(INDENT_TOKEN_RE, "").replace(/class="\s*"/, "");
+  first.html = token ? withToken(html && /\bclass="/.test(html) ? html : undefined, "p", token) : html && /\bclass="/.test(html) ? html : undefined;
+  if (indent) first.indent = indent;
+  else delete first.indent;
 }
 
 // ── Cross-page merges ───────────────────────────────────────────────────────

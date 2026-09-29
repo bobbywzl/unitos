@@ -662,7 +662,22 @@ function runsOfPages(segments: Segment[], chosen: number[]): Segment[][] {
 // amsart sets its title in bold capitals at the body's size (arXiv
 // 2506.08494, 2410.04586), and a Word contract in bold centered lines.
 function titleOf(segments: Segment[], bodySize: number, pages = 1): Segment | undefined {
-  const heads = segments.filter((s) => s.page < pages && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4);
+  // Most of a title's letters are set large: the W-9's form number, "W-9"
+  // at 24 pt after "Form" at 7 pt, stood over the form's 14 pt "Request for
+  // Taxpayer Identification Number and Certification". A heading whose runs
+  // carry no size counts as large.
+  const large = (s: Segment) => {
+    let big = 0;
+    let all = 0;
+    for (const r of s.runs ?? []) {
+      if (!r.look) return true;
+      const letters = s.text.slice(r.start, r.end).match(/\p{L}/gu)?.length ?? 0;
+      all += letters;
+      if (r.look.size >= bodySize * 1.14) big += letters;
+    }
+    return all === 0 || big * 2 > all;
+  };
+  const heads = segments.filter((s) => s.page < pages && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4 && large(s));
   if (heads.length === 0 && pages === 1) {
     const at = segments.findIndex((s) => s.page === 0 && s.text.trim().length > 0);
     const first = segments[at];
