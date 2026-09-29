@@ -535,7 +535,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
     // paragraph when the next line opens a sentence: the next line's first
     // word would have fit, so the break was the writer's. In a document with
     // no space between paragraphs it is the only sign (a Google Docs
-    // export's paragraphs and a report's table notes read as one before).
+    // export's paragraphs and table notes read as one before).
     // With no sentence's end, the line stops short by an em more than that
     // word: dated lines one under another and a paper's author lines ran
     // together.

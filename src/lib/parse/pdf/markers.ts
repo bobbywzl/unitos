@@ -44,7 +44,7 @@ export type Marker = {
 const BULLET_GLYPH_RE = /^([•▪◦‣●○■□◆❖➢➤►✓✔])\s*(?=\S)/;
 const BULLET_WORD_RE = /^([-–—*·∙])\s+/;
 // Word's second-level bullet: a letter "o" set in Courier New before words
-// that are not monospace (a report's nested items read as lines of text).
+// that are not monospace (nested Word list items read as lines of text).
 const COURIER_O_RE = /^o\s+(?=\S)/;
 const BOX_RE = /^([☐☑☒])\s+/;
 const CITE_RE = /^\[(\d{1,3}|[A-Z][A-Za-z+'’-]{0,15}\d{2,4}[a-z]?)\]\s+/;
