@@ -553,7 +553,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
     // of Physics…", a note's "²") starts a paragraph of its own: the
     // affiliations of arxiv-2504-02736 ran into one.
     const first = next.runs[0];
-    const labelled = first !== undefined && first.start === 0 && first.sup === true && /^[\d*∗†‡§¶‖,\s]+$/u.test(next.text.slice(0, first.end));
+    const labelled = first !== undefined && first.start === 0 && first.sup === true && !first.zone && /^[\d*∗†‡§¶‖,\s]+$/u.test(next.text.slice(0, first.end));
     // A hanging indent (a reference entry, a glossary term): the second
     // line steps in by one to three ems under a first line that wrapped —
     // it ran to the margin, or broke mid-sentence.

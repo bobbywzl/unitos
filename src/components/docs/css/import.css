@@ -166,6 +166,19 @@
 .docs-shell .docs-prose tr[data-pinned="true"] > th {
   background-image: linear-gradient(color-mix(in srgb, var(--docs-ink) 5%, transparent) 0 0);
 }
+/* A PDF's and a Word file's header cells are as the page draws them: the
+   parse keeps their words' weight and their fill, and a header row the page
+   leaves white stays white (a legal form's signature table drew tinted). */
+.docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose th {
+  font-weight: 400;
+}
+.docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose tr:not([data-pinned="true"]) > th {
+  background-color: transparent;
+}
+/* A pinned row keeps the page's ground under it (insert.css). */
+.docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose tr[data-pinned="true"] > th {
+  background-image: none;
+}
 /* A quote whose paragraphs draw their own bar (a Word file's quote, its
    paragraph borders and indent): the page editor's bar and inset step
    aside. */

@@ -439,12 +439,22 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
   const hasFirst = cellsOf.map((cells) => cells[0].text.length > 0);
   const anchors: number[] = [];
   let lastFirst = -1;
+  // A statement's labels: a group's name ends in a colon, and a label that
+  // wraps sets its values on its last line.
+  const valued = (k: number) => cellsOf[k].slice(1).some((c) => c.text.length > 0);
+  const colon = (k: number) => cellsOf[k][0].text.trim().endsWith(":");
   run.forEach((line, k) => {
     if (!hasFirst[k]) return;
     // A wrap: only the first column continues, or the first cell starts
     // lowercase ("Concealing" / "uncertainty know" — both columns wrapped).
+    // A line of the first column alone opens a row under a group's name, or
+    // under a row with its values when it names a group or its values come
+    // on its next line (the 10-K's statement of comprehensive income, p. 55,
+    // read two rows as one at each such line).
     const firstOnly = cellsOf[k].every((cell, idx) => idx === 0 || cell.text.length === 0);
-    const continues = firstOnly || /^[a-z]/.test(cellsOf[k][0].text);
+    const valuesNext = k + 1 < run.length && /^\p{Ll}/u.test(cellsOf[k + 1][0].text) && valued(k + 1);
+    const opens = lastFirst >= 0 && (colon(lastFirst) || (valued(lastFirst) && (colon(k) || valuesNext)));
+    const continues = (firstOnly && !opens) || /^[a-z]/.test(cellsOf[k][0].text);
     const wrap =
       continues &&
       lastFirst >= 0 &&
@@ -830,6 +840,11 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       const aligned = isAlignedLine(prev, columns);
       const indentedPastFirst = prev.x > columns[0] + 8;
       if (!aligned && !indentedPastFirst && !isLeftOnly(prev, columns)) break;
+      // A title over the table is no head: a line that reaches from the
+      // first column into the others, or that stands over the first column
+      // alone, set in by a quarter of it (a statement's name and its units,
+      // centered over the page: the 10-K, p. 55).
+      if (columns.length >= 2 && ((prev.x < columns[1] - 4 && prev.xEnd > columns[1] + 4) || (prev.xEnd < columns[1] && prev.x > columns[0] + (columns[1] - columns[0]) * 0.25))) break;
       // A first-column line that continues the paragraph above it (same x,
       // one leading below) is that paragraph's last line — a caption's wrap.
       if (!aligned && !indentedPastFirst && first >= 2) {

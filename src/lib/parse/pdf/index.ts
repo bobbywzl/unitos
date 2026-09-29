@@ -522,7 +522,9 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   // (a title that took the line under it as its scripts read as that
   // line's size).
   const titleSegment = deckTitle ?? titleOf(segments, bodySize);
-  const title = titleSegment?.text ?? null;
+  // One line: the title is the document's name in every add path. A line
+  // break the writer set stays in the heading's own text.
+  const title = titleSegment?.text.replace(/\s*\n\s*/g, " ") ?? null;
   const titleRuns = titleSegment?.runs?.filter((r) => (r.look?.size ?? 0) >= (titleSegment.rawSize ?? 0) - 0.5);
   const titleFont = titleSegment ? spansFromRuns(titleSegment.text, titleRuns?.length ? titleRuns : titleSegment.runs).font : undefined;
 
@@ -653,9 +655,16 @@ function runsOfPages(segments: Segment[], chosen: number[]): Segment[][] {
 // page ("Problem 1: …") is the first section, not the title. A paper that
 // sets its title in two languages, one under the other at one size, has the
 // first for its title (a Japanese paper's English title a tenth of a point
-// larger took the title).
+// larger took the title). With no heading on the first page set larger
+// than the body, a centered heading that opens the first page is the title:
+// amsart sets its title in bold capitals at the body's size (arXiv
+// 2506.08494, 2410.04586), and a Word contract in bold centered lines.
 function titleOf(segments: Segment[], bodySize: number, pages = 1): Segment | undefined {
   const heads = segments.filter((s) => s.page < pages && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4);
+  if (heads.length === 0 && pages === 1) {
+    const first = segments.find((s) => s.page === 0 && s.text.trim().length > 0);
+    return first?.type === "HEADING" && first.align === "center" && first.text.length > 4 ? first : undefined;
+  }
   const top = Math.max(0, ...heads.map((s) => s.rawSize!));
   return heads.find((s) => s.rawSize! >= top * 0.97);
 }

@@ -53,7 +53,7 @@ type Cut = { label: string; lines: Line[] };
     a cell of its own; null when the line opens with words. */
 function labelOf(line: Line, ruled: boolean): string | null {
   const first = line.runs[0];
-  if (first?.sup && first.start === 0) {
+  if (first?.sup && !first.zone && first.start === 0) {
     const label = line.text.slice(0, first.end).trim();
     if (RAISED_LABEL_RE.test(label)) return label;
   }
@@ -292,7 +292,7 @@ function wordsOf(cut: Cut): { text: string; runs: Run[] } {
 function marksAfterRaised(text: string, runs: Run[]): { start: number; end: number }[] {
   const out: { start: number; end: number }[] = [];
   for (const r of runs) {
-    if (!r.sup) continue;
+    if (!r.sup || r.zone) continue;
     SPACED_SYMBOLS_RE.lastIndex = r.end;
     const m = SPACED_SYMBOLS_RE.exec(text);
     if (m) out.push({ start: r.end + m[0].length - m[1].length, end: r.end + m[0].length });
@@ -306,7 +306,7 @@ function marksAfterRaised(text: string, runs: Run[]): { start: number; end: numb
 function raisedLabels(lines: Line[]): Set<string> {
   const labels = new Set<string>();
   for (const line of lines) {
-    for (const r of line.runs) if (r.sup) labels.add(line.text.slice(r.start, r.end).trim());
+    for (const r of line.runs) if (r.sup && !r.zone) labels.add(line.text.slice(r.start, r.end).trim());
     for (const m of line.text.matchAll(LEVEL_SYMBOLS_RE)) labels.add(m[0]);
     for (const m of marksAfterRaised(line.text, line.runs)) labels.add(line.text.slice(m.start, m.end));
   }
@@ -508,9 +508,11 @@ function levelLabel(label: string): RegExp {
 function referencesTo(hosts: Segment[], label: string, free: (host: Segment, start: number) => boolean): Found[] {
   const afterWord: Found[] = [];
   const afterDigit: Found[] = [];
+  // A formula's script is no mark: a formula that failed its check keeps its
+  // scripts raised (math/zones.ts part).
   for (const host of hosts) {
     for (const r of host.runs ?? []) {
-      if (!r.sup) continue;
+      if (!r.sup || r.zone) continue;
       const raw = host.text.slice(r.start, r.end);
       if (raw.trim() !== label) continue;
       const start = r.start + (raw.length - raw.trimStart().length);

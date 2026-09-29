@@ -353,10 +353,13 @@ function isDense(lines: Line[]): boolean {
   return gaps.length > 0 && median(gaps) <= median(lines.map((l) => l.size)) * 1.6;
 }
 
+// Prose: letters, most of them in lines of 15 letters or more. A column of
+// amounts under a line of words is none (the 10-K's statement of
+// comprehensive income, p. 55, read its labels and its values apart).
 function isProse(lines: Line[], minLines: number): boolean {
   if (lines.length < minLines) return false;
   const letters = (l: Line) => l.text.replace(/[^\p{L}]/gu, "").length;
   const all = lines.reduce((n, l) => n + letters(l), 0);
   const prose = lines.filter((l) => l.cells.length === 1 && letters(l) >= 15).reduce((n, l) => n + letters(l), 0);
-  return all > 0 && prose >= all * 0.6;
+  return all > 0 && prose >= all * 0.6 && all * 2 >= lines.reduce((n, l) => n + l.text.replace(/\s/g, "").length, 0);
 }

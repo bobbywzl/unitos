@@ -41,17 +41,23 @@ import type { Region } from "@/lib/video/types";
 //   PARAGRAPH  a paragraph; "\n" a line break; its layout tokens the page
 //              editor's own formats: kicker and label small, caption small
 //              and centered, display large, meta the Subtitle, quote inside
-//              a blockquote, center and right the alignment, an indent
-//              (first-line, hanging, block) the paragraph's indents
+//              a blockquote, center and right the alignment; its indent the
+//              paragraph's indents at the page's measure, and a Word
+//              paragraph's borders its borders
 //   HEADING    a heading of its level; one that repeats the title is the Title
 //   LIST       lists from the marker lines, nested two spaces a level, the
 //              markers drawn by the list (a Markdown task line a checklist
-//              line); a contents list is one paragraph per entry, each entry
-//              a link to its heading
+//              line), its depths, alignment, and the space between its
+//              items as the page sets them; a contents list is one
+//              paragraph per entry, each entry a link to its heading
 //   TABLE      a table (lib/docs/import-table.ts)
-//   CODE       a code block        EQUATION  an equation on its own line
+//   CODE       a code block        EQUATION  an equation on its own line,
+//                                            its number at the page's side
 //   SEPARATOR  a horizontal line   FIGURE    a figure object, its media a
-//                                            FigureMedia row (the figures)
+//                                            FigureMedia row (the figures);
+//                                            a PDF caption keeps its marks,
+//                                            a display equation's crop has
+//                                            none
 // Inside the words, the parse's styles become marks (a lowered or raised run
 // subscript or superscript; a color, a highlight, a face, and a size the
 // text style), and an inline formula becomes an inline equation of its TeX
