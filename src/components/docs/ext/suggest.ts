@@ -203,7 +203,7 @@ export function readSuggestions(doc: PMNode): Suggestion[] {
   // A suggestion stands where its words show: outside the copies hidden
   // for blocks put back with the same words (a format change on a line
   // whose list then changed).
-  const hidden = drafted.flatMap(({ d, same }) => (same ? d.blocks.removed : []));
+  const hidden = drafted.flatMap(({ d, same }) => (same ? hiddenCopies(doc, d.blocks.removed) : []));
   const out = drafted.map(({ d, same }): Suggestion => {
     const { id, added, removed, formats, blocks } = d;
     const shown = d.at.find((pos) => !hidden.some(([from, to]) => pos >= from && pos < to)) ?? d.from;
@@ -849,13 +849,22 @@ export function focusSuggestion(editor: Editor, id: string): void {
   editor.view.focus();
 }
 
+// A table's cells: a cell hidden leaves its column with no cells under it,
+// and the table draws narrower.
+const CELLS = new Set(["tableCell", "tableHeader"]);
+
+/** The removed copies a suggestion that puts blocks back with the same
+    words hides: all but a table's cells, which stay, struck (a column
+    moved draws at its old place and its new one). */
+const hiddenCopies = (doc: PMNode, removed: [number, number][]) => removed.filter(([from]) => !CELLS.has(doc.nodeAt(from)?.type.name ?? ""));
+
 /** Blocks a suggestion puts back with the same words draw once: the removed
     copy hides, and a list changed in place draws as a format change. */
 function sameWordsDecorations(doc: PMNode): DecorationSet {
   const node = (cls: string) => ([from, to]: [number, number]) => Decoration.node(from, to, { class: cls });
   const decorations = readSuggestions(doc).flatMap((s) =>
     s.same
-      ? [...s.blocks.removed.map(node("docs-suggest-hidden")), ...(s.same === "move" ? [] : s.blocks.added.map(node("docs-suggest-restyled")))]
+      ? [...hiddenCopies(doc, s.blocks.removed).map(node("docs-suggest-hidden")), ...(s.same === "move" ? [] : s.blocks.added.map(node("docs-suggest-restyled")))]
       : [],
   );
   return DecorationSet.create(doc, decorations);
@@ -865,7 +874,7 @@ function sameWordsDecorations(doc: PMNode): DecorationSet {
     removed copy hidden at the top would make a list command read every line
     as plain. Null when none is hidden there. */
 function shownAll(doc: PMNode): Selection | null {
-  const hidden = readSuggestions(doc).flatMap((s) => (s.same ? s.blocks.removed : []));
+  const hidden = readSuggestions(doc).flatMap((s) => (s.same ? hiddenCopies(doc, s.blocks.removed) : []));
   const first = (pos: number): Selection | null => {
     const sel = Selection.findFrom(doc.resolve(pos), 1, true);
     const range = sel && hidden.find(([from, to]) => from < sel.from && sel.from < to);

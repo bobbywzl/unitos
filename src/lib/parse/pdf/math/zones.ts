@@ -126,11 +126,8 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
     const url = math.every((g) => g.unicode === "/") && !/^[0-9]+\/[0-9]+$/.test(z.map((g) => g.unicode).join(""));
     if (!stacked && (math.length === 0 || url)) return;
     // A lone raised symbol after a word (a footnote's dagger) is a mark,
-    // not a formula: every glyph small, none on the line. So is an operator
-    // alone, its operands in a text font (MathTime's "−" of "−x_max" in
-    // IEEE Access, Springer's "·" between its keywords).
+    // not a formula: every glyph small, none on the line.
     if (!stacked && z.every((g) => g.size < size * 0.85)) return;
-    if (z.length === 1 && z[0].family !== null && /^(bin|rel|punct)$/.test(mathGlyph(z[0].family, z[0].code)?.cls ?? "")) return;
     zones.push(z);
   };
   for (let k = 0; k < glyphs.length; k++) {
