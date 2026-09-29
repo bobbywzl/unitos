@@ -191,7 +191,7 @@ function limitNames(glyphs: Glyph[]): { x1: number; x2: number; y: number; size:
 // display it sits close under or over, inside the display's width (an
 // array's row). A page's first or last line is held by the first three
 // only: a page number under a formula is no part of it.
-function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces: Glyph[]): boolean {
+function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces: Glyph[], display: Line[]): boolean {
   const x1 = frag.x;
   const x2 = frag.xEnd;
   const em = frag.size;
@@ -236,8 +236,12 @@ function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces
     names.some((n) => g.x + g.w / 2 > n.x1 - n.size && g.x + g.w / 2 < n.x2 + n.size && n.y - g.y > n.size * 0.3 && n.y - g.y < n.size * 1.3);
   if (glyphs.length > 0 && glyphs.every((g) => g.unicode.trim() === "" || under(g))) return true;
   if (edge) return false;
-  const left = Math.min(...near.map((l) => l.x));
-  const right = Math.max(...near.map((l) => l.xEnd));
+  // The display's width is all its lines': a limit's second row, wider than
+  // its first, stands past the first alone (a subarray's rows align left,
+  // and the display passed with the second row left out as words).
+  const wide = [...near, ...display].filter((l) => l !== frag);
+  const left = Math.min(...wide.map((l) => l.x));
+  const right = Math.max(...wide.map((l) => l.xEnd));
   return x1 >= left - em && x2 <= right + em && near.some((l) => Math.abs(l.y - frag.y) < Math.max(em, l.size) * 1.3);
 }
 
@@ -594,7 +598,7 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       const reach = kinds[j] === "label" && QED_RE.test(next.text.trim()) ? 2.6 : 1.6;
       // A limit over the next row's sum stands a little farther from the
       // row above (a display of several rows, each with its sums).
-      const limit = kinds[j] === "fragment" && prev.y - next.y <= size * 2.2 && attached(next, around(next, band), rules, edge(next), braces);
+      const limit = kinds[j] === "fragment" && prev.y - next.y <= size * 2.2 && attached(next, around(next, band), rules, edge(next), braces, band);
       // Rows a tall delimiter holds are one display, however far apart.
       const held = fences.some((f) => [prev, next].every((l) => l.y >= f.y1 && l.y <= f.y2 && l.x >= f.x2 - 1 && l.x - f.x2 < l.size * 3));
       const x1 = Math.min(...band.map((l) => l.x));
@@ -613,12 +617,12 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       // aligned row's lone "=" over its fraction's denominator).
       const after = lines[j + 1];
       const between = after !== undefined && kinds[j + 1] === "math" && next.y - after.y <= size * 1.6 && next.y < prev.y;
-      if (kinds[j] === "fragment" && !between && !attached(next, around(next, band), rules, edge(next), braces)) break;
+      if (kinds[j] === "fragment" && !between && !attached(next, around(next, band), rules, edge(next), braces, band)) break;
       labels += label;
       band.push(next);
     }
     // A fragment that opened the band holds only if the band holds it.
-    while (band.length > 1 && kinds[lines.indexOf(band[0])] === "fragment" && !attached(band[0], around(band[0], band), rules, edge(band[0]), braces)) {
+    while (band.length > 1 && kinds[lines.indexOf(band[0])] === "fragment" && !attached(band[0], around(band[0], band), rules, edge(band[0]), braces, band)) {
       out.push(band.shift()!);
       last = null;
       k++;

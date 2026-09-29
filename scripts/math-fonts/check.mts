@@ -8,7 +8,8 @@
 //      and the symbols the text layer garbles, typeset without and with
 //      pdfTeX's Unicode map, read as their characters in parsePdf's text;
 //   4. displays that once passed the check wrong: each EQUATION on their
-//      pages reads as one of the page's formulas (a crop or words pass).
+//      pages reads as one of the page's formulas (a crop or words pass);
+//      so does each formula of invented pages of the same shape.
 // Needs pdflatex. The exit code is 1 when a check fails.
 //
 //   npx tsx scripts/math-fonts/check.mts [--verbose]
@@ -342,6 +343,26 @@ try {
   const pairPages = pairs.map((c) => `\\parbox{\\textwidth}{${c.words}}`);
   const pairParse = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "pairs", packages, pairPages))));
   wrong.push(...wrongDisplays(pairParse.blocks, pairs.map((c, i) => ({ page: i + 1, inline: true, spaced: true, pick: /\\cup|\\le|\\in|=|>/, right: c.right }))));
+  // Limits side by side, each centered on its operator or name a thin space
+  // from the next, and the words of one limit as far apart: grown along the
+  // baseline, two sums read as one sum with both lower limits
+  // (\sum_{i=1j=1}^{n}\sum^{m}), two lim as one; a subarray's second row,
+  // wider than its first, went to the words under the display. The glyph
+  // check cannot see either.
+  const limitCases: { tex: string; right?: string }[] = [
+    { tex: "\\sum_{i=1}^{n}\\sum_{j=1}^{m} a_{ij}" },
+    { tex: "\\sum_{j=1}^{k}\\sum_{p,q=1}^{n} a_{jpq}" },
+    { tex: "\\lim_{s \\to +\\infty}\\lim_{t \\to +\\infty} g(s, t)" },
+    { tex: "\\max_{x \\in X}\\max_{y \\in Y} h(x, y)" },
+    { tex: "\\min_{x \\text{ feasible}}\\max_{y \\in Y} g(x, y)" },
+    { tex: "\\lim_{x \\to 0 \\text{ and } y \\to 0} f(x, y)" },
+    { tex: "\\sum_{g' \\in S(g)}\\bigwedge_{h \\in G} x_{g'h}" },
+    { tex: "\\sum_{\\begin{subarray}{l} i \\in \\Lambda \\\\ 0 < j < n \\end{subarray}} P(i, j)", right: "\\sum_{\\substack{i \\in \\Lambda \\\\ 0 < j < n}} P(i, j)" },
+  ];
+  const around = "The quantity below is the one the argument needs, and every term of it is finite for the values we take here.";
+  const limitPages = limitCases.map((c) => `${around} ${around}\\[ ${c.tex} \\]${around} ${around}`);
+  const limitParse = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "limits", packages, limitPages))));
+  wrong.push(...wrongDisplays(limitParse.blocks, limitCases.map((c, i) => ({ page: i + 1, right: [c.tex, ...(c.right ? [c.right] : [])] }))));
   // A list's bullet a math font draws (acmart's itemize, newtxmath's •) is
   // the item's marker, never its formula's: "• scan(Pred)" read
   // \bullet\text{ scan}, and the import drew two bullets.

@@ -1110,11 +1110,12 @@ function linearAt(input: Atom[]): string {
     // two letters were a product (G ∪ H G, H ∈ ℱ read G ∪ HG, H ∈ ℱ),
     // which the glyph check cannot see. Within a formula TeX sets nothing
     // between two operands but the first one's italic correction and,
-    // after a script, a twentieth of an em. A bar may be a relation (a ∣ b);
-    // a period, a slash, and a prime are no operand.
+    // after a script, a twentieth of an em for each level (e^{-x^2}\,dx
+    // sets two after the 2). A bar may be a relation (a ∣ b); a period, a
+    // slash, and a prime are no operand.
     const operand = (b: Atom, classes: string[]) => b.code >= 0 && classes.includes(b.cls) && !/^(\||\\\||\\mid|\\vert|\\Vert|\.|\/|'|\\prime)$/.test(b.tex);
     const wordStarts = (a.upright || a.italic) && /^[A-Za-z]$/.test(a.tex) && wordAt(k).word.length > 1;
-    const net = prev && tail ? gap - italicOf(tail) - (tail !== prev ? 0.05 * em : 0) : 0;
+    const net = prev && tail ? gap - italicOf(tail) - (tail === prev ? 0 : tail.size < prev.size * 0.6 ? 0.1 * em : 0.05 * em) : 0;
     const apart = prev !== null && !spaced && !afterWord && !wordStarts && operand(prev, ["ord", "close"]) && operand(a, ["ord", "open"]) && net > 0.2 * em;
     let wordEnds = false;
     let tex = a.tex;
