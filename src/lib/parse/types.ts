@@ -141,6 +141,11 @@ export type ParsedBlock = {
   // alignment is a token of its html, as a paragraph's.
   listIndents?: Indent[];
   itemSpace?: number;
+  // Word paragraphs: the borders the paragraph's style and its own
+  // properties draw (w:pBdr: a rule under a heading, a bar beside a quote),
+  // each side as the page editor stores a paragraph's: "<width pt>
+  // <solid|dotted|dashed> #rrggbb <padding pt>".
+  borders?: { top?: string; right?: string; bottom?: string; left?: string };
   // PDF FIGUREs: the crop of a display equation that failed the glyph check.
   // Its text is the display's glyphs as the text layer reads them (often
   // garbled), so the import shows it with no caption.

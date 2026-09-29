@@ -166,6 +166,14 @@
 .docs-shell .docs-prose tr[data-pinned="true"] > th {
   background-image: linear-gradient(color-mix(in srgb, var(--docs-ink) 5%, transparent) 0 0);
 }
+/* A quote whose paragraphs draw their own bar (a Word file's quote, its
+   paragraph borders and indent): the page editor's bar and inset step
+   aside. */
+.docs-shell .docs-prose blockquote:has(> p[data-border-left]) {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
+}
 /* A pageless table fills the text column: column widths (an import's,
    lib/docs/import-table.ts) are shares of the width, as a fixed layout
    spreads a table wider than its columns. */

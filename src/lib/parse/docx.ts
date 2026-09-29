@@ -344,9 +344,14 @@ type ParaProps = {
   numId: string | null;
   ilvl: number;
   align: "center" | "right" | "justify" | null;
-  border: { top: boolean; bottom: boolean; left: boolean; right: boolean };
+  /** Each side's border (w:pBdr) as the page editor stores a paragraph's
+      side (borderSide); null for none. */
+  border: Record<BorderSideName, string | null>;
   /** The left indent in twips: the style's, or the paragraph's own. */
   left: number;
+  /** The first line's indent against the left indent in twips (w:ind
+      firstLine; a hanging indent negative). */
+  first: number;
   /** The paragraph's own left indent, which wins over its list level's. */
   ownLeft: number | null;
   /** The look every run of the paragraph starts from. */
@@ -413,8 +418,9 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     numId: null,
     ilvl: 0,
     align: null,
-    border: { top: false, bottom: false, left: false, right: false },
+    border: { top: null, bottom: null, left: null, right: null },
     left: 0,
+    first: 0,
     ownLeft: indentOf(child(pPr, "ind")),
     base,
     markDeleted: child(child(pPr, "rPr"), "del") !== null,
@@ -441,11 +447,16 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     const lvl = intAttr(child(layer, "outlineLvl"), "val");
     if (lvl !== null) outline = lvl;
     const bdr = child(layer, "pBdr");
-    for (const side of ["top", "bottom", "left", "right"] as const) {
-      const b = child(bdr, side);
-      if (b) out.border[side] = !["none", "nil"].includes(attr(b, "val") ?? "none");
+    for (const side of BORDER_SIDES) {
+      const b = child(bdr, side) ?? (side === "left" ? child(bdr, "start") : side === "right" ? child(bdr, "end") : null);
+      if (b) out.border[side] = borderSide(b);
     }
-    out.left = indentOf(child(layer, "ind")) ?? out.left;
+    const ind = child(layer, "ind");
+    out.left = indentOf(ind) ?? out.left;
+    const hanging = intAttr(ind, "hanging");
+    const firstLine = intAttr(ind, "firstLine");
+    if (hanging !== null) out.first = -hanging;
+    else if (firstLine !== null) out.first = firstLine;
     const spacing = child(layer, "spacing");
     out.before = spaceOf(spacing, "before") ?? out.before;
     out.after = spaceOf(spacing, "after") ?? out.after;
@@ -467,6 +478,25 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
 /** A left indent (w:ind left, or start), in twips. */
 function indentOf(ind: Element | null): number | null {
   return intAttr(ind, "left") ?? intAttr(ind, "start");
+}
+
+// ── Borders ─────────────────────────────────────────────────────────────────
+
+type BorderSideName = "top" | "right" | "bottom" | "left";
+const BORDER_SIDES: BorderSideName[] = ["top", "right", "bottom", "left"];
+
+/** A border side (a w:pBdr, w:tcBorders, or w:tblBorders child) as the page
+    editor stores one: "<width pt> <solid|dotted|dashed> #rrggbb" and, for
+    a paragraph, the room between the line and the words (w:space, points);
+    null for none. Word's width is eighths of a point; "auto" is black. */
+function borderSide(el: Element, withSpace = true): string | null {
+  const val = attr(el, "val") ?? "none";
+  if (val === "none" || val === "nil") return null;
+  const dash = /^dot/.test(val) && !/dash/i.test(val) ? "dotted" : /dash/i.test(val) ? "dashed" : "solid";
+  const width = Math.min(12, Math.max(0.13, Math.round(((intAttr(el, "sz") ?? 4) / 8) * 100) / 100));
+  const color = hexColor(attr(el, "color")) ?? "#000000";
+  const space = Math.min(31, Math.max(0, intAttr(el, "space") ?? 0));
+  return `${width} ${dash} ${color}${withSpace ? ` ${space}` : ""}`;
 }
 
 /** The most space the page editor sets before or after a paragraph, 1584

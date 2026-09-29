@@ -7,7 +7,7 @@
 import { TOC_ENTRY_RE, TOC_LABEL_RE, TOC_TAIL_RE, isContentsEntry, readContentsEntries, twoColumnList } from "@/lib/parse/pdf/contents";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { readHeading } from "@/lib/parse/pdf/headings";
-import { closeLists, joinMarkerCells, readList } from "@/lib/parse/pdf/lists";
+import { closeLists, joinMarkerCells, readList, readReferences } from "@/lib/parse/pdf/lists";
 import { readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { tableFromRegion } from "@/lib/parse/pdf/ruled";
 import { findTableRuns, isLabelLine, tableFromRun } from "@/lib/parse/pdf/tables";
@@ -102,9 +102,11 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
       readRuleLine(lines, i) ??
       readLabelLine(lines, i, ctx) ??
       readHeading(lines, i, ctx, runOf) ??
+      readReferences(lines, i, ctx, runOf) ??
       readList(lines, i, ctx, runOf) ??
       readParagraph(lines, i, ctx, runOf);
-    if (step.segments.some((s) => s.type === "HEADING")) closeLists();
+    const heading = step.segments.findLast((s) => s.type === "HEADING");
+    if (heading) closeLists(heading.text);
     segments.push(...step.segments);
     i = step.next;
   }

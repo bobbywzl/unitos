@@ -307,7 +307,7 @@ function joinInlineRows(lines: Line[], hosts: (Line | null)[], ctx: PageContext)
     if (host) rowsOf.set(host, [...(rowsOf.get(host) ?? []), ...parts(l)]);
   });
   if (rowsOf.size === 0) return [...lines];
-  const orphans = orphanGlyphs(lines, ctx.drawing, true);
+  const orphans = orphanGlyphs(lines, ctx.drawing);
   const joined = new Map<Line, Line>();
   const kept = new Set<Line>();
   for (const [host, rows] of rowsOf) {
@@ -699,16 +699,13 @@ function isEquationShaped(s: Segment, ctx: PageContext): boolean {
 // item reads (a placed accent, a composite's second half: the page's
 // orphans) inside its box, less a label at either end a quad or more apart
 // (its \tag, or \tag* for a proof's end mark). null when an item holds text
-// the drawing has no glyph for (the check could not see it). An item of
-// words pdf.js ran into an item of another font has no glyphs of its own
-// (zones.ts unread): the orphans under it are its words.
+// the drawing has no glyph for (the check could not see it).
 function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; label: string | null; labelGlyphs: Glyph[] } | null {
+  if (line.items.some((i) => !i.glyphs?.length)) return null;
   const top = line.yMax + line.size * 1.2;
   const bottom = line.yMin - line.size * 0.6;
   const orphans = pageOrphans.filter((g) => g.x + g.w / 2 > line.x && g.x + g.w / 2 < line.xEnd && g.y >= bottom && g.y <= top);
-  const drawn = (i: Item) => orphans.filter((g) => g.x >= i.x - 0.5 && g.x < i.x + i.w && Math.abs(g.y - i.y) < i.size * 0.5).length >= i.str.replace(/\s/g, "").length;
-  if (line.items.some((i) => !i.glyphs?.length && !drawn(i))) return null;
-  const glyphs = [...line.items.flatMap((i) => i.glyphs ?? []), ...orphans].sort((a, b) => a.x - b.x);
+  const glyphs = [...line.items.flatMap((i) => i.glyphs!), ...orphans].sort((a, b) => a.x - b.x);
   const size = Math.max(...glyphs.map((g) => g.size));
   // A label: the glyphs at an end that read "(…)", a quad or more from the rest.
   const labelAt = (from: number, dir: 1 | -1): { glyphs: Glyph[]; text: string } | null => {
@@ -930,7 +927,7 @@ export function displayEquations(
     const line = tex && !missed ? displayOf(segments[k]) : undefined;
     if (line) {
       used.add(line);
-      orphans ??= orphanGlyphs(lines, ctx.drawing, false);
+      orphans ??= orphanGlyphs(lines, ctx.drawing);
       equation = equationOf(line, orphans, ctx);
     } else if (missed ? !isMissed(segments[k]) : tex || !isMathSegment(segments[k], ctx)) {
       out.push(segments[k]);

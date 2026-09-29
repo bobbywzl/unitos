@@ -131,7 +131,11 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     word with a next one on its line takes that scale, a space short of the
     next word (a justified line's spaces stretch, so the median runs high).
     A line's last word keeps its width: the page's notes, set smaller than
-    its body at the same size, run past the column at the body's scale. */
+    its body at the same size, run past the column at the body's scale.
+    Two words are two words: a word whose box runs into the next word's
+    ends a space short of it (NASA SP-4408's scan boxes overlap, "Igor"
+    ending at 170.7 and "Lissov" starting at 167.0, and 89 pages read runs
+    of words with no space). */
 export function fitOcrItems(items: Item[]) {
   const text = median(items.map((i) => i.size));
   for (let k = items.length - 1; k >= 0; k--) if (charCount(items[k].str) <= 2 && items[k].size > text * 4) items.splice(k, 1);
@@ -147,12 +151,12 @@ export function fitOcrItems(items: Item[]) {
     const ratio = b ? (b.x - a.x) / (a.w + a.size * 0.25) : 0;
     if (ratio > 0.5 && ratio < 2.5) ratios.push(ratio);
   });
-  if (ratios.length < 20) return;
-  const scale = median(ratios);
-  if (Math.abs(scale - 1) < 0.1) return;
+  const scale = ratios.length >= 20 ? median(ratios) : 1;
   words.forEach((a, k) => {
     const b = next(k);
-    if (b && b.x - a.x < (a.w + a.size * 0.25) * 2.5) a.w = Math.max(a.w, Math.min(a.w * scale, b.x - a.x - a.size * 0.2));
+    if (!b) return;
+    if (Math.abs(scale - 1) >= 0.1 && b.x - a.x < (a.w + a.size * 0.25) * 2.5) a.w = Math.max(a.w, Math.min(a.w * scale, b.x - a.x - a.size * 0.2));
+    if (a.x + a.w > b.x - a.size * 0.15 && b.x - a.x > a.size * 0.5 && /[\p{L}\p{N}]$/u.test(a.str) && /^[\p{L}\p{N}]/u.test(b.str)) a.w = b.x - a.x - a.size * 0.2;
   });
 }
 

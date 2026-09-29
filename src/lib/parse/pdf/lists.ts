@@ -17,7 +17,7 @@ import {
   pushedApart,
   stopsShort,
 } from "@/lib/parse/pdf/paragraphs";
-import { TextBuilder, fillsMargin, joinGroup } from "@/lib/parse/pdf/text";
+import { TextBuilder, boldShare, fillsMargin, joinGroup } from "@/lib/parse/pdf/text";
 import type { Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 import type { Indent } from "@/lib/parse/types";
 
@@ -75,9 +75,12 @@ function openLevels(page: number): { x: number; marker: Marker }[] | null {
   return open && (page === open.page || page === open.page + 1) ? open.levels : null;
 }
 
-/** A heading closes the list last read: an item after it starts afresh. */
-export function closeLists() {
+/** A heading closes the list last read: an item after it starts afresh.
+    A references heading opens the references (readReferences), and any
+    other heading closes them. */
+export function closeLists(heading?: string) {
   open = null;
+  references = heading !== undefined && REFERENCES_RE.test(heading.trim());
 }
 
 // Where the item's words start: the first glyph after the marker.
@@ -263,8 +266,9 @@ function listIndentsOf(items: Item[], depths: number[], levels: number[], ctx: P
 // between its checkbox items, and the import drew them tight), and "justify"
 // on its html where its items are set justified.
 function withItemLayout(list: Segment, lines: Line[], items: Line[][], ctx: PageContext): Segment {
-  const gaps = items.slice(1).map((item, k) => items[k][items[k].length - 1].y - item[0].y - ctx.leading * item[0].size);
-  const space = gaps.length > 0 ? Math.round(median(gaps)) : 0;
+  // Items one under the other: an item atop the next column stands higher.
+  const pitches = items.slice(1).map((item, k) => ({ pitch: items[k][items[k].length - 1].y - item[0].y, size: item[0].size })).filter((p) => p.pitch > 0);
+  const space = pitches.length > 0 ? Math.round(median(pitches.map((p) => p.pitch - ctx.leading * p.size))) : 0;
   if (space > 0) list.itemSpace = space;
   if (justifiedItems(lines, items, ctx)) list.html = '<ul class="justify"></ul>';
   return list;
@@ -451,4 +455,77 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
     ...geom(run),
   });
   return { segments, next: j };
+}
+
+// ── References ──────────────────────────────────────────────────────────────
+
+// A references section's heading: its entries follow, on its page and the
+// pages after, up to the next heading.
+const REFERENCES_RE = /^(?:\d{1,2}\.?\s+)?(?:references(?: and notes)?|bibliography|literature cited|works cited)$/i;
+let references = false;
+
+/** A references section whose entries carry no marker, each set with a
+    hanging indent (author-year references: MNRAS, ACL): a line at the
+    entries' left edge opens an entry and a line set in by the hanging step
+    goes on with it, in each column. One LIST, an entry a line, no marker:
+    read as paragraphs, the entries of one line ran together, 25 in one
+    (arXiv 2503.22874), and 42 of 50 entries were no list's (arXiv
+    2503.10997). Lines that show no hanging indent are left to the other
+    readers. */
+export function readReferences(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
+  const line = lines[i];
+  const marker = references ? readMarker(line) : null;
+  if (!references || runOf[i] !== -1 || line.table || marker?.family === "cite" || marker?.family === "arabic") return null;
+  const size = line.size;
+  const run: Line[] = [line];
+  for (let j = i + 1; j < lines.length; j++) {
+    const next = lines[j];
+    const prev = run[run.length - 1];
+    const gap = prev.y - next.y;
+    if (runOf[j] !== -1 || next.table || Math.abs(next.size - size) > 1.2 || boldShare(next.runs, next.text.length) > 0.9) break;
+    if (lineColumn(next) === lineColumn(prev) && (gap <= 0 || gap > size * ctx.leading * 3)) break;
+    run.push(next);
+  }
+  // Each column's entry edge (its leftmost line) and right edge, and the
+  // hanging step: how far the lines set in stand from the edge.
+  const columns = new Map<unknown, { left: number; right: number }>();
+  for (const l of run) {
+    const key = lineColumn(l);
+    const c = columns.get(key);
+    columns.set(key, { left: Math.min(c?.left ?? l.x, l.x), right: Math.max(c?.right ?? l.xEnd, l.xEnd) });
+  }
+  const edgeOf = (l: Line) => columns.get(lineColumn(l))!;
+  const steps = run.map((l) => l.x - edgeOf(l).left).filter((d) => d >= size * 0.3 && d <= size * 3);
+  if (steps.length === 0) return null;
+  const step = median(steps);
+  const entries: Line[][] = [];
+  const tail: Line[] = [];
+  let end = 0;
+  for (const [k, l] of run.entries()) {
+    const d = l.x - edgeOf(l).left;
+    if (Math.abs(d) <= size * 0.3) entries.push([l]);
+    else if (Math.abs(d - step) <= size * 0.5) {
+      if (entries.length > 0) entries[entries.length - 1].push(l);
+      else tail.push(l);
+    } else break;
+    end = k + 1;
+  }
+  if (!entries.some((entry) => entry.length >= 2)) return null;
+  const segments: Segment[] = [];
+  // The page opens with the end of the entry the page before cut: a
+  // paragraph the cross-page join gives to that entry.
+  if (tail.length > 0) {
+    const { text, runs } = joinGroup(tail, true);
+    segments.push({ type: "PARAGRAPH", text: text.replace(/\n/g, " "), page: line.page, runs, ...geom(tail) });
+  }
+  const builder = new TextBuilder();
+  for (const entry of entries) {
+    const { text, runs } = joinGroup(entry, true);
+    builder.append({ text: text.replace(/\n/g, " "), runs }, "\n");
+  }
+  const all = entries.flat();
+  const list: Segment = { type: "LIST", text: builder.text, page: line.page, runs: builder.runs, ...geom(all) };
+  list.listIndents = [{ left: Math.round(edgeOf(all[0]).left + step - leftEdge(all[0], ctx)), first: Math.round(-step) }];
+  segments.push(withItemLayout(list, lines, entries, ctx));
+  return { segments, next: i + end };
 }
