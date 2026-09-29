@@ -67,13 +67,20 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
     cur = [];
     const count = (ch: string) => z.filter((g) => g.unicode === ch).length;
     // A sentence's colon or semicolon after a formula, and a bracket it
-    // does not close, are the sentence's.
+    // does not close, are the sentence's; a half-open interval's ")" closes
+    // its "[" ("[0, ∞)" lost its bracket and read as words).
     for (;;) {
       const last = z[z.length - 1];
       if (!last || (last.family !== "ot1" && last.family !== null)) break;
-      if (/^[;:]$/.test(last.unicode) || (last.unicode === ")" && count(")") > count("("))) z = z.slice(0, -1);
+      if (/^[;:]$/.test(last.unicode) || (last.unicode === ")" && count(")") + count("]") > count("(") + count("["))) z = z.slice(0, -1);
       else break;
     }
+    // A bracket the formula never closes, a word space after the formula's
+    // last glyph, opens the sentence's aside: "its range is ℝ (i.e. no set"
+    // read "ℝ(i", which no check passes.
+    const brackets = (from: number, re: RegExp) => z.slice(from).filter((h) => re.test(h.unicode)).length;
+    const aside = z.findIndex((g, n) => n > 0 && /^[([]$/.test(g.unicode) && gapOf(z[n - 1], g) > 0.2 * size && brackets(n + 1, /^[)\]]$/) <= brackets(n + 1, /^[([]$/));
+    if (aside > 0) z = z.slice(0, aside);
     // A footnote mark set apart before the formula, the sentence's colon,
     // or a bracket the formula does not close, is the sentence's.
     for (;;) {

@@ -582,13 +582,17 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
     (i < 2 || lines[i - 2].y - above.y > above.size * ctx.leading * 1.3);
   const headingBelow = title && below !== undefined && titleLike(below) && Math.abs(below.size - last.size) > 0.5;
   const bodyBelow = below !== undefined && styledShare(below) < 0.5;
+  // Over a paragraph's first line set in, a title set apart above needs no
+  // gap under it: MMWR sets its subheads a size under the body, over the
+  // indented first line ("Prescribers" read as a paragraph).
+  const opensBelow = title && bodyBelow && below.x > last.x + last.size * 0.5 && below.x <= last.x + last.size * 3;
   const small = line.size < ctx.bodySize * 0.98;
-  if (small && !(headingAbove && bodyBelow) && !(gapAbove && headingBelow)) return null;
+  if (small && !(headingAbove && bodyBelow) && !(gapAbove && (headingBelow || opensBelow))) return null;
   // A centered title set apart above needs no gap under it: a statement's
   // title sits 12.8 pt over its units line ("CONDENSED CONSOLIDATED
   // STATEMENTS OF OPERATIONS (Unaudited)" read as a paragraph).
   const centeredTitle = title && centered && gapAbove;
-  if (!below || !(centeredTitle || ((gapAbove || headingAbove) && (gapBelow || headingBelow || (headingAbove && bodyBelow))))) return null;
+  if (!below || !(centeredTitle || ((gapAbove || headingAbove) && (gapBelow || headingBelow || opensBelow || (headingAbove && bodyBelow))))) return null;
   const { text: joined, runs } = headingText(run, centered);
   return { segments: [headingOf(run, joined, runs)], next: j };
 }

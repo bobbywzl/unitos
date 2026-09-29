@@ -313,7 +313,7 @@ const withGap = (cell: string, gap: string) => cell.replace(/(?:<span class="cel
 /** A row's source numbered `n`, its last cell ending in `gap`. */
 const rowAt = (row: string, n: number, gap: string) =>
   row
-    .replace(/(<th class="sheet-rn[^"]*"[^>]*>)\d+(<\/th>)/, (_, open: string, close: string) => `${open}${n}${close}`)
+    .replace(/(<th class="sheet-rn[^"]*"[^>]*>)\d*(<\/th>)/, (_, open: string, close: string) => `${open}${n}${close}`)
     .replace(/(?:<span class="cell-gap">[\t\n]<\/span>)?<\/td><\/tr>$/, () => `${GAP_SOURCE(gap)}</td></tr>`);
 // A value a sheet lines up right: a number, a percent, an amount, a date.
 const NUMBER = /^(?:[-+(]?[$€£¥]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?%?\)?|\d{4}-\d{2}-\d{2})$/;
@@ -405,8 +405,10 @@ function sheetShape(html: string, prev: string, next: string, cut: SheetCut | nu
   const after = next.split("\n").map((r) => r.split("\t"));
   const width = before[0].length;
   const newWidth = after[0].length;
-  if (before.some((r) => r.length !== width) || before.length !== grid.rows.length || grid.rows.some((r) => r.cells.length !== width)) return { refused: "stale" };
-  // A grid is a rectangle, and one edit changes its rows or its columns.
+  // A grid is a rectangle — a cell with a line break in its words reads as
+  // two rows, so rows and columns stay — and one edit changes its rows or
+  // its columns.
+  if (before.some((r) => r.length !== width) || before.length !== grid.rows.length || grid.rows.some((r) => r.cells.length !== width)) return { refused: "grid" };
   if (after.some((r) => r.length !== newWidth) || (before.length !== after.length && width !== newWidth)) return { refused: "grid" };
   const splices: { start: number; end: number; source: string }[] = [];
   const setAttr = (el: Element, name: string, value: string) => {
