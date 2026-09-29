@@ -1,7 +1,7 @@
 import type { Block } from "@prisma/client";
 import type { Thinking } from "@/lib/assistant/thinking";
 import { blockKind, withListMarkers, type BlockKind } from "@/lib/block-kind";
-import { blockTakes, isWebAddress, keepsLines, type DocumentShape } from "@/lib/block-takes";
+import { blockTakes, isWebAddress, keepsLines, skippedWarning, type DocumentShape } from "@/lib/block-takes";
 import type { ChatTurn } from "@/lib/conversation";
 import { SUGGEST_MAX_NEW_CHARS, SUGGEST_MAX_WINDOWS, SUGGEST_PARALLEL } from "@/lib/derive/config";
 import { runSuggest } from "@/lib/derive/suggest";
@@ -11,7 +11,7 @@ import type { Lang } from "@/lib/i18n/config";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { mapLimit } from "@/lib/jev";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
-import { replicaEdit, replicaWarning, type ReplicaRefusal } from "@/lib/replica";
+import { REPLICA_REFUSAL, replicaEdit, type ReplicaRefusal } from "@/lib/replica";
 import { hexStyle } from "@/lib/text-style";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
 
@@ -332,7 +332,7 @@ export function reviseActions(
           at = o.end;
         }
         const refused = op.op === "replace_words" ? replicaRefusal(block, text + block.text.slice(at)) : null;
-        if (refused) warnings.push(replicaWarning(t, refused, op.why));
+        if (refused) warnings.push(skippedWarning(t, REPLICA_REFUSAL[refused], op.why));
         else taken.push(op);
       }
       entry.words = taken;
@@ -416,7 +416,7 @@ export function reviseActions(
     for (const action of unit.actions) {
       const block = action.type === "edit_block" ? byId.get(action.blockId) : undefined;
       const refused = block && action.type === "edit_block" ? replicaRefusal(block, action.newText) : null;
-      if (refused) warnings.push(replicaWarning(t, refused, action.description));
+      if (refused) warnings.push(skippedWarning(t, REPLICA_REFUSAL[refused], action.description));
       else if (takes(action)) actions.push(action);
       else refuse(action.description);
     }

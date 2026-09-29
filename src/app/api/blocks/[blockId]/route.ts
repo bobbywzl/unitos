@@ -310,9 +310,10 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
     }
     return NextResponse.json({ ok: true, editId: result.removedEdits[blockId] ?? null });
   }
-  // A page, a video's player, and a sheet's name stay (lib/block-takes.ts).
+  // A video's player, a sheet's name, and a handwritten document's last
+  // page stay (lib/block-takes.ts).
   if (!blockTakes.removal(block.type, await documentShape(block.documentId))) {
-    return NextResponse.json({ error: t("api.onlyTextBlocksRemoved") }, { status: 400 });
+    return NextResponse.json({ error: t(block.type === "PAGE" ? "api.lastPageStays" : "api.onlyTextBlocksRemoved") }, { status: 400 });
   }
 
   const [, , , , removal] = await db.$transaction([

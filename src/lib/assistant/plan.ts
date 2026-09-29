@@ -1,8 +1,8 @@
 import { z } from "zod";
 import type { BlockKind } from "@/lib/block-kind";
-import { blockTakes, isWebAddress, type DocumentShape } from "@/lib/block-takes";
+import { blockTakes, isWebAddress, skippedWarning, type DocumentShape } from "@/lib/block-takes";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { replicaEdit, replicaWarning } from "@/lib/replica";
+import { REPLICA_REFUSAL, replicaEdit } from "@/lib/replica";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
 
 // The assistant's actions (SPEC.md §7): what the model proposes, validated
@@ -337,13 +337,22 @@ export function enrichActions(
       warnings.push(t(action.type === "format_block" ? "api.warnBlockNotFoundOrNotText" : "api.warnBlockNotFound", { description: action.description }));
       continue;
     }
+    if (action.type === "remove_block" && block.type === "PAGE") {
+      // The plan's pages as its removals leave them: the last one stays.
+      if (!blockTakes.removal(block.type, shape)) warnings.push(skippedWarning(t, "api.lastPageStays", action.description));
+      else {
+        shape.pages -= 1;
+        actions.push(action);
+      }
+      continue;
+    }
     if (action.type === "edit_block" || action.type === "remove_block") {
       if (!(action.type === "edit_block" ? blockTakes.words : blockTakes.removal)(block.type, shape)) {
         warnings.push(t("api.warnOnlyTextEdited", { description: action.description }));
       } else if (action.type === "edit_block" && (block.type === "SLIDE" || block.type === "SHEET")) {
         // A slide's or a sheet's replica: the route's own check, run first.
         const edited = replicaEdit(block.type, block.html ?? "", block.text, action.newText);
-        if ("refused" in edited) warnings.push(replicaWarning(t, edited.refused, action.description));
+        if ("refused" in edited) warnings.push(skippedWarning(t, REPLICA_REFUSAL[edited.refused], action.description));
         else actions.push(action);
       } else actions.push(action);
       continue;
@@ -385,6 +394,7 @@ export function enrichActions(
 export const planShape = (ctx: Pick<PlanContext, "format" | "blocks">): DocumentShape => ({
   format: ctx.format,
   media: ctx.blocks.some((b) => b.type === "VIDEO" || b.type === "TRANSCRIPT"),
+  pages: ctx.blocks.filter((b) => b.type === "PAGE").length,
 });
 
 // The sidebar assistant's answer ends with its actions in a fenced block

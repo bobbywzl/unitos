@@ -1,7 +1,7 @@
 import { JSDOM } from "jsdom";
 import { z } from "zod";
 import { diffSegments } from "@/lib/anchors/remap";
-import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
+import type { TKey } from "@/lib/i18n/dictionaries";
 import { escapeHtml } from "@/lib/parse/office";
 import { columnLetter } from "@/lib/parse/sheets";
 
@@ -36,12 +36,6 @@ export const REPLICA_REFUSAL: Record<ReplicaRefusal, TKey> = {
   empty: "api.replicaEmpty",
   stale: "api.replicaStale",
 };
-
-/** The plan's warning for an edit a replica does not take, with the reason. */
-export function replicaWarning(t: TFunc, refused: ReplicaRefusal, description: string): string {
-  const reason = t(REPLICA_REFUSAL[refused]);
-  return t("api.warnReplica", { reason: reason.charAt(0).toLowerCase() + reason.slice(1), description });
-}
 
 // A node's place in the html, as jsdom gives it.
 type Location = {

@@ -112,7 +112,34 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     segments.push(...step.segments);
     i = step.next;
   }
+  markPullQuotes(segments);
   return withDrawnSeparators(segments, starts, lines, ctx, runOf);
+}
+
+// ── Pull quotes ─────────────────────────────────────────────────────────────
+
+// A paragraph set in a column under half as wide as a paragraph of its page
+// that holds four in five of its words: a pull quote, the text's own words
+// set apart ("Many Earth science missions, both airborne and on orbit, …"
+// beside the paragraph it quotes, the Earth Observer p. 7: read as a
+// paragraph).
+function markPullQuotes(segments: Segment[]): void {
+  const wordsOf = (text: string) => text.toLowerCase().match(/\p{L}{3,}/gu) ?? [];
+  const width = (s: Segment) => (s.box ? s.box.x2 - s.box.x1 : 0);
+  for (const s of segments) {
+    if (s.type !== "PARAGRAPH" || /\b(?:quote|caption|center)\b/.test(s.html ?? "")) continue;
+    const words = wordsOf(s.text);
+    if (words.length < 8) continue;
+    const quoted = segments.some((t) => {
+      if (t === s || t.type !== "PARAGRAPH" || t.text.length <= s.text.length || width(s) * 2 > width(t)) return false;
+      const theirs = new Set(wordsOf(t.text));
+      return words.filter((w) => theirs.has(w)).length >= words.length * 0.8;
+    });
+    if (!quoted) continue;
+    const tokens = /class="([^"]*)"/.exec(s.html ?? "")?.[1].split(/\s+/).filter(Boolean) ?? [];
+    s.html = `<p class="${[...tokens.filter((t) => !t.startsWith("indent")), "quote"].join(" ")}"></p>`;
+    delete s.indent;
+  }
 }
 
 // ── Separators ──────────────────────────────────────────────────────────────

@@ -83,6 +83,7 @@ const en = {
   replicaFixed: "These words stay: a bullet, the speaker notes' label, a chart's data, a formula's cell, or a cell a merge covers",
   replicaEmpty: "The slide has no text there to hold new words",
   replicaStale: "The block changed since the edit was made. Ask again",
+  lastPageStays: "A handwritten document keeps its last page",
   editNotRemovedParagraph: "Edit is not a removed paragraph",
   paragraphAlreadyBack: "Paragraph is already back",
 
@@ -118,7 +119,7 @@ const en = {
   warnActionNotForDocument: "Skipped: this action does not apply to this document. ({description})",
   warnActionUnreadable: "Skipped: the action could not be read. ({description})",
   warnLinkAddress: "Skipped: the link's address is not a web address. ({description})",
-  warnReplica: "Skipped: {reason}. ({description})",
+  warnSkipped: "Skipped: {reason}. ({description})",
   reviseNoBlocks: "Nothing to revise: no block in the scope takes a change to its words.",
   reviseNoEdits: "The revision found nothing to change.",
 
@@ -422,6 +423,7 @@ const zh: Record<keyof typeof en, string> = {
   replicaFixed: "这些文字保持不变：项目符号、演讲者备注的标签、图表的数据、公式所在的单元格，或被合并覆盖的单元格",
   replicaEmpty: "幻灯片在那里没有可容纳新文字的文本",
   replicaStale: "此块在编辑之后已更改。请再问一次",
+  lastPageStays: "手写文档保留其最后一个页面",
   editNotRemovedParagraph: "此编辑不是被移除的段落",
   paragraphAlreadyBack: "段落已经恢复了",
 
@@ -453,7 +455,7 @@ const zh: Record<keyof typeof en, string> = {
   warnActionNotForDocument: "已跳过：此操作不适用于此文档。（{description}）",
   warnActionUnreadable: "已跳过：无法读取该操作。（{description}）",
   warnLinkAddress: "已跳过：链接地址不是网址。（{description}）",
-  warnReplica: "已跳过：{reason}。（{description}）",
+  warnSkipped: "已跳过：{reason}。（{description}）",
   reviseNoBlocks: "无可修订：范围内没有可以改动文字的块。",
   reviseNoEdits: "修订没有找到需要改动的地方。",
 

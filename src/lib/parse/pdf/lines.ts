@@ -534,6 +534,25 @@ export function buildLines(items: Item[], page: number): Line[] {
         return rise > 0.45 && rise < 0.95 && center > g.x - g.size * 0.1 && center < g.x + g.w + g.size * 0.1;
       }),
     );
+  // The limits of a text-size operator set over and under it (\sum\limits
+  // in a sentence) go where the operator goes: they joined the lines around
+  // it ("A ∈ ℱ. n" over one line, "vial=1" ending the next, the owner's
+  // notes). An integral's are scripts beside it.
+  const inlineOps = [...boxes].filter(([op, box]) => {
+    const g = op.glyphs?.length === 1 ? op.glyphs[0] : null;
+    return !box.display && g !== null && g.family !== null && mathGlyph(g.family, g.code)?.cls === "op" && !/[∫∮]/.test(op.str);
+  });
+  const inlineLimitOf = (item: Item) =>
+    inlineOps.find(([op, box]) => {
+      const center = item.x + item.w / 2;
+      if (item.size > op.size * 0.8 || center < op.x - op.size * 0.25 || center > op.x + op.w + op.size * 0.25) return false;
+      const above = item.y >= box.top - item.size * 0.2 && item.y - box.top < op.size * 0.7;
+      const below = item.y <= box.bottom && box.bottom - item.y < op.size;
+      if (!above && !below) return false;
+      const reach = Math.max(0, above ? item.y - box.top : box.bottom - item.y);
+      return !stats.some((l) => l.size >= item.size / 0.8 && Math.abs(l.y - item.y) < Math.min(reach, l.size * 0.45));
+    })?.[0];
+  const inlineLimits = new Map<Item, Item[]>();
   for (let k = 0; k < grouped.length; k++) {
     for (const item of grouped[k]) {
       const glyph = item.str.trim();
@@ -541,6 +560,12 @@ export function buildLines(items: Item[], page: number): Line[] {
       if (limitOf(item, stats)) continue;
       if (k + 1 < grouped.length && labelOf(item, k + 1)) {
         moved[k + 1].push(item);
+        kept[k] = kept[k].filter((i) => i !== item);
+        continue;
+      }
+      const op = inlineLimitOf(item);
+      if (op) {
+        inlineLimits.set(op, [...(inlineLimits.get(op) ?? []), item]);
         kept[k] = kept[k].filter((i) => i !== item);
         continue;
       }
@@ -617,8 +642,8 @@ export function buildLines(items: Item[], page: number): Line[] {
       ? all.filter((n) => stats[n].size >= op.size * 0.8 && axis(n) <= stats[n].size * 0.35 && near(n, 1.5)).sort((a, b) => axis(a) - axis(b))
       : [];
     const target = onAxis[0] ?? (box ? [...mathy, ...prose].sort(byDistance)[0] : (mathy[0] ?? prose[0]));
-    if (target !== undefined) moved[target].push(op);
-    else standalone.push([op]);
+    if (target !== undefined) moved[target].push(op, ...(inlineLimits.get(op) ?? []));
+    else standalone.push([op, ...(inlineLimits.get(op) ?? [])]);
   }
   const regrouped = [...kept.map((g, k) => [...g, ...moved[k]]), ...standalone].filter((g) => g.length > 0);
   const baseline = (g: Item[]) => {
