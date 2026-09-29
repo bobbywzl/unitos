@@ -236,11 +236,16 @@ function assemblePieces(atoms: Atom[]): Atom[] {
     // A column of one bar piece is a plain bar, not a fence (\arrowvert).
     fences.push(node(col, tex, col[0].yb, col[0].size, { fam: "omx", cls, entry: { latex: tex, unicode: tex, cls: "open", box: [0, 0], size: 5 } }));
   }
-  // Bar columns pair up as open and close: |x| drawn tall.
+  // Bar columns pair up as open and close, each kind with its own: |x|
+  // drawn tall, and a norm around it (‖∏|f|^p‖ paired ‖ with the first |,
+  // arXiv 2506.08494 (2.12)).
   const bars = fences.filter((a) => a.cls === "bar").sort(byX);
-  for (let i = 0; i + 1 < bars.length; i += 2) {
-    bars[i].cls = "open";
-    bars[i + 1].cls = "close";
+  for (const tex of ["|", "\\|"]) {
+    const kind = bars.filter((b) => b.tex === tex);
+    for (let i = 0; i + 1 < kind.length; i += 2) {
+      kind[i].cls = "open";
+      kind[i + 1].cls = "close";
+    }
   }
   for (const b of bars) if (b.cls === "bar") b.cls = "ord";
   // Integral signs set against each other: \iint, \iiint (amsmath kerns
@@ -934,7 +939,7 @@ function linearAt(input: Atom[]): string {
   const onBase = (a: Atom) =>
     a.limits ||
     (hangingFamily(a.fam) && a.size >= baseSize * 0.75) ||
-    (a.size >= baseSize * 0.85 ? Math.abs(a.yb - base) < 0.2 * baseSize : Math.abs(a.yb - base) < 0.05 * baseSize);
+    (a.size >= baseSize * 0.85 ? Math.abs(a.yb - base) < 0.12 * baseSize : Math.abs(a.yb - base) < 0.05 * baseSize);
   // A small glyph on the baseline right after a larger script is that
   // script's own script: the exponent in a subscript (I_{k 2^{-n}}) sits
   // as high as the base's baseline.

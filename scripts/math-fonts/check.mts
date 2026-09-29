@@ -76,15 +76,20 @@ function canon(tex: string): string {
   }
 }
 
-// Each EQUATION of a parse on the pages named: it reads as one of its
-// page's formulas (its \tag aside), or the case fails.
-function wrongDisplays(blocks: { type: string; text: string; page?: number }[], formulas: Map<number, string[]>): string[] {
+// A page's displays that once passed the check wrong: each EQUATION on the
+// page (or each whose LaTeX pick matches) reads as one of the right
+// formulas, its \tag aside; a crop or words pass.
+type DisplayCase = { page: number; pick?: RegExp; right: string[] };
+
+function wrongDisplays(blocks: { type: string; text: string; page?: number }[], cases: DisplayCase[]): string[] {
   const out: string[] = [];
   for (const b of blocks) {
-    const right = formulas.get(b.page ?? 0);
-    if (b.type !== "EQUATION" || !right) continue;
+    if (b.type !== "EQUATION") continue;
     const latex = b.text.replace(/\s*\\tag\*?\{[^}]*\}\s*$/, "");
-    if (!right.some((f) => canon(f) === canon(latex))) out.push(`p. ${b.page}: ${b.text}`);
+    for (const c of cases) {
+      if (c.page !== b.page || (c.pick && !c.pick.test(latex))) continue;
+      if (!c.right.some((f) => canon(f) === canon(latex))) out.push(`p. ${b.page}: ${b.text}`);
+    }
   }
   return out;
 }
@@ -241,35 +246,67 @@ try {
 
   // 4: displays that once passed the check wrong. Typeset in Times with
   // mathptmx, a formula's letters are a text italic's, as Springer's
-  // MathTime sets them: round 2 read them as \mathrm. Springer's own pages
-  // run when the corpus holds them: (12) passed without the braces its
+  // MathTime sets them: round 2 read them as \mathrm. The corpus's pages run
+  // when .bench holds them: Springer's (12) passed without the braces its
   // extension font hangs over its first row, (29) without the limits under
-  // its two "lim"s, the page's last line.
+  // its two "lim"s, the page's last line; arXiv 2506.08494's Theorems 8
+  // and 12 read their exponent Σd_j/2 as a big operator after the bracket,
+  // (2.12) paired its norm with the absolute value's first bar, and (2.14)
+  // set λ's subscript "max" on λ's baseline.
   const cases: { tex: string; words: string }[] = [
     { tex: "\\lim_{x\\to\\pm\\infty} a(x,t) = \\lim_{x\\to\\pm\\infty} b(x,t) = 0.", words: "The display ends the page, its limits on the page's last line." },
     { tex: "\\max_{k\\le n} |S_k| \\le \\sup_{t\\in[0,1]} |B_t|.", words: "A display with limits under two names stands between two sentences." },
   ];
   const sheet = cases.map((c, i) => `${c.words} Case ${i + 1} follows.\\begin{equation}${c.tex}\\end{equation}${i === 0 ? "" : "Words follow the display."}`);
   const times = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "displays", `${packages}\n\\usepackage{mathptmx}`, sheet))));
-  const wrong = wrongDisplays(times.blocks, new Map(cases.map((c, i) => [i + 1, [c.tex]])));
-  const springer = join(import.meta.dirname, "..", "..", ".bench", "real", "springer-bmb-01377.pdf");
-  if (existsSync(springer)) {
-    const parsed = await parsePdf(new Uint8Array(readFileSync(springer)), { pages: [6, 11] });
-    const bold = "(\\mathbf{n},\\mathbf{m}";
-    const formulas = new Map([
-      [6, [`\\frac{\\partial p}{\\partial t}${bold},t)=(\\mathcal{D}+\\mathcal{R})p${bold},t).`, `\\varphi${bold})=\\lim_{t\\to\\infty}p${bold},t)`, `0=(\\mathcal{D}+\\mathcal{R})\\varphi${bold}).`]],
-      [
-        11,
-        [
-          "A\\xrightarrow{k_2}B\\xrightarrow{k_3}\\emptyset.",
-          "\\frac{\\partial a}{\\partial t}=D_A\\frac{\\partial^2a}{\\partial x^2}-k_2a+2k_1\\delta(x),",
-          "\\frac{\\partial b}{\\partial t}=D_B\\frac{\\partial^2b}{\\partial x^2}+k_2a-k_3b,",
-          "\\lim_{x\\to\\pm\\infty}a(x,t)=\\lim_{x\\to\\pm\\infty}b(x,t)=0.",
-        ],
+  const wrong = wrongDisplays(times.blocks, cases.map((c, i) => ({ page: i + 1, right: [c.tex] })));
+  const bold = "(\\mathbf{n},\\mathbf{m}";
+  const norm = "\\left\\|\\prod_{j=1}^{n}f_j(\\xi_j)\\right\\|";
+  const corpus: { file: string; cases: DisplayCase[] }[] = [
+    {
+      file: "real/springer-bmb-01377.pdf",
+      cases: [
+        { page: 6, right: [`\\frac{\\partial p}{\\partial t}${bold},t)=(\\mathcal{D}+\\mathcal{R})p${bold},t).`, `\\varphi${bold})=\\lim_{t\\to\\infty}p${bold},t)`, `0=(\\mathcal{D}+\\mathcal{R})\\varphi${bold}).`] },
+        {
+          page: 11,
+          right: [
+            "A\\xrightarrow{k_2}B\\xrightarrow{k_3}\\emptyset.",
+            "\\frac{\\partial a}{\\partial t}=D_A\\frac{\\partial^2a}{\\partial x^2}-k_2a+2k_1\\delta(x),",
+            "\\frac{\\partial b}{\\partial t}=D_B\\frac{\\partial^2b}{\\partial x^2}+k_2a-k_3b,",
+            "\\lim_{x\\to\\pm\\infty}a(x,t)=\\lim_{x\\to\\pm\\infty}b(x,t)=0.",
+          ],
+        },
       ],
-    ]);
-    wrong.push(...wrongDisplays(parsed.blocks, formulas));
-  } else console.log("displays: Springer's pages not in .bench/real, skipped");
+    },
+    {
+      file: "arxiv/2506.08494v1.pdf",
+      cases: [
+        {
+          page: 4,
+          pick: /\\eta_\{j\}/,
+          right: ["\\left\\|\\prod_{j=1}^{n}\\left|(\\widehat{g}_j/\\widehat{e_{t_j}})(\\eta_j)\\right|^{p_j}\\right\\|_\\alpha\\le\\left\\|\\prod_{j=1}^{n}\\left|(g_j/e_{t_j})(\\xi_j)\\right|^{p_j}\\right\\|_1"],
+        },
+        {
+          page: 4,
+          pick: /\\mu\\xi/,
+          right: [
+            "\\left\\|e^{\\frac{|\\xi|^2}{2q\\lambda_{\\max}}}\\prod_{j=1}^{n}\\widehat{g}_j(\\mu\\xi_j)\\right\\|_q\\le(p\\lambda_{\\min})^{\\frac{\\sum k_j}{2}}\\left\\|e^{\\frac{|\\xi|^2}{2p\\lambda_{\\min}}}\\prod_{j=1}^{n}g_j(\\xi_j)\\right\\|_p",
+          ],
+        },
+        { page: 5, pick: /d_\{j\}/, right: [`${norm}_q\\le\\max\\left\\{\\frac{1}{p\\lambda_{\\min}-1},q\\lambda_{\\max}-1\\right\\}^{\\sum d_j/2}${norm}_p`] },
+        { page: 7, pick: /d_\{j\}/, right: [`${norm}_q\\le\\left(\\frac{q\\lambda_{\\min}-1}{p\\lambda_{\\min}-1}\\right)^{\\sum d_j/2}${norm}_p`] },
+      ],
+    },
+  ];
+  for (const { file, cases: pageCases } of corpus) {
+    const pdf = join(import.meta.dirname, "..", "..", ".bench", file);
+    if (!existsSync(pdf)) {
+      console.log(`displays: .bench/${file} not there, skipped`);
+      continue;
+    }
+    const parsed = await parsePdf(new Uint8Array(readFileSync(pdf)), { pages: pageCases.map((c) => c.page) });
+    wrong.push(...wrongDisplays(parsed.blocks, pageCases));
+  }
   for (const w of wrong) console.log(`WRONG DISPLAY ${w}`);
   console.log(`displays that once passed wrong: ${wrong.length === 0 ? "none reads wrong" : `${wrong.length} read wrong`}`);
   if (wrong.length > 0) failed = true;
