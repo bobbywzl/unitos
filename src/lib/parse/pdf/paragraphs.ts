@@ -69,7 +69,9 @@ function otherColumn(l: Line, of: Line): boolean {
 // where anything stands in its margin.
 export function leftEdge(line: Line, ctx: PageContext): number {
   const column = lineColumn(line);
-  return column && column[0] > ctx.columnLeft + line.size ? column[0] : ctx.columnLeft;
+  if (!column) return ctx.columnLeft;
+  // The page's column is measured to a whole point; its extent to the glyph.
+  return column[0] > ctx.columnLeft + line.size || Math.abs(column[0] - ctx.columnLeft) <= 1 ? column[0] : ctx.columnLeft;
 }
 
 // The first-line indent a page's paragraphs share, in points: the step most
@@ -317,6 +319,16 @@ export function lineAlign(lines: Line[], from: number, to: number, ctx: PageCont
   const last = group.length - 1;
   if (last >= 1 && group.slice(0, last).every(atRight) && justifiedPage(lines, ctx)) return "justify";
   return null;
+}
+
+/** Line k stops short of its column's right edge on a page set justified:
+    it ends its paragraph or its list item, and the line under it is no wrap
+    of it (a hint under an exercise's last item joined the item, the math
+    notes p. 9). */
+export function stopsShort(lines: Line[], k: number, ctx: PageContext): boolean {
+  if (!justifiedPage(lines, ctx)) return false;
+  const right = columnEdges(lines, k, ctx).right;
+  return right > 0 && right - lines[k].xEnd > lines[k].size * 0.33;
 }
 
 /** A list's items set justified, as lineAlign reads a paragraph: every line
@@ -641,7 +653,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
 // shows that indent, and set in otherwise a block indent (a form's label
 // lines under its item, the math notes' one-line definitions: 56 read
 // flush).
-function layout(lines: Line[], from: number, to: number, ctx: PageContext, text: string): { tokens: string[]; indent?: Indent } {
+export function layout(lines: Line[], from: number, to: number, ctx: PageContext, text: string): { tokens: string[]; indent?: Indent } {
   const tokens: string[] = [];
   const group = lines.slice(from, to);
   const first = group[0];

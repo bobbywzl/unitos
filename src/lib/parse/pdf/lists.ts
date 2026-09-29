@@ -5,7 +5,18 @@
 import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { BULLET_RE, GLYPH_BULLET_RE, follows, isGlyphMarker, opensSequence, readMarker, type Marker } from "@/lib/parse/pdf/markers";
-import { isCentered, isFirstLineIndent, isIndented, justifiedItems, leftEdge, opensWithLabel, proseEdge, pushedApart } from "@/lib/parse/pdf/paragraphs";
+import {
+  isCentered,
+  isFirstLineIndent,
+  isIndented,
+  justifiedItems,
+  layout,
+  leftEdge,
+  opensWithLabel,
+  proseEdge,
+  pushedApart,
+  stopsShort,
+} from "@/lib/parse/pdf/paragraphs";
 import { TextBuilder, fillsMargin, joinGroup } from "@/lib/parse/pdf/text";
 import type { Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 import type { Indent } from "@/lib/parse/types";
@@ -159,7 +170,10 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
       j++;
       continue;
     }
-    if (goesOn(item, prev, next, edge, ctx)) {
+    // On a page set justified a wrapped line fills the column: under a line
+    // that stopped short, a line with no marker is no wrap of the item (a
+    // form's label lines under a checkbox item, the legal packet p. 4).
+    if (!stopsShort(lines, j - 1, ctx) && goesOn(item, prev, next, edge, ctx)) {
       item.lines.push(next);
       j++;
       continue;
@@ -378,10 +392,15 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
     segments.push({ type: "PARAGRAPH", text: tail.text, page: line.page, runs: tail.runs, ...geom(tail.lines) });
   }
   // Labels that end in a colon, one to a line with no marker, are a form's
-  // fields (a fill-in rule drawn after each): each is a paragraph, not an
-  // item of an invented list.
-  if (items.length >= 2 && items.every((item) => item.lines.length === 1 && !BULLET_RE.test(item.text) && /:$/.test(item.text.trim()))) {
-    const field = (item: (typeof items)[number]): Segment => ({ type: "PARAGRAPH", text: item.text, page: item.lines[0].page, runs: item.runs, ...geom(item.lines) });
+  // fields (a fill-in rule drawn after each, or typed as a blank): each is a
+  // paragraph set in as the page sets it, not an item of an invented list.
+  if (items.length >= 2 && items.every((item) => item.lines.length === 1 && !BULLET_RE.test(item.text) && /:(?:\s*_{3,})?$/.test(item.text.trim()))) {
+    const field = (item: (typeof items)[number]): Segment => {
+      const k = lines.indexOf(item.lines[0]);
+      const { tokens, indent } = layout(lines, k, k + 1, ctx, item.text);
+      const html = tokens.length > 0 ? `<p class="${tokens.join(" ")}"></p>` : undefined;
+      return { type: "PARAGRAPH", text: item.text, ...(html ? { html } : {}), ...(indent ? { indent } : {}), page: item.lines[0].page, runs: item.runs, ...geom(item.lines) };
+    };
     return { segments: [...segments, ...items.map(field)], next: j };
   }
   const glyphItem = items.length === 1 && GLYPH_BULLET_RE.test(items[0].text) && !/^\s*\*/.test(items[0].text);

@@ -47,12 +47,23 @@ export function pageLines(items: Item[], pageWidth: number, page: number, graphi
   return lines;
 }
 
-function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: number, depth: number, lines?: Line[]): Piece[] {
+// extent: the column the region's lines were read in, when it is not the
+// region's own (blocks side by side in a column).
+function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: number, depth: number, lines?: Line[], extent?: [number, number]): Piece[] {
   const split = depth < 3 ? findSplit(items, graphics, page, pageWidth, depth) : null;
-  if (!split) return leaf(items, graphics, lines);
+  if (!split) return leaf(items, graphics, lines, extent);
   const out: Piece[] = [];
   let aboveWhole = false;
+  const own = extent ?? extentOf(items);
   for (const band of split.bands) {
+    if (band.kind) {
+      // A part and a block read in the region's column.
+      for (const side of [band.left, band.right]) {
+        if (side.items.length + side.graphics.length > 0) out.push(...readRegion(side.items, side.graphics, page, pageWidth, depth + 1, undefined, band.kind === "blocks" ? own : extent));
+      }
+      aboveWhole = false;
+      continue;
+    }
     // A band where neither side is prose (a wide table's rows, a form under
     // two columns of text) reads in one pass, so its rows stay whole. A
     // band of a line or two a side (between an overfull line and a float)
@@ -75,18 +86,20 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
   return out;
 }
 
+const extentOf = (items: Item[]): [number, number] => [Math.min(...items.map((i) => i.x)), Math.max(...items.map((i) => i.x + i.w))];
+
 // One column: its lines top to bottom, and each graphic after the lines
 // above it and the lines beside it on its left (a slide's text beside its
 // photo reads first); graphics on one row read left to right. lines: the
 // items' lines, when the band test built them.
-function leaf(items: Item[], graphics: Placed[], lines?: Line[]): Piece[] {
+function leaf(items: Item[], graphics: Placed[], lines?: Line[], column?: [number, number]): Piece[] {
   const sorted = [...graphics].sort((a, b) => {
     const overlap = Math.min(a.box.y2, b.box.y2) - Math.max(a.box.y1, b.box.y1);
     const shorter = Math.min(a.box.y2 - a.box.y1, b.box.y2 - b.box.y1);
     return overlap > shorter * 0.5 ? a.box.x1 - b.box.x1 : b.box.y2 - a.box.y2;
   });
   const out: Piece[] = [];
-  const extent: [number, number] = [Math.min(...items.map((i) => i.x)), Math.max(...items.map((i) => i.x + i.w))];
+  const extent = column ?? extentOf(items);
   let rest = items;
   for (const graphic of sorted) {
     const { x1, x2, y1, y2 } = graphic.box;
@@ -101,7 +114,11 @@ function leaf(items: Item[], graphics: Placed[], lines?: Line[]): Piece[] {
 }
 
 type Side = { items: Item[]; graphics: Placed[] };
-type Band = { left: Side; right: Side; separator: Piece | null };
+// A band: its two sides beside the gutter, then the row across the gutter
+// under it. A part (what stands above or under one band) reads as a region
+// of its own; blocks are a band's sides set side by side in the region's
+// column (stacked).
+type Band = { left: Side; right: Side; separator: Piece | null; kind?: "part" | "blocks" };
 
 // The gutter of a region, and its bands, when the region reads as columns:
 // few characters cross the gutter, and in the bands with something on both
@@ -273,24 +290,43 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
     .filter((b) => letters(b.left) >= 90 && letters(b.right) >= 90)
     .sort((a, b) => letters(b.left) + letters(b.right) - letters(a.left) - letters(a.right))
     .find((b) => isColumns(b.left.items, page, pageWidth, depth) && isColumns(b.right.items, page, pageWidth, depth));
-  return band ? { bands: stacked(band, items, graphics) } : null;
+  if (band) return { bands: stacked(band, items, graphics) };
+  const blocks = twoSided.find((b) => isBlocks(b, page));
+  return blocks ? { bands: stacked(blocks, items, graphics, "blocks") } : null;
 }
 
 // A region cut above and under one band: what stands above it, the band,
-// and what stands under it, each read as a region of its own.
-function stacked(band: Band, items: Item[], graphics: Placed[]): Band[] {
+// and what stands under it, each read as a region of its own; the band's
+// sides are columns, or blocks in the region's column.
+function stacked(band: Band, items: Item[], graphics: Placed[], kind?: "blocks"): Band[] {
   const own = new Set([...band.left.items, ...band.right.items]);
   const ownGraphics = new Set([...band.left.graphics, ...band.right.graphics]);
   const top = Math.max(...[...own].map((i) => i.y));
-  const whole = (list: Item[], placed: Placed[]): Band => ({ left: { items: list, graphics: placed }, right: { items: [], graphics: [] }, separator: null });
+  const part = (list: Item[], placed: Placed[]): Band => ({ left: { items: list, graphics: placed }, right: { items: [], graphics: [] }, separator: null, kind: "part" });
   const rest = items.filter((i) => !own.has(i));
   const restGraphics = graphics.filter((p) => !ownGraphics.has(p));
   const high = (p: Placed) => (p.box.y1 + p.box.y2) / 2 > top;
   return [
-    whole(rest.filter((i) => i.y > top), restGraphics.filter(high)),
-    { ...band, separator: null },
-    whole(rest.filter((i) => i.y <= top), restGraphics.filter((p) => !high(p))),
+    part(rest.filter((i) => i.y > top), restGraphics.filter(high)),
+    { ...band, separator: null, kind },
+    part(rest.filter((i) => i.y <= top), restGraphics.filter((p) => !high(p))),
   ].filter((b) => b.left.items.length + b.left.graphics.length + b.right.items.length + b.right.graphics.length > 0);
+}
+
+// Blocks side by side, not a table's columns: two sides a wide gutter
+// apart (three ems or more) whose lines share a baseline once at most,
+// while a line of one side has no partner. A table's rows share their
+// baselines. The SF 298's foot, "NSN 7540-01-280-5500" beside "Standard
+// Form 298 (Rev. 2-89)" over "Prescribed by ANSI Std. 239-18", read as one
+// paragraph; the IRS W-9's three header boxes as one line.
+function isBlocks(band: Band, page: number): boolean {
+  const { left, right } = band;
+  if (left.items.length === 0 || right.items.length === 0 || [...left.items, ...right.items].some((i) => i.math)) return false;
+  const size = Math.max(...[...left.items, ...right.items].map((i) => i.size));
+  if (Math.min(...right.items.map((i) => i.x)) - Math.max(...left.items.map((i) => i.x + i.w)) < size * 3) return false;
+  const [a, b] = [buildLines(left.items, page), buildLines(right.items, page)];
+  const paired = a.filter((l) => b.some((m) => Math.abs(m.y - l.y) <= 0.5)).length;
+  return paired <= 1 && Math.max(a.length, b.length) > paired;
 }
 
 // A side of a split: a prose column, or columns of its own (a page of three

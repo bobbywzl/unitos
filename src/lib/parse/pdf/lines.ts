@@ -447,12 +447,20 @@ export function buildLines(items: Item[], page: number): Line[] {
     });
   const grouped: Item[][] = [];
   const anchors: Item[] = [];
+  // A line whose largest item is half again the size of the text beside it
+  // reaches no second baseline of that text: the IRS W-9's 24 pt "W-9" took
+  // the two lines of the title beside it, and the side box's, into one line.
+  const ownBaseline = (group: Item[], anchor: Item, item: Item) => {
+    if (anchor.size < item.size * 1.5) return true;
+    const kin = group.filter((i) => Math.abs(i.size - item.size) <= item.size * 0.25);
+    return kin.length === 0 || kin.some((i) => Math.abs(i.y - item.y) < item.size * 0.5);
+  };
   for (const item of sorted) {
     if (hangs(item)) continue;
     const last = grouped[grouped.length - 1];
     const anchor = anchors[anchors.length - 1];
     const tolerance = anchor ? Math.max(2, Math.max(anchor.size, item.size) * 0.5) : 0;
-    if (last && Math.abs(anchor.y - item.y) < tolerance) {
+    if (last && Math.abs(anchor.y - item.y) < tolerance && ownBaseline(last, anchor, item)) {
       last.push(item);
       if (item.size > anchor.size) anchors[anchors.length - 1] = item;
     } else {
