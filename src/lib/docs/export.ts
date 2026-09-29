@@ -407,22 +407,29 @@ function bulletLevels(glyph: string): ILevelsOptions[] {
     list's kind (toolbar/lists.ts lineLevel: the levels of the list that
     draws it, else the default's), its glyph format as Word's level text
     ("(%1)" for "(%0)"), a legal level's numbers above it as numbers, as the
-    page draws them. The list starts at its start at its own level. */
+    page draws them. A level that draws no marker (an empty bullet) is
+    Word's none, its words where the page sets them: at the level's left,
+    the first line at its own place, and no marker's hanging indent. The
+    list starts at its start at its own level. */
 function listLevels(list: RichNode, drawer: RichNode, depth: number, indents: ListIndent[] | null): ILevelsOptions[] {
   const widths = markerWidths(list, drawer, depth, []);
   return Array.from({ length: 9 }, (_, level) => {
     const glyph = lineLevel(drawer, level, list.type === "orderedList");
+    const none = "bullet" in glyph && glyph.bullet === "";
+    const indent = levelIndent(level, widths[level], indents);
     return {
       level,
-      ...("bullet" in glyph
-        ? { format: LevelFormat.BULLET, text: glyph.bullet }
-        : {
-            format: COUNTERS[glyph.counter],
-            text: glyph.format.replace(/%([0-8])/g, (_, k: string) => `%${Number(k) + 1}`),
-            isLegalNumberingStyle: /%\d.*%\d/.test(glyph.format) || undefined,
-          }),
+      ...(none
+        ? { format: LevelFormat.NONE, text: "", suffix: LevelSuffix.NOTHING }
+        : "bullet" in glyph
+          ? { format: LevelFormat.BULLET, text: glyph.bullet }
+          : {
+              format: COUNTERS[glyph.counter],
+              text: glyph.format.replace(/%([0-8])/g, (_, k: string) => `%${Number(k) + 1}`),
+              isLegalNumberingStyle: /%\d.*%\d/.test(glyph.format) || undefined,
+            }),
       start: level === depth ? Number(list.attrs?.start) || 1 : 1,
-      style: { paragraph: { indent: levelIndent(level, widths[level], indents) } },
+      style: { paragraph: { indent: none && !(indents && level < indents.length) ? { left: indent.left } : indent } },
     };
   });
 }
