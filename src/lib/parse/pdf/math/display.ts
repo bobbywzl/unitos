@@ -43,6 +43,8 @@ const MATH_WORDS = new Set([
 
 // A formula's relations and operators: a display states or applies one.
 const RELATION_RE = /[=<>≤≥≈∼≃≅≡≠∝≪≫≺≻→←↔⇒⇐⇔⟶⟹⟺↦∈∉∋⊂⊆⊃⊇∑∏∫∮⋀⋁⋃⋂+×∪∩⊕⊗∧∨]/;
+// A display's next row opens with its relation or its operator.
+const CONTINUES_RE = /^(:=|[=<>≤≥≈∼≃≅≡≠∝≪≫⇒⇔⟹⟺+−-])/;
 
 // ── Display lines on a TeX page ─────────────────────────────────────────────
 
@@ -558,12 +560,17 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       const limit = kinds[j] === "fragment" && prev.y - next.y <= size * 2.2 && attached(next, around(next, band), rules, edge(next), braces);
       // Rows a tall delimiter holds are one display, however far apart.
       const held = fences.some((f) => [prev, next].every((l) => l.y >= f.y1 && l.y <= f.y2 && l.x >= f.x2 - 1 && l.x - f.x2 < l.size * 3));
-      if ((prev.y - next.y > size * reach && !limit && !held) || prev.y < next.y) break;
+      const x1 = Math.min(...band.map((l) => l.x));
+      const x2 = Math.max(...band.map((l) => l.xEnd));
+      // A row that opens with a relation or an operator ("= …", "+ …") goes
+      // on the display over it, however far its sums set the rows apart:
+      // the owner's notes drew 6 such rows as displays of their own, and
+      // Springer's rows of a lone "+" stood apart from the crop they end.
+      const goesOn = kinds[j] === "math" && CONTINUES_RE.test(unlabeled(next).text.trim()) && prev.y - next.y <= size * 3.5 && next.x >= x1 - size;
+      if ((prev.y - next.y > size * reach && !limit && !held && !goesOn) || prev.y < next.y) break;
       // A display's lines sit side by side at most a few ems apart (a
       // fraction's numerator beside a big operator); a label at the margin
       // stands farther.
-      const x1 = Math.min(...band.map((l) => l.x));
-      const x2 = Math.max(...band.map((l) => l.xEnd));
       if (kinds[j] !== "label" && (next.xEnd < x1 - size * 6 || next.x > x2 + size * 6) && !band.every((l) => kinds[lines.indexOf(l)] === "label")) break;
       const label = kinds[j] === "label" || unlabeled(next).label !== null ? 1 : 0;
       if (labels + label > 1) break;

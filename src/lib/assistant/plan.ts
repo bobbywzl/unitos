@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { BlockKind } from "@/lib/block-kind";
-import { blockTakes, isWebAddress, keepsLines, type DocumentShape } from "@/lib/block-takes";
+import { blockTakes, isWebAddress, type DocumentShape } from "@/lib/block-takes";
 import type { TFunc } from "@/lib/i18n/dictionaries";
+import { REPLICA_REFUSAL, replicaEdit } from "@/lib/replica";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
 
 // The assistant's actions (SPEC.md §7): what the model proposes, validated
@@ -227,7 +228,8 @@ export type PlanContext = {
   edits: DocumentEdits;
   // Document.format: "slides", "sheets", or null.
   format: string | null;
-  blocks: { id: string; type: string; text: string }[];
+  // A slide's and a sheet's html is its replica, which the plan checks an edit against.
+  blocks: { id: string; type: string; text: string; html: string | null }[];
   // Every document attached to the project, the open one included.
   attachedIds: Set<string>;
   sectionIds: Set<string>;
@@ -338,8 +340,13 @@ export function enrichActions(
     if (action.type === "edit_block" || action.type === "remove_block") {
       if (!(action.type === "edit_block" ? blockTakes.words : blockTakes.removal)(block.type, shape)) {
         warnings.push(t("api.warnOnlyTextEdited", { description: action.description }));
-      } else if (action.type === "edit_block" && block.type === "SLIDE" && !keepsLines(block.text, action.newText)) {
-        warnings.push(t("api.warnSlideLines", { description: action.description }));
+      } else if (action.type === "edit_block" && (block.type === "SLIDE" || block.type === "SHEET")) {
+        // A slide's or a sheet's replica: the route's own check, run first.
+        const edited = replicaEdit(block.type, block.html ?? "", block.text, action.newText);
+        if ("refused" in edited) {
+          const reason = t(REPLICA_REFUSAL[edited.refused]);
+          warnings.push(t("api.warnReplica", { reason: reason.charAt(0).toLowerCase() + reason.slice(1), description: action.description }));
+        } else actions.push(action);
       } else actions.push(action);
       continue;
     }

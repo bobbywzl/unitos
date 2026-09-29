@@ -9,7 +9,7 @@ import { removeBlock, replaceBlockText, setBlockKind } from "@/lib/docs/ops";
 import { editRichText, importSharedResponse, isRichTextDocument } from "@/lib/docs/server";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import type { TKey } from "@/lib/i18n/dictionaries";
-import { replicaWithText, slidePicture, type ReplicaRefusal } from "@/lib/replica";
+import { REPLICA_REFUSAL, replicaEdit, sheetCutSchema, slidePicture, type SheetCut } from "@/lib/replica";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
@@ -39,13 +39,22 @@ const KIND_TO_BLOCK: Record<
 
 type StyleSpan = { start: number; end: number; style: string; quotedText: string };
 
-// Why a slide's or a sheet's replica does not take new words (lib/replica.ts).
-const REPLICA_REFUSAL: Record<ReplicaRefusal, TKey> = {
-  lines: "api.replicaLines",
-  fixed: "api.replicaFixed",
-  empty: "api.replicaEmpty",
-  stale: "api.replicaStale",
-};
+// The rows or columns a sheet edit took out, kept on the edit so Undo puts
+// them back; past this size they are not kept, and Undo builds them anew.
+const CUT_MAX = 100_000;
+
+/** What the block's last edit took out of its sheet, when this edit takes
+    that one back: the text goes back to the text before it. */
+async function cutTakenBack(block: { id: string; documentId: string; text: string }, text: string): Promise<SheetCut | null> {
+  const last = await db.blockEdit.findFirst({
+    where: { documentId: block.documentId, blockId: block.id, kind: "TEXT_EDIT" },
+    orderBy: { createdAt: "desc" },
+    select: { before: true, after: true, meta: true },
+  });
+  if (!last || last.before !== text || last.after !== block.text) return null;
+  const parsed = sheetCutSchema.safeParse((last.meta as Record<string, unknown> | null)?.cut);
+  return parsed.success ? parsed.data : null;
+}
 
 /** A list conversion's text, as the reader's edit toolbar writes it: into a
     list, every line takes its marker; out of one, the markers go. */
@@ -132,13 +141,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
 
   const newText = text;
   // A slide's or a sheet's replica takes the new words in place (SPEC.md
-  // §27: its DOM text stays the block's text); a slide whose words are not
-  // its words as parsed shows its replica, its picture held.
+  // §27: its DOM text stays the block's text), a sheet its rows and columns
+  // too; a slide whose words are not its words as parsed shows its replica,
+  // its picture held.
   let replicaHtml: string | null = null;
+  let replicaCut: SheetCut | null = null;
   if (replica) {
-    const edited = replicaWithText(block.html ?? "", block.text, newText);
+    const cut = block.type === "SHEET" ? await cutTakenBack(block, newText) : null;
+    const edited = replicaEdit(block.type, block.html ?? "", block.text, newText, cut);
     if ("refused" in edited) return NextResponse.json({ error: t(REPLICA_REFUSAL[edited.refused]) }, { status: 400 });
     replicaHtml = block.type === "SLIDE" ? slidePicture(edited.html, newText, block.originalText ?? block.text) : edited.html;
+    replicaCut = edited.cut && JSON.stringify(edited.cut).length <= CUT_MAX ? edited.cut : null;
   }
 
   // Remap every anchor on this block through the edit, the way Google Docs
@@ -190,6 +203,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
         kind: "TEXT_EDIT",
         before: block.text,
         after: newText,
+        ...(replicaCut ? { meta: { cut: replicaCut } } : {}),
         userId: access.user.id,
       },
     });

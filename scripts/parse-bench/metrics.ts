@@ -1512,9 +1512,11 @@ function indentSizes(ref: Flat, cand: Flat, al: Alignment): { score: number | nu
 /** Spacing: the space the reference measures under a paragraph or a list
     (to the next one below it in its column) and between a list's items,
     against its counterpart's, within 2 pt or a quarter. A block the
-    candidate runs into the next one is the paragraphs metric's, not counted
-    here. The legal packet's checkbox items and the Word report's list
-    paragraphs are spaced 4 to 6 pt; the page editor drew them tight. */
+    candidate runs into the next one is the paragraphs metric's, and a
+    block whose candidate says no space (a parse that measured none there;
+    the import always draws one) is not counted here. The legal packet's
+    checkbox items and the Word report's list paragraphs are spaced 4 to
+    6 pt; the page editor drew them tight. */
 function spacingScores(ref: Flat, cand: Flat, al: Alignment): { score: number | null; misses: PropertyMiss[] } {
   let total = 0;
   let right = 0;
@@ -1528,9 +1530,8 @@ function spacingScores(ref: Flat, cand: Flat, al: Alignment): { score: number | 
     if (block.kind !== "paragraph" && block.kind !== "list") return;
     const cb = al.owner[rb];
     const other = cb >= 0 ? cand.blocks[cb] : null;
-    if (block.spaceAfter !== undefined && (rb + 1 >= ref.blocks.length || al.owner[rb + 1] !== cb)) {
-      judge(rb, block.spaceAfter, other?.kind === "paragraph" || other?.kind === "list" ? other.spaceAfter : undefined, "after");
-    }
+    const said = other?.kind === "paragraph" || other?.kind === "list" ? other.spaceAfter : undefined;
+    if (block.spaceAfter !== undefined && said !== undefined && al.owner[rb + 1] !== cb) judge(rb, block.spaceAfter, said, "after");
     if (block.kind === "list" && block.itemSpace !== undefined) judge(rb, block.itemSpace, other?.kind === "list" ? (other.itemSpace ?? 0) : undefined, "between items");
   });
   return { score: total > 0 ? right / total : null, misses };

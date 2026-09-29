@@ -6,7 +6,7 @@
 // PDF points, y up; an em is a glyph's size.
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
-import { isItalicFont, type MathFamily } from "@/lib/parse/pdf/glyphs";
+import { isItalicFont, isUnreadMath, type MathFamily } from "@/lib/parse/pdf/glyphs";
 import { mathGlyph, type MathGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Box, Item } from "@/lib/parse/pdf/types";
 
@@ -157,7 +157,9 @@ const CM_NAME_RE = /cm(r|mi|mib|sy|bsy|ex|bx|ti|ss|tt|sl)\d/i;
 
 function textAtom(g: Glyph): Atom | null {
   const ch = g.unicode;
-  if (!TEXT_CHAR_RE.test(ch) || CM_NAME_RE.test(g.base)) return null;
+  // A math font's glyph no table reads (MathTime's big parenthesis) is no
+  // text: read as a small one, it made a row of its own over its formula.
+  if (!TEXT_CHAR_RE.test(ch) || CM_NAME_RE.test(g.base) || isUnreadMath(g)) return null;
   const [height, depth] = /[gjpqy]/.test(ch)
     ? [0.45, 0.22]
     : /[acemnorsuvwxz]/.test(ch)
@@ -985,8 +987,10 @@ function linearAt(input: Atom[]): string {
       const mid = (a.x1 + main[end].x2) / 2;
       const half = (main[end].x2 - a.x1) / 2 + 0.4 * em;
       // A limit hangs wholly under the name's baseline; an inline subscript
-      // reaches above it. It grows along its own baseline.
-      const under = small.filter((s) => !s.claimed && s.top < a.yb - 0.15 * em);
+      // reaches above it. Its baseline alone says so where its box is a
+      // guess (a text font's "t" under Times' "lim" read as the subscript of
+      // the "=" before it, Springer). It grows along its own baseline.
+      const under = small.filter((s) => !s.claimed && (s.top < a.yb - 0.15 * em || s.yb < a.yb - 0.45 * em));
       const low = under.filter((s) => Math.abs(cx(s) - mid) < half);
       for (let added = low.length > 0; added; ) {
         added = false;
@@ -1062,7 +1066,9 @@ function linearAt(input: Atom[]): string {
     else if (spaced) out.push("\\quad");
     // A word space after a comma between formulas set in one display
     // ("m(0) = 1/5, m(1) = 2/5"): TeX's own space there is a sixth of an em.
-    else if (prev?.cls === "punct" && gap > 0.4 * em) out.push("\\ ");
+    // Two digits set apart are two numbers: a matrix row's "−1 1" read as
+    // −11 (Springer).
+    else if ((prev?.cls === "punct" && gap > 0.4 * em) || (prev && /^[0-9]$/.test(prev.tex) && /^[0-9]$/.test(a.tex) && gap > 0.2 * em)) out.push("\\ ");
     if (a.fracPart !== undefined && nesting === 1) {
       if (style.display && a.fracPart < style.size * 0.8) tex = tex.replace(/^\\frac/, "\\tfrac");
       else if (!style.display && a.fracPart >= style.size * 0.9) tex = tex.replace(/^\\frac/, "\\dfrac");

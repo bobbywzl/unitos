@@ -202,6 +202,11 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
   const { text, runs } = joinGroup(run);
   const flat = text.replace(/\n/g, " ");
   const prose = /[.!?]$/.test(flat.trim()) && [...flat].length > 80;
+  // A numbered sentence set large is an exercise, an item of its list
+  // (OpenStax's "6.2 Fill in the blanks.", "6.4 In 2012, … took the SAT
+  // exam. The …", read as headings among its sections "6.1 | …").
+  const sentence = /[.!?]$/.test(flat.trim()) || /\p{Ll}{3,}\.\s+\p{Lu}/u.test(flat);
+  if (marker && marker.family !== "bullet" && sentence && flat.slice(marker.length).trim().split(/\s+/).length >= 3) return null;
   // A quotation set large, in its quote marks, is a quote (a slide's 20 pt
   // quotation read as a heading).
   const quoted = /^[“"‘]/.test(flat.trim()) && /(?:[”"’][.!?]?|[.!?][”"’])$/.test(flat.trim());
@@ -480,6 +485,9 @@ function numberedHeading(lines: Line[], i: number, ctx: PageContext, runOf: numb
     (styled && below.x > last.x + last.size && last.xEnd < below.xEnd - last.size * 3);
   if (!isolated) return null;
   const { text, runs } = headingText(run, centered);
+  // A question or two sentences under a number are an exercise, no heading
+  // (OpenStax's "6.1 What is the z-score of x…?").
+  if (/[?!]$/.test(text.trim()) || /\p{Ll}{3,}\.\s+\p{Lu}/u.test(text)) return null;
   return { segments: [headingOf(run, text, runs)], next: j };
 }
 
