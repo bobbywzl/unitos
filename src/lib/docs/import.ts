@@ -108,6 +108,9 @@ export type ImportInput = {
   bodyFont?: TextFont;
   titleFont?: TextFont;
   titleAlign?: "center" | "right";
+  /** The title's lines where the writer broke it (a PDF's): the Title
+      keeps the break. */
+  titleLines?: string[];
 };
 
 export type ImportResult = {
@@ -1041,7 +1044,11 @@ class Converter {
     // masthead, byline, or first heading centers it.
     const align = this.input.titleAlign ?? (this.input.titleFont ? null : centered ? "center" : null);
     if (align) attrs.textAlign = align;
-    this.push(paragraphNode(this.titleContent(inline({ text: title, spans: [], starts })), attrs));
+    // The writer's line breaks stay in the Title (two centered lines), when
+    // its lines are the title's words.
+    const lines = this.input.titleLines;
+    const text = lines && lines.join(" ").replace(/\s+/g, " ").trim() === title ? lines.join("\n") : title;
+    this.push(paragraphNode(this.titleContent(inline({ text, spans: [], starts })), attrs));
   }
 
   private block(block: ParsedBlock, index: number, isTitle: boolean) {

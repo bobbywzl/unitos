@@ -201,6 +201,10 @@ export type ParsedDocument = {
   bodyFont?: TextFont;
   titleFont?: TextFont;
   titleAlign?: "center" | "right";
+  // PDF parses: the title's lines where the writer broke it (a title set as
+  // two centered lines), when it has more than one. `title` stays one line:
+  // it is the document's name.
+  titleLines?: string[];
 };
 
 /** Document.references as stored Json → typed entries. Defensive: bad rows drop. */

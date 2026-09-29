@@ -582,10 +582,12 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   if (bodyFont) parsed.bodyFont = bodyFont;
   if (titleFont) parsed.titleFont = titleFont;
   if (titleSegment?.align) parsed.titleAlign = titleSegment.align;
+  const titleLines = titleSegment?.text.split(/\s*\n\s*/).map((line) => line.trim()).filter(Boolean) ?? [];
+  if (titleLines.length > 1) parsed.titleLines = titleLines;
   return parsed;
 }
 
-type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign">;
+type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign" | "titleLines">;
 
 // A page's items and drawing moved by the page box's corner, so (0, 0) is
 // the box's bottom left. The corner is rounded to whole steps of 2^-20 pt:
