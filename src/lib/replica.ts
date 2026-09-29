@@ -403,6 +403,7 @@ const NUMBER = /^(?:[-+(]?[$€£¥]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?%?\)?|\d
 function bare(model: Element, frozen: "sheet-fr" | "sheet-fc"): Element {
   const el = model.cloneNode(false) as Element;
   el.removeAttribute("title");
+  el.removeAttribute("data-fmt");
   el.classList.remove(frozen);
   const style = el.getAttribute("style");
   if (style !== null) {
@@ -820,7 +821,7 @@ function gridFormulas(grid: Grid, words: string[][]) {
       const formula = slot?.origin ? slot.td.getAttribute("title") : null;
       if (!formula?.startsWith("=")) return;
       const value = computeFormula(formula, get);
-      out.push({ r, c, formula, shown: words[r][c], format: value === undefined ? null : formulaFormat(words[r][c], value) });
+      out.push({ r, c, formula, shown: words[r][c], format: value === undefined ? null : formulaFormat(words[r][c], value, slot!.td.getAttribute("data-fmt")) });
     }),
   );
   return out;
@@ -906,15 +907,24 @@ export function sheetWithText(html: string, prev: string, next: string, cut: She
     const shape = (text: string) => text.split("\n").map((r) => r.split("\t").length).join(",");
     if (shape(prev) !== shape(next)) return { refused: "grid" };
     const edited = replicaWithText(html, prev, next);
-    return "refused" in edited ? edited : { html: cellClasses(html, edited.html), cut: null };
+    if ("refused" in edited) return edited.refused === "lines" ? { refused: "grid" } : edited;
+    return { html: cellClasses(html, edited.html), cut: null };
   }
   // A chart's data under its drawing stays.
   if (!next.endsWith(tail)) return { refused: "fixed" };
   const nextGrid = next.slice(0, next.length - tail.length);
-  let now = rowsIn(nextGrid, grid.width);
+  // The new grid: as wide as the old (its rows may change), else another
+  // width with as many rows. A cell's words with a line break that the new
+  // text keeps stay in one cell: a reading that splits them is not the grid.
+  const breaks = was.flat().filter((cell) => cell.includes("\n") && nextGrid.includes(cell));
+  const read = (w: number) => {
+    const rows = w > 0 ? rowsIn(nextGrid, w) : null;
+    return rows && breaks.every((b) => rows.some((r) => r.some((cell) => cell.includes(b)))) ? rows : null;
+  };
+  let now = read(grid.width);
   for (let d = 1; !now && d <= 20; d++) {
     for (const w of [grid.width + d, grid.width - d]) {
-      const rows: string[][] | null = w > 0 && !now ? rowsIn(nextGrid, w) : null;
+      const rows: string[][] | null = now ? null : read(w);
       if (rows && rows.length === was.length) now = rows;
     }
   }
@@ -926,16 +936,18 @@ export function sheetWithText(html: string, prev: string, next: string, cut: She
     if ("refused" in reshaped) return reshaped;
     shaped = reshaped;
   }
-  // Each formula stands where its cell went; the references of the ones the
-  // sheet computes move with their cells.
+  // Each formula stands where its cell went, its references moved with
+  // their cells.
   const moved: { r: number; c: number; formula: string; was: string; format: string | null; shown: string }[] = [];
   for (const f of formulas) {
     const r = shaped.row(f.r);
     const c = shaped.col(f.c);
     if (r === null || c === null) continue;
-    const formula = f.format === null ? f.formula : movedFormula(f.formula, shaped.row, shaped.col);
-    if (formula === null) return { refused: "reads" };
-    moved.push({ r, c, formula, was: f.formula, format: f.format, shown: f.shown });
+    // A formula the sheet computes cannot lose a cell it reads; any other
+    // keeps its text when its references cannot move.
+    const formula = movedFormula(f.formula, shaped.row, shaped.col);
+    if (formula === null && f.format !== null) return { refused: "reads" };
+    moved.push({ r, c, formula: formula ?? f.formula, was: f.formula, format: f.format, shown: f.shown });
   }
   const titled = withCells(
     shaped.html,
@@ -946,7 +958,8 @@ export function sheetWithText(html: string, prev: string, next: string, cut: She
   const current = gridWords(readGrid(titled)!);
   const words = now.map((cells, r) => cells.map((w, c) => (formulaAt(r, c) ? current[r][c] : w)));
   const edited = replicaWithText(titled, readReplica(titled).text, joinRows(words) + tail);
-  if ("refused" in edited) return edited;
+  // A line break or a tab a cell's words gain or lose leaves the grid.
+  if ("refused" in edited) return edited.refused === "lines" ? { refused: "grid" } : edited;
   const computed = formulaWords(
     edited.html,
     moved.flatMap((m) => (m.format === null ? [] : [{ r: m.r, c: m.c, formula: m.formula, format: m.format }])),

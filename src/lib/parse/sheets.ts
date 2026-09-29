@@ -83,7 +83,10 @@ type CellStyle = {
   borders?: { top: Border; right: Border; bottom: Border; left: Border };
 };
 
-type Cell = { text: string; kind: CellKind; styleId: number | null; href?: string; formula?: string; number?: number };
+// A formula's cell keeps its number format (a code or a built-in id): the
+// reader's sheet computes the formula again and shows its value in it
+// (lib/replica.ts, lib/sheet-formulas.ts).
+type Cell = { text: string; kind: CellKind; styleId: number | null; href?: string; formula?: string; format?: string | number; number?: number };
 
 type Row = { cells: Cell[]; heightPt: number | null };
 
@@ -868,7 +871,8 @@ function readCell(c: Element, shared: string[], styles: Styles, date1904: boolea
   const styleId = intAttr(c, "s");
   const v = child(c, "v")?.textContent ?? "";
   const formula = child(c, "f")?.textContent?.trim() || undefined;
-  const base = { styleId, formula };
+  const format = formula && styleId !== null ? styles.numFmts[styleId] : undefined;
+  const base = { styleId, formula, ...(format !== undefined && format !== 0 && format !== "General" ? { format } : {}) };
   switch (type) {
     case "s": {
       const text = shared[Number(v)] ?? "";
@@ -1181,6 +1185,7 @@ function renderGrid(sheet: Sheet, workbook: Workbook): { text: string; html: str
         span && span.cols > 1 ? ` colspan="${span.cols}"` : "",
         span && span.rows > 1 ? ` rowspan="${span.rows}"` : "",
         cell.formula ? ` title="=${escapeHtml(cell.formula)}"` : "",
+        cell.formula && cell.format !== undefined ? ` data-fmt="${escapeHtml(String(cell.format))}"` : "",
       ].join("");
       const content = cell.href
         ? `<a href="${escapeHtml(cell.href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(cell.text)}</a>`

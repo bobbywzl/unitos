@@ -10,7 +10,7 @@ import * as ssf from "ssf";
 // percent, and SUM, AVERAGE, MIN, MAX, COUNT, COUNTA, PRODUCT, ROUND, ABS,
 // and IF. A formula is computed only when this reading gives back its stored
 // value in a format that shows it as it shows (`formulaFormat`); any other
-// keeps its value and its text.
+// keeps its value, and its references move with their cells when they can.
 
 export type CellValue = number | string | boolean | { error: string } | null;
 
@@ -375,7 +375,7 @@ export function cellValue(shown: string): CellValue {
   if (text === "") return null;
   if (text === "TRUE" || text === "FALSE") return text === "TRUE";
   if (/^#(?:DIV\/0!|N\/A|VALUE!|REF!|NAME\?|NUM!|NULL!)$/.test(text)) return { error: text };
-  const m = /^(\()?([-+])?([$€£¥])?([-+])?(\d{1,3}(?:,\d{3})+|\d*)(\.\d*)?(?:[eE]([-+]?\d+))?(%)?(\))?$/.exec(text.replace(/ /g, " ").replace(/ /g, ""));
+  const m = /^(\()?([-+])?([$€£¥])?([-+])?(\d{1,3}(?:,\d{3})+|\d*)(\.\d*)?(?:[eE]([-+]?\d+))?(%)?(\))?$/.exec(text.replace(/\u00a0/g, " ").replace(/ /g, ""));
   if (!m || (m[5] === "" && !m[6]) || Boolean(m[1]) !== Boolean(m[9])) return shown;
   const [, open, sign1, , sign2, int, dec, exp, pct] = m;
   let n = Number(`${int.replace(/,/g, "") || "0"}${dec ?? ""}${exp ? `e${exp}` : ""}`);
@@ -385,20 +385,24 @@ export function cellValue(shown: string): CellValue {
   return n;
 }
 
-/** The format that shows `value` as `shown` — General, or a number format
-    read from the shown text (its grouping, decimals, currency, percent,
-    parentheses for a negative) — or null when none does. */
-export function formulaFormat(shown: string, value: CellValue): string | null {
+/** The format that shows `value` as `shown`, or null when none does: the
+    cell's own (`hint`, the file's number format), else a number format read
+    from the shown text (its grouping, decimals, currency, percent,
+    parentheses for a negative) or General — the read one first when the
+    text shows it (a trailing zero, a grouping, a percent, a currency). */
+export function formulaFormat(shown: string, value: CellValue, hint: string | null = null): string | null {
   if (value === null) return shown === "" || shown === "0" ? "General" : null;
   if (typeof value !== "number") return toText(value) === shown ? "General" : null;
-  const tries = ["General"];
+  const read: string[] = [];
   const m = /^\(?-?([$€£¥])?-?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?(%)?\)?$/.exec(shown.trim());
   if (m) {
     const [, currency, int, dec, pct] = m;
     const body = `${int.includes(",") ? "#,##0" : "0"}${dec ? `.${"0".repeat(dec.length)}` : ""}${pct ? "%" : ""}`;
     const positive = currency ? `"${currency}"${body}` : body;
-    tries.push(positive, `${positive};(${positive})`);
+    read.push(positive, `${positive};(${positive})`);
   }
+  const shows_ = m && (m[1] || m[2].includes(",") || m[3]?.endsWith("0") || m[4] || shown.trim().startsWith("("));
+  const tries = [...(hint ? [hint] : []), ...(shows_ ? [...read, "General"] : ["General", ...read])];
   return tries.find((code) => shows(code, value) === shown) ?? null;
 }
 
@@ -444,8 +448,10 @@ export function movedFormula(formula: string, row: (r: number) => number | null,
     }
     return null;
   };
-  const write = (ref: Extract<Token, { t: "ref" }>, r: number, c: number) =>
-    splices.push({ start: ref.start, end: ref.end, text: `${ref.colFixed ? "$" : ""}${letters(c)}${ref.rowFixed ? "$" : ""}${r + 1}` });
+  // A reference that stays where it was keeps its text.
+  const write = (ref: Extract<Token, { t: "ref" }>, r: number, c: number) => {
+    if (r !== ref.r || c !== ref.c) splices.push({ start: ref.start, end: ref.end, text: `${ref.colFixed ? "$" : ""}${letters(c)}${ref.rowFixed ? "$" : ""}${r + 1}` });
+  };
   for (let k = 0; k < list.length; k++) {
     const t = list[k];
     if (t.t !== "ref") continue;
