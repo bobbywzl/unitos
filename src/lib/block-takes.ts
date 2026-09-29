@@ -8,12 +8,14 @@ import { db } from "@/lib/db";
 // Words change in a text block and in a transcript line. A format changes
 // in a paragraph, a heading, a list, or code; a page, a transcript line, or
 // an equation never turns into another kind. A text block, a transcript
-// line, a line, or a page may go: the restore route brings each back whole.
-// A style or a web link goes on a text block's words. Nothing changes a
-// video's player, a slide, a sheet, a table, or a figure. A sheets document
-// keeps its sheet names (the HEADING before each sheet). A slides, sheets,
-// or media document takes no new block, and no block moves in one; in a
-// handwritten document a new block goes after the last page.
+// line, or a line may go: the restore route brings each back whole. A page
+// stays: Convert again writes the text after as many orders as there are
+// pages (lib/handwritten/convert.ts), so a page gone would put text among
+// the pages. A style or a web link goes on a text block's words. Nothing
+// changes a video's player, a slide, a sheet, a table, or a figure. A
+// sheets document keeps its sheet names (the HEADING before each sheet). A
+// slides, sheets, or media document takes no new block, and no block moves
+// in one; in a handwritten document a new block goes after the last page.
 
 /** A document's format (Document.format: slides, sheets, or null), and
     whether it is a video's or an audio's (a VIDEO or TRANSCRIPT block). */
@@ -21,7 +23,7 @@ export type DocumentShape = { format: string | null; media: boolean };
 
 export const TEXT_BLOCKS: ReadonlySet<string> = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
 const WORDS = new Set([...TEXT_BLOCKS, "TRANSCRIPT"]);
-const REMOVABLE = new Set([...WORDS, "SEPARATOR", "PAGE"]);
+const REMOVABLE = new Set([...WORDS, "SEPARATOR"]);
 const FORMATS = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);
 // Blocks that hold their place: none moves, and none goes before the first.
 const FIXED = new Set(["PAGE", "VIDEO", "TRANSCRIPT", "SLIDE", "SHEET"]);

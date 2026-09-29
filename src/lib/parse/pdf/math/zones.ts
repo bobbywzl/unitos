@@ -13,6 +13,7 @@ import { isUnicodeMathFont } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { braceLabelBoxes, type Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
+import { wholeChars } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, MathZone, Run } from "@/lib/parse/pdf/types";
 import type { MathSpan } from "@/lib/parse/types";
 
@@ -170,7 +171,11 @@ function charSpans(item: Item): [number, number][] {
     let end: number;
     if (read !== "" && item.str.startsWith(read, i)) end = i + read.length;
     else if (read === "" || g.w <= g.size * 0.01) end = i;
-    else end = Math.min(item.str.length, i + 1);
+    // One glyph, one character, and a character past the Basic Multilingual
+    // Plane is two UTF-16 units: Cambria Math's 𝑝 reads "𝑝𝑝" in the text
+    // layer, and a cut one unit in began the NPS thesis's formulas with half
+    // a letter (the import's save failed).
+    else end = Math.min(item.str.length, i + ((item.str.codePointAt(i) ?? 0) > 0xffff ? 2 : 1));
     spans.push([i, end]);
     i = end;
   }
@@ -430,6 +435,7 @@ export function mathSpans(text: string, runs: Run[] | undefined): MathSpan[] {
     let { start, end } = s;
     while (start < end && /\s/.test(text[start])) start++;
     while (end > start && /\s/.test(text[end - 1])) end--;
+    ({ start, end } = wholeChars(text, start, end));
     const latex = s.zones.map((z) => z.latex).join(" ");
     // A formula a text word cut in two ("m(" and ") = m(" around HH) reads
     // as two formulas with a bracket each: both stay text.

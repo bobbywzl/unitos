@@ -272,7 +272,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
     }
     return NextResponse.json({ ok: true, editId: result.removedEdits[blockId] ?? null });
   }
-  // A video's player and a sheet's name stay (lib/block-takes.ts).
+  // A page, a video's player, and a sheet's name stay (lib/block-takes.ts).
   if (!blockTakes.removal(block.type, await documentShape(block.documentId))) {
     return NextResponse.json({ error: t("api.onlyTextBlocksRemoved") }, { status: 400 });
   }

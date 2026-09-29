@@ -58,6 +58,12 @@ export type StyleSpan = {
 // half point, bold, italic, and the color (#rrggbb; none for black).
 export type TextFont = { family: string; size: number; bold?: true; italic?: true; color?: string };
 
+// An indent as the page sets it, in points, the way the page editor stores a
+// paragraph's (indentLeft, indentFirstLine): left, how far in from the
+// column's left edge the lines start; first, where the first line starts
+// against them (a first-line indent; negative, a hanging indent).
+export type Indent = { left: number; first: number };
+
 // One inline formula over block plain text: the text keeps the formula's
 // readable characters (σ(𝒜α)), latex is the formula (\sigma(\mathcal{A}_\alpha)).
 // A block document draws the text; an import turns the span into an inline
@@ -126,6 +132,15 @@ export type ParsedBlock = {
   // blank line, a Word paragraph's space after); absent where a figure, a
   // table, or the page's end follows. The import's space after.
   spaceAfter?: number;
+  // PDF paragraphs: the indent the page sets; absent where every line starts
+  // at the column's edge. The html's indent token names its kind.
+  indent?: Indent;
+  // PDF lists: each depth's indent (an item's marker stands at left + first,
+  // its wrapped lines at left), and the space the page leaves between two
+  // items beyond the line pitch, in points (absent: none). A list's
+  // alignment is a token of its html, as a paragraph's.
+  listIndents?: Indent[];
+  itemSpace?: number;
   // URL blocks, in memory only: the id of the element the block came from
   // (its own id, or the id of a wrapper whose first block it is), the target
   // a contents entry's targetFragment resolves against. Stripped before save.

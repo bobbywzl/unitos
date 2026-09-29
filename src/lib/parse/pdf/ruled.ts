@@ -28,7 +28,7 @@ import {
   type TableCell,
   type TableRow,
 } from "@/lib/parse/pdf/tables";
-import { escapeHtml, isMonoLine, joinGroup } from "@/lib/parse/pdf/text";
+import { escapeHtml, insidePair, isMonoLine, joinGroup } from "@/lib/parse/pdf/text";
 import type { Box, Cell, Item, Line, MathZone, Run, Segment, TableRegion } from "@/lib/parse/pdf/types";
 
 // What the ruled tables read of a page's drawing.
@@ -1170,6 +1170,8 @@ function splitAt(it: Item, cuts: number[]): Item[] {
       }
     }
     to = Math.max(from, Math.min(n, to));
+    // A share of the width counts UTF-16 units: a cut never halves a character.
+    if (insidePair(it.str, to)) to += 1;
     const str = it.str.slice(from, to);
     const words = str.trim();
     if (words.length > 0) {
