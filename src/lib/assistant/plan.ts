@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { BlockKind } from "@/lib/block-kind";
+import { blockTakes, isWebAddress, type DocumentShape } from "@/lib/block-takes";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
 
@@ -9,6 +11,8 @@ import type { AssistantAction, AssistantAnchor } from "@/lib/types";
 // approves the plan in the plan card before anything runs.
 
 const DESCRIPTION_MAX = 300;
+// A text block's format (lib/block-kind.ts).
+const BLOCK_KINDS = ["paragraph", "h1", "h2", "h3", "list", "numbered"] as const satisfies readonly BlockKind[];
 // The suggest route's own caps (app/api/documents/[documentId]/suggest).
 const INSTRUCTION_MAX = 4000;
 const BLOCK_IDS_MAX = 200;
@@ -25,8 +29,10 @@ export const actionSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("insert_paragraph"),
-    afterBlockId: z.string().min(1),
+    // null: the document's start.
+    afterBlockId: z.string().min(1).nullable(),
     text: z.string().min(1).max(50_000),
+    kind: z.enum(BLOCK_KINDS).optional(),
     description,
   }),
   z.object({ type: z.literal("remove_block"), blockId: z.string().min(1), description }),
@@ -59,24 +65,40 @@ export const actionSchema = z.discriminatedUnion("type", [
     type: z.literal("link"),
     blockId: z.string().min(1),
     quote,
-    toDocumentId: z.string().min(1),
+    // Another attached document, or a web address: one of the two.
+    toDocumentId: z.string().min(1).optional(),
+    href: z.string().min(1).max(2_000).optional(),
     description,
   }),
   z.object({
     type: z.literal("format_block"),
     blockId: z.string().min(1),
-    kind: z.enum(["paragraph", "h1", "h2", "h3"]),
+    kind: z.enum(BLOCK_KINDS),
     description,
   }),
   z.object({
     type: z.literal("style"),
     blockId: z.string().min(1),
     quote,
-    style: z.enum(["bold", "italic"]),
+    style: z.enum(["bold", "italic", "underline"]),
+    description,
+  }),
+  z.object({
+    type: z.literal("move_block"),
+    blockId: z.string().min(1),
+    afterBlockId: z.string().min(1).nullable(),
     description,
   }),
   z.object({
     type: z.literal("suggest"),
+    instruction: z.string().min(1).max(INSTRUCTION_MAX),
+    blockIds: z.array(z.string().min(1).max(64)).min(1).max(BLOCK_IDS_MAX).optional(),
+    description,
+  }),
+  // A document without rich text: the edits of many blocks, found part by
+  // part (lib/assistant/revise.ts), for the plan card.
+  z.object({
+    type: z.literal("revise"),
     instruction: z.string().min(1).max(INSTRUCTION_MAX),
     blockIds: z.array(z.string().min(1).max(64)).min(1).max(BLOCK_IDS_MAX).optional(),
     description,
@@ -108,13 +130,13 @@ function clip(text: string, max: number): string {
     description takes its instruction's words. */
 function lenient(item: unknown): unknown {
   if (!item || typeof item !== "object" || Array.isArray(item)) return item;
-  const fields: Record<string, unknown> = Object.fromEntries(Object.entries(item).filter(([, value]) => value !== null));
+  const fields: Record<string, unknown> = Object.fromEntries(Object.entries(item).filter(([key, value]) => value !== null || key === "afterBlockId"));
   const ids = Array.isArray(fields.blockIds) ? [...new Set(fields.blockIds.filter((id) => typeof id === "string" && id))] : [];
   if (ids.length > 0 && ids.length <= BLOCK_IDS_MAX) fields.blockIds = ids;
   else delete fields.blockIds;
   if (typeof fields.instruction === "string") fields.instruction = clip(fields.instruction, INSTRUCTION_MAX);
   if (typeof fields.description === "string") fields.description = clip(fields.description, DESCRIPTION_MAX);
-  if (fields.type === "suggest" && !fields.description && typeof fields.instruction === "string") {
+  if ((fields.type === "suggest" || fields.type === "revise") && !fields.description && typeof fields.instruction === "string") {
     fields.description = clip(fields.instruction, DESCRIPTION_MAX);
   }
   return fields;
@@ -148,19 +170,23 @@ export const actionsSchema = z.unknown().transform(readActions);
 // The action types as the prompts list them: one line per type, the same
 // lines for the selection chat and the sidebar assistant.
 const ACTION_LINES: Record<RawAction["type"], string> = {
-  edit_block: "- edit_block {blockId, newText, description} — replace a block's text.",
-  insert_paragraph: "- insert_paragraph {afterBlockId, text, description} — add a paragraph after a block.",
+  edit_block:
+    "- edit_block {blockId, newText, description} — replace a block's text. A LIST block's text is its lines, each with its marker (- or 1.) and two spaces per level of nesting: a line nests or unnests by its spaces.",
+  insert_paragraph: '- insert_paragraph {afterBlockId, text, kind?: "paragraph"|"h1"|"h2"|"h3"|"list"|"numbered", description} — add a block after a block; afterBlockId null adds it at the document\'s start; a paragraph when kind is left out.',
   remove_block: "- remove_block {blockId, description} — delete a block.",
   highlight: '- highlight {blockId, quote, color: "clay"|"sage"|"gold"|"plum", comment?, description} — highlight exact text.',
   comment: "- comment {blockId, quote, comment, description} — annotate exact text with a note.",
   add_note:
     "- add_note {content, sectionId? or sectionTitle?, blockId?, quote?, description} — a note in the notebook. Cite the passage via blockId + quote when the note comes from the text. A new sectionTitle creates the section.",
   add_section: "- add_section {title, description} — an empty section.",
-  link: "- link {blockId, quote, toDocumentId, description} — hyperlink exact text to another attached document.",
-  format_block: '- format_block {blockId, kind: "paragraph"|"h1"|"h2"|"h3", description} — change a block\'s heading level.',
-  style: '- style {blockId, quote, style: "bold"|"italic", description} — bold or italicize exact text.',
+  link: "- link {blockId, quote, toDocumentId? or href?, description} — hyperlink exact text to another attached document (toDocumentId) or to a web address (href).",
+  format_block: '- format_block {blockId, kind: "paragraph"|"h1"|"h2"|"h3"|"list"|"numbered", description} — change a block\'s format: a paragraph, a heading level, or a list.',
+  style: '- style {blockId, quote, style: "bold"|"italic"|"underline", description} — bold, italicize, or underline exact text.',
+  move_block: "- move_block {blockId, afterBlockId, description} — move a block after another block; afterBlockId null moves it to the document's start.",
   suggest:
     "- suggest {instruction, blockIds?, description} — change the document's words or styles. The changes land in the document as suggestions the reader accepts or rejects. instruction: every change to make and where, in plain words, under 150 words; the suggestions write the new words, so never copy the changed text into it. blockIds: the blocks to change, only when the change concerns some blocks and not the selection or the whole document; a heading stands for its section. Leave blockIds out for the whole document.",
+  revise:
+    "- revise {instruction, blockIds?, description} — a change to many blocks at once: the spelling or grammar across the document, its register, a section rewritten. The document is read part by part, and the edit of each block comes to the plan card. instruction: every change to make and where, in plain words, under 150 words; never the changed text itself. blockIds: the blocks to change, only when the change concerns some blocks; a heading stands for its section. Leave blockIds out for the whole document.",
 };
 
 /** How the assistant changes the open document: with the block actions (an
@@ -171,18 +197,19 @@ export type DocumentEdits = "blocks" | "suggestions" | "none";
 
 // The block actions change an article's blocks outright. In a document with
 // rich text the assistant's changes are suggestions instead.
-const BLOCK_ACTIONS: ReadonlySet<RawAction["type"]> = new Set(["edit_block", "insert_paragraph", "remove_block", "format_block", "style"]);
+const BLOCK_ACTIONS: ReadonlySet<RawAction["type"]> = new Set(["edit_block", "insert_paragraph", "remove_block", "format_block", "style", "move_block", "revise"]);
 const fitsDocument = (type: RawAction["type"], edits: DocumentEdits): boolean =>
   type === "suggest" ? edits === "suggestions" : !BLOCK_ACTIONS.has(type) || edits === "blocks";
 
 /** The action types as the prompts list them, one line per type: on a
     document with rich text, suggest in place of the block actions; on a
-    document that takes no edits, neither. */
-export function actionLines(edits: DocumentEdits): string[] {
-  return (Object.keys(ACTION_LINES) as RawAction["type"][]).filter((type) => fitsDocument(type, edits)).map((type) => ACTION_LINES[type]);
+    document that takes no edits, neither. revise only where the route runs
+    it: the sidebar assistant (`sidebar`). */
+export function actionLines(edits: DocumentEdits, sidebar = false): string[] {
+  return (Object.keys(ACTION_LINES) as RawAction["type"][])
+    .filter((type) => fitsDocument(type, edits) && (sidebar || type !== "revise"))
+    .map((type) => ACTION_LINES[type]);
 }
-
-export const TEXT_TYPES = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
 
 export function buildAnchor(blockText: string, quoteText: string, blockId: string): AssistantAnchor | null {
   const start = blockText.indexOf(quoteText);
@@ -201,6 +228,8 @@ export function buildAnchor(blockText: string, quoteText: string, blockId: strin
 export type PlanContext = {
   documentId: string;
   edits: DocumentEdits;
+  // Document.format: "slides", "sheets", or null.
+  format: string | null;
   blocks: { id: string; type: string; text: string }[];
   // Every document attached to the project, the open one included.
   attachedIds: Set<string>;
@@ -208,16 +237,16 @@ export type PlanContext = {
   t: TFunc;
 };
 
-type SuggestAction = Extract<RawAction, { type: "suggest" }>;
+type CommandAction = Extract<RawAction, { type: "suggest" | "revise" }>;
 
-/** Several suggest actions as the one a message runs (SPEC.md §29): their
-    instructions in order, one per line, and the blocks of them all; one
-    that names no blocks covers the whole document. */
-function joinSuggest(list: SuggestAction[]): SuggestAction {
+/** Several suggest (or revise) actions as the one a message runs (SPEC.md
+    §29): their instructions in order, one per line, and the blocks of them
+    all; one that names no blocks covers the whole document. */
+function joinCommands(list: CommandAction[]): CommandAction {
   if (list.length === 1) return list[0];
   const blockIds = list.every((a) => a.blockIds) ? [...new Set(list.flatMap((a) => a.blockIds ?? []))] : [];
   return {
-    type: "suggest",
+    type: list[0].type,
     instruction: clip(list.map((a) => a.instruction).join("\n"), INSTRUCTION_MAX),
     ...(blockIds.length > 0 && blockIds.length <= BLOCK_IDS_MAX ? { blockIds } : {}),
     description: clip(list.map((a) => a.description).join(" "), DESCRIPTION_MAX),
@@ -226,95 +255,101 @@ function joinSuggest(list: SuggestAction[]): SuggestAction {
 
 /** Validate and enrich every action against the real document, so the client
     executes ready-made requests. Invalid actions become warnings, never
-    writes; so does each action the model wrote that did not read. */
+    writes; so does each action the model wrote that did not read. A change
+    to the document's blocks goes through the rule the block routes read
+    (lib/block-takes.ts). */
 export function enrichActions(
   read: ReadActions,
   ctx: PlanContext,
 ): { actions: AssistantAction[]; warnings: string[] } {
   const { t } = ctx;
   const blockById = new Map(ctx.blocks.map((b) => [b.id, b]));
+  const indexById = new Map(ctx.blocks.map((b, i) => [b.id, i]));
+  const nextType = (id: string) => ctx.blocks[(indexById.get(id) ?? -2) + 1]?.type;
+  const shape = planShape(ctx);
   const actions: AssistantAction[] = [];
   const warnings = read.unreadable.map((u) => t("api.warnActionUnreadable", { description: u.label }));
-  // A message runs one command of suggestions: the suggest actions join.
-  const suggests = read.actions.filter((a): a is SuggestAction => a.type === "suggest" && fitsDocument(a.type, ctx.edits));
-  const raw = suggests.length > 1 ? [...read.actions.filter((a) => !suggests.includes(a as SuggestAction)), joinSuggest(suggests)] : read.actions;
+  // A message runs one command of suggestions, or one revision: the suggest
+  // actions join, and the revise actions join.
+  let raw: RawAction[] = read.actions;
+  for (const type of ["suggest", "revise"] as const) {
+    const commands = raw.filter((a): a is CommandAction => a.type === type && fitsDocument(a.type, ctx.edits));
+    if (commands.length > 1) raw = [...raw.filter((a) => !commands.includes(a as CommandAction)), joinCommands(commands)];
+  }
+  const refuse = (description: string) => warnings.push(t("api.warnActionNotForDocument", { description }));
+  const missing = (description: string) => warnings.push(t("api.warnBlockNotFound", { description }));
 
   for (const action of raw) {
     if (!fitsDocument(action.type, ctx.edits)) {
-      warnings.push(t("api.warnActionNotForDocument", { description: action.description }));
+      refuse(action.description);
       continue;
     }
-    if (action.type === "suggest") {
-      // Named blocks must be the document's.
-      const blockIds = action.blockIds?.filter((id) => blockById.has(id));
-      if (action.blockIds && !blockIds?.length) {
-        warnings.push(t("api.warnBlockNotFound", { description: action.description }));
+    switch (action.type) {
+      case "suggest":
+      case "revise": {
+        // Named blocks must be the document's.
+        const blockIds = action.blockIds?.filter((id) => blockById.has(id));
+        if (action.blockIds && !blockIds?.length) missing(action.description);
+        else actions.push({ ...action, blockIds });
         continue;
       }
-      actions.push({ ...action, blockIds });
-      continue;
-    }
-    if (action.type === "add_section") {
-      actions.push(action);
-      continue;
-    }
-    if (action.type === "add_note") {
-      const sectionId = action.sectionId && ctx.sectionIds.has(action.sectionId) ? action.sectionId : undefined;
-      let source: (AssistantAnchor & { documentId: string }) | undefined;
-      if (action.blockId && action.quote) {
-        const block = blockById.get(action.blockId);
-        const anchor = block ? buildAnchor(block.text, action.quote, block.id) : null;
-        if (anchor) source = { documentId: ctx.documentId, ...anchor };
-        else warnings.push(t("api.warnSourceQuoteNotFound", { description: action.description }));
+      case "add_section":
+        actions.push(action);
+        continue;
+      case "add_note": {
+        const sectionId = action.sectionId && ctx.sectionIds.has(action.sectionId) ? action.sectionId : undefined;
+        let source: (AssistantAnchor & { documentId: string }) | undefined;
+        if (action.blockId && action.quote) {
+          const block = blockById.get(action.blockId);
+          const anchor = block ? buildAnchor(block.text, action.quote, block.id) : null;
+          if (anchor) source = { documentId: ctx.documentId, ...anchor };
+          else warnings.push(t("api.warnSourceQuoteNotFound", { description: action.description }));
+        }
+        actions.push({
+          type: "add_note",
+          content: action.content,
+          sectionId,
+          sectionTitle: sectionId ? undefined : (action.sectionTitle ?? "Notes"),
+          source,
+          description: action.description,
+        });
+        continue;
       }
-      actions.push({
-        type: "add_note",
-        content: action.content,
-        sectionId,
-        sectionTitle: sectionId ? undefined : (action.sectionTitle ?? "Notes"),
-        source,
-        description: action.description,
-      });
+      case "insert_paragraph": {
+        // afterBlockId null: the document's start.
+        const after = action.afterBlockId === null ? null : blockById.get(action.afterBlockId);
+        if (after === undefined) missing(action.description);
+        else if (after ? !blockTakes.after(after.type, nextType(after.id), shape) : !blockTakes.start(ctx.blocks[0]?.type, shape)) refuse(action.description);
+        else actions.push(action);
+        continue;
+      }
+      case "move_block": {
+        const target = blockById.get(action.blockId);
+        const after = action.afterBlockId === null ? null : blockById.get(action.afterBlockId);
+        if (!target || after === undefined || action.afterBlockId === action.blockId) missing(action.description);
+        else if (!blockTakes.move(target.type, shape)) refuse(action.description);
+        else if (after ? !blockTakes.after(after.type, nextType(after.id), shape) : !blockTakes.start(ctx.blocks[0]?.type, shape)) refuse(action.description);
+        else actions.push(action);
+        continue;
+      }
+    }
+    const block = blockById.get(action.blockId);
+    if (!block) {
+      warnings.push(t(action.type === "format_block" ? "api.warnBlockNotFoundOrNotText" : "api.warnBlockNotFound", { description: action.description }));
+      continue;
+    }
+    if (action.type === "edit_block" || action.type === "remove_block") {
+      if (!(action.type === "edit_block" ? blockTakes.words : blockTakes.removal)(block.type, shape)) {
+        warnings.push(t("api.warnOnlyTextEdited", { description: action.description }));
+      } else actions.push(action);
       continue;
     }
     if (action.type === "format_block") {
-      const target = blockById.get(action.blockId);
-      if (!target || !TEXT_TYPES.has(target.type)) {
-        warnings.push(t("api.warnBlockNotFoundOrNotText", { description: action.description }));
-        continue;
-      }
-      actions.push(action);
+      if (!blockTakes.kind(block.type, shape)) refuse(action.description);
+      else actions.push(action);
       continue;
     }
-    if (action.type === "style") {
-      const target = blockById.get(action.blockId);
-      const anchor = target ? buildAnchor(target.text, action.quote, target.id) : null;
-      if (!anchor) {
-        warnings.push(t("api.warnQuoteNotFound", { description: action.description }));
-        continue;
-      }
-      actions.push({ type: "style", anchor, style: action.style, description: action.description });
-      continue;
-    }
-    const block = blockById.get(
-      action.type === "insert_paragraph" ? action.afterBlockId : action.blockId,
-    );
-    if (!block) {
-      warnings.push(t("api.warnBlockNotFound", { description: action.description }));
-      continue;
-    }
-    if (
-      (action.type === "edit_block" || action.type === "remove_block") &&
-      !TEXT_TYPES.has(block.type)
-    ) {
-      warnings.push(t("api.warnOnlyTextEdited", { description: action.description }));
-      continue;
-    }
-    if (action.type === "edit_block" || action.type === "remove_block" || action.type === "insert_paragraph") {
-      actions.push(action);
-      continue;
-    }
-    // highlight / comment / link carry exact quotes: resolve to offsets now.
+    // highlight / comment / style / link carry exact quotes: resolve to offsets now.
     const anchor = buildAnchor(block.text, action.quote, block.id);
     if (!anchor) {
       warnings.push(t("api.warnQuoteNotFound", { description: action.description }));
@@ -324,16 +359,29 @@ export function enrichActions(
       actions.push({ type: "highlight", anchor, color: action.color, comment: action.comment, description: action.description });
     } else if (action.type === "comment") {
       actions.push({ type: "comment", anchor, comment: action.comment, description: action.description });
+    } else if (action.type === "style") {
+      if (!blockTakes.style(block.type)) refuse(action.description);
+      else actions.push({ type: "style", anchor, style: action.style, description: action.description });
+    } else if (action.href !== undefined) {
+      // A web address, on a document without rich text (a rich text takes
+      // its links as the assistant's suggestions).
+      if (ctx.edits !== "blocks" || !blockTakes.style(block.type)) refuse(action.description);
+      else if (!isWebAddress(action.href)) warnings.push(t("api.warnLinkAddress", { description: action.description }));
+      else actions.push({ type: "link", anchor, href: action.href.trim(), description: action.description });
+    } else if (!action.toDocumentId || !ctx.attachedIds.has(action.toDocumentId) || action.toDocumentId === ctx.documentId) {
+      warnings.push(t("api.warnLinkTargetNotAttached", { description: action.description }));
     } else {
-      if (!ctx.attachedIds.has(action.toDocumentId) || action.toDocumentId === ctx.documentId) {
-        warnings.push(t("api.warnLinkTargetNotAttached", { description: action.description }));
-        continue;
-      }
       actions.push({ type: "link", anchor, toDocumentId: action.toDocumentId, description: action.description });
     }
   }
   return { actions, warnings };
 }
+
+/** The open document's shape, from what the plan reads of it. */
+export const planShape = (ctx: Pick<PlanContext, "format" | "blocks">): DocumentShape => ({
+  format: ctx.format,
+  media: ctx.blocks.some((b) => b.type === "VIDEO" || b.type === "TRANSCRIPT"),
+});
 
 // The sidebar assistant's answer ends with its actions in a fenced block
 // (SPEC.md §7): the answer streams to the reader, the block is held back on

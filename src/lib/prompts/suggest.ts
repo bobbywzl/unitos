@@ -40,6 +40,10 @@ export type SuggestCtx = {
   // The asker's pending suggestions in the scope, one line each (lib/docs/suggest-ops.ts).
   pending: string[];
   history: ChatTurn[];
+  // Where the ops land: the page editor, as the assistant's suggestions
+  // (page); or the plan card, as the block edits of a document without rich
+  // text (plan, lib/assistant/revise.ts).
+  target: "page" | "plan";
 };
 
 const OP_LINES = [
@@ -50,8 +54,27 @@ const OP_LINES = [
   "- remove_blocks {blockIds, why}: consecutive blocks deleted whole.",
   "- set_style {blockId, style, why}: normal, title, subtitle, h1 to h6, bulleted, numbered, checklist.",
   "- set_alignment {blockId, alignment, why}: left, center, right, or justify.",
-  '- format_words {blockId, find, format, value?, why}: a format on exact words: bold, italic, underline, or strikethrough; link, value the address ("" takes the link off); color, value #rrggbb; font, value the font\'s name; size, value the size in points.',
+  '- format_words {blockId, find, format, value?, why}: a format on exact words: bold, italic, underline, or strikethrough; link, value the address ("" takes the link off); color, value #rrggbb; highlight_color, value #rrggbb; font, value the font\'s name; size, value the size in points.',
+  "- insert_row {blockId, where, cells, why}: a new table row above or below the row of the cell blockId names. cells: its words, one string per column, left to right.",
+  "- remove_row {blockId, why}: the row of the cell blockId names, removed.",
+  "- move_row {blockId, toBlockId, where, why}: the row of the cell blockId names, moved above or below the row of the cell toBlockId names, in the same table.",
+  "- insert_column {blockId, where, cells, why}: a new column left or right of the column of the cell blockId names. cells: its words, one string per row, top to bottom.",
+  "- remove_column {blockId, why}: the column of the cell blockId names, removed.",
+  "- insert_footnote {blockId, find, text, why}: a footnote whose number goes right after the words find. text: the footnote's words.",
   "markdown: # to ###### headings, - bulleted lines, 1. numbered lines, - [ ] checklist lines, **bold**, *italic*, [text](url), a new table as | cell | lines under a | --- | line. No images.",
+];
+
+// A document without rich text: its blocks take the plan card's edits
+// (lib/assistant/revise.ts), so the ops are the ones those edits make.
+const PLAN_OP_LINES = [
+  '- replace_words {blockId, find, text, format?, why}: change words inside one block. find: the block\'s words exactly as written, long enough to occur once in it. text: the words that take their place; "" deletes them. format: bold, italic, or underline, when the new words take one.',
+  "- rewrite_block {blockId, text, why}: one block's words written anew, whole, with no blank line. Use it when most of a block changes. The block keeps its format.",
+  "- replace_blocks {blockIds, markdown, why}: consecutive blocks replaced by new blocks. Use it to turn a paragraph into a list, split one, join two, or reorder them.",
+  "- insert_blocks {afterBlockId, markdown, why}: new blocks after a block; afterBlockId null puts them at the document's start.",
+  "- remove_blocks {blockIds, why}: consecutive blocks deleted whole.",
+  "- set_style {blockId, style, why}: normal, h1, h2, h3, bulleted, numbered.",
+  '- format_words {blockId, find, format, value?, why}: a format on exact words: bold, italic, or underline; link, value the web address ("" takes the link off); color, value #rrggbb; highlight_color, value #rrggbb.',
+  "markdown: # to ### headings, - bulleted lines, 1. numbered lines, two spaces more per level of nesting. Plain words otherwise: no bold, italic, link, table, or image.",
 ];
 
 function scopeLines(scope: SuggestCtx["scope"]): string[] {
@@ -73,13 +96,22 @@ function scopeLines(scope: SuggestCtx["scope"]): string[] {
 }
 
 export function suggestPrompt(ctx: SuggestCtx): string {
+  const plan = ctx.target === "plan";
   const rules = [
     "Do what the command asks and nothing else. Change no word the command does not ask you to change.",
     "Keep the author's voice, terms, names, numbers, dates, citations, and links unless the command asks to change them.",
     "Keep every claim the document makes. New words may explain, connect, or restate; a new number, name, date, or finding appears only when the command asks for it or the material states it.",
     "Copy find exactly, character for character. Never paraphrase it.",
     "One op per change. Use the smallest op: replace_words for a word, a phrase, or a sentence; rewrite_block when most of a block changes.",
-    "Never touch figures, equations, tables' structure, smart chips, footnote numbers, or images. Words inside a table cell can change.",
+    ...(plan
+      ? [
+          "A LIST block's words are its lines, each with its marker (- or 1.) and two spaces more per level of nesting: a line nests or unnests by its spaces. An EQUATION block's words are its TeX: rewrite_block changes them. Write TeX that KaTeX draws.",
+          "Never change a TABLE, FIGURE, PAGE, SLIDE, SHEET, VIDEO, or TRANSCRIPT block, and never remove or replace an equation.",
+        ]
+      : [
+          "An EQUATION block's words are its TeX, a FIGURE block's words its caption: rewrite_block changes them. An inline equation stands in its block's words as $TeX$: replace_words with find the whole $TeX$ and text the new $TeX$ changes it. Write TeX that KaTeX draws.",
+          "Never remove, move, or replace a figure, an image, an equation, a smart chip, or a footnote number. A table cell's words change with replace_words, a table's rows and columns with the row and column ops.",
+        ]),
     `Keep the document's language. Write summary and every why in ${languageName(ctx.lang)}.`,
     "why: one sentence on what the op changes and why.",
     "summary: one or two sentences on what the suggestions change. When the command asks no change, return no ops and say so in summary.",
@@ -90,7 +122,9 @@ export function suggestPrompt(ctx: SuggestCtx): string {
   ];
   const styles = ctx.styles.map((s) => `[block ${s.blockId}] ${s.style}${s.where === "cell" ? " (table cell)" : s.where === "footnote" ? " (footnote)" : ""}`);
   return [
-    "Suggest edits to the document above. Each op becomes a suggestion the reader accepts or rejects.",
+    plan
+      ? "Suggest edits to the document above. Each op becomes an edit in the plan card; the reader applies the edits they keep."
+      : "Suggest edits to the document above. Each op becomes a suggestion the reader accepts or rejects.",
     "",
     profileLines(ctx.profile),
     "",
@@ -108,7 +142,7 @@ export function suggestPrompt(ctx: SuggestCtx): string {
       : []),
     "",
     "Ops:",
-    ...OP_LINES,
+    ...(plan ? PLAN_OP_LINES : OP_LINES),
     "",
     "Rules:",
     ...rules.map((rule, n) => `${n + 1}. ${rule}`),

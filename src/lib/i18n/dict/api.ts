@@ -67,6 +67,14 @@ const en = {
   reparsedVersionName: "Re-parsed",
   onlyTextBlocksRemoved: "Only text blocks can be removed",
   onlyTextBlocksStyled: "Only text blocks can be styled",
+  // The block routes' rule (lib/block-takes.ts): what would corrupt the document.
+  onlyTextBlocksLinked: "Only text blocks can take a link",
+  blockKindFixed: "This block keeps its kind",
+  blockInsertRefused: "No new block goes here",
+  blockNotMovable: "This block cannot move there",
+  linkAddressInvalid: "The link's address is not a web address",
+  linkOffsetsInvalid: "Link offsets are invalid",
+  linkInPageEditor: "Links in this document are set in the page editor",
   editNotRemovedParagraph: "Edit is not a removed paragraph",
   paragraphAlreadyBack: "Paragraph is already back",
 
@@ -101,6 +109,9 @@ const en = {
   warnActionsUnreadable: "The assistant's actions could not be read. Ask again.",
   warnActionNotForDocument: "Skipped: this action does not apply to this document. ({description})",
   warnActionUnreadable: "Skipped: the action could not be read. ({description})",
+  warnLinkAddress: "Skipped: the link's address is not a web address. ({description})",
+  reviseNoBlocks: "Nothing to revise: no block in the scope takes a change to its words.",
+  reviseNoEdits: "The revision found nothing to change.",
 
   // Derivations
   deriveNeedsKey: "MOONSHOT_API_KEY is not set. Derivations need it.",
@@ -388,6 +399,13 @@ const zh: Record<keyof typeof en, string> = {
   reparsedVersionName: "重新解析之后",
   onlyTextBlocksRemoved: "只有文本块可以移除",
   onlyTextBlocksStyled: "只有文本块可以设置样式",
+  onlyTextBlocksLinked: "只有文本块可以添加链接",
+  blockKindFixed: "此块的类型不能更改",
+  blockInsertRefused: "此处不能添加新块",
+  blockNotMovable: "此块无法移到那里",
+  linkAddressInvalid: "链接地址不是网址",
+  linkOffsetsInvalid: "链接偏移无效",
+  linkInPageEditor: "此文档的链接在页面编辑器中设置",
   editNotRemovedParagraph: "此编辑不是被移除的段落",
   paragraphAlreadyBack: "段落已经恢复了",
 
@@ -418,6 +436,9 @@ const zh: Record<keyof typeof en, string> = {
   warnActionsUnreadable: "无法读取助手的操作。请再问一次。",
   warnActionNotForDocument: "已跳过：此操作不适用于此文档。（{description}）",
   warnActionUnreadable: "已跳过：无法读取该操作。（{description}）",
+  warnLinkAddress: "已跳过：链接地址不是网址。（{description}）",
+  reviseNoBlocks: "无可修订：范围内没有可以改动文字的块。",
+  reviseNoEdits: "修订没有找到需要改动的地方。",
 
   deriveNeedsKey: "未设置 MOONSHOT_API_KEY。AI 生成需要它。",
   typeNotBuilt: "{type} 尚未实现",

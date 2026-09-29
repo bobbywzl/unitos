@@ -1,6 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
-import { blockKind } from "@/lib/block-kind";
+import { blockKind, stripListMarkers, withListMarkers, type BlockKind } from "@/lib/block-kind";
+import { blockTakes, documentShape } from "@/lib/block-takes";
 import { diffSegments, remapAnchor, remapRange } from "@/lib/anchors/remap";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
@@ -33,6 +34,13 @@ const KIND_TO_BLOCK: Record<
 };
 
 type StyleSpan = { start: number; end: number; style: string; quotedText: string };
+
+/** A list conversion's text, as the reader's edit toolbar writes it: into a
+    list, every line takes its marker; out of one, the markers go. */
+function convertedText(text: string, from: BlockKind, to: BlockKind): string {
+  if (to === "list" || to === "numbered") return withListMarkers(text, to);
+  return from === "list" || from === "numbered" ? stripListMarkers(text) : text;
+}
 
 // Edit a block's text. TABLE and FIGURE content is sanitized html, not text, so they are
 // not editable. block.html is left untouched — for HEADING it stores the level tag.
@@ -69,10 +77,22 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   const target = data.kind !== undefined ? KIND_TO_BLOCK[data.kind] : null;
   const fromKind = blockKind(block.type, block.html, block.text);
   const kindChanges = data.kind !== undefined && fromKind !== data.kind;
+  // Only an edit that cannot corrupt the document (lib/block-takes.ts): a
+  // page, a video's player, or a sheet's name keeps its words, and a page,
+  // a transcript line, or an equation keeps its kind.
+  const shape = await documentShape(block.documentId);
+  if (data.text !== undefined && data.text !== block.text && !blockTakes.words(block.type, shape)) {
+    return NextResponse.json({ error: t("api.onlyTextBlocksEdited") }, { status: 400 });
+  }
+  if (kindChanges && !blockTakes.kind(block.type, shape)) {
+    return NextResponse.json({ error: t("api.blockKindFixed") }, { status: 400 });
+  }
+  // A list conversion sent without text re-marks the stored text.
+  const text = data.text ?? (kindChanges ? convertedText(block.text, fromKind, data.kind!) : undefined);
 
   // Format change without a text change: heading level, paragraph, or list kind,
-  // recorded as FORMAT. List conversions send text too and take the path below.
-  if (data.text === undefined || data.text === block.text) {
+  // recorded as FORMAT. List conversions change the text too and take the path below.
+  if (text === undefined || text === block.text) {
     if (!kindChanges || !target) return NextResponse.json(block);
     const [formatted] = await db.$transaction([
       db.block.update({
@@ -95,7 +115,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
     return NextResponse.json(formatted);
   }
 
-  const newText = data.text;
+  const newText = text;
 
   // Remap every anchor on this block through the edit, the way Google Docs
   // moves highlights while you type: shift, grow, shrink, or orphan visibly.
@@ -252,6 +272,10 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
     }
     return NextResponse.json({ ok: true, editId: result.removedEdits[blockId] ?? null });
   }
+  // A video's player and a sheet's name stay (lib/block-takes.ts).
+  if (!blockTakes.removal(block.type, await documentShape(block.documentId))) {
+    return NextResponse.json({ error: t("api.onlyTextBlocksRemoved") }, { status: 400 });
+  }
 
   const [, , , , removal] = await db.$transaction([
     db.block.delete({ where: { id: blockId } }),
@@ -264,11 +288,20 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
         blockId: block.id,
         kind: "BLOCK_REMOVE",
         before: block.text,
+        // What restore needs to bring the block back whole: a page its
+        // number, a transcript line its times and voice, words their styles.
         meta: {
           order: block.order,
           type: block.type,
           html: block.html,
           originalText: block.originalText,
+          page: block.page,
+          startTime: block.startTime,
+          endTime: block.endTime,
+          speaker: block.speaker,
+          styles: block.styles ?? undefined,
+          links: block.links ?? undefined,
+          citations: block.citations ?? undefined,
         },
         userId: access.user.id,
       },

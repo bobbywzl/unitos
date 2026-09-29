@@ -1,6 +1,8 @@
 import type { DerivationType, NoteStatus } from "@prisma/client";
 import type { ChatTurn } from "@/lib/conversation";
 import type { SuggestResult } from "@/lib/docs/assistant-suggestions";
+import type { BlockKind } from "@/lib/block-kind";
+import type { ToggleStyle } from "@/lib/text-style";
 
 /** One reply in the discussion under a note, an edit, or a link. */
 export type ReplyView = {
@@ -411,7 +413,9 @@ export type AssistantAnchor = {
     the client can execute it through the normal API routes. */
 export type AssistantAction =
   | { type: "edit_block"; blockId: string; newText: string; description: string }
-  | { type: "insert_paragraph"; afterBlockId: string; text: string; description: string }
+  // kind: the new block's format (a heading, a list); absent = a paragraph.
+  // afterBlockId null: the document's start.
+  | { type: "insert_paragraph"; afterBlockId: string | null; text: string; kind?: BlockKind; description: string }
   | { type: "remove_block"; blockId: string; description: string }
   | {
       type: "highlight";
@@ -430,17 +434,21 @@ export type AssistantAction =
       description: string;
     }
   | { type: "add_section"; title: string; description: string }
-  | { type: "link"; anchor: AssistantAnchor; toDocumentId: string; description: string }
-  | {
-      type: "format_block";
-      blockId: string;
-      kind: "paragraph" | "h1" | "h2" | "h3";
-      description: string;
-    }
-  | { type: "style"; anchor: AssistantAnchor; style: "bold" | "italic"; description: string }
+  // A link to another attached document, or (href) to a web address.
+  | { type: "link"; anchor: AssistantAnchor; toDocumentId?: string; href?: string; description: string }
+  | { type: "format_block"; blockId: string; kind: BlockKind; description: string }
+  // bold, italic, underline, a text color ("color:#rrggbb"), or a highlight
+  // ("highlight:#rrggbb"): the edit toolbar's styles (lib/text-style.ts).
+  | { type: "style"; anchor: AssistantAnchor; style: ToggleStyle; description: string }
+  // A block moved after another; afterBlockId null = the document's start.
+  | { type: "move_block"; blockId: string; afterBlockId: string | null; description: string }
   // A change to a document with rich text (SPEC.md §29): the reader runs it
   // as the assistant's suggestions, never through the plan card.
-  | { type: "suggest"; instruction: string; blockIds?: string[]; description: string };
+  | { type: "suggest"; instruction: string; blockIds?: string[]; description: string }
+  // A document without rich text: the edits of many blocks, found part by
+  // part on the server (lib/assistant/revise.ts); the plan carries those
+  // edits in its place.
+  | { type: "revise"; instruction: string; blockIds?: string[]; description: string };
 
 export type AssistantPlan = {
   reply: string | null;

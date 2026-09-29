@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { api } from "@/lib/api";
-import { blockKind } from "@/lib/block-kind";
+import { blockKind, type BlockKind } from "@/lib/block-kind";
 import { definable, defineKey } from "@/lib/define";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
@@ -465,11 +465,13 @@ type SpeechRec = {
 const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 // Format targets of a format_block action, shown in the plan card.
-const FORMAT_KIND_KEY: Record<"paragraph" | "h1" | "h2" | "h3", TKey> = {
+const FORMAT_KIND_KEY: Record<BlockKind, TKey> = {
   paragraph: "reader.kindParagraph",
   h1: "reader.kindH1",
   h2: "reader.kindH2",
   h3: "reader.kindH3",
+  list: "reader.kindList",
+  numbered: "reader.kindNumbered",
 };
 
 /** The concrete target of a plan action, shown before Apply so approval is
@@ -496,16 +498,20 @@ function actionDetail(
     case "edit_block":
       return t("reader.detailTo", { text: clip(action.newText) });
     case "insert_paragraph":
-      return `“${clip(action.text)}”`;
+      return `${action.kind && action.kind !== "paragraph" ? `${t(FORMAT_KIND_KEY[action.kind])} · ` : ""}“${clip(action.text)}”`;
     case "remove_block":
       return `“${clip(blockText(action.blockId))}”`;
     case "link": {
       const target =
-        documents.find((d) => d.id === action.toDocumentId)?.title ?? t("reader.aDocument");
+        action.href ?? documents.find((d) => d.id === action.toDocumentId)?.title ?? t("reader.aDocument");
       return `“${clip(action.anchor.quotedText, 60)}” → ${target}`;
     }
     case "format_block":
       return `“${clip(blockText(action.blockId), 60)}” → ${t(FORMAT_KIND_KEY[action.kind])}`;
+    case "move_block":
+      return action.afterBlockId === null
+        ? t("reader.detailMoveStart", { what: clip(blockText(action.blockId), 50) })
+        : t("reader.detailMoveAfter", { what: clip(blockText(action.blockId), 50), after: clip(blockText(action.afterBlockId), 50) });
     default:
       return null;
   }
@@ -522,7 +528,9 @@ const ACTION_LABEL_KEY: Record<AssistantAction["type"], TKey> = {
   link: "reader.actionLink",
   format_block: "reader.actionFormat",
   style: "reader.actionStyle",
+  move_block: "reader.actionMove",
   suggest: "reader.actionSuggest",
+  revise: "reader.actionRevise",
 };
 
 // The assistant's commands on selected words (SPEC.md §29), in the chips'
@@ -6126,6 +6134,11 @@ export function ReaderInteractions({
     const undo: { description: string; run: () => Promise<unknown> }[] = [];
     let applied = 0;
     const failed: string[] = [];
+    // A block as the plan's earlier actions left it: the routes answer with it.
+    const changed = new Map<string, BlockData>();
+    const current = (id: string) => changed.get(id) ?? blocks.find((b) => b.id === id);
+    // New blocks after one block land in the plan's order: each after the one before.
+    const lastInserted = new Map<string, string>();
     for (const action of actions) {
       try {
         switch (action.type) {
@@ -6140,8 +6153,9 @@ export function ReaderInteractions({
             break;
           }
           case "edit_block": {
-            const before = blocks.find((b) => b.id === action.blockId)?.text ?? null;
-            await api(`/api/blocks/${action.blockId}`, "PATCH", { text: action.newText });
+            const before = current(action.blockId)?.text ?? null;
+            const saved = await api<BlockData>(`/api/blocks/${action.blockId}`, "PATCH", { text: action.newText });
+            changed.set(action.blockId, saved);
             if (before !== null) {
               undo.push({
                 description: action.description,
@@ -6151,12 +6165,26 @@ export function ReaderInteractions({
             break;
           }
           case "insert_paragraph": {
+            const place = action.afterBlockId ?? "";
             const created = await api<{ id: string }>("/api/blocks", "POST", {
               documentId,
-              afterBlockId: action.afterBlockId,
+              afterBlockId: lastInserted.get(place) ?? action.afterBlockId,
               text: action.text,
+              ...(action.kind ? { kind: action.kind } : {}),
             });
+            lastInserted.set(place, created.id);
             undo.push({ description: action.description, run: () => api(`/api/blocks/${created.id}`, "DELETE") });
+            break;
+          }
+          case "move_block": {
+            // The answer names the block it stood after: Undo moves it back.
+            const moved = await api<{ previousAfterBlockId: string | null }>(`/api/blocks/${action.blockId}/move`, "POST", {
+              afterBlockId: action.afterBlockId,
+            });
+            undo.push({
+              description: action.description,
+              run: () => api(`/api/blocks/${action.blockId}/move`, "POST", { afterBlockId: moved.previousAfterBlockId }),
+            });
             break;
           }
           case "remove_block": {
@@ -6218,6 +6246,20 @@ export function ReaderInteractions({
             break;
           }
           case "link": {
+            if (action.href !== undefined) {
+              // A web address on the words: the answer names the address
+              // they had before, and Undo puts it back ("" takes it off).
+              const range = { startOffset: action.anchor.startOffset, endOffset: action.anchor.endOffset };
+              const linked = await api<{ previous: string | null }>(`/api/blocks/${action.anchor.blockId}/link`, "POST", {
+                ...range,
+                href: action.href,
+              });
+              undo.push({
+                description: action.description,
+                run: () => api(`/api/blocks/${action.anchor.blockId}/link`, "POST", { ...range, href: linked.previous ?? "" }),
+              });
+              break;
+            }
             const link = await api<{ id: string }>("/api/links", "POST", {
               fromDocumentId: documentId,
               toDocumentId: action.toDocumentId,
@@ -6227,13 +6269,16 @@ export function ReaderInteractions({
             break;
           }
           case "format_block": {
-            const block = blocks.find((b) => b.id === action.blockId);
+            // A list's markers change with its kind (the route writes them),
+            // so Undo sends the text back with the kind.
+            const block = current(action.blockId);
             const before = block ? blockKind(block.type, block.html, block.text) : null;
-            await api(`/api/blocks/${action.blockId}`, "PATCH", { kind: action.kind });
-            if (before !== null && before !== action.kind) {
+            const saved = await api<BlockData>(`/api/blocks/${action.blockId}`, "PATCH", { kind: action.kind });
+            changed.set(action.blockId, saved);
+            if (block && before !== null && before !== action.kind) {
               undo.push({
                 description: action.description,
-                run: () => api(`/api/blocks/${action.blockId}`, "PATCH", { kind: before }),
+                run: () => api(`/api/blocks/${action.blockId}`, "PATCH", { kind: before, text: block.text }),
               });
             }
             break;

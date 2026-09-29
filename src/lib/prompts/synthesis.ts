@@ -125,17 +125,19 @@ function actLines(act: PageActions): string[] {
     `Other attached documents (id — title):\n${act.otherDocuments.length > 0 ? act.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
     ...(act.caretBlockId ? [`The caret stands in [block ${act.caretBlockId}]. "Here" means right after it.`] : []),
     "Action types:",
-    ...actionLines(act.edits ?? "blocks"),
+    ...actionLines(act.edits ?? "blocks", true),
     "Rules for actions:",
     "1. A message that asks for a change to the document or the notes: write the answer, then end with a fenced block whose info string is actions, holding a JSON array of the actions, one action too. Nothing after the block. To reorganize, format, restructure, rewrite, fix, shorten, or translate the open document is a change to it, and so is a change to \"my notes\" or \"these notes\" when the open document holds the reader's own notes.",
     "2. A message that asks for analysis, an answer, or a summary, and no change: no block.",
     "3. Use block ids exactly as given in the [block <id>] tags. Every quote must be an exact substring of the named block's text.",
     "4. Use the smallest set of actions that fulfils the message. Never change text the message did not ask to change.",
     "5. description: one plain sentence of what the action does, for the reader's approval list.",
-    "6. TABLE and FIGURE blocks cannot be edited or removed.",
+    "6. TABLE, FIGURE, SLIDE, SHEET, and VIDEO blocks cannot be edited or removed; the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
     act.edits === "suggestions"
       ? "7. A change to the document's words or styles is one suggest action, whatever its size: the whole document, a section, or a paragraph. The answer is one sentence on what will change; never write the changed text in the answer: the suggestions carry it."
-      : "7. In the answer, say what each action changes and why. The answer stands on its own; the reader reads the actions in the plan card.",
+      : act.edits === "blocks"
+        ? "7. A change to the words of more than five blocks (the spelling or grammar across the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. In the answer, say what the actions change and why; for a revise action, one sentence on what will change: the plan card carries the edits."
+        : "7. In the answer, say what each action changes and why. The answer stands on its own; the reader reads the actions in the plan card.",
     ...(act.edits === "none"
       ? [
           "8. The document's words and styles cannot be changed: a project of another account holds the document too. When the message asks to change them, say so in one sentence, and propose no action for the change.",

@@ -77,7 +77,7 @@ export function actPrompt(ctx: ActCtx): string {
     "2. A command that only asks for analysis, an answer, or a summary: put it in reply and return no actions.",
     "3. Use the smallest set of actions that fulfils the command. Never change text the command did not ask to change.",
     "4. description: one plain sentence of what the action does, for the reader's approval list.",
-    "5. TABLE and FIGURE blocks cannot be edited or removed.",
+    "5. TABLE, FIGURE, SLIDE, SHEET, and VIDEO blocks cannot be edited or removed; the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
     "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click.",
     `7. Write reply, every description, and every why in ${language}.`,
     `8. reply: start with the answer, in one sentence. Then the evidence: what the document says, each claim citing its block. As few words as the answer needs, under 100 unless the command needs more. ${STYLE_RULE} Say plainly when the document does not answer, then say what the document does say about it. Never add a fact the document does not state. A sentence that could be written about any other document is deleted; a sentence that restates the selection in other words is deleted.`,

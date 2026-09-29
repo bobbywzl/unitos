@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { blockTakes } from "@/lib/block-takes";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { toggleBlockStyle } from "@/lib/docs/ops";
@@ -54,6 +55,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
       },
     });
     return NextResponse.json(await db.block.findUnique({ where: { id: blockId } }));
+  }
+
+  // A style goes on a text block's words (lib/block-takes.ts).
+  if (!blockTakes.style(block.type)) {
+    return NextResponse.json({ error: t("api.onlyTextBlocksStyled") }, { status: 400 });
   }
 
   const spans = (Array.isArray(block.styles) ? block.styles : []) as unknown as StyleSpan[];

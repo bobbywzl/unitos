@@ -444,6 +444,7 @@ async function handle(req: Request, t: TFunc) {
   const { actions, warnings } = enrichActions(result.data.actions, {
     documentId: data.documentId,
     edits,
+    format: document.format,
     blocks: document.blocks,
     attachedIds: new Set(attachedDocs.map((nd) => nd.documentId)),
     sectionIds: new Set(sections.map((s) => s.id)),

@@ -99,9 +99,17 @@ function listName([before, after]: [string, string], t: TFunc): string {
 
 /** A side's words, quoted: an object by name, a line break as ↵. */
 function words(pieces: (string | PMNode)[], t: TFunc): string {
-  const text = pieces
-    .map((p) => (typeof p === "string" ? p : OBJECTS[p.type.name] ? t(OBJECTS[p.type.name]) : p.type.name === "hardBreak" ? "↵" : p.textContent))
-    .join("");
+  const piece = (p: string | PMNode) =>
+    typeof p === "string"
+      ? p
+      : OBJECTS[p.type.name]
+        ? t(OBJECTS[p.type.name])
+        : p.type.name === "hardBreak"
+          ? "↵"
+          : p.type.name === "inlineMath"
+            ? `$${String(p.attrs.latex ?? "")}$`
+            : p.textContent;
+  const text = pieces.map(piece).join("");
   return `“${text.length > 120 ? `${text.slice(0, 120)}…` : text}”`;
 }
 
@@ -109,14 +117,28 @@ function words(pieces: (string | PMNode)[], t: TFunc): string {
     its words; Format with the names of its format changes. */
 function describe(s: Suggestion, t: TFunc): ReactNode[] {
   const lines: ReactNode[] = [];
-  const formats = s.formats.map(({ mark, node }) => {
+  // An equation's TeX and a figure's caption are words: their change reads
+  // as a replacement.
+  const formats = s.formats.flatMap(({ mark, node }) => {
     const { type, attrName, previousValue, newValue } = mark.attrs;
-    return type === "mark" ? markName(previousValue as MarkJson, newValue as MarkJson, t) : blockName(node, attrName, newValue, t);
+    if (type === "attr" && (attrName === "latex" || attrName === "caption")) {
+      lines.push(
+        <>
+          <b>{t("docsSuggest.replace")}</b> <i>{words([String(previousValue ?? "")], t)}</i> {t("docsSuggest.replaceWith")} <i>{words([String(newValue ?? "")], t)}</i>
+        </>,
+      );
+      return [];
+    }
+    return [type === "mark" ? markName(previousValue as MarkJson, newValue as MarkJson, t) : blockName(node, attrName, newValue, t)];
   });
   // Whole blocks with no words (an empty line) read as "¶".
   const side = (pieces: (string | PMNode)[], blocks: [number, number][]) => (pieces.length || !blocks.length ? pieces : ["¶"]);
   const [plus, minus] = [side(s.added, s.blocks.added), side(s.removed, s.blocks.removed)];
-  if (s.same === "move") {
+  // A footnote added: its number and its words.
+  const footnote = s.added.findIndex((p) => typeof p !== "string" && p.type.name === "footnoteReference");
+  if (footnote >= 0 && !s.removed.length) {
+    lines.push(<><b>{t("docsSuggest.addFootnote")}</b> <i>{words(s.added.filter((p, i) => i !== footnote && p !== "¶"), t)}</i></>);
+  } else if (s.same === "move") {
     lines.push(<><b>{t("docsSuggest.move")}</b> <i>{words(s.added, t)}</i></>);
   } else if (s.same) {
     formats.unshift(listName(s.same, t));

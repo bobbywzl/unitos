@@ -216,6 +216,8 @@ const en = {
   actionFormat: "Format",
   actionStyle: "Style",
   actionSuggest: "Suggestions",
+  actionMove: "Move",
+  actionRevise: "Revise",
   detailInto: "into {where} · “{quote}”",
   theSection: "the section",
   detailTo: "to “{text}”",
@@ -224,6 +226,11 @@ const en = {
   kindH1: "h1",
   kindH2: "h2",
   kindH3: "h3",
+  kindList: "bulleted list",
+  kindNumbered: "numbered list",
+  // A move_block action: the block, then where it goes.
+  detailMoveAfter: "“{what}” → after “{after}”",
+  detailMoveStart: "“{what}” → the document's start",
 
   // Pending link banner
   linkingBanner: "Linking “{quote}” from {source} — select the other end, then press Close link",
@@ -488,6 +495,8 @@ const zh: Record<keyof typeof en, string> = {
   actionFormat: "格式",
   actionStyle: "样式",
   actionSuggest: "建议",
+  actionMove: "移动",
+  actionRevise: "修订",
   detailInto: "添加到 {where} · “{quote}”",
   theSection: "该章节",
   detailTo: "改为“{text}”",
@@ -496,6 +505,10 @@ const zh: Record<keyof typeof en, string> = {
   kindH1: "一级标题",
   kindH2: "二级标题",
   kindH3: "三级标题",
+  kindList: "无序列表",
+  kindNumbered: "有序列表",
+  detailMoveAfter: "“{what}” → 移到“{after}”之后",
+  detailMoveStart: "“{what}” → 移到文档开头",
 
   // Pending link banner
   linkingBanner: "正在链接来自{source}的“{quote}”——选中另一端，再按“闭合链接”",
