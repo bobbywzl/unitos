@@ -18,8 +18,10 @@ import { columnLetter } from "@/lib/parse/sheets";
 // byte for byte (the text PATCH keeps the html of an edit that, run
 // backwards, would not).
 
-/** Why an edit does not go into the replica: a slide's line, or a tab in
-    one, added or removed (lines); a sheet that is no longer a grid — a row
+/** Why an edit does not go into the replica: a slide's line that no text
+    box or speaker notes hold (a table's row, a line a break divides, notes
+    with no line under their label), or a tab in a line, added or removed
+    (lines); a sheet that is no longer a grid — a row
     with more or fewer cells than the first, or rows and columns changed in
     one edit (grid); a sheet's frozen rows or columns added or removed
     (frozen); rows or columns of a sheet with merged cells or a drawing
@@ -762,9 +764,9 @@ function sharedWords(x: string[], y: string[]): number {
     why not. The slide's own lines and its speaker notes' lines align apart
     (alignLines, lines paired by the words they share). A line that goes
     takes its paragraph and the gap beside it; a text box whose every line
-    goes stays, empty. A new line comes after the kept line before it, else
-    before the kept line after it, built like a paragraph of that box
-    (newParagraph). Notes taken away whole take their label; notes given to
+    goes stays, empty. A new line comes after the kept line before it (at
+    the start, before the kept line after it), built like a paragraph of
+    that box (newParagraph). Notes taken away whole take their label; notes given to
     a slide without them come after it, a paragraph per line. */
 function slideShape(html: string, prev: string, next: string): { html: string } | { refused: ReplicaRefusal } | null {
   const slide = readSlideLines(html);
@@ -817,8 +819,10 @@ function slideShape(html: string, prev: string, next: string): { html: string } 
       }
       let k = j;
       while (k < kept.length && kept[k] === null) k += 1;
+      // After the kept line before (a table's row or a broken line takes
+      // none), else, at the start, before the kept line after.
       const before = j > 0 ? slide.lines[part.from + kept[j - 1]!]?.para : null;
-      const after = k < kept.length ? slide.lines[part.from + kept[k]!]?.para : null;
+      const after = j === 0 && k < kept.length ? slide.lines[part.from + kept[k]!]?.para : null;
       const anchor = before ?? after;
       if (!anchor) return { refused: "lines" };
       const made = part.now.slice(j, k).map((line) => newParagraph(anchor, line));

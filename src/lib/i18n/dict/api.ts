@@ -76,7 +76,7 @@ const en = {
   linkOffsetsInvalid: "Link offsets are invalid",
   linkInPageEditor: "Links in this document are set in the page editor",
   // A slide's, a sheet's, or a table's replica (lib/replica.ts): what it does not take.
-  replicaLines: "A slide keeps its lines: change words within a line",
+  replicaLines: "A slide's lines come and go in its text boxes and its speaker notes, which keep a line; a table's rows, a line a break divides, and a tab stay",
   replicaGrid: "A sheet stays a grid: every row has as many cells as the first, and one edit adds or removes rows or columns, not both",
   replicaFrozen: "A sheet's frozen rows and columns stay: add or remove rows and columns after them",
   replicaMerged: "A sheet with merged cells or a drawing keeps its rows and columns: change words within a cell",
@@ -430,7 +430,7 @@ const zh: Record<keyof typeof en, string> = {
   linkAddressInvalid: "链接地址不是网址",
   linkOffsetsInvalid: "链接偏移无效",
   linkInPageEditor: "此文档的链接在页面编辑器中设置",
-  replicaLines: "幻灯片保留其行：请在一行内修改文字",
+  replicaLines: "幻灯片的行只在文本框和演讲者备注中增删，备注至少保留一行；表格的行、被换行分开的行和制表符保持不变",
   replicaGrid: "工作表保持为网格：每一行的单元格与第一行一样多，一次编辑只增删行或只增删列，不能两者同时",
   replicaFrozen: "工作表的冻结行与冻结列保持不变：请在它们之后增删行与列",
   replicaMerged: "含合并单元格或绘图的工作表保留其行与列：请在单元格内修改文字",

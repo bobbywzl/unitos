@@ -32,7 +32,8 @@ export type DocumentShape = { format: string | null; media: boolean; pages: numb
 
 export const TEXT_BLOCKS: ReadonlySet<string> = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
 // A slide's, a sheet's, and a table's words change in their replica, line
-// by line and cell by cell (lib/replica.ts).
+// by line and cell by cell, and a slide's lines come and go in its text
+// boxes and its speaker notes (lib/replica.ts).
 const WORDS = new Set([...TEXT_BLOCKS, "TRANSCRIPT", "SLIDE", "SHEET", "TABLE"]);
 // A slide and a sheet stay: their words change, the deck and the workbook keep their shape.
 const REMOVABLE = new Set([...TEXT_BLOCKS, "TRANSCRIPT", "SEPARATOR"]);
