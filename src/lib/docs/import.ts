@@ -143,7 +143,7 @@ const PARAGRAPH_SPACE_PT = 10;
     sets it (article's 10 pt skip draws about 4 pt closer). A PDF's and a
     Word file's displays draw no space of their own (css/import.css): the
     page editor's margin and KaTeX's 1 em stacked on the page's space after
-    a paragraph set each display in a band about five times the page's. */
+    a paragraph set each display far from the words it belongs to. */
 const DISPLAY_SPACE_PT = 4;
 /** A small line (the kicker, a label, a caption) and a display line, as
     text sizes. */
@@ -1477,8 +1477,8 @@ class Converter {
 /** A table's text size in points, when every word of it carries one (the
     size lib/docs/import-table.ts sets its runs in): the size most of its
     letters take. Its cells' paragraphs take it, so a line is as tall as
-    its words: at Normal text's size, a 9 pt table under 10.5 pt text drew
-    each row 2 pt taller than the page's. */
+    its words: at Normal text's size, a table set smaller than the body
+    drew each line taller than the page's. */
 function cellSize(table: RichNode): number | null {
   const letters = new Map<number, number>();
   let bare = false;

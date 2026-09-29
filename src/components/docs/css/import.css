@@ -218,7 +218,7 @@
    leaves around it (lib/docs/import.ts: the space after the block over it,
    and its own space after, insert/math.ts), none of its own: the page
    editor's margin and padding and KaTeX's 1 em margin stacked on it set
-   each display in a band about five times the page's. */
+   each display far from the words it belongs to. */
 .docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose .docs-math-block {
   margin: 0;
   padding-top: 0;
@@ -230,8 +230,8 @@
 /* A table's cells padded as its page pads them (a Word file's cell margins:
    the table's cellPadding, insert/table.ts). A PDF's and a Word file's
    cells otherwise leave no room over and under their words, as Word and TeX
-   set a cell: the page editor's 5 pt all round drew their rows 1.6 to 1.9
-   times the page's height. A cell's own padding wins. */
+   set a cell: the page editor's 5 pt all round drew their rows far taller
+   than the page's. A cell's own padding wins. */
 .docs-shell .docs-prose :is(td, th) {
   padding: var(--docs-cell-padding, 5pt);
 }
