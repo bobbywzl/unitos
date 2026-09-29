@@ -161,3 +161,11 @@ export function isGlyphMarker(m: Marker): boolean {
 export function opensSequence(m: Marker): boolean {
   return m.family === "bullet" || m.family === "box" || (m.family === "cite" && m.value <= 1) || m.value === 1;
 }
+
+/** A number or a letter and ")" that close a parenthesis the line above
+    left open are the text's, no marker: "X ~ N(5," over "6) represents
+    weight gains…" (OpenStax p. 4, read as an item "6)"). */
+export function closesParen(prev: { text: string }, next: { text: string }): boolean {
+  const open = (prev.text.match(/\(/g) ?? []).length - (prev.text.match(/\)/g) ?? []).length;
+  return open > 0 && /^\s*[\p{L}\p{N}]{1,3}\)/u.test(next.text);
+}

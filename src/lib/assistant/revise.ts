@@ -11,7 +11,7 @@ import type { Lang } from "@/lib/i18n/config";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { mapLimit } from "@/lib/jev";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
-import { replicaEdit, replicaWarning } from "@/lib/replica";
+import { replicaEdit, replicaWarning, type ReplicaRefusal } from "@/lib/replica";
 import { hexStyle } from "@/lib/text-style";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
 
@@ -307,9 +307,36 @@ export function reviseActions(
     }
   }
 
+  // A slide's or a sheet's words change within its lines and cells, as its
+  // replica takes them (lib/replica.ts): why not, or null.
+  const replicaRefusal = (block: RevisedBlock, text: string): ReplicaRefusal | null => {
+    if (block.type !== "SLIDE" && block.type !== "SHEET") return null;
+    if (!keepsLines(block.text, text)) return block.type === "SLIDE" ? "lines" : "grid";
+    const edited = replicaEdit(block.type, block.html ?? "", block.text, text);
+    return "refused" in edited ? edited.refused : null;
+  };
+
   for (const [blockId, entry] of own) {
     const block = byId.get(blockId);
     if (!block) continue;
+    // Each word change a slide's or a sheet's replica does not take is
+    // skipped with the reason; the rest stand.
+    if (!entry.rewrite && (block.type === "SLIDE" || block.type === "SHEET")) {
+      const taken: Own["words"] = [];
+      for (const op of [...entry.words].sort((a, b) => a.start - b.start)) {
+        const trial = [...taken, op].flatMap((o) => (o.op === "replace_words" ? [o] : []));
+        let text = "";
+        let at = 0;
+        for (const o of trial) {
+          text += block.text.slice(at, o.start) + o.text;
+          at = o.end;
+        }
+        const refused = op.op === "replace_words" ? replicaRefusal(block, text + block.text.slice(at)) : null;
+        if (refused) warnings.push(replicaWarning(t, refused, op.why));
+        else taken.push(op);
+      }
+      entry.words = taken;
+    }
     const actions: AssistantAction[] = [];
     let text = block.text;
     // The styles and links on the new words: their spans in the new text.
@@ -384,21 +411,12 @@ export function reviseActions(
         return false;
     }
   };
-  // A slide's or a sheet's words change within its lines and cells, as its
-  // replica takes them (lib/replica.ts): why not, or null.
-  const replicaWhy = (action: AssistantAction): string | null => {
-    const block = action.type === "edit_block" ? byId.get(action.blockId) : undefined;
-    if (action.type !== "edit_block" || !block || (block.type !== "SLIDE" && block.type !== "SHEET")) return null;
-    const edited = keepsLines(block.text, action.newText)
-      ? replicaEdit(block.type, block.html ?? "", block.text, action.newText)
-      : { refused: block.type === "SLIDE" ? ("lines" as const) : ("grid" as const) };
-    return "refused" in edited ? replicaWarning(t, edited.refused, action.description) : null;
-  };
   const actions: AssistantAction[] = [];
   for (const unit of units.sort((a, b) => a.at - b.at || a.seq - b.seq)) {
     for (const action of unit.actions) {
-      const why = replicaWhy(action);
-      if (why) warnings.push(why);
+      const block = action.type === "edit_block" ? byId.get(action.blockId) : undefined;
+      const refused = block && action.type === "edit_block" ? replicaRefusal(block, action.newText) : null;
+      if (refused) warnings.push(replicaWarning(t, refused, action.description));
       else if (takes(action)) actions.push(action);
       else refuse(action.description);
     }

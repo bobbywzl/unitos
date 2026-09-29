@@ -6,12 +6,14 @@
 //   2. KaTeX renders every entry's command;
 //   3. composites: each construct TeX builds from two glyphs (≠ ↦ ⟹ ≅ …),
 //      and the symbols the text layer garbles, typeset without and with
-//      pdfTeX's Unicode map, read as their characters in parsePdf's text.
+//      pdfTeX's Unicode map, read as their characters in parsePdf's text;
+//   4. displays that once passed the check wrong: each EQUATION on their
+//      pages reads as one of the page's formulas (a crop or words pass).
 // Needs pdflatex. The exit code is 1 when a check fails.
 //
 //   npx tsx scripts/math-fonts/check.mts [--verbose]
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import katex from "katex";
@@ -54,6 +56,37 @@ function sourceOf(family: MathFamily, code: number, e: MathGlyph): string | null
   if ((family === "omx" || family === "esint") && e.cls === "op") return `$${e.display ? "\\displaystyle" : "\\textstyle"}${e.latex}$`;
   if (family === "ot1" && e.upright) return `$\\mathrm{${e.latex}}$`;
   return `$${e.latex}$`;
+}
+
+// KaTeX's MathML with spacing, attributes, and empty operators set aside
+// (scripts/parse-bench/math-layout.mts).
+function canon(tex: string): string {
+  try {
+    return katex
+      .renderToString(tex, { output: "mathml", throwOnError: true, displayMode: true })
+      .replace(/<annotation[\s\S]*?<\/annotation>/, "")
+      .replace(/<mspace[^>]*\/?>(<\/mspace>)?/g, "")
+      .replace(/<mtext>[\s ⁡-⁤]*<\/mtext>/g, "")
+      .replace(/<mo[^>]*><\/mo>/g, "")
+      .replace(/ (?!mathvariant|linethickness)[a-z]+="[^"]*"/g, "")
+      .replace(/<\/?mrow>/g, "")
+      .replace(/\s+/g, " ");
+  } catch (err) {
+    return `ERR ${(err as Error).message}`;
+  }
+}
+
+// Each EQUATION of a parse on the pages named: it reads as one of its
+// page's formulas (its \tag aside), or the case fails.
+function wrongDisplays(blocks: { type: string; text: string; page?: number }[], formulas: Map<number, string[]>): string[] {
+  const out: string[] = [];
+  for (const b of blocks) {
+    const right = formulas.get(b.page ?? 0);
+    if (b.type !== "EQUATION" || !right) continue;
+    const latex = b.text.replace(/\s*\\tag\*?\{[^}]*\}\s*$/, "");
+    if (!right.some((f) => canon(f) === canon(latex))) out.push(`p. ${b.page}: ${b.text}`);
+  }
+  return out;
 }
 
 function typeset(dir: string, name: string, preamble: string, pages: string[]): string {
@@ -205,6 +238,41 @@ try {
     console.log(`composites, ${regime.endsWith("0") ? "no Unicode map" : "pdfTeX's Unicode map"}: ${good} of ${composites.length} read right`);
     if (good < composites.length) failed = true;
   }
+
+  // 4: displays that once passed the check wrong. Typeset in Times with
+  // mathptmx, a formula's letters are a text italic's, as Springer's
+  // MathTime sets them: round 2 read them as \mathrm. Springer's own pages
+  // run when the corpus holds them: (12) passed without the braces its
+  // extension font hangs over its first row, (29) without the limits under
+  // its two "lim"s, the page's last line.
+  const cases: { tex: string; words: string }[] = [
+    { tex: "\\lim_{x\\to\\pm\\infty} a(x,t) = \\lim_{x\\to\\pm\\infty} b(x,t) = 0.", words: "The display ends the page, its limits on the page's last line." },
+    { tex: "\\max_{k\\le n} |S_k| \\le \\sup_{t\\in[0,1]} |B_t|.", words: "A display with limits under two names stands between two sentences." },
+  ];
+  const sheet = cases.map((c, i) => `${c.words} Case ${i + 1} follows.\\begin{equation}${c.tex}\\end{equation}${i === 0 ? "" : "Words follow the display."}`);
+  const times = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "displays", `${packages}\n\\usepackage{mathptmx}`, sheet))));
+  const wrong = wrongDisplays(times.blocks, new Map(cases.map((c, i) => [i + 1, [c.tex]])));
+  const springer = join(import.meta.dirname, "..", "..", ".bench", "real", "springer-bmb-01377.pdf");
+  if (existsSync(springer)) {
+    const parsed = await parsePdf(new Uint8Array(readFileSync(springer)), { pages: [6, 11] });
+    const bold = "(\\mathbf{n},\\mathbf{m}";
+    const formulas = new Map([
+      [6, [`\\frac{\\partial p}{\\partial t}${bold},t)=(\\mathcal{D}+\\mathcal{R})p${bold},t).`, `\\varphi${bold})=\\lim_{t\\to\\infty}p${bold},t)`, `0=(\\mathcal{D}+\\mathcal{R})\\varphi${bold}).`]],
+      [
+        11,
+        [
+          "A\\xrightarrow{k_2}B\\xrightarrow{k_3}\\emptyset.",
+          "\\frac{\\partial a}{\\partial t}=D_A\\frac{\\partial^2a}{\\partial x^2}-k_2a+2k_1\\delta(x),",
+          "\\frac{\\partial b}{\\partial t}=D_B\\frac{\\partial^2b}{\\partial x^2}+k_2a-k_3b,",
+          "\\lim_{x\\to\\pm\\infty}a(x,t)=\\lim_{x\\to\\pm\\infty}b(x,t)=0.",
+        ],
+      ],
+    ]);
+    wrong.push(...wrongDisplays(parsed.blocks, formulas));
+  } else console.log("displays: Springer's pages not in .bench/real, skipped");
+  for (const w of wrong) console.log(`WRONG DISPLAY ${w}`);
+  console.log(`displays that once passed wrong: ${wrong.length === 0 ? "none reads wrong" : `${wrong.length} read wrong`}`);
+  if (wrong.length > 0) failed = true;
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

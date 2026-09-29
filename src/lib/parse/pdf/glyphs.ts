@@ -358,13 +358,16 @@ function texTextFonts(glyphs: Glyph[]) {
 
 /** A font's lean and weight by its name (fontFlags), read once a font: a
     formula's letter in an italic one is a math letter, not \mathrm, and in
-    a bold one \mathbf (layout.ts). */
+    a bold one \mathbf (layout.ts). Adobe's names end in "It" or "Obl"
+    (PLOS sets its formulas' letters in MinionPro-It, which read as
+    \mathrm). */
 const looks = new Map<string, { italic: boolean; bold: boolean }>();
+const ADOBE_ITALIC_RE = /(?:^|[-a-z])(?:It|Obl)$/;
 function fontLook(base: string): { italic: boolean; bold: boolean } {
   let look = looks.get(base);
   if (look === undefined) {
     const { italic, bold } = fontFlags(base);
-    looks.set(base, (look = { italic, bold }));
+    looks.set(base, (look = { italic: italic || ADOBE_ITALIC_RE.test(base), bold }));
   }
   return look;
 }

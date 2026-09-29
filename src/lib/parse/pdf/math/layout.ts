@@ -6,7 +6,7 @@
 // PDF points, y up; an em is a glyph's size.
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
-import { isBoldFont, isItalicFont, isUnreadMath, type MathFamily } from "@/lib/parse/pdf/glyphs";
+import { isBoldFont, isItalicFont, isTextMath, isUnreadMath, type MathFamily } from "@/lib/parse/pdf/glyphs";
 import { mathGlyph, type MathGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Box, Item } from "@/lib/parse/pdf/types";
 
@@ -25,7 +25,8 @@ export type Atom = {
   top: number;
   bottom: number;
   upright: boolean;
-  // A text italic's letter: a word of them is text, one alone a math letter.
+  // A text italic's letter where the page's math sets its own letters: a
+  // word of them is text, one alone a math letter.
   italic?: boolean;
   // Set while the formula is read.
   limits?: boolean;
@@ -152,10 +153,12 @@ function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
 // digits, "=", and letters from the text's fonts: Utopia's under
 // MathDesign, Liberation Serif's in LibreOffice and OpenStax), its box
 // estimated from its shape, as the font's metrics are not known. An upright
-// letter is \mathrm, an italic one a math letter. A Computer Modern font
-// under another name (arXiv 2502.02648's "mwa_cmmi10") is no text font: its
-// letters are math italic, and the formula stays a picture.
-const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−!/<>]$/;
+// letter is \mathrm, an italic one a math letter. An en dash is the minus,
+// a middle dot the product (PLOS sets both in Minion: "1 – Δe^{–λt}"). A
+// Computer Modern font under another name (arXiv 2502.02648's "mwa_cmmi10")
+// is no text font: its letters are math italic, and the formula stays a
+// picture.
+const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!/<>]$/;
 const CM_NAME_RE = /cm(r|mi|mib|sy|bsy|ex|bx|ti|ss|tt|sl)\d/i;
 
 function textAtom(g: Glyph): Atom | null {
@@ -173,7 +176,7 @@ function textAtom(g: Glyph): Atom | null {
           ? [0.1, 0]
           : /[()[\]/]/.test(ch)
             ? [0.75, 0.25]
-            : /[=+−<>]/.test(ch)
+            : /[=+−–·<>]/.test(ch)
               ? [0.58, 0.08]
               : [0.69, 0];
   const cls = /[,;]/.test(ch)
@@ -184,7 +187,7 @@ function textAtom(g: Glyph): Atom | null {
         ? "close"
         : /[=<>]/.test(ch)
           ? "rel"
-          : /[+−]/.test(ch)
+          : /[+−–·]/.test(ch)
             ? "bin"
             : "ord";
   const italic = isItalicFont(g.base);
@@ -196,7 +199,7 @@ function textAtom(g: Glyph): Atom | null {
     code: g.code,
     entry: null,
     // KaTeX draws "-" in a formula as the minus sign.
-    tex: bold ? `\\${italic ? "boldsymbol" : "mathbf"}{${ch}}` : ch === "−" ? "-" : ch,
+    tex: bold ? `\\${italic ? "boldsymbol" : "mathbf"}{${ch}}` : ch === "−" || ch === "–" ? "-" : ch === "·" ? "\\cdot" : ch,
     cls,
     size: g.size,
     x1: g.x,
@@ -205,7 +208,9 @@ function textAtom(g: Glyph): Atom | null {
     top: g.y + height * g.size,
     bottom: g.y - depth * g.size,
     upright: /[A-Za-z]/.test(ch) && !italic && !bold,
-    italic: /[A-Za-z]/.test(ch) && italic && !bold,
+    // PLOS sets every formula's letters in Minion's italic ("dP_k/dt"):
+    // those are math letters (isTextMath), not words.
+    italic: /[A-Za-z]/.test(ch) && italic && !bold && !isTextMath(g),
   };
 }
 

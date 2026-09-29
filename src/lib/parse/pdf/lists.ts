@@ -4,7 +4,7 @@
 
 import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
-import { BULLET_RE, GLYPH_BULLET_RE, follows, isGlyphMarker, opensSequence, readMarker, type Marker } from "@/lib/parse/pdf/markers";
+import { BULLET_RE, GLYPH_BULLET_RE, closesParen, follows, isGlyphMarker, opensSequence, readMarker, type Marker } from "@/lib/parse/pdf/markers";
 import {
   isCentered,
   isFirstLineIndent,
@@ -42,7 +42,12 @@ export function readList(lines: Line[], i: number, ctx: PageContext, runOf: numb
   if (marker && (line.size <= ctx.bodySize * 1.15 || (isGlyphMarker(marker) && line.size <= ctx.bodySize * 1.6))) {
     return markedList(lines, i, ctx, runOf, marker);
   }
-  return indentedBand(lines, i, ctx, runOf);
+  // A bullet the page draws opens an item as a printed one does: Beamer's
+  // balls beside lines at the frame's edge (synth-slides-tex: its first
+  // items ran together as one paragraph).
+  const drawn = marker ? null : drawnMarkerAt(line, ctx);
+  const list = drawn !== null && line.size <= ctx.bodySize * 1.6 ? markedList(lines, i, ctx, runOf, DRAWN, drawn) : null;
+  return list ?? indentedBand(lines, i, ctx, runOf);
 }
 
 // A marker set off by a tab reads as a cell of its own ("(i)⇥the investment
@@ -103,8 +108,8 @@ function bodyXOf(line: Line, marker: Marker): number {
   return line.xEnd;
 }
 
-function itemOf(line: Line, marker: Marker): Item {
-  return { lines: [line], marker, markerX: line.x, bodyX: bodyXOf(line, marker) };
+function itemOf(line: Line, marker: Marker, markerX = line.x): Item {
+  return { lines: [line], marker, markerX, bodyX: bodyXOf(line, marker) };
 }
 
 // One level of a list: markers within 0.8 em of one another (a right-aligned
@@ -116,11 +121,11 @@ function sameLevel(a: { markerX: number; bodyX: number }, b: { markerX: number; 
 // A marked line after the items read so far opens the next item when its
 // marker follows the last one at its level, or opens a nested list under
 // the last item.
-function joinsList(items: Item[], line: Line, marker: Marker): boolean {
-  const here = { markerX: line.x, bodyX: bodyXOf(line, marker) };
+function joinsList(items: Item[], line: Line, marker: Marker, markerX = line.x): boolean {
+  const here = { markerX, bodyX: bodyXOf(line, marker) };
   let at = items.length - 1;
   while (at >= 0 && !sameLevel(items[at], here, line.size)) at--;
-  if (at < 0) return line.x > items[items.length - 1].markerX + line.size * 0.5 && opensSequence(marker);
+  if (at < 0) return markerX > items[items.length - 1].markerX + line.size * 0.5 && opensSequence(marker);
   if (follows(items[at].marker, marker)) return true;
   // An item of an outer level after the sibling ("2." after "1.3") opens
   // this level again: "2.1" starts it anew.
@@ -142,9 +147,9 @@ function goesOn(item: Item, prev: Line, next: Line, edge: number, ctx: PageConte
   );
 }
 
-function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[], first: Marker): Step | null {
+function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[], first: Marker, firstX = lines[i].x): Step | null {
   const line = lines[i];
-  const items: Item[] = [itemOf(line, first)];
+  const items: Item[] = [itemOf(line, first, firstX)];
   // The column's right edge, where a wrapped line runs to: the prose lines
   // around the list end there, else the column the list was read in (a
   // form's items, with no prose line near the first: an item's last word
@@ -168,9 +173,24 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     const item = items[items.length - 1];
     const sibling = [...items].reverse().find((it) => Math.abs(it.markerX - next.x) <= next.size * 0.8);
     const marker = readMarker(next, sibling?.marker);
+    const drawn = marker ? null : drawnMarkerAt(next, ctx);
+    const mark = marker ?? (drawn !== null ? DRAWN : null);
+    // A marker at the item's words, under a line that ran to the column's
+    // edge mid-sentence and at no level the list has, is the item's next
+    // line ("… are either" over "(1) in the public domain or (2) …": a
+    // nested item "(1)", real-gslides-oer-5rs p3), and so is a number that
+    // closes a parenthesis the line above left open.
+    const here = { markerX: drawn ?? next.x, bodyX: mark ? bodyXOf(next, mark) : next.x };
+    const wrap =
+      mark !== null &&
+      (closesParen(prev, next) ||
+        (Math.abs(next.x - item.bodyX) <= next.size * 0.3 &&
+          !/[.:;!?]$/.test(prev.text.trim()) &&
+          fillsMargin(prev, next, edge) &&
+          !items.some((it) => sameLevel(it, here, next.size))));
     // Marked items sit farther apart than wrapped lines (itemsep).
-    if (marker && gap <= next.size * ctx.leading * 2.2 && joinsList(items, next, marker)) {
-      items.push(itemOf(next, marker));
+    if (mark && !wrap && gap <= next.size * ctx.leading * 2.2 && joinsList(items, next, mark, drawn ?? next.x)) {
+      items.push(itemOf(next, mark, drawn ?? next.x));
       j++;
       continue;
     }
@@ -184,7 +204,7 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     }
     break;
   }
-  if (!isList(items, i, ctx)) return null;
+  if ((first === DRAWN && items.length < 2) || !isList(items, i, ctx)) return null;
   const { depths, levels } = depthsOf(items, line.size);
   const list = listSegment(items, depths);
   list.listIndents = listIndentsOf(items, depths, levels, ctx);
@@ -309,21 +329,41 @@ function listSegment(items: Item[], depths: number[]): Segment {
 // ── Indented bands ──────────────────────────────────────────────────────────
 
 // A bullet the page draws as a shape left of a line's first word, about its
-// letters' height (Beamer's and a slide program's bullets never reach the
-// text layer).
-function drawnBullet(line: Line, ctx: PageContext): boolean {
+// letters' height, at most `most` ems wide and high (Beamer's and a slide
+// program's bullets never reach the text layer; Beamer paints its balls as
+// shadings): the shape's left edge, or null.
+function drawnBulletAt(line: Line, ctx: PageContext, most = 0.9): number | null {
   const s = line.size;
-  return [...ctx.drawing.paths.filter((b) => !b.clip), ...ctx.drawing.fills].some(
+  const shape = [...ctx.drawing.paths.filter((b) => !b.clip), ...ctx.drawing.fills, ...ctx.drawing.shades].find(
     (b) =>
       b.x2 <= line.x + s * 0.1 &&
       b.x1 >= line.x - s * 3 &&
       b.x2 - b.x1 >= s * 0.1 &&
-      b.x2 - b.x1 <= s * 0.9 &&
+      b.x2 - b.x1 <= s * most &&
       b.y2 - b.y1 >= s * 0.1 &&
-      b.y2 - b.y1 <= s * 0.9 &&
+      b.y2 - b.y1 <= s * most &&
       b.y1 >= line.y - s * 0.3 &&
       b.y2 <= line.y + s,
   );
+  return shape ? shape.x1 : null;
+}
+
+function drawnBullet(line: Line, ctx: PageContext): boolean {
+  return drawnBulletAt(line, ctx) !== null;
+}
+
+// A drawn bullet's marker: "•", no characters of the line.
+const DRAWN: Marker = { text: "•", family: "bullet", shape: "•", value: 0, length: 0, checked: false };
+
+// A caption's label after a square the page draws (LIPIcs: "Figure 2",
+// "Algorithm 1") opens no item.
+const CAPTION_RE = /^(?:Figure|Fig\.|Table|Algorithm|Listing)\s*\d/i;
+
+// Where a drawn bullet stands left of a line that opens an item: a shape
+// two thirds of an em at most (a form's checkbox is bigger than a bullet).
+function drawnMarkerAt(line: Line, ctx: PageContext): number | null {
+  if (line.cells.length !== 1 || CAPTION_RE.test(line.text.trim())) return null;
+  return drawnBulletAt(line, ctx, 0.65);
 }
 
 // An unmarked indented band: its gaps, outdents, and short lines split it
@@ -373,8 +413,9 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
     // first line it opens a list of its own, and the lines above it are a
     // paragraph (an exercise's words after its display over its items,
     // "(see Example 1.6).", read as a bullet over them: Grinstead p. 35).
-    if (BULLET_RE.test(next.text) && (next.x < line.x - next.size * 0.5 || (!BULLET_RE.test(line.text) && readMarker(next) !== null))) break;
-    const continues = BULLET_RE.test(next.text) || next.x >= line.x - 2;
+    const marked = BULLET_RE.test(next.text) && !closesParen(run[run.length - 1], next);
+    if (marked && (next.x < line.x - next.size * 0.5 || (!BULLET_RE.test(line.text) && readMarker(next) !== null))) break;
+    const continues = marked || next.x >= line.x - 2;
     if (!continues) break;
     run.push(next);
     j++;
@@ -397,7 +438,7 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
   const shortLines = run.filter((l) => l.xEnd < edge - l.size * 3).length;
   const ragged = shortLines * 2 >= run.length;
   for (let k = 1; k < run.length; k++) {
-    const marked = BULLET_RE.test(run[k].text);
+    const marked = BULLET_RE.test(run[k].text) && !closesParen(run[k - 1], run[k]);
     const spaced = gaps[k - 1] > gapThreshold && !pushedApart(run[k - 1], run[k]);
     const outdented = run[k].x < run[k - 1].x - line.size * 0.5;
     const ended = ragged && !fillsMargin(run[k - 1], run[k], edge);

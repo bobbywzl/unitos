@@ -413,7 +413,19 @@ function capsHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
     }
   }
   const below = lines[j];
-  if (!below || !isCentered(lines, i, ctx) || !apartAbove(lines[i - 1], line, ctx) || !apartBelow(run[run.length - 1], below, ctx)) return null;
+  if (!below || !isCentered(lines, i, ctx)) return null;
+  // A statement's title in capitals, set tight between its company line and
+  // its units line over its table, all centered: the 10-K's "CONSOLIDATED
+  // STATEMENTS OF INCOME" read as a paragraph (real-sec-10k-goog-2024-p54).
+  const above = lines[i - 1];
+  const statement =
+    above !== undefined &&
+    isCentered(lines, i - 1, ctx) &&
+    !caps(above) &&
+    isCentered(lines, j, ctx) &&
+    !caps(below) &&
+    lines[j + 1]?.table !== undefined;
+  if (!statement && (!apartAbove(above, line, ctx) || !apartBelow(run[run.length - 1], below, ctx))) return null;
   return heading(run, j, true);
 }
 
