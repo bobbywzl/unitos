@@ -108,8 +108,9 @@ type Band = { left: Side; right: Side; separator: Piece | null };
 // sides, each side is prose set in a column (or graphics only, beside a
 // column of text). A wide table also leaves a gutter, but its sides are
 // short cells: those regions stay in one pass so rows keep their reading
-// order.
-function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: number): { bands: Band[] } | null {
+// order. depth: how many regions this one lies in (a side tested as columns
+// of its own counts one more).
+function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: number, depth: number): { bands: Band[] } | null {
   if (items.length === 0) return null;
   const x0 = Math.min(...items.map((i) => i.x), ...graphics.map((p) => p.box.x1));
   const x1 = Math.max(...items.map((i) => i.x + i.w), ...graphics.map((p) => p.box.x2));
@@ -117,20 +118,37 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   const total = chars(items);
   if (width < pageWidth * 0.3 || total === 0) return null;
 
-  // The gutter: the x that the fewest characters cross, the one nearest the
-  // region's middle among equals.
-  let best: { g: number; cross: number } | null = null;
+  // The gutters to try: each valley of the characters that cross an x, the
+  // x of a valley nearest the region's middle, the fewest crossings first.
+  // The fewest are not always the columns': the IRS W-9 sets two columns of
+  // instructions under a form whose field 4 stands in a column of its own,
+  // and the form's lines cross the columns' gutter.
   const middle = x0 + width / 2;
+  const scan: { g: number; cross: number }[] = [];
   for (let g = x0 + width * 0.2; g <= x0 + width * 0.8; g += width * 0.01) {
     let cross = 0;
     for (const i of items) if (i.x < g && i.x + i.w > g) cross += i.str.trim().length;
-    if (!best || cross < best.cross || (cross === best.cross && Math.abs(g - middle) < Math.abs(best.g - middle))) {
-      best = { g, cross };
-    }
+    scan.push({ g, cross });
   }
-  if (!best || best.cross / total >= 0.5) return null;
-  const g = best.g;
+  const valleys: { g: number; cross: number }[] = [];
+  for (let k = 0; k < scan.length; ) {
+    let end = k;
+    while (end + 1 < scan.length && scan[end + 1].cross === scan[k].cross) end++;
+    const run = scan.slice(k, end + 1);
+    const low = (k === 0 || scan[k - 1].cross > scan[k].cross) && (end === scan.length - 1 || scan[end + 1].cross > scan[k].cross);
+    if (low && scan[k].cross / total < 0.5) valleys.push(run.reduce((a, b) => (Math.abs(b.g - middle) < Math.abs(a.g - middle) ? b : a)));
+    k = end + 1;
+  }
+  valleys.sort((a, b) => a.cross - b.cross || Math.abs(a.g - middle) - Math.abs(b.g - middle));
+  for (const { g } of valleys.slice(0, 3)) {
+    const split = splitAt(items, graphics, page, pageWidth, depth, g, total);
+    if (split) return split;
+  }
+  return null;
+}
 
+// The region cut at the gutter g, when it reads as columns there.
+function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: number, depth: number, g: number, total: number): { bands: Band[] } | null {
   // Rows that span the gutter: the items that cross it, the items on either
   // side of it with no more than a word's gap between them, up to 1.2 em (a
   // full-width caption whose word gap fell on the gutter was read as two
@@ -140,8 +158,8 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   // items has one word over the gutter and the rest on either side).
   const byY = [...items].sort((a, b) => a.y - b.y);
   const maxSize = Math.max(...items.map((i) => i.size));
-  const near = (s: Item) => {
-    // The items near s's baseline: a binary search for the window's start.
+  // The items near s's baseline: a binary search for the window's start.
+  const beside = (s: Item) => {
     let lo = 0;
     let hi = byY.length;
     while (lo < hi) {
@@ -152,12 +170,32 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
     const out: Item[] = [];
     for (let k = lo; k < byY.length && byY[k].y <= s.y + maxSize * 0.5; k++) {
       const item = byY[k];
-      const size = Math.max(s.size, item.size);
-      const gap = Math.max(item.x - (s.x + s.w), s.x - (item.x + item.w));
-      if (item !== s && Math.abs(item.y - s.y) < size * 0.5 && gap < size * 1.2) out.push(item);
+      if (item !== s && Math.abs(item.y - s.y) < Math.max(s.size, item.size) * 0.5) out.push(item);
     }
     return out;
   };
+  // The right column's edge: the x where four lines or more right of the
+  // gutter start. An item there, more than half an em after the item before
+  // it across the gutter, opens the right column's line: the Federal
+  // Register sets its three columns 1.0 em apart, and each line of a column
+  // that ran near the gutter took the next column's line into a row across
+  // the page.
+  const starts = new Map<number, number>();
+  for (const item of items) {
+    if (item.x < g || beside(item).some((j) => j.x < item.x && j.x + j.w > g)) continue;
+    const x = Math.round(item.x);
+    starts.set(x, (starts.get(x) ?? 0) + 1);
+  }
+  const counted = (x: number) => (starts.get(x - 1) ?? 0) + (starts.get(x) ?? 0) + (starts.get(x + 1) ?? 0);
+  const edge = [...starts.keys()].map((x) => ({ x, n: counted(x) })).filter((e) => e.n >= 4).sort((a, b) => b.n - a.n)[0]?.x;
+  const opens = (a: Item, b: Item, size: number) =>
+    edge !== undefined && a.x + a.w <= g && b.x >= g && Math.abs(b.x - edge) <= 1.5 && b.x - (a.x + a.w) > size * 0.5;
+  const near = (s: Item) =>
+    beside(s).filter((item) => {
+      const size = Math.max(s.size, item.size);
+      const gap = Math.max(item.x - (s.x + s.w), s.x - (item.x + item.w));
+      return gap < size * 1.2 && !(item.x > s.x ? opens(s, item, size) : opens(item, s, size));
+    });
   const spanning = new Set(items.filter((i) => i.x < g && i.x + i.w > g));
   for (const item of items) {
     if (item.x + item.w > g) continue;
