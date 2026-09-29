@@ -32,8 +32,9 @@ import { cellValue, computeFormula, formulaFormat, movedFormula, shows } from "@
     hold them (empty); a replica whose text is not the block's (stale). A
     table that keeps its html keeps its rows and columns (cells) and the
     words a table keeps: a formula, the break between a cell's paragraphs,
-    a cell a merge covers (held). */
-export type ReplicaRefusal = "lines" | "grid" | "frozen" | "merged" | "fixed" | "empty" | "stale" | "cells" | "held";
+    a cell a merge covers (held). A sheet keeps a row or a column a formula
+    it computes reads alone, not in a range (reads). */
+export type ReplicaRefusal = "lines" | "grid" | "frozen" | "merged" | "fixed" | "empty" | "stale" | "cells" | "held" | "reads";
 
 /** What the reader is told for each refusal. */
 export const REPLICA_REFUSAL: Record<ReplicaRefusal, TKey> = {
@@ -46,6 +47,7 @@ export const REPLICA_REFUSAL: Record<ReplicaRefusal, TKey> = {
   stale: "api.replicaStale",
   cells: "api.replicaCells",
   held: "api.replicaHeld",
+  reads: "api.replicaReads",
 };
 
 // A node's place in the html, as jsdom gives it.
@@ -912,7 +914,7 @@ export function sheetWithText(html: string, prev: string, next: string, cut: She
   let now = rowsIn(nextGrid, grid.width);
   for (let d = 1; !now && d <= 20; d++) {
     for (const w of [grid.width + d, grid.width - d]) {
-      const rows = w > 0 && !now ? rowsIn(nextGrid, w) : null;
+      const rows: string[][] | null = w > 0 && !now ? rowsIn(nextGrid, w) : null;
       if (rows && rows.length === was.length) now = rows;
     }
   }
@@ -926,18 +928,18 @@ export function sheetWithText(html: string, prev: string, next: string, cut: She
   }
   // Each formula stands where its cell went; the references of the ones the
   // sheet computes move with their cells.
-  const moved: { r: number; c: number; formula: string; format: string | null; shown: string }[] = [];
+  const moved: { r: number; c: number; formula: string; was: string; format: string | null; shown: string }[] = [];
   for (const f of formulas) {
     const r = shaped.row(f.r);
     const c = shaped.col(f.c);
     if (r === null || c === null) continue;
     const formula = f.format === null ? f.formula : movedFormula(f.formula, shaped.row, shaped.col);
     if (formula === null) return { refused: "reads" };
-    moved.push({ r, c, formula, format: f.format, shown: f.shown });
+    moved.push({ r, c, formula, was: f.formula, format: f.format, shown: f.shown });
   }
   const titled = withCells(
     shaped.html,
-    moved.filter((m, i) => m.formula !== formulas.filter((f) => shaped.row(f.r) !== null && shaped.col(f.c) !== null)[i]?.formula).map((m) => ({ r: m.r, c: m.c, title: m.formula })),
+    moved.filter((m) => m.formula !== m.was).map((m) => ({ r: m.r, c: m.c, title: m.formula })),
   );
   // Every cell but a formula's takes next's words; a formula's keeps its own.
   const formulaAt = (r: number, c: number) => moved.find((m) => m.r === r && m.c === c);
