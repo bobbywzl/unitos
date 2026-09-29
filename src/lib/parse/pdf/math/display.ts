@@ -986,6 +986,8 @@ export function displayEquations(
         mathShare: 1,
       });
     } else {
+      // Its text is the display's glyphs as the text layer reads them, often
+      // garbled: the import shows the crop with no caption (mathCrop).
       out.push({
         type: "FIGURE",
         text: group
@@ -998,6 +1000,7 @@ export function displayEquations(
         region: regionOf(crop, pageWidth, pageHeight),
         lineSize: group[0].lineSize,
         mathShare: 1,
+        mathCrop: true,
       });
     }
     k = m;

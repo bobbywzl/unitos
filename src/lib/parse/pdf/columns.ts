@@ -260,9 +260,9 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
   if (graphicsLeft || graphicsRight) return isProse(buildLines(graphicsLeft ? right : left, page), 2) ? { bands } : null;
   if (leftChars === 0 || rightChars === 0) return null;
   // Two columns of text: most of the region's characters sit beside each
-  // other, each side holds a fair share, and each side is a prose column.
+  // other, and each side is a prose column, however narrow (the Earth
+  // Observer's pull quote beside its article holds 7% of their characters).
   if (sideChars < total * 0.4) return null;
-  if (leftChars < sideChars * 0.15 || rightChars < sideChars * 0.15) return null;
   return isColumns(left, page, pageWidth, depth) && isColumns(right, page, pageWidth, depth) ? { bands } : null;
 }
 

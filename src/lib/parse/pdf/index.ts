@@ -555,6 +555,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       block.pageStarts = s.breaks.map((b) => ({ offset: b.offset, page: chosen[b.page] }));
     }
     if ((s.type === "FIGURE" || s.type === "EQUATION") && s.region) block.region = s.region;
+    if (s.type === "FIGURE" && s.mathCrop) block.mathCrop = true;
     const allLinks = [...(s.links ?? []), ...links];
     if (styles.length > 0) block.styles = styles;
     const math = s.type === "PARAGRAPH" || s.type === "LIST" || s.type === "HEADING" ? mathSpans(s.text, s.runs) : [];

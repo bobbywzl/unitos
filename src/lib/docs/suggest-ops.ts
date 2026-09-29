@@ -31,6 +31,9 @@ const MARK_FORMATS = ["bold", "italic", "underline", "strikethrough"] as const s
 const VALUE_FORMATS = ["link", "color", "highlight_color", "font", "size"] as const satisfies readonly SuggestValueFormat[];
 // A new row's or column's words, one string per cell.
 const cells = z.array(z.string().max(2_000)).max(50).default([]);
+/** A number as a model writes it: 12, "12", or "12pt". */
+const points = (min: number, max: number) =>
+  z.preprocess((v) => (typeof v === "string" ? Number(v.trim().replace(/\s*pt$/i, "")) : v), z.number().min(min).max(max)).optional();
 const ALIGNMENTS = ["left", "center", "right", "justify"] as const satisfies readonly SuggestAlignment[];
 const suggestOpSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("replace_words"), blockId: id, find, text: z.string().max(4_000), format: z.enum(MARK_FORMATS).optional(), why }),
@@ -48,6 +51,12 @@ const suggestOpSchema = z.discriminatedUnion("op", [
     why,
   }),
   z.object({ op: z.literal("set_alignment"), blockId: id, alignment: z.enum(ALIGNMENTS), why }),
+  z
+    .object({ op: z.literal("set_spacing"), blockId: id, line: points(0.5, 5), before: points(0, 200), after: points(0, 200), why })
+    .refine((o) => o.line !== undefined || o.before !== undefined || o.after !== undefined),
+  z
+    .object({ op: z.literal("set_indent"), blockId: id, left: points(0, 500), right: points(0, 500), firstLine: points(-200, 500), why })
+    .refine((o) => o.left !== undefined || o.right !== undefined || o.firstLine !== undefined),
   z.object({ op: z.literal("insert_row"), blockId: id, where: z.enum(["above", "below"]), cells, why }),
   z.object({ op: z.literal("remove_row"), blockId: id, why }),
   z.object({ op: z.literal("move_row"), blockId: id, toBlockId: id, where: z.enum(["above", "below"]), why }),
@@ -135,6 +144,7 @@ export type BlockPlace = {
 };
 
 const LIST_STYLES: Record<string, SuggestStyle> = { bulletList: "bulleted", orderedList: "numbered", taskList: "checklist" };
+const LIST_STYLE_NAMES: ReadonlySet<SuggestStyle> = new Set(Object.values(LIST_STYLES));
 const LIST_PARTS = new Set([...Object.keys(LIST_STYLES), "listItem", "taskItem"]);
 
 /** Every indexed block's place, read the way the paragraph index reads the
@@ -294,7 +304,7 @@ const TEXT_ROWS = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);
     alignment, whole rows, or the gap after a row (-1: the document's start). */
 type Claim =
   | { kind: "words"; row: number; from: number; to: number }
-  | { kind: "style"; row: number; attr: "style" | "alignment" }
+  | { kind: "style"; row: number; attr: "style" | "alignment" | "spacing" | "indent" }
   | { kind: "rows"; rows: number[] }
   | { kind: "gap"; after: number };
 
@@ -326,13 +336,22 @@ function once(text: string, needle: string): QuoteHit | "notFound" | "ambiguous"
   return matchInTextLoose(rest, selector) ? "ambiguous" : hit;
 }
 
-/** Markdown as the page takes it: no images, no HTML, at most 200 lines. */
+// An image on a line of its own: ![what it shows](address).
+const IMAGE_LINE = /^\s*!\[([^\]\n]*)\]\(\s*(\S+?)\s*\)\s*$/;
+
+/** Markdown as the page takes it: no HTML, at most 200 lines. An image on a
+    line of its own stays when its address is a web address; any other
+    image is its words. */
 function cleanMarkdown(text: string): string {
   return text
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/<\/?[a-zA-Z][^>]*>/g, "")
     .split("\n")
     .slice(0, 200)
+    .map((line) => {
+      const image = IMAGE_LINE.exec(line);
+      if (image) return /^https?:\/\/\S+$/i.test(image[2]) ? `![${image[1]}](${image[2]})` : image[1];
+      return line.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
+    })
     .join("\n")
     .trim();
 }
@@ -444,6 +463,13 @@ export function resolveOps(
       if (!place.style || place.where !== "body") return "notText";
       if (op.style === place.style) return null;
       return { op: { i, op: op.op, blockId: row.id, style: op.style, baseStyle: place.style, why: op.why }, claim: { kind: "style", row: k, attr: "style" }, chars: 0 };
+    }
+    if (op.op === "set_spacing" || op.op === "set_indent") {
+      // A paragraph, a heading, a list line, a table cell's or a footnote's
+      // paragraph; not code. A list line's indent is its nesting (replace_blocks).
+      if (!place.style || (op.op === "set_indent" && LIST_STYLE_NAMES.has(place.style))) return "notText";
+      const { why: _why, op: _op, blockId: _blockId, ...values } = op;
+      return { op: { i, op: op.op, blockId: row.id, ...values, why: op.why } as ResolvedOp, claim: { kind: "style", row: k, attr: op.op === "set_spacing" ? "spacing" : "indent" }, chars: 0 };
     }
     if (op.op === "set_alignment") {
       // A paragraph, a heading, a list line, a table cell's or a footnote's paragraph; not code.
