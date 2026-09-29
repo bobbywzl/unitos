@@ -1260,6 +1260,26 @@ async function checkFixture(f: Fixture): Promise<Report> {
     ];
     const wrong = want.filter(([text, depth, marker]) => !items.some((it) => it.text === text && it.depth === depth && it.marker === marker));
     check(wrong.length === 0, "every list marker family draws as its list", wrong.length ? `${wrong.length} of ${want.length}: ${wrong.map(([text]) => text).join(" | ")}` : `${want.length} lines`);
+
+    // A list whose first line stands a level in keeps its lines' depths:
+    // siblings stay siblings ("(b)" drew "(2)", its line a level too deep),
+    // and each depth stands where the page sets its lines (the page's
+    // depths 1 and 2, not 0 and 1).
+    const parts: [string, number, string][] = [
+      ["the first part", 0, "(a)"],
+      ["its first case", 1, "(1)"],
+      ["its second case", 1, "(2)"],
+      ["the second part", 0, "(b)"],
+      ["a case of the second part", 1, "(1)"],
+    ];
+    const off = parts.filter(([text, depth, marker]) => !items.some((it) => it.text === text && it.depth === depth && it.marker === marker));
+    const list = (doc.content ?? []).find((n) => n.type === "orderedList" && inlineText(n.content?.[0]?.content?.[0] ?? { type: "text" }) === "the first part");
+    const depths = list?.attrs?.listIndents;
+    check(
+      off.length === 0 && depths === "[[38,-18],[54,-16]]",
+      "a list whose first line stands a level in keeps each line's depth, at the page's depths",
+      `${off.length ? `${off.length} of ${parts.length} off: ${off.map(([text]) => text).join(" | ")}` : `${parts.length} lines`}; depths ${String(depths ?? "none")}`,
+    );
   }
 
   // Every list's markers draw as the parse prints them (round 2): a
@@ -1691,6 +1711,7 @@ function syntheticPdf(): Fixture {
   const l24 = "- the set A ⊂ X\n- the map f : X → Y on page fifteen";
   const m25 = "A bound 1 + 1/n that a page start cuts, and an empty formula here.";
   const s26 = "It has struck words, red words, lit words, sans words, and small words in one line.";
+  const l27 = "i. The number K is called the constant.";
   const table = pdfTable([["Model", "BLEU", "Cost"], ["Base", "27.3", "3.3"], ["Big", "28.4", "23.0"]], true);
   const blocks: Block[] = [
     { type: "PARAGRAPH", text: p0, page: 1, styles: [{ ...span(p0, "bold words"), style: "bold" }], links: [{ ...span(p0, "a link"), href: "https://example.com/" }] },
@@ -1747,6 +1768,17 @@ function syntheticPdf(): Fixture {
     ] },
     { type: "PARAGRAPH", text: "September 28, 2026", html: '<p class="right">', page: 16, font: { family: "Times New Roman", size: 11 }, spaceAfter: 0 },
     { type: "PARAGRAPH", text: "A note set small in a sans face.", page: 16, font: { family: "Arial", size: 9 }, spaceAfter: 14 },
+    // A list whose first line stands a level in: an exercise's parts after
+    // the lines that define its events, its cases two levels in.
+    {
+      type: "LIST",
+      text: "  (a) the first part\n    (1) its first case\n    (2) its second case\n  (b) the second part\n    (1) a case of the second part",
+      page: 16,
+      listIndents: [{ left: 5, first: 0 }, { left: 38, first: -18 }, { left: 54, first: -16 }],
+    },
+    // A list line that opens with a formula (a sentence's end the parse
+    // read as the numeral "i."): its words and the formula stay.
+    { type: "LIST", text: l27, page: 16, math: [mathSpan(l27, "i", "i"), mathSpan(l27, "K", "K")] },
   ];
   // Footnotes: a reference raised in a paragraph and one in a list line,
   // each footnote after its block, its label first; a table's note with no

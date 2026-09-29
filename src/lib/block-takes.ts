@@ -6,9 +6,10 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 // and the block routes (app/api/blocks) read this one rule, so what the plan
 // card offers is what the routes do.
 //
-// Words change in a text block, in a transcript line, in a slide's or a
-// sheet's replica, as the replica takes them, and in a converted table (a
-// handwritten document's TABLE), whose html is written anew from its text
+// Words change in a text block, in a transcript line, and in a slide's, a
+// sheet's, or a table's replica, as the replica takes them: a converted
+// table (a handwritten document's TABLE) has its html written anew from its
+// text, and any other table keeps its html and its rows and columns
 // (lib/replica.ts). A format changes in a paragraph, a heading, a list, or
 // code; a page, a transcript line, or an equation never turns into another
 // kind. A text block, a transcript line, a line, a converted table, or a
@@ -18,8 +19,8 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 // no text among the pages). A style or a web link goes on a text block's
 // words and on a transcript line's. Two transcript lines next to each other
 // join, and one splits, their times following their words
-// (lib/transcript-lines.ts). Nothing changes a video's player, a table, or a
-// figure, or a slide's or a sheet's kind. A sheets document keeps its sheet names (the
+// (lib/transcript-lines.ts). Nothing changes a video's player or a figure,
+// or a table's, a slide's, or a sheet's kind. A sheets document keeps its sheet names (the
 // HEADING before each sheet). A slides, sheets, or media document takes no
 // new block, and no block moves in one; in a handwritten document a new
 // block goes after the last page.
@@ -30,9 +31,9 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 export type DocumentShape = { format: string | null; media: boolean; pages: number };
 
 export const TEXT_BLOCKS: ReadonlySet<string> = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
-// A slide's and a sheet's words change in their replica, line by line and
-// cell by cell (lib/replica.ts).
-const WORDS = new Set([...TEXT_BLOCKS, "TRANSCRIPT", "SLIDE", "SHEET"]);
+// A slide's, a sheet's, and a table's words change in their replica, line
+// by line and cell by cell (lib/replica.ts).
+const WORDS = new Set([...TEXT_BLOCKS, "TRANSCRIPT", "SLIDE", "SHEET", "TABLE"]);
 // A slide and a sheet stay: their words change, the deck and the workbook keep their shape.
 const REMOVABLE = new Set([...TEXT_BLOCKS, "TRANSCRIPT", "SEPARATOR"]);
 const FORMATS = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);
@@ -45,7 +46,7 @@ const convertedTable = (type: string, doc: DocumentShape) => type === "TABLE" &&
 const addsBlocks = (doc: DocumentShape) => !doc.format && !doc.media;
 
 export const blockTakes = {
-  words: (type: string, doc: DocumentShape) => (WORDS.has(type) && !sheetName(type, doc)) || convertedTable(type, doc),
+  words: (type: string, doc: DocumentShape) => WORDS.has(type) && !sheetName(type, doc),
   kind: (type: string, doc: DocumentShape) => FORMATS.has(type) && !sheetName(type, doc),
   // A handwritten document keeps a page: the one left is its last.
   removal: (type: string, doc: DocumentShape) =>

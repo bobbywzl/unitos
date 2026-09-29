@@ -429,9 +429,9 @@ export function enrichActions(
     if (action.type === "edit_block" || action.type === "remove_block") {
       if (!(action.type === "edit_block" ? blockTakes.words : blockTakes.removal)(block.type, shape)) {
         warnings.push(t("api.warnOnlyTextEdited", { description: action.description }));
-      } else if (action.type === "edit_block" && (block.type === "SLIDE" || block.type === "SHEET")) {
-        // A slide's or a sheet's replica: the route's own check, run first.
-        const edited = replicaEdit(block.type, block.html ?? "", block.text, action.newText);
+      } else if (action.type === "edit_block" && (block.type === "SLIDE" || block.type === "SHEET" || block.type === "TABLE") && block.html) {
+        // A slide's, a sheet's, or a table's replica: the route's own check, run first.
+        const edited = replicaEdit(block.type, block.html, block.text, action.newText);
         if ("refused" in edited) warnings.push(skippedWarning(t, REPLICA_REFUSAL[edited.refused], action.description));
         else actions.push(action);
       } else actions.push(action);

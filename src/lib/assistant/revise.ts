@@ -27,6 +27,11 @@ import type { AssistantAction, AssistantAnchor } from "@/lib/types";
 /** A block of the open document as the revision reads it. */
 export type RevisedBlock = Pick<Block, "id" | "type" | "text" | "html"> & Partial<Pick<Block, "startTime" | "endTime">>;
 
+// The blocks whose words change alone: no style, no format.
+const WORDS_ALONE = new Set(["SLIDE", "SHEET", "TABLE", "TRANSCRIPT"]);
+// The blocks whose words are a replica's (lib/replica.ts).
+const REPLICAS = new Set(["SLIDE", "SHEET", "TABLE"]);
+
 const STYLE_OF_KIND: Record<BlockKind, SuggestStyle> = {
   paragraph: "normal",
   h1: "h1",
@@ -38,20 +43,20 @@ const STYLE_OF_KIND: Record<BlockKind, SuggestStyle> = {
 
 /** Each block whose words the revision may change, as the ops read it: its
     format as a paragraph style (code has none), and one container for all,
-    so consecutive blocks change together; a slide, a sheet, or a
+    so consecutive blocks change together; a slide, a sheet, a table, or a
     transcript line its words alone. An equation's TeX changes by
-    rewrite_block, which needs no place; a converted table waits for its
-    own edit_block. */
+    rewrite_block, which needs no place. */
 export function revisePlaces(blocks: RevisedBlock[], shape: DocumentShape): Map<string, BlockPlace> {
   const places = new Map<string, BlockPlace>();
   for (const b of blocks) {
-    // A slide's words change within its lines, a sheet's within its cells,
-    // a transcript line's with its times kept, and nothing else of them.
-    if ((b.type === "SLIDE" || b.type === "SHEET" || b.type === "TRANSCRIPT") && blockTakes.words(b.type, shape)) {
+    // A slide's words change within its lines, a sheet's and a table's
+    // within their cells, a transcript line's with its times kept, and
+    // nothing else of them.
+    if (WORDS_ALONE.has(b.type) && blockTakes.words(b.type, shape)) {
       places.set(b.id, { style: null, where: "words", container: "", group: null });
       continue;
     }
-    if (!blockTakes.words(b.type, shape) || b.type === "EQUATION" || b.type === "TABLE") continue;
+    if (!blockTakes.words(b.type, shape) || b.type === "EQUATION") continue;
     const style = b.type === "CODE" ? null : STYLE_OF_KIND[blockKind(b.type, b.html, b.text)];
     places.set(b.id, { style, where: "body", container: "", group: null });
   }
@@ -308,21 +313,21 @@ export function reviseActions(
     }
   }
 
-  // A slide's or a sheet's words change within its lines and cells, as its
-  // replica takes them (lib/replica.ts): why not, or null.
+  // A slide's, a sheet's, or a table's words change within its lines and
+  // cells, as its replica takes them (lib/replica.ts): why not, or null.
   const replicaRefusal = (block: RevisedBlock, text: string): ReplicaRefusal | null => {
-    if (block.type !== "SLIDE" && block.type !== "SHEET") return null;
-    if (!keepsLines(block.text, text)) return block.type === "SLIDE" ? "lines" : "grid";
-    const edited = replicaEdit(block.type, block.html ?? "", block.text, text);
+    if (!REPLICAS.has(block.type) || !block.html) return null;
+    if (!keepsLines(block.text, text)) return block.type === "SLIDE" ? "lines" : block.type === "SHEET" ? "grid" : "cells";
+    const edited = replicaEdit(block.type, block.html, block.text, text);
     return "refused" in edited ? edited.refused : null;
   };
 
   for (const [blockId, entry] of own) {
     const block = byId.get(blockId);
     if (!block) continue;
-    // Each word change a slide's or a sheet's replica does not take is
-    // skipped with the reason; the rest stand.
-    if (!entry.rewrite && (block.type === "SLIDE" || block.type === "SHEET")) {
+    // Each word change a slide's, a sheet's, or a table's replica does not
+    // take is skipped with the reason; the rest stand.
+    if (!entry.rewrite && REPLICAS.has(block.type)) {
       const taken: Own["words"] = [];
       for (const op of [...entry.words].sort((a, b) => a.start - b.start)) {
         const trial = [...taken, op].flatMap((o) => (o.op === "replace_words" ? [o] : []));

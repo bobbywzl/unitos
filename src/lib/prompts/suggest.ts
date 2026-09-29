@@ -111,8 +111,9 @@ export function suggestPrompt(ctx: SuggestCtx): string {
           "A LIST block's words are its lines, each with its marker (- or 1.) and two spaces more per level of nesting: a line nests or unnests by its spaces. An EQUATION block's words are its TeX: rewrite_block changes them. Write TeX that KaTeX draws.",
           "A SLIDE block's words are its lines: its title, each line of its text, the line Speaker notes:, and each line of the notes. replace_words changes words within a line. Never add or remove a line, and never change a bullet or the line Speaker notes:.",
           "A SHEET block's words are its rows, a line per row and a tab between cells. replace_words changes words within a cell. Never add or remove a tab or a line, and never change a cell a formula computes.",
+          "A TABLE block's words are its rows, a line per row and a tab between cells. replace_words changes words within a cell. Never add or remove a tab or a line.",
           "A TRANSCRIPT block is one line of a recording, said by one voice at its times: replace_words, rewrite_block, and format_words change its words, and its times stay. Never add, remove, join, or split a line.",
-          "Never change a TABLE, FIGURE, PAGE, or VIDEO block, and never remove or replace an equation, a slide, a sheet, or a transcript line.",
+          "Never change a FIGURE, PAGE, or VIDEO block, and never remove or replace an equation, a slide, a sheet, a table, or a transcript line.",
         ]
       : [
           "An EQUATION block's words are its TeX, a FIGURE block's words its caption: rewrite_block changes them. A FIGURE block with no words is an image: its caption is a new line under it (insert_blocks after it). An inline equation stands in its block's words as $TeX$: replace_words with find the whole $TeX$ and text the new $TeX$ changes it. Write TeX that KaTeX draws.",

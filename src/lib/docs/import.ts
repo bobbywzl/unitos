@@ -464,9 +464,13 @@ type ListType = "bulletList" | "orderedList" | "taskList";
 type Count = { counter: ListCounter; value: number };
 
 type ListLine = {
+  /** The line's depth in the lists (nestLines). */
   depth: number;
-  /** The depth the indent gives, for a list drawn as paragraphs. */
+  /** The depth the indent gives: the parse's, two spaces a level. */
   indent: number;
+  /** Where the page sets the line's depth (its block's listIndents at
+      `indent`), when the page says. */
+  printed?: Indent;
   /** The list the line belongs to; null when its start is no marker. */
   type: ListType | null;
   /** The line's start is no marker: an item of a level that draws none (a
@@ -522,6 +526,7 @@ function listLine(line: Source): ListLine {
   const indent = /^ */.exec(line.text)?.[0].length ?? 0;
   const whole = sliceSource(line, indent, line.text.length, true);
   const out: ListLine = { depth: Math.floor(indent / 2), indent: Math.floor(indent / 2), type: null, checked: false, words: whole, whole };
+  const unmarked: ListLine = { ...out, unmarked: true };
   const text = whole.text;
   let m: RegExpExecArray | null;
   let cut = 0;
@@ -546,7 +551,7 @@ function listLine(line: Source): ListLine {
   } else {
     const found = counterAt(text);
     const count = found && countOf(found.token);
-    if (!found || !count) return { ...out, unmarked: true };
+    if (!found || !count) return unmarked;
     out.type = "orderedList";
     out.count = { ...count, before: found.before, after: found.after };
     if (/^[ivx]$/i.test(found.token)) {
@@ -554,6 +559,10 @@ function listLine(line: Source): ListLine {
     }
     cut = found.length;
   }
+  // A marker is never a formula's characters: a line that opens with one
+  // (a sentence's end, "i. The number K is…", read as the numeral "i.")
+  // keeps its words and the formula, with no marker.
+  if (whole.atoms?.some((a) => a.start < cut)) return unmarked;
   out.words = sliceSource(whole, cut, whole.text.length, true);
   return out;
 }
@@ -596,6 +605,32 @@ function levelsOfLines(lines: ListLine[], printed: boolean): void {
     if (formatParts(format, k)) line.level = { counter: count.counter, format };
     else line.type = null;
   }
+}
+
+/** Each line's depth: how many lines still open above it are set less
+    deep. A line goes at most one level deeper than the line before it, and
+    lines set alike stay siblings wherever the first line stands. A list
+    whose first line stood a level in took that line out a level and each
+    line after it a level deeper than its sibling above ("(b)" drew
+    "(2)"). */
+function nestLines(lines: ListLine[]): void {
+  const open: number[] = [];
+  for (const line of lines) {
+    while (open.length > 0 && open[open.length - 1] >= line.indent) open.pop();
+    line.depth = open.length;
+    open.push(line.indent);
+  }
+}
+
+/** Where the page sets each depth of the lines, from its first line at that
+    depth (ListLine.printed): undefined from the first depth the page does
+    not say on, where the list sheet goes on a half inch a depth. */
+function depthIndents(lines: ListLine[]): Indent[] | undefined {
+  const out: Indent[] = [];
+  for (const line of lines) if (!(line.depth in out) && line.printed) out[line.depth] = line.printed;
+  let n = 0;
+  while (n in out) n++;
+  return n > 0 ? out.slice(0, n) : undefined;
 }
 
 /** Lines with no marker as items of a bulleted list whose level is an empty
@@ -704,7 +739,7 @@ class Converter {
   private quote: RichNode | null = null;
   /** The last list block drawn as lists: its lines, and its nodes from
       out[at], for a list that resumes after it. */
-  private lastList: { lines: ListLine[]; nodes: RichNode[]; at: number; itemSpace: number; indents: Indent[] | undefined } | null = null;
+  private lastList: { lines: ListLine[]; nodes: RichNode[]; at: number; itemSpace: number } | null = null;
   /** The last page whose start is placed, and page starts a block could not
       hold, for the next block. */
   private page = 0;
@@ -1096,7 +1131,9 @@ class Converter {
       }
       if (waiting.length > 0) line.starts = [...waiting, ...line.starts];
       waiting = [];
-      lines.push(listLine(line));
+      const l = listLine(line);
+      l.printed = block.listIndents?.[l.indent];
+      lines.push(l);
     }
     this.carry(waiting);
     if (lines.length === 0) return;
@@ -1105,9 +1142,7 @@ class Converter {
     const contents =
       tokensOf(block.html).includes("contents") || (block.links ?? []).some((l) => l.targetOrder !== undefined);
     if (!contents && this.resume(lines, block, index)) return;
-    // A line goes at most one level deeper than the line before it.
-    let depth = -1;
-    for (const l of lines) depth = l.depth = Math.min(l.depth, depth + 1);
+    nestLines(lines);
     levelsOfLines(lines, this.printed);
     unmarkedLines(lines);
     if (contents || lines.some((l) => l.type === null)) {
@@ -1124,11 +1159,11 @@ class Converter {
       this.lastList = null;
       return;
     }
-    const nodes = this.lists(lines, block.listIndents);
+    const nodes = this.lists(lines);
     this.lineLook(lines.flatMap((l) => (l.node ? [l.node] : [])), block);
     this.spaceLast(nodes, block);
     this.place(index, nodes);
-    this.lastList = { lines, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block), indents: block.listIndents };
+    this.lastList = { lines, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block) };
   }
 
   /** The space between a list's items, in points (ParsedBlock.itemSpace). */
@@ -1151,13 +1186,13 @@ class Converter {
   }
 
   /** The lines as lists, each outermost list in its format and, but a
-      checklist, at its page's depths (ParsedBlock.listIndents). A list
-      with no marker on any line draws none at every level, so a line moved
-      a level in or out stays unmarked. */
-  private lists(lines: ListLine[], indents: Indent[] | undefined): RichNode[] {
+      checklist, at its page's depths (depthIndents). A list with no marker
+      on any line draws none at every level, so a line moved a level in or
+      out stays unmarked. */
+  private lists(lines: ListLine[]): RichNode[] {
     const tops: Top[] = [];
     const nodes = listsAt(lines, 0, 0, tops).nodes;
-    const listIndents = listIndentsAttr(indents);
+    const listIndents = listIndentsAttr(depthIndents(lines));
     const unmarked = lines.every((l) => l.unmarked);
     for (const top of tops) {
       const seen = unmarked ? Array.from({ length: 9 }, () => ({ bullet: "" })) : top.seen;
@@ -1177,14 +1212,13 @@ class Converter {
       the last thing placed but those blocks, or the lines do not go on it. */
   private resume(lines: ListLine[], block: ParsedBlock, index: number): boolean {
     const last = this.lastList;
-    if (!last || lines[0].depth < 1 || this.quote) return false;
+    if (!last || lines[0].indent < 1 || this.quote) return false;
     const between = this.out.slice(last.at + last.nodes.length);
     const placed = last.nodes.every((node, k) => this.out[last.at + k] === node);
     if (!placed || between.length > 2 || between.some((n) => n.type !== "paragraph" && n.type !== "blockMath")) return false;
     const tail = last.lines[last.lines.length - 1];
-    let depth = tail.depth;
-    for (const l of lines) depth = l.depth = Math.min(l.depth, depth + 1);
     const all = [...last.lines, ...lines];
+    nestLines(all);
     levelsOfLines(all, this.printed);
     unmarkedLines(lines);
     if (lines.some((l) => l.type === null)) return false;
@@ -1196,7 +1230,7 @@ class Converter {
     }
     tail.more = [...(tail.more ?? []), ...between];
     this.out.splice(last.at);
-    const nodes = this.lists(all, last.indents ?? block.listIndents);
+    const nodes = this.lists(all);
     this.lineLook(lines.flatMap((l) => (l.node ? [l.node] : [])), block);
     this.spaceLast(nodes, block);
     // A link to the resumed block lands on its first line.
@@ -1207,7 +1241,7 @@ class Converter {
       if (typeof first.attrs.blockId === "string") this.firstIds.set(index, first.attrs.blockId);
     }
     for (const node of nodes) this.push(node);
-    this.lastList = { lines: all, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block), indents: last.indents ?? block.listIndents };
+    this.lastList = { lines: all, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block) };
     return true;
   }
 

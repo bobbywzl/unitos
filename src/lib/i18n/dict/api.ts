@@ -75,7 +75,7 @@ const en = {
   linkAddressInvalid: "The link's address is not a web address",
   linkOffsetsInvalid: "Link offsets are invalid",
   linkInPageEditor: "Links in this document are set in the page editor",
-  // A slide's or a sheet's replica (lib/replica.ts): what it does not take.
+  // A slide's, a sheet's, or a table's replica (lib/replica.ts): what it does not take.
   replicaLines: "A slide keeps its lines: change words within a line",
   replicaGrid: "A sheet stays a grid: every row has as many cells as the first, and one edit adds or removes rows or columns, not both",
   replicaFrozen: "A sheet's frozen rows and columns stay: add or remove rows and columns after them",
@@ -83,6 +83,8 @@ const en = {
   replicaFixed: "These words stay: a bullet, the speaker notes' label, a chart's data, a formula's cell, or a cell a merge covers",
   replicaEmpty: "The slide has no text there to hold new words",
   replicaStale: "The block changed since the edit was made. Ask again",
+  replicaCells: "A table keeps its rows and columns: change words within a cell",
+  replicaHeld: "These words stay: a formula, the break between a cell's paragraphs, or a cell a merge covers",
   lastPageStays: "A handwritten document keeps its last page",
   lineJoinLines: "Only two transcript lines join",
   lineJoinNext: "Only two lines next to each other join: a joined line would cover the lines between them",
@@ -435,6 +437,8 @@ const zh: Record<keyof typeof en, string> = {
   replicaFixed: "这些文字保持不变：项目符号、演讲者备注的标签、图表的数据、公式所在的单元格，或被合并覆盖的单元格",
   replicaEmpty: "幻灯片在那里没有可容纳新文字的文本",
   replicaStale: "此块在编辑之后已更改。请再问一次",
+  replicaCells: "表格保留其行与列：请在单元格内修改文字",
+  replicaHeld: "这些文字保持不变：公式、单元格内段落之间的分隔，或被合并覆盖的单元格",
   lastPageStays: "手写文档保留其最后一个页面",
   lineJoinLines: "只有两行逐字稿可以拼接",
   lineJoinNext: "只有相邻的两行可以拼接：拼接后的一行会盖住它们之间的行",

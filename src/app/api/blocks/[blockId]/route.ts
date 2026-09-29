@@ -39,21 +39,25 @@ const KIND_TO_BLOCK: Record<
 
 type StyleSpan = { start: number; end: number; style: string; quotedText: string };
 
-// The rows or columns a sheet edit took out, kept on the edit so Undo puts
-// them back; past this size they are not kept, and Undo builds them anew.
-const CUT_MAX = 100_000;
+// What a replica's edit keeps for its Undo: the rows or columns a sheet
+// edit took out, and the html before an edit that, run backwards, would
+// not give it back (words that emptied a run, a character the page wrote
+// as an entity). Past this size they are not kept, and Undo builds the
+// replica anew.
+const KEPT_MAX = 100_000;
 
-/** What the block's last edit took out of its sheet, when this edit takes
-    that one back: the text goes back to the text before it. */
-async function cutTakenBack(block: { id: string; documentId: string; text: string }, text: string): Promise<SheetCut | null> {
+/** What the block's last edit kept, when this edit takes that one back:
+    the text goes back to the text before it. */
+async function keptForUndo(block: { id: string; documentId: string; text: string }, text: string): Promise<{ cut: SheetCut | null; html: string | null }> {
   const last = await db.blockEdit.findFirst({
     where: { documentId: block.documentId, blockId: block.id, kind: "TEXT_EDIT" },
     orderBy: { createdAt: "desc" },
     select: { before: true, after: true, meta: true },
   });
-  if (!last || last.before !== text || last.after !== block.text) return null;
-  const parsed = sheetCutSchema.safeParse((last.meta as Record<string, unknown> | null)?.cut);
-  return parsed.success ? parsed.data : null;
+  if (!last || last.before !== text || last.after !== block.text) return { cut: null, html: null };
+  const meta = (last.meta as Record<string, unknown> | null) ?? {};
+  const cut = sheetCutSchema.safeParse(meta.cut);
+  return { cut: cut.success ? cut.data : null, html: typeof meta.html === "string" ? meta.html : null };
 }
 
 /** A list conversion's text, as the reader's edit toolbar writes it: into a
@@ -142,19 +146,26 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   }
 
   const newText = text;
-  // A slide's or a sheet's replica takes the new words in place (SPEC.md
-  // §27: its DOM text stays the block's text), a sheet its rows and columns
-  // too, and a converted table is drawn anew from its text (§16); a slide
-  // whose words are not its words as parsed shows its replica, its picture
-  // held.
+  // A slide's, a sheet's, or a table's replica takes the new words in place
+  // (SPEC.md §27: its DOM text stays the block's text), a sheet its rows and
+  // columns too, and a converted table is drawn anew from its text (§16); a
+  // slide whose words are not its words as parsed shows its replica, its
+  // picture held. An edit taken back puts back what the edit kept.
   let replicaHtml: string | null = null;
-  let replicaCut: SheetCut | null = null;
-  if (replica) {
-    const cut = block.type === "SHEET" ? await cutTakenBack(block, newText) : null;
-    const edited = replicaEdit(block.type, block.html ?? "", block.text, newText, cut);
-    if ("refused" in edited) return NextResponse.json({ error: t(REPLICA_REFUSAL[edited.refused]) }, { status: 400 });
-    replicaHtml = block.type === "SLIDE" ? slidePicture(edited.html, newText, block.originalText ?? block.text) : edited.html;
-    replicaCut = edited.cut && JSON.stringify(edited.cut).length <= CUT_MAX ? edited.cut : null;
+  const kept: { cut?: SheetCut; html?: string } = {};
+  if (replica && block.html !== null) {
+    const parsed = block.originalText ?? block.text;
+    const drawn = (html: string, words: string) => (block.type === "SLIDE" ? slidePicture(html, words, parsed) : html);
+    const back = await keptForUndo(block, newText);
+    if (back.html !== null) replicaHtml = back.html;
+    else {
+      const edited = replicaEdit(block.type, block.html, block.text, newText, back.cut);
+      if ("refused" in edited) return NextResponse.json({ error: t(REPLICA_REFUSAL[edited.refused]) }, { status: 400 });
+      replicaHtml = drawn(edited.html, newText);
+      if (edited.cut && JSON.stringify(edited.cut).length <= KEPT_MAX) kept.cut = edited.cut;
+      const undone = replicaEdit(block.type, replicaHtml, newText, block.text, edited.cut);
+      if ((!("html" in undone) || drawn(undone.html, block.text) !== block.html) && block.html.length <= KEPT_MAX) kept.html = block.html;
+    }
   }
 
   // Remap every anchor on this block through the edit, the way Google Docs
@@ -208,7 +219,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
         kind: "TEXT_EDIT",
         before: block.text,
         after: newText,
-        ...(replicaCut ? { meta: { cut: replicaCut } } : {}),
+        ...(kept.cut || kept.html ? { meta: kept } : {}),
         userId: access.user.id,
       },
     });

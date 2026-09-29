@@ -2,18 +2,21 @@ import { JSDOM } from "jsdom";
 import { z } from "zod";
 import { diffSegments } from "@/lib/anchors/remap";
 import type { TKey } from "@/lib/i18n/dictionaries";
+import { separateBlocks } from "@/lib/parse/dom-text";
 import { escapeHtml } from "@/lib/parse/office";
 import { columnLetter } from "@/lib/parse/sheets";
 
-// A slide's or a sheet's replica with new words (SPEC.md §27). The one rule
-// holds after every edit: the replica's DOM text — every text node outside
-// [data-anchor-skip] — equals the block's text. The text is pieces between
-// gaps (`.cell-gap`: a newline between a slide's lines or a sheet's rows, a
-// tab between cells); an edit changes words within pieces and keeps every
-// gap, so the slide keeps its lines and the sheet its grid. New words take
-// the run where the change starts, so they keep its font, size, and color.
-// The html is changed in place, text node by text node, and every other
-// byte stays: an edit taken back gives the replica back byte for byte.
+// A slide's, a sheet's, or a table's replica with new words (SPEC.md §27,
+// §16). The one rule holds after every edit: the replica's DOM text — every
+// text node outside [data-anchor-skip] — equals the block's text. The text
+// is pieces between gaps (`.cell-gap`: a newline between a slide's lines or
+// a table's rows, a tab between cells); an edit changes words within pieces
+// and keeps every gap, so the slide keeps its lines and the sheet its grid.
+// New words take the run where the change starts, so they keep its font,
+// size, and color. The html is changed in place, text node by text node,
+// and every other byte stays: an edit taken back gives the replica back
+// byte for byte (the text PATCH keeps the html of an edit that, run
+// backwards, would not).
 
 /** Why an edit does not go into the replica: a slide's line, or a tab in
     one, added or removed (lines); a sheet that is no longer a grid — a row
@@ -23,8 +26,11 @@ import { columnLetter } from "@/lib/parse/sheets";
     (merged); words the replica draws elsewhere or keeps (fixed: a bullet,
     the speaker notes' label, a chart's data under its drawing, a formula's
     cell, a cell a merge covers); words where the replica has no run to
-    hold them (empty); a replica whose text is not the block's (stale). */
-export type ReplicaRefusal = "lines" | "grid" | "frozen" | "merged" | "fixed" | "empty" | "stale";
+    hold them (empty); a replica whose text is not the block's (stale). A
+    table that keeps its html keeps its rows and columns (cells) and the
+    words a table keeps: a formula, the break between a cell's paragraphs,
+    a cell a merge covers (held). */
+export type ReplicaRefusal = "lines" | "grid" | "frozen" | "merged" | "fixed" | "empty" | "stale" | "cells" | "held";
 
 /** What the reader is told for each refusal. */
 export const REPLICA_REFUSAL: Record<ReplicaRefusal, TKey> = {
@@ -35,6 +41,8 @@ export const REPLICA_REFUSAL: Record<ReplicaRefusal, TKey> = {
   fixed: "api.replicaFixed",
   empty: "api.replicaEmpty",
   stale: "api.replicaStale",
+  cells: "api.replicaCells",
+  held: "api.replicaHeld",
 };
 
 // A node's place in the html, as jsdom gives it.
@@ -46,7 +54,11 @@ type Location = {
   endTag?: { startOffset: number };
 };
 
-type Located = { node: Text; start: number; end: number; fixed: boolean };
+// A text node with its place in the html; `bound`, the place of the link or
+// the raised or lowered mark it stands in: words added at its edge go
+// outside it.
+type Located = { node: Text; start: number; end: number; fixed: boolean; bound: { start: number; end: number } | null };
+type Splice = { start: number; end: number; source: string };
 type Piece = {
   nodes: Located[];
   // Where words go when the piece has none: before its gap, in a table cell.
@@ -69,6 +81,20 @@ const CELL_GAP = /^[\t\n]$/;
     hidden cell. Its piece has no words and takes none. */
 const coveredIn = (cell: Element) =>
   [...cell.querySelectorAll(".cell-gap")].filter((gap) => CELL_GAP.test(gap.textContent ?? "")).length > 1 || /display:\s*none/.test(cell.getAttribute("style") ?? "");
+const BOUNDED = "a, sup, sub";
+
+/** The place of the outermost link or raised or lowered mark `node` stands in. */
+function boundOf(dom: JSDOM, node: Text): Located["bound"] {
+  let el = node.parentElement?.closest(BOUNDED) ?? null;
+  for (let up = el?.parentElement?.closest(BOUNDED); up; up = up.parentElement?.closest(BOUNDED)) el = up;
+  const loc = el ? dom.nodeLocation(el) : null;
+  return loc ? { start: loc.startOffset - PREFIX.length, end: loc.endOffset - PREFIX.length } : null;
+}
+
+/** `html` with the splices made, from the end; at one place, a
+    replacement before an insert. */
+const applied = (html: string, splices: Splice[]) =>
+  [...splices].sort((a, b) => b.start - a.start || b.end - a.end).reduce((out, { start, end, source }) => out.slice(0, start) + source + out.slice(end), html);
 
 /** The replica's pieces and gaps, each text node with its place in `html`. */
 function readReplica(html: string): { text: string; pieces: Piece[]; gaps: string[] } {
@@ -92,7 +118,7 @@ function readReplica(html: string): { text: string; pieces: Piece[]; gaps: strin
     const piece = pieces[pieces.length - 1];
     const gap = parent.closest(".cell-gap");
     if (!gap || !CELL_GAP.test(node.data)) {
-      piece.nodes.push({ node, ...at(node), fixed: Boolean(gap || parent.closest(FIXED_RUNS)) });
+      piece.nodes.push({ node, ...at(node), fixed: Boolean(gap || parent.closest(FIXED_RUNS)), bound: boundOf(dom, node) });
       continue;
     }
     // A gap closes the piece before it. In a table cell or a caption the
@@ -153,8 +179,8 @@ function cutAsReplica(next: string, was: string[], gaps: string[]): string[] | n
     word-level diff; words changed one for one, with the spaces between
     the same, change one by one; each loses the letters both sides share
     at its ends. */
-function stretches(before: string, after: string): { from: number; to: number; words: string }[] {
-  const out: { from: number; to: number; words: string }[] = [];
+function stretches(before: string, after: string): Stretch[] {
+  const out: Stretch[] = [];
   const trimmed = (from: number, to: number, words: string) => {
     let p = 0;
     while (from + p < to && p < words.length && before[from + p] === words[p]) p++;
@@ -175,27 +201,58 @@ function stretches(before: string, after: string): { from: number; to: number; w
   return out;
 }
 
-/** One piece's changes as splices of the html, or why not. The words both
-    sides share stay; each changed stretch (a word-level diff) goes into the
-    run where it starts (a pure insert: the run it follows, else the one it
-    precedes), and the runs after lose what it covers. */
-function pieceSplices(piece: Piece, before: string, after: string): { start: number; end: number; source: string }[] | ReplicaRefusal {
+type Stretch = { from: number; to: number; words: string };
+
+/** One piece's changes as splices of the html, or why not. */
+function pieceSplices(piece: Piece, before: string, after: string): Splice[] | ReplicaRefusal {
   if (piece.fixed) return "fixed";
   if (piece.nodes.length === 0) return piece.cell === null ? "empty" : [{ start: piece.cell, end: piece.cell, source: escapeHtml(after) }];
-  const runs: { run: Located; from: number; to: number; edits: { from: number; to: number; words: string }[] }[] = [];
+  return placed(piece.nodes, stretches(before, after));
+}
+
+/** Changed stretches of the runs' words (their text nodes, one after
+    another) as splices of the html, or why not. The words both sides share
+    stay; each stretch goes into the run where it starts (a pure insert:
+    the run it follows, else the one it precedes; at the edge of a link or
+    a raised or lowered mark, outside it), and the runs after lose what it
+    covers. */
+function placed(nodes: Located[], changes: Stretch[]): Splice[] | ReplicaRefusal {
+  const runs: { run: Located; from: number; to: number; edits: Stretch[] }[] = [];
   let offset = 0;
-  for (const run of piece.nodes) {
+  for (const run of nodes) {
     runs.push({ run, from: offset, to: offset + run.node.data.length, edits: [] });
     offset += run.node.data.length;
   }
-  for (const { from, to, words } of stretches(before, after)) {
+  // Each link's or mark's words: from its first run to its last.
+  const spans = new Map<number, { from: number; to: number }>();
+  for (const x of runs) {
+    if (!x.run.bound) continue;
+    const span = spans.get(x.run.bound.start);
+    spans.set(x.run.bound.start, { from: Math.min(span?.from ?? x.from, x.from), to: Math.max(span?.to ?? x.to, x.to) });
+  }
+  const splices: Splice[] = [];
+  for (const { from, to, words } of changes) {
+    const edge = (x: (typeof runs)[number]) => {
+      const span = x.run.bound ? spans.get(x.run.bound.start) : undefined;
+      return span && (from === span.from || from === span.to) ? span : null;
+    };
+    const takes = (x: (typeof runs)[number]) => !x.run.fixed && !edge(x);
     const home =
       from < to
         ? runs.find((x) => from >= x.from && from < x.to)
-        : (runs.find((x) => from > x.from && from <= x.to && !x.run.fixed) ??
-          runs.find((x) => from >= x.from && from < x.to && !x.run.fixed) ??
-          runs.find((x) => from === x.from && !x.run.fixed));
-    if (!home) return "empty";
+        : (runs.find((x) => from > x.from && from <= x.to && takes(x)) ??
+          runs.find((x) => from >= x.from && from < x.to && takes(x)) ??
+          runs.find((x) => from === x.from && takes(x)));
+    if (!home) {
+      // Words added at a link's or a mark's edge, with no run beside it:
+      // outside it.
+      const beside = from === to ? runs.find((x) => !x.run.fixed && edge(x)) : undefined;
+      const span = beside && edge(beside);
+      if (!beside?.run.bound || !span) return "empty";
+      const at = from === span.to ? beside.run.bound.end : beside.run.bound.start;
+      splices.push({ start: at, end: at, source: escapeHtml(words) });
+      continue;
+    }
     for (const x of runs) {
       const cut = Math.max(from, x.from) < Math.min(to, x.to);
       if (x !== home && !cut) continue;
@@ -203,7 +260,6 @@ function pieceSplices(piece: Piece, before: string, after: string): { start: num
       x.edits.push({ from: Math.max(from, x.from) - x.from, to: Math.max(Math.min(to, x.to), Math.max(from, x.from)) - x.from, words: x === home ? words : "" });
     }
   }
-  const splices: { start: number; end: number; source: string }[] = [];
   for (const x of runs) {
     if (x.edits.length === 0) continue;
     let data = x.run.node.data;
@@ -220,15 +276,14 @@ export function replicaWithText(html: string, prev: string, next: string): { htm
   const was = replica.pieces.map((p) => p.nodes.map((n) => n.node.data).join(""));
   const now = cutAsReplica(next, was, replica.gaps);
   if (!now) return { refused: "lines" };
-  const splices: { start: number; end: number; source: string }[] = [];
+  const splices: Splice[] = [];
   for (let i = 0; i < replica.pieces.length; i++) {
     if (was[i] === now[i]) continue;
     const piece = pieceSplices(replica.pieces[i], was[i], now[i]);
     if (typeof piece === "string") return { refused: piece };
     splices.push(...piece);
   }
-  let out = html;
-  for (const { start, end, source } of splices.sort((a, b) => b.start - a.start)) out = out.slice(0, start) + source + out.slice(end);
+  const out = applied(html, splices);
   // The one rule, checked on what will be stored.
   if (readReplica(out).text !== next) return { refused: "stale" };
   return { html: out };
@@ -610,13 +665,131 @@ export function tableHtml(text: string): string {
   );
 }
 
-/** A slide's, a sheet's, or a converted table's replica with `next` for
-    its words: what the text PATCH stores, and what the plan checks before
-    it offers the edit. */
-export function replicaEdit(type: string, html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null } | { refused: ReplicaRefusal } {
-  if (type === "TABLE") return { html: tableHtml(next), cut: null };
-  if (type === "SHEET") return sheetWithText(html, prev, next, cut);
+// ── A table that keeps its html ────────────────────────────────────────────
+
+// One cell of a web page's table, as the walk reads its words: its text
+// nodes (a block boundary's space among them, with no place in the html),
+// and each character of its words with the stretch of those nodes it reads.
+type WebCell = { nodes: Located[]; text: string; units: { from: number; to: number }[]; end: number };
+
+/** A web page's or a Markdown file's table keeps the page's html
+    (lib/parse/url.ts tableText): its text is the grid its cells make, each
+    cell's words read with a space at every block boundary and one space
+    for each run of white space (lib/parse/dom-text.ts), a merged cell's
+    words in every row it spans and its other columns empty. Its DOM text is
+    not its text. The grid, read the walk's way, and its text. */
+function readWebTable(html: string) {
+  const dom = new JSDOM(`${PREFIX}${html}</body></html>`, { includeNodeLocations: true });
+  const table = dom.window.document.querySelector("table");
+  if (!table) return null;
+  const rows = [...table.querySelectorAll("tr")].filter((tr) => tr.closest("table") === table);
+  const slots: ({ cell: Element; blank: boolean } | undefined)[][] = rows.map(() => []);
+  rows.forEach((tr, r) => {
+    let c = 0;
+    for (const cell of [...tr.children].filter((x) => /^(td|th)$/i.test(x.tagName))) {
+      while (slots[r][c] !== undefined) c++;
+      const colspan = Math.max(1, Math.min(50, Number(cell.getAttribute("colspan") ?? "1") || 1));
+      const rowspan = Math.max(1, Math.min(200, Number(cell.getAttribute("rowspan") ?? "1") || 1));
+      for (let dr = 0; dr < rowspan && r + dr < slots.length; dr++) {
+        for (let dc = 0; dc < colspan; dc++) slots[r + dr][c + dc] = { cell, blank: dc > 0 };
+      }
+      c += colspan;
+    }
+  });
+  const cells = new Map<Element, WebCell>();
+  const read = (cell: Element): WebCell => {
+    const known = cells.get(cell);
+    if (known) return known;
+    separateBlocks(cell);
+    const nodes: Located[] = [];
+    let raw = "";
+    const walker = dom.window.document.createTreeWalker(cell, 4 /* NodeFilter.SHOW_TEXT */);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const node = n as Text;
+      const loc = dom.nodeLocation(node);
+      nodes.push(
+        loc
+          ? { node, start: loc.startOffset - PREFIX.length, end: loc.endOffset - PREFIX.length, fixed: false, bound: boundOf(dom, node) }
+          : { node, start: -1, end: -1, fixed: true, bound: null },
+      );
+      raw += node.data;
+    }
+    const units = [...raw.matchAll(/\s+|\S/g)].map((m) => ({ from: m.index, to: m.index + m[0].length, space: /\s/.test(m[0]) }));
+    if (units[0]?.space) units.shift();
+    if (units.at(-1)?.space) units.pop();
+    const text = units.map((u) => (u.space ? " " : raw.slice(u.from, u.to))).join("");
+    const end = ((dom.nodeLocation(cell) as Location | null)?.endTag?.startOffset ?? -1) - PREFIX.length;
+    const out = { nodes, text, units, end };
+    cells.set(cell, out);
+    return out;
+  };
+  const grid = slots.map((row) => [...row].map((slot) => (slot ? { cell: read(slot.cell), blank: slot.blank } : undefined)));
+  return { grid, text: grid.map((row) => row.map((slot) => (slot && !slot.blank ? slot.cell.text : "")).join("\t")).join("\n") };
+}
+
+/** A web page's table with `next` for its words (the same rows and cells),
+    or why not: each changed cell's words change in place, in the runs that
+    hold them. A merged cell's words change the same in every row it spans,
+    its other columns stay empty, and a block boundary's space stays. */
+function webTableWithText(html: string, prev: string, next: string): { html: string } | { refused: ReplicaRefusal } {
+  const table = readWebTable(html);
+  if (!table || table.text !== prev) return { refused: "stale" };
+  if (prev.replace(/[^\n\t]/g, "") !== next.replace(/[^\n\t]/g, "")) return { refused: "cells" };
+  const after = next.split("\n").map((r) => r.split("\t"));
+  const changed = new Map<WebCell, string>();
+  for (const [r, row] of table.grid.entries()) {
+    for (const [c, slot] of row.entries()) {
+      if (after[r][c] === (slot && !slot.blank ? slot.cell.text : "")) continue;
+      if (!slot) return { refused: "cells" };
+      if (slot.blank || (changed.has(slot.cell) && changed.get(slot.cell) !== after[r][c])) return { refused: "held" };
+      changed.set(slot.cell, after[r][c]);
+    }
+  }
+  for (const [r, row] of table.grid.entries()) {
+    for (const [c, slot] of row.entries()) if (slot && !slot.blank && changed.has(slot.cell) && changed.get(slot.cell) !== after[r][c]) return { refused: "held" };
+  }
+  const splices: Splice[] = [];
+  for (const [cell, words] of changed) {
+    if (cell.text === "") {
+      splices.push({ start: cell.end, end: cell.end, source: escapeHtml(words) });
+      continue;
+    }
+    // The words' stretches as stretches of the cell's text nodes.
+    const at = (p: number) => (p < cell.units.length ? cell.units[p].from : cell.units[cell.units.length - 1].to);
+    const made = placed(
+      cell.nodes,
+      stretches(cell.text, words).map((s) => ({ from: at(s.from), to: s.to > s.from ? cell.units[s.to - 1].to : at(s.from), words: s.words })),
+    );
+    if (typeof made === "string") return { refused: "held" };
+    splices.push(...made);
+  }
+  const out = applied(html, splices);
+  // Read back the walk's way, the table's text is the new text.
+  if (readWebTable(out)?.text !== next) return { refused: "stale" };
+  return { html: out };
+}
+
+/** A table's html with `next` for its words, or why not. A table whose
+    html holds nothing but its text (a converted table, SPEC.md §16) is
+    drawn anew from the new text, its rows and columns too. Any other keeps
+    its html and its rows and columns: a PDF's or a Word file's table (its
+    DOM text is its text) takes the words piece by piece, as a slide does —
+    the caption line a piece, each cell a piece, the break between a cell's
+    paragraphs and a formula kept; a web page's cell by cell. */
+function tableEdit(html: string, prev: string, next: string): { html: string } | { refused: ReplicaRefusal } {
+  if (html === tableHtml(prev)) return { html: tableHtml(next) };
+  if (readReplica(html).text !== prev) return webTableWithText(html, prev, next);
   const edited = replicaWithText(html, prev, next);
+  if (!("refused" in edited)) return edited;
+  return { refused: edited.refused === "stale" ? "stale" : edited.refused === "lines" ? "cells" : "held" };
+}
+
+/** A slide's, a sheet's, or a table's replica with `next` for its words:
+    what the text PATCH stores, and what the plan checks before it offers
+    the edit. */
+export function replicaEdit(type: string, html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null } | { refused: ReplicaRefusal } {
+  if (type === "SHEET") return sheetWithText(html, prev, next, cut);
+  const edited = type === "TABLE" ? tableEdit(html, prev, next) : replicaWithText(html, prev, next);
   return "refused" in edited ? edited : { html: edited.html, cut: null };
 }
 
