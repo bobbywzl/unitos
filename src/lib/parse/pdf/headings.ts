@@ -98,6 +98,7 @@ export function readHeading(lines: Line[], i: number, ctx: PageContext, runOf: n
     abstractHeading(lines, i, ctx) ??
     boldHeading(lines, i, ctx, runOf) ??
     partHeading(lines, i, ctx);
+  if (step?.segments.some((s) => s.type === "HEADING" && wordless(s.text))) return null;
   // A heading of its own lines keeps where it stands: centered or flush
   // right in its column (a run-in lead's is its paragraph's).
   const [heading] = step?.segments ?? [];
@@ -106,6 +107,16 @@ export function readHeading(lines: Line[], i: number, ctx: PageContext, runOf: n
     if (align === "center" || align === "right") heading.align = align;
   }
   return step;
+}
+
+// A heading has a word. Panel letters ("(b)", "b)", "(a) (b)") or a number
+// alone are no heading: Grinstead–Snell's "(b)" under Figure 4.6's second
+// drawing, bold, small, and set apart, read as a heading, and the labels of
+// the figure above it stayed text (p. 163). An opinion's part ("I", "A")
+// carries no parenthesis or period and stays one (partHeading).
+const PANEL_LETTERS_RE = /^(?:\s*(?:\(\p{L}\)|\p{L}[.)]))+\s*$/u;
+function wordless(text: string): boolean {
+  return PANEL_LETTERS_RE.test(text) || !/\p{L}/u.test(text);
 }
 
 // A part's numeral or letter alone on a centered line, set apart above and
@@ -518,6 +529,7 @@ function titleLike(line: Line): boolean {
   const text = line.text.trim();
   return (
     line.cells.length === 1 &&
+    !wordless(text) &&
     styledShare(line) > 0.9 &&
     endsStyled(line) &&
     [...text].length > 2 &&
