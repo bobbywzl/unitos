@@ -145,12 +145,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
     return NextResponse.json(formatted);
   }
 
-  const newText = text;
+  let newText = text;
   // A slide's, a sheet's, or a table's replica takes the new words in place
   // (SPEC.md §27: its DOM text stays the block's text), a sheet its rows and
   // columns too, and a converted table is drawn anew from its text (§16); a
   // slide whose words are not its words as parsed shows its replica, its
-  // picture held. An edit taken back puts back what the edit kept.
+  // picture held. A sheet computes its formulas again: the text stored is
+  // the one its replica reads. An edit taken back puts back what the edit
+  // kept.
   let replicaHtml: string | null = null;
   const kept: { cut?: SheetCut; html?: string } = {};
   if (replica && block.html !== null) {
@@ -161,6 +163,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
     else {
       const edited = replicaEdit(block.type, block.html, block.text, newText, back.cut);
       if ("refused" in edited) return NextResponse.json({ error: t(REPLICA_REFUSAL[edited.refused]) }, { status: 400 });
+      if (edited.text !== undefined) newText = edited.text;
       replicaHtml = drawn(edited.html, newText);
       if (edited.cut && JSON.stringify(edited.cut).length <= KEPT_MAX) kept.cut = edited.cut;
       const undone = replicaEdit(block.type, replicaHtml, newText, block.text, edited.cut);

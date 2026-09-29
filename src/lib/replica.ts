@@ -1322,40 +1322,43 @@ function tableEdit(html: string, prev: string, next: string): { html: string } |
 
 /** A slide's, a sheet's, or a table's replica with `next` for its words:
     what the text PATCH stores, and what the plan checks before it offers
-    the edit. */
-export function replicaEdit(type: string, html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null } | { refused: ReplicaRefusal } {
+    the edit. `text` is the text it reads when that is not `next` (a
+    sheet's formulas computed again). */
+export function replicaEdit(type: string, html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null; text?: string } | { refused: ReplicaRefusal } {
   if (type === "SHEET") return sheetWithText(html, prev, next, cut);
   const edited = type === "TABLE" ? tableEdit(html, prev, next) : slideWithText(html, prev, next);
   return "refused" in edited ? edited : { html: edited.html, cut: null };
 }
 
-/** What a sheet keeps as it is, for the assistant: its frozen rows and
-    columns, the cells a formula computes (named as the text reads them:
-    the row is the line, the column A, B, … the cell in it), and — with a
-    merge or a drawing — its rows and columns. Null when it keeps nothing. */
+/** What a sheet keeps as it is, for the assistant (the cells named as the
+    text reads them: the row is the line, the column A, B, … the cell in
+    it): its frozen rows and columns, the cells a formula computes, its
+    merged cells, and a chart's data after its rows. Null when it keeps
+    nothing. */
 function sheetKeeps(html: string): string | null {
-  const replica = readReplica(html);
+  const grid = readGrid(html);
+  if (!grid) return null;
+  const list = (cells: string[], what: string) => (cells.length > 0 ? `${cells.slice(0, 40).join(", ")}${cells.length > 40 ? `, and ${cells.length - 40} more` : ""} (${what})` : "");
   const formulas: string[] = [];
-  let row = 0;
-  let col = 0;
-  replica.pieces.forEach((piece, i) => {
-    if (piece.formula) formulas.push(`${columnLetter(col)}${row + 1}`);
-    if (replica.gaps[i] === "\n") {
-      row += 1;
-      col = 0;
-    } else col += 1;
-  });
-  const sheet = /<div class="sheet [^>]*>/.exec(html)?.[0] ?? "";
-  const frozenRows = Number(/data-frozen-rows="(\d+)"/.exec(sheet)?.[1] ?? 0);
-  const frozenCols = Number(/data-frozen-cols="(\d+)"/.exec(sheet)?.[1] ?? 0);
+  const merged: string[] = [];
+  grid.slots.forEach((row, r) =>
+    row.forEach((slot, c) => {
+      if (!slot?.origin) return;
+      if (slot.td.getAttribute("title")?.startsWith("=")) formulas.push(`${columnLetter(c)}${r + 1}`);
+      const span = (name: string) => Math.max(1, Number(slot.td.getAttribute(name) ?? 1) || 1);
+      if (span("colspan") > 1 || span("rowspan") > 1) merged.push(`${columnLetter(c)}${r + 1}:${columnLetter(c + span("colspan") - 1)}${r + span("rowspan")}`);
+    }),
+  );
   const frozen = [
-    frozenRows === 1 ? "row 1" : frozenRows > 1 ? `rows 1–${frozenRows}` : "",
-    frozenCols === 1 ? "column A" : frozenCols > 1 ? `columns A–${columnLetter(frozenCols - 1)}` : "",
+    grid.frozenRows === 1 ? "row 1" : grid.frozenRows > 1 ? `rows 1–${grid.frozenRows}` : "",
+    grid.frozenCols === 1 ? "column A" : grid.frozenCols > 1 ? `columns A–${columnLetter(grid.frozenCols - 1)}` : "",
   ].filter(Boolean);
-  const parts: string[] = [];
-  if (frozen.length > 0) parts.push(`${frozen.join(" and ")} (frozen)`);
-  if (formulas.length > 0) parts.push(`${formulas.slice(0, 40).join(", ")}${formulas.length > 40 ? `, and ${formulas.length - 40} more` : ""} (formulas)`);
-  if (/<td[^>]* (?:colspan|rowspan)=|class="sheet-drawing"|<td style="display:none">/.test(html)) parts.push("its rows and columns (merged cells or a drawing)");
+  const parts = [
+    frozen.length > 0 ? `${frozen.join(" and ")} (frozen)` : "",
+    list(formulas, "formulas"),
+    list(merged, "merged"),
+    grid.drawings.some((d) => d.querySelector(".scd-hidden")) ? `the lines after row ${grid.rows.length} (a chart's data)` : "",
+  ].filter(Boolean);
   return parts.length > 0 ? parts.join("; ") : null;
 }
 
