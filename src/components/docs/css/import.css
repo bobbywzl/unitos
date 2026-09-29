@@ -199,6 +199,16 @@
   margin-top: 0 !important;
   padding-top: var(--docs-bar-top, 0pt) !important;
 }
+/* A run-in heading (an import's bold lead, "1.2.3. Two examples."; its
+   runIn) stands at the start of the paragraph under it, on that
+   paragraph's first line, a word space before its words. It stays a
+   heading: the outline and the paragraph index list it. */
+.docs-prose :is(h1, h2, h3, h4, h5, h6)[data-run-in] {
+  float: left;
+  margin: 0 0.3em 0 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
 /* A PDF's and a Word file's display equation takes the space its page
    leaves around it (lib/docs/import.ts: the space after the block over it,
    and its own space after, insert/math.ts), none of its own: the page

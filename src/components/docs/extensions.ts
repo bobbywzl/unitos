@@ -216,6 +216,19 @@ const ParagraphFormat = Extension.create({
           },
         },
       },
+      {
+        types: ["heading"],
+        attributes: {
+          // A run-in heading (an import's bold lead, "1.2.3. Two examples."):
+          // drawn at the start of the paragraph under it, on its first line
+          // (css/import.css); the outline and the paragraph index list it.
+          runIn: {
+            default: null,
+            parseHTML: (el) => (el.hasAttribute("data-run-in") ? true : null),
+            renderHTML: (attrs) => (attrs.runIn === true ? { "data-run-in": "" } : {}),
+          },
+        },
+      },
     ];
   },
   addCommands() {

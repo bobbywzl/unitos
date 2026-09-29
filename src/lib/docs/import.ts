@@ -1166,8 +1166,11 @@ class Converter {
     }
     const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId(), ...borderAttrs(block) };
     if (align) attrs.textAlign = align;
+    // A run-in lead ("1.2.3. Two examples." and its paragraph's words on
+    // its line) is drawn as its paragraph's opening words (css/import.css).
+    if (tokensOf(block.html).includes("run-in")) attrs.runIn = true;
     // The page's own space after the heading, where it measured one.
-    if (block.spaceAfter !== undefined) attrs.spaceAfter = block.spaceAfter;
+    else if (block.spaceAfter !== undefined) attrs.spaceAfter = block.spaceAfter;
     this.place(index, [content.length > 0 ? { type: "heading", attrs, content } : { type: "heading", attrs }]);
   }
 
