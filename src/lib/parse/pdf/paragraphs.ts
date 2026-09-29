@@ -728,12 +728,13 @@ export function layout(lines: Line[], from: number, to: number, ctx: PageContext
   // A block's indent is from its own column's left edge (markEdges): against
   // the page's first column, every paragraph of the second read as set in.
   const left = leftEdge(group[group.length > 1 ? 1 : 0], ctx);
-  // A block indent leaves the column's words room: a third of the column at
-  // most, and the widest line fits after it (a form's box read as set in
-  // 461 pt of a 468 pt text width, and the page editor broke its words).
+  // A block indent leaves the column's words room: a quarter of the column
+  // at most, and the widest line fits after it (a form's box read as set in
+  // 461 pt of a 468 pt text width, and the page editor broke its words; a
+  // column read with a float's edge set every paragraph in by 165 pt).
   const right = Math.max(lineColumn(first)?.[1] ?? 0, ...group.map((l) => l.xEnd));
   const widest = Math.max(...group.map((l) => l.xEnd - l.x));
-  const fits = (inset: number) => inset <= (right - left) / 3 && inset + widest <= right - left + size;
+  const fits = (inset: number) => inset <= (right - left) / 4 && inset + widest <= right - left + size;
   let indent: Indent | null = null;
   if (group.length === 1) {
     const step = paragraphStep(lines, ctx);
