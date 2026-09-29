@@ -130,7 +130,6 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   }
   if (!best || best.cross / total >= 0.5) return null;
   const g = best.g;
-  const dbg = (...a: unknown[]) => { if (process.env.R3C) console.error("[split]", page, x0.toFixed(0), x1.toFixed(0), "g", g.toFixed(1), ...a); };
 
   // Rows that span the gutter: the items that cross it, the items on either
   // side of it with no more than a word's gap between them, up to 1.2 em (a
@@ -178,10 +177,8 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   // column (none, or each across the gutter, as a scan's page image is), a
   // region with less off them reads in one pass, and its spanning rows are
   // never built (a page of one column whose lines cross the gutter).
-  dbg("total", total, "spanning", chars([...spanning]));
   if (graphics.every((p) => p.box.x1 < g && p.box.x2 > g) && total - chars([...spanning]) < total * 0.4) return null;
   const rows = buildLines([...spanning], page);
-  for (const r of rows) dbg("row", r.y.toFixed(1), JSON.stringify(r.text.slice(0, 100)));
   const crossingGraphics = graphics.filter((p) => p.box.x1 < g && p.box.x2 > g);
   // Separators top to bottom: the spanning rows (by baseline) and the
   // graphics that cross the gutter (by their middle).
@@ -210,7 +207,6 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   const twoSided = bands.filter(
     (b) => (b.left.items.length > 0 || b.left.graphics.length > 0) && (b.right.items.length > 0 || b.right.graphics.length > 0),
   );
-  dbg("twoSided", twoSided.length);
   if (twoSided.length === 0) return null;
   const left = twoSided.flatMap((b) => b.left.items);
   const right = twoSided.flatMap((b) => b.right.items);
@@ -227,10 +223,8 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   if (leftChars === 0 || rightChars === 0) return null;
   // Two columns of text: most of the region's characters sit beside each
   // other, each side holds a fair share, and each side is a prose column.
-  dbg("left", leftChars, "right", rightChars, "graphicsLR", graphicsLeft, graphicsRight);
   if (sideChars < total * 0.4) return null;
   if (leftChars < sideChars * 0.15 || rightChars < sideChars * 0.15) return null;
-  dbg("isColumn", isColumn(left, page), isColumn(right, page));
   return isColumn(left, page) && isColumn(right, page) ? { bands } : null;
 }
 

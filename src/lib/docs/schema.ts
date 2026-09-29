@@ -363,7 +363,8 @@ function cleanAttrs(attrs: Record<string, unknown> | undefined, type: string): R
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(attrs)) {
     if (!ATTR_NAME.test(key) || (only && !only.has(key))) continue;
-    out[key] = cleanAttr(key, value);
+    const clean = cleanAttr(key, value);
+    out[key] = typeof clean === "string" ? wellFormed(clean) : clean;
   }
   return out;
 }
@@ -401,6 +402,25 @@ function cleanSuggestion({ type, attrs = {} }: RichMark): RichMark | null {
   return { type, attrs: { id, type: kind, attrName: name, previousValue: value(previousValue), newValue: value(newValue) } };
 }
 
+/** Half of a surrogate pair: a character past the Basic Multilingual Plane
+    (the math letters 𝑝 and 𝒜) cut in two. */
+const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+let loneSurrogateLogged = false;
+
+/** A string as the database takes it: Postgres refuses JSON that holds half
+    of a surrogate pair, and the whole save with it. In development that
+    fails with the words around it; in production the half is dropped and
+    logged once. */
+function wellFormed(text: string): string {
+  if (text.isWellFormed()) return text;
+  const at = text.search(LONE_SURROGATE_RE);
+  const words = JSON.stringify(text.slice(Math.max(0, at - 60), at + 20));
+  if (process.env.NODE_ENV !== "production") throw new Error(`The rich text holds half of a surrogate pair: ${words}`);
+  if (!loneSurrogateLogged) console.error(`[rich text] dropped half of a surrogate pair: ${words}`);
+  loneSurrogateLogged = true;
+  return text.replace(LONE_SURROGATE_RE, "");
+}
+
 /** The rich text as it may be stored: unknown node and mark types dropped,
     every attribute checked (cleanAttr), a link without a safe href, an image
     without a safe src, a figure object without a mediaId, a page start
@@ -427,8 +447,9 @@ export function sanitizeRichText(input: RichNode): RichNode | null {
       return mark ? [mark] : [];
     });
     if (node.type === "text") {
-      if (!node.text) return null;
-      out.text = node.text;
+      const text = node.text ? wellFormed(node.text) : "";
+      if (!text) return null;
+      out.text = text;
       if (marks.length > 0) out.marks = marks;
       return out;
     }

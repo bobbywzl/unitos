@@ -9,7 +9,9 @@
 //      between dollar signs;
 //   4. every parse figure has a figure object, with its media;
 //   5. page starts rise, one for each page that holds words;
-//   6. the size numbers are the rich text's.
+//   6. the size numbers are the rich text's;
+// and no string of the rich text holds half of a surrogate pair (the
+// database refuses the import).
 // It also reads what a reader would miss: the masthead (the kicker, one
 // Title, the Subtitle), each row's page and how the AI prefix names it,
 // each cell's place (C1), the words after each page start against the
@@ -760,7 +762,10 @@ async function checkFixture(f: Fixture): Promise<Report> {
       }),
     );
   } catch (err) {
-    fail("richTextFromImport runs", String(err instanceof Error ? (err.stack ?? err.message) : err).split("\n").slice(0, 4).join(" | "));
+    const reason = String(err instanceof Error ? (err.stack ?? err.message) : err).split("\n").slice(0, 4).join(" | ");
+    fail("richTextFromImport runs", reason);
+    // The sanitizer refuses half of a surrogate pair outside production.
+    if (/surrogate pair/.test(reason)) fail("no lone surrogate in the rich text", reason);
     return report;
   }
   report.ms.convert = Math.round(performance.now() - t0);
@@ -768,6 +773,19 @@ async function checkFixture(f: Fixture): Promise<Report> {
   const json = JSON.stringify(doc);
   report.jsonBytes = Buffer.byteLength(json);
   report.size = out.size;
+
+  // No lone surrogate: the database refuses JSON that holds half of a
+  // surrogate pair, and the import with it (the NPS thesis's formulas began
+  // inside a math letter). Every string counts: words and attributes.
+  const halves: string[] = [];
+  walk(doc, (node) => {
+    for (const v of [node.text, ...Object.values(node.attrs ?? {}), ...(node.marks ?? []).flatMap((m) => Object.values(m.attrs ?? {}))]) {
+      if (typeof v !== "string" || v.isWellFormed()) continue;
+      const at = v.search(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+      halves.push(`${node.type} "${clip(v.slice(Math.max(0, at - 40), at + 10).toWellFormed(), 60)}"`);
+    }
+  });
+  check(halves.length === 0, "no lone surrogate in the rich text", halves.length > 0 ? `${halves.length}: ${halves.slice(0, 3).join(" | ")}` : "");
 
   // 1. Sanitized equals itself.
   t0 = performance.now();
