@@ -764,6 +764,7 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
       !b.clip &&
       b.x1 >= line.x - size * 1.5 &&
       b.x1 < line.xEnd + size * 0.6 &&
+      b.x2 <= line.xEnd + size * 1.5 &&
       ((b.y1 >= low - size && b.y2 <= high + size) || (b.x2 - b.x1 < size * 0.6 && b.y2 > low && b.y1 < high)) &&
       !paintsRule(b, ctx.drawing.rules),
   );

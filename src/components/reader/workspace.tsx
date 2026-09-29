@@ -90,6 +90,8 @@ const STRIP_BUTTON =
 // above it. A set height, not a cap: the assistant pins its input to the
 // sheet's foot and scrolls its thread, which needs a height to fill.
 const SHEET_HEIGHT = "max-md:h-[min(max(60%,400px),calc(100%-150px))]";
+// md and up: the tray is the side column; below it, the sheet.
+const MD_QUERY = "(min-width: 768px)";
 
 // Tray width bounds: the bar between the reader and the tray drags within
 // these, so it can never overextend — the tray keeps a readable minimum and
@@ -192,6 +194,14 @@ export function Workspace({
   // bottom bar; mobileTray tracks it. On md+ the md: overrides put the same
   // aside back in the side column, so the flag is inert there.
   const [mobileTray, setMobileTray] = useState(false);
+  // A jump opens the sheet below md, as the bottom bar does. On md+ the flag
+  // stays as it is: the rail reads it to tell a second press on the open tab.
+  const openSheet = useCallback(() => {
+    if (!window.matchMedia(MD_QUERY).matches) setMobileTray(true);
+  }, []);
+  // The tray's aside: a jump looks for its card here, not in the page editor,
+  // whose note marks carry the note's id too.
+  const trayRef = useRef<HTMLElement>(null);
   // The tray's width on md+: dragged by the bar between the reader and the
   // tray, clamped by clampTrayWidth, remembered per browser.
   const [trayWidth, setTrayWidth] = useState(TRAY_DEFAULT);

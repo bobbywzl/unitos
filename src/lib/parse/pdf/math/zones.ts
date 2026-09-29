@@ -9,7 +9,7 @@
 // page's rules are known (resolveZones).
 
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
-import { isUnicodeMathFont } from "@/lib/parse/pdf/glyphs";
+import { isMathLetter, isUnicodeMathFont } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { braceLabelBoxes, hangingGlyph, type Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
@@ -39,6 +39,10 @@ const isMathGlyph = (g: Glyph) =>
 
 function kind(g: Glyph, size: number): Kind {
   if (isMathGlyph(g)) return "math";
+  // A text font's digits and + = ( ) join the math beside them as CMR's
+  // do: MathDesign, MathTime, newtxmath, and LibreOffice set a formula's
+  // digits in the text's font (Utopia, Times, Libertine, Liberation).
+  if (g.family === null) return ATTACH_RE.test(g.unicode) ? "attach" : "text";
   if (g.family !== "ot1") return "text";
   if (g.size < size * 0.85 || ATTACH_RE.test(g.unicode)) return "attach";
   // An accent over a math letter (\hat, \bar, \dot) is the text font's.
@@ -64,7 +68,7 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
     // does not close, are the sentence's.
     for (;;) {
       const last = z[z.length - 1];
-      if (!last || last.family !== "ot1") break;
+      if (!last || (last.family !== "ot1" && last.family !== null)) break;
       if (/^[;:]$/.test(last.unicode) || (last.unicode === ")" && count(")") > count("("))) z = z.slice(0, -1);
       else break;
     }
@@ -72,7 +76,7 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
     // or a bracket the formula does not close, is the sentence's.
     for (;;) {
       const first = z[0];
-      if (!first || first.family !== "ot1") break;
+      if (!first || (first.family !== "ot1" && first.family !== null)) break;
       const mark = first.size < size * 0.85 && z[1] !== undefined && gapOf(first, z[1]) > 0.15 * size;
       const punct = /^[:;!]$/.test(first.unicode);
       const bracket = /^[([]$/.test(first.unicode) && !z.slice(1).some((g) => g.unicode === ")" || g.unicode === "]");
@@ -124,9 +128,11 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       // "Var(" or "sgn x" set tight: a name; "sets:" is a word and its colon.
       const opens = after !== undefined && (kinds[j] === "math" || after.unicode === "(");
       // A bold letter stands a relation's space from its neighbors
-      // (\mathbf{x} = y); a roman one touches them (\mathrm{d}x), where a
-      // word space, however tight, is a fifth of an em.
-      const near = (/^CMBX/i.test(g.base) ? 0.3 : 0.12) * size;
+      // (\mathbf{x} = y), and so does a text italic's letter a page's math
+      // takes (glyphs.ts isMathLetter: the Math Guide's A∖B); a roman one
+      // touches them (\mathrm{d}x), where a word space, however tight, is a
+      // fifth of an em.
+      const near = (/^CMBX/i.test(g.base) || isMathLetter(g) ? 0.3 : 0.12) * size;
       const letter = word.length === 1 && ((cur.length > 0 && gap < near) || (nextMath && afterGap < near));
       const name = word.length <= 4 && opens && afterGap < 0.12 * size;
       if (opname || letter || name) cur.push(...glyphs.slice(k, j));
@@ -371,11 +377,14 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
   // a tall delimiter (KaTeX draws them so), which may start an em left
   // of the glyphs, or just right of them (a closing delimiter), and run
   // past them (the rows it holds that the formula lacks).
+  // A box that reaches an em and a half past them is none of theirs: a
+  // table cell's frame around the formula (the Math Guide's cells failed).
   const paths = drawing.paths.filter(
     (b) =>
       !b.clip &&
       b.x1 >= x1 - em * 1.5 &&
       b.x1 < x2 + em * 0.6 &&
+      b.x2 <= x2 + em * 1.5 &&
       ((b.y1 > low - em * 2 && b.y2 < high + em * 2) || (b.x2 - b.x1 < em * 0.6 && b.y2 > low && b.y1 < high + em)) &&
       !paintsRule(b, drawing.rules),
   );

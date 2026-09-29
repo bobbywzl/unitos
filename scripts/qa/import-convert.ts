@@ -1471,19 +1471,28 @@ async function checkFixture(f: Fixture): Promise<Report> {
     const first = Math.min(432 - left, Math.max(-left, Math.round(b.indent.first * 2) / 2));
     return [left || null, first || null];
   };
+  // Paragraphs pair by their words, the k-th of the parse with the k-th of
+  // the page: two with the same words may stand at two indents. A table's
+  // cells, a list's lines, and the Title are no parse paragraphs.
+  const byWords = new Map<string, RichNode[]>();
+  for (const top of doc.content ?? []) {
+    for (const n of top.type === "blockquote" ? (top.content ?? []) : [top]) {
+      const words = n.type === "paragraph" && n.attrs?.docStyle !== "title" ? norm(inlineText(n)) : "";
+      if (words) byWords.set(words, [...(byWords.get(words) ?? []), n]);
+    }
+  }
+  const taken = new Map<string, number>();
   const indented = f.blocks.flatMap((b) => {
-    const token = b.type === "PARAGRAPH" ? tokensOf(b).find((k) => k in INDENT_ATTRS) : undefined;
-    const want = b.type === "PARAGRAPH" ? (measured(b) ?? (token ? INDENT_ATTRS[token] : null)) : null;
-    return want && (want[0] !== null || want[1] !== null) ? [{ b, token: token ?? "indent", want }] : [];
+    if (b.type !== "PARAGRAPH") return [];
+    const words = norm(indexedText(b));
+    const k = taken.get(words) ?? 0;
+    taken.set(words, k + 1);
+    const token = tokensOf(b).find((t) => t in INDENT_ATTRS);
+    const want = measured(b) ?? (token ? INDENT_ATTRS[token] : null);
+    return want && (want[0] !== null || want[1] !== null) ? [{ b, token: token ?? "indent", want, node: byWords.get(words)?.[k] }] : [];
   });
   if (indented.length) {
-    const byWords = new Map<string, RichNode>();
-    walk(doc, (n) => {
-      const words = n.type === "paragraph" ? norm(inlineText(n)) : "";
-      if (words && !byWords.has(words)) byWords.set(words, n);
-    });
-    const wrong = indented.filter(({ b, want }) => {
-      const n = byWords.get(norm(indexedText(b)));
+    const wrong = indented.filter(({ want, node: n }) => {
       const [left, first] = want;
       return !n || (n.attrs?.indentLeft ?? null) !== left || (n.attrs?.indentFirstLine ?? null) !== first;
     });

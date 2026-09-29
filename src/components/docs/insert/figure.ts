@@ -11,8 +11,9 @@ import { captionParts, captionStylesOf, type CaptionStyle } from "@/lib/docs/sch
 
 // A figure object (SPEC.md §29): an import's figure, one block atom in the
 // page. It draws the figure as the block reader does (.reader-figure): a
-// web page's figure from its html, a PDF's figure as the crop of its page
-// under its caption. The media is the document's FigureMedia row, which the
+// web page's figure from its html, a PDF's figure as the crop of its page at
+// the size the PDF prints it, over its caption in the marks the page sets it
+// in (captionStyles). The media is the document's FigureMedia row, which the
 // page sends; the rich text holds only its id, so no save and no paste can
 // put markup in the page. A click opens the figure's tools
 // (DOCS_EVENT.figureTools); the caption is the figure's, never typed into.
@@ -26,7 +27,8 @@ export type FigureMediaView = {
   page: number | null;
   region: unknown | null;
   src: string | null;
-  /** A PDF crop's size in px (lib/figure-crop.ts): its place holds before it loads. */
+  /** A PDF crop's size in px as the PDF prints it (lib/figure-crop.ts): it
+      draws at that size, and its place holds before it loads. */
   size: { width: number; height: number } | null;
 };
 

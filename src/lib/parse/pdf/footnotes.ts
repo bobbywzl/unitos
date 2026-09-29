@@ -9,6 +9,7 @@
 // after the block that cites it, linked to its reference (placeFootnotes).
 
 import type { Rule } from "@/lib/parse/pdf/drawing";
+import { median } from "@/lib/parse/pdf/geometry";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
 import { joinGroup } from "@/lib/parse/pdf/text";
 import type { Line, Run, Segment } from "@/lib/parse/pdf/types";
@@ -277,8 +278,12 @@ const TITLE_NOTE_RE =
     with a label the page raises or the first reads as such a note. Each
     labeled line opens a note, and so does a line after a gap. */
 function titleNotes(column: Line[], end: number, bodySize: number, raised: Set<string>): { kept: Line[]; cuts: Cut[] } | null {
+  // Against the page's own body where it is set larger than the document's:
+  // a survey's 7 pt tables and references outnumber its 9 pt text.
+  const prose = column.filter((l) => l.cells.length === 1 && l.text.length > 40).map((l) => l.size);
+  const body = Math.max(bodySize, prose.length >= 5 ? median(prose) : 0);
   let top = end;
-  while (top > 0 && column[top - 1].text.trim() && column[top - 1].size <= bodySize * SMALL && (top === end || column[top - 1].y - column[top].y <= column[top].size * 4)) top--;
+  while (top > 0 && column[top - 1].text.trim() && column[top - 1].size <= body * SMALL && (top === end || column[top - 1].y - column[top].y <= column[top].size * 4)) top--;
   const area = column.slice(top, end);
   if (area.length === 0 || (!area.some((l) => raised.has(labelOf(l, false) ?? "")) && !TITLE_NOTE_RE.test(area[0].text))) return null;
   const cuts: Cut[] = [];

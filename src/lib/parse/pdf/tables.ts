@@ -812,21 +812,6 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       i++;
       continue;
     }
-    // A run with no gutter down it is no table: tableFromRun joined all its
-    // lines into one paragraph (a résumé's entries and their bullets). Its
-    // leading lines of cells are one when a gutter runs down them; the
-    // other lines go back to the other readers.
-    const columned = (ks: number[]) => runSeparators(ks.map((k) => lines[k])).length > 0;
-    if (!columned(members)) {
-      const single = members.findIndex((k) => lines[k].cells.length < 2);
-      const lead = single < 0 ? [] : members.slice(0, single);
-      if (lead.length < 2 || !columned(lead)) {
-        i++;
-        continue;
-      }
-      members.splice(lead.length);
-      j = lead[lead.length - 1] + 1;
-    }
     // Backward: wrapped header lines directly above (at most 3).
     const firstEdge = runSeparators(members.map((k) => lines[k]))[0];
     const left = Math.min(...members.map((k) => lines[k].x));

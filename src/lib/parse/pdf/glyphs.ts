@@ -485,7 +485,9 @@ export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
   for (const g of glyphs) {
     if (g.family === null || g.family === "ot1") continue;
     const entry = mathGlyph(g.family, g.code);
-    if (!entry) texts.set(g, g.unicode.replace(CONTROL_CHARS_RE, ""));
+    // A font read by its character reads as its text layer does: the
+    // Math Guide's ∖ is no backslash, though TeX's code for both is one.
+    if (!entry || unicodeFont(g.base)?.kind === "tex") texts.set(g, g.unicode.replace(CONTROL_CHARS_RE, ""));
     else texts.set(g, entry.cls === "piece" ? (PIECE_TEXT[entry.piece ?? ""] ?? "") : entry.unicode);
   }
   const textOf = (g: Glyph) => texts.get(g) ?? g.unicode;

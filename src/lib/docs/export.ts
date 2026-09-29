@@ -325,6 +325,11 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
   let children = inline(node.content, ctx, run, typeof a.blockId === "string" ? ctx.cuts.get(a.blockId) : undefined);
   if (node.type === "heading" && typeof a.blockId === "string") children = [bookmark(ctx, bookmarkName("h", a.blockId), children)];
   const stops = typeof a.tabStops === "string" ? a.tabStops.split(" ").map((stop) => stop.split(":")) : [];
+  // A side's line and its padding stand in the indent, as the page draws
+  // them: Word's indent is where the words start.
+  const inset = (side: unknown) => (typeof side === "string" ? side.split(" ").reduce((sum, v, k) => sum + (k === 0 || k === 3 ? Number(v) || 0 : 0), 0) : 0);
+  const [left, right] = [num(a.indentLeft), num(a.indentRight)];
+  const [insetLeft, insetRight] = [inset(a.borderLeft), inset(a.borderRight)];
   return para(ctx, {
     heading: node.type === "heading" ? HEADINGS[level - 1] : a.docStyle === "title" ? HeadingLevel.TITLE : undefined,
     style: a.docStyle === "subtitle" ? "Subtitle" : undefined,
@@ -336,8 +341,8 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
       lineRule: lineSpacing ? LineRuleType.AUTO : undefined,
     },
     indent: {
-      left: num(a.indentLeft) === undefined ? undefined : tw(a.indentLeft as number),
-      right: num(a.indentRight) === undefined ? undefined : tw(a.indentRight as number),
+      left: left === undefined && !insetLeft ? undefined : tw((left ?? 0) + insetLeft),
+      right: right === undefined && !insetRight ? undefined : tw((right ?? 0) + insetRight),
       firstLine: firstLine > 0 ? tw(firstLine) : undefined,
       hanging: firstLine < 0 ? tw(-firstLine) : undefined,
     },
@@ -638,6 +643,9 @@ function blocks(nodes: RichNode[] = [], ctx: Ctx): Block[] {
       case "blockquote":
         for (const child of node.content ?? []) {
           if (child.type !== "paragraph" && child.type !== "heading") out.push(...blocks([child], ctx));
+          // A quote that draws its own bar (an import's Word quote) keeps
+          // it and its indent, as the page draws it.
+          else if (typeof child.attrs?.borderLeft === "string") out.push(paragraph(child, ctx));
           else out.push(paragraph(child, ctx, { indent: { left: 720 }, border: { left: { style: BorderStyle.SINGLE, size: 18, color: "DADCE0", space: 12 } } }));
         }
         break;

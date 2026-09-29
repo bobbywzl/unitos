@@ -140,9 +140,12 @@ function setApart(line: { text: string; runs: Run[] }, from: number, length: num
 }
 
 /** The next marker continues the list of `prev`: the same family and shape
-    and the next value. Bullets, boxes, and author-year labels always do. */
+    and the next value. Bullets, boxes, and author-year labels always do. A
+    starred number goes on its sequence (a hard exercise, "*15" after
+    "14": Grinstead's exercises ran together in one paragraph). */
 export function follows(prev: Marker, next: Marker): boolean {
-  if (prev.family !== next.family || prev.shape !== next.shape) return false;
+  const shape = (m: Marker) => m.shape.replace(/^\*/, "");
+  if (prev.family !== next.family || shape(prev) !== shape(next)) return false;
   if (next.family === "bullet" || next.family === "box") return true;
   if (next.family === "cite") return prev.value === 0 ? next.value === 0 : next.value === prev.value + 1;
   return next.value === prev.value + 1;

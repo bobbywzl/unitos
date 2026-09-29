@@ -69,9 +69,10 @@ type Item = { lines: Line[]; marker: Marker; markerX: number; bodyX: number };
 // its items (a display equation, a fill-in line, the page break): the x of
 // each of its levels and the marker last seen there. It holds on its page
 // and the next; a heading ends it.
-let open: { page: number; levels: { x: number; marker: Marker }[] } | null = null;
+type Level = { markerX: number; bodyX: number; marker: Marker };
+let open: { page: number; levels: Level[] } | null = null;
 
-function openLevels(page: number): { x: number; marker: Marker }[] | null {
+function openLevels(page: number): Level[] | null {
   return open && (page === open.page || page === open.page + 1) ? open.levels : null;
 }
 
@@ -199,9 +200,7 @@ function isList(items: Item[], i: number, ctx: PageContext): boolean {
   const first = items[0];
   const size = first.lines[0].size;
   const hanging = items.some((it) => it.lines.slice(1).some((l) => l.x > it.markerX + size * 0.5));
-  const continued = (openLevels(first.lines[0].page) ?? []).some(
-    (level) => Math.abs(level.x - first.markerX) <= size * 0.8 && follows(level.marker, first.marker),
-  );
+  const continued = (openLevels(first.lines[0].page) ?? []).some((level) => sameLevel(level, first, size) && follows(level.marker, first.marker));
   if (!opensSequence(first.marker) && !continued && i > 0 && !(items.length >= 2 && follows(first.marker, items[1].marker))) return false;
   if (items.length >= 2) return true;
   if (first.marker.family === "box" && /[☐☑☒]/.test(first.lines[0].text.slice(first.marker.length))) return false;
@@ -220,24 +219,29 @@ function isList(items: Item[], i: number, ctx: PageContext): boolean {
 // right, and each level's marker x by rank. A list that goes on from the one
 // last read keeps its levels.
 function depthsOf(items: Item[], size: number): { depths: number[]; levels: number[] } {
-  const levels: { markerX: number; bodyX: number; marker: Marker }[] = [];
+  const levels: Level[] = [];
   const first = items[0];
   const remembered = openLevels(first.lines[0].page);
+  // A list goes on from the one last read where it starts at one of its
+  // levels: at the outermost with a marker that opens no sequence, or at a
+  // level under it with any (an exercise's "(a)" after a display cut its
+  // list, Grinstead p. 35: read as a new list, one level out).
   const continued =
     remembered !== null &&
-    (!opensSequence(first.marker) || first.marker.family === "box" || first.marker.family === "bullet") &&
-    remembered.some((level) => Math.abs(level.x - first.markerX) <= size * 0.8);
-  if (continued && remembered) for (const level of remembered) levels.push({ markerX: level.x, bodyX: Number.NaN, marker: level.marker });
+    remembered.some(
+      (level, r) =>
+        sameLevel(level, first, size) && (r >= 1 || !opensSequence(first.marker) || first.marker.family === "box" || first.marker.family === "bullet"),
+    );
+  if (continued && remembered) levels.push(...remembered.map((level) => ({ ...level })));
   const levelOf = items.map((item) => {
     let k = levels.findIndex((level) => sameLevel(level, item, size));
     if (k < 0) k = levels.push({ markerX: item.markerX, bodyX: item.bodyX, marker: item.marker }) - 1;
     levels[k].marker = item.marker;
-    if (Number.isNaN(levels[k].bodyX)) levels[k].bodyX = item.bodyX;
     return k;
   });
   const order = levels.map((_, k) => k).sort((a, b) => levels[a].markerX - levels[b].markerX);
   const rank = new Map(order.map((k, r) => [k, r]));
-  open = { page: first.lines[0].page, levels: order.map((k) => ({ x: levels[k].markerX, marker: levels[k].marker })) };
+  open = { page: first.lines[0].page, levels: order.map((k) => levels[k]) };
   return { depths: levelOf.map((k) => rank.get(k) ?? 0), levels: order.map((k) => levels[k].markerX) };
 }
 
@@ -347,8 +351,11 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
     // its own block, never the item's next line.
     if (lineMathShare(next) >= 0.5 && next.x > line.x + next.size * 4) break;
     // A marked line stepping back left of the run's first line is the
-    // next item of an outer list, not a line of this run.
-    if (BULLET_RE.test(next.text) && next.x < line.x - next.size * 0.5) break;
+    // next item of an outer list, not a line of this run; under an unmarked
+    // first line it opens a list of its own, and the lines above it are a
+    // paragraph (an exercise's words after its display over its items,
+    // "(see Example 1.6).", read as a bullet over them: Grinstead p. 35).
+    if (BULLET_RE.test(next.text) && (next.x < line.x - next.size * 0.5 || (!BULLET_RE.test(line.text) && readMarker(next) !== null))) break;
     const continues = BULLET_RE.test(next.text) || next.x >= line.x - 2;
     if (!continues) break;
     run.push(next);
