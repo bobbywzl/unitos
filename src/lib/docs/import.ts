@@ -435,9 +435,10 @@ function styleLooks(input: ImportInput): Partial<Record<DocStyle, NamedStyle>> {
   const spaced = input.blocks.some((b) => b.spaceAfter !== undefined);
   for (const [style, counts] of tally) {
     const looksOf = [...counts.values()].sort((a, b) => b.n - a.n);
-    // Bold and italic only where every heading of the level is: a heading
-    // set so takes the mark (lookMarks), and no mark takes either off (a
-    // heading set upright or in regular weight drew as most of its level).
+    // Bold and italic only where every heading of the level is: no mark
+    // takes either off (a heading set upright or in regular weight drew as
+    // most of its level). A bold heading takes the bold mark (lookMarks);
+    // an italic one keeps its italic runs (ParsedBlock.styles).
     const bold = looksOf.every((l) => l.font.bold === true);
     const italic = looksOf.every((l) => l.font.italic === true);
     looks[style] = { ...lookOf(style, looksOf[0].font), bold, italic, ...(spaced ? { spaceBefore: 0 } : {}) };
@@ -1001,7 +1002,6 @@ class Converter {
     if (font.size !== named.size && !role) attrs.fontSize = `${font.size}pt`;
     const marks: RichMark[] = Object.keys(attrs).length > 0 ? [{ type: "textStyle", attrs }] : [];
     if (block.type === "HEADING" && font.bold && !named.bold) marks.push({ type: "bold" });
-    if (block.type === "HEADING" && font.italic && !named.italic) marks.push({ type: "italic" });
     return marks;
   }
 
