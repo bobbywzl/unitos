@@ -48,7 +48,7 @@ export function pageLines(items: Item[], pageWidth: number, page: number, graphi
 }
 
 function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: number, depth: number, lines?: Line[]): Piece[] {
-  const split = depth < 3 ? findSplit(items, graphics, page, pageWidth) : null;
+  const split = depth < 3 ? findSplit(items, graphics, page, pageWidth, depth) : null;
   if (!split) return leaf(items, graphics, lines);
   const out: Piece[] = [];
   let aboveWhole = false;
@@ -263,7 +263,14 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
   // other, each side holds a fair share, and each side is a prose column.
   if (sideChars < total * 0.4) return null;
   if (leftChars < sideChars * 0.15 || rightChars < sideChars * 0.15) return null;
-  return isColumn(left, page) && isColumn(right, page) ? { bands } : null;
+  return isColumns(left, page, pageWidth, depth) && isColumns(right, page, pageWidth, depth) ? { bands } : null;
+}
+
+// A side of a split: a prose column, or columns of its own (a page of three
+// columns cut at its first gutter holds two on its right: the Federal
+// Register).
+function isColumns(items: Item[], page: number, pageWidth: number, depth: number): boolean {
+  return isColumn(items, page) || (depth < 2 && findSplit(items, [], page, pageWidth, depth + 1) !== null);
 }
 
 // A prose column: its lines start at the column's edge or the paragraph

@@ -141,6 +141,10 @@ export type ParsedBlock = {
   // alignment is a token of its html, as a paragraph's.
   listIndents?: Indent[];
   itemSpace?: number;
+  // PDF FIGUREs: the crop of a display equation that failed the glyph check.
+  // Its text is the display's glyphs as the text layer reads them (often
+  // garbled), so the import shows it with no caption.
+  mathCrop?: true;
   // URL blocks, in memory only: the id of the element the block came from
   // (its own id, or the id of a wrapper whose first block it is), the target
   // a contents entry's targetFragment resolves against. Stripped before save.
