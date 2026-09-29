@@ -271,7 +271,7 @@ export function listSheet(root: string): string {
     `${root} ul:not([data-type="taskList"]) > li { list-style-type: var(--docs-level-bullet); }`,
     `${root} ol > li { list-style-type: var(--docs-level-number); }`,
     `${root} :is(ol > li, ol > [data-suggestion-block] > li)::marker { content: var(--docs-level-marker); }`,
-    `${root} :is(ul, ol):not([data-type="taskList"]) > li > p:first-child { text-indent: var(--docs-level-first); }`,
+    `${root} :is(ul, ol):not([data-type="taskList"]) > li > p:first-child, ${root} :is(ul, ol):not([data-type="taskList"]) > [data-suggestion-block] > li > p:first-child { text-indent: var(--docs-level-first); }`,
     // Each depth's words: where the outermost list's page sets them
     // (listIndents), else a half inch a depth. A checklist keeps its own.
     ...Array.from(

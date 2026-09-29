@@ -11,6 +11,7 @@ import { texError } from "@/lib/katex";
 import { convertPrompt } from "@/lib/prompts/convert";
 import { fixTexPrompt } from "@/lib/prompts/fix-tex";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
+import { tableHtml } from "@/lib/replica";
 
 // The conversion job (SPEC.md §16): guards, page rendering, the model batches,
 // and the text block writes. Conversion starts on its own when a handwritten
@@ -65,32 +66,6 @@ function normalizeList(text: string): string {
       return `${indent}- ${body}`;
     })
     .join("\n");
-}
-
-// Table html with the invisible cell separators the PDF parse uses, so the
-// table's DOM text equals block text exactly — text anchors inside tables
-// depend on this (SPEC.md §5). The first row renders as the header row.
-function tableHtml(text: string): string {
-  const rows = text.split("\n").map((r) => r.split("\t"));
-  const rowHtml = (cells: string[], tag: "td" | "th", rowIdx: number) =>
-    `<tr>${cells
-      .map((c, cellIdx) => {
-        const last = cellIdx === cells.length - 1;
-        const gap = last
-          ? rowIdx === rows.length - 1
-            ? ""
-            : '<span class="cell-gap">\n</span>'
-          : '<span class="cell-gap">\t</span>';
-        return `<${tag}>${escapeHtml(c)}${gap}</${tag}>`;
-      })
-      .join("")}</tr>`;
-  if (rows.length === 1) return `<table><tbody>${rowHtml(rows[0], "td", 0)}</tbody></table>`;
-  return (
-    "<table>" +
-    `<thead>${rowHtml(rows[0], "th", 0)}</thead>` +
-    `<tbody>${rows.slice(1).map((r, i) => rowHtml(r, "td", i + 1)).join("")}</tbody>` +
-    "</table>"
-  );
 }
 
 function toBlockRow(b: ConvertedBlock): {

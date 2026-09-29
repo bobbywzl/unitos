@@ -569,9 +569,43 @@ export function sheetWithText(html: string, prev: string, next: string, cut: She
   return "refused" in edited ? edited : { html: cellClasses(reshaped.html, edited.html), cut: reshaped.cut };
 }
 
-/** A slide's or a sheet's replica with `next` for its words: what the text
-    PATCH stores, and what the plan checks before it offers the edit. */
+// ── A converted table ──────────────────────────────────────────────────────
+
+/** A converted table's html (a handwritten document's TABLE, SPEC.md §16):
+    its text as a table, the first row the header row when there are more,
+    with the invisible cell separators the PDF parse uses, so the table's DOM
+    text equals its text (SPEC.md §5). The html follows from the text alone:
+    an edit writes it anew from the new text, and the old text gives the old
+    html back byte for byte. */
+export function tableHtml(text: string): string {
+  const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const rows = text.split("\n").map((r) => r.split("\t"));
+  const rowHtml = (cells: string[], tag: "td" | "th", rowIdx: number) =>
+    `<tr>${cells
+      .map((c, cellIdx) => {
+        const last = cellIdx === cells.length - 1;
+        const gap = last
+          ? rowIdx === rows.length - 1
+            ? ""
+            : '<span class="cell-gap">\n</span>'
+          : '<span class="cell-gap">\t</span>';
+        return `<${tag}>${escape(c)}${gap}</${tag}>`;
+      })
+      .join("")}</tr>`;
+  if (rows.length === 1) return `<table><tbody>${rowHtml(rows[0], "td", 0)}</tbody></table>`;
+  return (
+    "<table>" +
+    `<thead>${rowHtml(rows[0], "th", 0)}</thead>` +
+    `<tbody>${rows.slice(1).map((r, i) => rowHtml(r, "td", i + 1)).join("")}</tbody>` +
+    "</table>"
+  );
+}
+
+/** A slide's, a sheet's, or a converted table's replica with `next` for
+    its words: what the text PATCH stores, and what the plan checks before
+    it offers the edit. */
 export function replicaEdit(type: string, html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null } | { refused: ReplicaRefusal } {
+  if (type === "TABLE") return { html: tableHtml(next), cut: null };
   if (type === "SHEET") return sheetWithText(html, prev, next, cut);
   const edited = replicaWithText(html, prev, next);
   return "refused" in edited ? edited : { html: edited.html, cut: null };

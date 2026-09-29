@@ -6,12 +6,14 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 // and the block routes (app/api/blocks) read this one rule, so what the plan
 // card offers is what the routes do.
 //
-// Words change in a text block, in a transcript line, and in a slide's or a
-// sheet's replica, as the replica takes them (lib/replica.ts). A format
-// changes in a paragraph, a heading, a list, or code; a page, a transcript
-// line, or an equation never turns into another kind. A text block, a
-// transcript line, a line, or a page while another page stays may go: the
-// restore route brings each back whole (Convert again writes its text after
+// Words change in a text block, in a transcript line, in a slide's or a
+// sheet's replica, as the replica takes them, and in a converted table (a
+// handwritten document's TABLE), whose html is written anew from its text
+// (lib/replica.ts). A format changes in a paragraph, a heading, a list, or
+// code; a page, a transcript line, or an equation never turns into another
+// kind. A text block, a transcript line, a line, a converted table, or a
+// page while another page stays may go: the restore route brings each back
+// whole (Convert again writes its text after
 // the last page's order, lib/handwritten/convert.ts, so a page gone leaves
 // no text among the pages). A style or a web link goes on a text block's
 // words. Nothing changes a video's player, a table, or a figure, or a
@@ -36,13 +38,16 @@ const FORMATS = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);
 const FIXED = new Set(["PAGE", "VIDEO", "TRANSCRIPT", "SLIDE", "SHEET"]);
 
 const sheetName = (type: string, doc: DocumentShape) => doc.format === "sheets" && type === "HEADING";
+// A handwritten document's table is the conversion's: its html is its text drawn.
+const convertedTable = (type: string, doc: DocumentShape) => type === "TABLE" && doc.pages > 0;
 const addsBlocks = (doc: DocumentShape) => !doc.format && !doc.media;
 
 export const blockTakes = {
-  words: (type: string, doc: DocumentShape) => WORDS.has(type) && !sheetName(type, doc),
+  words: (type: string, doc: DocumentShape) => (WORDS.has(type) && !sheetName(type, doc)) || convertedTable(type, doc),
   kind: (type: string, doc: DocumentShape) => FORMATS.has(type) && !sheetName(type, doc),
   // A handwritten document keeps a page: the one left is its last.
-  removal: (type: string, doc: DocumentShape) => (type === "PAGE" ? doc.pages > 1 : REMOVABLE.has(type) && !sheetName(type, doc)),
+  removal: (type: string, doc: DocumentShape) =>
+    type === "PAGE" ? doc.pages > 1 : (REMOVABLE.has(type) && !sheetName(type, doc)) || convertedTable(type, doc),
   style: (type: string) => TEXT_BLOCKS.has(type),
   /** A new block after one of `type`, followed by one of `next`. */
   after: (type: string, next: string | undefined, doc: DocumentShape) => addsBlocks(doc) && !(type === "PAGE" && next === "PAGE"),

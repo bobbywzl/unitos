@@ -76,10 +76,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   const access = await documentAccess(block.documentId, "editor");
   if (access instanceof NextResponse) return access;
 
-  // A table's and a figure's html is their content; a slide's and a sheet's
-  // replica takes new words through its text (below), never a kind.
-  const replica = block.type === "SLIDE" || block.type === "SHEET";
-  if (block.type === "TABLE" || block.type === "FIGURE" || (replica && data.kind !== undefined)) {
+  // A figure's html is its content; a slide's, a sheet's, and a converted
+  // table's replica takes new words through its text (below), never a kind,
+  // and any other table keeps its html (the rule, below).
+  const replica = block.type === "SLIDE" || block.type === "SHEET" || block.type === "TABLE";
+  if (block.type === "FIGURE" || (replica && data.kind !== undefined)) {
     return NextResponse.json({ error: t("api.onlyTextBlocksEdited") }, { status: 400 });
   }
 
@@ -141,8 +142,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   const newText = text;
   // A slide's or a sheet's replica takes the new words in place (SPEC.md
   // §27: its DOM text stays the block's text), a sheet its rows and columns
-  // too; a slide whose words are not its words as parsed shows its replica,
-  // its picture held.
+  // too, and a converted table is drawn anew from its text (§16); a slide
+  // whose words are not its words as parsed shows its replica, its picture
+  // held.
   let replicaHtml: string | null = null;
   let replicaCut: SheetCut | null = null;
   if (replica) {
@@ -298,20 +300,21 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
   if (!block) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
   const access = await documentAccess(block.documentId, "editor");
   if (access instanceof NextResponse) return access;
-  if (block.type === "TABLE" || block.type === "FIGURE" || block.type === "SLIDE" || block.type === "SHEET") {
+  const richText = await isRichTextDocument(block.documentId);
+  if ((block.type === "TABLE" && richText) || block.type === "FIGURE" || block.type === "SLIDE" || block.type === "SHEET") {
     return NextResponse.json({ error: t("api.onlyTextBlocksRemoved") }, { status: 400 });
   }
 
   // A blank document is edited through its rich text (SPEC.md §29).
-  if (await isRichTextDocument(block.documentId)) {
+  if (richText) {
     const result = await editRichText(block.documentId, access.user.id, (doc) => removeBlock(doc, blockId));
     if (!result.ok) {
       return result.reason === "shared" ? importSharedResponse(t) : NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
     }
     return NextResponse.json({ ok: true, editId: result.removedEdits[blockId] ?? null });
   }
-  // A video's player, a sheet's name, and a handwritten document's last
-  // page stay (lib/block-takes.ts).
+  // A video's player, a sheet's name, a table other than a converted one,
+  // and a handwritten document's last page stay (lib/block-takes.ts).
   if (!blockTakes.removal(block.type, await documentShape(block.documentId))) {
     return NextResponse.json({ error: t(block.type === "PAGE" ? "api.lastPageStays" : "api.onlyTextBlocksRemoved") }, { status: 400 });
   }

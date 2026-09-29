@@ -417,8 +417,8 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   // from Liberation Serif's (the Math Guide's A∖B); and on one whose math
   // fonts set no digit, its digits from the text's font. Such a glyph may
   // join the math beside it (math/zones.ts). Where a math font sets them,
-  // the text's are prose: "a σ-algebra" in a theorem, and a table's
-  // "53.4" before its gain set in math (arXiv 2411.19946).
+  // the text's are prose: a theorem's italic words, and a table's "53.4"
+  // before its gain set in math (arXiv 2411.19946).
   const latin = glyphs.some((g) => g.family === "oml" && /^[A-Za-z]$/.test(mathGlyph("oml", g.code)?.unicode ?? ""));
   const digits = glyphs.some((g) => g.family !== null && /^[0-9]$/.test(g.unicode));
   for (const g of glyphs) {

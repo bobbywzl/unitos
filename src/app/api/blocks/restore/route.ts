@@ -11,9 +11,8 @@ import { parseBody } from "@/lib/validate";
 
 const restoreSchema = z.object({ editId: z.string().min(1) });
 
-// The kinds a removal can take (lib/block-takes.ts), and a page removed
-// before the rule, each restored as itself.
-const RESTORABLE = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION", "SEPARATOR", "TRANSCRIPT", "PAGE"]);
+// The kinds a removal can take (lib/block-takes.ts), each restored as itself.
+const RESTORABLE = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION", "SEPARATOR", "TRANSCRIPT", "PAGE", "TABLE"]);
 
 // Restore a removed block from its BLOCK_REMOVE edit: same id, same text, same
 // format, same position. Anchors on the block heal on the next render because
