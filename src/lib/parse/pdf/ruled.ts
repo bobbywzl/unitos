@@ -1140,9 +1140,10 @@ function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawin
     return level && own.some((lines) => lines.every((l) => NUMERIC_CELL_RE.test(l.text.trim()))) ? n : 1;
   });
   const rows: TableRow[][] = splits.map((n) => Array.from({ length: n }, () => ({ cells: [] })));
-  // A row taller than its words by two text sizes at least (a blank line
-  // and the cells' padding) keeps its height rule to rule: a form's field
-  // row, a signature row. The import sets the row at least that tall.
+  // A row taller than its words (the lines' baselines and one line's
+  // height) by more than 0.6 of the text size keeps its height rule to
+  // rule: a form's field row, a signature row, a row set with room around
+  // its words. The import sets the row at least that tall.
   splits.forEach((n, r) => {
     const lines = cells.flatMap((cell, k) => (cell.row === r && cell.rowspan === 1 ? cellLines[k] : []));
     const words = lines.length > 0 ? Math.max(...lines.map((l) => l.yMax)) - Math.min(...lines.map((l) => l.yMin)) + Math.max(...lines.map((l) => l.size)) : 0;
