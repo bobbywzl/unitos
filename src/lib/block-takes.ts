@@ -5,14 +5,15 @@ import { db } from "@/lib/db";
 // and the block routes (app/api/blocks) read this one rule, so what the plan
 // card offers is what the routes do.
 //
-// Words change in a text block and in a transcript line. A format changes
+// Words change in a text block, in a transcript line, and in a slide's or a
+// sheet's replica, its lines and its grid kept (lib/replica.ts). A format changes
 // in a paragraph, a heading, a list, or code; a page, a transcript line, or
 // an equation never turns into another kind. A text block, a transcript
 // line, or a line may go: the restore route brings each back whole. A page
 // stays: Convert again writes the text after as many orders as there are
 // pages (lib/handwritten/convert.ts), so a page gone would put text among
 // the pages. A style or a web link goes on a text block's words. Nothing
-// changes a video's player, a slide, a sheet, a table, or a figure. A
+// changes a video's player, a table, or a figure, or a slide's or a sheet's kind. A
 // sheets document keeps its sheet names (the HEADING before each sheet). A
 // slides, sheets, or media document takes no new block, and no block moves
 // in one; in a handwritten document a new block goes after the last page.
@@ -22,7 +23,9 @@ import { db } from "@/lib/db";
 export type DocumentShape = { format: string | null; media: boolean };
 
 export const TEXT_BLOCKS: ReadonlySet<string> = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION"]);
-const WORDS = new Set([...TEXT_BLOCKS, "TRANSCRIPT"]);
+// A slide's and a sheet's words change in their replica, line by line and
+// cell by cell (lib/replica.ts).
+const WORDS = new Set([...TEXT_BLOCKS, "TRANSCRIPT", "SLIDE", "SHEET"]);
 const REMOVABLE = new Set([...WORDS, "SEPARATOR"]);
 const FORMATS = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);
 // Blocks that hold their place: none moves, and none goes before the first.

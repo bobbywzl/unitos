@@ -482,29 +482,44 @@ export function readReferences(lines: Line[], i: number, ctx: PageContext, runOf
     const next = lines[j];
     const prev = run[run.length - 1];
     const gap = prev.y - next.y;
-    if (runOf[j] !== -1 || next.table || Math.abs(next.size - size) > 1.2 || boldShare(next.runs, next.text.length) > 0.9) break;
+    if (runOf[j] !== -1 || next.table || Math.abs(next.size - size) > 0.6 || boldShare(next.runs, next.text.length) > 0.9) break;
     if (lineColumn(next) === lineColumn(prev) && (gap <= 0 || gap > size * ctx.leading * 3)) break;
     run.push(next);
   }
   // Each column's entry edge (its leftmost line) and right edge, and the
   // hanging step: how far the lines set in stand from the edge.
-  const columns = new Map<unknown, { left: number; right: number }>();
+  const columns = new Map<unknown, { left: number; right: number; lines: Line[] }>();
   for (const l of run) {
     const key = lineColumn(l);
-    const c = columns.get(key);
-    columns.set(key, { left: Math.min(c?.left ?? l.x, l.x), right: Math.max(c?.right ?? l.xEnd, l.xEnd) });
+    const c = columns.get(key) ?? { left: l.x, right: l.xEnd, lines: [] };
+    columns.set(key, { left: Math.min(c.left, l.x), right: Math.max(c.right, l.xEnd), lines: [...c.lines, l] });
   }
-  const edgeOf = (l: Line) => columns.get(lineColumn(l))!;
-  const steps = run.map((l) => l.x - edgeOf(l).left).filter((d) => d >= size * 0.3 && d <= size * 3);
+  const columnOf = (l: Line) => columns.get(lineColumn(l))!;
+  const steps = run.map((l) => l.x - columnOf(l).left).filter((d) => d >= size * 0.3 && d <= size * 3);
   if (steps.length === 0) return null;
   const step = median(steps);
+  // A column whose lines all start at one place shows no hanging indent:
+  // the middle of an entry of hundreds of authors (its lines wrap at the
+  // column's edge, and a line under a short one opens the next entry), or
+  // entries of one line each.
+  const wraps = new Set<unknown>();
+  for (const [key, c] of columns) {
+    if (c.lines.some((l) => Math.abs(l.x - c.left - step) <= size * 0.5)) continue;
+    const full = c.lines.slice(0, -1).filter((l, k) => fillsMargin(l, c.lines[k + 1], c.right)).length;
+    if (full >= (c.lines.length - 1) * 0.6 && full > 0) wraps.add(key);
+  }
   const entries: Line[][] = [];
   const tail: Line[] = [];
   let end = 0;
   for (const [k, l] of run.entries()) {
-    const d = l.x - edgeOf(l).left;
-    if (Math.abs(d) <= size * 0.3) entries.push([l]);
-    else if (Math.abs(d - step) <= size * 0.5) {
+    const c = columnOf(l);
+    const d = l.x - c.left;
+    const prev = run[k - 1];
+    const opens = wraps.has(lineColumn(l))
+      ? prev === undefined || !fillsMargin(prev, l, lineColumn(prev) === lineColumn(l) ? c.right : columnOf(prev).right)
+      : Math.abs(d) <= size * 0.3;
+    if (opens) entries.push([l]);
+    else if (wraps.has(lineColumn(l)) || Math.abs(d - step) <= size * 0.5) {
       if (entries.length > 0) entries[entries.length - 1].push(l);
       else tail.push(l);
     } else break;
@@ -525,7 +540,7 @@ export function readReferences(lines: Line[], i: number, ctx: PageContext, runOf
   }
   const all = entries.flat();
   const list: Segment = { type: "LIST", text: builder.text, page: line.page, runs: builder.runs, ...geom(all) };
-  list.listIndents = [{ left: Math.round(edgeOf(all[0]).left + step - leftEdge(all[0], ctx)), first: Math.round(-step) }];
+  list.listIndents = [{ left: Math.round(columnOf(all[0]).left + step - leftEdge(all[0], ctx)), first: Math.round(-step) }];
   segments.push(withItemLayout(list, lines, entries, ctx));
   return { segments, next: i + end };
 }

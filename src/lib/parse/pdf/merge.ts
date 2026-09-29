@@ -76,12 +76,13 @@ export function shiftSpansInto(target: Segment, source: Segment, offset: number)
 // A block joined across a page break takes the space the page leaves under
 // its later part (the first part's page ended under it, and a list that ran
 // from one page to the next lost the blank line under it: the owner's notes
-// p. 10); a list takes the first part's layout where the later part shows
-// more (a depth, its items' spacing, a justified item).
+// p. 10); a list keeps the first part's layout, and takes the later part's
+// where the first shows none (one item measures no spacing; a depth, a
+// justified item).
 function joinLayout(prev: Segment, next: Segment) {
   prev.spaceAfter = next.spaceAfter;
   if (prev.type === "LIST") {
-    prev.itemSpace ??= next.itemSpace;
+    if (!prev.text.includes("\n")) prev.itemSpace ??= next.itemSpace;
     if (next.listIndents && next.listIndents.length > (prev.listIndents?.length ?? 0)) prev.listIndents = [...(prev.listIndents ?? []), ...next.listIndents.slice(prev.listIndents?.length ?? 0)];
   }
   if (!ALIGN_RE.test(prev.html ?? "") && /\bjustify\b/.test(next.html ?? "")) prev.html = withToken(prev.html, prev.type === "LIST" ? "ul" : "p", "justify");
@@ -148,22 +149,42 @@ function liftFloatsOffParagraphBreaks(segments: Segment[]): Segment[] {
     // compare loop finding: a rubric list split in two by a figure).
     const listBreak = prev.type === "LIST" && !prev.tocEntries;
     if (!listBreak && (prev.type !== "PARAGRAPH" || /[.!?:…"”)]$/.test(prev.text.trim()))) continue;
+    // The floats may fill a page of their own (LaTeX's float page: the
+    // references ran on from p. 6 to p. 8 around a page of tables, arXiv
+    // 2503.22874).
     let k = b;
-    while (k < out.length && out[k].page === out[b].page && isFloat(out[k])) k++;
+    while (k < out.length && isFloat(out[k]) && out[k].page <= prev.page + 2) k++;
     if (k === b || k >= out.length) continue;
     const tail = out[k];
-    if (tail.page !== out[b].page) continue;
-    if (listBreak ? tail.type !== "LIST" || Boolean(tail.tocEntries) : tail.type !== "PARAGRAPH" || !/^[a-z($€£0-9"'“]/.test(tail.text)) continue;
-    out.splice(k, 1);
-    out.splice(b, 0, tail);
+    if (tail.page > prev.page + 2 || tail.page < out[k - 1].page) continue;
+    // A references entry's end at the page's top goes with the list after it.
+    const lift = listBreak && hangingTail(tail, out[k + 1]) ? 2 : 1;
+    if (lift === 1 && (listBreak ? tail.type !== "LIST" || Boolean(tail.tocEntries) : tail.type !== "PARAGRAPH" || !/^[a-z($€£0-9"'“]/.test(tail.text))) continue;
+    out.splice(b, 0, ...out.splice(k, lift));
   }
   return out;
+}
+
+// The end of a list's entry that a page break cut: a paragraph set at the
+// hanging indent of the entries that follow it on its page (a references
+// entry's end, "In Proceedings of …", arXiv 2503.10997).
+function hangingTail(tail: Segment, after: Segment | undefined): boolean {
+  const size = after?.lineSize ?? 10;
+  return (
+    tail.type === "PARAGRAPH" &&
+    after?.type === "LIST" &&
+    after.page === tail.page &&
+    tail.box !== undefined &&
+    after.box !== undefined &&
+    tail.box.x1 > after.box.x1 + size * 0.3 &&
+    tail.box.x1 < after.box.x1 + size * 3
+  );
 }
 
 export function mergeAcrossPages(input: Segment[]): Segment[] {
   const segments = liftFloatsOffParagraphBreaks(input);
   const out: Segment[] = [];
-  for (const segment of segments) {
+  for (const [index, segment] of segments.entries()) {
     const prev = out[out.length - 1];
     if (!prev || segment.page === prev.page) {
       out.push(segment);
@@ -200,6 +221,7 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       Boolean(prev.tocEntries) === Boolean(segment.tocEntries)
     ) {
       const offset = prev.text.length + 1;
+      joinLayout(prev, segment);
       prev.breaks = joinBreaks(prev, segment, offset);
       prev.text = prev.text + "\n" + segment.text;
       shiftSpansInto(prev, segment, offset);
@@ -209,7 +231,6 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
           ...segment.tocEntries.map((e) => ({ ...e, start: e.start + offset, end: e.end + offset })),
         ];
       }
-      joinLayout(prev, segment);
       continue;
     }
 
@@ -219,13 +240,16 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
     // a mid-sentence tail continues the item instead of becoming a new one.
     // The tail starts where the list's lines start, never well right of them:
     // a form's centered hint in parentheses under an item is its own line.
+    // A tail set at the hanging indent of the entries after it finishes the
+    // last entry whatever its words.
     if (
       segment.type === "PARAGRAPH" &&
       prev.type === "LIST" &&
       !prev.tocEntries &&
-      !/[.!?…:]$/.test(prev.text.trim()) &&
-      /^[a-z($€£0-9"'“]/.test(segment.text) &&
-      !(segment.box && prev.box && segment.box.x1 > prev.box.x1 + (prev.lineSize ?? 10) * 3)
+      (hangingTail(segment, segments[index + 1]) ||
+        (!/[.!?…:]$/.test(prev.text.trim()) &&
+          /^[a-z($€£0-9"'“]/.test(segment.text) &&
+          !(segment.box && prev.box && segment.box.x1 > prev.box.x1 + (prev.lineSize ?? 10) * 3)))
     ) {
       const lastNum = lastListNumber(prev.text);
       const offset = prev.text.length + 1;

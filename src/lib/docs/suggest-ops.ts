@@ -135,8 +135,8 @@ export type SuggestScope =
 export type BlockPlace = {
   /** Its paragraph style; null for code, a figure, a line, or an equation. */
   style: SuggestStyle | null;
-  /** A table cell or a footnote takes changes to its words only. */
-  where: "body" | "cell" | "footnote";
+  /** A table cell, a footnote, or a slide (words) takes changes to its words only. */
+  where: "body" | "cell" | "footnote" | "words";
   /** The node that holds it, lists aside: blocks replaced together share one. */
   container: string;
   /** The list or the table it stands in: a window never cuts inside one. */
@@ -467,7 +467,7 @@ export function resolveOps(
     if (k === undefined || !inScope.has(op.blockId)) return "outside";
     const row = rows[k];
     const place = places.get(row.id);
-    if (!TEXT_ROWS.has(row.type) || !place) return "notText";
+    if (!place || (!TEXT_ROWS.has(row.type) && place.where !== "words")) return "notText";
     if (op.op === "set_style") {
       if (!place.style || place.where !== "body") return "notText";
       if (op.style === place.style) return null;

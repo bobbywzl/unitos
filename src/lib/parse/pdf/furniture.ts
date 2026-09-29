@@ -42,9 +42,14 @@ type Side = "head" | "foot";
 // notice 18.5 pt under "Per Curiam").
 type Candidate = { row: Row; side: Side; strong: boolean };
 
-export type FurnitureDrop = { page: number; line: Line; why: "repeat" | "page number" | "place" | "cell" | "continued" | "band" };
+export type FurnitureDrop = { page: number; line: Line; why: "repeat" | "page number" | "place" | "cell" | "continued" | "band" | "blank" };
 
-const LONE_NUMBER_RE = /^[-–—\s]*(?:(?:page|p\.)\s*)?(\d{1,4}|[ivxlc]{1,7})(?:\s*(?:of|\/)\s*\d{1,4})?[-–—\s]*$/i;
+// A period may close the number: the 10-K prints "53." at each foot, and
+// its 97 page numbers stayed in the text.
+const LONE_NUMBER_RE = /^[-–—\s]*(?:(?:page|p\.)\s*)?(\d{1,4}|[ivxlc]{1,7})\.?(?:\s*(?:of|\/)\s*\d{1,4})?[-–—\s]*$/i;
+// The notice a book or a thesis prints on a page it leaves empty: the only
+// words of their page on six pages of the NPS thesis.
+const BLANK_PAGE_RE = /^\(?(?:this page (?:is |has been )?(?:intentionally|deliberately) left blank|(?:page )?intentionally left blank)\.?\)?$/i;
 // A long table's foot on each page it breaks at (LaTeX longtable, Word).
 const CONTINUED_RE = /^\(?continued (?:on (?:the )?next page|overleaf)\)?\.?$/i;
 
@@ -104,6 +109,9 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
     rows.map((pageRows) => pageRows.filter((r) => !strongRows.has(r) && !Number.isNaN(edge(r))).sort((a, b) => edge(a) - edge(b)));
   const byTop = byEdge((r) => r.top);
   const byBottom = byEdge((r) => r.bottom);
+  // A page number in another numbering reads like it: roman before arabic
+  // (the NPS thesis kept "i" to "xiv", the arabic numbers of its weak feet
+  // standing at their place).
   const outside = (c: Candidate): boolean => {
     const hit = known.get(c);
     if (hit !== undefined) return hit;
@@ -113,7 +121,7 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
     for (const pageRows of head ? byTop : byBottom) {
       for (const r of pageRows) {
         if (!((head ? r.top : r.bottom) <= edge + 2)) break;
-        if (r.page !== c.row.page && !same(r, c.row) && !sameOffset(r, c.row)) {
+        if (r.page !== c.row.page && !same(r, c.row) && !sameOffset(r, c.row) && !(r.lone && c.row.lone)) {
           inside++;
           break;
         }
@@ -138,6 +146,12 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
     }
     return false;
   };
+
+  // 0. The notice of a page left blank, its page's only words but its number.
+  for (const pageRows of rows) {
+    const words = pageRows.filter((r) => !r.lone);
+    if (words.length === 1 && BLANK_PAGE_RE.test(words[0].text)) dropped.set(words[0], "blank");
+  }
 
   // 1. Strong candidates with evidence of their own.
   for (const c of strong) {
@@ -183,7 +197,7 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
   for (const [p, lines] of pages.entries()) {
     const h = pageHeights[p];
     for (const line of lines) {
-      if (gone.has(line) || !/^\d{1,4}$/.test(line.text) || (line.y >= h * 0.08 && line.y <= h * 0.92)) continue;
+      if (gone.has(line) || !/^\d{1,4}\.?$/.test(line.text) || (line.y >= h * 0.08 && line.y <= h * 0.92)) continue;
       drops.push({ page: pageNumbers?.[p] ?? p, line, why: "band" });
     }
   }

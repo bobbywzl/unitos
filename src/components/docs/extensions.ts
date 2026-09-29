@@ -149,8 +149,9 @@ function ptAttr(name: string, css: (v: number) => string) {
     paragraph borders, w:pBdr: a rule under a heading, a bar beside a
     quote): "<width pt> <solid|dotted|dashed> #rrggbb <padding pt>", the
     padding the room between the line and the words. The paragraph's space
-    before or after stays outside the line, as a margin in place of its
-    padding. */
+    before and after stay outside its lines, as margins in place of its
+    padding: a rule sits under the words, not under the space after, and a
+    bar runs down the words alone. */
 const PARAGRAPH_BORDER = /^(\d{1,2}(?:\.\d{1,2})?) (solid|dotted|dashed) (#[0-9a-fA-F]{6})(?: (\d{1,2}(?:\.\d{1,2})?))?$/;
 
 function borderAttr(side: "top" | "right" | "bottom" | "left") {
@@ -163,8 +164,14 @@ function borderAttr(side: "top" | "right" | "bottom" | "left") {
       const m = typeof value === "string" ? PARAGRAPH_BORDER.exec(value) : null;
       if (!m) return {};
       const css = [`border-${side}: ${m[1]}pt ${m[2]} ${m[3]}`, `padding-${side}: ${m[4] ?? 0}pt`];
-      const space = side === "top" ? attrs.spaceBefore : side === "bottom" ? attrs.spaceAfter : undefined;
-      if (side === "top" || side === "bottom") css.push(`margin-${side}: ${typeof space === "number" ? space : 0}pt`);
+      const lined = (key: string) => typeof attrs[key] === "string" && PARAGRAPH_BORDER.test(attrs[key] as string);
+      // The space before and after as margins: a lined edge keeps its own
+      // side's padding, and beside a bar an edge without a line has none.
+      for (const [edge, key, space] of [["top", "borderTop", attrs.spaceBefore], ["bottom", "borderBottom", attrs.spaceAfter]] as const) {
+        if (key !== name && (side === "top" || side === "bottom" || lined(key))) continue;
+        if (key !== name) css.push(`padding-${edge}: 0`);
+        css.push(`margin-${edge}: ${typeof space === "number" ? space : 0}pt`);
+      }
       return { [`data-border-${side}`]: value, style: css.join("; ") };
     },
   };

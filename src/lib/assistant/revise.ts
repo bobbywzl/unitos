@@ -37,13 +37,18 @@ const STYLE_OF_KIND: Record<BlockKind, SuggestStyle> = {
 
 /** Each block whose words the revision may change, as the ops read it: its
     format as a paragraph style (code has none), and one container for all,
-    so consecutive blocks change together. An equation's TeX changes by
-    rewrite_block, which needs no place; a transcript line waits for the
-    video's turn. */
+    so consecutive blocks change together; a slide its words alone. An
+    equation's TeX changes by rewrite_block, which needs no place; a
+    transcript line waits for the video's turn, a sheet for its own. */
 export function revisePlaces(blocks: RevisedBlock[], shape: DocumentShape): Map<string, BlockPlace> {
   const places = new Map<string, BlockPlace>();
   for (const b of blocks) {
-    if (!blockTakes.words(b.type, shape) || b.type === "EQUATION" || b.type === "TRANSCRIPT") continue;
+    // A slide's words change within its lines, and nothing else of it.
+    if (b.type === "SLIDE" && blockTakes.words(b.type, shape)) {
+      places.set(b.id, { style: null, where: "words", container: "", group: null });
+      continue;
+    }
+    if (!blockTakes.words(b.type, shape) || b.type === "EQUATION" || b.type === "TRANSCRIPT" || b.type === "SHEET") continue;
     const style = b.type === "CODE" ? null : STYLE_OF_KIND[blockKind(b.type, b.html, b.text)];
     places.set(b.id, { style, where: "body", container: "", group: null });
   }

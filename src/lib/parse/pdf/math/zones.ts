@@ -362,7 +362,6 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
     // another line took is missing from the LaTeX, which still passes
     // the check (synth-math-html: a numerator's x^k read as x).
     zone.ok = check.ok && !strayInside(atoms, new Set(glyphs), drawing.glyphs);
-    if (process.env.R3M) console.error(`[r3m-zone] ok=${zone.ok} check=${check.ok} ${JSON.stringify(glyphs.map((g) => g.unicode).join(""))} latex=${latex} missing=${check.missing.join(" ")} extra=${check.extra.join(" ")}`);
     const last = atoms.filter((a) => a.size >= zone.size * 0.85).sort((a, b) => b.x2 - a.x2)[0];
     zone.open = last !== undefined && (last.cls === "rel" || last.cls === "bin" || last.cls === "punct");
   } catch {

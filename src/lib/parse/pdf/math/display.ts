@@ -481,7 +481,6 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   const fences = fencesOf(ctx);
   const fenced = (l: Line) => fences.some((f) => l.y <= f.y2 && l.y >= f.y1 && f.x1 < l.xEnd + l.size * 2 && f.x2 > l.x - l.size * 2);
   const kinds0 = input.map((l, n) => kindOf(l, ctx, columnOf(input, n, ctx), fenced(l)));
-  if (process.env.R3M) input.forEach((l, n) => console.error(`[r3m] ${kinds0[n]} y${l.y.toFixed(1)} ${JSON.stringify(l.text.slice(0, 90))} zones=${JSON.stringify(l.runs.filter((r) => r.zone).map((r) => l.text.slice(r.start, r.end)))} items=${JSON.stringify(l.items.map((i) => `${i.str}${i.zone ? `@${i.zone.glyphs.length}` : ""}`))}`));
   // A table's rows are no display: three cells or more, two of them
   // measured values or marks, with no tall delimiters around them (a
   // matrix's rows have them). Simulation tables with a formula in each row
@@ -766,7 +765,6 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
   );
   try {
     const { latex, check, atoms } = layoutLatex(glyphs, rules, { display: true, size }, paths);
-    if (process.env.R3M) console.error(`[r3m-eq] ok=${check.ok} ${JSON.stringify(glyphs.map((g) => g.unicode).join(""))} latex=${latex} missing=${check.missing.join(" ")} extra=${check.extra.join(" ")}`);
     // A display cut in two (its operators and an opening bracket on one line,
     // the rest on the next) passes the check on what it has: its brackets
     // do not close.
@@ -830,7 +828,6 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
       const hangs = g.family === null && !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]$/u.test(g.unicode);
       return g.y > box.y1 && g.y < box.y2 + (hangs ? g.size : 0);
     });
-    if (process.env.R3M) console.error(`[r3m-eq-stray] ${stray} ${latex}`);
     if (stray) return null;
     const pad = size * 0.15;
     box = { x1: box.x1 - pad, y1: box.y1 - pad, x2: box.x2 + pad, y2: box.y2 + pad };

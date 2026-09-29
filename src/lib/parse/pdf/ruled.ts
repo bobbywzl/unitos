@@ -20,6 +20,7 @@ import {
   columnAt,
   columnSeparators,
   isProseColumns,
+  leadIn,
   LINK_LINE_RE,
   rowsOf,
   tableSegment,
@@ -286,6 +287,23 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[]): Box
   return regions;
 }
 
+// A rule stack as wide as one column of a table bounds no table of its
+// own: most of its lines run on past its sides, with words on their
+// baselines on both sides of it (a row's label and its other values) or an
+// em or less outside it. The 10-K underlines each column of values apart,
+// and its OI&E statement read as four tables, a year's values in each
+// (p. 78).
+function slices(box: Box, lines: Line[], items: Item[]): boolean {
+  const on = lines.filter((l) => {
+    const row = items.filter((it) => Math.abs(it.y - l.y) < l.size * 0.5);
+    const left = row.filter((it) => it.x + it.w < box.x1 - 2);
+    const right = row.filter((it) => it.x > box.x2 + 2);
+    const close = left.some((it) => it.x + it.w > box.x1 - l.size) || right.some((it) => it.x < box.x2 + l.size);
+    return (left.length > 0 && right.length > 0) || close;
+  });
+  return on.length * 2 > lines.length;
+}
+
 // A rule region is a table when its lines split into two columns or more and
 // two rows or more carry cells in two of them. A listing's frame, a figure's
 // box around one label, a region of prose, and a plot's frame are not.
@@ -370,6 +388,8 @@ function gridHead(grid: Grid, body: Item[], items: Item[]): Item[] {
   let edge = b.y2;
   let top: Line | null = null;
   let stop: Line | null = null;
+  // The heads beside a lead-in's last words (below).
+  let beside: Item[] = [];
   // Six lines at most: a head of four over a first row the grid's shading
   // leaves out (apple-fy24q4 p. 4's "Three Months Ended" over its dates,
   // its column heads, and its first row).
@@ -381,6 +401,19 @@ function gridHead(grid: Grid, body: Item[], items: Item[]): Item[] {
     // statement, p. 54); right over the rows it is their label
     // (apple-fy24q4 p. 2's "ASSETS:").
     const phrases = phraseColumns(line, grid.xs);
+    // A lead-in's words over the first column end the head: a sentence that
+    // ends in a colon ("The following table presents our cash flows (in
+    // millions):"), or its last words under a line of prose. The 10-K took
+    // them into its heads on six pages; beside "millions):" its line holds
+    // "As of December 31, 2023", a head still (p. 68).
+    const lead = phrases.find((p) => p.to === 0);
+    const words = lead ? lead.items.map((it) => it.str).join(" ").trim() : "";
+    if (lead && (leadIn(words) || (words.endsWith(":") && k > 0 && isProseLine(lines[k - 1], b.x2 - b.x1)))) {
+      const end = Math.max(...lead.items.map((it) => it.x + it.w));
+      beside = above.filter((it) => Math.abs(it.y - line.y) < line.size * 0.5 && it.x > end);
+      stop = line;
+      break;
+    }
     const titled = top !== null && phrases.every((p) => p.to === 0) && line.x > grid.xs[0] + (grid.xs[1] - grid.xs[0]) * 0.25;
     const aligned = !phrases.some((p) => p.from === 0 && p.to > 0) && !titled;
     const plain = !CAPTION_START_RE.test(line.text) && !/[.!?]$/.test(line.text.trim()) && !isProseLine(line, b.x2 - b.x1);
@@ -395,11 +428,11 @@ function gridHead(grid: Grid, body: Item[], items: Item[]): Item[] {
     top = line;
     edge = line.y + line.size * 0.7;
   }
-  if (!top) return [];
+  if (!top) return beside;
   // The lines are copies (buildLines): the head is every item from the grid
   // up to halfway to the line that ended it.
   const cut = stop ? (top.y + stop.y) / 2 + size * 0.3 : top.y + top.size;
-  return above.filter((it) => centerOf(it).y < cut);
+  return [...above.filter((it) => centerOf(it).y < cut), ...beside];
 }
 
 // The ruled tables of a page, from its rules and filled boxes: grids first,
@@ -420,7 +453,13 @@ export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number
   );
   const grids = latticeGrids(drawing.rules, drawing.fills)
     .map((raw) => closeSlivers(raw, items))
-    .flatMap(splitStacked)
+    .flatMap((grid) => {
+      // Parts whose words set more columns than their lines draw are one
+      // table's rows, shaded apart (the 10-K's summary of results, p. 36,
+      // read as two tables at a row whose shading drew other edges).
+      const parts = splitStacked(grid);
+      return parts.length > 1 && parts.some((part) => isGroupGrid(part, items.filter((it) => inBox(it, part.box)))) ? [grid] : parts;
+    })
     .filter((grid) => {
       const g = grid.box;
       const inWider = wide.some(
@@ -466,7 +505,7 @@ export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number
       if (!free(box)) continue;
       const inside = items.filter((it) => inBox(it, { ...box, x1: box.x1 - 2, x2: box.x2 + 2 }));
       const lines = buildLines(inside, 0);
-      if (!isTableRegion(lines, box.x2 - box.x1)) continue;
+      if (!isTableRegion(lines, box.x2 - box.x1) || slices(box, lines, items)) continue;
       const inner = rules.filter((r) => r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3);
       const region = { box, items: inside, lines, grid: null, rules: inner, drawing };
       // The rules drawn between its columns are the table's, no chart's
@@ -889,9 +928,13 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const pitch = median(gaps);
   const starts = [0];
+  // Two lines that each hold a label and values are two rows however close:
+  // a statement's blank rows between its groups doubled the median gap (the
+  // 10-K's summary of results, p. 36, fused its rows in pairs).
+  const full = (cells: Cell[]) => cells[0].text.length > 0 && cells.slice(1).some((c) => c.text.length > 0);
   for (let k = 1; k < lines.length; k++) {
     const gap = gaps[k - 1];
-    if (gap < pitch * 0.7) continue;
+    if (gap < pitch * 0.7 && !(full(cellsOf[k]) && full(cellsOf[k - 1]))) continue;
     const cells = cellsOf[k];
     const filled = cells.filter((c) => c.text.length > 0);
     const lower = filled.every((c) => /^\p{Ll}/u.test(c.text));

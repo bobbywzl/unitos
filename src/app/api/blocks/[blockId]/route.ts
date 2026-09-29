@@ -8,6 +8,8 @@ import { db } from "@/lib/db";
 import { removeBlock, replaceBlockText, setBlockKind } from "@/lib/docs/ops";
 import { editRichText, importSharedResponse, isRichTextDocument } from "@/lib/docs/server";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
+import type { TKey } from "@/lib/i18n/dictionaries";
+import { replicaWithText, slidePicture, type ReplicaRefusal } from "@/lib/replica";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
@@ -37,6 +39,14 @@ const KIND_TO_BLOCK: Record<
 
 type StyleSpan = { start: number; end: number; style: string; quotedText: string };
 
+// Why a slide's or a sheet's replica does not take new words (lib/replica.ts).
+const REPLICA_REFUSAL: Record<ReplicaRefusal, TKey> = {
+  lines: "api.replicaLines",
+  fixed: "api.replicaFixed",
+  empty: "api.replicaEmpty",
+  stale: "api.replicaStale",
+};
+
 /** A list conversion's text, as the reader's edit toolbar writes it: into a
     list, every line takes its marker; out of one, the markers go. */
 function convertedText(text: string, from: FormatKind, to: FormatKind): string {
@@ -58,7 +68,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   const access = await documentAccess(block.documentId, "editor");
   if (access instanceof NextResponse) return access;
 
-  if (block.type === "TABLE" || block.type === "FIGURE" || block.type === "SLIDE" || block.type === "SHEET") {
+  // A table's and a figure's html is their content; a slide's and a sheet's
+  // replica takes new words through its text (below), never a kind.
+  const replica = block.type === "SLIDE" || block.type === "SHEET";
+  if (block.type === "TABLE" || block.type === "FIGURE" || (replica && data.kind !== undefined)) {
     return NextResponse.json({ error: t("api.onlyTextBlocksEdited") }, { status: 400 });
   }
 
@@ -118,6 +131,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   }
 
   const newText = text;
+  // A slide's or a sheet's replica takes the new words in place (SPEC.md
+  // §27: its DOM text stays the block's text); a slide whose words are not
+  // its words as parsed shows its replica, its picture held.
+  let replicaHtml: string | null = null;
+  if (replica) {
+    const edited = replicaWithText(block.html ?? "", block.text, newText);
+    if ("refused" in edited) return NextResponse.json({ error: t(REPLICA_REFUSAL[edited.refused]) }, { status: 400 });
+    replicaHtml = block.type === "SLIDE" ? slidePicture(edited.html, newText !== (block.originalText ?? block.text)) : edited.html;
+  }
 
   // Remap every anchor on this block through the edit, the way Google Docs
   // moves highlights while you type: shift, grow, shrink, or orphan visibly.
@@ -155,6 +177,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
         styles: nextSpans,
         ...(citations.length > 0 ? { citations: nextCitations } : {}),
         ...(kindChanges && target ? { type: target.type, html: target.html } : {}),
+        ...(replicaHtml !== null ? { html: replicaHtml } : {}),
         ...(block.originalText === null ? { originalText: block.text } : {}),
       },
     });

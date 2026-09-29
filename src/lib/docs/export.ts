@@ -346,6 +346,7 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
             position: tw(Number(at) || 0),
           }))
         : undefined,
+    border: paragraphBorders(a),
     keepNext: a.keepWithNext === true || undefined,
     keepLines: a.keepLinesTogether === true || undefined,
     widowControl: a.preventSingleLines !== false,
@@ -353,6 +354,16 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
     children,
     ...extra,
   });
+}
+
+/** A paragraph's borders as Word's (w:pBdr): each side as a cell's side,
+    with the room between the line and the words (an import's Word file). */
+function paragraphBorders(a: Record<string, unknown>): IParagraphOptions["border"] {
+  const sides = (["top", "right", "bottom", "left"] as const).flatMap((name) => {
+    const value = a[`border${name[0].toUpperCase()}${name.slice(1)}`];
+    return typeof value === "string" ? [[name, { ...side(value), space: Number(value.split(" ")[3] ?? 0) || 0 }] as const] : [];
+  });
+  return sides.length > 0 ? Object.fromEntries(sides) : undefined;
 }
 
 // ── Lists ───────────────────────────────────────────────────────────────────

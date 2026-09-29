@@ -75,6 +75,11 @@ const en = {
   linkAddressInvalid: "The link's address is not a web address",
   linkOffsetsInvalid: "Link offsets are invalid",
   linkInPageEditor: "Links in this document are set in the page editor",
+  // A slide's or a sheet's replica (lib/replica.ts): what it does not take.
+  replicaLines: "A slide keeps its lines and a sheet its rows and columns: change words within a line or a cell",
+  replicaFixed: "These words stay: a bullet, the speaker notes' label, a chart's data, a formula's cell, or a cell a merge covers",
+  replicaEmpty: "The slide has no text there to hold new words",
+  replicaStale: "The block changed since the edit was made. Ask again",
   editNotRemovedParagraph: "Edit is not a removed paragraph",
   paragraphAlreadyBack: "Paragraph is already back",
 
@@ -406,6 +411,10 @@ const zh: Record<keyof typeof en, string> = {
   linkAddressInvalid: "链接地址不是网址",
   linkOffsetsInvalid: "链接偏移无效",
   linkInPageEditor: "此文档的链接在页面编辑器中设置",
+  replicaLines: "幻灯片保留其行，工作表保留其行与列：请在一行或一个单元格内修改文字",
+  replicaFixed: "这些文字保持不变：项目符号、演讲者备注的标签、图表的数据、公式所在的单元格，或被合并覆盖的单元格",
+  replicaEmpty: "幻灯片在那里没有可容纳新文字的文本",
+  replicaStale: "此块在编辑之后已更改。请再问一次",
   editNotRemovedParagraph: "此编辑不是被移除的段落",
   paragraphAlreadyBack: "段落已经恢复了",
 

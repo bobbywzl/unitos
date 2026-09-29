@@ -166,6 +166,20 @@ const INDENTS: Record<(typeof INDENT_TOKENS)[number], Indent> = {
   "indent-block": { left: INDENT_PT, first: 0 },
 };
 
+/** A paragraph's borders as the page editor's (a Word file's rule under a
+    heading, its bar beside a quote), each side as the parse writes it. */
+const BORDER_ATTRS = { top: "borderTop", right: "borderRight", bottom: "borderBottom", left: "borderLeft" } as const;
+const BORDER_VALUE = /^(\d{1,2}(?:\.\d{1,2})?) (?:solid|dotted|dashed) #[0-9a-fA-F]{6}(?: (\d{1,2}(?:\.\d{1,2})?))?$/;
+
+function borderAttrs(block: ParsedBlock): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [side, name] of Object.entries(BORDER_ATTRS) as [keyof typeof BORDER_ATTRS, string][]) {
+    const value = block.borders?.[side];
+    if (value && BORDER_VALUE.test(value)) out[name] = value;
+  }
+  return out;
+}
+
 /** An indent as the page editor's paragraph attributes: the left indent
     within the text column, the first line never left of the column's edge. */
 function indentAttrs(indent: Indent | undefined): Record<string, number> {
@@ -1012,7 +1026,12 @@ class Converter {
     if (role === "meta") attrs.docStyle = "subtitle";
     else if (role !== "kicker" && this.spaceAfter(block) > 0) attrs.spaceAfter = this.spaceAfter(block);
     const kind = INDENT_TOKENS.find((k) => tokens.includes(k));
-    Object.assign(attrs, indentAttrs(block.indent ?? (kind ? INDENTS[kind] : undefined)));
+    const indent = block.indent ?? (kind ? INDENTS[kind] : undefined);
+    // A bar at the left stands in the indent, its padding from the words:
+    // the words start where the page starts them.
+    const bar = BORDER_VALUE.exec(block.borders?.left ?? "");
+    const inset = bar ? Number(bar[1]) + Number(bar[2] ?? 0) : 0;
+    Object.assign(attrs, indentAttrs(indent && inset ? { left: Math.max(0, indent.left - inset), first: indent.first } : indent), borderAttrs(block));
     const size =
       role === "kicker" || role === "label" || role === "caption" || role === "footnote" ? SMALL_SIZE : role === "display" ? DISPLAY_SIZE : null;
     const extra: RichMark[] = size ? [{ type: "textStyle", attrs: { fontSize: size } }] : [];
@@ -1028,7 +1047,7 @@ class Converter {
       this.place(index, [paragraphNode(this.titleContent(content), align ? { docStyle: "title", textAlign: align } : { docStyle: "title" })]);
       return;
     }
-    const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId() };
+    const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId(), ...borderAttrs(block) };
     if (align) attrs.textAlign = align;
     // The page's own space after the heading, where it measured one.
     if (block.spaceAfter !== undefined) attrs.spaceAfter = block.spaceAfter;

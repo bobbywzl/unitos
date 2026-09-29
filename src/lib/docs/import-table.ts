@@ -177,9 +177,9 @@ function collapsed(line: Inline[]): Piece[] {
 
 // ── The look the parse writes ───────────────────────────────────────────────
 // The parse's table html (lib/parse/pdf/tables.ts, lib/parse/docx.ts) keeps
-// the page's look as a few style properties: a cell's fill, a paragraph's
-// alignment and indent, a run's color and highlight, the table's text size,
-// the columns' widths. The html is read as untrusted: a color is #rrggbb, a
+// the page's look as a few style properties: a cell's fill and sides, a
+// paragraph's alignment and indent, a run's color and highlight, the table's
+// text size, the columns' widths. The html is read as untrusted: a color is #rrggbb, a
 // length a number of points in range, an alignment center or right; any
 // other value is no look, and a table without them reads as before.
 
@@ -215,6 +215,16 @@ function pointsOf(value: string | null, max: number): number | null {
   const n = m ? Number(m[1]) : NaN;
   return n > 0 && n <= max ? n : null;
 }
+
+/** A cell's side from its style ("border-top:0.13pt solid #b6bece", a
+    Word table's) as the page editor stores one ("0.13 solid #b6bece"; a
+    width of 0 hides the side). */
+function sideOf(el: Element, side: "top" | "right" | "bottom" | "left"): string | null {
+  const m = /^(\d{1,2}(?:\.\d{1,2})?)pt (solid|dotted|dashed) (#[0-9a-f]{6})$/.exec(styleOf(el, `border-${side}`) ?? "");
+  return m ? `${Number(m[1])} ${m[2]} ${m[3]}` : null;
+}
+
+const CELL_SIDES = { borderTop: "top", borderRight: "right", borderBottom: "bottom", borderLeft: "left" } as const;
 
 /** A paragraph's alignment and left indent (points), from a <p> or a cell. */
 function paragraphAttrs(el: Element): Record<string, unknown> {
@@ -737,9 +747,16 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
   const rows = trs.map((tr) => {
     pinning = pinning && tr.parentElement?.tagName.toLowerCase() === "thead";
     const cells = cellsOf(tr).map((cell) => {
+      // The cell's fill and its sides as the page sets them.
+      const attrs: Record<string, string> = {};
       const fill = colorOf(cell, "background-color");
+      if (fill) attrs.backgroundColor = fill;
+      for (const [name, side] of Object.entries(CELL_SIDES)) {
+        const value = sideOf(cell, side);
+        if (value) attrs[name] = value;
+      }
       return {
-        node: { type: cell.tagName.toLowerCase() === "th" ? "tableHeader" : "tableCell", content: cellBlocks(cell, gapped), ...(fill ? { attrs: { backgroundColor: fill } } : {}) },
+        node: { type: cell.tagName.toLowerCase() === "th" ? "tableHeader" : "tableCell", content: cellBlocks(cell, gapped), ...(Object.keys(attrs).length > 0 ? { attrs } : {}) },
         colspan: spanOf(cell, "colspan", widest),
         rowspan: spanOf(cell, "rowspan", trs.length),
       };

@@ -158,6 +158,8 @@ type StyleDef = {
   rPr: Element | null;
   /** A table style that sets its first row apart (tblStylePr firstRow). */
   firstRow: boolean;
+  /** A table style's table properties (its borders). */
+  tblPr: Element | null;
 };
 
 type Styles = {
@@ -191,6 +193,7 @@ function readStyles(zip: OfficeZip, rels: Map<string, Relationship>): Styles {
       pPr: child(style, "pPr"),
       rPr: child(style, "rPr"),
       firstRow: children(style, "tblStylePr").some((c) => attr(c, "type") === "firstRow"),
+      tblPr: child(style, "tblPr"),
     });
   }
   const defaults = descendants(doc, "docDefaults")[0];
@@ -1046,7 +1049,16 @@ type Sink = { line: () => Line; cut: (piece: Piece) => void; floating: Picture[]
 
 /** A list line: its left indent in twips (its depth is the indent's rank in
     the list), its marker, its words. */
-type ListLine = { indent: number; marker: string; words: Words };
+type ListLine = {
+  indent: number;
+  marker: string;
+  words: Words;
+  /** The space above the line in twips when a line of its list stands
+      right above it (spaceBetween and the blank paragraphs between), and
+      the line's alignment. */
+  gap?: number;
+  align: ParaProps["align"];
+};
 /** A list being read: its lines, whether it is a contents list, the notes
     its lines cite, its first line's paragraph (the space above the list),
     and the gap running on from its last line. */
@@ -1057,7 +1069,44 @@ type OpenList = { lines: ListLine[]; contents: boolean; notes: Note[]; first?: P
 type Spacing = { props: ParaProps; blank: number; pageEnd?: boolean };
 /** A table cell: its html, its words, the columns and rows it spans, the
     note marks in its words (offsets into them), and its fill. */
-type TableCell = { html: string; text: string; colspan: number; rowspan: number; notes?: (Span & { note: Note })[]; fill?: HexColor | null };
+type TableCell = {
+  html: string;
+  text: string;
+  colspan: number;
+  rowspan: number;
+  notes?: (Span & { note: Note })[];
+  fill?: HexColor | null;
+  /** The cell's own borders (w:tcBorders): a side it sets, null for none. */
+  borders?: Partial<Record<BorderSideName, string | null>>;
+};
+
+/** A table's borders: its style's, then its own (w:tblBorders), each edge
+    a side's value or null for none; an edge no layer sets is absent. */
+type TableBorders = Partial<Record<BorderSideName | "insideH" | "insideV", string | null>>;
+
+function tableBorders(layers: (Element | null)[]): TableBorders {
+  const out: TableBorders = {};
+  for (const layer of layers) {
+    const borders = child(layer, "tblBorders");
+    for (const edge of ["top", "right", "bottom", "left", "insideH", "insideV"] as const) {
+      const el = child(borders, edge) ?? (edge === "left" ? child(borders, "start") : edge === "right" ? child(borders, "end") : null);
+      if (el) out[edge] = borderSide(el, false);
+    }
+  }
+  return out;
+}
+
+/** A cell's own borders (w:tcBorders). */
+function cellBorders(tc: Element): TableCell["borders"] {
+  const borders = child(child(tc, "tcPr"), "tcBorders");
+  if (!borders) return undefined;
+  const out: NonNullable<TableCell["borders"]> = {};
+  for (const side of BORDER_SIDES) {
+    const el = child(borders, side) ?? (side === "left" ? child(borders, "start") : side === "right" ? child(borders, "end") : null);
+    if (el) out[side] = borderSide(el, false);
+  }
+  return out;
+}
 
 /** Letters by the size they are set in (half points as points), into a
     table's tally: the table's text size is the size most of them take. */
@@ -1206,10 +1255,25 @@ class DocxReader {
       entries.push({ start: joined.text.length, end: joined.text.length + line.words.text.length });
       joined.add(line.words);
     });
-    const block = this.textBlock("LIST", joined, list.contents ? '<ul class="contents"></ul>' : undefined);
+    // The list's alignment, when its lines share one (a report's justified
+    // items), and the space between its items: the gap most of them leave.
+    const align = list.lines.every((l) => l.align === list.lines[0].align) ? list.lines[0].align : null;
+    const tokens = [...(list.contents ? ["contents"] : []), ...(align ? [align] : [])];
+    const block = this.textBlock("LIST", joined, tokens.length > 0 ? `<ul class="${tokens.join(" ")}"></ul>` : undefined);
+    const gaps = new Map<number, number>();
+    for (const line of list.lines) if (line.gap !== undefined) gaps.set(line.gap, (gaps.get(line.gap) ?? 0) + 1);
+    const gap = [...gaps].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? 0;
+    if (gap > 0) block.itemSpace = points(gap);
     if (list.first && list.trail) this.spaced(block, list.first, list.trail);
     if (list.contents) for (const entry of entries) this.contentsLines.push({ block, ...entry });
     this.push(block, list.notes);
+  }
+
+  /** The space above a list line that follows a line of its list, in
+      twips; undefined for a list's first line or across a page's end. */
+  private listGap(props: ParaProps): number | undefined {
+    const trail = this.list?.trail;
+    return trail && !trail.pageEnd ? trail.blank + spaceBetween(trail.props, props) : undefined;
   }
 
   private closeCode() {
@@ -1318,7 +1382,7 @@ class DocxReader {
         this.closeList();
         this.list = { lines: [], contents: true, notes: [] };
       }
-      this.list.lines.push({ indent: (props.toc ?? 1) * INDENT_STEP_TWIPS, marker: "", words });
+      this.list.lines.push({ indent: (props.toc ?? 1) * INDENT_STEP_TWIPS, marker: "", words, gap: this.listGap(props), align: props.align });
       this.list.first ??= props;
       this.list.trail = { props, blank: 0 };
       this.contentsEntries += 1;
@@ -1345,7 +1409,13 @@ class DocxReader {
           this.list = { lines: [], contents: false, notes: [] };
         }
         // A list line is one line: a line break inside an item is a space.
-        this.list.lines.push({ indent, marker: marker === "□" ? "☐" : marker, words: { ...words, text: words.text.replace(/\n/g, " ") } });
+        this.list.lines.push({
+          indent,
+          marker: marker === "□" ? "☐" : marker,
+          words: { ...words, text: words.text.replace(/\n/g, " ") },
+          gap: this.listGap(props),
+          align: props.align,
+        });
         this.list.first ??= props;
         this.list.trail = { props, blank: 0 };
         this.list.notes.push(...words.notes.map((n) => n.note));
@@ -1901,6 +1971,24 @@ class DocxReader {
     // gap, and a covered slot's gap rides in the last cell drawn before it,
     // in its row or the row above.
     const heads = header.indexOf(false) === -1 ? rows.length : header.indexOf(false);
+    // Each cell's sides: its own, else the table's edge or inside line
+    // where it stands (a report's hairline gray-blue grid drew as one-point
+    // black lines).
+    const edges = tableBorders([...style.map((s) => s.tblPr), tblPr]);
+    const sidesOf = (cell: TableCell, r: number, c: number): string => {
+      const at: Record<BorderSideName, string | null | undefined> = {
+        top: cell.borders?.top !== undefined ? cell.borders.top : r === 0 ? edges.top : edges.insideH,
+        bottom: cell.borders?.bottom !== undefined ? cell.borders.bottom : r + cell.rowspan >= grid.length ? edges.bottom : edges.insideH,
+        left: cell.borders?.left !== undefined ? cell.borders.left : c === 0 ? edges.left : edges.insideV,
+        right: cell.borders?.right !== undefined ? cell.borders.right : c + cell.colspan >= cols ? edges.right : edges.insideV,
+      };
+      return BORDER_SIDES.flatMap((side) => {
+        const value = at[side];
+        if (value === undefined) return [];
+        const [width, dash, color] = (value ?? "0 solid #000000").split(" ");
+        return [`border-${side}:${width}pt ${dash} ${color}`];
+      }).join(";");
+    };
     const drawn: string[][] = [];
     const rowCells = grid.map((row, r) => {
       const tag = r < heads ? "th" : "td";
@@ -1912,8 +2000,8 @@ class DocxReader {
           return;
         }
         const { cell } = slot;
-        const fill = cell.fill ? ` style="background-color:${cell.fill}"` : "";
-        const spans = `${cell.colspan > 1 ? ` colspan="${cell.colspan}"` : ""}${cell.rowspan > 1 ? ` rowspan="${cell.rowspan}"` : ""}${fill}`;
+        const css = [cell.fill ? `background-color:${cell.fill}` : "", sidesOf(cell, r, c)].filter(Boolean).join(";");
+        const spans = `${cell.colspan > 1 ? ` colspan="${cell.colspan}"` : ""}${cell.rowspan > 1 ? ` rowspan="${cell.rowspan}"` : ""}${css ? ` style="${css}"` : ""}`;
         const parts = [`<${tag}${spans}>`, cell.html, gap];
         cells.push(parts);
         drawn.push(parts);
@@ -2008,7 +2096,8 @@ class DocxReader {
     const text = paragraphs.map((p) => p.text).filter(Boolean).join(" ");
     const fill = shadeColor(child(child(tc, "tcPr"), "shd"));
     const plain = paragraphs.length === 1 && !paragraphs[0].align && !paragraphs[0].indent;
-    if (plain) return { html: paragraphs[0].html, text, colspan: 1, rowspan: 1, notes: marks, fill };
+    const borders = cellBorders(tc);
+    if (plain) return { html: paragraphs[0].html, text, colspan: 1, rowspan: 1, notes: marks, fill, borders };
     let seen = false;
     const html = paragraphs
       .map((p) => {
@@ -2019,7 +2108,7 @@ class DocxReader {
         return `${gap}<p${attrs}>${p.html}</p>`;
       })
       .join("");
-    return { html, text, colspan: 1, rowspan: 1, notes: marks, fill };
+    return { html, text, colspan: 1, rowspan: 1, notes: marks, fill, borders };
   }
 }
 
