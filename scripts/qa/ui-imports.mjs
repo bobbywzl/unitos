@@ -2441,8 +2441,8 @@ RISKS.R23 = async (theme) => {
 };
 
 // C2: the assistant's suggestions on an import: a page start passes, a
-// figure is an object, the landing switches Viewing to Editing, Accept
-// keeps "p. N". First the landing's own ops (window.__applyAssistantOps),
+// figure's caption is its words and a figure itself is an object, the
+// landing switches Viewing to Editing, Accept keeps "p. N". First the landing's own ops (window.__applyAssistantOps),
 // then the assistant's bar with the model mock, as a person uses it.
 RISKS.C2 = async (theme) => {
   const pdf = await fresh("pdf", `-c2${theme[0]}`);
@@ -2455,12 +2455,15 @@ RISKS.C2 = async (theme) => {
   const changed = base.replace(/\bthe\b/, "one").replace(/\bthe\b(?![\s\S]*\bthe\b)/, "one");
   const ops = [
     { i: 0, op: "rewrite_block", blockId: s.blockId, base, text: changed, why: "QA: a word changed on each side of a page start." },
-    { i: 1, op: "rewrite_block", blockId: fig.blockId, base: fig.caption, text: "A new caption", why: "QA: a caption is the figure's." },
+    { i: 1, op: "rewrite_block", blockId: fig.blockId, base: fig.caption, text: "A new caption", why: "QA: a caption is the figure's words." },
+    { i: 2, op: "remove_blocks", blockIds: [fig.blockId], base: [fig.caption], why: "QA: a figure is an object." },
   ];
   const landed = await page.evaluate((o) => (window.__applyAssistantOps ? window.__applyAssistantOps(o) : null), ops);
   const switched = await until(async () => (await mode(page)) === "editing", 10_000);
   check("C2", Array.isArray(landed?.ids) && landed.ids.length > 0, `(${theme}) a rewrite across p. ${s.page} lands`, clip(JSON.stringify(landed), 160));
-  check("C2", (landed?.skipped ?? []).some((k) => k.i === 1 && k.reason === "object"), `(${theme}) an op on a figure is skipped as "object"`, clip(JSON.stringify(landed?.skipped), 120));
+  const captioned = (await figures(page)).find((f) => f.blockId === fig.blockId)?.caption ?? null;
+  check("C2", !(landed?.skipped ?? []).some((k) => k.i === 1) && captioned === "A new caption", `(${theme}) a rewrite of a figure's caption lands as a suggestion`, `caption "${clip(String(captioned), 40)}"; skipped ${clip(JSON.stringify(landed?.skipped), 80)}`);
+  check("C2", (landed?.skipped ?? []).some((k) => k.i === 2 && k.reason === "object"), `(${theme}) an op that removes a figure is skipped as "object"`, clip(JSON.stringify(landed?.skipped), 120));
   check("C2", switched, `(${theme}) suggestions landing on an import in Viewing switch it to Editing`, `mode ${await mode(page)}`);
   const still = (await pageStarts(page)).filter((x) => x.page === s.page);
   check("C2", still.length === 1, `(${theme}) the pending suggestion across p. ${s.page} keeps the page start`, `${still.length}${still[0] ? ` before "${still[0].before.slice(-15)}" after "${still[0].after.slice(0, 15)}"` : ""}`);
