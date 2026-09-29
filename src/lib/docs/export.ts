@@ -55,10 +55,12 @@ import { hex6, inlineText } from "@/lib/docs/blocks";
 import {
   captionParts,
   captionStylesOf,
+  listIndentsOf,
   suggestionAuthor,
   suggestionTime,
   ZWSP,
   type CaptionStyle,
+  type ListIndent,
   type PageSetup,
   type RichMark,
   type RichNode,
@@ -370,8 +372,17 @@ function paragraphBorders(a: Record<string, unknown>): IParagraphOptions["border
 
 /** Level n sits n + 1 half inches in, its glyph a quarter inch before it,
     or farther for a wider glyph and a space ("*15", "1.1", "A-1." ran into
-    their words at a quarter inch). `width` is in twips. */
-const levelIndent = (level: number, width = 0) => ({ left: 720 * (level + 1), hanging: Math.max(360, width + 110) });
+    their words at a quarter inch). `width` is in twips. A list whose page
+    set its depths (listIndents: an import's) takes them, as the page draws
+    them, the levels past them a half inch a level further. */
+function levelIndent(level: number, width = 0, indents: ListIndent[] | null = null): { left: number; hanging?: number; firstLine?: number } {
+  const hanging = Math.max(360, width + 110);
+  if (!indents) return { left: 720 * (level + 1), hanging };
+  const last = indents.length - 1;
+  if (level > last) return { left: tw(indents[last][0]) + 720 * (level - last), hanging };
+  const [left, first] = indents[level];
+  return first < 0 ? { left: tw(left), hanging: tw(-first) } : { left: tw(left), firstLine: first > 0 ? tw(first) : undefined };
+}
 
 /** A glyph's width in Arial 11 pt, in twips: about 70 a narrow character
     ("i", ".", "(") and 122 any other. */
@@ -391,7 +402,7 @@ function bulletLevels(glyph: string): ILevelsOptions[] {
     draws it, else the default's), its glyph format as Word's level text
     ("(%1)" for "(%0)"), a legal level's numbers above it as numbers, as the
     page draws them. The list starts at its start at its own level. */
-function listLevels(list: RichNode, drawer: RichNode, depth: number): ILevelsOptions[] {
+function listLevels(list: RichNode, drawer: RichNode, depth: number, indents: ListIndent[] | null): ILevelsOptions[] {
   const widths = markerWidths(list, drawer, depth, []);
   return Array.from({ length: 9 }, (_, level) => {
     const glyph = lineLevel(drawer, level, list.type === "orderedList");
@@ -405,7 +416,7 @@ function listLevels(list: RichNode, drawer: RichNode, depth: number): ILevelsOpt
             isLegalNumberingStyle: /%\d.*%\d/.test(glyph.format) || undefined,
           }),
       start: level === depth ? Number(list.attrs?.start) || 1 : 1,
-      style: { paragraph: { indent: levelIndent(level, widths[level]) } },
+      style: { paragraph: { indent: levelIndent(level, widths[level], indents) } },
     };
   });
 }
@@ -428,10 +439,17 @@ function markerWidths(list: RichNode, drawer: RichNode, depth: number, above: nu
     empty box, and a ticked line is struck through unless the preset says
     not. `drawer` is the list whose format draws this one: the outermost,
     or the nearest with a preset or levels of its own. */
-function list(node: RichNode, ctx: Ctx, outer: { type: string; reference: string } | null, level: number, drawer: RichNode = node): Block[] {
+function list(
+  node: RichNode,
+  ctx: Ctx,
+  outer: { type: string; reference: string } | null,
+  level: number,
+  drawer: RichNode = node,
+  indents: ListIndent[] | null = listIndentsOf(node.attrs?.listIndents),
+): Block[] {
   const own = outer?.type === node.type ? outer : { type: node.type, reference: `list${ctx.numbering.length}` };
   const draws = node.attrs?.listStyle || node.attrs?.listLevels ? node : drawer;
-  if (own !== outer && node.type !== "taskList") ctx.numbering.push({ reference: own.reference, levels: listLevels(node, draws, level) });
+  if (own !== outer && node.type !== "taskList") ctx.numbering.push({ reference: own.reference, levels: listLevels(node, draws, level, indents) });
   const strike = node.attrs?.listStyle !== "CHECKLIST_NO_STRIKETHROUGH";
   const out: Block[] = [];
   for (const item of node.content ?? []) {
@@ -439,10 +457,10 @@ function list(node: RichNode, ctx: Ctx, outer: { type: string; reference: string
     const reference = node.type === "taskList" ? (ticked ? "ticked" : "unticked") : own.reference;
     (item.content ?? []).forEach((child, i) => {
       if (child.type === "bulletList" || child.type === "orderedList" || child.type === "taskList") {
-        out.push(...list(child, ctx, own, level + 1, draws));
+        out.push(...list(child, ctx, own, level + 1, draws, indents));
       } else if (child.type === "paragraph" || child.type === "heading") {
         const lineStyle = ticked && strike ? { strike: true, color: "666666" } : {};
-        out.push(paragraph(child, ctx, i === 0 ? { numbering: { reference, level } } : { indent: { left: levelIndent(level).left } }, lineStyle));
+        out.push(paragraph(child, ctx, i === 0 ? { numbering: { reference, level } } : { indent: { left: levelIndent(level, 0, indents).left } }, lineStyle));
       } else {
         out.push(...blocks([child], ctx));
       }

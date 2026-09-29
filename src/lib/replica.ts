@@ -73,10 +73,29 @@ function readReplica(html: string): { text: string; pieces: Piece[]; gaps: strin
   return { text, pieces, gaps };
 }
 
-/** `text` split at its gap characters: the pieces and the gaps between. */
-function splitText(text: string): { pieces: string[]; gaps: string[] } {
-  const parts = text.split(/(\n|\t)/);
-  return { pieces: parts.filter((_, i) => i % 2 === 0), gaps: parts.filter((_, i) => i % 2 === 1) };
+/** `next` cut into the replica's pieces: the text split at every newline and
+    tab must give the same separators as the replica's, in order — its gaps,
+    and the tabs or newlines a run holds (a tab inside a line) — so each
+    piece takes the parts between its own. Null when they differ. */
+function cutAsReplica(next: string, was: string[], gaps: string[]): string[] | null {
+  const parts = next.split(/(\n|\t)/);
+  const pieces: string[] = [];
+  let k = 0;
+  for (let i = 0; i < was.length; i++) {
+    const inner = was[i].match(/[\n\t]/g) ?? [];
+    let piece = parts[k] ?? "";
+    for (const sep of inner) {
+      if (parts[k + 1] !== sep) return null;
+      piece += sep + (parts[k + 2] ?? "");
+      k += 2;
+    }
+    pieces.push(piece);
+    if (i < gaps.length) {
+      if (parts[k + 1] !== gaps[i]) return null;
+      k += 2;
+    }
+  }
+  return k === parts.length - 1 ? pieces : null;
 }
 
 /** The stretches `after` changes in `before`, as small as they go: a
@@ -148,14 +167,12 @@ export function replicaWithText(html: string, prev: string, next: string): { htm
   const replica = readReplica(html);
   if (replica.text !== prev) return { refused: "stale" };
   const was = replica.pieces.map((p) => p.nodes.map((n) => n.node.data).join(""));
-  // A piece holding a tab or a newline of its own cannot be told from a gap.
-  if (was.some((w) => /[\n\t]/.test(w))) return { refused: "lines" };
-  const now = splitText(next);
-  if (now.gaps.length !== replica.gaps.length || now.gaps.some((g, i) => g !== replica.gaps[i])) return { refused: "lines" };
+  const now = cutAsReplica(next, was, replica.gaps);
+  if (!now) return { refused: "lines" };
   const splices: { start: number; end: number; source: string }[] = [];
   for (let i = 0; i < replica.pieces.length; i++) {
-    if (was[i] === now.pieces[i]) continue;
-    const piece = pieceSplices(replica.pieces[i], was[i], now.pieces[i]);
+    if (was[i] === now[i]) continue;
+    const piece = pieceSplices(replica.pieces[i], was[i], now[i]);
     if (typeof piece === "string") return { refused: piece };
     splices.push(...piece);
   }

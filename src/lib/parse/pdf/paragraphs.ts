@@ -481,6 +481,21 @@ export function isFirstLineIndent(lines: Line[], i: number, ctx: PageContext, ru
   );
 }
 
+// The width of a line's first word, across the items the text layer cut it
+// into where its look changes: the first item alone read an opening quote
+// as the whole word (“ of “Partnership”),), and a wrapped line as one the
+// writer broke (synth-agreement-html).
+function firstWord(line: Line): number {
+  let end = line.x;
+  for (const item of [...line.items].sort((a, b) => a.x - b.x)) {
+    if (item.x > end + line.size * 0.12 && end > line.x) break;
+    const cut = item.str.search(/\S\s/);
+    if (cut >= 0) return Math.max(line.firstWordWidth, item.x + (item.w * (cut + 1)) / item.str.length - line.x);
+    end = item.x + item.w;
+  }
+  return Math.max(line.firstWordWidth, end - line.x);
+}
+
 // A float's label alone on its line: "TABLE I", "Figure 3.".
 const FLOAT_LABEL_RE = /^(?:fig\.?|figure|table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+)[.:]?$/i;
 
@@ -526,12 +541,13 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
     // With no sentence's end, the line stops short by an em more than that
     // word: a note's dated lines ("2013: …" under "2011-2012: …") and a
     // paper's author lines ran together.
-    const roomy = prev.xEnd + prev.size * 1.28 + next.firstWordWidth < sentenceEdge;
+    const word = firstWord(next);
+    const roomy = prev.xEnd + prev.size * 1.28 + word < sentenceEdge;
     const endsShort =
       !centered &&
       sentenceEdge > 0 &&
       (prevTerminal || roomy) &&
-      !fillsMargin(prev, next, sentenceEdge) &&
+      prev.xEnd + prev.size * 0.28 + word <= sentenceEdge - 1 &&
       OPENS_SENTENCE_RE.test(next.text);
     // A line that opens with a raised label (an affiliation's "1Department
     // of Physics…", a note's "²") starts a paragraph of its own: the

@@ -388,15 +388,28 @@ const DIVISION_RE = /^(exhibit|schedule|annex|appendix|part|article|section)\s+[
 // A division's depth by its kind: an exhibit holds sections.
 const DIVISION_DEPTH: Record<string, number> = { exhibit: 1, schedule: 1, annex: 1, appendix: 1, part: 2, article: 2, section: 2 };
 function capsHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
+  const caps = (line: Line) => {
+    const text = line.text.trim();
+    const letters = text.replace(/[^\p{L}]/gu, "").length;
+    if (line.cells.length !== 1 || letters < 3 || [...text].length > 60 || capsShare(text) < 0.9) return false;
+    if (line.size < ctx.bodySize * 0.85 || line.size > ctx.bodySize * (ctx.ocr ? 1.3 : 1.14)) return false;
+    return !(/[,;:]$/.test(text) || INITIAL_RE.test(text) || LABEL_RE.test(text) || CAPTION_RE.test(text));
+  };
   const line = lines[i];
-  const text = line.text.trim();
-  const letters = text.replace(/[^\p{L}]/gu, "").length;
-  if (line.cells.length !== 1 || letters < 3 || [...text].length > 60 || capsShare(text) < 0.9) return null;
-  if (line.size < ctx.bodySize * 0.85 || line.size > ctx.bodySize * (ctx.ocr ? 1.3 : 1.14)) return null;
-  if (/[,;:]$/.test(text) || INITIAL_RE.test(text) || LABEL_RE.test(text) || CAPTION_RE.test(text)) return null;
-  const below = lines[i + 1];
-  if (!below || !isCentered(lines, i, ctx) || !apartAbove(lines[i - 1], line, ctx) || !apartBelow(line, below, ctx)) return null;
-  return { segments: [headingOf([line], text, line.runs)], next: i + 1 };
+  if (!caps(line)) return null;
+  // The title under a division's label runs on over lines as far apart as
+  // the label stands from it (boldHeading).
+  const run = [line];
+  let j = i + 1;
+  if (i > 0 && DIVISION_RE.test(lines[i - 1].text.trim())) {
+    while (j < lines.length && run.length < 3 && caps(lines[j]) && !DIVISION_RE.test(lines[j].text.trim())) {
+      if (Math.abs(lines[j].size - line.size) > 0.5 || run[run.length - 1].y - lines[j].y > line.size * ctx.leading * 2 || !isCentered(lines, j, ctx)) break;
+      run.push(lines[j++]);
+    }
+  }
+  const below = lines[j];
+  if (!below || !isCentered(lines, i, ctx) || !apartAbove(lines[i - 1], line, ctx) || !apartBelow(run[run.length - 1], below, ctx)) return null;
+  return heading(run, j, true);
 }
 
 // "Abstract" alone on its line, in any weight: a paper's abstract heading

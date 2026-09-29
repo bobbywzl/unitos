@@ -136,33 +136,19 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   const total = chars(items);
   if (width < pageWidth * 0.3 || total === 0) return null;
 
-  // The gutters to try: each valley of the characters that cross an x, the
-  // x of a valley nearest the region's middle, the fewest crossings first.
-  // The fewest are not always the columns': the IRS W-9 sets two columns of
-  // instructions under a form whose field 4 stands in a column of its own,
-  // and the form's lines cross the columns' gutter.
+  // The gutter: the x that the fewest characters cross, the one nearest the
+  // region's middle among equals.
+  let best: { g: number; cross: number } | null = null;
   const middle = x0 + width / 2;
-  const scan: { g: number; cross: number }[] = [];
   for (let g = x0 + width * 0.2; g <= x0 + width * 0.8; g += width * 0.01) {
     let cross = 0;
     for (const i of items) if (i.x < g && i.x + i.w > g) cross += i.str.trim().length;
-    scan.push({ g, cross });
+    if (!best || cross < best.cross || (cross === best.cross && Math.abs(g - middle) < Math.abs(best.g - middle))) {
+      best = { g, cross };
+    }
   }
-  const valleys: { g: number; cross: number }[] = [];
-  for (let k = 0; k < scan.length; ) {
-    let end = k;
-    while (end + 1 < scan.length && scan[end + 1].cross === scan[k].cross) end++;
-    const run = scan.slice(k, end + 1);
-    const low = (k === 0 || scan[k - 1].cross > scan[k].cross) && (end === scan.length - 1 || scan[end + 1].cross > scan[k].cross);
-    if (low && scan[k].cross / total < 0.5) valleys.push(run.reduce((a, b) => (Math.abs(b.g - middle) < Math.abs(a.g - middle) ? b : a)));
-    k = end + 1;
-  }
-  valleys.sort((a, b) => a.cross - b.cross || Math.abs(a.g - middle) - Math.abs(b.g - middle));
-  for (const { g } of valleys.slice(0, 3)) {
-    const split = splitAt(items, graphics, page, pageWidth, depth, g, total);
-    if (split) return split;
-  }
-  return null;
+  if (!best || best.cross / total >= 0.5) return null;
+  return splitAt(items, graphics, page, pageWidth, depth, best.g, total);
 }
 
 // The region cut at the gutter g, when it reads as columns there.
