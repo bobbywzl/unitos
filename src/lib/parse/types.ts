@@ -197,7 +197,8 @@ export type ParsedDocument = {
   pageSize?: { width: number; height: number };
   // PDF parses: the PDF's own page labels, one per page ("xii", "1043"),
   // only when the PDF names its pages otherwise than 1..n. A page the PDF
-  // leaves unnamed reads as its number. Stored on Document.pageLabels.
+  // leaves unnamed among named ones has the number its neighbors imply, or
+  // none (""). Stored on Document.pageLabels.
   pageLabels?: string[];
   // PDF parses: the body's look (the import's Normal text), and the title's
   // look and alignment when the title came from the page (the import's

@@ -122,6 +122,11 @@
 .docs-prose [data-page-joined]::before {
   content: none;
 }
+/* A page the PDF leaves unnumbered draws no label. */
+.docs-prose [data-page-label=""]:not([data-page-labels])::before,
+.docs-prose [data-page-labels=""]::before {
+  content: none;
+}
 /* A table holding a page start lets its label out into the margin. */
 .docs-shell .docs-prose .tableWrapper:has([data-page-cell]) {
   overflow-x: visible;

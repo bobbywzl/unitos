@@ -99,7 +99,7 @@ export function PageIndicator({
   if (!tip) return null;
   return (
     <div className="docs-page-indicator" style={{ left: tip.x, top: tip.y }} aria-hidden>
-      {tip.pdf
+      {tip.pdf && pageName(editor, tip.pdf.page)
         ? t("docsInsert.pageStartOf", { page: pageName(editor, tip.pdf.page), total: tip.pdf.total })
         : t("docsPage.pageIndicator", { n: tip.n, total: pages })}
     </div>
