@@ -8,6 +8,7 @@
  *
  *   npx tsx scripts/parse-bench/arxiv/build.mts [--only 2411.09614v2,2502.02648v2] [--detail]
  */
+import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { texError } from "@/lib/katex";
 import type { RefBlock, RefDoc, Span } from "../model";
@@ -49,6 +50,8 @@ for (const paper of PAPERS) {
   const dir = result.doc.license === "open" || result.doc.license === "public-domain" ? "scripts/parse-bench/refs" : ".bench/refs";
   mkdirSync(dir, { recursive: true });
   writeFileSync(`${dir}/${result.doc.id}.json`, JSON.stringify(result.doc, null, 1) + "\n");
+  // The look the page shows beyond the words, measured on the PDF (look.py).
+  execFileSync("python3", [new URL("../look.py", import.meta.url).pathname, `${dir}/${result.doc.id}.json`, "--write", "--quiet"], { stdio: "inherit" });
   const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
   console.log(
     [

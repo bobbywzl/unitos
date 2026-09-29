@@ -133,7 +133,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 10
+      }
     },
     {
       "kind": "footnote",
@@ -152,7 +156,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 10
+      }
     },
     {
       "kind": "heading",
@@ -186,7 +194,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 10
+      }
     },
     {
       "kind": "heading",
@@ -206,7 +218,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 10
+      }
     },
     {
       "kind": "heading",
@@ -258,7 +274,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 10
+      }
     },
     {
       "kind": "equation",
@@ -454,7 +474,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 10
+      }
     },
     {
       "kind": "table",
@@ -710,7 +734,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 10
+      }
     },
     {
       "kind": "footnote",
@@ -729,7 +757,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 10
+      }
     },
     {
       "kind": "table",
@@ -895,7 +927,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 10
+      }
     },
     {
       "kind": "heading",
@@ -916,7 +952,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 10
+      }
     },
     {
       "kind": "heading",
@@ -1033,7 +1073,9 @@
             }
           ]
         }
-      ]
+      ],
+      "align": "justify",
+      "itemSpace": 0
     }
   ],
   "furniture": [

@@ -72,6 +72,23 @@ export function garblesOf(text: string): Garble[] {
 
 // ── Lines that are furniture ────────────────────────────────────────────────
 
+/** A roman page number from i to lxxxix, as front matter counts its pages
+    ("civil" and "mix" are words, not numbers). */
+const ROMAN = "(?=[ivxl])(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})";
 /** A line that is only a page number: "12", "12.", "xii", "- 12 -", "Page 3",
     "Page 3 of 12", "3 of 12", "3/12". */
-export const PAGE_NUMBER_RE = /^[-–— ]*(?:(?:page|p\.)\s*)?(?:\d{1,4}|[ivxlc]{1,7})\.?(?:\s*(?:of|\/)\s*\d{1,4})?[-–— ]*$/i;
+export const PAGE_NUMBER_RE = new RegExp(`^[-–— ]*(?:(?:page|p\\.)\\s*)?(?:\\d{1,4}|${ROMAN})\\.?(?:\\s*(?:of|\\/)\\s*\\d{1,4})?[-–— ]*$`, "i");
+
+/** The number a page-number line prints ("12", "- 12 -", "Page 12 of 30",
+    "xii"), or null. */
+export function pageNumberOf(line: string): number | null {
+  const text = line.trim();
+  if (!PAGE_NUMBER_RE.test(text)) return null;
+  const digits = /\d{1,4}/.exec(text.replace(/^[-–— ]*(?:(?:page|p\.)\s*)?/i, ""));
+  if (digits) return Number(digits[0]);
+  const roman = new RegExp(ROMAN, "i").exec(text.replace(/^[-–— ]*(?:(?:page|p\.)\s*)?/i, ""))?.[0].toLowerCase() ?? "";
+  const value: Record<string, number> = { i: 1, v: 5, x: 10, l: 50 };
+  let n = 0;
+  for (let k = 0; k < roman.length; k++) n += value[roman[k]] < (value[roman[k + 1]] ?? 0) ? -value[roman[k]] : value[roman[k]];
+  return n > 0 ? n : null;
+}

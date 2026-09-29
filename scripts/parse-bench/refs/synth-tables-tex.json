@@ -26,7 +26,8 @@
       "font": {
         "shape": "serif",
         "size": 14.35
-      }
+      },
+      "spaceAfter": 11
     },
     {
       "kind": "paragraph",
@@ -3810,7 +3811,8 @@
           "text": "For 2026 the group expects:"
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 13
     },
     {
       "kind": "list",
@@ -3842,7 +3844,9 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 8,
+      "spaceAfter": 13
     },
     {
       "kind": "paragraph",

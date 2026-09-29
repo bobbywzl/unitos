@@ -190,7 +190,8 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify"
   },
   {
    "kind": "heading",
@@ -208,7 +209,8 @@
     {
      "text": "Multi-Tenancy, De-Duplication, Data Access, Intel DSA"
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -217,7 +219,8 @@
      "text": "ACM Reference Format:",
      "bold": true
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -255,7 +258,8 @@
      "text": "This work is licensed under a Creative Commons Attribution 4.0 International License.",
      "href": "https://creativecommons.org/licenses/by/4.0"
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -264,7 +268,8 @@
      "text": "DaMoN ’25, Berlin, Germany",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -272,7 +277,8 @@
     {
      "text": "© 2025 Copyright held by the owner/author(s)."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -280,7 +286,8 @@
     {
      "text": "ACM ISBN 979-8-4007-1940-0/25/06"
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -307,7 +314,8 @@
     {
      "text": "Database management systems (DBMS) are the backbone of every larger software application and responsible for preserving ACID characteristics in combination with efficiency when it comes to highly transactional workloads and/or big data sets [7, 11, 16]. With the advent of the cloud specifically or the concept of virtualization in general, multiple databases are typically served by a single database instance. Depending on the deployment model, multiple databases will run in different virtual machines/containers, will be deployed at the level of different database engine processes, or will reside in different database schemes typically yielding the highest sharing potential of computing resources [9, 13]. Although different databases may reflect different schemes and thus serve different applications and user groups, there are two practically relevant scenarios where logically different databases are in fact not so different when it comes to the data they store:"
     }
-   ]
+   ],
+   "spaceAfter": 10
   },
   {
    "kind": "list",
@@ -330,7 +338,10 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify",
+   "itemSpace": 0,
+   "spaceAfter": 10
   },
   {
    "kind": "paragraph",

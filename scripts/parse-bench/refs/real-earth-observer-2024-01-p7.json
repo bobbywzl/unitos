@@ -42,7 +42,11 @@
      "italic": true,
      "href": "mailto:Philip.larkin@nasa.gov"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 14
+   }
   },
   {
    "kind": "heading",
@@ -187,7 +191,8 @@
     {
      "text": "By the 1990s, NASA Earth Science recognized that untested and underdeveloped technologies had the potential to stall the progress of mission implementation, occasionally idling large mission teams while bugs were worked out. (For context, this would be around the time the first missions of the Earth Observing System (EOS) were preparing to launch.) ESTO was formed to help manage and nurture technologies outside of the framework of flight missions, to allow new ideas to incubate and mature fully before being picked up for operational use."
     }
-   ]
+   ],
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -195,7 +200,8 @@
     {
      "text": "Since its inception, ESTO has employed an open, flexible, science-driven strategy that relies on competition and peer review to select promising technologies for Earth science. While early efforts focused on remote sensing instruments and data systems, solicitation topic areas gradually expanded to span the diversity of needs and requirements, from lidar and sensor webs to efforts that focus on a particular science theme, e.g., wildfire science and mitigation."
     }
-   ]
+   ],
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -203,7 +209,8 @@
     {
      "text": "Over the last 25 years, ESTO has awarded and managed more than 1100 technology projects for future science measurements. This forward-looking portfolio has enabled new Earth-observing capabilities, informed Earth Science Decadal Surveys and strategic planning, and generated numerous infusions and spinoffs."
     }
-   ]
+   ],
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",

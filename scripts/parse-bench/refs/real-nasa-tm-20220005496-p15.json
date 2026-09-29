@@ -23,7 +23,8 @@
     {
      "text": "vectors. The radial component points toward the blade tip, and the normal component points in the direction of the positive lift. The chordwise component is determined such that the orientation vectors form a right-handed system. The direction of the chordwise component depends on the direction of the rotor rotation. For counterclockwise rotation, the chordwise vector points toward the leading edge of the blade and for clockwise rotation, the vector points toward the trailing edge."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -32,7 +33,12 @@
      "text": "The blade motions computed by CAMRAD II are interfaced with OVERFLOW through motion variables. The various blade angles, such as flapping, collective and cyclic control angles, and lead-lag angles are defined in motion variables that are used in computing the source terms in the flow solver. These angles used in computing blade element and rotor orientations are shown below. The lead-lag effects are not included here for now."
     }
    ],
-   "indent": "first"
+   "indent": "first",
+   "indentPt": {
+    "left": 0,
+    "first": 36
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -57,7 +63,8 @@
     {
      "text": " is the angle due to the torsional deformation."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -79,7 +86,12 @@
      "text": "The collective and cyclical motions are swashplate control for conventional helicopters. For non-conventional rotorcraft, such as small electrically powered fixed pitch multicopter vehicles, the thrust changes are achieved by changing the rotor speed using an Electrical Speed Controller (ESC). In the loosely coupled framework, the speed control prediction by CAMRAD II is implemented through the same motion variables as in the OVERFLOW code."
     }
    ],
-   "indent": "first"
+   "indent": "first",
+   "indentPt": {
+    "left": 0,
+    "first": 36
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -151,7 +163,11 @@
      "text": "."
     }
    ],
-   "indent": "first"
+   "indent": "first",
+   "indentPt": {
+    "left": 0,
+    "first": 36
+   }
   },
   {
    "kind": "equation",
@@ -178,7 +194,8 @@
     {
      "text": " is the transformation matrix."
     }
-   ]
+   ],
+   "spaceAfter": 1
   },
   {
    "kind": "paragraph",
@@ -226,7 +243,8 @@
     {
      "text": " for clockwise rotating rotor."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -234,7 +252,8 @@
     {
      "text": "These velocity components and angles are shown in a blade element diagram of Figure 7 for a forward flight."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -266,7 +285,8 @@
     {
      "text": " is the tangential component from eq. (5)"
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",

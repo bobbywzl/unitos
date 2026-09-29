@@ -42,7 +42,8 @@
      "text": "2",
      "sup": true
     }
-   ]
+   ],
+   "spaceAfter": 2
   },
   {
    "kind": "paragraph",
@@ -54,7 +55,12 @@
     {
      "text": " Department of Physical Sciences, Indian Institute of Science Education and Research Kolkata, Mohanpur 741246, India"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -66,7 +72,8 @@
     {
      "text": " Department of Physics, University of Connecticut, Storrs, Connecticut 06269, USA"
     }
-   ]
+   ],
+   "spaceAfter": 5
   },
   {
    "kind": "paragraph",
@@ -91,7 +98,11 @@
     {
      "text": "Matrices filled with random numbers were originally studied by mathematicians in the context of probability theory and statistics. Their significance grew in the 1950s with Wigner’s works, where they were used to model the spectral properties of heavy nuclei [1–3]. These studies were soon extended to other complex systems, including atoms and molecules [4]. The main advantage of full random matrices is their analytical tractability. However, they are not physically realistic, as they imply all-to-all couplings and simultaneous interactions among all the particles. To better reflect the fact that the interactions in physical systems are local and decay with distance, Wigner introduced banded random matrices (BRMs) [5]."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "paragraph",
@@ -107,7 +118,12 @@
     {
      "text": "The band structure of BRMs is observed in the Hamiltonian of various physical systems, such as complex atoms [13], isolated thick wire with multiple transverse modes [14, 15], mesoscopic cylinder threaded by magnetic flux [16], and systems of two locally interacting particles confined to a one-dimensional potential well [17, 18]. Other examples include the one-excitation subspace of many-body systems with long-range couplings [19–25], field transmission matrix of multimode optical fibers in the weak coupling limit [26], and models for ocean acoustics [27]. The ubiquity of the band structure arises because typical operators are banded when expressed in the ordered eigenbasis of another operator under generic conditions [28, 29]."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -131,7 +147,11 @@
     {
      "text": "-distribution. This ensemble presents a nonergodic phase [38–41] and nontrivial long-range energy correlations [42, 39]."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "paragraph",
@@ -139,7 +159,12 @@
     {
      "text": "Despite their widespread applicability, obtaining analytical results for BRMs remains challenging. Unlike full random matrices, the eigenvalues of BRMs are not strongly correlated and their eigenvectors are not fully random vectors. As a result, many studies that involve BRMs rely primarily on numerical calculations."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 1
   },
   {
    "kind": "paragraph",
@@ -147,7 +172,12 @@
     {
      "text": "In this work, we present both numerical and semi-analytical results for BRMs in both the ergodic and nonergodic phases. Using the spectral form factor (SFF), level number variance, and power spectrum of noise, we demonstrate that weak long-range correlations persist in the nonergodic phase, despite the disappearance of short-range correlations."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 1
   },
   {
    "kind": "paragraph",
@@ -155,7 +185,12 @@
     {
      "text": "The SFF enables the analysis of level statistics in the time domain [3, 4], quantifying energy correlations across short and long ranges. It is an effective detector of quantum chaos [43] and has proven to be particularly useful for analyzing molecular spectra [44–49], where line resolution is not as good as in nuclear physics. By obtaining semi-analytical expressions for the SFF of BRMs, we can determine how its timescales depend on the matrix bandwidth. We investigate various characteristic timescales, with an emphasis on the time for the manifestations of spectral correlations (ramp) and the time for the saturation of the SFF (plateau)."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -163,7 +198,12 @@
     {
      "text": "In the ergodic phase of BRMs, the timescales of the SFF align with those for full random matrices, as expected. But, in the nonergodic phase, the behavior changes significantly, and full random matrices no longer serve as an appropriate reference. In this phase, short-range energy correlations are non-existent and the long-range correlations are fundamentally different from those in full random matrices. We find that, contrary to many-body quantum systems approaching localized phases, where the time for the onset of spectral correlations increases with the disorder strength [50–52], in BRMs, both timescales, for the appearance of spectral correlations and for the saturation of the SFF, decrease as the bandwidth is reduced. These two timescales eventually merge at the point where the BRM becomes a diagonal matrix and belongs to the Poisson ensemble."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -171,7 +211,12 @@
     {
      "text": "To further investigate the nature of the spectral correlations in the nonergodic phase of BRMs, we analyze the level number variance and the power spectrum of noise, both of which capture short- and long-range energy correlations. Our analysis of the level number variance reveals that in the nonergodic phase, weak long-range correlations, distinct from those in full random matrices, persist, which is consistent with predictions from Ref. [53]. This finding has implications for the SFF timescales, as mentioned above, and for the power spectrum. We show that the power spectrum can distinguish between the nonergodic and ergodic phases of BRMs at high frequencies of the energy level fluctuations, while at low frequencies, the behavior is identical for both phases."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -179,7 +224,11 @@
     {
      "text": "The paper is organized as follows. The BRM model is introduced in Sec. II. Our numerical and analytical studies of the evolution of the SFF and its timescales are detailed in Sec. III. Our analyses of the level number variance and power spectrum are presented in Sec. IV. Concluding remarks are provided in Sec. V."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "heading",
@@ -212,7 +261,11 @@
     {
      "text": " that we investigate are defined as"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -265,7 +318,8 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -297,7 +351,11 @@
     {
      "text": ", so we consider the parametrization"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -319,7 +377,11 @@
     {
      "text": " given by"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -873,7 +935,12 @@
     {
      "text": " in the legend of Fig. 1."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 4
   },
   {
    "kind": "paragraph",
@@ -985,7 +1052,12 @@
     {
      "text": " for BRM is provided in [67]."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 4
   },
   {
    "kind": "paragraph",
@@ -1033,7 +1105,11 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "heading",
@@ -1178,7 +1254,11 @@
     {
      "text": "The SFF detects both short- and long-range correlations in the energy spectrum, which makes it a useful tool for identifying the transition from the ergodic to the nonergodic phase. It is defined as"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -1224,7 +1304,8 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -1232,7 +1313,12 @@
     {
      "text": "The SFF has been employed in the investigation of scale-invariant critical dynamics [70, 71] and the stability of the many-body localized phase [51]. Its strong connection with the survival probability (probability of detecting the initial state later in time) enables the study of spectral correlations through the dynamics of quantum systems [50, 72–82]. The SFF and the survival probability can be experimentally measured [82–85], as demonstrated in [86]."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -1240,7 +1326,11 @@
     {
      "text": "The SFF averaged over an ensemble of random matrices can be decomposed in three parts [3, 50],"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -1487,7 +1577,11 @@
     {
      "text": " followed by a ramp toward saturation. This dip-ramp-plateau structure is known as the correlation hole [44–50, 72, 75–77, 82, 88, 89], which is a definite signature of spectral correlations [82]. The correlation hole can be detected experimentally in currently available superconducting quantum processors [86] and possibly also in experiments with trapped ions, cold atoms, and existing quantum computers [82]."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "heading",
@@ -1512,7 +1606,11 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "heading",
@@ -1537,7 +1635,11 @@
     {
      "text": ", and the norm of the off-diagonal part have finite ensemble averages. Using the maximum entropy principle [90–93], i.e. by maximizing the Shannon entropy in the matrix space subject to the above constraints, we get the density of BRM in the matrix space as"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -1575,7 +1677,11 @@
     {
      "text": "With the energy moments, we can express the density of states as"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -1655,7 +1761,8 @@
     {
      "text": "is the shifted Kurtosis, which is 1 for a Gaussian distribution and 0 for the semi-circle."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -1847,7 +1954,11 @@
     {
      "text": ". For the Poisson ensemble, the density of states in Fig. 3 is a Gaussian function and for the GOE, we recover the semicircle law."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "heading",
@@ -1920,7 +2031,11 @@
     {
      "text": " is the spacing of two unfolded energy levels, we can express the Fourier transform of the two-level cluster function in Eq. (5) as"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -1942,7 +2057,8 @@
     {
      "text": " is the two-level form factor. This function controls the long-time behavior of the SFF [50], giving rise to the correlation hole if the eigenvalues are correlated."
     }
-   ]
+   ],
+   "spaceAfter": 1
   },
   {
    "kind": "paragraph",
@@ -1966,7 +2082,11 @@
     {
      "text": " is the dimensionless time. For GOE [3],"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -2541,7 +2661,11 @@
     {
      "text": ", Eq. (16) agrees well with the SFF of the GOE [50, 82]"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -2579,7 +2703,11 @@
     {
      "text": "), where the correlation hole does not exist, the analytical expression for the SFF is simply [110–112]"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -2806,7 +2934,11 @@
     {
      "text": " for BRMs, we discuss them for the Poisson ensemble and the GOE."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "paragraph",
@@ -3047,7 +3179,11 @@
     {
      "text": " decreases, as further elaborated below."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "heading",
@@ -3093,7 +3229,12 @@
     {
      "text": " for short times, as done in the derivation of Eq. (21)."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -3109,7 +3250,11 @@
     {
      "text": " gives"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -3251,7 +3396,11 @@
     {
      "text": " [compare Fig. 2(d) with Figs. 2(b)-(c)]."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "paragraph",
@@ -3625,7 +3774,12 @@
     {
      "text": " approaches zero, eventually merging together when the correlation hole vanishes."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 3
   },
   {
    "kind": "paragraph",
@@ -3641,7 +3795,11 @@
     {
      "text": ") exhibits a correlation hole (Figs. 2(b)-(d)) despite the absence of short-range energy correlations. This is a manifestation of the weak long-range correlations following Altshuler-Shklovskii statistics, as we discuss next."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "heading",
@@ -3666,7 +3824,11 @@
     {
      "text": " [116–122]. In the ergodic phase, the Thouless energy determines the energy scale below which any two energy levels are correlated as in the GOE."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "heading",
@@ -3691,7 +3853,11 @@
     {
      "text": ", providing information about the rigidity of the spectrum. It is defined as [4],"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -3737,7 +3903,8 @@
     {
      "text": " indicates average over the spectrum."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -3785,7 +3952,12 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -3817,7 +3989,12 @@
     {
      "text": " between those for the Poisson ensemble and the GOE."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -3865,7 +4042,11 @@
     {
      "text": ". This means that the unfolded Thouless energy can be expressed as"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -3887,7 +4068,8 @@
     {
      "text": " is shown in the inset of Fig. 6(b)."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -3935,7 +4117,11 @@
     {
      "text": ","
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -4125,7 +4311,11 @@
     {
      "text": ". As shown in Ref. [53], above the Thouless energy, weak long-range correlations exist for BRM and follow the Altshuler-Shklovskii statistics [117],"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",

@@ -20,9 +20,10 @@ import { garblesOf, wordsOf, type Garble } from "./text";
 //   styles      mean F1 of the styles the reference marks (bold, italic, underline, strikethrough,
 //               small caps, sub, sup, text color, highlight)
 //   footnotes   mean of notes found, notes linked from their mark, and the notes' words F1
-//   roles       mean of alignment (titles, headings, paragraphs; justified where a wrap shows it),
-//               indentation, and captions F1, checkbox states, separators and quotations found,
-//               and printed equation labels right
+//   roles       mean of alignment (titles, headings, paragraphs, list items; justified where a wrap
+//               shows it), indentation, and captions F1, indent sizes and spacing as the page
+//               measures them, checkbox states, separators and quotations found, and printed
+//               equation labels right and on the page's side
 //   fonts       per role (body, title, each heading level, caption, footnote): the face's shape,
 //               its size (the body's in points, the others' as a ratio to the body), bold, color
 
@@ -54,6 +55,7 @@ export const FREE_WEIGHTS = {
   numbers: 10, // no line that is only a page number
   garbles: 10, // no garbled glyph, by string and by the math font's code
   math: 10, // display equations as LaTeX that draws the page's symbols (glyphs.ts)
+  look: 10, // the import's inline formulas at their words' size, crops at their printed width, a Word file's borders
 } as const;
 
 // ── The flat view ───────────────────────────────────────────────────────────
@@ -1059,7 +1061,15 @@ export type MathScores = {
   /** Printed equation labels ("(1.2)"), compared apart from the formula:
       reference labels on an equation with the same label, candidate labels
       the reference does not print. */
-  labels: { ref: number; right: number; extra: number; score: number | null; misses: { want: string; got: string }[] };
+  labels: {
+    ref: number;
+    right: number;
+    extra: number;
+    score: number | null;
+    misses: { want: string; got: string }[];
+    /** Of the labels right, those on the page's side (the right, or the left where the reference says so). */
+    side: { ref: number; right: number; score: number | null };
+  };
   /** Reference equations the candidate shows as images. */
   images: number;
   /** Reference equations and inline formulas the candidate reads as plain words. */
@@ -1085,7 +1095,7 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
   const miss = (isDisplay: boolean, m: MathItem, got: string, similarity: number) => {
     if (similarity < 0.999) misses.push({ display: isDisplay, want: latexOf(m), got, similarity });
   };
-  const labels: MathScores["labels"] = { ref: 0, right: 0, extra: 0, score: null, misses: [] };
+  const labels: MathScores["labels"] = { ref: 0, right: 0, extra: 0, score: null, misses: [], side: { ref: 0, right: 0, score: null } };
   for (const m of ref.math) {
     const want = mathTokens(m, m.display);
     if (m.display) {
@@ -1094,8 +1104,13 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
       if (m.label) {
         labels.ref++;
         const theirs = other?.kind === "equation" ? (other.label ?? "") : "";
-        if (theirs && normLabel(theirs) === normLabel(m.label)) labels.right++;
-        else labels.misses.push({ want: m.label, got: other?.kind === "equation" ? theirs || "(no label)" : `(${other?.kind ?? "missing"})` });
+        if (theirs && normLabel(theirs) === normLabel(m.label)) {
+          labels.right++;
+          const block = ref.blocks[m.block];
+          const want = block.kind === "equation" ? (block.labelSide ?? "right") : "right";
+          labels.side.ref++;
+          if (other?.kind === "equation" && (other.labelSide ?? "right") === want) labels.side.right++;
+        } else labels.misses.push({ want: m.label, got: other?.kind === "equation" ? theirs || "(no label)" : `(${other?.kind ?? "missing"})` });
       }
       let sim = 0;
       let got = "(missing)";
@@ -1148,6 +1163,7 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
     if (mine?.kind !== "equation" || !mine.label) labels.extra++;
   });
   labels.score = labels.ref > 0 ? labels.right / labels.ref : null;
+  labels.side.score = labels.side.ref > 0 ? labels.side.right / labels.side.ref : null;
   const mean = (list: number[]) => (list.length > 0 ? list.reduce((a, b) => a + b, 0) / list.length : null);
   const d = mean(display);
   const i = mean(inline);
@@ -1383,6 +1399,10 @@ export type RoleScores = {
   align: number | null;
   /** First-line, hanging, and block indents of paragraphs: F1 of those indented alike, where the reference marks any. */
   indent: number | null;
+  /** Paragraphs whose indent the reference measures: the share indented alike at the page's size. */
+  indentSize: number | null;
+  /** The space under paragraphs and lists and between a list's items, where the reference measures it: the share alike. */
+  spacing: number | null;
   /** Caption words (a figure's, a table's) in a caption of the candidate: F1, where the reference has captions. */
   captions: number | null;
   /** Checklist items: the share of the reference's whose counterpart item has its box and state. */
@@ -1392,8 +1412,8 @@ export type RoleScores = {
   quotes: number | null;
   /** The mean of the roles the reference has, printed equation labels among them (the composite's part). */
   score: number | null;
-  /** The blocks alignment and indentation count wrong, for the detail report. */
-  misses: { align: PropertyMiss[]; indent: PropertyMiss[] };
+  /** The blocks alignment, indentation, indent sizes, and spacing count wrong, for the detail report. */
+  misses: { align: PropertyMiss[]; indent: PropertyMiss[]; indentSize: PropertyMiss[]; spacing: PropertyMiss[] };
 };
 
 /** A block a property counts wrong: the reference's value and the
@@ -1417,7 +1437,6 @@ function propertyF1(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b: nu
     whose counterpart differs, then a candidate block whose main reference
     block differs. `none` names a side that sets none. */
 function propertyMisses(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b: number) => string | undefined, none: string): PropertyMiss[] {
-  const text = (flat: Flat, b: number) => flat.unitsOf[b].map((u) => flat.units[u].text).join(" ").replace(/\s+/g, " ").trim().slice(0, 60);
   const out: PropertyMiss[] = [];
   const seen = new Set<string>();
   ref.blocks.forEach((_, rb) => {
@@ -1427,7 +1446,7 @@ function propertyMisses(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b
     const got = cb >= 0 ? (of(cand, cb) ?? none) : "not found";
     if (got === want) return;
     seen.add(`${rb}:${cb}`);
-    out.push({ ref: want, cand: got, text: text(ref, rb) });
+    out.push({ ref: want, cand: got, text: blockText(ref, rb) });
   });
   cand.blocks.forEach((_, cb) => {
     const got = of(cand, cb);
@@ -1435,7 +1454,7 @@ function propertyMisses(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b
     const rb = al.main[cb];
     const want = rb >= 0 ? (of(ref, rb) ?? none) : "not found";
     if (want === got || seen.has(`${rb}:${cb}`)) return;
-    out.push({ ref: want, cand: got, text: text(cand, cb) });
+    out.push({ ref: want, cand: got, text: blockText(cand, cb) });
   });
   return out;
 }
@@ -1444,20 +1463,82 @@ function propertyMisses(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b
     flush left draw alike. */
 const JUSTIFY_CHARS = 100;
 
-/** A title's, a heading's, or a paragraph's alignment as the metric compares
-    it. Justified counts only where the reference justifies any paragraph
-    (a reference that marks none leaves it unscored) and on a paragraph of
-    JUSTIFY_CHARS or more, where a wrap shows it; elsewhere it is flush left.
+/** A title's, a heading's, a paragraph's, or a list's items' alignment as
+    the metric compares it. Justified counts only where the reference
+    justifies any paragraph (a reference that marks none leaves it
+    unscored), and on a paragraph of JUSTIFY_CHARS or more or a list with an
+    item that long, where a wrap shows it; elsewhere it is flush left.
     A line centered on the page is centered whether it reads as a heading or
     a paragraph. */
 function alignKey(justified: boolean) {
   return (flat: Flat, b: number): string | undefined => {
     const block = flat.blocks[b];
-    if (block.kind !== "title" && block.kind !== "heading" && block.kind !== "paragraph") return undefined;
+    if (block.kind !== "title" && block.kind !== "heading" && block.kind !== "paragraph" && block.kind !== "list") return undefined;
     if (block.align !== "justify") return block.align;
-    const chars = flat.unitsOf[b].reduce((n, u) => n + flat.units[u].text.length, 0);
-    return justified && block.kind === "paragraph" && chars >= JUSTIFY_CHARS ? "justify" : undefined;
+    // A list's items show it where one of them wraps.
+    const chars = Math.max(0, ...flat.unitsOf[b].map((u) => flat.units[u].text.length));
+    const whole = block.kind === "list" ? chars : flat.unitsOf[b].reduce((n, u) => n + flat.units[u].text.length, 0);
+    return justified && (block.kind === "paragraph" || block.kind === "list") && whole >= JUSTIFY_CHARS ? "justify" : undefined;
   };
+}
+
+/** A measure within 2 pt or a quarter of the page's: an indent, a space. */
+const nearPoints = (got: number, want: number) => Math.abs(got - want) <= Math.max(2, 0.25 * Math.abs(want));
+
+/** Indent sizes: each reference paragraph whose indent the page measures
+    (indentPt) against its counterpart's: its first line starting alike, and
+    its other lines too where the page sets them in, within 2 pt or a
+    quarter (a one-line paragraph set in reads as a first-line indent or a
+    block indent alike). amsbook sets its paragraphs 5 pt in, the page
+    editor drew every indent at half an inch. */
+function indentSizes(ref: Flat, cand: Flat, al: Alignment): { score: number | null; misses: PropertyMiss[] } {
+  const show = (x: { left: number; first: number } | undefined) => (x ? `${x.left}/${x.first} pt` : "none");
+  let total = 0;
+  let right = 0;
+  const misses: PropertyMiss[] = [];
+  ref.blocks.forEach((block, rb) => {
+    if (block.kind !== "paragraph" || !block.indentPt) return;
+    total++;
+    const cb = al.owner[rb];
+    const other = cb >= 0 ? cand.blocks[cb] : null;
+    const got = other?.kind === "paragraph" ? other.indentPt : undefined;
+    const want = block.indentPt;
+    if (got && nearPoints(got.left + got.first, want.left + want.first) && (want.left === 0 || nearPoints(got.left, want.left))) right++;
+    else misses.push({ ref: show(block.indentPt), cand: other ? show(got) : "not found", text: blockText(ref, rb) });
+  });
+  return { score: total > 0 ? right / total : null, misses };
+}
+
+/** Spacing: the space the reference measures under a paragraph or a list
+    (to the next one below it in its column) and between a list's items,
+    against its counterpart's, within 2 pt or a quarter. A block the
+    candidate runs into the next one is the paragraphs metric's, not counted
+    here. The legal packet's checkbox items and the Word report's list
+    paragraphs are spaced 4 to 6 pt; the page editor drew them tight. */
+function spacingScores(ref: Flat, cand: Flat, al: Alignment): { score: number | null; misses: PropertyMiss[] } {
+  let total = 0;
+  let right = 0;
+  const misses: PropertyMiss[] = [];
+  const judge = (rb: number, want: number, got: number | undefined, what: string) => {
+    total++;
+    if (got !== undefined && nearPoints(got, want)) right++;
+    else misses.push({ ref: `${what} ${want} pt`, cand: got === undefined ? "none" : `${got} pt`, text: blockText(ref, rb) });
+  };
+  ref.blocks.forEach((block, rb) => {
+    if (block.kind !== "paragraph" && block.kind !== "list") return;
+    const cb = al.owner[rb];
+    const other = cb >= 0 ? cand.blocks[cb] : null;
+    if (block.spaceAfter !== undefined && (rb + 1 >= ref.blocks.length || al.owner[rb + 1] !== cb)) {
+      judge(rb, block.spaceAfter, other?.kind === "paragraph" || other?.kind === "list" ? other.spaceAfter : undefined, "after");
+    }
+    if (block.kind === "list" && block.itemSpace !== undefined) judge(rb, block.itemSpace, other?.kind === "list" ? (other.itemSpace ?? 0) : undefined, "between items");
+  });
+  return { score: total > 0 ? right / total : null, misses };
+}
+
+/** A block's first words, for the detail report. */
+function blockText(flat: Flat, b: number): string {
+  return flat.unitsOf[b].map((u) => flat.units[u].text).join(" ").replace(/\s+/g, " ").trim().slice(0, 60);
 }
 
 /** The roles and marks the page's layout carries: alignment, indentation,
@@ -1467,6 +1548,8 @@ export function roleScores(ref: Flat, cand: Flat, al: Alignment, blocks: BlockSc
     const block = flat.blocks[b];
     return block.kind === "paragraph" ? block.indent : undefined;
   };
+  // A list's items count only where the reference justifies its paragraphs too (a reference that marks
+  // no paragraph justified leaves the look unscored).
   const justified = ref.blocks.some((block) => block.kind === "paragraph" && block.align === "justify");
   // Captions: a figure's caption unit, a table's (index -1), a caption paragraph.
   const isCaption = (flat: Flat, u: number) => {
@@ -1495,16 +1578,25 @@ export function roleScores(ref: Flat, cand: Flat, al: Alignment, blocks: BlockSc
     return x && x.ref > 0 ? x.found / x.ref : null;
   };
   const align = alignKey(justified);
+  const sizes = indentSizes(ref, cand, al);
+  const spacing = spacingScores(ref, cand, al);
   const roles = {
     align: propertyF1(ref, cand, al, align),
     indent: propertyF1(ref, cand, al, indent),
+    indentSize: sizes.score,
+    spacing: spacing.score,
     captions: refCaption > 0 ? f1Of(candCaption > 0 ? candHits / candCaption : 0, hits / refCaption) : null,
     checks: lists.checks.ref > 0 ? lists.checks.right / lists.checks.ref : null,
     separators: kind("separator"),
     quotes: kind("quote"),
   };
-  const misses = { align: roles.align === null ? [] : propertyMisses(ref, cand, al, align, "left"), indent: roles.indent === null ? [] : propertyMisses(ref, cand, al, indent, "none") };
-  return { ...roles, score: meanOf([...Object.values(roles), math.labels.score]), misses };
+  const misses = {
+    align: roles.align === null ? [] : propertyMisses(ref, cand, al, align, "left"),
+    indent: roles.indent === null ? [] : propertyMisses(ref, cand, al, indent, "none"),
+    indentSize: sizes.misses,
+    spacing: spacing.misses,
+  };
+  return { ...roles, score: meanOf([...Object.values(roles), math.labels.score, math.labels.side.score]), misses };
 }
 
 export type FontScores = {

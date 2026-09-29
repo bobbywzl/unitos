@@ -44,7 +44,8 @@
           "italic": true
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -53,7 +54,8 @@
           "text": "More than 900 neighbors came to the garden on September 13 for the eighth harvest festival, almost twice last year’s count. Volunteers weighed 1,340 pounds of produce at the market table, and the soup kitchen on Alder Street took home everything that was left at closing."
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -108,7 +110,8 @@
           "italic": true
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -117,7 +120,8 @@
           "text": "Two rain gardens planted along the north fence in May are now soaking up the runoff that used to flood the tool shed. Each garden is a shallow basin of native plants, deep-rooted asters, sedges, and swamp milkweed, that holds water after a storm and lets it sink into the ground over a day or two."
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -192,7 +196,8 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 0
     },
     {
       "kind": "heading",
@@ -211,7 +216,8 @@
           "italic": true
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",

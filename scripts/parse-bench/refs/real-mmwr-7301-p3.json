@@ -26,7 +26,8 @@
     {
      "text": "practitioner or physician assistant, dermatologist, podiatrist, and other) in the Medicare Part D Prescribers–by Provider and Drug data set as the denominator."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -38,7 +39,11 @@
      "text": "¶¶",
      "sup": true
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "footnote",
@@ -91,7 +96,11 @@
     {
      "text": "Among 1,017,417 unique prescribers, 130,637 (12.8%) prescribed topical antifungals (Table 2). The number of prescriptions per provider was highest for dermatologists (87.1), followed by podiatrists (67.2), and primary care physicians (12.3). Among 6.5 million topical antifungal prescriptions, the most were written by primary care physicians (2.6 million [40.0%], followed by nurse practitioners or physician assistants (1.4 million [21.4%]), dermatologists (1.1 million [17.6%]), and podiatrists (0.9 million [14.1%]). Among all topical antifungal prescriptions, 44.2% (2.9 million) were written by the top 10% (13,106) of topical antifungal prescribers. By provider type, the percentage of topical antifungal prescriptions written by higher-volume topical antifungal prescribers ranged from 35.5% for dermatologists to 54.8% for podiatrists."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -1590,7 +1599,12 @@
     {
      "text": ")."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -1612,7 +1626,11 @@
     {
      "text": " Clinicians should be aware of the potential risks"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "footnote",

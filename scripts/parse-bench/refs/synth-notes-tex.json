@@ -26,7 +26,8 @@
       "font": {
         "shape": "serif",
         "size": 11.96
-      }
+      },
+      "spaceAfter": 13
     },
     {
       "kind": "paragraph",
@@ -39,7 +40,8 @@
       "font": {
         "shape": "serif",
         "size": 10.91
-      }
+      },
+      "spaceAfter": 12
     },
     {
       "kind": "paragraph",
@@ -48,7 +50,8 @@
           "text": "Department of Statistics, Northfield University"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "spaceAfter": 12
     },
     {
       "kind": "paragraph",
@@ -94,7 +97,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 0
     },
     {
       "kind": "paragraph",
@@ -132,7 +140,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "heading",
@@ -153,7 +165,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "heading",
@@ -277,7 +293,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "footnote",
@@ -335,7 +355,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -374,7 +399,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 2
     },
     {
       "kind": "list",
@@ -579,7 +609,10 @@
             }
           ]
         }
-      ]
+      ],
+      "align": "justify",
+      "itemSpace": 0,
+      "spaceAfter": 5
     },
     {
       "kind": "paragraph",
@@ -616,7 +649,8 @@
           "italic": true
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 9
     },
     {
       "kind": "paragraph",
@@ -693,12 +727,17 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "equation",
       "latex": "X(\\omega)=\\sum_{k=1}^{n}c_k I_{A_k}(\\omega),\\qquad c_k\\in\\mathbb{R},\\ A_k\\in\\mathcal{F}.",
-      "label": "(2.1)"
+      "label": "(2.1)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -740,7 +779,8 @@
           "italic": true
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 9
     },
     {
       "kind": "paragraph",
@@ -750,7 +790,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 9
     },
     {
       "kind": "paragraph",
@@ -797,12 +842,17 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "equation",
       "latex": "X_n=\\sum_{k=1}^{n2^n}\\frac{k-1}{2^n}\\,I_{\\{(k-1)2^{-n}\\le X<k2^{-n}\\}}+n\\,I_{\\{X\\ge n\\}}.",
-      "label": "(2.2)"
+      "label": "(2.2)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -865,7 +915,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "heading",
@@ -975,7 +1029,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 9
     },
     {
       "kind": "paragraph",
@@ -998,7 +1057,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 0
     },
     {
       "kind": "list",
@@ -1069,7 +1133,9 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 0,
+      "spaceAfter": 9
     },
     {
       "kind": "paragraph",
@@ -1107,7 +1173,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "paragraph",
@@ -1145,12 +1215,17 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "equation",
       "latex": "F_X(x)=\\begin{cases}0, & x<0,\\\\ 1-p, & 0\\le x<1,\\\\ 1, & x\\ge 1.\\end{cases}",
-      "label": "(2.3)"
+      "label": "(2.3)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1192,7 +1267,8 @@
           "italic": true
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -1241,7 +1317,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "paragraph",
@@ -1373,7 +1453,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "heading",
@@ -1394,7 +1478,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "heading",
@@ -1503,12 +1591,17 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "equation",
       "latex": "\\begin{aligned}\\mathbf{E}[aX+bY]&=a\\,\\mathbf{E}X+b\\,\\mathbf{E}Y,\\\\ X\\le Y&\\Longrightarrow\\mathbf{E}X\\le\\mathbf{E}Y.\\end{aligned}",
-      "label": "(2.4)"
+      "label": "(2.4)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1569,7 +1662,8 @@
     {
       "kind": "equation",
       "latex": "\\mathbf{E}X=\\sup\\{\\mathbf{E}Y:\\ Y\\text{ simple},\\ 0\\le Y\\le X\\}\\in[0,\\infty].",
-      "label": "(2.5)"
+      "label": "(2.5)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1613,7 +1707,8 @@
           "text": "."
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -1647,7 +1742,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -1662,7 +1762,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 2
     },
     {
       "kind": "list",
@@ -1801,7 +1906,9 @@
             }
           ]
         }
-      ]
+      ],
+      "align": "justify",
+      "itemSpace": 0
     },
     {
       "kind": "paragraph",
@@ -1855,12 +1962,17 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "equation",
       "latex": "\\mathbf{E}N=\\sum_{k=0}^{\\infty}k\\,\\frac{e^{-\\lambda}\\lambda^k}{k!}=\\lambda e^{-\\lambda}\\sum_{k=1}^{\\infty}\\frac{\\lambda^{k-1}}{(k-1)!}=\\lambda.",
-      "label": "(2.6)"
+      "label": "(2.6)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1894,7 +2006,8 @@
           "italic": true
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -1929,7 +2042,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "footnote",
@@ -1950,7 +2067,8 @@
     {
       "kind": "equation",
       "latex": "\\mathbf{E}\\,g(X)=\\int_{\\mathbb{R}}g(x)\\,d\\mathcal{P}_X(x)=\\int_{-\\infty}^{\\infty}g(x)f_X(x)\\,dx,",
-      "label": "(2.7)"
+      "label": "(2.7)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -2075,7 +2193,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "heading",
@@ -2136,7 +2258,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -2164,7 +2291,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 8
     },
     {
       "kind": "paragraph",
@@ -2216,7 +2348,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -2263,7 +2400,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 2
     },
     {
       "kind": "list",
@@ -2390,7 +2532,9 @@
             }
           ]
         }
-      ]
+      ],
+      "align": "justify",
+      "itemSpace": 1
     },
     {
       "kind": "heading",
@@ -2486,12 +2630,17 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "equation",
       "latex": "\\varphi(\\mathbf{E}X)\\le\\mathbf{E}\\varphi(X).",
-      "label": "(2.8)"
+      "label": "(2.8)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -2546,7 +2695,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -2563,12 +2717,17 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "equation",
       "latex": "\\mathbf{E}|XY|\\le\\|X\\|_p\\|Y\\|_q\\quad\\text{for }\\tfrac{1}{p}+\\tfrac{1}{q}=1,\\qquad\\|X+Y\\|_p\\le\\|X\\|_p+\\|Y\\|_p.",
-      "label": "(2.9)"
+      "label": "(2.9)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -2626,7 +2785,8 @@
           "text": "."
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -2649,7 +2809,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 2
     },
     {
       "kind": "list",
@@ -2764,7 +2929,9 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 1,
+      "spaceAfter": 2
     },
     {
       "kind": "paragraph",
@@ -2834,7 +3001,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "heading",
@@ -2862,7 +3033,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -2892,12 +3068,17 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "equation",
       "latex": "\\mathbf{P}\\Bigl(\\bigcap_{i\\in I}A_i\\Bigr)=\\prod_{i\\in I}\\mathbf{P}(A_i)\\qquad\\text{for every }I\\subseteq\\{1,\\ldots,n\\}.",
-      "label": "(2.10)"
+      "label": "(2.10)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -3040,7 +3221,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "footnote",
@@ -3101,7 +3286,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "table",
@@ -3316,7 +3505,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -3363,7 +3557,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -3405,7 +3604,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 9
     },
     {
       "kind": "paragraph",
@@ -3436,7 +3640,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      },
+      "spaceAfter": 3
     },
     {
       "kind": "list",
@@ -3577,7 +3786,10 @@
             }
           ]
         }
-      ]
+      ],
+      "align": "justify",
+      "itemSpace": 0,
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -3587,7 +3799,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 18
+      }
     },
     {
       "kind": "paragraph",
@@ -3725,7 +3941,8 @@
     {
       "kind": "equation",
       "latex": "\\mathbf{P}\\Bigl(\\bigcap_{n=m}^{M}A_n^c\\Bigr)=\\prod_{n=m}^{M}\\bigl(1-\\mathbf{P}(A_n)\\bigr)\\le\\exp\\Bigl(-\\sum_{n=m}^{M}\\mathbf{P}(A_n)\\Bigr)\\longrightarrow 0",
-      "label": "(2.11)"
+      "label": "(2.11)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -3885,7 +4102,9 @@
             }
           ]
         }
-      ]
+      ],
+      "align": "justify",
+      "itemSpace": 0
     }
   ],
   "furniture": [

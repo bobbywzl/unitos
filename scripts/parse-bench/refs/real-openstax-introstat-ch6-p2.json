@@ -125,7 +125,8 @@
     {
      "text": "). It is calculated either by a calculator or a computer, or it is looked up in a table. Technology has made the tables virtually obsolete. For that reason, as well as the fact that there are various table formats, we are not including table instructions."
     }
-   ]
+   ],
+   "spaceAfter": 5
   },
   {
    "kind": "paragraph",
@@ -250,7 +251,8 @@
     {
      "text": " For example, if the mean of a normal distribution is five and the standard deviation is two, the value 11 is three standard deviations above (or to the right of) the mean. The calculation is as follows:"
     }
-   ]
+   ],
+   "spaceAfter": 5
   },
   {
    "kind": "paragraph",
@@ -298,7 +300,8 @@
     {
      "text": "-score is three."
     }
-   ]
+   ],
+   "spaceAfter": 8
   },
   {
    "kind": "paragraph",
@@ -557,7 +560,11 @@
     {
      "text": " = 17. Then:"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 20
+   }
   },
   {
    "kind": "equation",
@@ -597,7 +604,12 @@
     {
      "text": " = 5."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 20
+   },
+   "spaceAfter": 5
   },
   {
    "kind": "paragraph",
@@ -626,7 +638,12 @@
     {
      "text": ")"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 20
+   },
+   "spaceAfter": 8
   },
   {
    "kind": "paragraph",
@@ -662,7 +679,12 @@
     {
      "text": " = –0.67 (rounded to two decimal places)"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 20
+   },
+   "spaceAfter": 13
   },
   {
    "kind": "paragraph",
@@ -708,7 +730,12 @@
     {
      "text": " + (–0.67)σ = 1)"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 20
+   },
+   "spaceAfter": 5
   },
   {
    "kind": "paragraph",
@@ -800,7 +827,11 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 20
+   }
   },
   {
    "kind": "figure"
@@ -890,7 +921,8 @@
     {
      "text": "(5, 2). Fill in the blanks."
     }
-   ]
+   ],
+   "spaceAfter": 16
   },
   {
    "kind": "list",
@@ -1005,7 +1037,8 @@
       }
      ]
     }
-   ]
+   ],
+   "spaceAfter": 16
   },
   {
    "kind": "list",

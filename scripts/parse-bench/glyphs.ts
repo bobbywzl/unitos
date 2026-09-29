@@ -314,7 +314,8 @@ function printedText(doc: Doc): string {
         parts.push(mathLeaves(b, true).join(""), b.label ?? "");
         break;
       case "figure":
-        if (b.mathImage) parts.push(b.mathImage);
+        // A crop's glyphs are counted from its region (glyphScores).
+        if (b.mathImage && !b.at) parts.push(b.mathImage);
         spans(b.caption);
         break;
       case "code":
@@ -368,24 +369,44 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
   const expected = new Map<string, number>();
   const risky = new Set<string>();
   let hazards = 0;
+  const symbolOf = (g: PageGlyph) => {
+    const entry = g.family && MATH.has(g.family) ? mathGlyph(g.family, g.code) : null;
+    if (!entry || entry.cls === "accent") return null;
+    const symbol = entry.piece === "not" ? NEGATED : entry.piece === "mapstochar" ? MAPSTO : entry.piece || !entry.unicode ? null : classOf(entry.unicode.normalize("NFC"));
+    return symbol ? { symbol, wrong: entry.piece ? g.unicode !== "" : g.unicode.normalize("NFC") !== entry.unicode.normalize("NFC") } : null;
+  };
   pages.forEach((page, i) => {
     if (!inRange(i + 1)) return;
     for (const g of page.glyphs) {
-      if (!g.family || !MATH.has(g.family)) continue;
-      const entry = mathGlyph(g.family, g.code);
-      if (!entry || entry.cls === "accent") continue;
-      const symbol = entry.piece === "not" ? NEGATED : entry.piece === "mapstochar" ? MAPSTO : entry.piece || !entry.unicode ? null : classOf(entry.unicode.normalize("NFC"));
-      if (!symbol) continue;
-      expected.set(symbol, (expected.get(symbol) ?? 0) + 1);
-      const wrong = entry.piece ? g.unicode !== "" : g.unicode.normalize("NFC") !== entry.unicode.normalize("NFC");
-      if (wrong) {
+      const read = symbolOf(g);
+      if (!read) continue;
+      expected.set(read.symbol, (expected.get(read.symbol) ?? 0) + 1);
+      if (read.wrong) {
         hazards++;
-        risky.add(symbol);
+        risky.add(read.symbol);
       }
     }
   });
   const printed = new Map<string, number>();
   for (const ch of printedText(doc).normalize("NFC")) printed.set(classOf(ch), (printed.get(classOf(ch)) ?? 0) + 1);
+  // A crop shows its glyphs as the page draws them: none of them is lost or
+  // misread. Each symbol counts as often as the region draws it or its text
+  // reads it, whichever is more (the import's crop has no caption; the
+  // parse's text may hold a symbol the region's edge cuts off).
+  for (const block of doc.blocks) {
+    if (block.kind !== "figure" || !block.at) continue;
+    const page = inRange(block.at.page) ? pages[block.at.page - 1] : undefined;
+    const counts = new Map<string, number>();
+    for (const g of page ? glyphsIn(page, block.at.region) : []) {
+      const read = symbolOf(g);
+      if (read) counts.set(read.symbol, (counts.get(read.symbol) ?? 0) + 1);
+    }
+    const text = new Map<string, number>();
+    for (const ch of (block.mathImage ?? "").normalize("NFC")) text.set(classOf(ch), (text.get(classOf(ch)) ?? 0) + 1);
+    for (const symbol of new Set([...counts.keys(), ...text.keys()])) {
+      printed.set(symbol, (printed.get(symbol) ?? 0) + Math.max(counts.get(symbol) ?? 0, text.get(symbol) ?? 0));
+    }
+  }
   const missing: [string, number][] = [...risky]
     .map((s): [string, number] => [s, (expected.get(s) ?? 0) - (printed.get(s) ?? 0)])
     .filter(([, n]) => n > 0)

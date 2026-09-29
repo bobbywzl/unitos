@@ -28,12 +28,20 @@ export type Font = { shape: "serif" | "sans" | "mono"; size: number; bold?: true
 export type FontRole = "body" | "title" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "caption" | "footnote";
 /** Each role's font as the page sets it; a block that the page sets otherwise than its role carries its own `font`. */
 export type Fonts = { body: Font } & Partial<Record<Exclude<FontRole, "body">, Font>>;
+/** An indent as the page sets it, in points: left, how far in from the column's left edge the lines start;
+    first, where the first line starts against them (a first-line indent; negative, a hanging indent). */
+export type Indent = { left: number; first: number };
+/** A paragraph's and a list's look beyond its words, as measured on the page: its indent in points
+    (indentPt; the kind in `indent`), and the space under it beyond the line pitch, in points, to the next
+    paragraph or list below it in its column (spaceAfter). A list's items: their alignment (align) and the
+    space between two items beyond the line pitch (itemSpace). An equation's printed label stands at the
+    right unless labelSide says left (amsart's and amsbook's leqno). Each is recorded only where measured. */
 export type RefBlock =
   | { kind: "title"; spans: Span[]; align?: Align; font?: Font }
   | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; spans: Span[]; align?: Align; font?: Font }
-  | { kind: "paragraph"; spans: Span[]; align?: Align; indent?: "first" | "hanging" | "block"; font?: Font }
-  | { kind: "list"; items: { depth: number; marker: string; spans: Span[]; checked?: boolean }[]; font?: Font } // depth 0 = outermost; marker as printed: "(a)", "1.", "•", "☐"
-  | { kind: "equation"; latex: string; mathml?: string; label?: string } // display math; the label "(1.2)" never inside latex
+  | { kind: "paragraph"; spans: Span[]; align?: Align; indent?: "first" | "hanging" | "block"; indentPt?: Indent; spaceAfter?: number; font?: Font }
+  | { kind: "list"; items: { depth: number; marker: string; spans: Span[]; checked?: boolean }[]; align?: Align; itemSpace?: number; spaceAfter?: number; font?: Font } // depth 0 = outermost; marker as printed: "(a)", "1.", "•", "☐"
+  | { kind: "equation"; latex: string; mathml?: string; label?: string; labelSide?: "left" | "right" } // display math; the label "(1.2)" never inside latex
   | { kind: "table"; caption?: Span[]; rows: { cells: { spans: Span[]; header?: true; colspan?: number; rowspan?: number }[] }[]; font?: Font } // font: the caption's
   | { kind: "figure"; caption?: Span[]; font?: Font } // image, chart, or diagram; its inner labels are not text; font: the caption's
   | { kind: "code"; text: string }

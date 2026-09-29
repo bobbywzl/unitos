@@ -455,8 +455,10 @@ export function buildLines(items: Item[], page: number): Line[] {
   // A line whose largest item is half again the size of the text beside it
   // reaches no second baseline of that text: the IRS W-9's 24 pt "W-9" took
   // the two lines of the title beside it, and the side box's, into one line.
+  // A formula's scripts stand on baselines of their own around its tall
+  // delimiters.
   const ownBaseline = (group: Item[], anchor: Item, item: Item) => {
-    if (anchor.size < item.size * 1.5) return true;
+    if (anchor.size < item.size * 1.5 || anchor.math || item.math) return true;
     const kin = group.filter((i) => Math.abs(i.size - item.size) <= item.size * 0.25);
     return kin.length === 0 || kin.some((i) => Math.abs(i.y - item.y) < item.size * 0.5);
   };

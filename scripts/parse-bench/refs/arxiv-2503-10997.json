@@ -49,7 +49,12 @@
      "text": "1",
      "sup": true
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 12
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -68,7 +73,12 @@
     {
      "text": "National Institute of Technology, Tiruchirappalli"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 21
+   },
+   "spaceAfter": 3
   },
   {
    "kind": "paragraph",
@@ -211,7 +221,8 @@
     {
      "text": ", limiting the utility of WAs."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -233,7 +244,12 @@
     {
      "text": "semantic variations) (Bugliarello and Elliott, 2021; Li et al., 2022). Although these methods have shown promise, they often fail to capture the nuanced ways in which humans communicate through captions as shown in Figure 1. Pragmatic variations, such as multi-modal implicatures and metaphors (Genovesi, 2020), which utilize meanings or connotations beyond the literal description of the image, are often employed by caption writers to make their messages more engaging and relatable (Weiland et al., 2015)."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -255,7 +271,12 @@
     {
      "text": " (CRs). Based on the principles of Discourse Theory, CRs provide a structured overview of image-text relationships (Hobbs, 1978; Kress, 2009; O’Halloran et al., 2014), modeling both contextual and pragmatics aspects of language (Ma et al., 2025; Mavridou et al., 2015)."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -267,7 +288,12 @@
      "text": "using CRs as guidelines for generating captions that fulfill specific communicative functions while preserving semantic coherence.",
      "italic": true
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -289,7 +315,11 @@
     {
      "text": " outperforms existing baselines on caption diversity while retaining ground truth similarity. Our contributions are as follows:"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   }
   },
   {
    "kind": "list",
@@ -335,7 +365,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 4
   },
   {
    "kind": "heading",
@@ -505,7 +536,9 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify",
+   "itemSpace": 8
   },
   {
    "kind": "table",
@@ -2344,7 +2377,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 9
   }
  ],
  "furniture": [

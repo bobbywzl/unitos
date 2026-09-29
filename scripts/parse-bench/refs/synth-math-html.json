@@ -21,7 +21,8 @@
           "text": "ADA L. MERCER"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "spaceAfter": 14
     },
     {
       "kind": "paragraph",

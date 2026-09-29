@@ -24,7 +24,8 @@
     {
      "text": "Fabrice Baudoin Hongyi Chen Cheng Ouyang"
     }
-   ]
+   ],
+   "spaceAfter": 11
   },
   {
    "kind": "paragraph",
@@ -208,7 +209,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 0
   },
   {
    "kind": "heading",
@@ -364,7 +366,8 @@
     {
      "text": ". Exploration of these topics in our setting is left for future work."
     }
-   ]
+   ],
+   "spaceAfter": 12
   },
   {
    "kind": "paragraph",
@@ -396,7 +399,11 @@
     {
      "text": ". In [Dal01], the condition"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "equation",
@@ -678,7 +685,11 @@
      "latex": "u_{0}\\in L^{\\infty}(M)\\cap L^{r}(M)",
      "mathml": "<math display=\"inline\"><mrow><msub><mi>u</mi><mn>0</mn></msub><mo>∈</mo><mrow><mrow><msup><mi>L</mi><mi mathvariant=\"normal\">∞</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>∩</mo><mrow><msup><mi>L</mi><mi>r</mi></msup><mo lspace=\"0em\" rspace=\"0em\">​</mo><mrow><mo stretchy=\"false\">(</mo><mi>M</mi><mo stretchy=\"false\">)</mo></mrow></mrow></mrow></mrow></math>"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "equation",
@@ -804,7 +815,8 @@
       }
      ]
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -929,7 +941,11 @@
     {
      "text": ", which we call Dalang’s condition, and show that (2) holds for these solutions. Finally in section 4 we show that a lower bound on sectional curvature gives rise to the aforementioned matching lower bound for moment asymptotics."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "heading",
@@ -946,7 +962,8 @@
     {
      "text": "We first gather some notation we will use in the paper."
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "list",
@@ -1170,7 +1187,9 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify",
+   "itemSpace": 7
   },
   {
    "kind": "heading",
@@ -1187,7 +1206,8 @@
     {
      "text": "We recall the following two results:"
     }
-   ]
+   ],
+   "spaceAfter": 6
   },
   {
    "kind": "paragraph",
@@ -1352,7 +1372,8 @@
     {
      "text": "See [DM88]."
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -1360,7 +1381,12 @@
     {
      "text": "Our main tool for the rest of the paper is the following theorem."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   },
+   "spaceAfter": 6
   },
   {
    "kind": "paragraph",
@@ -1502,7 +1528,8 @@
      "text": ".",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 6
   },
   {
    "kind": "paragraph",
@@ -1551,7 +1578,12 @@
     {
      "text": "We first deduce the following from the above heat kernel estimate."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   },
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -1591,7 +1623,8 @@
      "text": ".",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "list",
@@ -1700,7 +1733,9 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify",
+   "itemSpace": 7
   },
   {
    "kind": "equation",
@@ -1819,7 +1854,8 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "list",
@@ -1899,7 +1935,11 @@
     {
      "text": "For (8), we use the upper bound (3) which yields:"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "equation",
@@ -2149,7 +2189,12 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -2181,7 +2226,11 @@
     {
      "text": ","
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "equation",
@@ -2210,7 +2259,8 @@
     {
      "text": " the correlation function is the Green’s function for the Laplace equation."
     }
-   ]
+   ],
+   "spaceAfter": 6
   },
   {
    "kind": "paragraph",
@@ -2307,7 +2357,8 @@
      "text": " is the family in Definition 5.",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 6
   },
   {
    "kind": "paragraph",
@@ -2455,7 +2506,8 @@
     {
      "text": " which plays a central role in our study."
     }
-   ]
+   ],
+   "spaceAfter": 6
   },
   {
    "kind": "paragraph",
@@ -2593,7 +2645,11 @@
     {
      "text": " gives us"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "equation",
@@ -2765,7 +2821,8 @@
      "text": " is called a random field solution of (17) in the Itô-Walsh sense [Wal86] if the following conditions are met:",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 8
   },
   {
    "kind": "list",
@@ -2885,7 +2942,9 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 8,
+   "spaceAfter": 8
   },
   {
    "kind": "paragraph",
@@ -2901,7 +2960,11 @@
     {
      "text": " the space"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "equation",

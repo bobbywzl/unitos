@@ -27,7 +27,8 @@
         "shape": "serif",
         "size": 13,
         "color": "#595959"
-      }
+      },
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -3805,7 +3806,8 @@
         {
           "text": "For 2026 the group expects:"
         }
-      ]
+      ],
+      "spaceAfter": 6
     },
     {
       "kind": "list",
@@ -3837,7 +3839,9 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 2,
+      "spaceAfter": 4
     },
     {
       "kind": "paragraph",
