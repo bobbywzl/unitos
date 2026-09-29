@@ -187,6 +187,18 @@
   padding-left: 0;
   border-left: none;
 }
+/* Paragraphs with a bar at their left, one after another, draw one bar, as
+   Word draws paragraphs with the same borders: the space between them lies
+   inside the bar (extensions.ts gives it as --docs-bar-top and -bottom), so
+   a quote of three paragraphs is one bar, not three with gaps. */
+.docs-prose [data-border-left]:not([data-border-top], [data-border-bottom]):has(+ [data-border-left]:not([data-border-top], [data-border-bottom])) {
+  margin-bottom: 0 !important;
+  padding-bottom: var(--docs-bar-bottom, 0pt) !important;
+}
+.docs-prose [data-border-left]:not([data-border-top], [data-border-bottom]) + [data-border-left]:not([data-border-top], [data-border-bottom]) {
+  margin-top: 0 !important;
+  padding-top: var(--docs-bar-top, 0pt) !important;
+}
 /* A pageless table fills the text column: column widths (an import's,
    lib/docs/import-table.ts) are shares of the width, as a fixed layout
    spreads a table wider than its columns. */

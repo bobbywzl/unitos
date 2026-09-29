@@ -167,10 +167,14 @@ function borderAttr(side: "top" | "right" | "bottom" | "left") {
       const lined = (key: string) => typeof attrs[key] === "string" && PARAGRAPH_BORDER.test(attrs[key] as string);
       // The space before and after as margins: a lined edge keeps its own
       // side's padding, and beside a bar an edge without a line has none.
+      // Beside a bar the space is also --docs-bar-top and -bottom: where
+      // barred paragraphs follow one another, it lies inside their one bar
+      // (css/import.css).
       for (const [edge, key, space] of [["top", "borderTop", attrs.spaceBefore], ["bottom", "borderBottom", attrs.spaceAfter]] as const) {
         if (key !== name && (side === "top" || side === "bottom" || lined(key))) continue;
-        if (key !== name) css.push(`padding-${edge}: 0`);
-        css.push(`margin-${edge}: ${typeof space === "number" ? space : 0}pt`);
+        const pt = `${typeof space === "number" ? space : 0}pt`;
+        if (key !== name) css.push(`padding-${edge}: 0`, `--docs-bar-${edge}: ${pt}`);
+        css.push(`margin-${edge}: ${pt}`);
       }
       return { [`data-border-${side}`]: value, style: css.join("; ") };
     },

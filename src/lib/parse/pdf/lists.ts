@@ -207,7 +207,7 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
   if ((first === DRAWN && items.length < 2) || !isList(items, i, ctx)) return null;
   const { depths, levels } = depthsOf(items, line.size);
   const list = listSegment(items, depths);
-  list.listIndents = listIndentsOf(items, depths, levels, ctx);
+  list.listIndents = listIndentsOf(items, depths, levels, listEdge(items, lines, i, j, ctx));
   return { segments: [withItemLayout(list, lines, items.map((item) => item.lines), ctx)], next: j };
 }
 
@@ -265,14 +265,36 @@ function depthsOf(items: Item[], size: number): { depths: number[]; levels: numb
   return { depths: levelOf.map((k) => rank.get(k) ?? 0), levels: order.map((k) => levels[k].markerX) };
 }
 
+// The left edge of the column a list stands in: its first line's
+// (leftEdge), or where the line right above or below the list in its column
+// starts, when that is further left. A page whose lines are mostly a list
+// set in from the prose reads its column at the list (its markers stood at
+// the column's edge or in the margin, its words half their place in). A
+// column never starts right of the list's markers.
+function listEdge(items: Item[], lines: Line[], from: number, to: number, ctx: PageContext): number {
+  const own = items.flatMap((item) => item.lines);
+  const markers = Math.min(...items.map((item) => item.markerX));
+  const left = Math.min(...own.map((l) => l.x));
+  const right = Math.max(...own.map((l) => l.xEnd));
+  const reach = own[0].size * ctx.leading * 4;
+  let edge = leftEdge(own[0], ctx);
+  for (const [line, gap] of [
+    [lines[from - 1], lines[from - 1] ? lines[from - 1].y - own[0].y : 0],
+    [lines[to], lines[to] ? own[own.length - 1].y - lines[to].y : 0],
+  ] as const) {
+    if (!line || line.cells.length !== 1 || gap <= 0 || gap > reach || line.x >= right || line.xEnd <= left) continue;
+    edge = Math.min(edge, leftEdge(line, ctx), line.x);
+  }
+  return Math.min(edge, markers);
+}
+
 // Where each depth's items stand (ParsedBlock.listIndents), from the
-// column's left edge: an item's marker at left + first, its wrapped lines at
-// left; where no item of a depth wraps, its words stand at left, as under a
-// hanging marker. A flush list's wraps come back under its markers (a
-// form's checkbox items), a hanging list's stand under its words (a book's
-// exercises): the import drew every list hanging half an inch in.
-function listIndentsOf(items: Item[], depths: number[], levels: number[], ctx: PageContext): Indent[] {
-  const edge = leftEdge(items[0].lines[0], ctx);
+// column's left edge (listEdge): an item's marker at left + first, its
+// wrapped lines at left; where no item of a depth wraps, its words stand at
+// left, as under a hanging marker. A flush list's wraps come back under its
+// markers (a form's checkbox items), a hanging list's stand under its words
+// (a book's exercises): the import drew every list hanging half an inch in.
+function listIndentsOf(items: Item[], depths: number[], levels: number[], edge: number): Indent[] {
   return levels.map((x, d) => {
     const at = items.filter((_, k) => depths[k] === d);
     if (at.length === 0) return { left: Math.round(x - edge), first: 0 };

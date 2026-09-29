@@ -226,6 +226,21 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
     const html = tokens.length > 0 ? { html: `<p class="${tokens.join(" ")}"></p>` } : {};
     return { segments: [{ type: "PARAGRAPH", text: flat, ...html, page: line.page, runs, ...geom(run) }], next: j };
   }
+  // Most of a line's letters are set large: a form's number set large after
+  // a word set small ("Form W-9": "W-9" at 24 pt, "Form" at 7 pt) is no
+  // heading, and it stood over the form's title as the document's title. An
+  // OCR layer sizes each word from the scan: a scanned bulletin's heading
+  // read as small words.
+  if (run.length === 1 && !ctx.ocr) {
+    let big = 0;
+    let all = 0;
+    for (const r of line.runs) {
+      const letters = line.text.slice(r.start, r.end).match(/\p{L}/gu)?.length ?? 0;
+      all += letters;
+      if ((r.look ? (r.look.capitals ?? r.look.size) : line.size) > ctx.bodySize * 1.14) big += letters;
+    }
+    if (all > 0 && big * 2 < all) return null;
+  }
   return { segments: [headingOf(run, flat, runs)], next: j };
 }
 

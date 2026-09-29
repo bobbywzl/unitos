@@ -207,21 +207,27 @@ export function listMarker(outer: { type: string; attrs?: Record<string, unknown
 const cssString = (text: string) => `"${text.replace(/["\\\n\r\f]/g, (c) => `\\${c.charCodeAt(0).toString(16)} `)}"`;
 
 /** A list's levels as its inline style (listSheet): level n's bullet
-    in --docs-bullet-n (none for an empty bullet: no marker), its counter
-    in --docs-number-n (list-style-type, for a browser that draws no
-    ::marker content), and its marker in --docs-marker-n (::marker's
-    content: its format's words around the level's counter, or around every
-    level's for legal numbers). */
+    in --docs-bullet-n (with an em space after it; none for an empty bullet:
+    no marker), its counter in --docs-number-n (list-style-type, for a
+    browser that draws no ::marker content), and its marker in
+    --docs-marker-n (::marker's content: its format's words around the
+    level's counter, or around every level's for legal numbers, and an em
+    space). --docs-glyph-n and --docs-count-n hold the bullet and the marker
+    with no space, for a list set at its page's depths (indentStyle). */
 export function levelStyle(levels: ListLevel[]): string {
   return levels
     .map((level, k) => {
       const n = k + 1;
-      if ("bullet" in level) return `--docs-bullet-${n}: ${level.bullet ? cssString(`${level.bullet}\u2003`) : "none"}`;
+      if ("bullet" in level) {
+        return level.bullet
+          ? `--docs-bullet-${n}: ${cssString(`${level.bullet}\u2003`)}; --docs-glyph-${n}: ${cssString(level.bullet)}`
+          : `--docs-bullet-${n}: none; --docs-glyph-${n}: none`;
+      }
       const parts = formatParts(level.format, k);
       if (!parts) return "";
       const count = parts.sep === null ? `counter(list-item, ${level.counter})` : `counters(list-item, ${cssString(parts.sep)}, ${level.counter})`;
-      const marker = [parts.before ? cssString(parts.before) : "", count, cssString(`${parts.after}\u2003`)].filter(Boolean).join(" ");
-      return `--docs-number-${n}: ${level.counter}; --docs-marker-${n}: ${marker}`;
+      const words = (after: string) => [parts.before ? cssString(parts.before) : "", count, after ? cssString(after) : ""].filter(Boolean).join(" ");
+      return `--docs-number-${n}: ${level.counter}; --docs-marker-${n}: ${words(`${parts.after}\u2003`)}; --docs-count-${n}: ${words(parts.after)}`;
     })
     .filter(Boolean)
     .join("; ");
@@ -230,25 +236,22 @@ export function levelStyle(levels: ListLevel[]): string {
 /** Half an inch: a list depth's step where its page sets none. */
 const DEPTH_PT = 36;
 
-/** A list's depths as its inline style (listSheet): --docs-indent-n, where
-    depth n's words stand. Under a marker that hangs before the words, at
-    the depth's left; where the words follow the marker (a first-line
-    indent), about two ems past the marker's place, left + first (the
-    marker and its space: the page editor hangs every marker before the
-    words, so the wrapped lines stand there too). A depth whose level draws
-    no marker (`levels`: an empty bullet) stands as a paragraph: its words
-    at its left, its first line at left + first (--docs-first-n). The depths
-    past the list's own go on a half inch a depth. */
-export function indentStyle(indents: ListIndent[], levels: ListLevel[] | null = null): string {
-  const unmarked = (k: number) => {
-    const level = levels?.[k];
-    return level !== undefined && "bullet" in level && level.bullet === "";
-  };
-  const at = ([left, first]: ListIndent, k: number) => (first < 0 || unmarked(k) ? `${left}pt` : `calc(${left + first}pt + 2em)`);
+/** A list set at its page's depths (an import's listIndents) as its inline
+    style (listSheet): each depth's words at its left (--docs-indent-n), its
+    first line at left + first (--docs-first-n), and its marker in a box from
+    there to the words (--docs-hang-n): the page's hang where the marker
+    hangs before the words, else the room to the next half-inch stop, as
+    Docs and Word set a tab after a marker. A marker wider than its box
+    moves the first line's words on; none stands left of its line's start,
+    so none stands in the margin. The depths past the list's own go on a
+    half inch a depth, set as the last one. */
+export function indentStyle(indents: ListIndent[]): string {
   const last = indents.length - 1;
   return Array.from({ length: 9 }, (_, k) => {
-    const words = `--docs-indent-${k + 1}: ${k <= last ? at(indents[k], k) : `calc(${at(indents[last], last)} + ${DEPTH_PT * (k - last)}pt)`}`;
-    return k <= last && unmarked(k) && indents[k][1] !== 0 ? `${words}; --docs-first-${k + 1}: ${indents[k][1]}pt` : words;
+    const [own, first] = indents[Math.min(k, last)];
+    const left = own + DEPTH_PT * Math.max(0, k - last);
+    const hang = first < 0 ? -first : DEPTH_PT - ((left + first) % DEPTH_PT);
+    return `--docs-indent-${k + 1}: ${left}pt; --docs-first-${k + 1}: ${first}pt; --docs-hang-${k + 1}: ${hang}pt`;
   }).join("; ");
 }
 
@@ -256,22 +259,31 @@ export function indentStyle(indents: ListIndent[], levels: ListLevel[] | null = 
     in the web page download): Google Docs' defaults (● ○ ■, 1. a. i.), each
     depth's level, a bullet as list-style-type, and a number as ::marker's
     content, with its counter as list-style-type where a browser draws no
-    ::marker content; a line of a depth that draws no marker sets its first
-    line at its page's place (indentStyle). A line a suggestion adds or
-    removes whole sits in the suggestion's wrapper (css/suggest.css). */
+    ::marker content. A list set at its page's depths (data-list-indents,
+    indentStyle) draws no ::marker: each line's marker is a box at its first
+    line's start, before its words, and a depth that draws no marker has
+    none. A line a suggestion adds or removes whole sits in the
+    suggestion's wrapper (css/suggest.css). */
 export function listSheet(root: string): string {
   const li = (n: number) => `${root} ${Array.from({ length: n }, () => "li").join(" ")}`;
+  // A list set at its page's depths, and the lists inside it.
+  const own = (tag: string) => `:is(${tag}[data-list-indents], [data-list-indents] ${tag})`;
+  const first = (list: string) => [`${root} ${list} > li > p:first-child`, `${root} ${list} > [data-suggestion-block] > li > p:first-child`];
   return [
     `${root} { ${levelStyle(BULLET_PRESETS[0].levels)}; ${levelStyle(NUMBER_PRESETS[0].levels)}; }`,
     ...Array.from(
       { length: 9 },
       (_, k) =>
-        `${li(k + 1)} { --docs-level-bullet: var(--docs-bullet-${k + 1}); --docs-level-number: var(--docs-number-${k + 1}); --docs-level-marker: var(--docs-marker-${k + 1}); --docs-level-first: var(--docs-first-${k + 1}, 0pt); }`,
+        `${li(k + 1)} { --docs-level-bullet: var(--docs-bullet-${k + 1}); --docs-level-number: var(--docs-number-${k + 1}); --docs-level-marker: var(--docs-marker-${k + 1}); --docs-level-first: var(--docs-first-${k + 1}, 0pt); --docs-level-hang: var(--docs-hang-${k + 1}, 0pt); --docs-level-glyph: var(--docs-glyph-${k + 1}); --docs-level-count: var(--docs-count-${k + 1}); }`,
     ),
     `${root} ul:not([data-type="taskList"]) > li { list-style-type: var(--docs-level-bullet); }`,
     `${root} ol > li { list-style-type: var(--docs-level-number); }`,
     `${root} :is(ol > li, ol > [data-suggestion-block] > li)::marker { content: var(--docs-level-marker); }`,
-    `${root} :is(ul, ol):not([data-type="taskList"]) > li > p:first-child, ${root} :is(ul, ol):not([data-type="taskList"]) > [data-suggestion-block] > li > p:first-child { text-indent: var(--docs-level-first); }`,
+    `${first(':is(ul, ol):not([data-type="taskList"])').join(", ")} { text-indent: var(--docs-level-first); }`,
+    `${root} :is(ul, ol)[data-list-indents] li { --docs-level-bullet: none; --docs-level-number: none; --docs-level-marker: none; }`,
+    `${first(`${own("ul")}:not([data-type="taskList"])`).map((p) => `${p}::before`).join(", ")} { content: var(--docs-level-glyph); }`,
+    `${first(own("ol")).map((p) => `${p}::before`).join(", ")} { content: var(--docs-level-count); }`,
+    `${[...first(`${own("ul")}:not([data-type="taskList"])`), ...first(own("ol"))].map((p) => `${p}::before`).join(", ")} { display: inline-block; box-sizing: border-box; min-width: var(--docs-level-hang); padding-right: 0.25em; text-indent: 0; }`,
     // Each depth's words: where the outermost list's page sets them
     // (listIndents), else a half inch a depth. A checklist keeps its own.
     ...Array.from(

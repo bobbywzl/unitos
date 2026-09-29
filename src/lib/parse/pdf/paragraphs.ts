@@ -66,11 +66,13 @@ function otherColumn(l: Line, of: Line): boolean {
 const edges = new WeakMap<Line, number>();
 
 /** Where each line's column starts (leftEdge reads it): the leftmost place
-    the lines of its column start at, among the lines of its size (within
-    15%), one cell each, read in its column, that reach over it. The extent
-    the column split keeps reaches past that edge where anything stands in
-    the column's margin (Elsevier's right column: every paragraph read as
-    set in by 10 pt), and spans a side column or a float read with the text
+    the lines of its column start at, among the lines of one cell, read in
+    its column, that reach over it, from 85% of its size to half as large
+    again (a caption set smaller beside the text is no edge of it; the body
+    is the edge of an abstract set smaller and in). The extent the column
+    split keeps reaches past that edge where anything stands in the
+    column's margin (Elsevier's right column: every paragraph read as set
+    in by 10 pt), and spans a side column or a float read with the text
     (PLOS pp. 2 and 6, Nature p. 1: 165 to 178 pt). A line with no such
     place (a box on a form) starts its own column: nothing sets it in. */
 export function markEdges(lines: Line[], ctx: PageContext) {
@@ -80,7 +82,7 @@ export function markEdges(lines: Line[], ctx: PageContext) {
     const column = lineColumn(line);
     const xs = lines
       .filter((l) => {
-        if (l === line || l.cells.length !== 1 || !near(l.size, size, size * 0.15)) return false;
+        if (l === line || l.cells.length !== 1 || l.size < size * 0.85 || l.size > size * 1.5) return false;
         if (l.x >= line.xEnd - size || l.xEnd <= line.x + size) return false;
         const other = lineColumn(l);
         return !column || !other || (near(column[0], other[0], 1) && near(column[1], other[1], 1));
@@ -752,7 +754,13 @@ export function layout(lines: Line[], from: number, to: number, ctx: PageContext
       Math.abs(next.x - leftEdge(next, ctx)) <= size * 0.5 &&
       Math.abs(leftEdge(next, ctx) - left) <= size * 0.5 &&
       fillsMargin(first, next, right);
-    if (step !== null && Math.abs(inset - step) <= size * 0.15) indent = { left: 0, first: step };
+    // Set in by the page's step from the column's edge, or from the column
+    // split's extent where it stands a little left of that edge: a column's
+    // references set their labels in by 3 pt, and the acknowledgment's one
+    // line over them lost its first-line indent.
+    const column = lineColumn(first);
+    const stepped = (x: number) => step !== null && Math.abs(first.x - x - step) <= size * 0.15;
+    if (step !== null && (stepped(left) || (column !== undefined && column[0] < left && left - column[0] <= size && stepped(column[0])))) indent = { left: 0, first: step };
     else if (inset >= size && wraps && inset <= size * 5) indent = { left: 0, first: inset };
     else if (inset >= size && fits(inset)) indent = { left: inset, first: 0 };
   } else {

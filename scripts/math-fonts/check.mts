@@ -59,14 +59,17 @@ function sourceOf(family: MathFamily, code: number, e: MathGlyph): string | null
 }
 
 // KaTeX's MathML with spacing, attributes, and empty operators set aside
-// (scripts/parse-bench/math-layout.mts).
-function canon(tex: string): string {
+// (scripts/parse-bench/math-layout.mts); spaced: every space the LaTeX
+// writes stays, as one mark.
+function canon(tex: string, spaced = false): string {
+  const space = spaced ? "<space/>" : "";
   try {
     return katex
       .renderToString(tex, { output: "mathml", throwOnError: true, displayMode: true })
       .replace(/<annotation[\s\S]*?<\/annotation>/, "")
-      .replace(/<mspace[^>]*\/?>(<\/mspace>)?/g, "")
-      .replace(/<mtext>[\s ⁡-⁤]*<\/mtext>/g, "")
+      .replace(/<mspace[^>]*\/?>(<\/mspace>)?/g, space)
+      .replace(/<mtext>[\s ⁡-⁤]*<\/mtext>/g, space)
+      .replace(/(<space\/>)+/g, space)
       .replace(/<mo[^>]*><\/mo>/g, "")
       .replace(/ (?!mathvariant|linethickness)[a-z]+="[^"]*"/g, "")
       .replace(/<\/?mrow>/g, "")
@@ -79,8 +82,9 @@ function canon(tex: string): string {
 // A page's displays that once passed the check wrong: each EQUATION on the
 // page (or each whose LaTeX pick matches) reads as one of the right
 // formulas, its \tag aside; a crop or words pass.
-// inline: the case reads the blocks' inline formulas, not their EQUATIONs.
-type DisplayCase = { page: number; pick?: RegExp; right: string[]; inline?: boolean };
+// inline: the case reads the blocks' inline formulas, not their EQUATIONs;
+// spaced: the spaces they write count.
+type DisplayCase = { page: number; pick?: RegExp; right: string[]; inline?: boolean; spaced?: boolean };
 
 function wrongDisplays(blocks: { type: string; text: string; page?: number; math?: { latex: string }[] }[], cases: DisplayCase[]): string[] {
   const out: string[] = [];
@@ -92,7 +96,7 @@ function wrongDisplays(blocks: { type: string; text: string; page?: number; math
     for (const f of formulas) {
       for (const c of cases) {
         if (c.page !== b.page || Boolean(c.inline) !== f.inline || (c.pick && !c.pick.test(f.latex))) continue;
-        if (!c.right.some((r) => canon(r) === canon(f.latex))) out.push(`p. ${b.page}: ${f.latex}`);
+        if (!c.right.some((r) => canon(r, c.spaced) === canon(f.latex, c.spaced))) out.push(`p. ${b.page}: ${f.latex}`);
       }
     }
   }
@@ -321,6 +325,23 @@ try {
     const parsed = await parsePdf(new Uint8Array(readFileSync(pdf)), { pages: pageCases.map((c) => c.page) });
     wrong.push(...wrongDisplays(parsed.blocks, pageCases));
   }
+  // Two formulas a word space apart read as two, or as one that writes the
+  // space: read as one without it, the letters either side of the space
+  // were a product (G ∪ HG, H ∈ ℱ), which the glyph check cannot see. On
+  // the page they are the glue a control space inside one formula is.
+  const pairs: { words: string; right: string[] }[] = [
+    { words: "The family is closed under $G \\cup H$ $G, H \\in \\mathcal{F}$, as the next lemma shows for every family.", right: ["G\\cup H", "G,H\\in\\mathcal{F}", "G\\cup H\\ G,H\\in\\mathcal{F}"] },
+    { words: "For each pair we have $s \\le t$ $t \\le u$ and so the order is a chain of the elements.", right: ["s\\le t", "t\\le u", "s\\le t\\ t\\le u"] },
+    { words: "The two sums $x = 2$ $y = 3$ are the first values the recursion takes in this example.", right: ["x=2", "y=3", "x=2\\ y=3"] },
+    // The tightest line TeX sets: a word space of 0.222 em, after a letter
+    // with no italic correction.
+    { words: "{\\spaceskip=0.222em\\relax In a tight line $p \\in x$ $q \\in Q$ still are two formulas.}", right: ["p\\in x", "q\\in Q", "p\\in x\\ q\\in Q"] },
+    // A quad inside one formula stays, or splits it in two right formulas.
+    { words: "The rule $f(x) = 1 \\quad x > 0$ holds for the positive values.", right: ["f(x)=1\\quad x>0", "f(x)=1", "x>0"] },
+  ];
+  const pairPages = pairs.map((c) => `\\parbox{\\textwidth}{${c.words}}`);
+  const pairParse = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "pairs", packages, pairPages))));
+  wrong.push(...wrongDisplays(pairParse.blocks, pairs.map((c, i) => ({ page: i + 1, inline: true, spaced: true, pick: /\\cup|\\le|\\in|=|>/, right: c.right }))));
   // A list's bullet a math font draws (acmart's itemize, newtxmath's •) is
   // the item's marker, never its formula's: "• scan(Pred)" read
   // \bullet\text{ scan}, and the import drew two bullets.

@@ -95,6 +95,28 @@ function node(atoms: Atom[], tex: string, yb: number, size: number, extra: Parti
   };
 }
 
+// A letter's italic correction in em (tftopl cmmi10 and cmsy10, those of
+// 0.02 em and more): TeX sets it after the letter, so two letters of one
+// formula stand up to that far apart. A text italic's letter (MathTime's
+// Times) takes a tenth of an em.
+const ITALIC: Partial<Record<MathFamily, Record<number, number>>> = {
+  oml: {
+    0x00: 0.139, 0x02: 0.028, 0x04: 0.076, 0x05: 0.081, 0x06: 0.058, 0x07: 0.139, 0x09: 0.11, 0x0a: 0.05, 0x0c: 0.053,
+    0x0d: 0.056, 0x0e: 0.038, 0x10: 0.074, 0x11: 0.036, 0x12: 0.028, 0x17: 0.064, 0x18: 0.046, 0x19: 0.036, 0x1b: 0.036,
+    0x1c: 0.113, 0x1d: 0.036, 0x20: 0.036, 0x21: 0.036, 0x24: 0.028, 0x26: 0.08, 0x40: 0.056, 0x42: 0.05, 0x43: 0.072,
+    0x44: 0.028, 0x45: 0.058, 0x46: 0.139, 0x48: 0.081, 0x49: 0.078, 0x4a: 0.096, 0x4b: 0.072, 0x4d: 0.109, 0x4e: 0.109,
+    0x4f: 0.028, 0x50: 0.139, 0x53: 0.058, 0x54: 0.139, 0x55: 0.109, 0x56: 0.222, 0x57: 0.139, 0x58: 0.078, 0x59: 0.222,
+    0x5a: 0.072, 0x66: 0.108, 0x67: 0.036, 0x6a: 0.057, 0x6b: 0.031, 0x71: 0.036, 0x72: 0.028, 0x76: 0.036, 0x77: 0.027,
+    0x79: 0.036, 0x7a: 0.044,
+  },
+  oms: {
+    0x42: 0.03, 0x43: 0.058, 0x44: 0.028, 0x45: 0.089, 0x46: 0.099, 0x47: 0.059, 0x49: 0.074, 0x4a: 0.185, 0x4e: 0.147,
+    0x4f: 0.028, 0x50: 0.082, 0x53: 0.075, 0x54: 0.254, 0x55: 0.099, 0x56: 0.082, 0x57: 0.082, 0x58: 0.146, 0x59: 0.082,
+    0x5a: 0.079,
+  },
+};
+const italicOf = (a: Atom): number => ((a.fam ? ITALIC[a.fam]?.[a.code] : undefined) ?? (a.fam === null && a.italic ? 0.1 : 0)) * a.size;
+
 function variantOf(base: string): Variant {
   if (/^(CMMIB|CMBSY|EUFB)/i.test(base)) return "bold";
   if (/^CMBX/i.test(base)) return "bf";
@@ -839,25 +861,34 @@ function limits(atoms: Atom[], em: number): Atom[] {
   const out = [...atoms];
   // A text-size operator takes limits too (\sum\limits in a list item):
   // a limit sits wholly over its top or under its bottom, a script beside.
-  for (const op of atoms.filter((a) => a.cls === "op" && (a.entry?.display || hangingFamily(a.fam)) && a.size >= em * 0.75)) {
-    const inX = (b: Atom) => b !== op && Math.abs(cx(b) - cx(op)) < (op.x2 - op.x1) / 2 + 0.3 * em;
-    // A limit grows along its baseline: "p prime" is wider than ∏.
-    const grow = (seed: Atom[]) => {
-      const set = [...seed];
-      for (let added = true; added; ) {
-        added = false;
-        for (const b of out) {
-          if (set.includes(b) || b === op) continue;
-          if (set.some((c) => Math.abs(c.yb - b.yb) < 0.3 * c.size && (Math.abs(b.x1 - c.x2) < 0.6 * em || Math.abs(c.x1 - b.x2) < 0.6 * em || overlapX(b, c) > 0))) {
-            set.push(b);
-            added = true;
-          }
-        }
-      }
-      return set;
-    };
-    const up = grow(out.filter((b) => inX(b) && b.bottom >= op.top - 0.1 * em && b.size < op.size));
-    const low = grow(out.filter((b) => inX(b) && b.top <= op.bottom + 0.1 * em && b.size < op.size && !up.includes(b)));
+  const ops = atoms.filter((a) => a.cls === "op" && (a.entry?.display || hangingFamily(a.fam)) && a.size >= em * 0.75);
+  const over = (op: Atom, b: Atom) => b.bottom >= op.top - 0.1 * em && b.size < op.size;
+  const under = (op: Atom, b: Atom) => b.top <= op.bottom + 0.1 * em && b.size < op.size;
+  // The small glyphs over or under an operator, in runs along their
+  // baselines: a limit is a run ("p prime" is wider than ∏), or rows of
+  // runs (\substack). TeX sets a thin space at least between two
+  // operators, so their limits are two runs, each the nearer operator's:
+  // grown along the baseline, two sums side by side read as one sum with
+  // both lower limits (\sum_{j=1\ p,q=1}^{k}\sum^{n}, arXiv 2506.08494
+  // p. 16), which the check cannot see.
+  const runs: Atom[][] = [];
+  for (const b of atoms.filter((c) => !ops.includes(c) && ops.some((o) => over(o, c) || under(o, c))).sort(byX)) {
+    const run = runs.find((r) => Math.abs(r[0].yb - b.yb) < 0.3 * b.size && b.x1 - Math.max(...r.map((c) => c.x2)) < 0.15 * em);
+    if (run) run.push(b);
+    else runs.push([b]);
+  }
+  const owner = new Map<Atom[], Atom>();
+  for (const r of runs) {
+    const x1 = Math.min(...r.map((c) => c.x1));
+    const x2 = Math.max(...r.map((c) => c.x2));
+    const fits = ops.filter((o) => (r.every((c) => over(o, c)) || r.every((c) => under(o, c))) && x2 > o.x1 - 0.3 * em && x1 < o.x2 + 0.3 * em);
+    const o = fits.sort((p, q) => Math.abs((x1 + x2) / 2 - cx(p)) - Math.abs((x1 + x2) / 2 - cx(q)))[0];
+    if (o) owner.set(r, o);
+  }
+  for (const op of ops) {
+    const mine = runs.filter((r) => owner.get(r) === op).flat();
+    const up = mine.filter((b) => over(op, b));
+    const low = mine.filter((b) => under(op, b) && !up.includes(b));
     if (up.length) op.upper = stackedLimit(up);
     if (low.length) op.lower = stackedLimit(low);
     op.limits = true;
@@ -1033,6 +1064,10 @@ function linearAt(input: Atom[]): string {
   }
   const out: string[] = [];
   let prev: Atom | null = null;
+  // The previous symbol's rightmost glyph (its last script, if any), and
+  // whether it ended a word (a name, \text): the space after it is its own.
+  let tail: Atom | null = null;
+  let afterWord = false;
   for (let k = 0; k < main.length; k++) {
     const a = main[k];
     // A piece no composite took (a map arrow's bar whose arrow the line
@@ -1045,6 +1080,18 @@ function linearAt(input: Atom[]): string {
     const reach = nameLimits.get(a) ?? [];
     const gap = prev ? Math.min(a.x1, ...reach.map((s) => s.x1)) - prev.x2 : 0;
     const spaced = prev !== null && gap > 0.9 * em;
+    // Two operands a word space apart keep the space (two formulas set a
+    // space apart and read as one, or a control space): read without it,
+    // two letters were a product (G ∪ H G, H ∈ ℱ read G ∪ HG, H ∈ ℱ),
+    // which the glyph check cannot see. Within a formula TeX sets nothing
+    // between two operands but the first one's italic correction and,
+    // after a script, a twentieth of an em. A bar may be a relation (a ∣ b);
+    // a period, a slash, and a prime are no operand.
+    const operand = (b: Atom, classes: string[]) => b.code >= 0 && classes.includes(b.cls) && !/^(\||\\\||\\mid|\\vert|\\Vert|\.|\/|'|\\prime)$/.test(b.tex);
+    const wordStarts = (a.upright || a.italic) && /^[A-Za-z]$/.test(a.tex) && wordAt(k).word.length > 1;
+    const net = prev && tail ? gap - italicOf(tail) - (tail !== prev ? 0.05 * em : 0) : 0;
+    const apart = prev !== null && !spaced && !afterWord && !wordStarts && operand(prev, ["ord", "close"]) && operand(a, ["ord", "open"]) && net > 0.2 * em;
+    let wordEnds = false;
     let tex = a.tex;
     let last = a;
     // A word in a text italic set apart as text is \textit (\text{ for all }
@@ -1057,6 +1104,7 @@ function linearAt(input: Atom[]): string {
       if (word.length > 1 && (((!prev || gap > 0.25 * em) && (!next || trail > 0.25 * em)) || /^[a-z]{4,}$/.test(word))) {
         k = end;
         last = main[k];
+        wordEnds = true;
         const lead = prev && gap > 0.2 * em && !spaced ? " " : "";
         tex = `\\textit{${lead}${word}${trail > 0.2 * em && trail <= 0.9 * em && next ? " " : ""}}`;
       }
@@ -1066,6 +1114,7 @@ function linearAt(input: Atom[]): string {
       const { end, word } = wordAt(k);
       k = end;
       last = main[k];
+      wordEnds = word.length > 1;
       const trail = main[k + 1] ? main[k + 1].x1 - last.x2 : 0;
       // A name set tight against its argument's bracket is an operator
       // ("softmax(", "Var(").
@@ -1085,9 +1134,11 @@ function linearAt(input: Atom[]): string {
         const close = main.findIndex((b, j) => j > k && b.tex === ")");
         if (close > k) {
           out.pop();
-          while (out.length && /^\\q?quad$/.test(out[out.length - 1])) out.pop();
+          while (out.length && /^\\(q?quad| )$/.test(out[out.length - 1])) out.pop();
           out.push(`\\pmod{${linear(main.slice(k + 1, close).map((b) => ({ ...b })))}}`);
           prev = main[close];
+          tail = prev;
+          afterWord = false;
           k = close;
           continue;
         }
@@ -1108,9 +1159,9 @@ function linearAt(input: Atom[]): string {
     else if (spaced) out.push("\\quad");
     // A word space after a comma between formulas set in one display
     // ("m(0) = 1/5, m(1) = 2/5"): TeX's own space there is a sixth of an em.
-    // Two digits set apart are two numbers: a matrix row's "−1 1" read as
-    // −11 (Springer).
-    else if ((prev?.cls === "punct" && gap > 0.4 * em) || (prev && /^[0-9]$/.test(prev.tex) && /^[0-9]$/.test(a.tex) && gap > 0.2 * em)) out.push("\\ ");
+    // Two operands apart (above): two digits apart are two numbers too, a
+    // matrix row's "−1 1" read as −11 (Springer).
+    else if ((prev?.cls === "punct" && gap > 0.4 * em) || apart) out.push("\\ ");
     if (a.fracPart !== undefined && nesting === 1) {
       if (style.display && a.fracPart < style.size * 0.8) tex = tex.replace(/^\\frac/, "\\tfrac");
       else if (!style.display && a.fracPart >= style.size * 0.9) tex = tex.replace(/^\\frac/, "\\dfrac");
@@ -1139,6 +1190,9 @@ function linearAt(input: Atom[]): string {
     if (mine.length) tex += scripts(mine, last.yb, em);
     out.push(tex);
     prev = { ...last, x1: a.x1, x2: Math.max(last.x2, ...mine.map((s) => s.x2), ...reach.map((s) => s.x2)) };
+    tail = [last, ...mine, ...reach].reduce((t, s) => (s.x2 > t.x2 ? s : t));
+    if (tail === last) tail = prev;
+    afterWord = wordEnds;
   }
   // A script with no base is a glyph the layout could not place: the
   // formula is not read (the check fails it).
