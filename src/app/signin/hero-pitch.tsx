@@ -28,7 +28,7 @@ export type PitchRow = {
   done: boolean;
   /** The closing line: larger, and it underlines itself once it has typed in. */
   close?: boolean;
-  /** The lead line: subheading size, bold, no underline. */
+  /** The lead line: big and bold, just under the hero's second line in size, no underline. */
   lead?: boolean;
 };
 
@@ -116,7 +116,7 @@ export function HeroPitch({ rows, doneLabel }: { rows: PitchRow[]; doneLabel: st
                 r.close
                   ? "grid pt-1 text-lg leading-snug font-semibold text-ink sm:text-xl"
                   : r.lead
-                    ? "grid max-w-[34ch] text-lg leading-snug font-bold text-balance text-ink sm:text-xl"
+                    ? "grid text-[length:clamp(1.15rem,4.4cqw,2rem)] leading-[1.15] font-bold text-balance text-ink"
                     : "grid text-[13.5px] leading-relaxed font-medium text-sand-800 sm:text-[15px]"
               }
             >

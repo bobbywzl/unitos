@@ -9,11 +9,10 @@ const en = {
   heroItems:
     "a video|an audio file|an article|a research paper|a legal document|a PDF assignment",
   heroB: "Put it in Unitos Notebook.",
-  // The pitch, typed out on load (signin/hero-pitch.tsx): the lead line on
-  // what Unitos is, then three rows, each stamped Done (common.done) once it
+  // The pitch, typed out on load (signin/hero-pitch.tsx): the lead line, big
+  // and bold, just under the hero's second line in size, then three rows, each stamped Done (common.done) once it
   // finishes typing, then a closing line that underlines itself.
-  heroPitchLead:
-    "To help you dissect the grueling, complicated, technical content into simple and understandable stuff for you.",
+  heroPitchLead: "Break it all down and see all your progress.",
   heroPitchRow1: "Understand your stuff and break it down fast. Figures, text, audio notes.",
   heroPitchRow2: "Record and organize your thoughts, right next to your work.",
   heroPitchRow3: "Share your thoughts and brainstorm.",
@@ -112,7 +111,7 @@ const zh: Record<keyof typeof en, string> = {
   heroA: "搞不懂的{item}？",
   heroItems: "视频|音频|文章|研究论文|法律文件|PDF 作业",
   heroB: "就用 Unitos Notebook。",
-  heroPitchLead: "帮你把艰涩复杂的技术内容，拆解成简单易懂的内容。",
+  heroPitchLead: "把一切拆解开，看见你的每一步进展。",
   heroPitchRow1: "看懂内容，快速拆解。插图、文字、语音笔记。",
   heroPitchRow2: "把想法记录整理好，就在你的内容旁边。",
   heroPitchRow3: "分享想法，一起头脑风暴。",
