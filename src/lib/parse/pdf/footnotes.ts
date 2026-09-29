@@ -211,6 +211,7 @@ function cutColumn(
   scan: boolean,
   counted: number,
   lead: boolean,
+  titlePage: boolean,
 ): { kept: Line[]; cuts: Cut[] } {
   const left = Math.min(...column.map((l) => l.x));
   const right = Math.max(...column.map((l) => l.xEnd));
@@ -259,7 +260,32 @@ function cutColumn(
     const cuts = [...(top < start ? indentedNotes(column.slice(top, start)) : []), ...group(column.slice(start, end), false)];
     return { kept: [...column.slice(0, top), ...column.slice(end)], cuts };
   }
-  return (scan && cutScanNotes(column, end, continuing, counted)) || { kept: column, cuts: [] };
+  return (titlePage && titleNotes(column, end, bodySize, raised)) || (scan && cutScanNotes(column, end, continuing, counted)) || { kept: column, cuts: [] };
+}
+
+/** The notes a first page sets at a column's foot about the title and its
+    authors, with no mark in the text: amsart's subject classification,
+    keywords, and date (arXiv 2506.08494, 2410.04586: read as paragraphs),
+    and acmart's note on the authors over their contact block, a gap
+    between them (arXiv 2609.29669). The column's last small lines, notes
+    apart by a gap as wide as three of their lines at most, when one opens
+    with a label the page raises or the first reads as such a note. Each
+    labeled line opens a note, and so does a line after a gap. */
+const TITLE_NOTE_RE =
+  /^(?:(?:19|20)\d\d )?Mathematics Subject Classification|^Key ?words(?: and phrases)?\b|^Date:|^Received\b|^(?:This (?:work|research) (?:was|is) )?(?:partially |partly )?(?:supported|funded) by\b/i;
+function titleNotes(column: Line[], end: number, bodySize: number, raised: Set<string>): { kept: Line[]; cuts: Cut[] } | null {
+  let top = end;
+  while (top > 0 && column[top - 1].text.trim() && column[top - 1].size <= bodySize * SMALL && (top === end || column[top - 1].y - column[top].y <= column[top].size * 4)) top--;
+  const area = column.slice(top, end);
+  if (area.length === 0 || (!area.some((l) => raised.has(labelOf(l, false) ?? "")) && !TITLE_NOTE_RE.test(area[0].text))) return null;
+  const cuts: Cut[] = [];
+  area.forEach((line, k) => {
+    const label = labelOf(line, false);
+    const apart = k > 0 && area[k - 1].y - line.y > line.size * 2;
+    if (k === 0 || (label !== null && raised.has(label)) || apart) cuts.push({ label: label !== null && raised.has(label) ? label : "", lines: [line] });
+    else cuts[cuts.length - 1].lines.push(line);
+  });
+  return { kept: [...column.slice(0, top), ...column.slice(end)], cuts };
 }
 
 /** Runs cut to [from, to) and moved by `shift`. */
@@ -448,7 +474,7 @@ export function cutFootnotes(pages: Line[][], rules: Rule[][], bodySize: number,
         endnotes.add(note);
         footnotes.push(note);
       }
-      const cut = cutColumn(head.kept, pageRules, bodySize, raised, continuing, scans[p] === true, counted, continuing || p === 0);
+      const cut = cutColumn(head.kept, pageRules, bodySize, raised, continuing, scans[p] === true, counted, continuing || p === 0, p === 0);
       kept.push(...cut.kept);
       if (scans[p]) counted = cut.cuts.reduce((n, one) => scanNumber(one.label) ?? n, counted);
       for (const one of cut.cuts) {
