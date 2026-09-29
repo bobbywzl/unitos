@@ -6,6 +6,7 @@
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
 import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
+import { isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
 import { mathSpans } from "@/lib/parse/pdf/math/zones";
 import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup, spansFromRuns } from "@/lib/parse/pdf/text";
@@ -618,6 +619,14 @@ export function isProseColumns(lines: Line[], ocr: boolean): boolean {
   return lines.length > 0 && prose * 2 >= lines.length;
 }
 
+// A line that opens with a bullet is a list's item, no cell's wrapped line:
+// a résumé's bullets under each entry's two lines (a title and its dates, a
+// place and its town) ran into the entry's table.
+function bulleted(line: Line): boolean {
+  const marker = readMarker(line);
+  return marker !== null && isGlyphMarker(marker);
+}
+
 // Form lines: every cell a label awaiting its words ("Name:"), a blank to
 // fill ("____"), or boxes to tick, with no rule drawn around them (a ruled
 // form is found by its grid, ruled.ts).
@@ -678,6 +687,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
         continue;
       }
       if (next.size > ctx.bodySize * 1.15) break;
+      if (bulleted(next)) break;
       const columns = clusterColumns(members.map((k) => lines[k]));
       const aligned = isAlignedLine(next, columns);
       const leftOnly = isLeftOnly(next, columns);
@@ -761,12 +771,27 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       i++;
       continue;
     }
+    // A run with no gutter down it is no table: tableFromRun joined all its
+    // lines into one paragraph (a résumé's entries and their bullets). Its
+    // leading lines of cells are one when a gutter runs down them; the
+    // other lines go back to the other readers.
+    const columned = (ks: number[]) => withoutSignColumns(ks.map((k) => lines[k]), columnSeparators(ks.map((k) => lines[k]))).length > 0;
+    if (!columned(members)) {
+      const single = members.findIndex((k) => lines[k].cells.length < 2);
+      const lead = single < 0 ? [] : members.slice(0, single);
+      if (lead.length < 2 || !columned(lead)) {
+        i++;
+        continue;
+      }
+      members.splice(lead.length);
+      j = lead[lead.length - 1] + 1;
+    }
     // Backward: wrapped header lines directly above (at most 3).
     let first = members[0];
     let absorbed = 0;
     while (first > 0 && absorbed < 3) {
       const prev = lines[first - 1];
-      if (prev.cells.length !== 1 || runOf[first - 1] !== -1) break;
+      if (prev.cells.length !== 1 || runOf[first - 1] !== -1 || bulleted(prev)) break;
       if (prev.size > ctx.bodySize * 1.15) break;
       const gap = prev.y - lines[first].y;
       if (gap < 0 || gap > prev.size * ctx.leading * 1.35) break;

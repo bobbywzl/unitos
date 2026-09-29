@@ -272,6 +272,15 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[]): Box
     }
     if (top === null) top = sorted[k].y1;
     bottom = sorted[k + 1].y1;
+    // A line alone at the band's foot, set larger than every other line of
+    // the band, is the heading the rule under it underlines, not a row: a
+    // résumé's "Experience" (12 pt over entries of 10 and 10.9 pt) closed
+    // its Education entries' table.
+    const low = lines[lines.length - 1];
+    if (lines.length >= 2 && low.cells.length === 1 && low.size >= Math.max(...lines.slice(0, -1).map((l) => l.size)) * 1.05) {
+      bottom = low.y + low.size;
+      close();
+    }
   }
   close();
   return regions;

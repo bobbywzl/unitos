@@ -28,7 +28,7 @@ import {
   type CellNotes,
   type Piece,
 } from "@/lib/docs/import-table";
-import type { PageStart, ParsedBlock, StyleSpan, TextFont } from "@/lib/parse/types";
+import type { Indent, PageStart, ParsedBlock, StyleSpan, TextFont } from "@/lib/parse/types";
 import type { Region } from "@/lib/video/types";
 
 // The converter (SPEC.md §29): an import — a PDF, a web page, a Markdown or
@@ -131,8 +131,13 @@ const PARAGRAPH_SPACE_PT = 10;
     text sizes. */
 const SMALL_SIZE = "9pt";
 const DISPLAY_SIZE = "21pt";
-/** One indent step, as the page editor's (components/docs/extensions.ts). */
+/** One indent step, as the page editor's (components/docs/extensions.ts):
+    an indent a parse names but does not measure, and a contents entry's
+    level. */
 const INDENT_PT = 36;
+/** The deepest indent the converter keeps, in points: a page's indent is
+    within its text column. */
+const MAX_INDENT_PT = 432;
 /** The most words one text node may hold (lib/docs/schema.ts richNodeSchema). */
 const MAX_TEXT = 200_000;
 /** The longest equation the rich text keeps as an equation (an attribute's
@@ -147,16 +152,28 @@ const PAGELESS_COLUMN_PX = 600;
 const ROLES = ["kicker", "meta", "label", "display", "quote", "caption", "footnote"] as const;
 type Role = (typeof ROLES)[number];
 
-// A paragraph's indent as the parse measured it (lib/parse/pdf: a class
-// token on its html), as the page editor's indents: one step, half an inch,
-// as Tab and Increase indent move a line. Under a hanging indent the first
-// line stands at the edge and the others a step in, as Docs stores it.
+// A paragraph's indent as the page sets it (ParsedBlock.indent, in points),
+// as the page editor's indents: the lines' left indent and the first line's
+// against it (negative: a hanging indent, the first line out at the edge),
+// as Docs stores them. A parse that names an indent's kind (a class token on
+// its html) without its measure gets one step, half an inch, as Tab and
+// Increase indent move a line. Round 2 drew every indent half an inch: an
+// amsbook paragraph's 5 pt first-line indent drew seven times too deep.
 const INDENT_TOKENS = ["indent-first", "indent-hanging", "indent-block"] as const;
-const INDENTS: Record<(typeof INDENT_TOKENS)[number], Record<string, number>> = {
-  "indent-first": { indentFirstLine: INDENT_PT },
-  "indent-hanging": { indentLeft: INDENT_PT, indentFirstLine: -INDENT_PT },
-  "indent-block": { indentLeft: INDENT_PT },
+const INDENTS: Record<(typeof INDENT_TOKENS)[number], Indent> = {
+  "indent-first": { left: 0, first: INDENT_PT },
+  "indent-hanging": { left: INDENT_PT, first: -INDENT_PT },
+  "indent-block": { left: INDENT_PT, first: 0 },
 };
+
+/** An indent as the page editor's paragraph attributes: the left indent
+    within the text column, the first line never left of the column's edge. */
+function indentAttrs(indent: Indent | undefined): Record<string, number> {
+  if (!indent || !Number.isFinite(indent.left) || !Number.isFinite(indent.first)) return {};
+  const left = Math.min(MAX_INDENT_PT, Math.max(0, Math.round(indent.left * 2) / 2));
+  const first = Math.min(MAX_INDENT_PT - left, Math.max(-left, Math.round(indent.first * 2) / 2));
+  return { ...(left ? { indentLeft: left } : {}), ...(first ? { indentFirstLine: first } : {}) };
+}
 
 function tokensOf(html: string | undefined): string[] {
   const m = /^<[a-z][a-z0-9]*\b[^>]*\bclass="([^"]*)"/i.exec(html ?? "");
@@ -642,7 +659,7 @@ class Converter {
   private quote: RichNode | null = null;
   /** The last list block drawn as lists: its lines, and its nodes from
       out[at], for a list that resumes after it. */
-  private lastList: { lines: ListLine[]; nodes: RichNode[]; at: number } | null = null;
+  private lastList: { lines: ListLine[]; nodes: RichNode[]; at: number; itemSpace: number } | null = null;
   /** The last page whose start is placed, and page starts a block could not
       hold, for the next block. */
   private page = 0;
@@ -994,8 +1011,8 @@ class Converter {
     if (align) attrs.textAlign = align;
     if (role === "meta") attrs.docStyle = "subtitle";
     else if (role !== "kicker" && this.spaceAfter(block) > 0) attrs.spaceAfter = this.spaceAfter(block);
-    const indent = INDENT_TOKENS.find((k) => tokens.includes(k));
-    if (indent) Object.assign(attrs, INDENTS[indent]);
+    const kind = INDENT_TOKENS.find((k) => tokens.includes(k));
+    Object.assign(attrs, indentAttrs(block.indent ?? (kind ? INDENTS[kind] : undefined)));
     const size =
       role === "kicker" || role === "label" || role === "caption" || role === "footnote" ? SMALL_SIZE : role === "display" ? DISPLAY_SIZE : null;
     const extra: RichMark[] = size ? [{ type: "textStyle", attrs: { fontSize: size } }] : [];
@@ -1044,17 +1061,43 @@ class Converter {
     levelsOfLines(lines, this.printed);
     if (contents || lines.some((l) => l.type === null)) {
       // A contents list, or lines the page editor's lists cannot draw:
-      // a paragraph per line, the words as they stand, indented as printed.
-      const nodes = lines.map((l) => paragraphNode(inline(l.whole), l.indent > 0 ? { indentLeft: l.indent * INDENT_PT } : {}));
+      // a paragraph per line, the words as they stand, indented as printed
+      // (a contents entry a step a level, as its links' depth reads).
+      const printedAt = (l: ListLine) => (contents ? undefined : block.listIndents?.[Math.min(l.indent, block.listIndents.length - 1)]);
+      const nodes = lines.map((l) =>
+        paragraphNode(inline(l.whole), indentAttrs(printedAt(l) ?? (l.indent > 0 ? { left: l.indent * INDENT_PT, first: 0 } : undefined))),
+      );
+      this.lineLook(nodes, block);
       this.spaceLast(nodes, block);
       this.place(index, nodes);
       this.lastList = null;
       return;
     }
     const nodes = this.lists(lines);
+    this.lineLook(lines.flatMap((l) => (l.node ? [l.node] : [])), block);
     this.spaceLast(nodes, block);
     this.place(index, nodes);
-    this.lastList = { lines, nodes, at: this.out.length - nodes.length };
+    this.lastList = { lines, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block) };
+  }
+
+  /** The space between a list's items, in points (ParsedBlock.itemSpace). */
+  private itemSpace(block: ParsedBlock): number {
+    const space = block.itemSpace ?? 0;
+    return Number.isFinite(space) && space > 0 ? Math.min(72, Math.round(space * 2) / 2) : 0;
+  }
+
+  /** A list's lines as the page sets them: the list's alignment (a Word
+      file's and amsbook's items are justified, as their paragraphs are),
+      and the space between two items; the last line takes the block's
+      space after (spaceLast). */
+  private lineLook(paragraphs: RichNode[], block: ParsedBlock) {
+    const align = alignOf(tokensOf(block.html));
+    const space = this.itemSpace(block);
+    for (const node of paragraphs) {
+      node.attrs ??= {};
+      if (align) node.attrs.textAlign = align;
+      if (space) node.attrs.spaceAfter = space;
+    }
   }
 
   /** The lines as lists, each outermost list in its format. */
@@ -1088,11 +1131,16 @@ class Converter {
     const all = [...last.lines, ...lines];
     levelsOfLines(all, this.printed);
     if (lines.some((l) => l.type === null)) return false;
-    // The list's last line is no longer its last.
-    if (tail.node?.attrs) delete tail.node.attrs.spaceAfter;
+    // The list's last line is no longer its last: it takes the space
+    // between the items.
+    if (tail.node?.attrs) {
+      if (last.itemSpace) tail.node.attrs.spaceAfter = last.itemSpace;
+      else delete tail.node.attrs.spaceAfter;
+    }
     tail.more = [...(tail.more ?? []), ...between];
     this.out.splice(last.at);
     const nodes = this.lists(all);
+    this.lineLook(lines.flatMap((l) => (l.node ? [l.node] : [])), block);
     this.spaceLast(nodes, block);
     // A link to the resumed block lands on its first line.
     const first = lines[0].node;
@@ -1102,7 +1150,7 @@ class Converter {
       if (typeof first.attrs.blockId === "string") this.firstIds.set(index, first.attrs.blockId);
     }
     for (const node of nodes) this.push(node);
-    this.lastList = { lines: all, nodes, at: this.out.length - nodes.length };
+    this.lastList = { lines: all, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block) };
     return true;
   }
 

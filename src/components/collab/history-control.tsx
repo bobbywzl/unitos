@@ -13,6 +13,7 @@ const KIND_KEY: Record<HistoryEntry["kind"], TKey> = {
   TEXT_EDIT: "panes.historyTextEdit",
   BLOCK_ADD: "panes.historyBlockAdd",
   BLOCK_REMOVE: "panes.historyBlockRemove",
+  BLOCK_MOVE: "panes.historyBlockMove",
   FORMAT: "panes.historyFormat",
   STYLE: "panes.historyStyle",
   LINK_ADD: "panes.historyLinkAdd",

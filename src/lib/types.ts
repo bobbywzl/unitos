@@ -272,6 +272,7 @@ export type HistoryEntry = {
     | "LINK_REMOVE"
     | "BLOCK_ADD"
     | "BLOCK_REMOVE"
+    | "BLOCK_MOVE"
     | "FORMAT"
     | "STYLE"
     | "NOTE_REMOVE"
@@ -465,7 +466,7 @@ export type AssistantPlan = {
     re-parse of an import, one row for the whole document (SPEC.md §29). */
 export type EditItem = {
   id: string;
-  kind: "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE" | "BLOCK_ADD" | "BLOCK_REMOVE" | "FORMAT" | "STYLE" | "REPARSE";
+  kind: "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE" | "BLOCK_ADD" | "BLOCK_REMOVE" | "BLOCK_MOVE" | "FORMAT" | "STYLE" | "REPARSE";
   blockId: string | null;
   before: string | null;
   after: string | null;
@@ -481,6 +482,7 @@ export type EditItem = {
     style?: string; // STYLE rows: "bold" | "italic"
     on?: boolean; // STYLE rows: applied or removed
     restoredFrom?: string; // BLOCK_ADD rows that restore a removed paragraph
+    movedAfter?: string | null; // BLOCK_MOVE rows: the words of the block it now follows; null = the document's start
   } | null;
   createdAt: string;
 };

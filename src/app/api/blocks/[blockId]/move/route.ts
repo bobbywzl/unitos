@@ -15,8 +15,9 @@ const moveSchema = z.object({
 
 // Move a block after another block, or to the document's start (SPEC.md §7:
 // the assistant's move_block). The blocks between shift by one, and the
-// links that point at a block by its order follow it. The answer names the
-// block it stood after before, so Undo moves it back. Only where a move
+// links that point at a block by its order follow it; a BLOCK_MOVE edit
+// records it. The answer names the block it stood after before, so Undo
+// moves it back. Only where a move
 // cannot corrupt the document (lib/block-takes.ts); a document with rich
 // text moves its blocks in the page editor.
 export async function POST(req: Request, ctx: { params: Promise<{ blockId: string }> }) {
@@ -25,14 +26,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
   const { data, error } = await parseBody(req, moveSchema);
   if (error) return error;
 
-  const block = await db.block.findUnique({ where: { id: blockId }, select: { id: true, documentId: true, order: true, type: true } });
+  const block = await db.block.findUnique({ where: { id: blockId }, select: { id: true, documentId: true, order: true, type: true, text: true } });
   if (!block) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
   const access = await documentAccess(block.documentId, "editor");
   if (access instanceof NextResponse) return access;
   const after =
     data.afterBlockId === null
       ? null
-      : await db.block.findUnique({ where: { id: data.afterBlockId }, select: { id: true, documentId: true, order: true, type: true } });
+      : await db.block.findUnique({ where: { id: data.afterBlockId }, select: { id: true, documentId: true, order: true, type: true, text: true } });
   if (data.afterBlockId !== null && (!after || after.documentId !== block.documentId)) {
     return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
   }
@@ -70,6 +71,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
       }
       await tx.block.update({ where: { id: block.id }, data: { order: to } });
       await followOrders(tx, block.documentId, moved);
+      // The Edits tab and History show the move: the words moved, and the
+      // words of the block they now follow (null: the document's start).
+      await tx.blockEdit.create({
+        data: {
+          documentId: block.documentId,
+          blockId: block.id,
+          kind: "BLOCK_MOVE",
+          after: block.text,
+          meta: { quotedText: block.text.slice(0, 300), movedAfter: after ? after.text.slice(0, 300) : null },
+          userId: access.user.id,
+        },
+      });
     });
     await bumpDocument(block.documentId);
   }

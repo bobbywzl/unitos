@@ -101,7 +101,9 @@ export function actPrompt(ctx: ActCtx): string {
         ? [
             "10. The document's words and styles cannot be changed: a project of another account holds the document too. A command that asks to change them: say so in reply, in one sentence, and return no action for the change.",
           ]
-        : []),
+        : [
+            "10. A change to the words of more than five blocks (the spelling or grammar of a long selection or of the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. Its blockIds: the selected blocks when the command concerns the selection. reply: one sentence on what will change: the plan carries the edits.",
+          ]),
     "",
     ...(ctx.history.length > 0
       ? [

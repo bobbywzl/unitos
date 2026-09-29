@@ -1461,12 +1461,20 @@ async function checkFixture(f: Fixture): Promise<Report> {
       `${eqWant.length} in the parse (${regions} with a region), ${eqHave.length} equations; ${report.figures} figure objects and ${out.figures.length} media for ${parseFigures.length} parse figures${lostEq.length ? `; lost ${lostEq.length}: ${lostEq.slice(0, 2).map((x) => clip(x, 40)).join(" | ")}` : ""}`,
     );
   }
-  // A paragraph's indent (a class token of the parse) is the page editor's
-  // indents, half an inch a step: [indentLeft, indentFirstLine].
+  // A paragraph's indent is the page editor's indents: the page's measure
+  // (ParsedBlock.indent, in points), else half an inch a step of the kind
+  // its class token names: [indentLeft, indentFirstLine].
   const INDENT_ATTRS: Record<string, [number | null, number | null]> = { "indent-first": [null, 36], "indent-hanging": [36, -36], "indent-block": [36, null] };
+  const measured = (b: Block): [number | null, number | null] | null => {
+    if (!b.indent) return null;
+    const left = Math.min(432, Math.max(0, Math.round(b.indent.left * 2) / 2));
+    const first = Math.min(432 - left, Math.max(-left, Math.round(b.indent.first * 2) / 2));
+    return [left || null, first || null];
+  };
   const indented = f.blocks.flatMap((b) => {
     const token = b.type === "PARAGRAPH" ? tokensOf(b).find((k) => k in INDENT_ATTRS) : undefined;
-    return token ? [{ b, token }] : [];
+    const want = b.type === "PARAGRAPH" ? (measured(b) ?? (token ? INDENT_ATTRS[token] : null)) : null;
+    return want && (want[0] !== null || want[1] !== null) ? [{ b, token: token ?? "indent", want }] : [];
   });
   if (indented.length) {
     const byWords = new Map<string, RichNode>();
@@ -1474,9 +1482,9 @@ async function checkFixture(f: Fixture): Promise<Report> {
       const words = n.type === "paragraph" ? norm(inlineText(n)) : "";
       if (words && !byWords.has(words)) byWords.set(words, n);
     });
-    const wrong = indented.filter(({ b, token }) => {
+    const wrong = indented.filter(({ b, want }) => {
       const n = byWords.get(norm(indexedText(b)));
-      const [left, first] = INDENT_ATTRS[token];
+      const [left, first] = want;
       return !n || (n.attrs?.indentLeft ?? null) !== left || (n.attrs?.indentFirstLine ?? null) !== first;
     });
     check(

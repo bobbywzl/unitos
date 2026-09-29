@@ -51,8 +51,9 @@ const isLetter = (g: Glyph) => LETTER_RE.test(g.unicode);
 const MARKER_RE = /^(\((?:[a-zA-Z]|[ivxlc]{1,5}|\d{1,3})\)|(?:[a-zA-Z]|[ivxlc]{1,5}|\d{1,3})[.)])$/;
 const gapOf = (a: Glyph, b: Glyph) => b.x - (a.x + a.w);
 
-/** The formulas among a cell's glyphs (in x order), as glyph runs. */
-function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
+/** The formulas among a cell's glyphs (in x order), as glyph runs. start:
+    the cell's first glyph, where a list item's marker stands. */
+function zonesOf(glyphs: Glyph[], size: number, start: Glyph | undefined): Glyph[][] {
   const zones: Glyph[][] = [];
   let cur: Glyph[] = [];
   const kinds = glyphs.map((g) => kind(g, size));
@@ -81,7 +82,7 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
     }
     // A list item's marker at the cell's start ("(a)", "(ii)", "3.") is the
     // item's, not its first formula's ("(a) x ≥ 0" read as one formula).
-    if (z[0] === glyphs[0]) {
+    if (z[0] === start) {
       for (let n = 2; n < Math.min(7, z.length); n++) {
         const head = z.slice(0, n).map((g) => g.unicode).join("");
         if (MARKER_RE.test(head) && gapOf(z[n - 1], z[n]) > 0.15 * size) {
@@ -182,6 +183,13 @@ function charSpans(item: Item): [number, number][] {
   return spans;
 }
 
+// An item's string past its last glyph: words the drawing set in another
+// font that pdf.js ran into the item (none for most items).
+function unread(item: Item, spans: [number, number][]): string {
+  return spans.length > 0 ? item.str.slice(spans[spans.length - 1][1]) : item.str;
+}
+const WORD_RE = /\p{L}{2}/u;
+
 // A part of an item: its glyphs [from, to) and their string. The spaces
 // after a part stay with it, so the line puts exactly one space between it
 // and the next part.
@@ -231,9 +239,26 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
       .filter((g) => g.family !== null || g.unicode.trim() !== "")
       .sort((a, b) => a.x - b.x || b.y - a.y);
     const zoneOf = new Map<Glyph, MathZone>();
-    // An item with no glyphs is text a formula cannot run through.
-    const breaks = cellItems.filter((it) => !it.glyphs?.length).map((it) => it.x);
-    for (const z of zonesOf(glyphs, size)) {
+    // An item with no glyphs is text a formula cannot run through. Words no
+    // glyph of the items reads end a formula there, as a word zonesOf sees
+    // does: an item's words past its last glyph (pdf.js ran a math ")" and
+    // " are connected. Notice that" set in another font into one item, and
+    // the formulas on either side read as one, arXiv 2506.06752 p. 3), and
+    // an item of words with no glyphs.
+    const breaks: number[] = [];
+    const cuts: number[] = [];
+    for (const it of cellItems) {
+      const gl = it.glyphs ?? [];
+      if (gl.length === 0) (WORD_RE.test(it.str) ? cuts : breaks).push(it.x);
+      else if (WORD_RE.test(unread(it, charSpans(it)))) cuts.push(gl[gl.length - 1].x + gl[gl.length - 1].w);
+    }
+    const pieces: Glyph[][] = [[]];
+    for (const g of glyphs) {
+      const k = cuts.filter((x) => x <= g.x).length;
+      while (pieces.length <= k) pieces.push([]);
+      pieces[k].push(g);
+    }
+    for (const z of pieces.flatMap((piece) => zonesOf(piece, size, glyphs[0]))) {
       const x1 = z[0].x;
       const x2 = z[z.length - 1].x;
       if (breaks.some((x) => x > x1 && x < x2)) continue;
@@ -261,12 +286,10 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
         out.push(part(item, spans, from, k, zones[from]));
         from = k;
       }
-      // Words past the item's last glyph, which the drawing sets in another
-      // font (pdf.js ran a math ")" and " to instance" into one item, arXiv
-      // 2506.06752 p. 5), are no part of the formula that glyph ends: they
-      // leave it as text a formula cannot run through.
+      // The words past the item's last glyph are no part of the formula that
+      // glyph ends: an item of their own, with no glyphs.
       const last = out[out.length - 1];
-      const rest = item.str.slice(spans[spans.length - 1][1]);
+      const rest = unread(item, spans);
       if (last.zone && rest.trim() !== "") {
         const tail = glyphs[glyphs.length - 1];
         last.str = last.str.slice(0, last.str.length - rest.length);
@@ -290,11 +313,25 @@ function textSize(items: Item[]): number {
 
 /** The glyphs no text item reads: an accent placed on its letter, the
     second half of a composite (↦'s arrow), a code the text layer drops. A
-    formula's layout needs them. */
-export function orphanGlyphs(lines: Line[], drawing: PageDrawing): Glyph[] {
+    formula's layout needs them. inline: less the glyphs under an item's
+    words that no glyph of it reads (unread), which are those words: an
+    inline formula beside them took them into its LaTeX as \text (arXiv
+    2506.06752 p. 3). A display's line holds its words: they are its own. */
+export function orphanGlyphs(lines: Line[], drawing: PageDrawing, inline: boolean): Glyph[] {
   const read = new Set<Glyph>();
-  for (const line of lines) for (const item of line.items) for (const g of item.glyphs ?? []) read.add(g);
-  return drawing.glyphs.filter((g) => !read.has(g) && g.family !== null);
+  const worded: { x1: number; x2: number; y: number; size: number }[] = [];
+  for (const line of lines) {
+    for (const item of line.items) {
+      const glyphs = item.glyphs ?? [];
+      for (const g of glyphs) read.add(g);
+      if (!inline) continue;
+      const tail = glyphs[glyphs.length - 1];
+      const x1 = tail ? tail.x + tail.w : item.x;
+      if (item.x + item.w > x1 && unread(item, charSpans(item)).trim() !== "") worded.push({ x1, x2: item.x + item.w, y: item.y, size: item.size });
+    }
+  }
+  const words = (g: Glyph) => worded.some((w) => g.x >= w.x1 - 0.5 && g.x < w.x2 && Math.abs(g.y - w.y) < w.size * 0.5);
+  return drawing.glyphs.filter((g) => !read.has(g) && g.family !== null && !words(g));
 }
 
 /** Each zone on the page's lines gets its LaTeX, checked against its
@@ -309,7 +346,7 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
       const zone = item.zone;
       if (!zone || seen.has(zone)) continue;
       seen.add(zone);
-      orphans ??= orphanGlyphs(lines, drawing);
+      orphans ??= orphanGlyphs(lines, drawing, true);
       resolveZone(zone, drawing, orphans);
     }
   }

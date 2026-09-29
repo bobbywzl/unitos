@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { api } from "@/lib/api";
-import { blockKind, type BlockKind } from "@/lib/block-kind";
+import { formatKind, type BlockKind, type FormatKind } from "@/lib/block-kind";
 import { definable, defineKey } from "@/lib/define";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
@@ -6272,7 +6272,7 @@ export function ReaderInteractions({
             // A list's markers change with its kind (the route writes them),
             // so Undo sends the text back with the kind.
             const block = current(action.blockId);
-            const before = block ? blockKind(block.type, block.html, block.text) : null;
+            const before = block ? formatKind(block.type, block.html, block.text) : null;
             const saved = await api<BlockData>(`/api/blocks/${action.blockId}`, "PATCH", { kind: action.kind });
             changed.set(action.blockId, saved);
             if (block && before !== null && before !== action.kind) {
@@ -6529,11 +6529,7 @@ export function ReaderInteractions({
     setEditMode(!editMode);
   }
 
-  async function formatBlock(
-    blockId: string,
-    kind: "paragraph" | "h1" | "h2" | "h3" | "list" | "numbered",
-    text?: string,
-  ) {
+  async function formatBlock(blockId: string, kind: FormatKind, text?: string) {
     const was = blocksRef.current.find((b) => b.id === blockId);
     const wasKind = blockFormatKind(was);
     const wasText = was?.text;
@@ -6701,14 +6697,9 @@ export function ReaderInteractions({
   }
 
 /** The format a stored block is in, for a step that puts it back. */
-function blockFormatKind(
-  block: { type: string; html: string | null; text: string } | undefined,
-): "paragraph" | "h1" | "h2" | "h3" | "list" | "numbered" | null {
-  if (!block) return null;
-  if (block.type === "LIST") return /^\s*\d{1,3}[.)]\s/.test(block.text) ? "numbered" : "list";
-  if (block.type !== "HEADING") return "paragraph";
-  const level = /^<h([1-3])/.exec(block.html ?? "")?.[1] ?? "2";
-  return `h${level}` as "h1" | "h2" | "h3";
+/** A block's format as Undo restores it: a code block is code again. */
+function blockFormatKind(block: { type: string; html: string | null; text: string } | undefined): FormatKind | null {
+  return block ? formatKind(block.type, block.html, block.text) : null;
 }
 
   // Merge anchor, extraction, term, and link layers per block.

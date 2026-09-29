@@ -10,6 +10,14 @@ export function blockKind(type: string, html: string | null, text: string): Bloc
   return m ? (`h${m[1]}` as BlockKind) : "h2";
 }
 
+/** A block's format as the PATCH route restores it: a text block's kind,
+    or code. Undo of a code block's format change sends "code". */
+export type FormatKind = BlockKind | "code";
+
+export function formatKind(type: string, html: string | null, text: string): FormatKind {
+  return type === "CODE" ? "code" : blockKind(type, html, text);
+}
+
 // List markers live in a LIST block's text ("- " / "N. ", two spaces per
 // level of nesting — the parser's convention). A conversion rewrites them,
 // as the reader's edit toolbar does (components/reader/reader.tsx).

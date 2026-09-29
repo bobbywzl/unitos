@@ -437,10 +437,14 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
   // quotation (an opinion quoting a statute read as a lone list item).
   const above = lines[i - 1];
   const quoted = run.length >= 2 && (/^[“"‘]/.test(items[0].text) || (above !== undefined && /:$/.test(above.text.trim())));
+  // Set in as the page sets it, where no list claims it ("Its Manager" under
+  // a signature's company line, the legal packet p. 7).
+  const { tokens, indent } = quoted ? { tokens: ["quote"], indent: undefined } : layout(lines, i, j, ctx, items[0].text);
   segments.push({
     type: "PARAGRAPH",
     text: items[0].text,
-    ...(quoted ? { html: '<p class="quote"></p>' } : {}),
+    ...(tokens.length > 0 ? { html: `<p class="${tokens.join(" ")}"></p>` } : {}),
+    ...(indent ? { indent } : {}),
     page: line.page,
     runs: items[0].runs,
     listItem: !quoted && run.length <= 6,

@@ -52,6 +52,10 @@ const en = {
   kindLinkRemove: "Link removed",
   kindBlockAdd: "Paragraph added",
   kindBlockRemove: "Paragraph removed",
+  kindBlockMove: "Paragraph moved",
+  // A move's place: the words of the block it now follows.
+  movedAfter: "Now after “{text}”",
+  movedToStart: "Now at the document's start",
   kindFormat: "Format",
   kindStyle: "Style",
   // A re-parse of an import (SPEC.md §29): one row for the whole document.
@@ -112,6 +116,7 @@ const en = {
   formatH3: "h3",
   formatList: "list",
   formatNumbered: "numbered",
+  formatCode: "code",
   documentFallback: "document",
   // Markdown block chips
   jumpToBlock: "Jump to this block in the document",
@@ -161,6 +166,9 @@ const zh: Record<keyof typeof en, string> = {
   kindLinkRemove: "已移除链接",
   kindBlockAdd: "已添加段落",
   kindBlockRemove: "已移除段落",
+  kindBlockMove: "已移动段落",
+  movedAfter: "现在位于“{text}”之后",
+  movedToStart: "现在位于文档开头",
   kindFormat: "格式",
   kindStyle: "样式",
   kindReparse: "重新解析",
@@ -214,6 +222,7 @@ const zh: Record<keyof typeof en, string> = {
   formatH3: "三级标题",
   formatList: "无序列表",
   formatNumbered: "有序列表",
+  formatCode: "代码",
   documentFallback: "文档",
   jumpToBlock: "跳转到文档中的此块",
 };

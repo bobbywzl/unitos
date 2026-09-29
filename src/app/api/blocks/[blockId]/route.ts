@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
-import { blockKind, stripListMarkers, withListMarkers, type BlockKind } from "@/lib/block-kind";
+import { formatKind, stripListMarkers, withListMarkers, type FormatKind } from "@/lib/block-kind";
 import { blockTakes, documentShape } from "@/lib/block-takes";
 import { diffSegments, remapAnchor, remapRange } from "@/lib/anchors/remap";
 import { bumpDocument, documentAccess } from "@/lib/collab";
@@ -14,7 +14,8 @@ import { parseBody } from "@/lib/validate";
 const patchSchema = z
   .object({
     text: z.string().max(50_000).optional(),
-    kind: z.enum(["paragraph", "h1", "h2", "h3", "list", "numbered"]).optional(),
+    // code: a code block again (Undo of a code block's format change).
+    kind: z.enum(["paragraph", "h1", "h2", "h3", "list", "numbered", "code"]).optional(),
   })
   .refine((d) => d.text !== undefined || d.kind !== undefined, {
     message: "text or kind is required",
@@ -22,7 +23,7 @@ const patchSchema = z
 
 const KIND_TO_BLOCK: Record<
   string,
-  { type: "PARAGRAPH" | "HEADING" | "LIST"; html: string | null }
+  { type: "PARAGRAPH" | "HEADING" | "LIST" | "CODE"; html: string | null }
 > = {
   paragraph: { type: "PARAGRAPH", html: null },
   h1: { type: "HEADING", html: "<h1>" },
@@ -31,13 +32,14 @@ const KIND_TO_BLOCK: Record<
   // Both list kinds store as LIST; the numbering lives in the text markers.
   list: { type: "LIST", html: null },
   numbered: { type: "LIST", html: null },
+  code: { type: "CODE", html: null },
 };
 
 type StyleSpan = { start: number; end: number; style: string; quotedText: string };
 
 /** A list conversion's text, as the reader's edit toolbar writes it: into a
     list, every line takes its marker; out of one, the markers go. */
-function convertedText(text: string, from: BlockKind, to: BlockKind): string {
+function convertedText(text: string, from: FormatKind, to: FormatKind): string {
   if (to === "list" || to === "numbered") return withListMarkers(text, to);
   return from === "list" || from === "numbered" ? stripListMarkers(text) : text;
 }
@@ -65,7 +67,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
     const result = await editRichText(block.documentId, access.user.id, (doc) => {
       let next: typeof doc | null = doc;
       if (data.text !== undefined) next = replaceBlockText(next, blockId, data.text);
-      if (next && data.kind !== undefined) next = setBlockKind(next, blockId, data.kind) ?? next;
+      if (next && data.kind !== undefined && data.kind !== "code") next = setBlockKind(next, blockId, data.kind) ?? next;
       return next;
     });
     if (!result.ok) {
@@ -75,7 +77,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   }
 
   const target = data.kind !== undefined ? KIND_TO_BLOCK[data.kind] : null;
-  const fromKind = blockKind(block.type, block.html, block.text);
+  const fromKind = formatKind(block.type, block.html, block.text);
   const kindChanges = data.kind !== undefined && fromKind !== data.kind;
   // Only an edit that cannot corrupt the document (lib/block-takes.ts): a
   // page, a video's player, or a sheet's name keeps its words, and a page,

@@ -125,7 +125,7 @@ function actLines(act: PageActions): string[] {
     `Other attached documents (id — title):\n${act.otherDocuments.length > 0 ? act.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
     ...(act.caretBlockId ? [`The caret stands in [block ${act.caretBlockId}]. "Here" means right after it.`] : []),
     "Action types:",
-    ...actionLines(act.edits ?? "blocks", true),
+    ...actionLines(act.edits ?? "blocks"),
     "Rules for actions:",
     "1. A message that asks for a change to the document or the notes: write the answer, then end with a fenced block whose info string is actions, holding a JSON array of the actions, one action too. Nothing after the block. To reorganize, format, restructure, rewrite, fix, shorten, or translate the open document is a change to it, and so is a change to \"my notes\" or \"these notes\" when the open document holds the reader's own notes.",
     "2. A message that asks for analysis, an answer, or a summary, and no change: no block.",

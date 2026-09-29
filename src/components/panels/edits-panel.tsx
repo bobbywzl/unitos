@@ -17,6 +17,7 @@ const KIND_KEY: Record<EditItem["kind"], TKey> = {
   LINK_REMOVE: "panels.kindLinkRemove",
   BLOCK_ADD: "panels.kindBlockAdd",
   BLOCK_REMOVE: "panels.kindBlockRemove",
+  BLOCK_MOVE: "panels.kindBlockMove",
   FORMAT: "panels.kindFormat",
   STYLE: "panels.kindStyle",
   REPARSE: "panels.kindReparse",
@@ -31,6 +32,7 @@ const FORMAT_KEY: Record<string, TKey> = {
   h3: "panels.formatH3",
   list: "panels.formatList",
   numbered: "panels.formatNumbered",
+  code: "panels.formatCode",
 };
 const STYLE_KEY: Record<string, TKey> = {
   bold: "panels.styleBold",
@@ -214,6 +216,15 @@ function EditCard({
             text: edit.meta?.quotedText ?? "",
           })}
         </p>
+      ) : edit.kind === "BLOCK_MOVE" ? (
+        <div className="mt-2 flex flex-col gap-1">
+          <p className="line-clamp-3 text-[13px]">{edit.after}</p>
+          <p className="line-clamp-2 text-[12px] text-sand-600">
+            {edit.meta?.movedAfter
+              ? t("panels.movedAfter", { text: edit.meta.movedAfter })
+              : t("panels.movedToStart")}
+          </p>
+        </div>
       ) : edit.kind === "BLOCK_ADD" || edit.kind === "BLOCK_REMOVE" ? (
         <div className="mt-2 flex flex-col gap-1.5">
           <p

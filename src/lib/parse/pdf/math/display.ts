@@ -307,7 +307,7 @@ function joinInlineRows(lines: Line[], hosts: (Line | null)[], ctx: PageContext)
     if (host) rowsOf.set(host, [...(rowsOf.get(host) ?? []), ...parts(l)]);
   });
   if (rowsOf.size === 0) return [...lines];
-  const orphans = orphanGlyphs(lines, ctx.drawing);
+  const orphans = orphanGlyphs(lines, ctx.drawing, true);
   const joined = new Map<Line, Line>();
   const kept = new Set<Line>();
   for (const [host, rows] of rowsOf) {
@@ -699,13 +699,16 @@ function isEquationShaped(s: Segment, ctx: PageContext): boolean {
 // item reads (a placed accent, a composite's second half: the page's
 // orphans) inside its box, less a label at either end a quad or more apart
 // (its \tag, or \tag* for a proof's end mark). null when an item holds text
-// the drawing has no glyph for (the check could not see it).
+// the drawing has no glyph for (the check could not see it). An item of
+// words pdf.js ran into an item of another font has no glyphs of its own
+// (zones.ts unread): the orphans under it are its words.
 function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; label: string | null; labelGlyphs: Glyph[] } | null {
-  if (line.items.some((i) => !i.glyphs?.length)) return null;
   const top = line.yMax + line.size * 1.2;
   const bottom = line.yMin - line.size * 0.6;
   const orphans = pageOrphans.filter((g) => g.x + g.w / 2 > line.x && g.x + g.w / 2 < line.xEnd && g.y >= bottom && g.y <= top);
-  const glyphs = [...line.items.flatMap((i) => i.glyphs!), ...orphans].sort((a, b) => a.x - b.x);
+  const drawn = (i: Item) => orphans.filter((g) => g.x >= i.x - 0.5 && g.x < i.x + i.w && Math.abs(g.y - i.y) < i.size * 0.5).length >= i.str.replace(/\s/g, "").length;
+  if (line.items.some((i) => !i.glyphs?.length && !drawn(i))) return null;
+  const glyphs = [...line.items.flatMap((i) => i.glyphs ?? []), ...orphans].sort((a, b) => a.x - b.x);
   const size = Math.max(...glyphs.map((g) => g.size));
   // A label: the glyphs at an end that read "(…)", a quad or more from the rest.
   const labelAt = (from: number, dir: 1 | -1): { glyphs: Glyph[]; text: string } | null => {
@@ -766,6 +769,7 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
   );
   try {
     const { latex, check, atoms } = layoutLatex(glyphs, rules, { display: true, size }, paths);
+    if (process.env.R3M) console.error(`[r3m-eq] ok=${check.ok} ${JSON.stringify(glyphs.map((g) => g.unicode).join(""))} latex=${latex} missing=${check.missing.join(" ")} extra=${check.extra.join(" ")}`);
     // A display cut in two (its operators and an opening bracket on one line,
     // the rest on the next) passes the check on what it has: its brackets
     // do not close.
@@ -810,14 +814,26 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
       g.x + g.w / 2 < box.x2 &&
       g.y > box.y1 - size &&
       g.y < box.y2 + size;
+    // So is a glyph under or over one of its big operators, where a limit
+    // stands: a limit on a line of its own that the display's lines left out
+    // (its words set in a text italic, "g′ ∈ fullS(g)") passed with its
+    // operators bare, arXiv 2506.06752 (10).
+    const ops = atoms.filter((a) => a.cls === "op" && (a.entry?.display || hangingFamily(a.fam)));
+    const limit = (g: Glyph) =>
+      g.size < size * 0.85 &&
+      ops.some((op) => {
+        const cx = g.x + g.w / 2;
+        return cx > op.x1 - size * 0.2 && cx < op.x2 + size * 0.2 && ((g.y < op.bottom && g.y > op.bottom - size * 0.9) || (g.y > op.top && g.y < op.top + size * 0.45));
+      });
     const stray = ctx.drawing.glyphs.some((g) => {
       if (own.has(g) || (g.family === null && g.unicode.trim() === "")) return false;
-      if (past(g) || beyond(g) || brace(g)) return true;
+      if (past(g) || beyond(g) || brace(g) || limit(g)) return true;
       if (labels.some((b) => g.x + g.w / 2 > b.x1 && g.x + g.w / 2 < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
       if (g.x + g.w / 2 <= box.x1 || g.x + g.w / 2 >= box.x2) return false;
       const hangs = g.family === null && !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]$/u.test(g.unicode);
       return g.y > box.y1 && g.y < box.y2 + (hangs ? g.size : 0);
     });
+    if (process.env.R3M) console.error(`[r3m-eq-stray] ${stray} ${latex}`);
     if (stray) return null;
     const pad = size * 0.15;
     box = { x1: box.x1 - pad, y1: box.y1 - pad, x2: box.x2 + pad, y2: box.y2 + pad };
@@ -914,7 +930,7 @@ export function displayEquations(
     const line = tex && !missed ? displayOf(segments[k]) : undefined;
     if (line) {
       used.add(line);
-      orphans ??= orphanGlyphs(lines, ctx.drawing);
+      orphans ??= orphanGlyphs(lines, ctx.drawing, false);
       equation = equationOf(line, orphans, ctx);
     } else if (missed ? !isMissed(segments[k]) : tex || !isMathSegment(segments[k], ctx)) {
       out.push(segments[k]);

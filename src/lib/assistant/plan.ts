@@ -203,12 +203,9 @@ const fitsDocument = (type: RawAction["type"], edits: DocumentEdits): boolean =>
 
 /** The action types as the prompts list them, one line per type: on a
     document with rich text, suggest in place of the block actions; on a
-    document that takes no edits, neither. revise only where the route runs
-    it: the sidebar assistant (`sidebar`). */
-export function actionLines(edits: DocumentEdits, sidebar = false): string[] {
-  return (Object.keys(ACTION_LINES) as RawAction["type"][])
-    .filter((type) => fitsDocument(type, edits) && (sidebar || type !== "revise"))
-    .map((type) => ACTION_LINES[type]);
+    document that takes no edits, neither. */
+export function actionLines(edits: DocumentEdits): string[] {
+  return (Object.keys(ACTION_LINES) as RawAction["type"][]).filter((type) => fitsDocument(type, edits)).map((type) => ACTION_LINES[type]);
 }
 
 export function buildAnchor(blockText: string, quoteText: string, blockId: string): AssistantAnchor | null {

@@ -647,7 +647,10 @@ export function itemGlyphs(items: TextOrigin[], glyphs: Glyph[]): (Glyph[] | und
     const end = item.x + item.w + shift[n] + 0.01;
     for (let i = start + 1; i < glyphs.length; i++) {
       const g = glyphs[i];
-      if (g.font !== item.font || taken.has(i) || g.x > end || Math.abs(g.y - item.y) > item.size) break;
+      // pdf.js runs two fonts of one embedded file into one item (a T1 and
+      // an OT1 LMRoman10-Regular: "ExactlyOne(mp", arXiv 2506.06752 p. 6):
+      // the glyphs of either are the item's.
+      if ((g.font !== item.font && g.base !== glyphs[start].base) || taken.has(i) || g.x > end || Math.abs(g.y - item.y) > item.size) break;
       if (g.family === null && g.unicode.trim() === "") continue;
       run.push(g);
     }

@@ -6,6 +6,7 @@
 // column of text is a column of its own, and its place in the order is where
 // its figure goes.
 
+import { median } from "@/lib/parse/pdf/geometry";
 import { buildLines } from "@/lib/parse/pdf/lines";
 import type { Box, Item, Line } from "@/lib/parse/pdf/types";
 
@@ -322,7 +323,7 @@ function stacked(band: Band, items: Item[], graphics: Placed[], kind?: "blocks")
 function isBlocks(band: Band, page: number): boolean {
   const { left, right } = band;
   if (left.items.length === 0 || right.items.length === 0 || [...left.items, ...right.items].some((i) => i.math)) return false;
-  const size = Math.max(...[...left.items, ...right.items].map((i) => i.size));
+  const size = median([...left.items, ...right.items].map((i) => i.size));
   if (Math.min(...right.items.map((i) => i.x)) - Math.max(...left.items.map((i) => i.x + i.w)) < size * 3) return false;
   const [a, b] = [buildLines(left.items, page), buildLines(right.items, page)];
   const paired = a.filter((l) => b.some((m) => Math.abs(m.y - l.y) <= 0.5)).length;
