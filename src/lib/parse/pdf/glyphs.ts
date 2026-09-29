@@ -353,14 +353,20 @@ function texTextFonts(glyphs: Glyph[]) {
   }
 }
 
-/** A font whose letters lean: italic, oblique, or slanted (fontFlags). A
-    formula's letter in one is a math letter, not \mathrm (layout.ts). */
-const italics = new Map<string, boolean>();
-export function isItalicFont(base: string): boolean {
-  let italic = italics.get(base);
-  if (italic === undefined) italics.set(base, (italic = fontFlags(base).italic));
-  return italic;
+/** A font's lean and weight by its name (fontFlags), read once a font: a
+    formula's letter in an italic one is a math letter, not \mathrm, and in
+    a bold one \mathbf (layout.ts). */
+const looks = new Map<string, { italic: boolean; bold: boolean }>();
+function fontLook(base: string): { italic: boolean; bold: boolean } {
+  let look = looks.get(base);
+  if (look === undefined) {
+    const { italic, bold } = fontFlags(base);
+    looks.set(base, (look = { italic, bold }));
+  }
+  return look;
 }
+export const isItalicFont = (base: string) => fontLook(base).italic;
+export const isBoldFont = (base: string) => fontLook(base).bold;
 
 /** The page's glyphs with each glyph of a math font set in Unicode given
     the TeX family and code of the same symbol (its own box where its font

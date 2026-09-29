@@ -3,6 +3,7 @@ import { z } from "zod";
 import { diffSegments } from "@/lib/anchors/remap";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { escapeHtml } from "@/lib/parse/office";
+import { columnLetter } from "@/lib/parse/sheets";
 
 // A slide's or a sheet's replica with new words (SPEC.md §27). The one rule
 // holds after every edit: the replica's DOM text — every text node outside
@@ -314,12 +315,6 @@ const rowAt = (row: string, n: number, gap: string) =>
   row
     .replace(/(<th class="sheet-rn[^"]*"[^>]*>)\d+(<\/th>)/, (_, open: string, close: string) => `${open}${n}${close}`)
     .replace(/(?:<span class="cell-gap">[\t\n]<\/span>)?<\/td><\/tr>$/, () => `${GAP_SOURCE(gap)}</td></tr>`);
-/** A column letter: A, B, …, Z, AA, … */
-function columnLetter(index: number): string {
-  let out = "";
-  for (let k = index + 1; k > 0; k = Math.floor((k - 1) / 26)) out = String.fromCharCode(65 + ((k - 1) % 26)) + out;
-  return out;
-}
 // A value a sheet lines up right: a number, a percent, an amount, a date.
 const NUMBER = /^(?:[-+(]?[$€£¥]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?%?\)?|\d{4}-\d{2}-\d{2})$/;
 

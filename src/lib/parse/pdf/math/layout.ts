@@ -6,7 +6,7 @@
 // PDF points, y up; an em is a glyph's size.
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
-import { isItalicFont, isUnreadMath, type MathFamily } from "@/lib/parse/pdf/glyphs";
+import { isBoldFont, isItalicFont, isUnreadMath, type MathFamily } from "@/lib/parse/pdf/glyphs";
 import { mathGlyph, type MathGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Box, Item } from "@/lib/parse/pdf/types";
 
@@ -184,12 +184,16 @@ function textAtom(g: Glyph): Atom | null {
           : /[+−]/.test(ch)
             ? "bin"
             : "ord";
+  const italic = isItalicFont(g.base);
+  // A bold letter or digit is \mathbf (Springer's vectors n, m in Times
+  // Bold read as \mathrm), a bold italic one \boldsymbol.
+  const bold = /[A-Za-z0-9]/.test(ch) && isBoldFont(g.base);
   return {
     fam: null,
     code: g.code,
     entry: null,
     // KaTeX draws "-" in a formula as the minus sign.
-    tex: ch === "−" ? "-" : ch,
+    tex: bold ? `\\${italic ? "boldsymbol" : "mathbf"}{${ch}}` : ch === "−" ? "-" : ch,
     cls,
     size: g.size,
     x1: g.x,
@@ -197,7 +201,7 @@ function textAtom(g: Glyph): Atom | null {
     yb: g.y,
     top: g.y + height * g.size,
     bottom: g.y - depth * g.size,
-    upright: /[A-Za-z]/.test(ch) && !isItalicFont(g.base),
+    upright: /[A-Za-z]/.test(ch) && !italic && !bold,
   };
 }
 

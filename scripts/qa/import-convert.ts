@@ -1473,14 +1473,20 @@ async function checkFixture(f: Fixture): Promise<Report> {
   };
   // Paragraphs pair by their words, the k-th of the parse with the k-th of
   // the page: two with the same words may stand at two indents. A table's
-  // cells, a list's lines, and the Title are no parse paragraphs.
+  // cells, a list's lines, and the Title are no parse paragraphs; a
+  // paragraph a list item holds after its line is (a list that resumes).
   const byWords = new Map<string, RichNode[]>();
-  for (const top of doc.content ?? []) {
-    for (const n of top.type === "blockquote" ? (top.content ?? []) : [top]) {
-      const words = n.type === "paragraph" && n.attrs?.docStyle !== "title" ? norm(inlineText(n)) : "";
-      if (words) byWords.set(words, [...(byWords.get(words) ?? []), n]);
+  const paragraphsOf = (node: RichNode) => {
+    if (node.type === "table") return;
+    if (node.type === "paragraph") {
+      const words = node.attrs?.docStyle !== "title" ? norm(inlineText(node)) : "";
+      if (words) byWords.set(words, [...(byWords.get(words) ?? []), node]);
+      return;
     }
-  }
+    const line = node.type === "listItem" || node.type === "taskItem" ? 1 : 0;
+    for (const child of (node.content ?? []).slice(line)) paragraphsOf(child);
+  };
+  paragraphsOf(doc);
   const taken = new Map<string, number>();
   const indented = f.blocks.flatMap((b) => {
     if (b.type !== "PARAGRAPH") return [];

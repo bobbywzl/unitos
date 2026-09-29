@@ -1061,7 +1061,7 @@ class Converter {
     const align = alignOf(tokensOf(block.html));
     const content = inline(this.sourceOf(block, starts, isTitle ? "title" : undefined));
     if (isTitle) {
-      this.place(index, [paragraphNode(this.titleContent(content), align ? { docStyle: "title", textAlign: align } : { docStyle: "title" })]);
+      this.place(index, [paragraphNode(this.titleContent(content), { docStyle: "title", ...(align ? { textAlign: align } : {}), ...borderAttrs(block) })]);
       return;
     }
     const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId(), ...borderAttrs(block) };
