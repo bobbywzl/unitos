@@ -344,7 +344,23 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     The import draws the page's list markers at every level. Word: the
 //     same look, space after paragraphs, notes in table cells, and a contents
 //     field built from its headings.
+// 22: the parse loop's round 3 (SPEC.md §30, §31) — PDF: columns with a
+//     narrow gutter, and three columns, split; blocks side by side read in
+//     order; a scan's overlapping word boxes keep their spaces. A paragraph's
+//     indent is measured in points; a list keeps each depth's indents, the
+//     space between its items, and its justified items; an algorithm's lines
+//     and a references list with no markers are lists with no marker; a
+//     bullet the page draws opens an item, and no bullet is invented.
+//     Division labels, a statement's title, and a centered title on the
+//     first page are headings; a page number with a period and a roman one
+//     drop; a first page's notes are footnotes; a pull quote is a quote. More
+//     math fonts read as TeX's; a formula that fails its check keeps its
+//     scripts; an equation number keeps its side; a display crop carries no
+//     caption; a list's bullet never joins a formula. A figure's crop never
+//     takes in a running head, a running foot, a page number, or a footnote.
+//     Word: paragraph borders, indents, the space between list items, and
+//     cell borders.
 // Slides and sheets (SPEC.md §27) parse with their own parsers
 // (lib/parse/slides.ts, lib/parse/sheets.ts) and re-parse only on request:
 // they carry no version of their own.
-export const PARSER_VERSION = 21;
+export const PARSER_VERSION = 22;
