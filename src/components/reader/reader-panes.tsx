@@ -373,9 +373,10 @@ export function ReaderPanes({
           Extract controls (top-right). Below md with the sheet open
           (data-sheet-open, workspace.tsx), bottom-right: the sheet cuts the
           reader short, which brings its bottom-left up to the page editor's
-          Show tabs & outlines at the canvas's top-left. The open menu takes
-          the app's menus' layer, over the page editor's header, which a
-          short reader brings under it (docs/css/layer.css). */}
+          Show tabs & outlines at the canvas's top-left. While the menu is
+          open it stands at z-40, the layer of the app's menus
+          (docs/css/layer.css), over the page editor's header, which a short
+          reader brings under the menu. */}
       <div
         ref={menuRef}
         className={`absolute bottom-4 left-4 max-md:in-data-sheet-open:right-4 max-md:in-data-sheet-open:left-auto print:hidden ${

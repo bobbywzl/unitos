@@ -1962,8 +1962,8 @@ class DocxReader {
     const spanOf = (tc: Element) => Math.max(1, intAttr(child(child(tc, "tcPr"), "gridSpan"), "val") ?? 1);
     // A table of one cell a row is a box around paragraphs (a callout, a
     // framed note): its content reads as the document's own. One shaded cell
-    // of one paragraph is a label bar, a table with its fill (a report's
-    // white words on a navy bar read as a plain paragraph).
+    // of one paragraph is a label bar, a table with its fill (white words on
+    // a navy bar read as a plain paragraph).
     const only = rows.length === 1 && cellsOf(rows[0]).length === 1 ? cellsOf(rows[0])[0] : null;
     const bar =
       only !== null &&
