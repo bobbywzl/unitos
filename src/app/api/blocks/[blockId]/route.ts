@@ -112,7 +112,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   // a transcript line, or an equation keeps its kind.
   const shape = await documentShape(block.documentId);
   if (data.text !== undefined && data.text !== block.text && !blockTakes.words(block.type, shape)) {
-    return NextResponse.json({ error: t("api.onlyTextBlocksEdited") }, { status: 400 });
+    // A page's words are the blocks converted from it; its text names it.
+    return NextResponse.json({ error: t(block.type === "PAGE" ? "api.pageWords" : "api.onlyTextBlocksEdited") }, { status: 400 });
   }
   if (kindChanges && !blockTakes.kind(block.type, shape)) {
     return NextResponse.json({ error: t("api.blockKindFixed") }, { status: 400 });

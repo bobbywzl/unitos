@@ -427,7 +427,10 @@ export function enrichActions(
       continue;
     }
     if (action.type === "edit_block" || action.type === "remove_block") {
-      if (!(action.type === "edit_block" ? blockTakes.words : blockTakes.removal)(block.type, shape)) {
+      if (action.type === "edit_block" && block.type === "PAGE") {
+        // A page keeps its text: its page anchors find it by it.
+        warnings.push(skippedWarning(t, "api.pageWords", action.description));
+      } else if (!(action.type === "edit_block" ? blockTakes.words : blockTakes.removal)(block.type, shape)) {
         warnings.push(t("api.warnOnlyTextEdited", { description: action.description }));
       } else if (action.type === "edit_block" && (block.type === "SLIDE" || block.type === "SHEET" || block.type === "TABLE") && block.html) {
         // A slide's, a sheet's, or a table's replica: the route's own check, run first.

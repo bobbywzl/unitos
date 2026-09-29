@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     db.block.findFirst({
       where: { documentId: data.documentId, ...(after ? { order: { gt: after.order } } : {}) },
       orderBy: { order: "asc" },
-      select: { type: true, order: true },
+      select: { type: true, order: true, page: true },
     }),
   ]);
   if (after ? !blockTakes.after(after.type, neighbor?.type, shape) : !blockTakes.start(neighbor?.type, shape)) {
@@ -84,6 +84,10 @@ export async function POST(req: Request) {
   // The new block's place: right after `after`, or where the first block stands.
   const order = after ? after.order + 1 : (neighbor?.order ?? 0);
   const format = data.type === "PARAGRAPH" && data.kind ? KIND_TO_BLOCK[data.kind] : null;
+  // In a handwritten document a new block joins the page whose words it
+  // follows (else the page of the words after it), as the conversion
+  // stamps its blocks (SPEC.md §16).
+  const page = shape.pages > 0 ? ((after && after.type !== "PAGE" ? after.page : null) ?? (neighbor && neighbor.type !== "PAGE" ? neighbor.page : null)) : null;
   const text = data.kind === "list" || data.kind === "numbered" ? withListMarkers(data.text ?? "", data.kind) : (data.text ?? "");
 
   const block = await db.$transaction(async (tx) => {
@@ -101,6 +105,7 @@ export async function POST(req: Request) {
         text,
         html: format?.html ?? data.html,
         originalText: "",
+        ...(page !== null ? { page } : {}),
       },
     });
     await tx.blockEdit.create({

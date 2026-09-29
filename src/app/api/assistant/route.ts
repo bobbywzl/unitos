@@ -45,6 +45,7 @@ import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } f
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
 import { transcriptContext } from "@/lib/assistant/transcript";
+import { pageLines } from "@/lib/assistant/pages";
 import { sheetKeepLines } from "@/lib/replica";
 import { parseBody } from "@/lib/validate";
 
@@ -190,16 +191,24 @@ async function handle(req: Request, t: TFunc) {
           const edits: DocumentEdits =
             !open || !takesSuggestions(open) ? "blocks" : (await importShared(data.documentId!)) ? "none" : "suggestions";
           // What each sheet keeps as it is, for the rules on sheets; a
-          // video's or an audio's voices, chapters, and anchored words.
-          const [sheets, transcript] = await Promise.all([
+          // video's or an audio's voices, chapters, and anchored words; a
+          // handwritten document's pages and the blocks of each page's words.
+          const [sheets, transcript, pages] = await Promise.all([
             open?.format === "sheets"
               ? db.block
                   .findMany({ where: { documentId: data.documentId!, type: "SHEET" }, orderBy: { order: "asc" }, select: { id: true, type: true, html: true } })
                   .then(sheetKeepLines)
               : [],
             transcriptContext(data.documentId!),
+            db.block
+              .findFirst({ where: { documentId: data.documentId!, type: "PAGE" }, select: { id: true } })
+              .then((page) =>
+                page
+                  ? db.block.findMany({ where: { documentId: data.documentId! }, orderBy: { order: "asc" }, select: { id: true, type: true, page: true } }).then(pageLines)
+                  : [],
+              ),
           ]);
-          return { sections, attachedDocs: attached.map((nd) => nd.document), edits, format: open?.format ?? null, sheets, transcript };
+          return { sections, attachedDocs: attached.map((nd) => nd.document), edits, format: open?.format ?? null, sheets, transcript, pages };
         })()
       : null;
   const messages: ModelMessage[] = [{ role: "system", content: system }];
@@ -265,6 +274,7 @@ async function handle(req: Request, t: TFunc) {
             edits: act.edits,
             caretBlockId: data.caretBlockId,
             sheets: act.sheets,
+            pages: act.pages,
             transcript: act.transcript?.lines ?? null,
           }
         : undefined,
