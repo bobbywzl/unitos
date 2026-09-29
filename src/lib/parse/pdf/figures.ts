@@ -89,7 +89,11 @@ function withPanels(figure: Segment, panels: CaptionPart[]) {
 }
 
 // Chart text, equation glyphs, ticks: what a figure leaves in the text layer.
+// A panel's letter alone ("(b)") is its figure's label whatever it read as:
+// set bold, it read as a heading, and every label over it stayed text
+// (Grinstead–Snell p. 163, Figure 4.6).
 function isFigureDebris(s: Segment, ctx: PageContext): boolean {
+  if (!s.region && LETTERS_RE.test(s.text)) return true;
   if (s.region || s.type === "HEADING" || s.type === "CODE" || s.type === "EQUATION") return false;
   if (isCaption(s.text, s.runs)) return false;
   if (s.type === "FIGURE") return !s.region;
