@@ -275,6 +275,10 @@ export type HistoryEntry = {
     | "BLOCK_MOVE"
     | "FORMAT"
     | "STYLE"
+    // A video's or an audio's transcript lines (SPEC.md §11).
+    | "LINE_JOIN"
+    | "LINE_SPLIT"
+    | "SPEAKER"
     | "NOTE_REMOVE"
     | "SECTION_REMOVE"
     | "DOCUMENT_DETACH"
@@ -449,7 +453,16 @@ export type AssistantAction =
   // A document without rich text: the edits of many blocks, found part by
   // part on the server (lib/assistant/revise.ts); the plan carries those
   // edits in its place.
-  | { type: "revise"; instruction: string; blockIds?: string[]; description: string };
+  | { type: "revise"; instruction: string; blockIds?: string[]; description: string }
+  // A video's or an audio's transcript (SPEC.md §11, app/api/blocks/lines):
+  // two lines next to each other joined into one; one line split in two, the
+  // second from `offset` (its first words, `quote`); a line given to another
+  // voice (`previous`: its voice before, for Undo); a voice renamed on every
+  // line (`previousName`: its name before).
+  | { type: "join_lines"; blockId: string; nextBlockId: string; description: string }
+  | { type: "split_line"; blockId: string; offset: number; quote: string; description: string }
+  | { type: "set_speaker"; blockId: string; speakerId: string; previous: string | null; description: string }
+  | { type: "rename_speaker"; speakerId: string; name: string; previousName: string; description: string };
 
 export type AssistantPlan = {
   reply: string | null;
@@ -466,7 +479,22 @@ export type AssistantPlan = {
     re-parse of an import, one row for the whole document (SPEC.md §29). */
 export type EditItem = {
   id: string;
-  kind: "TEXT_EDIT" | "LINK_ADD" | "LINK_REMOVE" | "BLOCK_ADD" | "BLOCK_REMOVE" | "BLOCK_MOVE" | "FORMAT" | "STYLE" | "REPARSE";
+  kind:
+    | "TEXT_EDIT"
+    | "LINK_ADD"
+    | "LINK_REMOVE"
+    | "BLOCK_ADD"
+    | "BLOCK_REMOVE"
+    | "BLOCK_MOVE"
+    | "FORMAT"
+    | "STYLE"
+    | "REPARSE"
+    // A video's or an audio's transcript lines (SPEC.md §11): two lines
+    // joined, a line split (before: the words before; after: the words
+    // after, a line each), a line given to another voice (meta from, to).
+    | "LINE_JOIN"
+    | "LINE_SPLIT"
+    | "SPEAKER";
   blockId: string | null;
   before: string | null;
   after: string | null;
@@ -477,8 +505,8 @@ export type EditItem = {
     toDocumentId?: string;
     toTitle?: string;
     quotedText?: string;
-    from?: string;
-    to?: string;
+    from?: string | null; // FORMAT rows: the format before; SPEAKER rows: the voice's name before
+    to?: string | null;
     style?: string; // STYLE rows: "bold" | "italic"
     on?: boolean; // STYLE rows: applied or removed
     restoredFrom?: string; // BLOCK_ADD rows that restore a removed paragraph
