@@ -205,6 +205,11 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
     "- revise {instruction, blockIds?, description} — a change to many blocks at once: the spelling or grammar across the document, its register, a section rewritten. The document is read part by part, and the edit of each block comes to the plan card. instruction: every change to make and where, in plain words, under 150 words; never the changed text itself. blockIds: the blocks to change, only when the change concerns some blocks; a heading stands for its section. Leave blockIds out for the whole document.",
 };
 
+// A video's or an audio's transcript lines (SPEC.md §11): the rule the
+// sidebar assistant and the selection chat give the model.
+export const TRANSCRIPT_RULE =
+  "A TRANSCRIPT block is one line of the recording, said by one voice at the times in its tag. edit_block changes its words, and its times stay; style and link work on its words; remove_block takes the line out. join_lines joins two lines of one voice, the second right after the first; split_line splits a line at the words its second line starts with; set_speaker gives a line to another voice of Speakers; rename_speaker renames a voice on every line it says. No line is added, and no line moves.";
+
 /** How the assistant changes the open document: with the block actions (an
     article), with the assistant's suggestions (a document with rich text,
     SPEC.md §29), or not at all (an import a project of another account
@@ -383,8 +388,11 @@ export function enrichActions(
         const line = blockById.get(action.blockId);
         if (!line) missing(action.description);
         else if (!shape.media || line.type !== "TRANSCRIPT") refuse(action.description);
-        else if (!ctx.transcript?.speakers.some((s) => s.id === action.speakerId)) warnings.push(skippedWarning(t, "api.lineSpeakerUnknown", action.description));
-        else if ((line.speaker ?? null) !== action.speakerId) actions.push({ ...action, previous: line.speaker ?? null });
+        else {
+          const voice = ctx.transcript?.speakers.find((s) => s.id === action.speakerId);
+          if (!voice) warnings.push(skippedWarning(t, "api.lineSpeakerUnknown", action.description));
+          else if ((line.speaker ?? null) !== voice.id) actions.push({ ...action, name: voice.name, previous: line.speaker ?? null });
+        }
         continue;
       }
       case "rename_speaker": {

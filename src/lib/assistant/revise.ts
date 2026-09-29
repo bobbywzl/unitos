@@ -38,20 +38,20 @@ const STYLE_OF_KIND: Record<BlockKind, SuggestStyle> = {
 
 /** Each block whose words the revision may change, as the ops read it: its
     format as a paragraph style (code has none), and one container for all,
-    so consecutive blocks change together; a slide or a sheet its words
-    alone. An equation's TeX changes by rewrite_block, which needs no place;
-    a transcript line waits for the video's turn, a converted table for its
+    so consecutive blocks change together; a slide, a sheet, or a
+    transcript line its words alone. An equation's TeX changes by
+    rewrite_block, which needs no place; a converted table waits for its
     own edit_block. */
 export function revisePlaces(blocks: RevisedBlock[], shape: DocumentShape): Map<string, BlockPlace> {
   const places = new Map<string, BlockPlace>();
   for (const b of blocks) {
     // A slide's words change within its lines, a sheet's within its cells,
-    // and nothing else of them.
-    if ((b.type === "SLIDE" || b.type === "SHEET") && blockTakes.words(b.type, shape)) {
+    // a transcript line's with its times kept, and nothing else of them.
+    if ((b.type === "SLIDE" || b.type === "SHEET" || b.type === "TRANSCRIPT") && blockTakes.words(b.type, shape)) {
       places.set(b.id, { style: null, where: "words", container: "", group: null });
       continue;
     }
-    if (!blockTakes.words(b.type, shape) || b.type === "EQUATION" || b.type === "TRANSCRIPT" || b.type === "TABLE") continue;
+    if (!blockTakes.words(b.type, shape) || b.type === "EQUATION" || b.type === "TABLE") continue;
     const style = b.type === "CODE" ? null : STYLE_OF_KIND[blockKind(b.type, b.html, b.text)];
     places.set(b.id, { style, where: "body", container: "", group: null });
   }

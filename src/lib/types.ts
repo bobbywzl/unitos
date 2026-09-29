@@ -457,11 +457,11 @@ export type AssistantAction =
   // A video's or an audio's transcript (SPEC.md §11, app/api/blocks/lines):
   // two lines next to each other joined into one; one line split in two, the
   // second from `offset` (its first words, `quote`); a line given to another
-  // voice (`previous`: its voice before, for Undo); a voice renamed on every
-  // line (`previousName`: its name before).
+  // voice (`name`: the voice's; `previous`: the line's voice before, for
+  // Undo); a voice renamed on every line (`previousName`: its name before).
   | { type: "join_lines"; blockId: string; nextBlockId: string; description: string }
   | { type: "split_line"; blockId: string; offset: number; quote: string; description: string }
-  | { type: "set_speaker"; blockId: string; speakerId: string; previous: string | null; description: string }
+  | { type: "set_speaker"; blockId: string; speakerId: string; name: string; previous: string | null; description: string }
   | { type: "rename_speaker"; speakerId: string; name: string; previousName: string; description: string };
 
 export type AssistantPlan = {

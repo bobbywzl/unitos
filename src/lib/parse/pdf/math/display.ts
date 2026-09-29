@@ -895,7 +895,7 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
       if (labels.some((b) => g.x + g.w / 2 > b.x1 && g.x + g.w / 2 < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
       if (g.x + g.w / 2 <= box.x1 || g.x + g.w / 2 >= box.x2) return false;
       const hangs = g.family === null && (isUnreadMath(g) || !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]$/u.test(g.unicode));
-      return g.y > box.y1 && g.y < box.y2 + (hangs ? g.size : 0);
+      return g.y >= box.y1 - size * 0.05 && g.y < box.y2 + (hangs ? g.size : 0);
     });
     if (stray) return null;
     const pad = size * 0.15;

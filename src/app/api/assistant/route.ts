@@ -44,6 +44,7 @@ import { featureCall } from "@/lib/feature-models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
+import { transcriptContext } from "@/lib/assistant/transcript";
 import { sheetKeepLines } from "@/lib/replica";
 import { parseBody } from "@/lib/validate";
 
@@ -188,12 +189,17 @@ async function handle(req: Request, t: TFunc) {
           // An import another account's project holds takes no edits.
           const edits: DocumentEdits =
             !open || !takesSuggestions(open) ? "blocks" : (await importShared(data.documentId!)) ? "none" : "suggestions";
-          // What each sheet keeps as it is, for the rules on sheets.
-          const sheets =
+          // What each sheet keeps as it is, for the rules on sheets; a
+          // video's or an audio's voices, chapters, and anchored words.
+          const [sheets, transcript] = await Promise.all([
             open?.format === "sheets"
-              ? sheetKeepLines(await db.block.findMany({ where: { documentId: data.documentId!, type: "SHEET" }, orderBy: { order: "asc" }, select: { id: true, type: true, html: true } }))
-              : [];
-          return { sections, attachedDocs: attached.map((nd) => nd.document), edits, format: open?.format ?? null, sheets };
+              ? db.block
+                  .findMany({ where: { documentId: data.documentId!, type: "SHEET" }, orderBy: { order: "asc" }, select: { id: true, type: true, html: true } })
+                  .then(sheetKeepLines)
+              : [],
+            transcriptContext(data.documentId!),
+          ]);
+          return { sections, attachedDocs: attached.map((nd) => nd.document), edits, format: open?.format ?? null, sheets, transcript };
         })()
       : null;
   const messages: ModelMessage[] = [{ role: "system", content: system }];
@@ -259,6 +265,7 @@ async function handle(req: Request, t: TFunc) {
             edits: act.edits,
             caretBlockId: data.caretBlockId,
             sheets: act.sheets,
+            transcript: act.transcript?.lines ?? null,
           }
         : undefined,
     });
@@ -354,13 +361,14 @@ async function handle(req: Request, t: TFunc) {
       const blocks = await db.block.findMany({
         where: { documentId: data.documentId! },
         orderBy: { order: "asc" },
-        select: { id: true, type: true, text: true, html: true, startTime: true, endTime: true },
+        select: { id: true, type: true, text: true, html: true, startTime: true, endTime: true, speaker: true },
       });
       const ctx = {
         documentId: data.documentId!,
         edits: act!.edits,
         format: act!.format,
         blocks,
+        transcript: act!.transcript,
         attachedIds: new Set(act!.attachedDocs.map((d) => d.id)),
         sectionIds: new Set(act!.sections.map((s) => s.id)),
         t,

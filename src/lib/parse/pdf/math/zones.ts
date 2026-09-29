@@ -157,24 +157,7 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       const letter = word.length === 1 && ((cur.length > 0 && gap < near) || (nextMath && afterGap < near));
       const name = word.length <= 4 && opens && afterGap < 0.12 * size;
       if (opname || letter || name) cur.push(...glyphs.slice(k, j));
-      else {
-        // Words inside a set's braces are the set's ("{t ∈ ℝ such that
-        // g(t) ≥ 1}"): the formula opened a brace a later glyph of the line
-        // closes, and its math goes on after a few words. Such a set read as
-        // words before.
-        const braces = (list: Glyph[], ch: string) => list.filter((h) => h.family !== null && h.unicode === ch).length;
-        const open = braces(cur, "{") - braces(cur, "}");
-        let m = k;
-        while (m < glyphs.length && kinds[m] === "text" && isLetter(glyphs[m])) m++;
-        const words = glyphs.slice(k, m).filter((h, n) => n === 0 || gapOf(glyphs[k + n - 1], h) >= 0.12 * size).length;
-        const goesOn = m < glyphs.length && kinds[m] !== "text" && braces(glyphs.slice(m), "}") >= open;
-        if (open > 0 && words <= 4 && m - k <= 20 && goesOn) {
-          cur.push(...glyphs.slice(k, m));
-          k = m - 1;
-          continue;
-        }
-        flush();
-      }
+      else flush();
       k = j - 1;
       continue;
     }
@@ -471,7 +454,9 @@ function strayInside(atoms: Atom[], own: Set<Glyph>, page: Glyph[]): boolean {
   return page.some((g) => {
     if (own.has(g) || g.hidden || g.unicode.trim() === "") return false;
     const cx = g.x + g.w / 2;
-    if (cx > x1 && cx < x2 && g.y > y1 && g.y < y2) return true;
+    // A glyph on the lowest limit's baseline is inside too: a lower limit's
+    // "=1" that another line took left \sum_{k}^{r}, which passed.
+    if (cx > x1 && cx < x2 && g.y >= y1 - em * 0.05 && g.y < y2) return true;
     if (labels.some((b) => cx > b.x1 && cx < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
     return g.size < em * 0.8 && g.x >= x2 && g.x < x2 + em * 0.3 && g.y > base + em * 0.2 && g.y < y2;
   });
@@ -511,8 +496,9 @@ export function mathSpans(text: string, runs: Run[] | undefined): MathSpan[] {
   // A formula a text word cut in two ("m(" and ") = m(" around HH) reads
   // as two formulas with a bracket each: both stay text. A set whose
   // braces hold words ("{t ∈ ℝ such that g(t) ≥ 1}", broken across lines
-  // too) is one formula: its parts in order, the few words between them
-  // as \text, when together they close the brace the first opened.
+  // too: TeX's source sets it as three formulas and two words) keeps its
+  // parts, the brace open in the first and closed in the last, when the
+  // few words between them are all that stands between.
   const out: MathSpan[] = [];
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i];
@@ -521,13 +507,13 @@ export function mathSpans(text: string, runs: Run[] | undefined): MathSpan[] {
       let j = i;
       while (j + 1 < parts.length && j - i < 3 && !balanced(latex)) {
         const between = text.slice(parts[j].end, parts[j + 1].start);
-        const words = between.match(/\p{L}+/gu) ?? [];
-        if (!/^[\s\p{L}]*$/u.test(between) || words.length > 4) break;
-        latex += words.length > 0 ? `\\text{ ${words.join(" ")} }${parts[j + 1].latex}` : ` ${parts[j + 1].latex}`;
+        // A part that ends in a hyphen ends a compound word ("σ-algebra").
+        if (!/^[\s\p{L}]*$/u.test(between) || (between.match(/\p{L}+/gu) ?? []).length > 4 || /-$/.test(parts[j].latex)) break;
+        latex += ` ${parts[j + 1].latex}`;
         j++;
       }
       if (j > i && balanced(latex)) {
-        out.push({ start: p.start, end: parts[j].end, latex });
+        out.push(...parts.slice(i, j + 1));
         i = j;
         continue;
       }

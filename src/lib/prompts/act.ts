@@ -1,4 +1,4 @@
-import { actionLines, type DocumentEdits } from "@/lib/assistant/plan";
+import { actionLines, TRANSCRIPT_RULE, type DocumentEdits } from "@/lib/assistant/plan";
 import type { ChatTurn } from "@/lib/conversation";
 import type { Lang } from "@/lib/i18n/config";
 import { languageName, profileLines, STYLE_RULE, WEB_LINES, type ReaderProfileCtx } from "@/lib/prompts/types";
@@ -40,6 +40,9 @@ export type ActCtx = {
   edits?: DocumentEdits;
   // What each sheet of the document keeps as it is (sheetKeepLines).
   sheets?: string[];
+  // A video's or an audio's document: its voices and who speaks from which
+  // line (lib/assistant/transcript.ts); null for any other document.
+  transcript?: string[] | null;
 };
 
 /** The selection block for a text selection: what the route puts in the
@@ -65,6 +68,7 @@ export function actPrompt(ctx: ActCtx): string {
     "",
     `Other attached documents (id — title):\n${ctx.otherDocuments.length > 0 ? ctx.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
     ...(ctx.sheets?.length ? ["", `Sheets (what each keeps as it is):\n${ctx.sheets.join("\n")}`] : []),
+    ...(ctx.transcript?.length ? ["", ...ctx.transcript] : []),
     "",
     `The reader's notes across the corpus (section: note):\n${
       ctx.notes.length > 0
@@ -73,7 +77,7 @@ export function actPrompt(ctx: ActCtx): string {
     }`,
     "",
     "Action types:",
-    ...actionLines(ctx.edits ?? "blocks"),
+    ...actionLines(ctx.edits ?? "blocks", Boolean(ctx.transcript)),
     "",
     "Rules:",
     "1. Use block ids exactly as given. Every quote must be an exact substring of the named block's text.",
@@ -106,6 +110,7 @@ export function actPrompt(ctx: ActCtx): string {
           ]
         : [
             "10. A change to the words of more than five blocks (the spelling or grammar of a long selection or of the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. Its blockIds: the selected blocks when the command concerns the selection. reply: one sentence on what will change: the plan carries the edits.",
+            ...(ctx.transcript ? [`11. ${TRANSCRIPT_RULE}`] : []),
           ]),
     "",
     ...(ctx.history.length > 0

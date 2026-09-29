@@ -512,6 +512,14 @@ function actionDetail(
       return action.afterBlockId === null
         ? t("reader.detailMoveStart", { what: clip(blockText(action.blockId), 50) })
         : t("reader.detailMoveAfter", { what: clip(blockText(action.blockId), 50), after: clip(blockText(action.afterBlockId), 50) });
+    case "join_lines":
+      return t("reader.detailJoinLines", { first: clip(blockText(action.blockId), 45), second: clip(blockText(action.nextBlockId), 45) });
+    case "split_line":
+      return t("reader.detailSplitLine", { before: clip(blockText(action.blockId).slice(0, action.offset).trim(), 45), after: clip(action.quote, 45) });
+    case "set_speaker":
+      return `“${clip(blockText(action.blockId), 60)}” → ${action.name}`;
+    case "rename_speaker":
+      return `${action.previousName} → ${action.name}`;
     default:
       return null;
   }
@@ -531,6 +539,10 @@ const ACTION_LABEL_KEY: Record<AssistantAction["type"], TKey> = {
   move_block: "reader.actionMove",
   suggest: "reader.actionSuggest",
   revise: "reader.actionRevise",
+  join_lines: "reader.actionJoinLines",
+  split_line: "reader.actionSplitLine",
+  set_speaker: "reader.actionSetSpeaker",
+  rename_speaker: "reader.actionRenameSpeaker",
 };
 
 // The assistant's commands on selected words (SPEC.md §29), in the chips'
@@ -6281,6 +6293,50 @@ export function ReaderInteractions({
                 run: () => api(`/api/blocks/${action.blockId}`, "PATCH", { kind: before, text: block.text }),
               });
             }
+            break;
+          }
+          case "join_lines": {
+            // A transcript's lines (SPEC.md §11): the answer names the edit,
+            // and Undo gives both lines back as they were.
+            const joined = await api<{ editId: string }>("/api/blocks/lines", "POST", {
+              op: "join",
+              blockId: action.blockId,
+              nextBlockId: action.nextBlockId,
+            });
+            undo.push({ description: action.description, run: () => api("/api/blocks/lines", "POST", { op: "undo", editId: joined.editId }) });
+            break;
+          }
+          case "split_line": {
+            // The place as the line reads now: the plan's earlier actions may
+            // have changed its words.
+            const text = current(action.blockId)?.text;
+            const at = text?.indexOf(action.quote) ?? -1;
+            const cut = await api<{ editId: string }>("/api/blocks/lines", "POST", {
+              op: "split",
+              blockId: action.blockId,
+              offset: at > 0 ? at : action.offset,
+            });
+            undo.push({ description: action.description, run: () => api("/api/blocks/lines", "POST", { op: "undo", editId: cut.editId }) });
+            break;
+          }
+          case "set_speaker": {
+            const set = await api<{ previous: string | null }>("/api/blocks/lines", "POST", {
+              op: "speaker",
+              blockId: action.blockId,
+              speakerId: action.speakerId,
+            });
+            undo.push({
+              description: action.description,
+              run: () => api("/api/blocks/lines", "POST", { op: "speaker", blockId: action.blockId, speakerId: set.previous }),
+            });
+            break;
+          }
+          case "rename_speaker": {
+            await api(`/api/documents/${documentId}/speakers`, "PATCH", { speakerId: action.speakerId, name: action.name });
+            undo.push({
+              description: action.description,
+              run: () => api(`/api/documents/${documentId}/speakers`, "PATCH", { speakerId: action.speakerId, name: action.previousName }),
+            });
             break;
           }
           case "style": {

@@ -1,4 +1,4 @@
-import { actionLines, type DocumentEdits } from "@/lib/assistant/plan";
+import { actionLines, TRANSCRIPT_RULE, type DocumentEdits } from "@/lib/assistant/plan";
 import type { Lang } from "@/lib/i18n/config";
 import {
   answerLanguage,
@@ -111,6 +111,9 @@ type PageActions = {
   caretBlockId?: string | null;
   // What each sheet of the document keeps as it is (sheetKeepLines).
   sheets?: string[];
+  // A video's or an audio's document: its voices and who speaks from which
+  // line (lib/assistant/transcript.ts); null for any other document.
+  transcript?: string[] | null;
 };
 
 // This page scope: the actions the assistant may propose, and the fence the
@@ -126,9 +129,10 @@ function actLines(act: PageActions): string[] {
     `Sections in the project (id — title):\n${act.sections.length > 0 ? act.sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
     `Other attached documents (id — title):\n${act.otherDocuments.length > 0 ? act.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
     ...(act.sheets?.length ? [`Sheets (what each keeps as it is):\n${act.sheets.join("\n")}`] : []),
+    ...(act.transcript ?? []),
     ...(act.caretBlockId ? [`The caret stands in [block ${act.caretBlockId}]. "Here" means right after it.`] : []),
     "Action types:",
-    ...actionLines(act.edits ?? "blocks"),
+    ...actionLines(act.edits ?? "blocks", Boolean(act.transcript)),
     "Rules for actions:",
     "1. A message that asks for a change to the document or the notes: write the answer, then end with a fenced block whose info string is actions, holding a JSON array of the actions, one action too. Nothing after the block. To reorganize, format, restructure, rewrite, fix, shorten, or translate the open document is a change to it, and so is a change to \"my notes\" or \"these notes\" when the open document holds the reader's own notes.",
     "2. A message that asks for analysis, an answer, or a summary, and no change: no block.",
@@ -145,7 +149,9 @@ function actLines(act: PageActions): string[] {
       ? [
           "8. The document's words and styles cannot be changed: a project of another account holds the document too. When the message asks to change them, say so in one sentence, and propose no action for the change.",
         ]
-      : []),
+      : act.transcript
+        ? [`8. ${TRANSCRIPT_RULE}`]
+        : []),
   ];
 }
 

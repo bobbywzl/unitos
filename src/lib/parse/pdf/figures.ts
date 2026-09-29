@@ -535,6 +535,7 @@ export function attachFigureRegions(
   pageHeight: number,
   graphics: Graphic[],
   page: number, // 0-based
+  allLines: Line[], // the page's lines before its furniture and footnotes left
 ): Segment[] {
   const images = figureImages(ctx.drawing.images, pageWidth, pageHeight);
   const drawing: Drawn = { images, paths: ctx.drawing.paths };
@@ -566,6 +567,14 @@ export function attachFigureRegions(
   };
   const pageTop = pageHeight * 0.94;
   const pageBottom = pageHeight * 0.06;
+  // The lines the page lost before segmentation: its furniture (running
+  // heads, running feet, page numbers) and its footnotes. No figure's band
+  // takes one in.
+  const inText = new Set(lines);
+  const dropped = allLines.filter((l) => !inText.has(l)).map((l) => ({ x1: l.x, x2: l.xEnd, y1: l.yMin - l.size * 0.3, y2: l.yMax + l.size * 0.85 }));
+  // A graphic with its words: its labels and the caption under it.
+  const graphicExtent = (g: Graphic): Box =>
+    [...g.labels, ...g.caption].reduce((b, i) => unionBox(b, { x1: i.x, x2: i.x + i.w, y1: i.y - i.size * 0.25, y2: i.y + i.size * 0.8 }), g.box);
   const out: Segment[] = [];
   // Segments a figure took below its caption: debris, and the caption's
   // second paragraph.
@@ -650,10 +659,15 @@ export function attachFigureRegions(
     }
     const above = column[column.length - 1];
     // The band ends under the previous segment, its caption included (a
-    // figure's box leaves its caption out).
+    // figure's box leaves its caption out). With none, it ends under the
+    // lowest line the page dropped over the caption in its column, and at 94%
+    // of the page at most.
+    const capBox = cap.box;
+    const centeredIn = (b: Box, y1: number, y2: number) => b.x1 < x2 && b.x2 > x1 && (b.y1 + b.y2) / 2 >= y1 && (b.y1 + b.y2) / 2 <= y2;
+    const roof = Math.min(Infinity, ...dropped.filter((b) => b.y1 >= capBox.y2 && b.x1 < x2 && b.x2 > x1).map((b) => b.y1));
     const top = above?.box
       ? Math.min(above.box.y1, above.captionBox?.y1 ?? Infinity) - ctx.bodySize * 0.6
-      : pageTop;
+      : Math.min(pageTop, roof - ctx.bodySize * 0.6);
     let box: Box | null = null;
     const drawnAbove = drawingIn(drawing, cap.box.y2, top, x1, x2);
     const next = withMath.slice(c + 1).filter((s) => inColumn(s) && !consumed.has(s));
@@ -662,6 +676,17 @@ export function attachFigureRegions(
       for (const s of swept) out.splice(out.indexOf(s), 1);
       taken.push(...swept);
       box = { x1, x2, y1: cap.box.y2 + ctx.bodySize * 0.2, y2: top };
+      // With nothing of the text over it, a figure's top is its own: the top
+      // of its drawing, of its graphics with their words, and of the words it
+      // swept (a chart's title, an axis name), past 94% of the page where
+      // they reach, and never over a line the page dropped. arXiv 2506.06752
+      // pp. 4, 5, 15: the band ran to 94% of the page, and each crop showed
+      // the running head.
+      if (!above?.box) {
+        const own = [drawnAbove, ...graphics.filter((g) => centeredIn(g.box, capBox.y2, top)).map(graphicExtent), ...swept.map((s) => s.box)];
+        const tops = own.flatMap((b) => (b ? [b.y2] : []));
+        if (tops.length > 0) box.y2 = Math.min(Number.isFinite(roof) ? roof : pageTop, Math.max(...tops) + ctx.bodySize * 0.2);
+      }
       for (const s of swept) if (s.box) box = unionBox(box, s.box);
       // The drawing sets the width: a chart wider than the text column keeps
       // its axis labels.
@@ -705,7 +730,13 @@ export function attachFigureRegions(
         }
       }
       const below = next[m];
-      let bottom = end ?? (below?.box ? below.box.y2 + ctx.bodySize * 0.6 : pageBottom);
+      // With nothing of the text under it, the band ends over the highest
+      // line the page dropped under the caption in its column, and at 6% of
+      // the page at least.
+      const ground = Math.max(-Infinity, ...dropped.filter((b) => b.y2 <= capBottom && b.x1 < x2 && b.x2 > x1).map((b) => b.y2));
+      const foot = Math.max(pageBottom, ground + ctx.bodySize * 0.6);
+      let bottom = end ?? (below?.box ? below.box.y2 + ctx.bodySize * 0.6 : foot);
+      let open = end === undefined && !below?.box;
       const drawnBelow = drawingIn(drawing, bottom, cap.box.y1, x1, x2);
       // Debris is a figure's only where something is drawn near it: a
       // graphic under the caption, or paths or an image among the lines.
@@ -733,10 +764,21 @@ export function attachFigureRegions(
         }
         next.splice(0, k);
         m = 0;
-        bottom = next[0]?.box ? next[0].box.y2 + ctx.bodySize * 0.6 : pageBottom;
+        bottom = next[0]?.box ? next[0].box.y2 + ctx.bodySize * 0.6 : foot;
+        open = !next[0]?.box;
       }
       if (m > 0 || cap.box.y1 - bottom > rowGap * 3 || drawnBelow) {
         box = { x1, x2, y1: bottom, y2: cap.box.y1 - ctx.bodySize * 0.2 };
+        // With nothing of the text under it, a figure's foot is its own, and
+        // never under a line the page dropped (arXiv 2506.08209 p. 12: the
+        // band ran to 6% of the page, and the crop showed half the page
+        // number).
+        if (open) {
+          const capFoot = cap.box.y1;
+          const own = [drawnBelow, ...graphics.filter((g) => centeredIn(g.box, bottom, capFoot)).map(graphicExtent), ...next.slice(0, m).map((s) => s.box)];
+          const feet = own.flatMap((b) => (b ? [b.y1] : []));
+          if (feet.length > 0) box.y1 = Math.max(Number.isFinite(ground) ? ground : pageBottom, Math.min(...feet) - ctx.bodySize * 0.2);
+        }
         for (const s of next.slice(0, m)) {
           if (s.box) box = unionBox(box, s.box);
           consumed.add(s);

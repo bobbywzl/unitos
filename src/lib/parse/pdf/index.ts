@@ -435,7 +435,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     const pageSegments = segmentPage(shown, ctx);
     if (ocr) for (const s of pageSegments) if (s.rawSize !== undefined) s.rawSize *= bodySize / pageBody;
     const withEquations = displayEquations(pageSegments, shown, ctx, pageWidths[p], pageHeights[p]);
-    const withFigures = attachFigureRegions(withEquations, lines, ctx, pageWidths[p], pageHeights[p], graphics[p], p);
+    const withFigures = attachFigureRegions(withEquations, lines, ctx, pageWidths[p], pageHeights[p], graphics[p], p, pages[p]);
     // Then a TeX page's displays its display lines missed, once the figures
     // took their own words.
     const missed = { graphics: graphics[p].map((g) => g.box) };

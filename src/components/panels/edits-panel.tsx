@@ -21,6 +21,9 @@ const KIND_KEY: Record<EditItem["kind"], TKey> = {
   FORMAT: "panels.kindFormat",
   STYLE: "panels.kindStyle",
   REPARSE: "panels.kindReparse",
+  LINE_JOIN: "panels.kindLineJoin",
+  LINE_SPLIT: "panels.kindLineSplit",
+  SPEAKER: "panels.kindSpeaker",
 };
 
 // FORMAT and STYLE meta values are wire data; these map them to display labels.
@@ -45,8 +48,8 @@ const STYLE_KEY: Record<string, TKey> = {
   "color-plum": "panels.styleColorPlum",
 };
 
-function formatLabel(t: TFunc, kind: string | undefined): string {
-  if (kind === undefined) return "?";
+function formatLabel(t: TFunc, kind: string | null | undefined): string {
+  if (kind === undefined || kind === null) return "?";
   const key = FORMAT_KEY[kind];
   return key ? t(key) : kind;
 }
@@ -216,6 +219,30 @@ function EditCard({
             text: edit.meta?.quotedText ?? "",
           })}
         </p>
+      ) : edit.kind === "LINE_JOIN" || edit.kind === "LINE_SPLIT" ? (
+        // A transcript's lines (SPEC.md §11): the words before and after, a
+        // line each.
+        <div className="mt-2 flex flex-col gap-1.5">
+          {edit.before && (
+            <div>
+              <span className="text-[11px] text-sand-500">{t("panels.wasLabel")}</span>
+              <p className="line-clamp-4 whitespace-pre-line text-[13px] text-sand-600">{edit.before}</p>
+            </div>
+          )}
+          {edit.after && (
+            <div>
+              <span className="text-[11px] text-sand-500">{t("panels.nowLabel")}</span>
+              <p className="line-clamp-4 whitespace-pre-line text-[13px]">{edit.after}</p>
+            </div>
+          )}
+        </div>
+      ) : edit.kind === "SPEAKER" ? (
+        <div className="mt-2 flex flex-col gap-1">
+          <p className="line-clamp-2 text-[13px]">{edit.meta?.quotedText}</p>
+          <p className="text-[12px] text-sand-600">
+            {edit.meta?.from || t("panels.speakerNone")} → {edit.meta?.to || t("panels.speakerNone")}
+          </p>
+        </div>
       ) : edit.kind === "BLOCK_MOVE" ? (
         <div className="mt-2 flex flex-col gap-1">
           <p className="line-clamp-3 text-[13px]">{edit.after}</p>

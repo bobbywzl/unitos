@@ -16,8 +16,10 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 // whole (Convert again writes its text after
 // the last page's order, lib/handwritten/convert.ts, so a page gone leaves
 // no text among the pages). A style or a web link goes on a text block's
-// words. Nothing changes a video's player, a table, or a figure, or a
-// slide's or a sheet's kind. A sheets document keeps its sheet names (the
+// words and on a transcript line's. Two transcript lines next to each other
+// join, and one splits, their times following their words
+// (lib/transcript-lines.ts). Nothing changes a video's player, a table, or a
+// figure, or a slide's or a sheet's kind. A sheets document keeps its sheet names (the
 // HEADING before each sheet). A slides, sheets, or media document takes no
 // new block, and no block moves in one; in a handwritten document a new
 // block goes after the last page.
@@ -48,7 +50,7 @@ export const blockTakes = {
   // A handwritten document keeps a page: the one left is its last.
   removal: (type: string, doc: DocumentShape) =>
     type === "PAGE" ? doc.pages > 1 : (REMOVABLE.has(type) && !sheetName(type, doc)) || convertedTable(type, doc),
-  style: (type: string) => TEXT_BLOCKS.has(type),
+  style: (type: string) => TEXT_BLOCKS.has(type) || type === "TRANSCRIPT",
   /** A new block after one of `type`, followed by one of `next`. */
   after: (type: string, next: string | undefined, doc: DocumentShape) => addsBlocks(doc) && !(type === "PAGE" && next === "PAGE"),
   /** A new block at the document's start, before one of `first`. */

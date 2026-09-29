@@ -43,6 +43,7 @@ import type { TFunc } from "@/lib/i18n/dictionaries";
 import { actionsSchema, enrichActions, planShape, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
+import { transcriptContext } from "@/lib/assistant/transcript";
 import { sheetKeepLines } from "@/lib/replica";
 import { SUGGEST_COMMANDS, type SuggestCommand } from "@/lib/prompts/suggest";
 import { parseBody } from "@/lib/validate";
@@ -192,7 +193,7 @@ async function handle(req: Request, t: TFunc) {
   const document = await db.document.findUnique({
     where: { id: data.documentId },
     include: {
-      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, html: true, startTime: true, endTime: true, cell: true, page: true } },
+      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, html: true, startTime: true, endTime: true, speaker: true, cell: true, page: true } },
     },
     // An import's rich text runs to megabytes, and so does a PDF's file:
     // only a core anchor and the assistant's suggestions read the rich text
@@ -382,6 +383,8 @@ async function handle(req: Request, t: TFunc) {
   const svgChart = svgSource ? await svgChartCall() : null;
   const web = data.web === true && !attachedImage && !svgChart;
   const lang = await currentLang();
+  // A video's or an audio's voices, chapters, and anchored words (SPEC.md §11).
+  const transcript = await transcriptContext(document.id);
   const userPrompt = actPrompt({
     profile,
     lang,
@@ -398,6 +401,7 @@ async function handle(req: Request, t: TFunc) {
     command: data.command,
     edits,
     sheets: document.format === "sheets" ? sheetKeepLines(document.blocks) : undefined,
+    transcript: transcript?.lines ?? null,
   });
 
   const messages: ModelMessage[] = [
@@ -454,6 +458,7 @@ async function handle(req: Request, t: TFunc) {
     edits,
     format: document.format,
     blocks: document.blocks,
+    transcript,
     attachedIds: new Set(attachedDocs.map((nd) => nd.documentId)),
     sectionIds: new Set(sections.map((s) => s.id)),
     t,

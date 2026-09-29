@@ -526,23 +526,47 @@ export function buildLines(items: Item[], page: number): Line[] {
   // label or a limit of another line's (arXiv 2502.02648's c_k, over the
   // next line's ">", read "c^α" and "γ >k 1").
   const all = grouped.flat();
+  const touches = (i: Item, item: Item) => item.x - (i.x + i.w) > -0.05 * i.size && item.x - (i.x + i.w) < 0.15 * i.size;
   const scripted = (item: Item) =>
-    all.some((i) => i !== item && i.size > item.size * 1.1 && Math.abs(i.y - item.y) < i.size * 0.6 && item.x - (i.x + i.w) > -0.05 * i.size && item.x - (i.x + i.w) < 0.15 * i.size);
+    all.some((i) => i !== item && i.size > item.size * 1.1 && Math.abs(i.y - item.y) < i.size * 0.6 && touches(i, item)) ||
+    operators.some((op) => {
+      const box = boxes.get(op);
+      return box !== undefined && op.size > item.size * 1.1 && item.y > box.bottom - op.size * 0.5 && item.y < box.top + op.size * 0.5 && touches(op, item);
+    });
+  // The small glyphs on an item's baseline set on with it: a label's or a
+  // limit's whole run ("k=1" under a sum).
+  const runOf = (item: Item) => {
+    const run = [item];
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const i of all) {
+        if (run.includes(i) || i.size > item.size * 1.1 || Math.abs(i.y - item.y) > item.size * 0.1) continue;
+        if (run.some((r) => i.x < r.x + r.w + item.size * 0.3 && i.x + i.w > r.x - item.size * 0.3)) {
+          run.push(i);
+          grew = true;
+        }
+      }
+    }
+    return { items: run, x1: Math.min(...run.map((i) => i.x)), x2: Math.max(...run.map((i) => i.x + i.w)) };
+  };
   // A label stacked over a relation of the line under it (\overset{p}{\to},
   // a word over an arrow) is that line's, however near the line above: it
-  // joined the line above as a stray letter.
-  const labelOf = (item: Item, n: number) =>
-    stats[n].y < item.y &&
-    item.size <= stats[n].size * 0.8 &&
-    !scripted(item) &&
-    grouped[n].some((i) =>
+  // joined the line above as a stray letter. The whole label stands over
+  // the relation: a sum's "=1" (of "k=1") over the next line's "<" is the
+  // sum's.
+  const labelOf = (item: Item, n: number) => {
+    if (stats[n].y >= item.y || item.size > stats[n].size * 0.8) return false;
+    const run = runOf(item);
+    if (run.items.some(scripted)) return false;
+    const center = (run.x1 + run.x2) / 2;
+    return grouped[n].some((i) =>
       (i.glyphs ?? []).some((g) => {
         if (g.family === null || g.size < stats[n].size * 0.9 || mathGlyph(g.family, g.code)?.cls !== "rel") return false;
         const rise = (item.y - g.y) / g.size;
-        const center = item.x + item.w / 2;
         return rise > 0.45 && rise < 0.95 && center > g.x - g.size * 0.1 && center < g.x + g.w + g.size * 0.1;
       }),
     );
+  };
   // The limits of a text-size operator set over and under it (\sum\limits
   // in a sentence) go where the operator goes: the upper one ended the line
   // above as a stray letter, the lower one ran into the end of the line
@@ -572,14 +596,14 @@ export function buildLines(items: Item[], page: number): Line[] {
       const glyph = item.str.trim();
       const accent = glyph.length === 1 && SPACING_ACCENTS[glyph] !== undefined;
       if (limitOf(item, stats)) continue;
-      if (k + 1 < grouped.length && labelOf(item, k + 1)) {
-        moved[k + 1].push(item);
-        kept[k] = kept[k].filter((i) => i !== item);
-        continue;
-      }
       const op = inlineLimitOf(item);
       if (op) {
         inlineLimits.set(op, [...(inlineLimits.get(op) ?? []), item]);
+        kept[k] = kept[k].filter((i) => i !== item);
+        continue;
+      }
+      if (k + 1 < grouped.length && labelOf(item, k + 1)) {
+        moved[k + 1].push(item);
         kept[k] = kept[k].filter((i) => i !== item);
         continue;
       }
