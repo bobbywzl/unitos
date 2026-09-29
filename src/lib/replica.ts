@@ -1,5 +1,6 @@
 import { JSDOM } from "jsdom";
 import { diffSegments } from "@/lib/anchors/remap";
+import type { TKey } from "@/lib/i18n/dictionaries";
 import { escapeHtml } from "@/lib/parse/office";
 
 // A slide's or a sheet's replica with new words (SPEC.md §27). The one rule
@@ -12,13 +13,27 @@ import { escapeHtml } from "@/lib/parse/office";
 // The html is changed in place, text node by text node, and every other
 // byte stays: an edit taken back gives the replica back byte for byte.
 
-/** Why an edit does not go into the replica: a line, a row, a column, or a
-    tab added or removed (lines); words the replica draws elsewhere or keeps
-    (fixed: a bullet, the speaker notes' label, a chart's data under its
-    drawing, a formula's cell, a cell a merge covers); words where the
-    replica has no run to hold them (empty); a replica whose text is not the
-    block's (stale). */
-export type ReplicaRefusal = "lines" | "fixed" | "empty" | "stale";
+/** Why an edit does not go into the replica: a slide's line, or a tab in
+    one, added or removed (lines); a sheet that is no longer a grid — a row
+    with more or fewer cells than the first, or rows and columns changed in
+    one edit (grid); a sheet's frozen rows or columns added or removed
+    (frozen); rows or columns of a sheet with merged cells or a drawing
+    (merged); words the replica draws elsewhere or keeps (fixed: a bullet,
+    the speaker notes' label, a chart's data under its drawing, a formula's
+    cell, a cell a merge covers); words where the replica has no run to
+    hold them (empty); a replica whose text is not the block's (stale). */
+export type ReplicaRefusal = "lines" | "grid" | "frozen" | "merged" | "fixed" | "empty" | "stale";
+
+/** What the reader is told for each refusal. */
+export const REPLICA_REFUSAL: Record<ReplicaRefusal, TKey> = {
+  lines: "api.replicaLines",
+  grid: "api.replicaGrid",
+  frozen: "api.replicaFrozen",
+  merged: "api.replicaMerged",
+  fixed: "api.replicaFixed",
+  empty: "api.replicaEmpty",
+  stale: "api.replicaStale",
+};
 
 type Located = { node: Text; start: number; end: number; fixed: boolean };
 type Piece = {
@@ -69,6 +84,13 @@ function readReplica(html: string): { text: string; pieces: Piece[]; gaps: strin
     }
     gaps.push(node.data);
     pieces.push({ nodes: [], cell: null, fixed: false });
+  }
+  // A sheet's last cell has no gap after it: empty, its words go at its end.
+  const last = pieces[pieces.length - 1];
+  const lastCell = last.nodes.length === 0 && gaps.length > 0 ? document.querySelector("tbody > tr:last-child > td:last-child") : null;
+  if (lastCell && !lastCell.textContent) {
+    last.cell = (dom.nodeLocation(lastCell)?.endTag?.startOffset ?? PREFIX.length) - PREFIX.length;
+    last.fixed = merged || lastCell.getAttribute("title")?.startsWith("=") === true;
   }
   return { text, pieces, gaps };
 }

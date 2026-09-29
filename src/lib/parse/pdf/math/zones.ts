@@ -9,7 +9,7 @@
 // page's rules are known (resolveZones).
 
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
-import { isMathLetter, isUnicodeMathFont } from "@/lib/parse/pdf/glyphs";
+import { isTextMath, isUnicodeMathFont } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { braceLabelBoxes, hangingGlyph, type Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
@@ -39,10 +39,10 @@ const isMathGlyph = (g: Glyph) =>
 
 function kind(g: Glyph, size: number): Kind {
   if (isMathGlyph(g)) return "math";
-  // A text font's digits and + = ( ) join the math beside them as CMR's
-  // do: MathDesign, MathTime, newtxmath, and LibreOffice set a formula's
-  // digits in the text's font (Utopia, Times, Libertine, Liberation).
-  if (g.family === null) return ATTACH_RE.test(g.unicode) ? "attach" : "text";
+  // A text font's digit joins the math beside it as CMR's does where the
+  // page's formulas take their digits from the text's font (glyphs.ts
+  // isTextMath: MathDesign's Utopia, LibreOffice's Liberation Serif).
+  if (g.family === null) return isTextMath(g) && /^[0-9]$/.test(g.unicode) ? "attach" : "text";
   if (g.family !== "ot1") return "text";
   if (g.size < size * 0.85 || ATTACH_RE.test(g.unicode)) return "attach";
   // An accent over a math letter (\hat, \bar, \dot) is the text font's.
@@ -129,10 +129,10 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       const opens = after !== undefined && (kinds[j] === "math" || after.unicode === "(");
       // A bold letter stands a relation's space from its neighbors
       // (\mathbf{x} = y), and so does a text italic's letter a page's math
-      // takes (glyphs.ts isMathLetter: the Math Guide's A∖B); a roman one
+      // takes (glyphs.ts isTextMath: the Math Guide's A∖B); a roman one
       // touches them (\mathrm{d}x), where a word space, however tight, is a
       // fifth of an em.
-      const near = (/^CMBX/i.test(g.base) || isMathLetter(g) ? 0.3 : 0.12) * size;
+      const near = (/^CMBX/i.test(g.base) || isTextMath(g) ? 0.3 : 0.12) * size;
       const letter = word.length === 1 && ((cur.length > 0 && gap < near) || (nextMath && afterGap < near));
       const name = word.length <= 4 && opens && afterGap < 0.12 * size;
       if (opname || letter || name) cur.push(...glyphs.slice(k, j));

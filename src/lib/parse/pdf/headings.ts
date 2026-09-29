@@ -661,10 +661,21 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, slide
   // voting as its sections: "CCS Concepts" and "Keywords", set the size of
   // "Abstract", stand at its level.
   const part = (s: Segment) => s.type === "HEADING" && Number.isFinite(minDepth) && PART_RE.test(s.text.trim());
+  // A number met before is no section's (OpenStax numbers an exercise "6.1"
+  // under its section "6.1 | …"): it votes for no size's level.
+  const seen = new Set<string>();
+  const repeats = segments.map((s, k) => {
+    const m = depths[k] !== null && s.type === "HEADING" ? HEADING_NUMBER_RE.exec(s.text) : null;
+    const key = m ? m[1] + m[2] : undefined;
+    if (!key) return false;
+    const met = seen.has(key);
+    seen.add(key);
+    return met;
+  });
   const votes = new Map<number, Map<number, number>>();
   segments.forEach((s, k) => {
     const depth = depths[k];
-    if (depth === null && !part(s)) return;
+    if ((depth === null && !part(s)) || repeats[k]) return;
     const level = depth === null ? numberedBase : numberedBase + depth - minDepth;
     const row = votes.get(clusterOf(s)) ?? new Map<number, number>();
     row.set(level, (row.get(level) ?? 0) + 1);
@@ -675,17 +686,30 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, slide
   if (slides) {
     for (const s of segments) if (s.type === "HEADING" && !slideSizes.has(s.page)) slideSizes.set(s.page, clusters(segments.filter((t) => t.page === s.page)));
   }
+  // Each size's level: the one most of its numbered headings take; a size
+  // none numbers stands a level under the larger sizes where one does
+  // (OpenStax's "Z-Scores" under "6.1 | …": the floor at h3 set them at one
+  // level), else by its rank under the biggest, h3 at most.
+  const sizeLevels: number[] = [];
+  let voted = false;
+  sizes.forEach((_, idx) => {
+    const row = votes.get(idx);
+    if (row) voted = true;
+    sizeLevels[idx] = row
+      ? [...row].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]
+      : voted
+        ? Math.max(...sizeLevels.slice(0, idx)) + 1
+        : Math.min(3, base + idx);
+  });
   segments.forEach((s, k) => {
     if (s.type !== "HEADING") return;
     const idx = clusterOf(s);
     const depth = depths[k];
-    const sized = votes.get(idx);
     const level =
       slides ? Math.min(3, 2 + Math.max(0, clusterOf(s, slideSizes.get(s.page) ?? [])))
       : depth !== null ? numberedBase + depth - minDepth
       : part(s) ? numberedBase
-      : sized ? [...sized].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]
-      : Math.min(3, base + Math.max(0, idx));
+      : (sizeLevels[idx] ?? Math.min(3, base));
     const capped = Math.min(6, Math.max(1, level));
     s.html = `<h${capped}${s.align ? ` class="${s.align}"` : ""}>${escapeHtml(s.text)}</h${capped}>`;
   });

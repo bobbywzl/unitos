@@ -394,18 +394,24 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   // On a page whose math fonts set no Latin letter, a formula takes its
   // letters from the text's italic: MathDesign's from Utopia's (arXiv
   // 2506.06352's \mathcal{L}(t)), MathTime's from Times', LibreOffice's
-  // from Liberation Serif's (the Math Guide's A∖B). Such a letter may join
-  // the math beside it (math/zones.ts). Where a math font sets the
-  // letters, the text's italic is prose ("a σ-algebra" in a theorem).
+  // from Liberation Serif's (the Math Guide's A∖B); and on one whose math
+  // fonts set no digit, its digits from the text's font. Such a glyph may
+  // join the math beside it (math/zones.ts). Where a math font sets them,
+  // the text's are prose: "a σ-algebra" in a theorem, and a table's
+  // "53.4" before its gain set in math (arXiv 2411.19946).
   const latin = glyphs.some((g) => g.family === "oml" && /^[A-Za-z]$/.test(mathGlyph("oml", g.code)?.unicode ?? ""));
-  if (!latin) for (const g of glyphs) if (g.family === null && /^[A-Za-z]$/.test(g.unicode) && isItalicFont(g.base)) mathLetters.add(g);
+  const digits = glyphs.some((g) => g.family !== null && /^[0-9]$/.test(g.unicode));
+  for (const g of glyphs) {
+    if (g.family !== null) continue;
+    if ((!latin && /^[A-Za-z]$/.test(g.unicode) && isItalicFont(g.base)) || (!digits && /^[0-9]$/.test(g.unicode))) textMath.add(g);
+  }
   return glyphs;
 }
 
-const mathLetters = new WeakSet<Glyph>();
-/** A text italic's letter on a page whose math fonts set no Latin letter
-    (unicodeMath): a formula's letter where it stands against math. */
-export const isMathLetter = (g: Glyph) => mathLetters.has(g);
+const textMath = new WeakSet<Glyph>();
+/** A text font's italic letter or digit on a page whose math fonts set
+    none (unicodeMath): a formula's own where it stands against math. */
+export const isTextMath = (g: Glyph) => textMath.has(g);
 
 // A big operator or a radical: its glyph hangs from its origin, so a line
 // places it by its center (lines.ts). The integrals after ∐ are esint's.

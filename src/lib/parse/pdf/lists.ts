@@ -308,6 +308,24 @@ function listSegment(items: Item[], depths: number[]): Segment {
 
 // ── Indented bands ──────────────────────────────────────────────────────────
 
+// A bullet the page draws as a shape left of a line's first word, about its
+// letters' height (Beamer's and a slide program's bullets never reach the
+// text layer).
+function drawnBullet(line: Line, ctx: PageContext): boolean {
+  const s = line.size;
+  return [...ctx.drawing.paths.filter((b) => !b.clip), ...ctx.drawing.fills].some(
+    (b) =>
+      b.x2 <= line.x + s * 0.1 &&
+      b.x1 >= line.x - s * 3 &&
+      b.x2 - b.x1 >= s * 0.1 &&
+      b.x2 - b.x1 <= s * 0.9 &&
+      b.y2 - b.y1 >= s * 0.1 &&
+      b.y2 - b.y1 <= s * 0.9 &&
+      b.y1 >= line.y - s * 0.3 &&
+      b.y2 <= line.y + s,
+  );
+}
+
 // An unmarked indented band: its gaps, outdents, and short lines split it
 // into items (vector bullets, whose glyphs never reach the text layer).
 function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
@@ -415,6 +433,19 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
     return { segments: [...segments, ...items.map(field)], next: j };
   }
   const glyphItem = items.length === 1 && GLYPH_BULLET_RE.test(items[0].text) && !/^\s*\*/.test(items[0].text);
+  // Items with no marker in the text are a list only where the page draws
+  // their bullets as shapes; else they are paragraphs set in (an example
+  // box's lines read as a bullet list: OpenStax p. 3).
+  const unmarked = items.filter((item) => !BULLET_RE.test(item.text));
+  if (items.length >= 2 && unmarked.length > 0 && unmarked.filter((item) => drawnBullet(item.lines[0], ctx)).length * 2 < unmarked.length) {
+    const paragraph = (item: (typeof items)[number]): Segment => {
+      const k = lines.indexOf(item.lines[0]);
+      const { tokens, indent } = layout(lines, k, k + item.lines.length, ctx, item.text);
+      const html = tokens.length > 0 ? `<p class="${tokens.join(" ")}"></p>` : undefined;
+      return { type: "PARAGRAPH", text: item.text, ...(html ? { html } : {}), ...(indent ? { indent } : {}), page: item.lines[0].page, runs: item.runs, ...geom(item.lines) };
+    };
+    return { segments: [...segments, ...items.map(paragraph)], next: j };
+  }
   if (items.length >= 2 || glyphItem) {
     const builder = new TextBuilder();
     for (const item of items) {
