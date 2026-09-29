@@ -218,9 +218,8 @@ function charSpans(item: Item): [number, number][] {
 // after a part stay with it, so the line puts exactly one space between it
 // and the next part. A part of a formula is raised or lowered as its glyphs
 // stand against the formula's baseline (base): a formula that fails the
-// check keeps its scripts as the words' sub and sup (a failed formula's
-// scripts read flat on 32 pages of the owner's notes); one that passes
-// drops them (resolveZones), its LaTeX holds them.
+// check keeps its scripts as the words' sub and sup (x_n read "xn"); one
+// that passes drops them (resolveZones), its LaTeX holds them.
 function part(item: Item, spans: [number, number][], from: number, to: number, zone: MathZone | undefined, base: number | undefined): Item {
   const glyphs = item.glyphs!.slice(from, to);
   const start = from === 0 ? 0 : spans[from][0];
@@ -488,17 +487,40 @@ export function mathSpans(text: string, runs: Run[] | undefined): MathSpan[] {
   // zone that failed the check stay text.
   const seen = new Map<MathZone, number>();
   for (const s of spans) for (const z of s.zones) seen.set(z, (seen.get(z) ?? 0) + 1);
-  const out: MathSpan[] = [];
+  const parts: MathSpan[] = [];
   for (const s of spans) {
     if (!s.zones.every((z) => z.ok && seen.get(z) === 1)) continue;
     let { start, end } = s;
     while (start < end && /\s/.test(text[start])) start++;
     while (end > start && /\s/.test(text[end - 1])) end--;
     ({ start, end } = wholeChars(text, start, end));
-    const latex = s.zones.map((z) => z.latex).join(" ");
-    // A formula a text word cut in two ("m(" and ") = m(" around HH) reads
-    // as two formulas with a bracket each: both stay text.
-    if (end > start && balanced(latex)) out.push({ start, end, latex });
+    if (end > start) parts.push({ start, end, latex: s.zones.map((z) => z.latex).join(" ") });
+  }
+  // A formula a text word cut in two ("m(" and ") = m(" around HH) reads
+  // as two formulas with a bracket each: both stay text. A set whose
+  // braces hold words ("{t ∈ ℝ such that g(t) ≥ 1}", broken across lines
+  // too) is one formula: its parts in order, the few words between them
+  // as \text, when together they close the brace the first opened.
+  const out: MathSpan[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (!balanced(p.latex) && /\\lbrace/.test(p.latex)) {
+      let latex = p.latex;
+      let j = i;
+      while (j + 1 < parts.length && j - i < 3 && !balanced(latex)) {
+        const between = text.slice(parts[j].end, parts[j + 1].start);
+        const words = between.match(/\p{L}+/gu) ?? [];
+        if (!/^[\s\p{L}]*$/u.test(between) || words.length > 4) break;
+        latex += words.length > 0 ? `\\text{ ${words.join(" ")} }${parts[j + 1].latex}` : ` ${parts[j + 1].latex}`;
+        j++;
+      }
+      if (j > i && balanced(latex)) {
+        out.push({ start: p.start, end: parts[j].end, latex });
+        i = j;
+        continue;
+      }
+    }
+    if (balanced(p.latex)) out.push(p);
   }
   return out;
 }

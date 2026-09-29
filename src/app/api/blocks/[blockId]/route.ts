@@ -86,6 +86,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
 
   // A blank document is edited through its rich text (SPEC.md §29).
   if (await isRichTextDocument(block.documentId)) {
+    if (block.type === "TABLE") return NextResponse.json({ error: t("api.onlyTextBlocksEdited") }, { status: 400 });
     const result = await editRichText(block.documentId, access.user.id, (doc) => {
       let next: typeof doc | null = doc;
       if (data.text !== undefined) next = replaceBlockText(next, blockId, data.text);

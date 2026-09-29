@@ -563,10 +563,10 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
     );
   const out: Line[] = [];
   // A row that opens with a relation or an operator ("= …", "+ …") goes on
-  // the display over it, however far its sums set the rows apart (the
-  // owner's notes drew 6 such rows as displays of their own), when the two
-  // read as one formula, or when neither reads alone (Springer's rows of a
-  // lone "+" stood apart from the crop they end). A row that reads alone
+  // the display over it, however far its sums set the rows apart (such
+  // rows read as displays of their own), when the two read as one formula,
+  // or when neither reads alone (Springer's rows of a lone "+" stood apart
+  // from the crop they end). A row that reads alone
   // under a display that does not stays an equation of its own (arXiv
   // 2410.04586 p. 7: "= ez^e[…]" under a crop of double sums).
   const continues = new Set<Line>();
@@ -788,7 +788,7 @@ function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; lab
         : Math.min(...run.map((g) => g.x)) - Math.max(...rest.map((g) => g.x + g.w));
     // amsmath sets a label half a quad at least from a wide formula
     // (\mintagsep): a label set 0.79 em left of a display with cases read
-    // into the formula as its first words (the owner's notes).
+    // into the formula as its first words.
     return gap >= size * 0.5 ? { glyphs: run, text } : null;
   };
   const right = labelAt(glyphs.length - 1, -1);

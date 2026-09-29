@@ -42,7 +42,7 @@ class MathView implements NodeView {
     const blockId = this.node.attrs.blockId as string | null | undefined;
     if (blockId) this.dom.setAttribute("data-block-id", blockId);
     // An import's equation numbered at the left margin, as the page sets it
-    // (amsmath's leqno: the owner's math notes number every display there).
+    // (amsmath's leqno).
     const leqno = this.display && this.node.attrs.leqno === true;
     const drawn = `${leqno ? "left" : "right"} ${latex}`;
     if (drawn === this.drawn && this.dom.childNodes.length > 0) return;

@@ -26,8 +26,8 @@ export function cropBox(region: Region, width: number, height: number, pad: numb
     on a page `page` points big: the size the PDF prints it at, scaled down
     to fit the page's text box when it would not (the import's 1 in margins
     are wider than many a PDF's). Drawn at the column's width, a figure of
-    one column of a two-column paper drew twice its printed size, and the
-    owner's mind map ran onto the next page. */
+    one column of a two-column paper drew twice its printed size, and a
+    figure as tall as its page ran onto the next page. */
 export function figureCropSize(
   region: Region | null,
   page: { width: number; height: number; margins?: { top: number; right: number; bottom: number; left: number } },
