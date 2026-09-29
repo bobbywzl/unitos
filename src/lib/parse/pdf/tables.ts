@@ -25,7 +25,9 @@ const FACE_RE = /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/;
 export type CellParagraph = { start: number; end: number; align?: "center" | "right"; indent?: number };
 // fill: the cell's shading (#rrggbb).
 export type TableCell = { text: string; runs: Run[]; colspan?: number; rowspan?: number; paragraphs?: CellParagraph[]; fill?: string };
-export type TableRow = { cells: TableCell[] };
+// height: a ruled row's height on the page, in points, where the page
+// sets it taller than its words (a form's field row, a signature row).
+export type TableRow = { cells: TableCell[]; height?: number };
 // What a table keeps of the page's look: its words' size and each column's
 // width on the page, in points (the import sets the table at that size and
 // its columns in those proportions: an empty form column keeps its width).
@@ -266,8 +268,13 @@ export function tableSegment(
   where: Pick<Segment, "box" | "lineSize" | "mathShare">,
   look?: TableLook,
 ): Segment {
-  const rowHtml = (row: TableRow, tag: "td" | "th", rowIdx: number) =>
-    `<tr>${row.cells
+  const points = (n: number) => Math.round(n * 10) / 10;
+  // A row's height rides on its first cell of one row, as that cell's
+  // height (a cell's height is its row's least height). A <tr> carries no
+  // attribute: merge.ts joins a table's rows across a page break by "<tr>".
+  const rowHtml = (row: TableRow, tag: "td" | "th", rowIdx: number) => {
+    const tall = row.height !== undefined && row.height > 0 && row.height < 2000 ? row.cells.findIndex((c) => (c.rowspan ?? 1) === 1) : -1;
+    return `<tr>${row.cells
       .map((c, cellIdx) => {
         const last = cellIdx === row.cells.length - 1;
         const gap = last
@@ -276,11 +283,14 @@ export function tableSegment(
             : '<span class="cell-gap">\n</span>'
           : '<span class="cell-gap">\t</span>';
         const spans = `${(c.colspan ?? 1) > 1 ? ` colspan="${c.colspan}"` : ""}${(c.rowspan ?? 1) > 1 ? ` rowspan="${c.rowspan}"` : ""}`;
-        const fill = c.fill && HEX_RE.test(c.fill) ? ` style="background-color:${c.fill}"` : "";
-        return `<${tag}${spans}${fill}>${cellHtml(c)}${gap}</${tag}>`;
+        const style = [
+          ...(c.fill && HEX_RE.test(c.fill) ? [`background-color:${c.fill}`] : []),
+          ...(cellIdx === tall ? [`height:${points(row.height ?? 0)}pt`] : []),
+        ];
+        return `<${tag}${spans}${style.length > 0 ? ` style="${style.join(";")}"` : ""}>${cellHtml(c)}${gap}</${tag}>`;
       })
       .join("")}</tr>`;
-  const points = (n: number) => Math.round(n * 10) / 10;
+  };
   const html =
     (look ? `<table style="font-size:${points(look.size)}pt">` : "<table>") +
     (look ? `<colgroup>${look.columns.map((w) => `<col style="width:${points(w)}pt">`).join("")}</colgroup>` : "") +

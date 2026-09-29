@@ -650,7 +650,7 @@ export function sizedAtMost(node: RichNode, size: number): RichNode {
 type TableLook = { pt: number | null; columns: number[] | null };
 
 function tableNode(
-  rows: { cells: { node: RichNode; colspan: number; rowspan: number }[]; pinned: boolean }[],
+  rows: { cells: { node: RichNode; colspan: number; rowspan: number }[]; pinned: boolean; minHeight?: number | null }[],
   room: number,
   look: TableLook = { pt: null, columns: null },
 ): {
@@ -678,7 +678,8 @@ function tableNode(
   const content = grid.map((cells, r): RichNode => {
     // A row the rows above fill whole has no cell of its own.
     const row: RichNode = cells.length > 0 ? { type: "tableRow", content: cells.map((c) => c.node) } : { type: "tableRow" };
-    if (rows[r].pinned && !pinAll) row.attrs = { pinned: true };
+    const attrs = { ...(rows[r].pinned && !pinAll ? { pinned: true } : {}), ...(rows[r].minHeight ? { minHeight: rows[r].minHeight } : {}) };
+    if (Object.keys(attrs).length > 0) row.attrs = attrs;
     return row;
   });
   return { table: { type: "table", content }, rowStarts };
@@ -768,7 +769,10 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
         rowspan: spanOf(cell, "rowspan", trs.length),
       };
     });
-    return { cells, pinned: pinning };
+    // A row the page sets taller than its words keeps its height as its
+    // least height: a cell of one row carries it (a form's field row).
+    const minHeight = Math.max(0, ...cellsOf(tr).map((cell) => (spanOf(cell, "rowspan", trs.length) === 1 ? (pointsOf(styleOf(cell, "height"), 2000) ?? 0) : 0)));
+    return { cells, pinned: pinning, minHeight: minHeight > 0 ? minHeight : null };
   });
   const look: TableLook = {
     pt: pointsOf(styleOf(table, "font-size"), 72),
