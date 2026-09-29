@@ -1,7 +1,10 @@
+import { JumpToEmail } from "./jump-to-email";
+
 // The trial band (signin/page.tsx): under the sign-in card and the reader
 // deck, above the plans. A lead line, then the offer, bigger and bolder, in
 // the hero face: a clay-to-gold fill with a glint that sweeps across it, and
 // four-point stars that twinkle around it (.si-trial-* in globals.css).
+// The offer is a link to the sign-up email field (signin/jump-to-email.tsx).
 // Reduced motion keeps the fill and the stars, still. The bottom padding keeps
 // the lower stars and the glow clear of the plans divider, which overlaps the
 // bottom of the page's main by 80px.
@@ -27,11 +30,11 @@ function Star({ size }: { size: number }) {
   );
 }
 
-export function TrialBand({ lead, offer }: { lead: string; offer: string }) {
+export function TrialBand({ lead, offer, emailId }: { lead: string; offer: string; emailId: string }) {
   return (
     <section className="mt-[clamp(56px,8vw,112px)] flex flex-col items-center gap-4 pb-10 text-center">
       <p className="text-[length:clamp(1.15rem,2.2vw,1.75rem)] leading-snug font-bold text-balance text-ink">{lead}</p>
-      <p className="relative inline-block px-2">
+      <JumpToEmail emailId={emailId} className="si-trial-link relative inline-block rounded-2xl px-2">
         {STARS.map((s, i) => (
           <span
             key={i}
@@ -45,7 +48,7 @@ export function TrialBand({ lead, offer }: { lead: string; offer: string }) {
         <span className="si-trial-offer block font-hero text-[length:clamp(2rem,5vw,3.75rem)] leading-[1.05] text-balance uppercase">
           {offer}
         </span>
-      </p>
+      </JumpToEmail>
     </section>
   );
 }

@@ -17,6 +17,9 @@ import { TrialBand } from "./trial-band";
 
 export const dynamic = "force-dynamic";
 
+// The sign-up email field's id: the trial band's offer jumps to it.
+const SIGNUP_EMAIL_ID = "signup-email";
+
 // The sign-in page's display face (.font-hero in globals.css): a condensed,
 // high-contrast serif, set in capitals — formal and eye-catching, unlike
 // Caprasimo, which carries headings inside the app. Variable weight and
@@ -246,6 +249,7 @@ export default async function SignInPage({
                       // asked for.
                       <form action="/api/auth/email/start" method="post" className="space-y-2.5">
                         <input
+                          id={SIGNUP_EMAIL_ID}
                           name="email"
                           type="email"
                           required
@@ -401,8 +405,11 @@ export default async function SignInPage({
 
         {/* The trial band: the lead line and the offer, under the card and
             the deck, above the plans. Only where sign-in is on: a
-            single-reader instance has no trial. */}
-        {enabled && <TrialBand lead={t("signin.trialLead")} offer={t("signin.trialOffer")} />}
+            single-reader instance has no trial. The offer jumps to the
+            sign-up email field. */}
+        {enabled && (
+          <TrialBand lead={t("signin.trialLead")} offer={t("signin.trialOffer")} emailId={SIGNUP_EMAIL_ID} />
+        )}
       </main>
 
       {plans && (

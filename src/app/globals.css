@@ -1615,6 +1615,26 @@ ellipse.anchor-flash {
     animation: si-trial-twinkle 2.4s ease-in-out infinite;
   }
 }
+/* The offer is a link to the sign-up email field: it lifts a little and
+   glows brighter under the pointer, and draws a clay ring on keyboard focus. */
+.si-trial-link {
+  cursor: pointer;
+  outline: none;
+}
+.si-trial-link:hover .si-trial-offer {
+  filter: drop-shadow(0 0 26px rgba(217, 138, 82, 0.75));
+}
+.si-trial-link:focus-visible {
+  box-shadow: 0 0 0 2px var(--clay);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .si-trial-link {
+    transition: transform 0.2s ease;
+  }
+  .si-trial-link:hover {
+    transform: scale(1.03);
+  }
+}
 @keyframes si-trial-glint {
   0% {
     background-position: 100% 0;
