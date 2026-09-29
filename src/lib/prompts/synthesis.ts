@@ -132,7 +132,7 @@ function actLines(act: PageActions): string[] {
     "3. Use block ids exactly as given in the [block <id>] tags. Every quote must be an exact substring of the named block's text.",
     "4. Use the smallest set of actions that fulfils the message. Never change text the message did not ask to change.",
     "5. description: one plain sentence of what the action does, for the reader's approval list.",
-    "6. TABLE, FIGURE, SLIDE, SHEET, and VIDEO blocks cannot be edited or removed; the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
+    "6. TABLE, FIGURE, and VIDEO blocks cannot be edited or removed. A SLIDE block's words change with edit_block within its lines: the new text keeps every line and every bullet, and the line Speaker notes: as it is. A SHEET block cannot be edited. A SLIDE or a SHEET block is never removed, and the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
     act.edits === "suggestions"
       ? "7. A change to the document's words or styles is one suggest action, whatever its size: the whole document, a section, or a paragraph. The answer is one sentence on what will change; never write the changed text in the answer: the suggestions carry it."
       : act.edits === "blocks"

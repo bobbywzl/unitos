@@ -1,13 +1,14 @@
 // Headings: which lines are a heading, what a numbered heading looks like,
 // and each heading's level.
 
+import { lineColumn } from "@/lib/parse/pdf/columns";
 import { TOC_TAIL_RE } from "@/lib/parse/pdf/contents";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
 import { charCount } from "@/lib/parse/pdf/glyphs";
 import { BULLET_RE, isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { isCentered, leftEdge, lineAlign, readParagraph } from "@/lib/parse/pdf/paragraphs";
-import { boldShare, escapeHtml, fillsMargin, joinGroup, lineAsPart, startsWithBoldLead } from "@/lib/parse/pdf/text";
+import { TextBuilder, boldShare, escapeHtml, fillsMargin, joinGroup, lineAsPart, startsWithBoldLead } from "@/lib/parse/pdf/text";
 import type { Item, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 
 // Numbered heading: the number must close with "." or ")" or dot into a
@@ -343,16 +344,34 @@ function sectionHeading(lines: Line[], i: number, ctx: PageContext): Step | null
   const last = run[run.length - 1];
   const above = lines[i - 1];
   const below = lines[j];
-  if (!below) return apartAbove(above, line, ctx) ? heading(run, j) : null;
+  if (!below) return apartAbove(above, line, ctx) ? heading(run, j, centered) : null;
   const opens = below.x > line.x + line.size * 0.8 && below.x < line.x + line.size * 3 && textShare(below, (item) => item.italic) < 0.5;
   if (!apartAbove(above, line, ctx) && !opens && !(centered && apartBelow(last, below, ctx))) return null;
-  return heading(run, j);
+  return heading(run, j, centered);
 }
 
 // One heading of a run of lines, wrapped lines joined with spaces.
-function heading(run: Line[], next: number): Step {
-  const { text, runs } = joinGroup(run);
-  return { segments: [headingOf(run, text.replace(/\n/g, " "), runs)], next };
+function heading(run: Line[], next: number, centered: boolean): Step {
+  const { text, runs } = headingText(run, centered);
+  return { segments: [headingOf(run, text, runs)], next };
+}
+
+// A heading's lines as one text: a wrap is a space, and in a centered
+// heading a line the writer broke stays a line of its own: the upper line
+// stops short of its column by more than the next line's first word, the
+// test that splits bold centered lines into paragraphs (paragraphs.ts). The
+// legal packet's title, two centered lines, drew as one line.
+function headingText(run: Line[], centered: boolean): { text: string; runs: Run[] } {
+  const builder = new TextBuilder();
+  let from = 0;
+  for (let k = 1; k <= run.length; k++) {
+    const [prev, next] = [run[k - 1], run[k]];
+    if (next && !(centered && prev.xEnd + prev.size * 1.28 + next.firstWordWidth < (lineColumn(prev)?.[1] ?? 0))) continue;
+    const part = joinGroup(run.slice(from, k));
+    builder.append({ text: part.text.replace(/\n/g, " "), runs: part.runs }, "\n");
+    from = k;
+  }
+  return builder;
 }
 
 // An unnumbered title in capitals on a line of its own, centered in its
@@ -363,6 +382,9 @@ function heading(run: Line[], next: number): Step {
 // its title ("CHAPTER 2") stay paragraphs.
 const INITIAL_RE = /(?:^|\s)\p{Lu}\.(?=\s|$)/u;
 const LABEL_RE = /^(?:chapter|part|book|appendix|section|lecture)\s+\S+$/i;
+// A division's label alone on its line, set bold: an exhibit, a schedule, a
+// section of a contract or a form ("EXHIBIT B", "SECTION A", "ARTICLE IV").
+const DIVISION_RE = /^(?:exhibit|schedule|annex|appendix|part|article|section)\s+[\p{L}\p{N}]{1,4}\.?$/iu;
 function capsHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
   const line = lines[i];
   const text = line.text.trim();
@@ -442,8 +464,8 @@ function numberedHeading(lines: Line[], i: number, ctx: PageContext, runOf: numb
     (styled && above !== undefined && above.y - line.y > line.size * ctx.leading * 1.3 && styledShare(below) < 0.5) ||
     (styled && below.x > last.x + last.size && last.xEnd < below.xEnd - last.size * 3);
   if (!isolated) return null;
-  const { text, runs } = joinGroup(run);
-  return { segments: [headingOf(run, text.replace(/\n/g, " "), runs)], next: j };
+  const { text, runs } = headingText(run, centered);
+  return { segments: [headingOf(run, text, runs)], next: j };
 }
 
 // The line's last words are set bold or in small caps. A bold lead with a
@@ -501,12 +523,19 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   const run: Line[] = [line];
   let j = i + 1;
   const centered = isCentered(lines, i, ctx);
-  while (j < lines.length && run.length < 3 && !boldLead && runOf[j] === -1) {
+  // A division's label ("EXHIBIT B", "SECTION A") is a heading of its own,
+  // and the title under it goes on over a wider gap: the legal packet sets
+  // "OAK VALLEY INVESTMENTS LLC" over "INVESTOR SUITABILITY QUESTIONNAIRE"
+  // as far apart as the label is from them.
+  const division = DIVISION_RE.test(text);
+  const underLabel = i > 0 && DIVISION_RE.test(lines[i - 1].text.trim());
+  while (j < lines.length && run.length < 3 && !boldLead && !division && runOf[j] === -1) {
     const next = lines[j];
     if (
       !titleLike(next) ||
+      DIVISION_RE.test(next.text.trim()) ||
       Math.abs(next.size - line.size) > 0.5 ||
-      run[run.length - 1].y - next.y > line.size * ctx.leading * 1.3 ||
+      run[run.length - 1].y - next.y > line.size * ctx.leading * (underLabel ? 2 : 1.3) ||
       !(centered ? isCentered(lines, j, ctx) : Math.abs(next.x - line.x) <= line.size)
     )
       break;
@@ -537,8 +566,8 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   // STATEMENTS OF OPERATIONS (Unaudited)" read as a paragraph).
   const centeredTitle = title && centered && gapAbove;
   if (!below || !(centeredTitle || ((gapAbove || headingAbove) && (gapBelow || headingBelow || (headingAbove && bodyBelow))))) return null;
-  const { text: joined, runs } = joinGroup(run);
-  return { segments: [headingOf(run, joined.replace(/\n/g, " "), runs)], next: j };
+  const { text: joined, runs } = headingText(run, centered);
+  return { segments: [headingOf(run, joined, runs)], next: j };
 }
 
 // ── Heading levels ──────────────────────────────────────────────────────────
