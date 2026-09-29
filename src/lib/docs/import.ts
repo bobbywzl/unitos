@@ -164,6 +164,9 @@ const TITLE_REACH = 12;
 /** The pageless text column at its narrowest, in px (components/docs/page/
     geometry.ts pagelessWidth): a table fitted to it fits every column. */
 const PAGELESS_COLUMN_PX = 600;
+/** A table's cell padding as its page sets it, "top right bottom left" in
+    points (a Word file's cell margins: the html's data-cell-padding). */
+const CELL_PADDING = /^<table\b[^>]*\bdata-cell-padding="((?:\d{1,2}(?:\.\d)? ){3}\d{1,2}(?:\.\d)?)"/;
 
 const ROLES = ["kicker", "meta", "label", "display", "quote", "caption", "footnote"] as const;
 type Role = (typeof ROLES)[number];
@@ -1303,6 +1306,9 @@ class Converter {
     const notes = this.cellNotes(block, index);
     const built = (block.html ? tableFromHtml(block.html, this.room, notes) : null) ?? tableFromText(block.text, this.room);
     if (!built) return this.carry(starts);
+    // The cells' padding as the page sets it (css/import.css draws it).
+    const padding = CELL_PADDING.exec(block.html ?? "")?.[1];
+    if (padding) built.table.attrs = { ...built.table.attrs, cellPadding: padding };
     // A footnote whose number the cell holds is the page editor's; one whose
     // label stayed words stays a paragraph after the table.
     walk(built.table, (node) => {

@@ -519,12 +519,16 @@ function table(node: RichNode, ctx: Ctx): Table {
   const columnWidths = widths.map((w) => Math.round((w ?? share) * 15));
   const align = node.attrs?.tableAlign;
   const indent = num(node.attrs?.tableIndent);
+  // The cells' padding as the page set it (an import's cellPadding), else
+  // 5 pt a side.
+  const [top, right, bottom, left] = typeof node.attrs?.cellPadding === "string" ? node.attrs.cellPadding.split(" ").map(Number) : [];
+  const padded = [top, right, bottom, left].every((v) => typeof v === "number" && Number.isFinite(v) && v >= 0);
   return new Table({
     columnWidths,
     width: { size: columnWidths.reduce((sum, w) => sum + w, 0), type: WidthType.DXA },
     alignment: align === "center" ? AlignmentType.CENTER : align === "right" ? AlignmentType.RIGHT : undefined,
     indent: indent && align !== "center" && align !== "right" ? { size: tw(indent), type: WidthType.DXA } : undefined,
-    margins: { top: 100, bottom: 100, left: 100, right: 100 },
+    margins: padded ? { top: tw(top), right: tw(right), bottom: tw(bottom), left: tw(left) } : { top: 100, bottom: 100, left: 100, right: 100 },
     rows: rows.map((row) => {
       const minHeight = num(row.attrs?.minHeight);
       return new TableRow({

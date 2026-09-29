@@ -41,6 +41,10 @@ class MathView implements NodeView {
     const latex = String(this.node.attrs.latex ?? "");
     const blockId = this.node.attrs.blockId as string | null | undefined;
     if (blockId) this.dom.setAttribute("data-block-id", blockId);
+    // An import's display keeps the space its page leaves under it, drawn
+    // as a paragraph's space after is.
+    const after: unknown = this.display ? this.node.attrs.spaceAfter : null;
+    this.dom.style.paddingBottom = typeof after === "number" && after > 0 ? `${after}pt` : "";
     // An import's equation numbered at the left margin, as the page sets it
     // (amsmath's leqno).
     const leqno = this.display && this.node.attrs.leqno === true;
@@ -222,6 +226,16 @@ const DocsBlockMath = BlockMath.extend({
         default: null,
         parseHTML: (el) => (el.hasAttribute("data-leqno") ? true : null),
         renderHTML: (attrs) => (attrs.leqno === true ? { "data-leqno": "" } : {}),
+      },
+      // The space under an import's display, in points: the page's
+      // (lib/docs/import.ts); null, none.
+      spaceAfter: {
+        default: null,
+        parseHTML: (el) => {
+          const v = Number(el.getAttribute("data-space-after"));
+          return el.hasAttribute("data-space-after") && Number.isFinite(v) && v > 0 ? v : null;
+        },
+        renderHTML: (attrs) => (typeof attrs.spaceAfter === "number" ? { "data-space-after": String(attrs.spaceAfter) } : {}),
       },
     };
   },

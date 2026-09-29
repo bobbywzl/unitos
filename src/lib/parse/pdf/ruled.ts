@@ -22,6 +22,7 @@ import {
   isProseColumns,
   leadIn,
   LINK_LINE_RE,
+  NUMERIC_CELL_RE,
   rowsOf,
   tableSegment,
   withoutSignColumns,
@@ -141,7 +142,9 @@ function partOf(grid: Grid, r0: number, r1: number): Grid {
 // paragraph abut like cells and hold its sentences.
 function isTableGrid(grid: Grid, items: Item[], drawing: TableDrawing, pageWidth: number, pageHeight: number): boolean {
   const b = grid.box;
-  if (grid.ys.length < 3 || grid.xs.length < 3) return false;
+  // One column of shaded rows is a table when its text sets columns (a
+  // statement shades each row across the page: the 10-K, p. 72).
+  if (grid.ys.length < 3 || grid.xs.length < 2 || (grid.xs.length === 2 && columnSeparators(buildLines(items.filter((it) => inBox(it, b)), 0)).length === 0)) return false;
   const edges = [b.x1 <= pageWidth * 0.02, b.x2 >= pageWidth * 0.98, b.y1 <= pageHeight * 0.02, b.y2 >= pageHeight * 0.98];
   if (edges.filter(Boolean).length >= 2) return false;
   if (drawing.images.some((img) => img.x1 < b.x2 && img.x2 > b.x1 && img.y1 < b.y2 && img.y2 > b.y1)) return false;
@@ -527,7 +530,7 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
   const loose = items.filter((it) => !grids.some((grid) => inBox(it, grid.box)));
   for (const grid of grids) {
     const body = items.filter((it) => inBox(it, grid.box));
-    if (isGroupGrid(grid, body)) {
+    if (grid.xs.length === 2 || isGroupGrid(grid, body)) {
       // Its head, found against the columns its text sets: a statement
       // shades its rows, and its year head stands over the shading (the
       // 10-K's income statement, p. 54). Its rows hold several lines: the
@@ -539,6 +542,10 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
       const box = head.length > 0 ? { ...b, y2: Math.max(...head.map((it) => it.y + it.size)) } : b;
       const inside = [...head, ...body];
       const inner = joinedRules(drawing.rules.filter((r) => r.dir === "h" && r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3));
+      // The grid's top parts the head over it from its rows, as a rule
+      // drawn there would (the rules under a head's parts span some
+      // columns only).
+      if (head.length > 0) inner.push({ dir: "h", x1: b.x1, x2: b.x2, y1: b.y2, y2: b.y2, thickness: 0 });
       regions.push({ box, items: inside, lines: buildLines(inside, 0), grid: null, rules: inner, drawing });
       continue;
     }
@@ -1112,11 +1119,23 @@ function linesText(lines: Line[]): { text: string; runs: Run[] } {
 function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawing: TableDrawing): TableRow[] {
   const inner = grid.xs.slice(1, -1);
   const pieces = items.flatMap((it) => splitAt(it, inner.filter((x) => x > it.x + it.w * 0.05 && x < it.x + it.w * 0.95)));
-  const cells = cells.flatMap((cell) => unmerged(cell, grid.xs, items, pieces));
+  const cells = grid.cells.flatMap((cell) => unmerged(cell, grid.xs, items, pieces));
   const rowCount = grid.ys.length - 1;
-  const rows: TableRow[] = Array.from({ length: rowCount }, () => ({ cells: [] }));
   const size = textSize(items);
   const cellLines = cells.map((cell) => fractionCell(buildLines(pieces.filter((it) => inBox(it, cell)), page), drawing.rules, size));
+  // A row whose cells with words each hold as many lines on the same
+  // baselines, one cell's lines all amounts, is that many rows: a
+  // statement's lines in one ruled row (the invoice's vehicle price,
+  // plates, and discount read as one row of three-line cells).
+  const splits = Array.from({ length: rowCount }, (_, r) => {
+    const own = cells.flatMap((cell, k) => (cell.row === r && cellLines[k].length > 0 ? [cellLines[k]] : []));
+    const n = own[0]?.length ?? 0;
+    const spanned = cells.some((cell) => cell.rowspan > 1 && cell.row <= r && cell.row + cell.rowspan > r);
+    if (spanned || own.length < 2 || n < 2 || own.some((lines) => lines.length !== n)) return 1;
+    const level = own.every((lines) => lines.every((l, i) => Math.abs(l.y - own[0][i].y) <= l.size * 0.3));
+    return level && own.some((lines) => lines.every((l) => NUMERIC_CELL_RE.test(l.text.trim()))) ? n : 1;
+  });
+  const rows: TableRow[][] = splits.map((n) => Array.from({ length: n }, () => ({ cells: [] })));
   // The cells' padding: the least a line stands from its cell's left edge,
   // and from its right edge (Word's 5.4 pt); more is a line set in.
   const least = (gaps: number[]) => Math.min(10, ...gaps.filter((d) => d >= 0));
@@ -1149,28 +1168,32 @@ function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawin
   cells.forEach((cell, k) => {
     built.push(...cellLines[k]);
     const edge = cell.colspan === 1 ? flush.get(cell.col) : undefined;
-    const words = cellLines[k].length > 0 ? cellParagraphs(cellLines[k], cell, inset, edge, sits[k] === "full" && centeredRow(cell.row)) : { text: "", runs: [] };
-    const out: TableCell = words.text.trim() === "" ? { text: "", runs: [] } : words;
-    if (cell.colspan > 1) out.colspan = cell.colspan;
-    if (cell.rowspan > 1) out.rowspan = cell.rowspan;
     const fill = cellFill(cell, grid.box, drawing.fills);
-    if (fill) out.fill = fill;
-    rows[cell.row].cells.push(out);
+    const n = splits[cell.row];
+    const parts = n > 1 ? Array.from({ length: n }, (_, i) => cellLines[k].slice(i, i + 1)) : [cellLines[k]];
+    parts.forEach((lines, i) => {
+      const words = lines.length > 0 ? cellParagraphs(lines, cell, inset, edge, sits[k] === "full" && centeredRow(cell.row)) : { text: "", runs: [] };
+      const out: TableCell = words.text.trim() === "" ? { text: "", runs: [] } : words;
+      if (cell.colspan > 1) out.colspan = cell.colspan;
+      if (cell.rowspan > 1) out.rowspan = cell.rowspan;
+      if (fill) out.fill = fill;
+      rows[cell.row][i].cells.push(out);
+    });
   });
-  return rows.filter((r) => r.cells.length > 0);
+  return rows.flat().filter((r) => r.cells.length > 0);
 }
 
 // A cell merged across columns whose phrases stand in those columns, none
-// across a column's line (a quarter of a phrase past it at most), two
-// columns with words at least, is those columns' cells: a form's row whose
-// inner rules are not drawn (the invoice's vehicle row, set under its order
-// row's columns, read as one cell). pieces: the items cut at the lines.
+// across a column's line (half an em past it at most), two columns with
+// words at least, is those columns' cells: a form's row whose inner rules
+// are not drawn (the invoice's vehicle row, set under its order row's
+// columns, read as one cell). pieces: the items cut at the lines.
 function unmerged(cell: GridCell, xs: number[], items: Item[], pieces: Item[]): GridCell[] {
   if (cell.colspan < 2) return [cell];
   const lines = xs.slice(cell.col + 1, cell.col + cell.colspan);
-  const across = buildLines(items.filter((it) => inBox(it, cell)), 0)
-    .flatMap(phrasesOf)
-    .some((p) => lines.some((x) => Math.min(x - p.x1, p.x2 - x) > (p.x2 - p.x1) * 0.25));
+  const across = buildLines(items.filter((it) => inBox(it, cell)), 0).some((l) =>
+    phrasesOf(l).some((p) => lines.some((x) => Math.min(x - p.x1, p.x2 - x) > l.size * 0.5)),
+  );
   const columns = new Set(pieces.filter((it) => inBox(it, cell)).map((it) => columnAt(centerOf(it).x, lines)));
   if (across || columns.size < 2) return [cell];
   return Array.from({ length: cell.colspan }, (_, k) => ({ ...cell, x1: xs[cell.col + k], x2: xs[cell.col + k + 1], col: cell.col + k, colspan: 1 }));

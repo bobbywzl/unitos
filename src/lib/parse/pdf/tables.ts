@@ -410,8 +410,8 @@ export function boldHeaderRows(rows: TableRow[]): number {
 }
 
 // A cell of a value: an amount, a share, or a count ("$ 2,174", "(357)",
-// "21.0 %").
-const NUMERIC_CELL_RE = /^[$€£¥]?\s*\(?[-−–]?[\d.,]+\)?\s*%?$/;
+// "21.0 %", "-£2,000").
+export const NUMERIC_CELL_RE = /^[-−–]?[$€£¥]?\s*\(?[-−–]?[\d.,]+\)?\s*%?$/;
 
 // Row starts in a run of lines split into cells. Rows come from the run's
 // vertical rhythm: with two gap sizes present, the small gap is a wrapped

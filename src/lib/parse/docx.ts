@@ -1112,6 +1112,8 @@ type TableCell = {
   fill?: HexColor | null;
   /** The cell's own borders (w:tcBorders): a side it sets, null for none. */
   borders?: Partial<Record<BorderSideName, string | null>>;
+  /** The cell's margins in points, "top right bottom left" (cellMargins). */
+  margins?: string;
 };
 
 /** A table's borders: its style's, then its own (w:tblBorders), each edge
@@ -1999,6 +2001,7 @@ class DocxReader {
     const sizes = new Map<number, number>();
     const header: boolean[] = [];
     const firstRow = style.some((s) => s.firstRow) && tableLooksFirstRow(tblPr);
+    const outer = [...style.map((s) => child(s.tblPr, "tblCellMar")), child(tblPr, "tblCellMar")];
     rows.forEach((tr, r) => {
       const trPr = child(tr, "trPr");
       header.push(flag(child(trPr, "tblHeader")) === true || (r === 0 && firstRow));
@@ -2017,6 +2020,7 @@ class DocxReader {
         } else {
           cell = this.cell(tc, style, notes, sizes);
           cell.colspan = span;
+          cell.margins = cellMargins([...outer, child(child(tc, "tcPr"), "tcMar")]).map(points).join(" ");
           row.push({ cell, origin: true });
         }
         for (let k = 1; k < span; k++) row.push({ cell, origin: false });
@@ -2081,7 +2085,16 @@ class DocxReader {
       widths.length === cols && widths.every((w) => w > 0 && w < 100_000)
         ? `<colgroup>${widths.map((w) => `<col style="width:${points(w)}pt">`).join("")}</colgroup>`
         : "";
-    const open = size !== undefined && size > 0 && size < 1000 ? `<table style="font-size:${size}pt">` : "<table>";
+    // The cells' margins (the ones most cells take), in points, as the
+    // page editor pads an import's cells (css/import.css).
+    const margins = new Map<string, number>();
+    for (const row of grid) {
+      for (const slot of row) {
+        if (slot.origin && slot.cell.margins) margins.set(slot.cell.margins, (margins.get(slot.cell.margins) ?? 0) + 1);
+      }
+    }
+    const padding = [...margins].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const open = `<table${size !== undefined && size > 0 && size < 1000 ? ` style="font-size:${size}pt"` : ""}${padding ? ` data-cell-padding="${padding}"` : ""}>`;
     const block: ParsedBlock = { type: "TABLE", text: texts.join("\n"), html: `${open}${colgroup}${head}${body}</table>` };
     // The note marks in the cells, at their places in the table's text: the
     // references a table's footnotes are cited from.
@@ -2179,6 +2192,22 @@ function cellsOf(tr: Element): Element[] {
     if (c.localName === "tc") out.push(c);
     else if (c.localName === "sdt") out.push(...cellsOf(child(c, "sdtContent") ?? c));
     else if (c.localName === "customXml") out.push(...cellsOf(c));
+  }
+  return out;
+}
+
+/** A cell's margins in twips, top, right, bottom, left: its own (w:tcMar)
+    over its table's and its table style's (w:tblCellMar) over Word's, none
+    over and under the words and 108 twips at the sides. */
+function cellMargins(layers: (Element | null)[]): number[] {
+  const out = [0, 108, 0, 108];
+  for (const margins of layers) {
+    (["top", "right", "bottom", "left"] as const).forEach((side, k) => {
+      const el = child(margins, side) ?? (side === "left" ? child(margins, "start") : side === "right" ? child(margins, "end") : null);
+      const w = intAttr(el, "w");
+      const type = attr(el, "type");
+      if (w !== null && w >= 0 && w <= 2880 && (type === null || type === "dxa")) out[k] = w;
+    });
   }
   return out;
 }
