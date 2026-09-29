@@ -32,6 +32,10 @@ export type ResolvedOp =
   | { i: number; op: "remove_blocks"; blockIds: string[]; base: string[]; why: string }
   | { i: number; op: "set_style"; blockId: string; style: SuggestStyle; baseStyle: SuggestStyle; why: string }
   | { i: number; op: "set_alignment"; blockId: string; alignment: SuggestAlignment; why: string }
+  // Line spacing as a multiple, the space before and after in points.
+  | { i: number; op: "set_spacing"; blockId: string; line?: number; before?: number; after?: number; why: string }
+  // Indents in points: left, right, and the first line's.
+  | { i: number; op: "set_indent"; blockId: string; left?: number; right?: number; firstLine?: number; why: string }
   // A table's rows and columns, each named by one of its cells' blockId.
   | { i: number; op: "insert_row"; blockId: string; where: "above" | "below"; cells: string[]; why: string }
   | { i: number; op: "remove_row"; blockId: string; why: string }

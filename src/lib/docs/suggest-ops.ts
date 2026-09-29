@@ -141,6 +141,8 @@ export type BlockPlace = {
   container: string;
   /** The list or the table it stands in: a window never cuts inside one. */
   group: string | null;
+  /** An image (a FIGURE row with no caption of its own). */
+  image?: true;
 };
 
 const LIST_STYLES: Record<string, SuggestStyle> = { bulletList: "bulleted", orderedList: "numbered", taskList: "checklist" };
@@ -166,7 +168,7 @@ export function blockPlaces(doc: RichNode): Map<string, BlockPlace> {
           : node.type !== "paragraph"
             ? null
             : (at.list ?? (docStyle === "title" || docStyle === "subtitle" ? docStyle : "normal"));
-      places.set(blockId, { style, where: at.where, container: at.container, group: at.group });
+      places.set(blockId, { style, where: at.where, container: at.container, group: at.group, ...(node.type === "image" ? { image: true as const } : {}) });
       return;
     }
     const cell = node.type === "tableCell" || node.type === "tableHeader";
@@ -449,6 +451,13 @@ export function resolveOps(
       const row = rows[k];
       if (!inScope.has(row.id)) return "outside";
       const text = op.text.trim();
+      // An image has no caption of its own: its caption is a line under it,
+      // in italics, as a caption is written in Google Docs.
+      if (places.get(row.id)?.image) {
+        if (!text || places.get(row.id)?.where !== "body") return "object";
+        const markdown = `*${text.replace(/\s+/g, " ").replace(/\*/g, "")}*`;
+        return { op: { i, op: "insert_blocks", afterBlockId: row.id, markdown, why: op.why }, claim: { kind: "gap", after: k }, chars: markdown.length };
+      }
       if (row.type === "EQUATION" && texError(text) !== null) return "tex";
       if (!text || text === row.text.trim()) return null;
       return { op: { i, op: op.op, blockId: row.id, base: row.text, text, why: op.why }, claim: { kind: "rows", rows: [k] }, chars: text.length };
