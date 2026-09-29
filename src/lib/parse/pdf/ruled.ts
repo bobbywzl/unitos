@@ -143,6 +143,11 @@ function partOf(grid: Grid, r0: number, r1: number): Grid {
 function isTableGrid(grid: Grid, items: Item[], drawing: TableDrawing, pageWidth: number, pageHeight: number): boolean {
   const b = grid.box;
   if (grid.ys.length < 3 || grid.xs.length < 2) return false;
+  // Cells of several columns stand side by side on a row at least: boxes
+  // stacked one to a row are a paragraph's lines painted white (a Chinese
+  // paper's last three references read as a table).
+  const beside = grid.ys.slice(1).some((_, r) => grid.cells.filter((c) => c.row <= r && c.row + c.rowspan > r).length >= 2);
+  if (grid.xs.length >= 3 && !beside) return false;
   // One column of shaded rows is a table when its text sets columns, and
   // not two of prose (a statement shades each row across the page: the
   // 10-K, p. 72).
@@ -463,9 +468,11 @@ function checkboxes(drawing: PageDrawing, items: Item[]): { squares: PathBox[]; 
     drawing.rules.some((r) => r.dir === "h" && near(r.y1, p.y2) && across(r, p.x1, p.x2)) &&
     drawing.rules.some((r) => r.dir === "v" && near(r.x1, p.x1) && across(r, p.y1, p.y2)) &&
     drawing.rules.some((r) => r.dir === "v" && near(r.x1, p.x2) && across(r, p.y1, p.y2));
+  // A square filled in a color is a chart's legend key, no box to tick.
+  const filled = (p: Box) => drawing.fills.some((f) => f.color !== undefined && !/^#(?:f[5-9a-f]){3}$/i.test(f.color) && near(f.x1, p.x1) && near(f.x2, p.x2) && near(f.y1, p.y1) && near(f.y2, p.y2));
   const found = drawing.paths.filter((p) => {
     const [w, h] = [p.x2 - p.x1, p.y2 - p.y1];
-    return !p.clip && w >= 4 && w <= 16 && Math.abs(w - h) <= w * 0.15 && ruled(p) && !items.some((it) => inBox(it, p));
+    return !p.clip && w >= 4 && w <= 16 && Math.abs(w - h) <= w * 0.15 && ruled(p) && !filled(p) && !items.some((it) => inBox(it, p));
   });
   const squares: PathBox[] = [];
   const marks: Item[] = [];
