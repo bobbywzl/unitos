@@ -1758,7 +1758,7 @@ export function ReaderInteractions({
   const [commentsView, setCommentsView] = useState<CommentsView>("all");
   const commentsHidden = commentsView === "hidden";
   // The page editor's card column (layer/comment-card.tsx CardColumn): the
-  // cards stand in it, over the notes tray when the pane has no room.
+  // cards stand in it, inside the pane, never over the notes tray.
   const [columnHost, setColumnHost] = useState<HTMLDivElement | null>(null);
   const inColumn = (cards: React.ReactNode) => (columnHost ? createPortal(cards, columnHost) : cards);
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
@@ -3590,6 +3590,22 @@ export function ReaderInteractions({
     container.addEventListener("docs:margin", onMargin);
     return () => container.removeEventListener("docs:margin", onMargin);
   }, [blankDocument]);
+  // A comment the reader just made, where the margin has no room for the
+  // cards at rest (a split pane, or no room beside the page even with the
+  // page at the canvas's left edge): only the open card shows there, so the
+  // new comment's card opens, under its words, once the stored comment is
+  // in. Not when the reader has moved on to a toolbar or another card.
+  const madeCommentRef = useRef<string[]>([]);
+  useEffect(() => {
+    const sourceId = madeCommentRef.current.find((id) => annotationBubbles[id]);
+    if (!sourceId) return;
+    madeCommentRef.current = [];
+    const container = containerRef.current;
+    if (!richTextRef.current || !container || popoverRef.current || marginCardOpenRef.current) return;
+    const page = splitRef.current ? null : pageGeometry(container, docsShiftRef.current);
+    if (page && marginPlace(page)) return;
+    window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
+  }, [annotationBubbles]);
   // Every painted comment has its card in the column, one line each; the
   // open one is its CommentCard. None minimized, hidden, or in a split pane.
   const columnComments =
@@ -5198,6 +5214,7 @@ export function ReaderInteractions({
       // Each mark learns its stored source (one per segment, in the passage's
       // order), and one whose stored copy is already in goes.
       const note = (await res.json().catch(() => null)) as { sources?: { id: string; blockId: string }[] } | null;
+      if (input.comment) madeCommentRef.current = (note?.sources ?? []).map((s) => s.id);
       const sources = [...(note?.sources ?? [])];
       const ids = new Map<object, string | undefined>(
         optimistic.map(({ blockId, mark }) => {
