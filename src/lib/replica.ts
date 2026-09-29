@@ -56,9 +56,19 @@ type Piece = {
   formula: boolean;
 };
 
-// The runs whose words stay: a bullet, the speaker notes' label, a chart's data.
-const FIXED_RUNS = ".sb, .slide-notes-label, .scd-hidden";
+// The runs whose words stay: a bullet, the speaker notes' label, a chart's
+// data, a table cell's formula (its characters drawn from its TeX).
+const FIXED_RUNS = ".sb, .slide-notes-label, .scd-hidden, [data-type='inline-math']";
 const PREFIX = "<!DOCTYPE html><html><head></head><body>";
+// A gap between cells or lines; a space in a gap is the break between a
+// table cell's paragraphs, a run whose words stay.
+const CELL_GAP = /^[\t\n]$/;
+
+/** A cell a merge covers: its gap rides in a cell drawn beside it, so that
+    cell holds more than one gap (a sheet's, a Word table's), or in a
+    hidden cell. Its piece has no words and takes none. */
+const coveredIn = (cell: Element) =>
+  [...cell.querySelectorAll(".cell-gap")].filter((gap) => CELL_GAP.test(gap.textContent ?? "")).length > 1 || /display:\s*none/.test(cell.getAttribute("style") ?? "");
 
 /** The replica's pieces and gaps, each text node with its place in `html`. */
 function readReplica(html: string): { text: string; pieces: Piece[]; gaps: string[] } {
@@ -73,9 +83,6 @@ function readReplica(html: string): { text: string; pieces: Piece[]; gaps: strin
   const gaps: string[] = [];
   let lastGap = -1;
   let text = "";
-  // With merged cells in the table, an empty piece may be a cell a merge
-  // covers (its gap rides in a cell beside it): no empty piece takes words.
-  const merged = document.querySelector("td[colspan], td[rowspan]") !== null;
   const walker = document.createTreeWalker(document.body, 4 /* NodeFilter.SHOW_TEXT */);
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     const node = n as Text;
@@ -84,33 +91,35 @@ function readReplica(html: string): { text: string; pieces: Piece[]; gaps: strin
     text += node.data;
     const piece = pieces[pieces.length - 1];
     const gap = parent.closest(".cell-gap");
-    if (!gap) {
-      piece.nodes.push({ node, ...at(node), fixed: Boolean(parent.closest(FIXED_RUNS)) });
+    if (!gap || !CELL_GAP.test(node.data)) {
+      piece.nodes.push({ node, ...at(node), fixed: Boolean(gap || parent.closest(FIXED_RUNS)) });
       continue;
     }
-    // A gap closes the piece before it. In a table cell the piece's words
-    // go before the gap; a formula's cell keeps its words.
-    const cell = gap.parentElement?.closest("td, th") ?? null;
+    // A gap closes the piece before it. In a table cell or a caption the
+    // piece's words go before the gap; a formula's cell, a cell a merge
+    // covers, and a cell of a chart's data keep their words.
+    const cell = gap.parentElement?.closest("td, th, caption") ?? null;
     if (cell) {
       piece.cell = at(gap).start;
       piece.formula = cell.getAttribute("title")?.startsWith("=") === true;
-      if (piece.formula || (merged && piece.nodes.length === 0)) piece.fixed = true;
+      if (piece.formula || cell.closest(FIXED_RUNS) || (piece.nodes.length === 0 && coveredIn(cell))) piece.fixed = true;
     }
     gaps.push(node.data);
     lastGap = at(gap).start;
     pieces.push({ nodes: [], cell: null, fixed: false, formula: false });
   }
-  // A sheet's last cell has no gap after it: a formula's keeps its words;
+  // A table's last cell has no gap after it: a formula's keeps its words;
   // an empty one takes words at its end.
   const last = pieces[pieces.length - 1];
   const final = last.nodes.at(-1)?.node.parentElement?.closest("td");
   if (final?.getAttribute("title")?.startsWith("=")) last.fixed = last.formula = true;
-  const lastCell = last.nodes.length === 0 ? document.querySelector("tbody > tr:last-child > td:last-child") : null;
+  const lastRow = [...document.querySelectorAll("tr")].at(-1);
+  const lastCell = last.nodes.length === 0 && lastRow?.lastElementChild?.matches("td, th") ? lastRow.lastElementChild : null;
   const lastCellAt = lastCell && !lastCell.textContent ? (dom.nodeLocation(lastCell) as Location | null) : null;
   if (lastCellAt?.endTag && lastCellAt.startOffset - PREFIX.length > lastGap) {
     last.cell = lastCellAt.endTag.startOffset - PREFIX.length;
     last.formula = lastCell!.getAttribute("title")?.startsWith("=") === true;
-    last.fixed = merged || last.formula;
+    last.fixed = last.formula || coveredIn(lastCell!);
   }
   return { text, pieces, gaps };
 }
