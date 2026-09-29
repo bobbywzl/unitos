@@ -681,8 +681,8 @@ function points(value: number): number {
 // otherwise than 1..n — as pdf.js's own viewer does. A page left unnamed
 // reads as its number. A label is a margin note ("xii", "A-12"): a longer
 // one is cut, so a crafted prefix cannot swell the page data, and cut by
-// characters, so no cut halves a surrogate pair (the labels are JSON, and
-// the database refuses half a pair).
+// characters: the database refuses a string that holds half of a surrogate
+// pair, and the add with it.
 const PAGE_LABEL_MAX = 24;
 function pageLabelsOf(labels: string[] | null, pageCount: number): string[] | undefined {
   if (!labels || labels.length !== pageCount) return undefined;

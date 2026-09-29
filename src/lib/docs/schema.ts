@@ -407,10 +407,10 @@ function cleanSuggestion({ type, attrs = {} }: RichMark): RichMark | null {
 const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 let loneSurrogateLogged = false;
 
-/** A string as the database takes it: Postgres refuses JSON that holds half
-    of a surrogate pair, and the whole save with it. In development that
-    fails with the words around it; in production the half is dropped and
-    logged once. */
+/** A string as the database takes it: the database client refuses a string
+    that holds half of a surrogate pair, and the whole save with it. In
+    development that fails with the words around it; in production the half
+    is dropped and logged once. */
 function wellFormed(text: string): string {
   if (text.isWellFormed()) return text;
   const at = text.search(LONE_SURROGATE_RE);

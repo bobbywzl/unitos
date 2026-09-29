@@ -774,7 +774,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
   report.jsonBytes = Buffer.byteLength(json);
   report.size = out.size;
 
-  // No lone surrogate: the database refuses JSON that holds half of a
+  // No lone surrogate: the database refuses a string that holds half of a
   // surrogate pair, and the import with it (the NPS thesis's formulas began
   // inside a math letter). Every string counts: words and attributes.
   const halves: string[] = [];

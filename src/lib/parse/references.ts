@@ -281,8 +281,8 @@ function buildEntry(
     label = marker[1];
     text = text.slice(marker[0].length);
   }
-  // The cut never halves a surrogate pair: the references are JSON, and the
-  // database refuses half a pair.
+  // The cut never halves a surrogate pair: the database refuses a string that
+  // holds half of one, and the add with it.
   if (text.length > REF_TEXT_MAX) text = `${text.slice(0, /[\uD800-\uDBFF]/.test(text[REF_TEXT_MAX - 1]) ? REF_TEXT_MAX - 1 : REF_TEXT_MAX)}…`;
 
   return { id, label, text, url: entryUrl(clone, baseUrl) };
