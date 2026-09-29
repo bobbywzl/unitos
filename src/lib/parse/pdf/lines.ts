@@ -521,8 +521,8 @@ export function buildLines(items: Item[], page: number): Line[] {
   // stayed put before only by luck: a footnote mark moved to the line above
   // and subscripts to the line below — import compare loop finding.)
   // A label stacked over a relation of the line under it (\overset{p}{\to},
-  // "a.s." over an arrow) is that line's, however near the line above: it
-  // joined the line above as a stray letter (the owner's notes).
+  // a word over an arrow) is that line's, however near the line above: it
+  // joined the line above as a stray letter.
   const labelOf = (item: Item, n: number) =>
     stats[n].y < item.y &&
     item.size <= stats[n].size * 0.8 &&
@@ -535,9 +535,9 @@ export function buildLines(items: Item[], page: number): Line[] {
       }),
     );
   // The limits of a text-size operator set over and under it (\sum\limits
-  // in a sentence) go where the operator goes: they joined the lines around
-  // it ("A ∈ ℱ. n" over one line, "vial=1" ending the next, the owner's
-  // notes). An integral's are scripts beside it.
+  // in a sentence) go where the operator goes: the upper one ended the line
+  // above as a stray letter, the lower one ran into the end of the line
+  // below. An integral's are scripts beside it.
   const inlineOps = [...boxes].filter(([op, box]) => {
     const g = op.glyphs?.length === 1 ? op.glyphs[0] : null;
     return !box.display && g !== null && g.family !== null && mathGlyph(g.family, g.code)?.cls === "op" && !/[∫∮]/.test(op.str);

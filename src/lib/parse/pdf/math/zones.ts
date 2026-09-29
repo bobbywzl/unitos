@@ -145,7 +145,24 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       const letter = word.length === 1 && ((cur.length > 0 && gap < near) || (nextMath && afterGap < near));
       const name = word.length <= 4 && opens && afterGap < 0.12 * size;
       if (opname || letter || name) cur.push(...glyphs.slice(k, j));
-      else flush();
+      else {
+        // Words inside a set's braces are the set's ("{t ∈ ℝ such that
+        // g(t) ≥ 1}"): the formula opened a brace a later glyph of the line
+        // closes, and its math goes on after a few words. Such a set read as
+        // words before.
+        const braces = (list: Glyph[], ch: string) => list.filter((h) => h.family !== null && h.unicode === ch).length;
+        const open = braces(cur, "{") - braces(cur, "}");
+        let m = k;
+        while (m < glyphs.length && kinds[m] === "text" && isLetter(glyphs[m])) m++;
+        const words = glyphs.slice(k, m).filter((h, n) => n === 0 || gapOf(glyphs[k + n - 1], h) >= 0.12 * size).length;
+        const goesOn = m < glyphs.length && kinds[m] !== "text" && braces(glyphs.slice(m), "}") >= open;
+        if (open > 0 && words <= 4 && m - k <= 20 && goesOn) {
+          cur.push(...glyphs.slice(k, m));
+          k = m - 1;
+          continue;
+        }
+        flush();
+      }
       k = j - 1;
       continue;
     }
@@ -201,9 +218,9 @@ function charSpans(item: Item): [number, number][] {
 // after a part stay with it, so the line puts exactly one space between it
 // and the next part. A part of a formula is raised or lowered as its glyphs
 // stand against the formula's baseline (base): a formula that fails the
-// check keeps its scripts as the words' sub and sup (the owner's notes:
-// x_n read "xn" and ℝ^d "ℝd" on 32 pages); one that passes drops them
-// (resolveZones), its LaTeX holds them.
+// check keeps its scripts as the words' sub and sup (a failed formula's
+// scripts read flat on 32 pages of the owner's notes); one that passes
+// drops them (resolveZones), its LaTeX holds them.
 function part(item: Item, spans: [number, number][], from: number, to: number, zone: MathZone | undefined, base: number | undefined): Item {
   const glyphs = item.glyphs!.slice(from, to);
   const start = from === 0 ? 0 : spans[from][0];

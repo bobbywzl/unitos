@@ -787,8 +787,8 @@ function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; lab
         ? Math.min(...rest.map((g) => g.x)) - Math.max(...run.map((g) => g.x + g.w))
         : Math.min(...run.map((g) => g.x)) - Math.max(...rest.map((g) => g.x + g.w));
     // amsmath sets a label half a quad at least from a wide formula
-    // (\mintagsep): the owner's notes set "(1.2.2)" 0.79 em left of a
-    // display with cases, and it read into the formula as its first words.
+    // (\mintagsep): a label set 0.79 em left of a display with cases read
+    // into the formula as its first words (the owner's notes).
     return gap >= size * 0.5 ? { glyphs: run, text } : null;
   };
   const right = labelAt(glyphs.length - 1, -1);

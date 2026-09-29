@@ -1034,9 +1034,9 @@ function linearAt(input: Atom[]): string {
     const spaced = prev !== null && gap > 0.9 * em;
     let tex = a.tex;
     let last = a;
-    // A word in a text italic set apart as text is \textit (\text{ compact }
-    // in a theorem's italic read as the letters "compact" after K); its
-    // letter alone, or letters set tight, stay math letters.
+    // A word in a text italic set apart as text is \textit (\text{ for all }
+    // in a theorem's italic read as the math letters "forall"); its letter
+    // alone, or letters set tight, stay math letters.
     if (a.italic && /^[A-Za-z]$/.test(a.tex)) {
       const { end, word } = wordAt(k);
       const next = main[end + 1];
