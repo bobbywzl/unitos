@@ -2,6 +2,7 @@ import type { DocStyle } from "@/components/docs/extensions";
 import { listFormat, sameLevel } from "@/components/docs/toolbar/lists";
 import { DEFAULT_STYLES, STYLE_ATTR, styleChanges, type NamedStyle } from "@/components/docs/toolbar/styles";
 import {
+  CAPTION_STYLES,
   DEFAULT_PAGE_SETUP,
   formatParts,
   INDEXED_NODE_TYPES,
@@ -9,6 +10,7 @@ import {
   newBlockId,
   sanitizeRichText,
   ZWSP,
+  type CaptionStyle,
   type ListCounter,
   type ListLevel,
   type PageSetup,
@@ -312,6 +314,23 @@ function styleMark(style: StyleSpan["style"], named: NamedStyle): RichMark | nul
   if (kind === "font") return { type: "textStyle", attrs: { fontFamily: value } };
   if (kind === "size") return Number(value) > 0 ? { type: "textStyle", attrs: { fontSize: `${Number(value)}pt` } } : null;
   return null;
+}
+
+/** A PDF figure's caption styles (the figure object's captionStyles): the
+    parse's plain styles over the caption, as the JSON the object keeps, so
+    the caption keeps its bold label (a Japanese white paper's figure label
+    drew regular); null when it has none. A style that cuts a character in
+    two is left out. */
+function captionStylesFor(block: ParsedBlock, caption: string): string | null {
+  const halfway = (at: number) => at > 0 && at < caption.length && /[\uDC00-\uDFFF]/.test(caption[at]);
+  const styles: CaptionStyle[] = [];
+  for (const s of block.styles ?? []) {
+    const end = Math.min(s.end, caption.length);
+    const style = s.style as CaptionStyle["style"];
+    if (!CAPTION_STYLES.includes(style) || s.start < 0 || end <= s.start || halfway(s.start) || halfway(end)) continue;
+    styles.push({ start: s.start, end, style });
+  }
+  return styles.length > 0 ? JSON.stringify(styles.slice(0, 100)) : null;
 }
 
 /** The named styles an import's look sets, as "Update 'Heading 1' to match"
@@ -1127,11 +1146,15 @@ class Converter {
 
   private figure(block: ParsedBlock, index: number, starts: PageStart[]) {
     const mediaId = newBlockId();
-    const caption = clip(block.text, MAX_CAPTION_CHARS);
+    // A display equation kept as a crop has no caption: its text is the
+    // display's glyphs as the text layer reads them, often garbled (about
+    // 125 crops in the corpus drew them under the equation).
+    const caption = block.mathCrop ? "" : clip(block.text, MAX_CAPTION_CHARS);
     const page = this.input.kind === "pdf" && typeof block.page === "number" ? block.page : null;
     const region = block.region ?? null;
     const pageStart = starts.at(-1)?.page ?? null;
     this.figures.push({ mediaId, html: this.input.kind === "pdf" ? null : block.html ?? null, caption, page, region });
+    const captionStyles = this.input.kind === "pdf" ? captionStylesFor(block, caption) : null;
     this.place(index, [
       {
         type: "figure",
@@ -1139,6 +1162,7 @@ class Converter {
           blockId: newBlockId(),
           mediaId,
           caption,
+          ...(captionStyles ? { captionStyles } : {}),
           page,
           region: region ? JSON.stringify(region) : null,
           pageStart,

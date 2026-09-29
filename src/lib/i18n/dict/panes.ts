@@ -433,8 +433,10 @@ const en = {
   detailMediaLost: "{n} of {total} images and videos on the page not loaded: {names}",
   uploadMediaOk: "Every image and video on the page loaded ({n}).",
   uploadEveryMediaLoaded: "every image and video on the page loaded ({n})",
-  // The size guard kept an import out of the page editor (SPEC.md §29).
+  // The size guard kept an import out of the page editor (SPEC.md §29); a
+  // PDF's pages can be chosen on a new add (SPEC.md §15).
   uploadBlockDocument: "Too long for the page editor, so it opens in the reader instead.",
+  uploadBlockDocumentPdf: "Too long for the page editor, so it opens in the reader instead. Add it again and choose its pages.",
   // The document bar, after the automatic re-parse (document-bar.tsx)
   reparseCaptionsWithoutFigure: "No figure loaded for {labels} after the re-parse.",
   reparseMediaLost: "Not loaded from the page after the re-parse: {names}.",
@@ -834,6 +836,7 @@ const zh: Record<keyof typeof en, string> = {
   uploadMediaOk: "页面上的每个图片和视频都已加载（{n} 个）。",
   uploadEveryMediaLoaded: "页面上的每个图片和视频都已加载（{n} 个）",
   uploadBlockDocument: "内容太长，无法在页面编辑器中打开，改为在阅读器中打开。",
+  uploadBlockDocumentPdf: "内容太长，无法在页面编辑器中打开，改为在阅读器中打开。重新添加，并在页码中选择要导入的页。",
   reparseCaptionsWithoutFigure: "重新解析后，{labels} 没有加载插图。",
   reparseMediaLost: "重新解析后，页面上没有加载：{names}。",
   reparseRenderFailed: "浏览器渲染失败：{reason}",

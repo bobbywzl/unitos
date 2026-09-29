@@ -52,7 +52,17 @@ import { db } from "@/lib/db";
 import { fetchFigureImage } from "@/lib/derive/figure";
 import { isAssistantAuthor } from "@/lib/docs/assistant-suggestions";
 import { hex6, inlineText } from "@/lib/docs/blocks";
-import { suggestionAuthor, suggestionTime, ZWSP, type PageSetup, type RichMark, type RichNode } from "@/lib/docs/schema";
+import {
+  captionParts,
+  captionStylesOf,
+  suggestionAuthor,
+  suggestionTime,
+  ZWSP,
+  type CaptionStyle,
+  type PageSetup,
+  type RichMark,
+  type RichNode,
+} from "@/lib/docs/schema";
 import { CROP_PAD, CROP_PAGE_WIDTH, WHOLE_PAGE_WIDTH } from "@/lib/figure-crop";
 import { cropPageRegion, renderPdfPage } from "@/lib/handwritten/pages";
 import { serverT } from "@/lib/i18n/server";
@@ -70,8 +80,9 @@ import { parseRegion, type Region } from "@/lib/video/types";
 
 type Block = Paragraph | Table;
 type Picture = { data: Uint8Array; type: "png" | "jpg" | "gif" | "bmp"; width: number; height: number };
-/** A figure object's pictures, and whether they are a PDF figure's crop. */
-type FigurePictures = { pictures: Picture[]; crop: boolean };
+/** A figure object's pictures, whether they are a PDF figure's crop, and
+    the size in px a crop is printed at (FigureMediaView.size). */
+type FigurePictures = { pictures: Picture[]; crop: boolean; printed?: { width: number; height: number } | null };
 
 /** The figure objects' media (FigureMedia, by media id), the PDF a figure's
     crop is cut from, and the address a web figure's relative images
@@ -506,27 +517,29 @@ function imageRun(node: RichNode, ctx: Ctx): ImageRun | null {
   });
 }
 
-/** A figure's picture takes at most the text column's width and 28rem of
-    height, as the page draws a PDF figure (css/import.css). A row of
-    pictures shares the width, FIGURE_GAP px apart. */
+/** A web figure's picture takes at most the text column's width and 28rem
+    of height. A row of pictures shares the width, FIGURE_GAP px apart. */
 const FIGURE_MAX_HEIGHT = 448;
 const FIGURE_GAP = 12;
 
 /** A figure object (SPEC.md §30), as the page draws it: its pictures
-    centered on one line, kept with its caption under them (9 pt, gray; a
-    PDF figure's in italics). A figure with no picture (a video, an embed, a
-    crop that did not render) is its caption. */
+    centered on one line, kept with its caption under them (9 pt, gray, in
+    the marks a PDF figure's caption keeps). A figure with no picture (a
+    video, an embed, a crop that did not render) is its caption. */
 function figure(node: RichNode, ctx: Ctx): Paragraph[] {
-  const { pictures, crop } = ctx.figures.get(node) ?? { pictures: [], crop: false };
+  const { pictures, crop, printed } = ctx.figures.get(node) ?? { pictures: [], crop: false };
   const caption = typeof node.attrs?.caption === "string" ? node.attrs.caption.trim() : "";
   const change = changeOf(node);
   const out: Paragraph[] = [];
   if (pictures.length > 0) {
     const room = (ctx.textWidth - FIGURE_GAP * (pictures.length - 1)) / pictures.length;
     const children = pictures.flatMap((picture, i) => {
-      // A crop fills the column, as the page draws it; any other picture
-      // keeps its own size when it fits.
-      const scale = Math.min(room / picture.width, FIGURE_MAX_HEIGHT / picture.height, crop ? Infinity : 1);
+      // A crop takes the size the PDF prints it at, as the page draws it;
+      // any other picture keeps its own size when it fits.
+      const scale =
+        crop && printed
+          ? Math.min(room / picture.width, printed.width / picture.width)
+          : Math.min(room / picture.width, FIGURE_MAX_HEIGHT / picture.height, crop ? Infinity : 1);
       const run = new ImageRun({
         type: picture.type,
         data: picture.data,
@@ -546,11 +559,27 @@ function figure(node: RichNode, ctx: Ctx): Paragraph[] {
     );
   }
   if (caption) {
-    const run = runOf({ type: "text", text: caption, marks: node.marks }, ctx, { italics: crop || undefined, size: 18, color: "666666" });
-    out.push(para(ctx, { spacing: { before: pictures.length > 0 ? 0 : tw(9), after: tw(9) }, children: run ? [run] : [] }));
+    // A PDF figure's caption keeps its bold label and the rest of its marks.
+    const styles = captionStylesOf(node.attrs?.captionStyles) ?? [];
+    const runs = captionParts(caption, styles).flatMap((part) => {
+      const marks = [...(node.marks ?? []), ...part.styles.map((style) => ({ type: CAPTION_MARKS[style] }))];
+      return runOf({ type: "text", text: part.text, marks }, ctx, { size: 18, color: "666666" }) ?? [];
+    });
+    out.push(para(ctx, { spacing: { before: pictures.length > 0 ? 0 : tw(9), after: tw(9) }, children: runs }));
   }
   return out;
 }
+
+/** A caption style's mark (lib/docs/schema.ts CaptionStyle). */
+const CAPTION_MARKS: Record<CaptionStyle["style"], string> = {
+  bold: "bold",
+  italic: "italic",
+  underline: "underline",
+  strike: "strike",
+  smallCaps: "smallCaps",
+  sub: "subscript",
+  sup: "superscript",
+};
 
 /** The document's headings, for its tables of contents. */
 function headingsOf(nodes: RichNode[] = []): { level: number; text: string; id: string }[] {
@@ -732,7 +761,7 @@ async function figurePictures(
   if (media.html === null) {
     const bytes = media.page !== null && crop ? await crop(media.page, parseRegion(media.region)) : null;
     const shown = bytes ? await picture(bytes) : null;
-    return { pictures: shown ? [shown] : [], crop: true };
+    return { pictures: shown ? [shown] : [], crop: true, printed: media.size };
   }
   const srcs = [...media.html.matchAll(/<img\b[^>]*?\ssrc="([^"]+)"/gi)].map((m) => m[1].replaceAll("&amp;", "&"));
   // An svg in a page needs no namespace; a file of its own does.

@@ -3,11 +3,12 @@
 // split them into items (bullet glyphs are often vector art, not text).
 
 import { lineColumn } from "@/lib/parse/pdf/columns";
-import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
+import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { BULLET_RE, GLYPH_BULLET_RE, follows, isGlyphMarker, opensSequence, readMarker, type Marker } from "@/lib/parse/pdf/markers";
-import { isCentered, isFirstLineIndent, isIndented, opensWithLabel, proseEdge, pushedApart } from "@/lib/parse/pdf/paragraphs";
+import { isCentered, isFirstLineIndent, isIndented, justifiedItems, leftEdge, opensWithLabel, proseEdge, pushedApart } from "@/lib/parse/pdf/paragraphs";
 import { TextBuilder, fillsMargin, joinGroup } from "@/lib/parse/pdf/text";
 import type { Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
+import type { Indent } from "@/lib/parse/types";
 
 // The line inside a framed box: the frame's left edge sits within three ems
 // left of the text and the frame spans the line.
@@ -166,8 +167,10 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     break;
   }
   if (!isList(items, i, ctx)) return null;
-  const depths = depthsOf(items, line.size);
-  return { segments: [listSegment(items, depths)], next: j };
+  const { depths, levels } = depthsOf(items, line.size);
+  const list = listSegment(items, depths);
+  list.listIndents = listIndentsOf(items, depths, levels, ctx);
+  return { segments: [withItemLayout(list, lines, items.map((item) => item.lines), ctx)], next: j };
 }
 
 // A lone marked line is an item when something says so: its words hang
@@ -197,8 +200,9 @@ function isList(items: Item[], i: number, ctx: PageContext): boolean {
 }
 
 // Each item's depth: the rank of its level among the list's levels, left to
-// right. A list that goes on from the one last read keeps its levels.
-function depthsOf(items: Item[], size: number): number[] {
+// right, and each level's marker x by rank. A list that goes on from the one
+// last read keeps its levels.
+function depthsOf(items: Item[], size: number): { depths: number[]; levels: number[] } {
   const levels: { markerX: number; bodyX: number; marker: Marker }[] = [];
   const first = items[0];
   const remembered = openLevels(first.lines[0].page);
@@ -217,7 +221,39 @@ function depthsOf(items: Item[], size: number): number[] {
   const order = levels.map((_, k) => k).sort((a, b) => levels[a].markerX - levels[b].markerX);
   const rank = new Map(order.map((k, r) => [k, r]));
   open = { page: first.lines[0].page, levels: order.map((k) => ({ x: levels[k].markerX, marker: levels[k].marker })) };
-  return levelOf.map((k) => rank.get(k) ?? 0);
+  return { depths: levelOf.map((k) => rank.get(k) ?? 0), levels: order.map((k) => levels[k].markerX) };
+}
+
+// Where each depth's items stand (ParsedBlock.listIndents), from the
+// column's left edge: an item's marker at left + first, its wrapped lines at
+// left; where no item of a depth wraps, its words stand at left, as under a
+// hanging marker. A flush list's wraps come back under its markers (the
+// legal packet's checkbox items), a hanging list's stand under its words
+// (the math notes' exercises): the import drew every list hanging half an
+// inch in.
+function listIndentsOf(items: Item[], depths: number[], levels: number[], ctx: PageContext): Indent[] {
+  const edge = leftEdge(items[0].lines[0], ctx);
+  return levels.map((x, d) => {
+    const at = items.filter((_, k) => depths[k] === d);
+    if (at.length === 0) return { left: Math.round(x - edge), first: 0 };
+    const marker = median(at.map((item) => item.markerX));
+    const wraps = at.flatMap((item) => item.lines.slice(1).map((l) => l.x));
+    const left = median(wraps.length > 0 ? wraps : at.map((item) => item.bodyX));
+    return { left: Math.round(left - edge), first: Math.round(marker - left) };
+  });
+}
+
+// A list's layout beside its words: the space the page leaves between two
+// items beyond the line pitch (ParsedBlock.itemSpace, the middle one, as
+// measureSpacing reads a block's space after: the legal packet sets 4 pt
+// between its checkbox items, and the import drew them tight), and "justify"
+// on its html where its items are set justified.
+function withItemLayout(list: Segment, lines: Line[], items: Line[][], ctx: PageContext): Segment {
+  const gaps = items.slice(1).map((item, k) => items[k][items[k].length - 1].y - item[0].y - ctx.leading * item[0].size);
+  const space = gaps.length > 0 ? Math.round(median(gaps)) : 0;
+  if (space > 0) list.itemSpace = space;
+  if (justifiedItems(lines, items, ctx)) list.html = '<ul class="justify"></ul>';
+  return list;
 }
 
 // The LIST text: one line per item, two spaces per depth, the marker as
@@ -372,7 +408,8 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
         "\n",
       );
     }
-    segments.push({ type: "LIST", text: builder.text, page: line.page, runs: builder.runs, ...geom(run) });
+    const list: Segment = { type: "LIST", text: builder.text, page: line.page, runs: builder.runs, ...geom(run) };
+    segments.push(withItemLayout(list, lines, items.map((item) => item.lines), ctx));
     return { segments, next: j };
   }
   // One item alone (usually cut by the page break): a paragraph that a

@@ -481,6 +481,7 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   const fences = fencesOf(ctx);
   const fenced = (l: Line) => fences.some((f) => l.y <= f.y2 && l.y >= f.y1 && f.x1 < l.xEnd + l.size * 2 && f.x2 > l.x - l.size * 2);
   const kinds0 = input.map((l, n) => kindOf(l, ctx, columnOf(input, n, ctx), fenced(l)));
+  if (process.env.R3M) input.forEach((l, n) => console.error(`[r3m] ${kinds0[n]} y${l.y.toFixed(1)} ${JSON.stringify(l.text.slice(0, 90))} zones=${JSON.stringify(l.runs.filter((r) => r.zone).map((r) => l.text.slice(r.start, r.end)))} items=${JSON.stringify(l.items.map((i) => `${i.str}${i.zone ? `@${i.zone.glyphs.length}` : ""}`))}`));
   // A table's rows are no display: three cells or more, two of them
   // measured values or marks, with no tall delimiters around them (a
   // matrix's rows have them). Simulation tables with a formula in each row

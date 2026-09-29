@@ -261,6 +261,18 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
         out.push(part(item, spans, from, k, zones[from]));
         from = k;
       }
+      // Words past the item's last glyph, which the drawing sets in another
+      // font (pdf.js ran a math ")" and " to instance" into one item, arXiv
+      // 2506.06752 p. 5), are no part of the formula that glyph ends: they
+      // leave it as text a formula cannot run through.
+      const last = out[out.length - 1];
+      const rest = item.str.slice(spans[spans.length - 1][1]);
+      if (last.zone && rest.trim() !== "") {
+        const tail = glyphs[glyphs.length - 1];
+        last.str = last.str.slice(0, last.str.length - rest.length);
+        last.w = Math.max(0, tail.x + tail.w - last.x);
+        out.push({ ...item, str: rest, x: tail.x + tail.w, w: Math.max(0, item.x + item.w - tail.x - tail.w), glyphs: [], zone: undefined });
+      }
     }
   }
   return out;
@@ -362,6 +374,7 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
     // another line took is missing from the LaTeX, which still passes
     // the check (synth-math-html: a numerator's x^k read as x).
     zone.ok = check.ok && !strayInside(atoms, new Set(glyphs), drawing.glyphs);
+    if (process.env.R3M) console.error(`[r3m-zone] ok=${zone.ok} check=${check.ok} ${JSON.stringify(glyphs.map((g) => g.unicode).join(""))} latex=${latex} missing=${check.missing.join(" ")} extra=${check.extra.join(" ")}`);
     const last = atoms.filter((a) => a.size >= zone.size * 0.85).sort((a, b) => b.x2 - a.x2)[0];
     zone.open = last !== undefined && (last.cls === "rel" || last.cls === "bin" || last.cls === "punct");
   } catch {

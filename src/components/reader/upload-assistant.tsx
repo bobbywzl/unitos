@@ -136,6 +136,13 @@ function hasFigureCheck(detail: string): boolean {
   }
 }
 
+/** The size guard's line for an add it kept out of the page editor: a PDF's
+    (its detail has no figure check) says how to bring it in, with fewer
+    pages (SPEC.md §15). */
+export function blockDocumentLine(detail: string): "panes.uploadBlockDocument" | "panes.uploadBlockDocumentPdf" {
+  return hasFigureCheck(detail) ? "panes.uploadBlockDocument" : "panes.uploadBlockDocumentPdf";
+}
+
 // Does the saved document read well enough to open before its finishing
 // step is done? The save stage's figure check says: the figures that loaded
 // against the captions left without one. No check: nothing speaks against it.
@@ -729,7 +736,7 @@ export function UploadAssistant({
                 ].join(" · ")}
               </p>
             )}
-            {blockDocument && <p className="text-xs text-sand-600">{t("panes.uploadBlockDocument")}</p>}
+            {blockDocument && singleDetail && <p className="text-xs text-sand-600">{t(blockDocumentLine(singleDetail))}</p>}
             {(failures.length > 0 || lostFigures || blockDocument) && (
               <>
                 {failures.length > 0 && (

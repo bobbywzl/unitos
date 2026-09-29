@@ -319,6 +319,23 @@ export function lineAlign(lines: Line[], from: number, to: number, ctx: PageCont
   return null;
 }
 
+/** A list's items set justified, as lineAlign reads a paragraph: every line
+    of an item but its last fills the column to its right edge, on a page
+    set justified, and one item of two lines at least shows it. The math
+    notes and the legal packet justify their items as they do their
+    paragraphs, and the import drew the items ragged. */
+export function justifiedItems(lines: Line[], items: Line[][], ctx: PageContext): boolean {
+  const wrapped = items.filter((item) => item.length >= 2);
+  if (wrapped.length === 0 || !justifiedPage(lines, ctx)) return false;
+  return wrapped.every((item) =>
+    item.slice(0, -1).every((l) => {
+      const k = lines.indexOf(l);
+      const right = k >= 0 ? columnEdges(lines, k, ctx).right : 0;
+      return right > 0 && Math.abs(right - l.xEnd) <= l.size * 0.33;
+    }),
+  );
+}
+
 // A title's lines, set larger than the body, centered on one another:
 // their middles agree within a tenth of their size, and they start at
 // different places. On a slide or a title page the widest line is the

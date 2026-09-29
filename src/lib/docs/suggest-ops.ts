@@ -352,7 +352,7 @@ function cleanMarkdown(text: string): string {
     .map((line) => {
       const image = IMAGE_LINE.exec(line);
       if (image) return /^https?:\/\/\S+$/i.test(image[2]) ? `![${image[1]}](${image[2]})` : image[1];
-      return line.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
+      return line.replace(/!\[([^\]]*)\]\((?:[^()]|\([^()]*\))*\)/g, "$1");
     })
     .join("\n")
     .trim();
@@ -477,8 +477,10 @@ export function resolveOps(
       // A paragraph, a heading, a list line, a table cell's or a footnote's
       // paragraph; not code. A list line's indent is its nesting (replace_blocks).
       if (!place.style || (op.op === "set_indent" && LIST_STYLE_NAMES.has(place.style))) return "notText";
-      const { why: _why, op: _op, blockId: _blockId, ...values } = op;
-      return { op: { i, op: op.op, blockId: row.id, ...values, why: op.why } as ResolvedOp, claim: { kind: "style", row: k, attr: op.op === "set_spacing" ? "spacing" : "indent" }, chars: 0 };
+      const values =
+        op.op === "set_spacing" ? { line: op.line, before: op.before, after: op.after } : { left: op.left, right: op.right, firstLine: op.firstLine };
+      const set = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined));
+      return { op: { i, op: op.op, blockId: row.id, ...set, why: op.why } as ResolvedOp, claim: { kind: "style", row: k, attr: op.op === "set_spacing" ? "spacing" : "indent" }, chars: 0 };
     }
     if (op.op === "set_alignment") {
       // A paragraph, a heading, a list line, a table cell's or a footnote's paragraph; not code.

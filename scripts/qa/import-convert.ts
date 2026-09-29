@@ -464,7 +464,8 @@ function blockUnits(b: Block, i: number): Unit[] {
     case "SEPARATOR":
       return [];
     case "FIGURE":
-      return [unit("figure", b.text, 0)];
+      // A display equation's crop has no caption (lib/docs/import.ts).
+      return [unit("figure", b.mathCrop ? "" : b.text, 0)];
     case "TABLE":
       return [unit("table", normTable(indexedText(b)), 0)];
     case "LIST": {
@@ -951,7 +952,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
     }
     if (usedMedia.has(mediaId)) figureProblems.push(`block ${i}: mediaId ${mediaId} used twice`);
     usedMedia.add(mediaId);
-    if (norm(String(a.caption ?? "")) !== norm(b.text)) figureProblems.push(`block ${i}: caption "${clip(String(a.caption ?? ""), 30)}" ≠ "${clip(b.text, 30)}"`);
+    if (norm(String(a.caption ?? "")) !== norm(b.mathCrop ? "" : b.text)) figureProblems.push(`block ${i}: caption "${clip(String(a.caption ?? ""), 30)}" ≠ "${clip(b.text, 30)}"`);
     if (m.caption !== a.caption) figureProblems.push(`block ${i}: media caption differs from the object's`);
     if ((b.html ?? null) !== m.html) figureProblems.push(`block ${i}: media html ${m.html === null ? "null" : `${m.html.length} chars`} ≠ parse html ${b.html ? `${b.html.length} chars` : "null"}`);
     if ((b.page ?? null) !== (a.page ?? null) || (b.page ?? null) !== m.page) figureProblems.push(`block ${i}: page ${String(a.page)}/${String(m.page)} ≠ ${String(b.page ?? null)}`);

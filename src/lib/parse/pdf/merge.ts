@@ -73,6 +73,27 @@ export function shiftSpansInto(target: Segment, source: Segment, offset: number)
   ];
 }
 
+// A block joined across a page break takes the space the page leaves under
+// its later part (the first part's page ended under it, and a list that ran
+// from one page to the next lost the blank line under it: the owner's notes
+// p. 10); a list takes the first part's layout where the later part shows
+// more (a depth, its items' spacing, a justified item).
+function joinLayout(prev: Segment, next: Segment) {
+  prev.spaceAfter = next.spaceAfter;
+  if (prev.type === "LIST") {
+    prev.itemSpace ??= next.itemSpace;
+    if (next.listIndents && next.listIndents.length > (prev.listIndents?.length ?? 0)) prev.listIndents = [...(prev.listIndents ?? []), ...next.listIndents.slice(prev.listIndents?.length ?? 0)];
+  }
+  if (!ALIGN_RE.test(prev.html ?? "") && /\bjustify\b/.test(next.html ?? "")) prev.html = withToken(prev.html, prev.type === "LIST" ? "ul" : "p", "justify");
+}
+
+const ALIGN_RE = /\bclass="[^"]*\b(?:center|right|justify)\b/;
+
+// A block's html with one more layout token on its class.
+function withToken(html: string | undefined, tag: string, token: string): string {
+  return html && /\bclass="/.test(html) ? html.replace(/\bclass="/, `class="${token} `) : `<${tag} class="${token}"></${tag}>`;
+}
+
 // A lone item joins a list across the page break only as one of its items:
 // no footnote, set where the list's items are, and its marker of the list's
 // family and next in its sequence (a line with no marker, a bulleted list's).
@@ -168,6 +189,7 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       const offset = joinWrapped(prev, segment.text);
       prev.breaks = joinBreaks(prev, segment, offset);
       shiftSpansInto(prev, segment, offset);
+      joinLayout(prev, segment);
       continue;
     }
 
@@ -187,6 +209,7 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
           ...segment.tocEntries.map((e) => ({ ...e, start: e.start + offset, end: e.end + offset })),
         ];
       }
+      joinLayout(prev, segment);
       continue;
     }
 
@@ -209,6 +232,7 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       prev.breaks = joinBreaks(prev, segment, offset);
       prev.text = prev.text + " " + segment.text;
       shiftSpansInto(prev, segment, offset);
+      prev.spaceAfter = segment.spaceAfter;
       if (lastNum !== null) {
         let expect = lastNum + 1;
         const re = /([ \n])(\d{1,2})([.)] )/g;
@@ -256,6 +280,7 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       prev.breaks = joinBreaks(prev, segment, prev.text.length + 1);
       prev.text = prev.text + "\n" + marker + segment.text;
       shiftSpansInto(prev, segment, offset);
+      prev.spaceAfter = segment.spaceAfter;
       continue;
     }
 
