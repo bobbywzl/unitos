@@ -138,11 +138,13 @@ type Atom = { start: number; end: number; node: RichNode };
     (ParsedBlock.spaceAfter). */
 const PARAGRAPH_SPACE_PT = 10;
 /** The space over and under a PDF's display equation where the parse
-    measured none, in points: TeX's skip around a display. A PDF's and a
+    measured none, in points: with the room the page editor's lines leave,
+    a display stands as far from its text as amsbook and amsart's 6 pt skip
+    sets it (article's 10 pt skip draws about 4 pt closer). A PDF's and a
     Word file's displays draw no space of their own (css/import.css): the
     page editor's margin and KaTeX's 1 em stacked on the page's space after
     a paragraph set each display in a band about five times the page's. */
-const DISPLAY_SPACE_PT = 6;
+const DISPLAY_SPACE_PT = 4;
 /** A small line (the kicker, a label, a caption) and a display line, as
     text sizes. */
 const SMALL_SIZE = "9pt";

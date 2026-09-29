@@ -235,7 +235,8 @@ const DocsBlockMath = BlockMath.extend({
           const v = Number(el.getAttribute("data-space-after"));
           return el.hasAttribute("data-space-after") && Number.isFinite(v) && v > 0 ? v : null;
         },
-        renderHTML: (attrs) => (typeof attrs.spaceAfter === "number" ? { "data-space-after": String(attrs.spaceAfter) } : {}),
+        renderHTML: (attrs) =>
+          typeof attrs.spaceAfter === "number" ? { "data-space-after": String(attrs.spaceAfter), style: `padding-bottom: ${attrs.spaceAfter}pt` } : {},
       },
     };
   },
