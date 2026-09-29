@@ -495,6 +495,59 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
   return { segments, next: j };
 }
 
+// ── Algorithms ──────────────────────────────────────────────────────────────
+
+// An algorithm's caption ("Algorithm 1 Building and solving the SAT
+// encoding."), and the lines that say what it takes and gives.
+const ALGORITHM_RE = /^Algorithm\s+\d+[.:]?(?:\s|$)/;
+const ALGORITHM_HEAD_RE = /^(?:Input|Output|Require|Ensure|Data|Result|Parameters?)\s*:/;
+
+/** The lines under an algorithm's caption: one LIST, a line an item, no
+    marker, each at the depth its indent reads (a loop's body one step in
+    from its "for … do"); the lines that say what it takes and gives stand
+    at the first depth. Read as paragraphs and a band set in, arXiv
+    2506.06752's Algorithm 1 kept depth 0 for depths 1 to 3. The lines go
+    on at the text's leading to a gap wider than a line and a half. */
+export function readAlgorithm(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
+  const line = lines[i];
+  const caption = lines[i - 1];
+  const size = line.size;
+  if (!caption || caption.page !== line.page || !ALGORITHM_RE.test(caption.text.trim()) || runOf[i] !== -1 || line.cells.length !== 1) return null;
+  if (caption.y - line.y <= 0 || caption.y - line.y > size * ctx.leading * 2.5) return null;
+  const run: Line[] = [line];
+  for (let j = i + 1; j < lines.length; j++) {
+    const next = lines[j];
+    const prev = run[run.length - 1];
+    const gap = prev.y - next.y;
+    if (runOf[j] !== -1 || next.cells.length !== 1 || lineColumn(next) !== lineColumn(prev) || Math.abs(next.size - size) > size * 0.15) break;
+    if (gap <= 0 || gap > size * ctx.leading * 1.6) break;
+    run.push(next);
+  }
+  if (run.length < 2) return null;
+  const head = (l: Line) => ALGORITHM_HEAD_RE.test(l.text.trim());
+  const levels: number[] = [];
+  for (const x of run.filter((l) => !head(l)).map((l) => l.x).sort((a, b) => a - b)) {
+    if (!levels.some((v) => Math.abs(v - x) <= size * 0.3)) levels.push(x);
+  }
+  const depths = run.map((l) => (head(l) ? 0 : Math.max(0, levels.findIndex((v) => Math.abs(v - l.x) <= size * 0.3))));
+  const builder = new TextBuilder();
+  run.forEach((l, k) => {
+    const lead = "  ".repeat(depths[k]);
+    builder.append({ text: lead + l.text, runs: l.runs.map((r) => ({ ...r, start: r.start + lead.length, end: r.end + lead.length })) }, "\n");
+  });
+  const edge = leftEdge(line, ctx);
+  const list: Segment = {
+    type: "LIST",
+    text: builder.text,
+    page: line.page,
+    runs: builder.runs,
+    listIndents: levels.map((x) => ({ left: Math.round(x - edge), first: 0 })),
+    ...geom(run),
+  };
+  open = null;
+  return { segments: [withItemLayout(list, lines, run.map((l) => [l]), ctx)], next: i + run.length };
+}
+
 // ── References ──────────────────────────────────────────────────────────────
 
 // A references section's heading: its entries follow, on its page and the

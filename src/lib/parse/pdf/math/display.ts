@@ -14,12 +14,12 @@
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
-import { sameFlags } from "@/lib/parse/pdf/glyphs";
+import { isUnreadMath, sameFlags } from "@/lib/parse/pdf/glyphs";
 import { regionOf, unionBox } from "@/lib/parse/pdf/geometry";
 import { ATTACH_PUNCT_RE, spaceGap } from "@/lib/parse/pdf/lines";
 import { BULLET_RE } from "@/lib/parse/pdf/markers";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
-import { braceLabelBoxes, hangingFamily, hangingGlyph } from "@/lib/parse/pdf/math/layout";
+import { braceLabelBoxes, hangingFamily, hangingGlyph, LIMIT_OPS } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import { balanced, orphanGlyphs, paintsRule, resolveZone } from "@/lib/parse/pdf/math/zones";
 import type { Box, Cell, Item, Line, MathZone, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
@@ -168,13 +168,29 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
   return "text";
 }
 
+// The operator names that take limits ("lim", "max") among an item's
+// glyphs: where each stands.
+function limitNames(glyphs: Glyph[]): { x1: number; x2: number; y: number; size: number }[] {
+  const out: { x1: number; x2: number; y: number; size: number }[] = [];
+  for (let k = 0; k < glyphs.length; ) {
+    let end = k;
+    while (end < glyphs.length && /^[A-Za-z]$/.test(glyphs[end].unicode)) end++;
+    if (LIMIT_OPS.has(glyphs.slice(k, end).map((g) => g.unicode).join(""))) {
+      out.push({ x1: glyphs[k].x, x2: glyphs[end - 1].x + glyphs[end - 1].w, y: glyphs[k].y, size: glyphs[k].size });
+    }
+    k = Math.max(end, k + 1);
+  }
+  return out;
+}
+
 // A fragment belongs to the display beside it only when the display holds
 // it: a fraction bar between it and one of the display's lines; a big
 // operator, brace, or delimiter it
 // sits over, under, or beside (a limit, a label under a brace, a matrix
-// entry); or a line of the display it sits close under or over, inside the
-// display's width (an array's row). A page's first or last line is held by
-// the first two only: a page number under a formula is no part of it.
+// entry); an operator name it sits under (a limit); or a line of the
+// display it sits close under or over, inside the display's width (an
+// array's row). A page's first or last line is held by the first three
+// only: a page number under a formula is no part of it.
 function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces: Glyph[]): boolean {
   const x1 = frag.x;
   const x2 = frag.xEnd;
@@ -211,6 +227,14 @@ function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces
     const beside = frag.y <= box.top && frag.y >= box.bottom;
     if ((on && close) || beside) return true;
   }
+  // Each glyph under an operator name that takes limits: Springer's (29)
+  // set "x → ±∞" under each "lim" on the page's last line, and the display
+  // passed with both bare.
+  const names = near.flatMap((l) => l.items.flatMap((item) => limitNames(item.glyphs ?? [])));
+  const glyphs = frag.items.flatMap((item) => item.glyphs ?? []);
+  const under = (g: Glyph) =>
+    names.some((n) => g.x + g.w / 2 > n.x1 - n.size && g.x + g.w / 2 < n.x2 + n.size && n.y - g.y > n.size * 0.3 && n.y - g.y < n.size * 1.3);
+  if (glyphs.length > 0 && glyphs.every((g) => g.unicode.trim() === "" || under(g))) return true;
   if (edge) return false;
   const left = Math.min(...near.map((l) => l.x));
   const right = Math.max(...near.map((l) => l.xEnd));
@@ -798,7 +822,9 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
     // would be missing from the LaTeX.
     // A symbol of a font the tables do not know may hang from its origin
     // like an integral (esint's ∫ read as "ˆ", arXiv 2411.09614 p. 5): an
-    // em over the box counts.
+    // em over the box counts. So may an unread glyph of a math font: the
+    // braces of Springer's (12) hang from an em over its first row, which
+    // passed without them.
     // A rule at the formula's bottom edge with glyphs just under it is a
     // fraction cut in two: its denominator went to the next line (arXiv
     // 2410.04586 p. 9 read it as an \underline).
@@ -837,7 +863,9 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
       if (past(g) || beyond(g) || brace(g) || limit(g)) return true;
       if (labels.some((b) => g.x + g.w / 2 > b.x1 && g.x + g.w / 2 < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
       if (g.x + g.w / 2 <= box.x1 || g.x + g.w / 2 >= box.x2) return false;
-      const hangs = g.family === null && !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]$/u.test(g.unicode);
+      // A small glyph just under the formula is a limit or a script it lost.
+      if (g.size < size * 0.85 && g.y <= box.y1 && g.y > box.y1 - size * 0.75) return true;
+      const hangs = g.family === null && (isUnreadMath(g) || !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]$/u.test(g.unicode));
       return g.y > box.y1 && g.y < box.y2 + (hangs ? g.size : 0);
     });
     if (stray) return null;

@@ -1,13 +1,14 @@
 // A page's lines cut into segments. Readers are tried in this order:
-// contents lists, tables, code listings, label lines, headings (headings.ts),
-// lists (lists.ts), and paragraphs (paragraphs.ts). Each takes the lines from
+// contents lists, tables, code listings, label lines, an algorithm's lines
+// (lists.ts), headings (headings.ts), references and lists (lists.ts), and
+// paragraphs (paragraphs.ts). Each takes the lines from
 // one index on and says where it stopped; the first that takes the line
 // makes its segments.
 
 import { TOC_ENTRY_RE, TOC_LABEL_RE, TOC_TAIL_RE, isContentsEntry, readContentsEntries, twoColumnList } from "@/lib/parse/pdf/contents";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { readHeading } from "@/lib/parse/pdf/headings";
-import { closeLists, joinMarkerCells, readList, readReferences } from "@/lib/parse/pdf/lists";
+import { closeLists, joinMarkerCells, readAlgorithm, readList, readReferences } from "@/lib/parse/pdf/lists";
 import { readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { tableFromRegion } from "@/lib/parse/pdf/ruled";
 import { findTableRuns, isLabelLine, tableFromRun } from "@/lib/parse/pdf/tables";
@@ -101,6 +102,7 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
       readCodeListing(lines, i, ctx, runOf) ??
       readRuleLine(lines, i) ??
       readLabelLine(lines, i, ctx) ??
+      readAlgorithm(lines, i, ctx, runOf) ??
       readHeading(lines, i, ctx, runOf) ??
       readReferences(lines, i, ctx, runOf) ??
       readList(lines, i, ctx, runOf) ??

@@ -127,7 +127,7 @@ export type MathVariant = "bold" | "bf" | "sf" | "tt";
 type UnicodeFont =
   | { kind: "katex"; face: string; style: string }
   | { kind: "opentype"; name: string }
-  | { kind: "tex"; italic: boolean; bullets: boolean }
+  | { kind: "tex"; italic: boolean; bullets: boolean; sized: boolean }
   | null;
 
 // Math fonts whose text layer reads right but whose codes follow no TeX
@@ -138,7 +138,10 @@ type UnicodeFont =
 // Math Guide's table of operators. Each glyph reads by its character, as
 // an OpenType math font's does; a letter of an italic one is math italic.
 // OpenSymbol also draws a list's bullets and dashes: those are no math.
-const UNICODE_TEX_RE = /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MnSymbol|EURM|OpenSymbol)/;
+// MathTime's extension font (MTEX) numbers its glyphs anew in each PDF
+// (Springer's ∑ at 0x08): each is a big operator, a sized delimiter, or a
+// piece, and stays unread.
+const UNICODE_TEX_RE = /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MTEX|MnSymbol|EURM|OpenSymbol)/;
 const ITALIC_MATH_RE = /Italic|MI(B|\d)*$|txmia|MathMI|^EURM/;
 
 // OpenType math fonts by name (Latin Modern's Type 1 math fonts are TeX's
@@ -155,7 +158,7 @@ function unicodeFont(base: string): UnicodeFont {
       : OPENTYPE_MATH_RE.test(base)
         ? { kind: "opentype", name: base }
         : UNICODE_TEX_RE.test(base)
-          ? { kind: "tex", italic: ITALIC_MATH_RE.test(base), bullets: /^OpenSymbol/.test(base) }
+          ? { kind: "tex", italic: ITALIC_MATH_RE.test(base), bullets: /^OpenSymbol/.test(base), sized: /^MTEX/.test(base) }
           : null;
     fontKinds.set(base, kind);
   }
@@ -386,7 +389,7 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
     if (first === second && more.length === 0 && /\p{L}/u.test(first)) g.unicode = first;
     let tex: Tex | null | undefined;
     if (font.kind === "katex") tex = katexChar(g.unicode, font.face, font.style);
-    else if (font.kind === "tex") tex = texWorldChar(g.unicode, font.italic, font.bullets);
+    else if (font.kind === "tex") tex = font.sized ? null : texWorldChar(g.unicode, font.italic, font.bullets);
     else {
       tex = openTypeSized(g, font.name);
       if (tex === undefined) tex = openTypeChar(g.unicode);

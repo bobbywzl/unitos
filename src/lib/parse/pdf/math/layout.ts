@@ -38,7 +38,7 @@ const OPNAMES = new Set([
   "tanh", "coth", "log", "ln", "lg", "exp", "det", "dim", "ker", "deg", "gcd", "hom", "arg", "Pr", "arcsin",
   "arccos", "arctan",
 ]);
-const LIMIT_OPS = new Set(["lim", "limsup", "liminf", "sup", "inf", "max", "min", "det", "gcd", "Pr"]);
+export const LIMIT_OPS = new Set(["lim", "limsup", "liminf", "sup", "inf", "max", "min", "det", "gcd", "Pr"]);
 // \not over a relation: the command KaTeX knows for the pair.
 const NOT: Record<string, string> = {
   "=": "\\neq", "\\in": "\\notin", "\\subset": "\\not\\subset", "\\supset": "\\not\\supset",
@@ -1019,7 +1019,9 @@ function linearAt(input: Atom[]): string {
     // cut off, a radical's parts) reads as nothing: the formula would lose
     // the symbol and still pass the check.
     if (a.cls === "piece") lost++;
-    const gap = prev ? a.x1 - prev.x2 : 0;
+    // A name's limits reach past it on both sides: the gaps are theirs.
+    const reach = nameLimits.get(a) ?? [];
+    const gap = prev ? Math.min(a.x1, ...reach.map((s) => s.x1)) - prev.x2 : 0;
     const spaced = prev !== null && gap > 0.9 * em;
     let tex = a.tex;
     let last = a;
@@ -1100,7 +1102,7 @@ function linearAt(input: Atom[]): string {
     if (a.upper) tex += `^{${a.upper}}`;
     if (mine.length) tex += scripts(mine, last.yb, em);
     out.push(tex);
-    prev = { ...last, x1: a.x1, x2: Math.max(last.x2, ...mine.map((s) => s.x2)) };
+    prev = { ...last, x1: a.x1, x2: Math.max(last.x2, ...mine.map((s) => s.x2), ...reach.map((s) => s.x2)) };
   }
   // A script with no base is a glyph the layout could not place: the
   // formula is not read (the check fails it).

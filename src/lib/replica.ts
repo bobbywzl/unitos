@@ -494,6 +494,40 @@ function sheetShape(html: string, prev: string, next: string, cut: SheetCut | nu
   return { html: out, cut: taken };
 }
 
+/** A cell's own words: its text without its gaps. */
+const wordsOf = (el: Element): string =>
+  [...el.childNodes].map((n) => (n.nodeType === 3 ? (n.textContent ?? "") : n.nodeType === 1 && !(n as Element).matches(".cell-gap, [data-anchor-skip]") ? wordsOf(n as Element) : "")).join("");
+
+/** Words that run over their empty neighbours (`sheet-over`, text beside an
+    empty cell as the parser draws it) are clipped while the cell to their
+    right has words — `sheet-clip`, marked `data-over` — and run over again
+    once it is empty. Only the class and the mark change, in place, so an
+    edit taken back gives the same bytes. */
+function overflow(html: string): string {
+  const dom = new JSDOM(`${PREFIX}${html}</body></html>`, { includeNodeLocations: true });
+  const splices: { start: number; end: number; source: string }[] = [];
+  for (const td of dom.window.document.querySelectorAll("td.sheet-over, td[data-over]")) {
+    const right = td.nextElementSibling;
+    const empty = right?.localName !== "td" || wordsOf(right) === "";
+    const over = td.classList.contains("sheet-over");
+    const loc = dom.nodeLocation(td) as Location | null;
+    const at = loc?.attrs?.class;
+    if (empty === over || !at) continue;
+    const start = at.startOffset - PREFIX.length;
+    const end = at.endOffset - PREFIX.length;
+    const cls = html.slice(start, end);
+    if (over) splices.push({ start, end, source: `${cls.replace(/\bsheet-over\b/, "sheet-clip")} data-over="1"` });
+    else {
+      const mark = loc!.attrs!["data-over"];
+      splices.push({ start, end, source: cls.replace(/\bsheet-clip\b/, "sheet-over") });
+      if (mark) splices.push({ start: mark.startOffset - PREFIX.length - 1, end: mark.endOffset - PREFIX.length, source: "" });
+    }
+  }
+  let out = html;
+  for (const { start, end, source } of splices.sort((x, y) => y.start - x.start)) out = out.slice(0, start) + source + out.slice(end);
+  return out;
+}
+
 /** A sheet's replica with `next` for its text — its words cell by cell, and
     rows or columns added or removed (one of the two in one edit) — with
     what the edit took out; or why not. `cut` is what the edit this one
@@ -502,14 +536,14 @@ export function sheetWithText(html: string, prev: string, next: string, cut: She
   const shape = (text: string) => text.split("\n").map((r) => r.split("\t").length).join(",");
   if (shape(prev) === shape(next)) {
     const edited = replicaWithText(html, prev, next);
-    return "refused" in edited ? edited : { html: edited.html, cut: null };
+    return "refused" in edited ? edited : { html: overflow(edited.html), cut: null };
   }
   if (readReplica(html).text !== prev) return { refused: "stale" };
   const reshaped = sheetShape(html, prev, next, cut);
   if ("refused" in reshaped) return reshaped;
   // The kept cells' new words, then.
   const edited = replicaWithText(reshaped.html, readReplica(reshaped.html).text, next);
-  return "refused" in edited ? edited : { html: edited.html, cut: reshaped.cut };
+  return "refused" in edited ? edited : { html: overflow(edited.html), cut: reshaped.cut };
 }
 
 /** A slide's or a sheet's replica with `next` for its words: what the text
