@@ -905,7 +905,8 @@ export function DocumentBar({
   }
 
   // Delete document: the document leaves the project and the library
-  // (DELETE /api/documents/[documentId]; refused while notes cite it).
+  // (DELETE /api/documents/[documentId]; its annotations go with it, and
+  // notes that quote it keep their text).
   async function deleteDocument(documentId: string) {
     closeList();
     if (!confirm(t("panes.confirmDeleteDocument"))) return;

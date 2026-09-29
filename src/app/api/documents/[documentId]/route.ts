@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { bumpDocument, documentAccess } from "@/lib/collab";
+import { bumpDocument, bumpNotebook, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -33,8 +33,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: s
   return NextResponse.json(updated);
 }
 
-// Delete a document from the library. Refused while notes cite it. Detaches from all
-// notebooks; blocks cascade.
+// Delete a document from the library. Detaches from all notebooks; blocks
+// cascade. The sources in it go: a note keeps its text and loses the source,
+// and an annotation with no source left in another document goes with the
+// document (an annotation anchored nowhere would read as a sidebar
+// conversation, SPEC.md §7).
 export async function DELETE(_req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
   const { documentId } = await ctx.params;
@@ -43,16 +46,33 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ documentId:
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
 
-  const cited = await db.source.count({ where: { documentId } });
-  if (cited > 0) {
-    return NextResponse.json({ error: t("api.notesCiteDocument") }, { status: 409 });
-  }
+  const cited = await db.source.findMany({
+    where: { documentId },
+    select: { noteId: true, note: { select: { section: { select: { hidden: true, notebookId: true } } } } },
+  });
+  const annotationIds = [...new Set(cited.filter((s) => s.note.section.hidden).map((s) => s.noteId))];
+  const anchoredElsewhere = new Set(
+    (
+      await db.source.findMany({
+        where: { noteId: { in: annotationIds }, documentId: { not: documentId } },
+        select: { noteId: true },
+      })
+    ).map((s) => s.noteId),
+  );
+  const goneAnnotationIds = annotationIds.filter((id) => !anchoredElsewhere.has(id));
+  const citingNotebookIds = new Set(cited.map((s) => s.note.section.notebookId));
 
   // Bump before the attachments go, so every corpus that carried it refreshes.
-  await bumpDocument(documentId);
+  const bumped = await bumpDocument(documentId);
   await db.$transaction([
+    db.note.deleteMany({ where: { id: { in: goneAnnotationIds } } }),
+    db.source.deleteMany({ where: { documentId } }),
     db.notebookDocument.deleteMany({ where: { documentId } }),
     db.document.delete({ where: { id: documentId } }),
   ]);
+  // A project whose notes cited it without carrying it refreshes too.
+  for (const notebookId of citingNotebookIds) {
+    if (!(notebookId in bumped)) await bumpNotebook(notebookId);
+  }
   return NextResponse.json({ ok: true });
 }

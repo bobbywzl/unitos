@@ -128,11 +128,13 @@ const en = {
   driveOffline: "Offline. Google Drive adds need the server.",
   driveLinkUseDrive:
     "This is a Google Drive link. Add it from the Google Drive tab, or link Google Drive in Settings to add links directly.",
-  confirmDeleteFromLibrary: "Delete this document from the library?",
+  confirmDeleteFromLibrary:
+    "Delete this document from the library? Its annotations go with it. Notes that quote it keep their text.",
   deleteFailed: "Delete failed",
   deleteDocument: "Delete document",
   deleteDocumentTitle: "Delete this document from the project and the library",
-  confirmDeleteDocument: "Delete this document? It leaves the project and the library.",
+  confirmDeleteDocument:
+    "Delete this document? It leaves the project and the library. Its annotations go with it. Notes that quote it keep their text.",
   documentActions: "Document actions",
   documentList: "Documents in this project",
   documentActionsFor: "Document actions: {title}",
@@ -562,11 +564,11 @@ const zh: Record<keyof typeof en, string> = {
   driveOffline: "离线。从 Google Drive 添加需要连接服务器。",
   driveLinkUseDrive:
     "这是 Google Drive 链接。请从“Google Drive”页签添加；或在设置中关联 Google Drive 后直接粘贴链接添加。",
-  confirmDeleteFromLibrary: "从文档库删除此文档？",
+  confirmDeleteFromLibrary: "从文档库删除此文档？它的批注一并删除。引用它的笔记保留文字。",
   deleteFailed: "删除失败",
   deleteDocument: "删除文档",
   deleteDocumentTitle: "从项目和文档库中删除此文档",
-  confirmDeleteDocument: "删除此文档？它将从项目和文档库中移除。",
+  confirmDeleteDocument: "删除此文档？它将从项目和文档库中移除。它的批注一并删除。引用它的笔记保留文字。",
   documentActions: "文档操作",
   documentList: "此项目的文档",
   documentActionsFor: "文档操作：{title}",
