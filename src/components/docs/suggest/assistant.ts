@@ -207,10 +207,11 @@ function land(
     case "insert_column":
     case "remove_row":
     case "remove_column":
-    case "move_row": {
+    case "move_row":
+    case "move_column": {
       const cell = cellOf(tr.doc, op.blockId);
       if (!cell) return "changed";
-      if (op.op === "move_row" && !cellOf(tr.doc, op.toBlockId)) return "changed";
+      if ((op.op === "move_row" || op.op === "move_column") && !cellOf(tr.doc, op.toBlockId)) return "changed";
       // A row op meets what this landing changed in the row, a column op or
       // a move what it changed in the table. The asker's earlier
       // suggestions in the table stack.
@@ -448,7 +449,11 @@ function withWords(state: EditorState, scratch: Transaction, words: string[], ro
 /** A row or a column added, removed, or moved, as the table menu does it,
     on the cell `op.blockId` names; new cells take their words. A row that
     holds or crosses merged cells does not move. */
-function editTable(editor: Editor, state: EditorState, op: Extract<ResolvedOp, { op: "insert_row" | "insert_column" | "remove_row" | "remove_column" | "move_row" }>): Transaction | SkipReason {
+function editTable(
+  editor: Editor,
+  state: EditorState,
+  op: Extract<ResolvedOp, { op: "insert_row" | "insert_column" | "remove_row" | "remove_column" | "move_row" | "move_column" }>,
+): Transaction | SkipReason {
   const at = cellOf(state.doc, op.blockId);
   if (!at) return "changed";
   const edit = state.tr.setSelection(TextSelection.create(state.doc, at.cell + 2));
@@ -460,6 +465,7 @@ function editTable(editor: Editor, state: EditorState, op: Extract<ResolvedOp, {
     if (!added.run()) return "object";
     return withWords(state, edit, op.cells, op.op === "insert_row") ?? "object";
   }
+  if (op.op === "move_column") return moveColumn(state, edit, at, op);
   // move_row: the row out, and a copy of it where it goes; its paragraphs
   // take new ids, as moved blocks do.
   const to = cellOf(state.doc, op.toBlockId);
@@ -481,6 +487,40 @@ function editTable(editor: Editor, state: EditorState, op: Extract<ResolvedOp, {
   edit.insert(start(target), copy);
   const moved = edit.mapping.map(from);
   edit.delete(moved, moved + row.nodeSize);
+  return edit;
+}
+
+/** A column out, cell by cell, and a copy of each cell where the column
+    goes, in the same rows; the copies' paragraphs take new ids, as a moved
+    row's do. A table with a merged cell in either column does not move. */
+function moveColumn(
+  state: EditorState,
+  edit: Transaction,
+  at: { table: number; cell: number },
+  op: Extract<ResolvedOp, { op: "move_column" }>,
+): Transaction | SkipReason {
+  const to = cellOf(state.doc, op.toBlockId);
+  const table = state.doc.nodeAt(at.table)!;
+  if (!to || to.table !== at.table) return "object";
+  const map = TableMap.get(table);
+  const start = at.table + 1;
+  const col = map.colCount(at.cell - start);
+  const target = map.colCount(to.cell - start) + (op.where === "right" ? 1 : 0);
+  const merged = (c: number) =>
+    c < map.width && Array.from({ length: map.height }, (_, r) => table.nodeAt(map.map[r * map.width + c])!).some((cell) => cell.attrs.colspan > 1 || cell.attrs.rowspan > 1);
+  if (merged(col) || merged(target)) return "object";
+  // Where it stands already: no change.
+  if (target === col || target === col + 1) return edit;
+  let rowStart = start;
+  table.forEach((row, _offset, r) => {
+    const cellPos = start + map.map[r * map.width + col];
+    const cell = state.doc.nodeAt(cellPos)!;
+    const place = target < map.width ? start + map.map[r * map.width + target] : rowStart + row.nodeSize - 1;
+    edit.insert(edit.mapping.map(place), cell.type.create(cell.attrs, freshIds(cell.content), cell.marks));
+    const moved = edit.mapping.map(cellPos);
+    edit.delete(moved, moved + cell.nodeSize);
+    rowStart += row.nodeSize;
+  });
   return edit;
 }
 

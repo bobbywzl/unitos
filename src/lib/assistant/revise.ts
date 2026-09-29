@@ -62,6 +62,8 @@ export function reviseScope(blocks: RevisedBlock[], places: Map<string, BlockPla
 // ── Ops to block actions ───────────────────────────────────────────────────
 
 type NewBlock = { kind: BlockKind; text: string };
+// A list being read: its kind, its lines, and the indents of its open levels.
+type OpenList = { kind: "list" | "numbered"; lines: string[]; indents: number[] };
 
 /** Inline markdown as plain words: bold markers dropped, a link its text,
     code its words. */
@@ -80,7 +82,7 @@ const plain = (text: string): string =>
 export function markdownBlocks(markdown: string): NewBlock[] {
   const blocks: NewBlock[] = [];
   let paragraph: string[] = [];
-  let list: { kind: "list" | "numbered"; lines: string[]; indents: number[] } | null = null;
+  let list = null as OpenList | null;
   const endParagraph = () => {
     const text = plain(paragraph.join(" "));
     if (text) blocks.push({ kind: "paragraph", text });
@@ -111,8 +113,8 @@ export function markdownBlocks(markdown: string): NewBlock[] {
       const kind = /\d/.test(item[2]) ? "numbered" : "list";
       const indent = item[1].length;
       // A new marker at the top level starts a new list.
-      if (list && indent === 0 && (list as { kind: string }).kind !== kind) endList();
-      const open: { kind: "list" | "numbered"; lines: string[]; indents: number[] } = (list ??= { kind, lines: [], indents: [] });
+      if (list && indent === 0 && list.kind !== kind) endList();
+      const open: OpenList = (list ??= { kind, lines: [], indents: [] });
       // One level per step in, whatever the step's width.
       while (open.indents.length > 0 && indent < open.indents[open.indents.length - 1]) open.indents.pop();
       if (open.indents.length === 0 || indent > open.indents[open.indents.length - 1]) open.indents.push(indent);
@@ -120,9 +122,8 @@ export function markdownBlocks(markdown: string): NewBlock[] {
       continue;
     }
     // An indented line under a list item goes on with it.
-    const open = list as { lines: string[] } | null;
-    if (open && /^\s/.test(line)) {
-      open.lines[open.lines.length - 1] += ` ${plain(line)}`;
+    if (list && /^\s/.test(line)) {
+      list.lines[list.lines.length - 1] += ` ${plain(line)}`;
       continue;
     }
     endList();

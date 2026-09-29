@@ -60,6 +60,7 @@ const OP_LINES = [
   "- move_row {blockId, toBlockId, where, why}: the row of the cell blockId names, moved above or below the row of the cell toBlockId names, in the same table.",
   "- insert_column {blockId, where, cells, why}: a new column left or right of the column of the cell blockId names. cells: its words, one string per row, top to bottom.",
   "- remove_column {blockId, why}: the column of the cell blockId names, removed.",
+  "- move_column {blockId, toBlockId, where, why}: the column of the cell blockId names, moved left or right of the column of the cell toBlockId names, in the same table.",
   "- insert_footnote {blockId, find, text, why}: a footnote whose number goes right after the words find. text: the footnote's words.",
   "markdown: # to ###### headings, - bulleted lines, 1. numbered lines, - [ ] checklist lines, **bold**, *italic*, [text](url), a new table as | cell | lines under a | --- | line. No images.",
 ];

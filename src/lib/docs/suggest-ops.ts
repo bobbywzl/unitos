@@ -53,6 +53,7 @@ const suggestOpSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("move_row"), blockId: id, toBlockId: id, where: z.enum(["above", "below"]), why }),
   z.object({ op: z.literal("insert_column"), blockId: id, where: z.enum(["left", "right"]), cells, why }),
   z.object({ op: z.literal("remove_column"), blockId: id, why }),
+  z.object({ op: z.literal("move_column"), blockId: id, toBlockId: id, where: z.enum(["left", "right"]), why }),
   z.object({ op: z.literal("insert_footnote"), blockId: id, find, text: z.string().trim().min(1).max(4_000), why }),
 ]);
 type SuggestOp = z.infer<typeof suggestOpSchema>;
@@ -373,13 +374,13 @@ export function resolveOps(
       const words = op.cells.map((c) => c.replace(/\s+/g, " ").trim());
       return { op: { i, op: op.op, blockId: op.blockId, where: op.where, cells: words, why: op.why } as ResolvedOp, claim, chars: words.join("").length };
     }
-    if (op.op === "move_row") {
+    if (op.op === "move_row" || op.op === "move_column") {
       const [k, to] = [cell(op.blockId), cell(op.toBlockId)];
       if (typeof k === "string") return k;
       if (typeof to === "string") return to;
-      // Rows of one table.
+      // Rows or columns of one table.
       if (places.get(op.blockId)?.group !== places.get(op.toBlockId)?.group) return "notText";
-      return { op: { i, op: op.op, blockId: op.blockId, toBlockId: op.toBlockId, where: op.where, why: op.why }, claim: { kind: "rows", rows: [k, to] }, chars: 0 };
+      return { op: { i, op: op.op, blockId: op.blockId, toBlockId: op.toBlockId, where: op.where, why: op.why } as ResolvedOp, claim: { kind: "rows", rows: [k, to] }, chars: 0 };
     }
     if (op.op === "insert_blocks") {
       let after = -1;

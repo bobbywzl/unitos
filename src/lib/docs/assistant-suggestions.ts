@@ -38,6 +38,7 @@ export type ResolvedOp =
   | { i: number; op: "move_row"; blockId: string; toBlockId: string; where: "above" | "below"; why: string }
   | { i: number; op: "insert_column"; blockId: string; where: "left" | "right"; cells: string[]; why: string }
   | { i: number; op: "remove_column"; blockId: string; why: string }
+  | { i: number; op: "move_column"; blockId: string; toBlockId: string; where: "left" | "right"; why: string }
   // A footnote whose number goes right after the words find (at `end`).
   | { i: number; op: "insert_footnote"; blockId: string; start: number; end: number; find: string; text: string; why: string };
 /** Why an op did not land. The page shows each reason in the reader's language. */
