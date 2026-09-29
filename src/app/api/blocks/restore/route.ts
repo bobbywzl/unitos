@@ -73,12 +73,18 @@ export async function POST(req: Request) {
   }
 
   const block = await db.$transaction(async (tx) => {
-    await tx.block.updateMany({
-      where: { documentId: edit.documentId, order: { gte: order } },
-      data: { order: { increment: 1 } },
-    });
-    // A link to the removed block points at it again; the rest follow their blocks.
-    await followOrders(tx, edit.documentId, (at) => (at > order ? at + 1 : at));
+    // Its place is free while nothing took it since (a removal leaves a gap):
+    // the block goes back into it and nothing moves. Else the blocks from
+    // its place on shift down by one.
+    const taken = await tx.block.findFirst({ where: { documentId: edit.documentId, order }, select: { id: true } });
+    if (taken) {
+      await tx.block.updateMany({
+        where: { documentId: edit.documentId, order: { gte: order } },
+        data: { order: { increment: 1 } },
+      });
+      // A link to the removed block points at it again; the rest follow their blocks.
+      await followOrders(tx, edit.documentId, (at) => (at > order ? at + 1 : at));
+    }
     const created = await tx.block.create({
       data: {
         id: edit.blockId!,

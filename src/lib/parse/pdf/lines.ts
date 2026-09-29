@@ -386,20 +386,6 @@ function buildLine(rawItems: Item[], page: number): Line {
   const firstWordWidth =
     first.str.length > 0 ? first.w * Math.min(1, firstWord.length / first.str.length) : size;
   const last = items[items.length - 1];
-  // The baseline is where the line's text sits: the median baseline of its
-  // full-size glyphs. The highest glyph was the baseline before, so a line
-  // with a superscript sat too high — its gap to the line above shrank and
-  // its gap to the line below grew, splitting paragraphs and fusing others
-  // (import compare loop finding).
-  // A big operator's or delimiter's origin is its top (math/layout.ts
-  // hangingBox): no baseline. The full size is the baseline glyphs' own: a
-  // line of a tall delimiter and its script (a closing ‖ and its subscript,
-  // arXiv 2506.08494) had none at the delimiter's size, and its baseline
-  // fell to the page's foot (median of none).
-  const onBase = items.filter((i) => !hangingBox(i));
-  const pool = onBase.length > 0 ? onBase : items;
-  const baseSize = Math.max(...pool.map((i) => i.size));
-  const large = pool.filter((i) => i.size >= baseSize * 0.75);
   const ys = items.map((i) => i.y);
   return {
     cells,
@@ -408,7 +394,7 @@ function buildLine(rawItems: Item[], page: number): Line {
     items,
     x: first.x,
     xEnd: Math.max(...items.map((i) => i.x + i.w), last.x + last.w),
-    y: median(large.map((i) => i.y)),
+    y: baselineOf(items, (i) => hangingBox(i) !== null),
     size,
     page,
     firstWordWidth,
@@ -416,6 +402,22 @@ function buildLine(rawItems: Item[], page: number): Line {
     yMin: Math.min(...ys),
     yMax: Math.max(...ys),
   };
+}
+
+// The baseline is where a line's text sits: the median baseline of its
+// full-size glyphs. The highest glyph was the baseline before, so a line
+// with a superscript sat too high — its gap to the line above shrank and
+// its gap to the line below grew, splitting paragraphs and fusing others
+// (import compare loop finding). A big operator's or delimiter's origin is
+// its top (math/layout.ts hangingBox): no baseline. The full size is the
+// size of the glyphs on the baseline: a line of tall delimiters and their
+// scripts (closing ‖s and their subscripts, arXiv 2506.08494) had none at
+// the delimiters' size, and the median of none put it at the page's foot.
+function baselineOf(items: Item[], hangs: (i: Item) => boolean): number {
+  const onBase = items.filter((i) => !hangs(i));
+  const pool = onBase.length > 0 ? onBase : items;
+  const size = Math.max(...pool.map((i) => i.size));
+  return median(pool.filter((i) => i.size >= size * 0.75).map((i) => i.y));
 }
 
 export function buildLines(items: Item[], page: number): Line[] {
@@ -646,12 +648,7 @@ export function buildLines(items: Item[], page: number): Line[] {
     else standalone.push([op, ...(inlineLimits.get(op) ?? [])]);
   }
   const regrouped = [...kept.map((g, k) => [...g, ...moved[k]]), ...standalone].filter((g) => g.length > 0);
-  const baseline = (g: Item[]) => {
-    const size = Math.max(...g.map((i) => i.size));
-    const onBase = g.filter((i) => !boxes.has(i));
-    return median((onBase.length > 0 ? onBase : g).filter((i) => i.size >= size * 0.75).map((i) => i.y));
-  };
-  regrouped.sort((a, b) => baseline(b) - baseline(a));
+  regrouped.sort((a, b) => baselineOf(b, (i) => boxes.has(i)) - baselineOf(a, (i) => boxes.has(i)));
   const lines = regrouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);
   // The lines beside a drop cap start where its paragraph's lines do.
   for (const { item, x } of starts) {
