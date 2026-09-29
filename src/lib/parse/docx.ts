@@ -1419,6 +1419,7 @@ class DocxReader {
       const block = this.textBlock("HEADING", words, `<h${level}${align}>${escapeHtml(words.text)}</h${level}>`, { headingBold: true });
       if (props.role === "title") this.titles.add(block);
       if (props.outline === 9) this.unlisted.add(block);
+      this.bordered(block, props);
       this.spaced(block, props, { props, blank: 0 });
       return block;
     }
@@ -1430,8 +1431,25 @@ class DocxReader {
     else if (props.role === "quote" || (props.border.left && props.left > 0 && !props.border.right)) tokens.push("quote");
     if (props.align) tokens.push(props.align);
     const block = this.textBlock("PARAGRAPH", words, tokens.length > 0 ? `<p class="${tokens.join(" ")}">${escapeHtml(words.text)}</p>` : undefined);
+    this.bordered(block, props);
+    // The paragraph's indent as Word sets it. A quotation's inset is the
+    // page editor's quote, unless the quotation draws its own bar.
+    const left = props.left > 0 && props.left < 100_000 ? points(props.left) : 0;
+    const first = Math.abs(props.first) < 100_000 ? points(props.first) : 0;
+    if ((left || first) && (!tokens.includes("quote") || props.border.left)) block.indent = { left, first };
     this.spaced(block, props, { props, blank: 0 });
     return block;
+  }
+
+  /** A paragraph's borders (w:pBdr), the style's and its own: a report's
+      rule under each Heading 1 and bar beside each quote. */
+  private bordered(block: ParsedBlock, props: ParaProps) {
+    const borders: NonNullable<ParsedBlock["borders"]> = {};
+    for (const side of BORDER_SIDES) {
+      const value = props.border[side];
+      if (value) borders[side] = value;
+    }
+    if (Object.keys(borders).length > 0) block.borders = borders;
   }
 
   /** A text block (a heading, a paragraph, a list) into the document's
