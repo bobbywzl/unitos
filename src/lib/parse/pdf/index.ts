@@ -99,7 +99,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     const content = await page.getTextContent();
     // Font programs resolve during operator-list building; afterwards the
     // real font names (Carlito-Bold, DejaVuSansMono, …) are readable.
-    let drawing: PageDrawing = { glyphs: [], rules: [], fills: [], images: [], paths: [] };
+    let drawing: PageDrawing = { glyphs: [], rules: [], fills: [], images: [], paths: [], shades: [] };
     try {
       const ops = (await page.getOperatorList()) as { fnArray: number[]; argsArray: unknown[] };
       const fonts: FontLookup = (id) => {

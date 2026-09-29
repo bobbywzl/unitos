@@ -25,6 +25,8 @@ export type Atom = {
   top: number;
   bottom: number;
   upright: boolean;
+  // A text italic's letter: a word of them is text, one alone a math letter.
+  italic?: boolean;
   // Set while the formula is read.
   limits?: boolean;
   upper?: string;
@@ -139,6 +141,7 @@ function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
       // A text italic's letter in a formula is a math letter (\mathit, or
       // the letters of a math set whose italic is its text's).
       upright: Boolean(entry.upright) && variant === null && !isItalicFont(g.base),
+      italic: Boolean(entry.upright) && variant === null && isItalicFont(g.base),
     });
   }
   return { atoms, unknown };
@@ -202,6 +205,7 @@ function textAtom(g: Glyph): Atom | null {
     top: g.y + height * g.size,
     bottom: g.y - depth * g.size,
     upright: /[A-Za-z]/.test(ch) && !italic && !bold,
+    italic: /[A-Za-z]/.test(ch) && italic && !bold,
   };
 }
 
@@ -945,7 +949,7 @@ function linearAt(input: Atom[]): string {
     let end = k;
     let word = main[k].tex;
     while (
-      main[end + 1]?.upright &&
+      (main[k].italic ? main[end + 1]?.italic : main[end + 1]?.upright) &&
       /^[A-Za-z]$/.test(main[end + 1].tex) &&
       (main[end + 1].x1 - main[end].x2 < 0.12 * em || (word === "lim" && main[end + 1].x1 - main[end].x2 < 0.3 * em))
     ) {
@@ -1025,8 +1029,22 @@ function linearAt(input: Atom[]): string {
     const spaced = prev !== null && gap > 0.9 * em;
     let tex = a.tex;
     let last = a;
+    // A word in a text italic set apart as text is \textit (\text{ compact }
+    // in a theorem's italic read as the letters "compact" after K); its
+    // letter alone, or letters set tight, stay math letters.
+    if (a.italic && /^[A-Za-z]$/.test(a.tex)) {
+      const { end, word } = wordAt(k);
+      const next = main[end + 1];
+      const trail = next ? next.x1 - main[end].x2 : 0;
+      if (word.length > 1 && (((!prev || gap > 0.25 * em) && (!next || trail > 0.25 * em)) || /^[a-z]{4,}$/.test(word))) {
+        k = end;
+        last = main[k];
+        const lead = prev && gap > 0.2 * em && !spaced ? " " : "";
+        tex = `\\textit{${lead}${word}${trail > 0.2 * em && trail <= 0.9 * em && next ? " " : ""}}`;
+      }
+    }
     // Upright letters: an operator name, a word in text, or \mathrm.
-    if (a.upright && /^[A-Za-z]$/.test(a.tex)) {
+    else if (a.upright && /^[A-Za-z]$/.test(a.tex)) {
       const { end, word } = wordAt(k);
       k = end;
       last = main[k];

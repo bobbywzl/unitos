@@ -548,7 +548,20 @@ function blankTwips(props: ParaProps, size: number): number {
 
 // ── Numbering ───────────────────────────────────────────────────────────────
 
-type Level = { fmt: string; text: string; start: number; restart: number | null; legal: boolean; font: string; left: number | null; first: number | null };
+/** A numbering level: its number format and text, its counter's start and
+    restart, its font, its indent, and what follows its number (w:suff:
+    "tab", the default, "space", or "nothing"). */
+type Level = {
+  fmt: string;
+  text: string;
+  start: number;
+  restart: number | null;
+  legal: boolean;
+  font: string;
+  left: number | null;
+  first: number | null;
+  suffix: string;
+};
 
 function readLevel(lvl: Element): Level {
   const rFonts = child(child(lvl, "rPr"), "rFonts");
@@ -561,6 +574,7 @@ function readLevel(lvl: Element): Level {
     left: indentOf(child(child(lvl, "pPr"), "ind")),
     first: firstOf(child(child(lvl, "pPr"), "ind")),
     font: attr(rFonts, "ascii") ?? attr(rFonts, "hAnsi") ?? "",
+    suffix: attr(child(lvl, "suff"), "val") ?? "tab",
   };
 }
 
@@ -707,9 +721,9 @@ class Numbering {
 
   /** The marker of the next item of list `numId` at level `ilvl`, as Word
       draws it ("1.", "1.1", "(a)", "•"; "" when a number format draws none), and
-      the level's indent; null when the list is not defined. The counters
-      move on. */
-  next(numId: string, ilvl: number): { marker: string; left: number | null; first: number | null } | null {
+      the level's indent and suffix; null when the list is not defined. The
+      counters move on. */
+  next(numId: string, ilvl: number): { marker: string; left: number | null; first: number | null; suffix: string } | null {
     const found = this.levels(numId);
     const level = found?.levels[ilvl];
     if (!found || !level) return null;
@@ -737,7 +751,7 @@ class Numbering {
               return formatNumber(level.legal ? "decimal" : (lv?.fmt ?? "decimal"), counters[at] ?? lv?.start ?? 1);
             })
             .trim();
-    return { marker, left: level.left, first: level.first };
+    return { marker, left: level.left, first: level.first, suffix: level.suffix };
   }
 }
 
@@ -1410,7 +1424,9 @@ class DocxReader {
     }
 
     // A list item: Word's numbering, or a marker typed before a tab. Its
-    // indent: the paragraph's own, else its level's, else its style's.
+    // indent: the paragraph's own, else its level's, else its style's. A
+    // level whose number format draws none ("none") is a list line with no
+    // marker, as Google Docs reads it (the page editor's empty bullet).
     if (only && props.heading === null && props.role !== "title") {
       const numbered = props.numId ? this.numbering.next(props.numId, props.ilvl) : null;
       let marker = numbered?.marker ?? null;
@@ -1418,12 +1434,17 @@ class DocxReader {
       let first = props.ownFirst ?? numbered?.first ?? props.first;
       if (!marker) {
         const typed = TYPED_MARKER.exec(only.text) ?? BOX_LINE.exec(only.text);
-        marker = typed ? typed[1] : null;
-        indent = props.left;
-        first = props.first;
-        if (typed) only.keep(typed[0].length);
+        if (typed) {
+          marker = typed[1];
+          indent = props.left;
+          first = props.first;
+          only.keep(typed[0].length);
+        }
       }
-      if (marker) {
+      // After no marker, the number's tab takes the first line's words to
+      // the hanging indent's stop: they stand at the indent.
+      if (marker === "" && numbered?.suffix === "tab" && first < 0) first = 0;
+      if (marker !== null) {
         const words = only.finish(false);
         this.closeCode();
         if (!this.list || this.list.contents) {

@@ -59,7 +59,7 @@ export type Rule = { dir: "h" | "v"; x1: number; y1: number; x2: number; y2: num
 export type Fill = Box & { color?: string };
 // A path's box; clip marks a path that only clips and paints nothing.
 export type PathBox = Box & { clip?: true };
-export type PageDrawing = { glyphs: Glyph[]; rules: Rule[]; fills: Fill[]; images: Box[]; paths: PathBox[] };
+export type PageDrawing = { glyphs: Glyph[]; rules: Rule[]; fills: Fill[]; images: Box[]; paths: PathBox[]; shades: Box[] };
 // A font by pdf.js's id: its name, font matrix, and writing direction.
 export type FontLookup = (id: string) => { name: string; fontMatrix?: ArrayLike<number>; vertical?: boolean } | null;
 
@@ -108,6 +108,7 @@ const OP = {
   setFillColorN: 55,
   setFillRGBColor: 59,
   setFillTransparent: 93,
+  shadingFill: 62,
 } as const;
 const STROKES = new Set<number>([OP.stroke, OP.closeStroke, OP.fillStroke, OP.eoFillStroke, OP.closeFillStroke, OP.closeEOFillStroke]);
 const FILLS = new Set<number>([OP.fill, OP.eoFill, OP.fillStroke, OP.eoFillStroke, OP.closeFillStroke, OP.closeEOFillStroke]);
@@ -185,6 +186,7 @@ export function readDrawing(
   const fills: Fill[] = [];
   const images: Box[] = [];
   const paths: PathBox[] = [];
+  const shades: Box[] = [];
   let state: State = {
     ctm: IDENTITY,
     tm: IDENTITY,
@@ -419,6 +421,13 @@ export function readDrawing(
         if (shown) images.push(shown);
         break;
       }
+      case OP.shadingFill: {
+        // A shading paints the clip in effect: Beamer draws its item
+        // bullets so, a ball in its form's box (synth-slides-tex: read as
+        // no bullet at all).
+        if (annotation === 0 && state.clip) shades.push({ ...state.clip });
+        break;
+      }
       case OP.solidColorImageMask: {
         // A one-pixel mask painted in the fill color over the unit square:
         // dvips draws every rule so — Grinstead–Snell's fraction bars (9 on
@@ -430,7 +439,7 @@ export function readDrawing(
       }
     }
   }
-  return { glyphs: unicodeMath(glyphs), rules, fills, images, paths };
+  return { glyphs: unicodeMath(glyphs), rules, fills, images, paths, shades };
 }
 
 // Two boxes' overlap; empty (x2 ≤ x1 or y2 ≤ y1) when they do not meet.

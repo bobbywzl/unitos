@@ -11,6 +11,7 @@ import type { Lang } from "@/lib/i18n/config";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { mapLimit } from "@/lib/jev";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
+import { replicaEdit, replicaWarning } from "@/lib/replica";
 import { hexStyle } from "@/lib/text-style";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
 
@@ -37,18 +38,19 @@ const STYLE_OF_KIND: Record<BlockKind, SuggestStyle> = {
 
 /** Each block whose words the revision may change, as the ops read it: its
     format as a paragraph style (code has none), and one container for all,
-    so consecutive blocks change together; a slide its words alone. An
-    equation's TeX changes by rewrite_block, which needs no place; a
-    transcript line waits for the video's turn, a sheet for its own. */
+    so consecutive blocks change together; a slide or a sheet its words
+    alone. An equation's TeX changes by rewrite_block, which needs no place;
+    a transcript line waits for the video's turn. */
 export function revisePlaces(blocks: RevisedBlock[], shape: DocumentShape): Map<string, BlockPlace> {
   const places = new Map<string, BlockPlace>();
   for (const b of blocks) {
-    // A slide's words change within its lines, and nothing else of it.
-    if (b.type === "SLIDE" && blockTakes.words(b.type, shape)) {
+    // A slide's words change within its lines, a sheet's within its cells,
+    // and nothing else of them.
+    if ((b.type === "SLIDE" || b.type === "SHEET") && blockTakes.words(b.type, shape)) {
       places.set(b.id, { style: null, where: "words", container: "", group: null });
       continue;
     }
-    if (!blockTakes.words(b.type, shape) || b.type === "EQUATION" || b.type === "TRANSCRIPT" || b.type === "SHEET") continue;
+    if (!blockTakes.words(b.type, shape) || b.type === "EQUATION" || b.type === "TRANSCRIPT") continue;
     const style = b.type === "CODE" ? null : STYLE_OF_KIND[blockKind(b.type, b.html, b.text)];
     places.set(b.id, { style, where: "body", container: "", group: null });
   }
@@ -365,7 +367,7 @@ export function reviseActions(
     switch (action.type) {
       case "edit_block": {
         const block = byId.get(action.blockId);
-        return Boolean(block) && blockTakes.words(block!.type, shape) && (block!.type !== "SLIDE" || keepsLines(block!.text, action.newText));
+        return Boolean(block) && blockTakes.words(block!.type, shape);
       }
       case "remove_block":
         return blockTakes.removal(byId.get(action.blockId)?.type ?? "", shape);
@@ -382,10 +384,22 @@ export function reviseActions(
         return false;
     }
   };
+  // A slide's or a sheet's words change within its lines and cells, as its
+  // replica takes them (lib/replica.ts): why not, or null.
+  const replicaWhy = (action: AssistantAction): string | null => {
+    const block = action.type === "edit_block" ? byId.get(action.blockId) : undefined;
+    if (action.type !== "edit_block" || !block || (block.type !== "SLIDE" && block.type !== "SHEET")) return null;
+    const edited = keepsLines(block.text, action.newText)
+      ? replicaEdit(block.type, block.html ?? "", block.text, action.newText)
+      : { refused: block.type === "SLIDE" ? ("lines" as const) : ("grid" as const) };
+    return "refused" in edited ? replicaWarning(t, edited.refused, action.description) : null;
+  };
   const actions: AssistantAction[] = [];
   for (const unit of units.sort((a, b) => a.at - b.at || a.seq - b.seq)) {
     for (const action of unit.actions) {
-      if (takes(action)) actions.push(action);
+      const why = replicaWhy(action);
+      if (why) warnings.push(why);
+      else if (takes(action)) actions.push(action);
       else refuse(action.description);
     }
   }

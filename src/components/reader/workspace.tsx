@@ -424,10 +424,18 @@ export function Workspace({
   // sheet), open the note if it is collapsed (the card listens for
   // dissect:open-note), scroll, flash.
   useEffect(() => {
-    const flash = (el: HTMLElement) => {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("anchor-flash");
-      setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+    // Scroll to the tray's card and flash it. Below md the sheet that holds
+    // it may still be opening: the flash waits for the card to show, a frame
+    // at a time, a second at most.
+    const flash = (selector: string, frames = 60) => {
+      const el = trayRef.current?.querySelector<HTMLElement>(selector);
+      if (el && el.getClientRects().length > 0) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("anchor-flash");
+        setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+      } else if (frames > 0 && !window.matchMedia(MD_QUERY).matches) {
+        requestAnimationFrame(() => flash(selector, frames - 1));
+      }
     };
     const onShowNote = (e: Event) => {
       const { noteId } = (e as CustomEvent<{ noteId: string }>).detail;
@@ -439,10 +447,7 @@ export function Workspace({
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent("dissect:open-note", { detail: { noteId } }));
         // The next frame: the opened card has its full height to center on.
-        requestAnimationFrame(() => {
-          const el = trayRef.current?.querySelector<HTMLElement>(`[data-note-id="${noteId}"]`);
-          if (el) flash(el);
-        });
+        requestAnimationFrame(() => flash(`[data-note-id="${noteId}"]`));
       }, 100);
     };
     // A mark the reader has no card for focuses its card in the Annotations
@@ -463,12 +468,7 @@ export function Workspace({
         reopening = sourceId;
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
         reopening = null;
-        requestAnimationFrame(() => {
-          const el = trayRef.current?.querySelector<HTMLElement>(
-            `[data-annotation-source-id="${sourceId}"]`,
-          );
-          if (el) flash(el);
-        });
+        requestAnimationFrame(() => flash(`[data-annotation-source-id="${sourceId}"]`));
       }, 150);
     };
     // The page editor's Show all comments opens the Annotations tab.
