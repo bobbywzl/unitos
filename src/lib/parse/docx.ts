@@ -1280,8 +1280,8 @@ class DocxReader {
       entries.push({ start: joined.text.length, end: joined.text.length + line.words.text.length });
       joined.add(line.words);
     });
-    // The list's alignment, when its lines share one (a report's justified
-    // items), and the space between its items: the gap most of them leave.
+    // The list's alignment, when its lines share one (justified items),
+    // and the space between its items: the gap most of them leave.
     const align = list.lines.every((l) => l.align === list.lines[0].align) ? list.lines[0].align : null;
     const tokens = [...(list.contents ? ["contents"] : []), ...(align ? [align] : [])];
     const block = this.textBlock("LIST", joined, tokens.length > 0 ? `<ul class="${tokens.join(" ")}"></ul>` : undefined);
@@ -1555,8 +1555,8 @@ class DocxReader {
     return block;
   }
 
-  /** A paragraph's borders (w:pBdr), the style's and its own: a report's
-      rule under each Heading 1 and bar beside each quote. */
+  /** A paragraph's borders (w:pBdr), the style's and its own: a rule
+      under a heading, a bar beside a quote. */
   private bordered(block: ParsedBlock, props: ParaProps) {
     const borders: NonNullable<ParsedBlock["borders"]> = {};
     for (const side of BORDER_SIDES) {
@@ -2016,8 +2016,8 @@ class DocxReader {
     // in its row or the row above.
     const heads = header.indexOf(false) === -1 ? rows.length : header.indexOf(false);
     // Each cell's sides: its own, else the table's edge or inside line
-    // where it stands (a report's hairline gray-blue grid drew as one-point
-    // black lines).
+    // where it stands (a hairline colored grid drew as one-point black
+    // lines).
     const edges = tableBorders([...style.map((s) => s.tblPr), tblPr]);
     const sidesOf = (cell: TableCell, r: number, c: number): string => {
       const at: Record<BorderSideName, string | null | undefined> = {

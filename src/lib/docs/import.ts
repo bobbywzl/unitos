@@ -164,8 +164,8 @@ type Role = (typeof ROLES)[number];
 // against it (negative: a hanging indent, the first line out at the edge),
 // as Docs stores them. A parse that names an indent's kind (a class token on
 // its html) without its measure gets one step, half an inch, as Tab and
-// Increase indent move a line. Round 2 drew every indent half an inch: an
-// amsbook paragraph's 5 pt first-line indent drew seven times too deep.
+// Increase indent move a line. Round 2 drew every indent half an inch: a
+// 5 pt first-line indent drew seven times too deep.
 const INDENT_TOKENS = ["indent-first", "indent-hanging", "indent-block"] as const;
 const INDENTS: Record<(typeof INDENT_TOKENS)[number], Indent> = {
   "indent-first": { left: 0, first: INDENT_PT },
@@ -1137,10 +1137,9 @@ class Converter {
     return Number.isFinite(space) && space > 0 ? Math.min(72, Math.round(space * 2) / 2) : 0;
   }
 
-  /** A list's lines as the page sets them: the list's alignment (a Word
-      file's and amsbook's items are justified, as their paragraphs are),
-      and the space between two items; the last line takes the block's
-      space after (spaceLast). */
+  /** A list's lines as the page sets them: the list's alignment (items
+      set justified, as their paragraphs are), and the space between two
+      items; the last line takes the block's space after (spaceLast). */
   private lineLook(paragraphs: RichNode[], block: ParsedBlock) {
     const align = alignOf(tokensOf(block.html));
     const space = this.itemSpace(block);

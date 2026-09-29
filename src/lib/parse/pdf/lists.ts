@@ -196,7 +196,7 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     }
     // On a page set justified a wrapped line fills the column: under a line
     // that stopped short, a line with no marker is no wrap of the item (a
-    // form's label lines under a checkbox item, the legal packet p. 4).
+    // form's label lines under a checkbox item).
     if (!stopsShort(lines, j - 1, ctx) && goesOn(item, prev, next, edge, ctx)) {
       item.lines.push(next);
       j++;
@@ -268,10 +268,9 @@ function depthsOf(items: Item[], size: number): { depths: number[]; levels: numb
 // Where each depth's items stand (ParsedBlock.listIndents), from the
 // column's left edge: an item's marker at left + first, its wrapped lines at
 // left; where no item of a depth wraps, its words stand at left, as under a
-// hanging marker. A flush list's wraps come back under its markers (the
-// legal packet's checkbox items), a hanging list's stand under its words
-// (the math notes' exercises): the import drew every list hanging half an
-// inch in.
+// hanging marker. A flush list's wraps come back under its markers (a
+// form's checkbox items), a hanging list's stand under its words (a book's
+// exercises): the import drew every list hanging half an inch in.
 function listIndentsOf(items: Item[], depths: number[], levels: number[], ctx: PageContext): Indent[] {
   const edge = leftEdge(items[0].lines[0], ctx);
   return levels.map((x, d) => {
@@ -286,9 +285,9 @@ function listIndentsOf(items: Item[], depths: number[], levels: number[], ctx: P
 
 // A list's layout beside its words: the space the page leaves between two
 // items beyond the line pitch (ParsedBlock.itemSpace, the middle one, as
-// measureSpacing reads a block's space after: the legal packet sets 4 pt
-// between its checkbox items, and the import drew them tight), and "justify"
-// on its html where its items are set justified.
+// measureSpacing reads a block's space after: a form spaces its checkbox
+// items, and the import drew them tight), and "justify" on its html where
+// its items are set justified.
 function withItemLayout(list: Segment, lines: Line[], items: Line[][], ctx: PageContext): Segment {
   // Items one under the other: an item atop the next column stands higher.
   const pitches = items.slice(1).map((item, k) => ({ pitch: items[k][items[k].length - 1].y - item[0].y, size: item[0].size })).filter((p) => p.pitch > 0);
@@ -520,8 +519,8 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
   // quotation (an opinion quoting a statute read as a lone list item).
   const above = lines[i - 1];
   const quoted = run.length >= 2 && (/^[“"‘]/.test(items[0].text) || (above !== undefined && /:$/.test(above.text.trim())));
-  // Set in as the page sets it, where no list claims it ("Its Manager" under
-  // a signature's company line, the legal packet p. 7).
+  // Set in as the page sets it, where no list claims it (a title line under
+  // a signature's company line).
   const { tokens, indent } = quoted ? { tokens: ["quote"], indent: undefined } : layout(lines, i, j, ctx, items[0].text);
   segments.push({
     type: "PARAGRAPH",

@@ -264,8 +264,8 @@ function runInHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
   const cut = end + (rest.length - rest.trimStart().length);
   if (cut >= line.text.length) return { segments: [heading], next: i + 1 };
   // The paragraph's first line: the line after the lead, set at the
-  // column's edge. The lead's indent is the heading's: the paragraph drew a
-  // first-line indent under its heading (the math notes' run-in heads).
+  // column's edge. The lead's indent is the heading's: under a run-in head
+  // the paragraph drew a first-line indent.
   const text = line.text.slice(cut);
   const runs = line.runs.filter((r) => r.end > cut).map((r) => ({ ...r, start: Math.max(0, r.start - cut), end: r.end - cut }));
   const x = leftEdge(line, ctx);
@@ -364,8 +364,8 @@ function heading(run: Line[], next: number, centered: boolean): Step {
 // A heading's lines as one text: a wrap is a space, and in a centered
 // heading a line the writer broke stays a line of its own: the upper line
 // stops short of its column by more than the next line's first word, the
-// test that splits bold centered lines into paragraphs (paragraphs.ts). The
-// legal packet's title, two centered lines, drew as one line.
+// test that splits bold centered lines into paragraphs (paragraphs.ts). A
+// title of two centered lines drew as one line.
 function headingText(run: Line[], centered: boolean): { text: string; runs: Run[] } {
   const builder = new TextBuilder();
   let from = 0;
@@ -388,7 +388,7 @@ function headingText(run: Line[], centered: boolean): { text: string; runs: Run[
 const INITIAL_RE = /(?:^|\s)\p{Lu}\.(?=\s|$)/u;
 const LABEL_RE = /^(?:chapter|part|book|appendix|section|lecture)\s+\S+$/i;
 // A division's label alone on its line, set bold: an exhibit, a schedule, a
-// section of a contract or a form ("EXHIBIT B", "SECTION A", "ARTICLE IV").
+// section of a contract or a form ("EXHIBIT 3", "SCHEDULE 1", "ARTICLE IV").
 const DIVISION_RE = /^(exhibit|schedule|annex|appendix|part|article|section)\s+[\p{L}\p{N}]{1,4}\.?$/iu;
 // A division's depth by its kind: an exhibit holds sections.
 const DIVISION_DEPTH: Record<string, number> = { exhibit: 1, schedule: 1, annex: 1, appendix: 1, part: 2, article: 2, section: 2 };
@@ -558,10 +558,9 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   const run: Line[] = [line];
   let j = i + 1;
   const centered = isCentered(lines, i, ctx);
-  // A division's label ("EXHIBIT B", "SECTION A") is a heading of its own,
-  // and the title under it goes on over a wider gap: the legal packet sets
-  // "OAK VALLEY INVESTMENTS LLC" over "INVESTOR SUITABILITY QUESTIONNAIRE"
-  // as far apart as the label is from them.
+  // A division's label ("EXHIBIT 3", "ARTICLE IV") is a heading of its own,
+  // and the title under it goes on over a wider gap: a contract may set its
+  // title's two lines as far apart as the label is from them.
   const division = DIVISION_RE.test(text);
   const underLabel = i > 0 && DIVISION_RE.test(lines[i - 1].text.trim());
   while (j < lines.length && run.length < 3 && !boldLead && !division && runOf[j] === -1) {
@@ -654,8 +653,8 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, slide
     : headingDepth(text);
   const depths = segments.map((s) => (s.type === "HEADING" ? depthOf(s.text) : null));
   // A division's label stands at its kind's depth, and the title under it one
-  // deeper (the legal packet's exhibits, sections, and their titles all read
-  // at one level).
+  // deeper (a contract's exhibits, sections, and their titles all read at
+  // one level).
   segments.forEach((s, k) => {
     const kind = s.type === "HEADING" ? DIVISION_RE.exec(s.text.trim())?.[1].toLowerCase() : undefined;
     if (!kind) return;

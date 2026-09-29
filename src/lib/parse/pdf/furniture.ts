@@ -4,9 +4,9 @@
 // size, and weight of furniture on other pages. parsePdf drops them before
 // segmentation.
 //
-// A fixed band (the top and bottom 8.5% of the page) missed most heads: a
-// book of lecture notes and Grinstead–Snell set them 13% down, the Supreme Court's
-// slip opinions 15% and 18.5% down in two rows, a scanned book's foot sits
+// A fixed band (the top and bottom 8.5% of the page) missed most heads:
+// Grinstead–Snell sets them 13% down, the Supreme Court's slip opinions
+// 15% and 18.5% down in two rows, a scanned book's foot sits
 // 83% down (census class 4). So each page's own first and last rows are the
 // candidates, and a candidate drops only on evidence from other pages.
 
@@ -69,8 +69,8 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
   const dropped = new Map<Row, FurnitureDrop["why"]>();
 
   // The pages whose strong candidates carry a number at the same distance
-  // from the page's index as one of the row's: page numbers. A restart (a
-  // packet of documents) starts a new distance.
+  // from the page's index as one of the row's: page numbers. A restart
+  // (documents bound in one file) starts a new distance.
   const tracks = (row: Row): number => {
     let best = 0;
     for (const n of row.numbers) {
@@ -97,8 +97,8 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
 
   // A head is furniture only above the text block of the other pages, a
   // foot only below it: any other row of another page that reaches the
-  // candidate's edge and does not read like it puts it inside. The legal
-  // packet starts pages with section titles, and a landscape page's table
+  // candidate's edge and does not read like it puts it inside. A contract
+  // may start pages with section titles, and a landscape page's table
   // caption sits where the other pages' first lines do.
   const allowed = Math.max(pageCount >= 5 ? 1 : 0, Math.floor(pageCount * 0.1));
   const known = new Map<Candidate, boolean>();

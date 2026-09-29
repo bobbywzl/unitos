@@ -958,7 +958,7 @@ export function tableScores(ref: Flat, cand: Flat, al: Alignment): TableScores {
         vote(ref.units[u], cu);
       }
     }
-    // A formula the owner's cells hold once, read alike or as the same characters, votes too.
+    // A formula the owning table's cells hold once, read alike or as the same characters, votes too.
     const ownerCells = cb >= 0 ? cand.unitsOf[cb].filter((u) => cand.units[u].index >= 0) : [];
     for (const u of body) {
       for (const k of refFormulas.get(u) ?? []) {
@@ -1489,8 +1489,8 @@ const nearPoints = (got: number, want: number) => Math.abs(got - want) <= Math.m
     (indentPt) against its counterpart's: its first line starting alike, and
     its other lines too where the page sets them in, within 2 pt or a
     quarter (a one-line paragraph set in reads as a first-line indent or a
-    block indent alike). amsbook sets its paragraphs 5 pt in, the page
-    editor drew every indent at half an inch. */
+    block indent alike). A page may set its paragraphs 5 pt in where the
+    page editor drew every indent at half an inch. */
 function indentSizes(ref: Flat, cand: Flat, al: Alignment): { score: number | null; misses: PropertyMiss[] } {
   const show = (x: { left: number; first: number } | undefined) => (x ? `${x.left}/${x.first} pt` : "none");
   let total = 0;
@@ -1514,9 +1514,9 @@ function indentSizes(ref: Flat, cand: Flat, al: Alignment): { score: number | nu
     against its counterpart's, within 2 pt or a quarter. A block the
     candidate runs into the next one is the paragraphs metric's, and a
     block whose candidate says no space (a parse that measured none there;
-    the import always draws one) is not counted here. The legal packet's
-    checkbox items and the Word report's list paragraphs are spaced 4 to
-    6 pt; the page editor drew them tight. */
+    the import always draws one) is not counted here. A page may space a
+    checklist's items or a list's paragraphs 4 to 6 pt apart where the page
+    editor drew them tight. */
 function spacingScores(ref: Flat, cand: Flat, al: Alignment): { score: number | null; misses: PropertyMiss[] } {
   let total = 0;
   let right = 0;

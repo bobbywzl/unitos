@@ -132,7 +132,7 @@ function parseFile(path: string): Promise<Parsed> {
         });
         since("import", t1);
         // The add saves the rich text as JSON in Postgres, which refuses a lone
-        // surrogate (a formula cut inside a Cambria Math letter): the owner saw
+        // surrogate (a formula cut inside a Cambria Math letter): the add shows
         // "Could not read this PDF" where the benchmark scored the import.
         const lone = loneSurrogate(richText);
         if (lone) throw new Error(`the rich text holds a lone surrogate the save refuses, in "${lone}"`);

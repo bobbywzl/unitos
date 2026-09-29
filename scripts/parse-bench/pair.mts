@@ -221,8 +221,8 @@ async function settle(page: Page, box: { top: number; bottom: number } | null = 
 
 /** A step run again once the page editor stands again, when the page
     navigated under it: a dev server reloads while other sessions edit
-    files, and the owner's 50-page run stopped at p. 28 with "Execution
-    context was destroyed". */
+    files, and a long run stopped partway with "Execution context was
+    destroyed". */
 async function steady<T>(page: Page, step: () => Promise<T>, ready: () => Promise<void>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {

@@ -168,7 +168,7 @@
 }
 /* A PDF's and a Word file's header cells are as the page draws them: the
    parse keeps their words' weight and their fill, and a header row the page
-   leaves white stays white (a legal form's signature table drew tinted). */
+   leaves white stays white. */
 .docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose th {
   font-weight: 400;
 }

@@ -37,9 +37,8 @@ export function proseEdge(lines: Line[], from: number, to: number): number {
 // not a slide's longest line (a citation's two lines on a slide split where
 // the first line ended, as if at a sentence's end). With no two near, the
 // edge three lines of the page share that start where the band does, in
-// its column: among short typed lines four lines hold no full one (a
-// note's dated lines, a page's first lines), and the writer's line breaks
-// ran together (the owner's notes p. 5, the math notes p. 44).
+// its column: among short typed lines four lines hold no full one (dated
+// lines, a page's first lines), and the writer's line breaks ran together.
 function sharedEdge(lines: Line[], from: number, to: number): number {
   const edge = proseEdge(lines, from, to);
   const band = lines[from];
@@ -323,8 +322,7 @@ export function lineAlign(lines: Line[], from: number, to: number, ctx: PageCont
 
 /** Line k stops short of its column's right edge on a page set justified:
     it ends its paragraph or its list item, and the line under it is no wrap
-    of it (a hint under an exercise's last item joined the item, the math
-    notes p. 9). */
+    of it (a hint under an exercise's last item joined the item). */
 export function stopsShort(lines: Line[], k: number, ctx: PageContext): boolean {
   if (!justifiedPage(lines, ctx)) return false;
   const right = columnEdges(lines, k, ctx).right;
@@ -333,9 +331,9 @@ export function stopsShort(lines: Line[], k: number, ctx: PageContext): boolean 
 
 /** A list's items set justified, as lineAlign reads a paragraph: every line
     of an item but its last fills the column to its right edge, on a page
-    set justified, and one item of two lines at least shows it. The math
-    notes and the legal packet justify their items as they do their
-    paragraphs, and the import drew the items ragged. */
+    set justified, and one item of two lines at least shows it. A page may
+    justify its items as it does its paragraphs, and the import drew the
+    items ragged. */
 export function justifiedItems(lines: Line[], items: Line[][], ctx: PageContext): boolean {
   const wrapped = items.filter((item) => item.length >= 2);
   if (wrapped.length === 0 || !justifiedPage(lines, ctx)) return false;
@@ -524,9 +522,9 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
     const centered = isCentered(lines, j - 1, ctx) && isCentered(lines, j, ctx);
     // A line set in by the page's own first-line indent under a paragraph's
     // line at the column's edge opens the next paragraph, under a full line
-    // too: amsbook's half-em indent is under isIndented's reach, and three
-    // paragraphs ran into the one above (the math notes pp. 10, 26, 38). A
-    // paragraph's second line under its first may be a hanging indent.
+    // too: amsbook's half-em indent is under isIndented's reach, and
+    // paragraphs ran into the one above. A paragraph's second line under its
+    // first may be a hanging indent.
     const stepsIn =
       step !== null &&
       group.length >= 2 &&
@@ -539,8 +537,8 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
     // no space between paragraphs it is the only sign (a Google Docs
     // export's paragraphs and a report's table notes read as one before).
     // With no sentence's end, the line stops short by an em more than that
-    // word: a note's dated lines ("2013: …" under "2011-2012: …") and a
-    // paper's author lines ran together.
+    // word: dated lines one under another and a paper's author lines ran
+    // together.
     const word = firstWord(next);
     const roomy = prev.xEnd + prev.size * 1.28 + word < sentenceEdge;
     const endsShort =
@@ -667,8 +665,8 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
 // indent's size (ParsedBlock.indent). A centered or flush-right paragraph
 // shows no indent. One line alone set in by the page's first-line indent
 // shows that indent, and set in otherwise a block indent (a form's label
-// lines under its item, the math notes' one-line definitions: 56 read
-// flush).
+// lines under its item; one-line definitions set in by the page's indent
+// read flush).
 export function layout(lines: Line[], from: number, to: number, ctx: PageContext, text: string): { tokens: string[]; indent?: Indent } {
   const tokens: string[] = [];
   const group = lines.slice(from, to);
@@ -694,8 +692,8 @@ export function layout(lines: Line[], from: number, to: number, ctx: PageContext
     const shift = first.x - restX;
     const inset = restX - left;
     // A first-line indent from a third of an em: amsbook's is half of one,
-    // and at half an em rounding decided (136 of the math notes'
-    // paragraphs read flush). An OCR layer's lines jitter by that much.
+    // and at half an em rounding decided (paragraphs read flush). An OCR
+    // layer's lines jitter by that much.
     if (shift >= size * (ctx.ocr ? 0.5 : 0.3) && shift <= size * 4) indent = { left: inset >= size ? inset : 0, first: shift };
     else if (-shift >= size * 0.5 && -shift <= size * 4) indent = { left: inset, first: shift };
     else if (Math.abs(shift) <= size * 0.5 && inset > size) indent = { left: inset, first: 0 };

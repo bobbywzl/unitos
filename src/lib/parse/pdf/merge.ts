@@ -75,8 +75,8 @@ export function shiftSpansInto(target: Segment, source: Segment, offset: number)
 
 // A block joined across a page break takes the space the page leaves under
 // its later part (the first part's page ended under it, and a list that ran
-// from one page to the next lost the blank line under it: the owner's notes
-// p. 10); a list keeps the first part's layout, and takes the later part's
+// from one page to the next lost the blank line under it); a list keeps the
+// first part's layout, and takes the later part's
 // where the first shows none (one item measures no spacing; a depth, a
 // justified item).
 function joinLayout(prev: Segment, next: Segment) {
