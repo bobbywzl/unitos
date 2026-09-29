@@ -834,7 +834,7 @@ function limits(atoms: Atom[], em: number): Atom[] {
   const out = [...atoms];
   // A text-size operator takes limits too (\sum\limits in a list item):
   // a limit sits wholly over its top or under its bottom, a script beside.
-  for (const op of atoms.filter((a) => a.cls === "op" && (a.entry?.display || hangingFamily(a.fam)))) {
+  for (const op of atoms.filter((a) => a.cls === "op" && (a.entry?.display || hangingFamily(a.fam)) && a.size >= em * 0.75)) {
     const inX = (b: Atom) => b !== op && Math.abs(cx(b) - cx(op)) < (op.x2 - op.x1) / 2 + 0.3 * em;
     // A limit grows along its baseline: "p prime" is wider than ∏.
     const grow = (seed: Atom[]) => {
@@ -901,9 +901,10 @@ function linearAt(input: Atom[]): string {
   const base = mainBaseline(atoms);
   // Big operators and delimiters sit on the math axis, a quarter em over
   // the baseline of their row: in a display of several rows each sum is its
-  // own row's (arXiv 2506.08494 p. 12: every sum went to the first row).
+  // own row's (arXiv 2506.08494 p. 12: every sum went to the first row). A
+  // sum set in a script's size sits on the script's axis.
   for (const a of atoms) {
-    if (hangingFamily(a.fam) && (a.cls === "op" || a.entry?.size || a.entry?.piece || a.cls === "open" || a.cls === "close")) a.yb = (a.top + a.bottom) / 2 - 0.25 * em;
+    if (hangingFamily(a.fam) && (a.cls === "op" || a.entry?.size || a.entry?.piece || a.cls === "open" || a.cls === "close")) a.yb = (a.top + a.bottom) / 2 - 0.25 * Math.min(em, a.size);
   }
   const rows = alignedRows(atoms, em);
   if (rows) return rows;
@@ -927,8 +928,13 @@ function linearAt(input: Atom[]): string {
   }
   atoms = limits(atoms, em);
   const baseSize = atoms.find((a) => a.yb === base)?.size ?? em;
+  // An extension font's glyph stands on the baseline, unless it is set in
+  // a script's size: the ∑ of an exponent Σd_j/2 read as a big operator
+  // after the brace it is the exponent of (arXiv 2506.08494 pp. 5, 7).
   const onBase = (a: Atom) =>
-    a.limits || hangingFamily(a.fam) || (a.size >= baseSize * 0.85 ? Math.abs(a.yb - base) < 0.2 * baseSize : Math.abs(a.yb - base) < 0.05 * baseSize);
+    a.limits ||
+    (hangingFamily(a.fam) && a.size >= baseSize * 0.75) ||
+    (a.size >= baseSize * 0.85 ? Math.abs(a.yb - base) < 0.2 * baseSize : Math.abs(a.yb - base) < 0.05 * baseSize);
   // A small glyph on the baseline right after a larger script is that
   // script's own script: the exponent in a subscript (I_{k 2^{-n}}) sits
   // as high as the base's baseline.

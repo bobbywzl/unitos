@@ -323,6 +323,24 @@ const ANY_MARKER =
   /^\s*([-*•▪◦‣●·∙○■□◆❖➢➤►✓✔–—](?:\s+[☐☑☒])?|[☐☑☒]|(?:\d{1,3}\.)+\d{1,3}\.?|\((?:[a-z]{1,5}|\d{1,3})\)|(?:[A-Z]{1,2}-)?(?:[a-z]{1,5}|\d{1,3})(?:\)\.?|\.\)?)|\*?\d{1,3}|\[\d{1,3}\])\s+/i;
 const LISTS = new Set(["bulletList", "orderedList", "taskList"]);
 
+/** A span's words line by line: a row's span ends at a line break, and a
+    drawn list line's marker is the list's, no words (a theorem's italic
+    ran on over the next item's "(b)"). A contents list and lines a list
+    cannot draw keep their markers as words. */
+const drawnList = (b: Block) =>
+  b.type === "LIST" &&
+  !tokensOf(b).includes("contents") &&
+  !(b.links ?? []).some((l) => l.targetOrder !== undefined) &&
+  b.text.split("\n").every((line) => !line.trim() || ANY_MARKER.test(`${line} `));
+const lineWords = (b: Block, s: { start: number }, words: string) =>
+  words
+    .split("\n")
+    .map((line, k) => {
+      const atStart = k > 0 || !b.text.slice(b.text.lastIndexOf("\n", s.start - 1) + 1, s.start).trim();
+      return atStart && drawnList(b) ? `${line} `.replace(ANY_MARKER, "") : line;
+    })
+    .filter((w) => norm(w));
+
 /** Each list line of the rich text in reading order: its words, its depth,
     and its marker as the page editor draws it (components/docs/toolbar/
     lists.ts: the outermost list's levels and the line's numbers). */
@@ -685,7 +703,11 @@ function lookChecks(f: Fixture, doc: RichNode, check: (ok: boolean, name: string
   });
   const want = f.blocks
     .filter((b) => b.type !== "FIGURE" && b.type !== "CODE" && b.type !== "TABLE")
-    .flatMap((b) => (b.styles ?? []).filter((s) => /^(strike|font:|size:)/.test(s.style)).flatMap((s) => outsideMath(b, s).map((words) => ({ key: s.style, words: norm(words) }))));
+    .flatMap((b) =>
+      (b.styles ?? [])
+        .filter((s) => /^(strike|font:|size:)/.test(s.style))
+        .flatMap((s) => outsideMath(b, s).flatMap((words) => lineWords(b, s, words)).map((words) => ({ key: s.style, words: norm(words) }))),
+    );
   const lost = want.filter(({ key, words }) => words && !(marked.get(key) ?? []).some((text) => norm(text).includes(words)));
   if (want.length > 0) check(lost.length === 0, "every strikethrough, face, and size is a mark", `${want.length} in the parse${lost.length ? `; lost ${lost.length}: ${lost.slice(0, 3).map((x) => `${x.key} "${clip(x.words, 30)}"`).join(" | ")}` : ""}`);
   // A paragraph's alignment token is its paragraph's alignment (a caption
@@ -1334,23 +1356,6 @@ async function checkFixture(f: Fixture): Promise<Report> {
   const STYLES = ["bold", "italic", "underline", "code", "smallCaps", "sub", "sup"];
   const inRows = (style: string, b?: Block) =>
     STYLES.includes(style) || style.startsWith("highlight:") || (style.startsWith("color:") && b?.type !== "HEADING");
-  // A span's words line by line: a row's span ends at a line break, and a
-  // drawn list line's marker is the list's, no words (a theorem's italic
-  // ran on over the next item's "(b)"). A contents list and lines a list
-  // cannot draw keep their markers as words.
-  const drawnList = (b: Block) =>
-    b.type === "LIST" &&
-    !tokensOf(b).includes("contents") &&
-    !(b.links ?? []).some((l) => l.targetOrder !== undefined) &&
-    b.text.split("\n").every((line) => !line.trim() || ANY_MARKER.test(`${line} `));
-  const lineWords = (b: Block, s: { start: number }, words: string) =>
-    words
-      .split("\n")
-      .map((line, k) => {
-        const atStart = k > 0 || !b.text.slice(b.text.lastIndexOf("\n", s.start - 1) + 1, s.start).trim();
-        return atStart && drawnList(b) ? `${line} `.replace(ANY_MARKER, "") : line;
-      })
-      .filter((w) => norm(w));
   const styleWant = f.blocks
     .filter((b) => b.type !== "FIGURE" && b.type !== "CODE")
     .flatMap((b) =>

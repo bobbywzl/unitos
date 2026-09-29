@@ -9,7 +9,7 @@
 // page's rules are known (resolveZones).
 
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
-import { isTextMath, isUnicodeMathFont, isUnreadMath } from "@/lib/parse/pdf/glyphs";
+import { isBoldFont, isTextMath, isUnicodeMathFont, isUnreadMath } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { braceLabelBoxes, hangingGlyph, type Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
@@ -103,10 +103,21 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
         }
       }
     }
+    // A number set in bold before a word space is an exercise's number
+    // ("*33 2n balls", Grinstead–Snell p. 125, read \mathbf{33}2n): the
+    // item's, not its formula's.
+    let bold = 0;
+    while (bold < z.length && /^[0-9]$/.test(z[bold].unicode) && isBoldFont(z[bold].base)) bold++;
+    if (bold > 0 && bold < z.length && gapOf(z[bold - 1], z[bold]) > 0.15 * size) z = z.slice(bold);
     // Math by font, or small glyphs stacked one over the other (a fraction
     // of digits: \frac{1}{2} sets no math-font glyph).
+    // A URL's slashes are the math italic's (url.sty sets them in math): a
+    // run whose only math is slashes is no formula (arXiv 2506.06352's
+    // "arbital.com/p/…" read "\operatorname{com}/\mathrm{p}/", and its
+    // link was lost).
     const stacked = z.some((a) => z.some((b) => a !== b && a.size < size * 0.85 && b.size < size * 0.85 && Math.abs(a.y - b.y) > size * 0.4 && a.x < b.x + b.w && b.x < a.x + a.w));
-    if (!stacked && !z.some((g) => kind(g, size) === "math")) return;
+    const math = z.filter((g) => kind(g, size) === "math");
+    if (!stacked && (math.length === 0 || math.every((g) => g.unicode === "/"))) return;
     // A lone raised symbol after a word (a footnote's dagger) is a mark,
     // not a formula: every glyph small, none on the line.
     if (!stacked && z.every((g) => g.size < size * 0.85)) return;
