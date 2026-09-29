@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { blockTakes } from "@/lib/block-takes";
@@ -85,7 +86,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
 
   const quotedText = block.text.slice(data.startOffset, data.endOffset);
   const [updated] = await db.$transaction([
-    db.block.update({ where: { id: blockId }, data: { styles: next } }),
+    // The last style taken off leaves the block with none, as it was.
+    db.block.update({ where: { id: blockId }, data: { styles: next.length > 0 ? next : Prisma.DbNull } }),
     // STYLE history row, so styling is auditable like every other edit.
     db.blockEdit.create({
       data: {

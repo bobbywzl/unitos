@@ -1,7 +1,7 @@
 import { JSDOM } from "jsdom";
 import type { DocStyle } from "@/components/docs/extensions";
 import { firstFamily, fontStack } from "@/components/docs/fonts";
-import { listMarker } from "@/components/docs/toolbar/lists";
+import { levelMarker, lineLevel, listMarker } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, type NamedStyle } from "@/components/docs/toolbar/styles";
 import type { RichMark, RichNode } from "@/lib/docs/schema";
 import type { ParsedBlock, TextFont } from "@/lib/parse/types";
@@ -919,8 +919,11 @@ class ImportReader {
           const space = this.spacingOf(first, "normal");
           looks.push({ align: alignValue(first?.attrs?.textAlign), after: space.after, before: space.before });
           const checked = item.attrs?.checked === true;
+          // A bullet line draws a bullet, or no marker where its level's bullet is empty (a bibliography's
+          // entries, an algorithm's steps): "", as the parse reads an unmarked list.
+          const bullet = levelMarker(lineLevel(node, depth, false), numbers) === "" ? "" : "•";
           const marker =
-            list.type === "taskList" ? (checked ? "☑" : "☐") : list.type === "orderedList" ? listMarker(node, numbers) : "•";
+            list.type === "taskList" ? (checked ? "☑" : "☐") : list.type === "orderedList" ? listMarker(node, numbers) : bullet;
           for (const at of into.breaks) breaks.push({ unit: items.length, at });
           for (const m of into.marks) marks.push({ unit: items.length, ...m });
           items.push(list.type === "taskList" ? { depth, marker, spans: into.spans, checked } : { depth, marker, spans: into.spans });

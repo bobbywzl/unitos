@@ -32,7 +32,7 @@ import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { resolveContentsLinks } from "@/lib/parse/url";
 import { fromImport, fromParse, printedNotes, type Doc } from "./adapt";
 import { forgetText, freeScores, lookScores, pdfText, wordBorders, type FreeScores, type PageSetup, type PdfText } from "./free";
-import { forgetGlyphs, glyphScores, pdfGlyphs, placeEquations, type GlyphScores } from "./glyphs";
+import { forgetGlyphs, glyphScores, pdfGlyphs, placeCrops, placeEquations, type GlyphScores } from "./glyphs";
 import { loadCorpus, loadRef, refPath, REF_DIRS, ROOT, type CorpusEntry } from "./load";
 import { flatten, score, type Scores } from "./metrics";
 import type { RefDoc } from "./model";
@@ -223,6 +223,7 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   result.guarded = parsed.guarded;
   let t0 = performance.now();
   const docs = { parse: fromParse(parsed, pages), import: parsed.richText ? fromImport(parsed.richText, pages, ref ? printedNotes(ref.blocks) : undefined) : { blocks: [] } };
+  if (parsed.richText) placeCrops(docs.parse, docs.import);
   result.docs = docs;
   if (ref) {
     const reference: Doc = { blocks: ref.blocks, fonts: ref.fonts };

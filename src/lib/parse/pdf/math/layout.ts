@@ -1037,8 +1037,10 @@ function linearAt(input: Atom[]): string {
     const a = main[k];
     // A piece no composite took (a map arrow's bar whose arrow the line
     // cut off, a radical's parts) reads as nothing: the formula would lose
-    // the symbol and still pass the check.
-    if (a.cls === "piece") lost++;
+    // the symbol and still pass the check. So does a radical sign no
+    // vinculum took (synth-math-tex's inline √ of a fraction read without
+    // its root).
+    if (a.cls === "piece" || a.cls === "radical") lost++;
     // A name's limits reach past it on both sides: the gaps are theirs.
     const reach = nameLimits.get(a) ?? [];
     const gap = prev ? Math.min(a.x1, ...reach.map((s) => s.x1)) - prev.x2 : 0;

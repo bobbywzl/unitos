@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { formatKind, stripListMarkers, withListMarkers, type FormatKind } from "@/lib/block-kind";
@@ -187,13 +188,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
       where: { id: blockId },
       // First edit freezes the original, so edited-vs-original coloring always
       // diffs against the text as parsed.
+      // An edit back to the text as parsed makes the block unedited again, so
+      // Undo gives it back as it was; a block with no styles keeps none.
       data: {
         text: newText,
-        styles: nextSpans,
+        ...(spans.length > 0 ? { styles: nextSpans.length > 0 ? nextSpans : Prisma.DbNull } : {}),
         ...(citations.length > 0 ? { citations: nextCitations } : {}),
         ...(kindChanges && target ? { type: target.type, html: target.html } : {}),
         ...(replicaHtml !== null ? { html: replicaHtml } : {}),
-        ...(block.originalText === null ? { originalText: block.text } : {}),
+        ...(block.originalText === null ? { originalText: block.text } : newText === block.originalText ? { originalText: null } : {}),
       },
     });
     // The search vector no longer matches the text; the next search re-embeds.

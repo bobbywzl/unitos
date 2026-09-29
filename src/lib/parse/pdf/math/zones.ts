@@ -75,11 +75,14 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       if (/^[;:]$/.test(last.unicode) || (last.unicode === ")" && count(")") + count("]") > count("(") + count("["))) z = z.slice(0, -1);
       else break;
     }
-    // A bracket the formula never closes, a word space after the formula's
-    // last glyph, opens the sentence's aside: "values in ℝ (a real number"
-    // read "ℝ(a", which no check passes.
-    const brackets = (from: number, re: RegExp) => z.slice(from).filter((h) => re.test(h.unicode)).length;
-    const aside = z.findIndex((g, n) => n > 0 && /^[([]$/.test(g.unicode) && gapOf(z[n - 1], g) > 0.2 * size && brackets(n + 1, /^[)\]]$/) <= brackets(n + 1, /^[([]$/));
+    // A text font's bracket the formula never closes, a word space after
+    // the formula's last glyph, opens the sentence's aside: "values in ℝ (a
+    // real number" read "ℝ(a", which no check passes. An extension font's
+    // delimiter is the formula's, whatever its text layer says (a tall "{"
+    // reads "(": "|x| = {" before cases lost its brace).
+    const text = (h: Glyph) => h.family === "ot1" || h.family === null;
+    const brackets = (from: number, re: RegExp) => z.slice(from).filter((h) => text(h) && re.test(h.unicode)).length;
+    const aside = z.findIndex((g, n) => n > 0 && text(g) && /^[([]$/.test(g.unicode) && gapOf(z[n - 1], g) > 0.2 * size && brackets(n + 1, /^[)\]]$/) <= brackets(n + 1, /^[([]$/));
     if (aside > 0) z = z.slice(0, aside);
     // A footnote mark set apart before the formula, the sentence's colon,
     // or a bracket the formula does not close, is the sentence's.
@@ -381,12 +384,16 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
   // arXiv 2502.02648 p. 11).
   const columns = drawing.rules.filter((r) => r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low - em && r.y2 < high + em * 1.2);
   const pad = columns.length > 0 ? em * 0.6 : 1;
+  // A radical's vinculum starts at its sign and may run past the last
+  // glyph under it (synth-math-tex's √ over a fraction, by a third of a point).
+  const vinculum = (r: Rule) =>
+    zone.glyphs.some((g) => g.family !== null && mathGlyph(g.family, g.code)?.cls === "radical" && Math.abs(g.x + g.w - r.x1) < em * 0.2);
   const near = [
     ...drawing.rules.filter(
       (r) =>
         r.dir === "h" &&
         r.x1 >= x1 - pad &&
-        r.x2 <= x2 + pad &&
+        r.x2 <= x2 + (vinculum(r) ? em : pad) &&
         r.y1 > low - em &&
         r.y1 < high + em &&
         glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2),

@@ -91,6 +91,8 @@ export function pdfGlyphs(path: string): Promise<PageGlyphs[] | null> {
 
 const INVISIBLE = /[\s​-‍⁠﻿]/u;
 const drawnMemo = new Map<string, string[] | null>();
+/** One symbol KaTeX draws two ways: a norm's bars, ‖ (U+2016) or ∥ (U+2225), as \| or \left\| sets it. */
+const SAME_SYMBOL: Record<string, string> = { "‖": "∥" };
 
 /** Each symbol KaTeX draws for a formula (display style), with its script
     level from the HTML's sizing classes (size 5–6: 0, 3–4: 1, 1–2: 2), as
@@ -119,7 +121,7 @@ function drawn(latex: string): string[] | null {
         continue;
       }
       const text = (m[2] ?? "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
-      for (const ch of text.normalize("NFKC")) if (!INVISIBLE.test(ch)) out.push(`${ch}@${stack.at(-1) ?? 0}`);
+      for (const ch of text.normalize("NFKC")) if (!INVISIBLE.test(ch)) out.push(`${SAME_SYMBOL[ch] ?? ch}@${stack.at(-1) ?? 0}`);
     }
   }
   drawnMemo.set(latex, out);
@@ -226,7 +228,9 @@ function atomsOf(glyphs: PageGlyph[]): Atom[] | null {
 
 /** The symbols the atoms draw, each atom rendered alone at its script level
     (its size against the formula's largest glyph outside the extension
-    font: 0.85 or more is 0, 0.6 or more is 1, else 2); null when KaTeX
+    font: 0.85 or more is 0, 0.6 or more is 1, else 2; an extension font's
+    glyph is 0 down to 0.75, and one set in a script's size is a script's,
+    as the app's check has it: the ∑ of an exponent); null when KaTeX
     cannot read an atom. Pieces and radical signs draw as rules or pictures
     in KaTeX: they are left out on both sides. */
 function atomSymbols(atoms: Atom[]): string[] | null {
@@ -235,7 +239,7 @@ function atomSymbols(atoms: Atom[]): string[] | null {
   for (const a of atoms) {
     if (a.piece || a.cls === "piece" || a.cls === "radical" || !a.tex) continue;
     const r = a.size / big;
-    const level = a.fam === "omx" ? 0 : r >= 0.85 ? 0 : r >= 0.6 ? 1 : 2;
+    const level = (a.fam === "omx" && r >= 0.75) || r >= 0.85 ? 0 : r >= 0.6 ? 1 : 2;
     const own = drawn(a.cls === "accent" ? `${a.tex}{}` : a.tex);
     if (!own) return null;
     for (const s of own) {
@@ -259,13 +263,18 @@ function surplus(a: Map<string, number>, b: Map<string, number>): string[] {
 
 /** The glyphs whose origin lies in a region of a page (percent of the page,
     y from the top, as the parser writes regions), word spaces aside. A math
-    font's blank glyph stays: it is a symbol the text layer read as a space. */
+    font's blank glyph stays: it is a symbol the text layer read as a space.
+    A cmex glyph (a big delimiter, a radical, a large operator) hangs below
+    its origin, which stands at its top: it is in where the em under its
+    origin meets the region (a cases brace whose top stands above a crop's
+    edge, whose picture holds it whole). */
 function glyphsIn(page: PageGlyphs, region: Region): PageGlyph[] {
   const b = regionBounds(region);
   return page.glyphs.filter((g) => {
     const x = (g.x / page.width) * 100;
     const y = ((page.height - g.y) / page.height) * 100;
-    return x >= b.x1 && x <= b.x2 && y >= b.y1 && y <= b.y2 && (g.unicode.trim() !== "" || (g.family !== null && MATH.has(g.family)));
+    const hang = g.family === "omx" ? (g.size / page.height) * 100 : 0;
+    return x >= b.x1 && x <= b.x2 && y + hang >= b.y1 && y <= b.y2 && (g.unicode.trim() !== "" || (g.family !== null && MATH.has(g.family)));
   });
 }
 
@@ -358,6 +367,21 @@ export function placeEquations(parse: Doc, imported: Doc) {
     if (i < 0) continue;
     block.at = placed[i].at;
     next = i + 1;
+  }
+}
+
+/** The import's crop of a display draws no caption: it is the equation's
+    picture where the parse's figure at its place (its page and region) is
+    one, as the parse reads its own crop (adapt.ts). Its picture shows no
+    words: its glyph text is none. */
+export function placeCrops(parse: Doc, imported: Doc) {
+  const key = (at: { page: number; region: Region }) => {
+    const b = regionBounds(at.region);
+    return [at.page, b.x1, b.y1, b.x2, b.y2].map((n) => n.toFixed(3)).join(" ");
+  };
+  const crops = new Set(parse.blocks.flatMap((b) => (b.kind === "figure" && b.mathImage !== undefined && b.at ? [key(b.at)] : [])));
+  for (const block of imported.blocks) {
+    if (block.kind === "figure" && block.at && block.mathImage === undefined && !block.caption && crops.has(key(block.at))) block.mathImage = "";
   }
 }
 

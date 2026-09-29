@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { figureCropSize } from "@/lib/figure-crop";
 import { attr, child, descendants, parseXmlPart, unzipOffice } from "@/lib/parse/office";
 import { regionBounds } from "@/lib/video/types";
-import type { Side } from "./adapt";
+import type { DocBlock, Side } from "./adapt";
 import type { GlyphScores } from "./glyphs";
 import { ROOT } from "./load";
 import { mathLeaves } from "./math";
@@ -302,7 +302,14 @@ export function pdfText(pdf: string, pages?: [number, number]): PdfText {
   return { first: pages?.[0] ?? 1, pages: new Set(lines.map((l) => l.page)).size, raw, lines, furniture: layout.furniture.filter(inRange), sizes: layout.sizes };
 }
 
-type Leaks = { strings: number; leaked: number; leaks: number; clean: number | null; found: { text: string; at: { unit: number; tok: number }[] }[] };
+type Leaks = {
+  strings: number;
+  leaked: number;
+  leaks: number;
+  clean: number | null;
+  /** Each leaked string: where the candidate's words hold it, and how many of its lines a figure's picture shows. */
+  found: { text: string; at: { unit: number; tok: number }[]; pictured?: number }[];
+};
 
 /** The lines alone on their row: a page number stands alone, a table's
     cell or a list's marker the text layer reads apart shares its row. */
@@ -316,6 +323,22 @@ function holds(words: string[], run: string[]): boolean {
   return false;
 }
 
+/** The candidate's figures that show a line of the PDF: its middle inside
+    the figure's region (a crop draws its region as the page does). */
+function picturedBy(pdf: PdfText, cand: Flat): (line: Line) => Extract<DocBlock, { kind: "figure" }>[] {
+  const figures = cand.blocks.flatMap((b) => (b.kind === "figure" && b.at ? [b] : []));
+  return (line) => {
+    const size = pdf.sizes.get(line.page);
+    if (!size) return [];
+    const [x, y] = [((line.left + line.right) / 2 / size.width) * 100, ((line.top + line.bottom) / 2 / size.height) * 100];
+    return figures.filter((f) => {
+      if (!f.at || f.at.page !== line.page) return false;
+      const b = regionBounds(f.at.region);
+      return x >= b.x1 && x <= b.x2 && y >= b.y1 && y <= b.y2;
+    });
+  };
+}
+
 /** Furniture lines' words at the candidate's edges (table cells aside: a
     cell may hold a number), past the times the same line stands alone on
     its row among the PDF's other lines (a chapter title that is also the
@@ -325,7 +348,10 @@ function holds(words: string[], run: string[]): boolean {
     the PDF's other lines: a heading's number ("2 VHE OBSERVATIONS"), a
     caption's ("Table 3"), a paragraph that opens with a company's name.
     The candidate's title is the page's own line where the running head
-    repeats it, and a footnote's label or mark is no page number. */
+    repeats it, and a footnote's label or mark is no page number. A
+    furniture line at the page's edge inside a figure's region leaks too:
+    the crop draws it (a figure's region that reaches up to the running
+    head). */
 function leaksOf(pdf: PdfText, furniture: Line[], cand: Flat): Leaks {
   const furnitureSet = new Set(furniture);
   const alone = aloneOnRow(pdf.lines);
@@ -347,15 +373,32 @@ function leaksOf(pdf: PdfText, furniture: Line[], cand: Flat): Leaks {
     return (before !== null && inLine([before, ...words[x]])) || (after !== null && inLine([...words[x], after]));
   };
   const matches = furnitureMatches(cand, words, false, false).map((list, x) => list.filter((m) => cand.blocks[cand.units[m.unit].block].kind !== "title" && !beside(m, x)));
+  // A crop shows a running head, a running foot, or a page number: a
+  // furniture line at its page's edge (no other line above a head, none
+  // below a foot) inside a figure's region. A chart's label a run of pages
+  // repeats inside the body is none.
+  const shown = picturedBy(pdf, cand);
+  const body = new Map<number, { top: number; bottom: number }>();
+  for (const l of kept) {
+    const b = body.get(l.page);
+    body.set(l.page, { top: Math.min(b?.top ?? l.top, l.top), bottom: Math.max(b?.bottom ?? l.bottom, l.bottom) });
+  }
+  const atEdge = (f: Line) => {
+    const b = body.get(f.page);
+    return !b || f.bottom <= b.top || f.top >= b.bottom;
+  };
+  const pictured = new Map<string, number>();
+  for (const f of furniture) if (atEdge(f) && shown(f).length > 0) pictured.set(f.text.trim(), (pictured.get(f.text.trim()) ?? 0) + 1);
   let leaked = 0;
   let leaks = 0;
   const found: Leaks["found"] = [];
   strings.forEach((text, x) => {
-    const excess = matches[x].length - (others.get(normText(text)) ?? 0);
+    const inPictures = pictured.get(text) ?? 0;
+    const excess = Math.max(0, matches[x].length - (others.get(normText(text)) ?? 0)) + inPictures;
     if (excess <= 0) return;
     leaked++;
     leaks += excess;
-    found.push({ text, at: matches[x] });
+    found.push({ text, at: matches[x], ...(inPictures > 0 ? { pictured: inPictures } : {}) });
   });
   return { strings: strings.length, leaked, leaks, clean: strings.length > 0 ? 1 - leaked / strings.length : null, found };
 }
@@ -507,7 +550,7 @@ export type FreeScores = {
   furniture: Leaks;
   numberLines: { count: number; score: number; found: { unit: number; text: string }[] };
   garbles: { count: number; score: number; found: { kind: string; match: string; unit: number; text: string }[] };
-  /** Display equations as LaTeX the glyph check passes, over every display the page sets in TeX's math fonts. */
+  /** Display equations as LaTeX the glyph check passes, a crop at half, over the displays checked and cropped (mathPart). */
   math: number | null;
   /** The import's look (lookScores); none for a parse. */
   look: LookScores | null;
@@ -567,6 +610,17 @@ const BLIND = 0.5;
     of it, which leaves an empty contents field empty where the parse builds
     the contents list from the headings: a contents list's words are left
     out (they repeat the headings). */
+/** The math part: each display checked as LaTeX scores 1 when it passes and 0
+    when it fails, and each crop of a display half (a right formula over its
+    crop over wrong words). It stands only where a display is checked: a crop
+    alone (a page whose formulas no check reads, set in Times) brings in no
+    part at 0. A page whose displays are all crops has no math part, as one
+    whose displays are words has none, and loses no garbles or coverage as
+    the words do. */
+export function mathPart(glyphs: Pick<GlyphScores, "checked" | "passed" | "mathImages">): number | null {
+  return glyphs.checked > 0 ? (glyphs.passed + glyphs.mathImages / 2) / (glyphs.checked + glyphs.mathImages) : null;
+}
+
 export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word = false, look: LookScores | null = null): FreeScores {
   const { words: printed, glyphs: formulaGlyphs, raised } = printedWords(cand, !word);
   const candBag = countWords([]);
@@ -587,17 +641,9 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
   // A diagram's labels are the figure's, not words to cover: short lines
   // (three words at most, a CJK character a quarter word) inside a region
   // the candidate shows as a figure. A paragraph shown as a picture still is
-  // (its lines are long).
-  const figures = cand.blocks.flatMap((b) => (b.kind === "figure" && b.at ? [b.at] : []));
-  const labels = pdf.lines.filter((l) => {
-    const size = pdf.sizes.get(l.page);
-    if (!size || labelWords(l.text) > 3) return false;
-    const [x, y] = [((l.left + l.right) / 2 / size.width) * 100, ((l.top + l.bottom) / 2 / size.height) * 100];
-    return figures.some((f) => {
-      const b = regionBounds(f.region);
-      return f.page === l.page && x >= b.x1 && x <= b.x2 && y >= b.y1 && y <= b.y2;
-    });
-  });
+  // (its lines are long); a display's crop shows every line in it.
+  const shown = picturedBy(pdf, cand);
+  const labels = pdf.lines.filter((l) => shown(l).some((f) => f.mathImage !== undefined || labelWords(l.text) <= 3));
   pdf.raw.forEach((rawLines, p) => {
     const lines = rawLines.map((line) => {
       // A raised footnote label runs into its note's first word ("1All amounts…"),
@@ -690,13 +736,12 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
   // none is forgiven here. The glyphs' codes see what no string shows (a lost
   // ϵ, ℱ read as F); the larger count stands.
   const garbleExcess = Math.max(garbled.length, glyphs?.garbles ?? 0);
-  const displays = glyphs ? glyphs.checked + glyphs.mathImages : 0;
   const parts: Record<keyof typeof FREE_WEIGHTS, number | null> = {
     coverage: f1,
     furniture: furniture.clean,
     numbers: Math.max(0, 1 - numberCount / Math.max(1, pdf.pages)),
     garbles: Math.max(0, 1 - garbleExcess / (5 + cand.toks.length / 100)),
-    math: glyphs && displays > 0 ? glyphs.passed / displays : null,
+    math: glyphs ? mathPart(glyphs) : null,
     look: look?.score ?? null,
   };
   let sum = 0;

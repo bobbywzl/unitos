@@ -209,7 +209,7 @@ function freeDetail(f: FreeScores, candidate: Doc) {
   console.log(`  Extra most:   ${list(f.coverage.extra)}`);
   console.log(`Furniture lines found by position: ${f.furniture.strings}; ${f.furniture.leaked} leak, ${f.furniture.leaks} times.`);
   for (const leak of f.furniture.found.slice(0, 40)) {
-    console.log(`  "${clip(leak.text, 100)}"`);
+    console.log(`  "${clip(leak.text, 100)}"${leak.pictured ? ` (${leak.pictured} in a figure's picture)` : ""}`);
     for (const m of leak.at.slice(0, 6)) {
       const tok = c.toks[m.tok];
       console.log(`    … ${clip(c.units[m.unit].text.slice(Math.max(0, tok.start - 60), tok.end + 60), 160)}`);

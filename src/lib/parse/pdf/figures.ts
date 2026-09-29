@@ -678,8 +678,8 @@ export function attachFigureRegions(
       box = { x1, x2, y1: cap.box.y2 + ctx.bodySize * 0.2, y2: top };
       // With nothing of the text over it, a figure's top is its own: the top
       // of its drawing, of its graphics with their words, and of the words it
-      // swept (a chart's title, an axis name), past 94% of the page where
-      // they reach, and never over a line the page dropped. arXiv 2506.06752
+      // swept (a chart's title, an axis name). It never reaches the line the
+      // page dropped over it (with none, 94% of the page). arXiv 2506.06752
       // pp. 4, 5, 15: the band ran to 94% of the page, and each crop showed
       // the running head.
       if (!above?.box) {
@@ -769,10 +769,11 @@ export function attachFigureRegions(
       }
       if (m > 0 || cap.box.y1 - bottom > rowGap * 3 || drawnBelow) {
         box = { x1, x2, y1: bottom, y2: cap.box.y1 - ctx.bodySize * 0.2 };
-        // With nothing of the text under it, a figure's foot is its own, and
-        // never under a line the page dropped (arXiv 2506.08209 p. 12: the
-        // band ran to 6% of the page, and the crop showed half the page
-        // number).
+        // With nothing of the text under it, a figure's foot is its own: the
+        // foot of its drawing, of its graphics with their words, and of the
+        // words it took. It never reaches the line the page dropped under it
+        // (with none, 6% of the page). arXiv 2506.08209 p. 12: the band ran
+        // to 6% of the page, and the crop showed half the page number.
         if (open) {
           const capFoot = cap.box.y1;
           const own = [drawnBelow, ...graphics.filter((g) => centeredIn(g.box, bottom, capFoot)).map(graphicExtent), ...next.slice(0, m).map((s) => s.box)];

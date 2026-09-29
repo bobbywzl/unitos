@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { blockTakes, isWebAddress } from "@/lib/block-takes";
@@ -59,7 +59,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
   if (!href && previous === null) return NextResponse.json({ ok: true, previous });
 
   await db.$transaction([
-    db.block.update({ where: { id: block.id }, data: { links: links as unknown as Prisma.InputJsonValue } }),
+    // The last link taken off leaves the block with none, as it was.
+    db.block.update({ where: { id: block.id }, data: { links: links.length > 0 ? (links as unknown as Prisma.InputJsonValue) : Prisma.DbNull } }),
     db.blockEdit.create({
       data: {
         documentId: block.documentId,

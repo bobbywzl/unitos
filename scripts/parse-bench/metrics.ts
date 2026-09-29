@@ -779,7 +779,9 @@ const sameMarker = (a: string, b: string) => (bulletLike(a) && bulletLike(b)) ||
     math alone stands between its found neighbors); then its depth and its
     marker are compared (every bullet glyph is one marker). A candidate's
     marker is the one it draws: the parse's printed marker, the import's
-    list format (a marker left in the words is no marker). */
+    list format (a marker left in the words is no marker), or, for an
+    unmarked item, the reference's marker its words open with (a label no
+    list level draws, "[Bil95]"). */
 export function listScores(ref: Flat, cand: Flat, al: Alignment): ListScores {
   const votes = new Map<number, Map<number, number>>(); // ref unit → cand unit → words
   const back = new Map<number, Map<number, number>>(); // cand unit → ref unit → words
@@ -854,7 +856,11 @@ export function listScores(ref: Flat, cand: Flat, al: Alignment): ListScores {
     else misses.push({ unit: ru, cand: cu, why: `depth ${theirs.depth}, not ${mine.depth}` });
     const level = (byDepth[mine.depth] ??= { found: 0, marked: 0 });
     level.found++;
-    if (sameMarker(mine.marker, theirs.marker)) {
+    // A label no list level draws ("[Bil95]") stays as the words an unmarked item opens with: that is its marker,
+    // drawn as the page draws it.
+    const words = cand.units[cu].text.trimStart();
+    const worded = theirs.marker === "" && mine.marker !== "" && words.startsWith(mine.marker) && (words.length === mine.marker.length || /\s/.test(words[mine.marker.length]));
+    if (sameMarker(mine.marker, theirs.marker) || worded) {
       marked++;
       level.marked++;
     } else misses.push({ unit: ru, cand: cu, why: `marker "${theirs.marker}", not "${mine.marker}"` });
@@ -921,6 +927,62 @@ function cellFormulas(flat: Flat): Map<number, number[]> {
   return out;
 }
 
+/** A formula's canonical tokens, and a cell's words as the table metric compares them. */
+const tokensOf = (flat: Flat, k: number) => mathTokens(flat.math[k], false);
+const plain = (text: string) => text.normalize("NFKC").replace(/\s+/g, "");
+
+/** A reference table's cells in the candidate table that owns it: rows and
+    columns map one to one, by the most words and formulas shared, and those
+    no word or formula maps keep their place when that place is free. */
+function cellMap(ref: Flat, cand: Flat, al: Alignment, rb: number, refFormulas: Map<number, number[]>, candFormulas: Map<number, number[]>) {
+  const cb = al.owner[rb];
+  const body = ref.unitsOf[rb].filter((u) => ref.units[u].index >= 0);
+  const rowVotes = new Map<string, number>();
+  const colVotes = new Map<string, number>();
+  const key = (a: number, b: number) => `${a},${b}`;
+  const vote = (ru: Unit, cu: Unit) => {
+    rowVotes.set(key(ru.row, cu.row), (rowVotes.get(key(ru.row, cu.row)) ?? 0) + 1);
+    colVotes.set(key(ru.col, cu.col), (colVotes.get(key(ru.col, cu.col)) ?? 0) + 1);
+  };
+  for (const u of body) {
+    for (let i = ref.units[u].first; i < ref.units[u].end; i++) {
+      const j = al.aTo[i];
+      if (j < 0) continue;
+      const cu = cand.units[cand.toks[j].unit];
+      if (cu.block !== cb || cu.index < 0) continue;
+      vote(ref.units[u], cu);
+    }
+  }
+  // A formula the owning table's cells hold once, read alike or as the same characters, votes too.
+  const ownerCells = cb >= 0 ? cand.unitsOf[cb].filter((u) => cand.units[u].index >= 0) : [];
+  for (const u of body) {
+    for (const k of refFormulas.get(u) ?? []) {
+      const want = tokensOf(ref, k);
+      const reading = plain(ref.math[k].text ?? "");
+      const alike = ownerCells.filter(
+        (cu) => (candFormulas.get(cu) ?? []).some((c) => sequenceSimilarity(want, tokensOf(cand, c)) >= SAME_FORMULA) || (reading !== "" && plain(cand.units[cu].text) === reading),
+      );
+      if (alike.length === 1) vote(ref.units[u], cand.units[alike[0]]);
+    }
+  }
+  const rows = assign(rowVotes);
+  const cols = assign(colVotes);
+  // Rows and columns no word or formula maps keep their place when that place is free (a table of formulas
+  // read as words).
+  const byPlace = (map: Map<number, number>, from: number[], to: number[]) => {
+    const taken = new Set(map.values());
+    for (const r of new Set(from)) {
+      if (map.has(r) || !to.includes(r) || taken.has(r)) continue;
+      map.set(r, r);
+      taken.add(r);
+    }
+  };
+  byPlace(rows, body.map((u) => ref.units[u].row), ownerCells.map((u) => cand.units[u].row));
+  byPlace(cols, body.map((u) => ref.units[u].col), ownerCells.map((u) => cand.units[u].col));
+  const cellAt = (unit: Unit) => ownerCells.find((c) => cand.units[c].row === rows.get(unit.row) && cand.units[c].col === cols.get(unit.col)) ?? -1;
+  return { cb, body, rows, cols, cellAt };
+}
+
 /** Tables: a table word is in place when it lands in the candidate table
     that owns its table, in the row and column its row and column map to
     (rows and columns map one to one, by the most words and formulas shared).
@@ -932,59 +994,13 @@ export function tableScores(ref: Flat, cand: Flat, al: Alignment): TableScores {
   const refFormulas = cellFormulas(ref);
   const candFormulas = cellFormulas(cand);
   const formulaPlaced = new Set<number>();
-  const tokensOf = (flat: Flat, k: number) => mathTokens(flat.math[k], false);
-  const plain = (text: string) => text.normalize("NFKC").replace(/\s+/g, "");
   let refWords = 0;
   let hits = 0;
   let outside = 0;
   const misses: TableScores["misses"] = [];
   ref.blocks.forEach((block, rb) => {
     if (block.kind !== "table") return;
-    const cb = al.owner[rb];
-    const body = ref.unitsOf[rb].filter((u) => ref.units[u].index >= 0);
-    const rowVotes = new Map<string, number>();
-    const colVotes = new Map<string, number>();
-    const key = (a: number, b: number) => `${a},${b}`;
-    const vote = (ru: Unit, cu: Unit) => {
-      rowVotes.set(key(ru.row, cu.row), (rowVotes.get(key(ru.row, cu.row)) ?? 0) + 1);
-      colVotes.set(key(ru.col, cu.col), (colVotes.get(key(ru.col, cu.col)) ?? 0) + 1);
-    };
-    for (const u of body) {
-      for (let i = ref.units[u].first; i < ref.units[u].end; i++) {
-        const j = al.aTo[i];
-        if (j < 0) continue;
-        const cu = cand.units[cand.toks[j].unit];
-        if (cu.block !== cb || cu.index < 0) continue;
-        vote(ref.units[u], cu);
-      }
-    }
-    // A formula the owning table's cells hold once, read alike or as the same characters, votes too.
-    const ownerCells = cb >= 0 ? cand.unitsOf[cb].filter((u) => cand.units[u].index >= 0) : [];
-    for (const u of body) {
-      for (const k of refFormulas.get(u) ?? []) {
-        const want = tokensOf(ref, k);
-        const reading = plain(ref.math[k].text ?? "");
-        const alike = ownerCells.filter(
-          (cu) => (candFormulas.get(cu) ?? []).some((c) => sequenceSimilarity(want, tokensOf(cand, c)) >= SAME_FORMULA) || (reading !== "" && plain(cand.units[cu].text) === reading),
-        );
-        if (alike.length === 1) vote(ref.units[u], cand.units[alike[0]]);
-      }
-    }
-    const rows = assign(rowVotes);
-    const cols = assign(colVotes);
-    // Rows and columns no word or formula maps keep their place when that place is free (a table of formulas
-    // read as words).
-    const byPlace = (map: Map<number, number>, from: number[], to: number[]) => {
-      const taken = new Set(map.values());
-      for (const r of new Set(from)) {
-        if (map.has(r) || !to.includes(r) || taken.has(r)) continue;
-        map.set(r, r);
-        taken.add(r);
-      }
-    };
-    byPlace(rows, body.map((u) => ref.units[u].row), ownerCells.map((u) => cand.units[u].row));
-    byPlace(cols, body.map((u) => ref.units[u].col), ownerCells.map((u) => cand.units[u].col));
-    const cellAt = (unit: Unit) => ownerCells.find((c) => cand.units[c].row === rows.get(unit.row) && cand.units[c].col === cols.get(unit.col)) ?? -1;
+    const { cb, body, rows, cols, cellAt } = cellMap(ref, cand, al, rb, refFormulas, candFormulas);
     for (const u of body) {
       const unit = ref.units[u];
       for (const k of refFormulas.get(u) ?? []) {
@@ -1084,7 +1100,8 @@ const latexOf = (m: { latex?: string; mathml?: string }) => m.latex ?? (m.mathml
 /** Math: each reference formula against its counterpart, by the similarity
     of canonical forms. A display equation's counterpart is its owner; an
     inline formula's is a candidate formula between the matched words around
-    it, or else the candidate's words there read as math. An image scores 0. */
+    it, or else the candidate's words there read as math; a formula alone in
+    a table cell, the candidate cell's (cellMap). An image scores 0. */
 export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
   const misses: MathScores["misses"] = [];
   const display: number[] = [];
@@ -1096,6 +1113,11 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
     if (similarity < 0.999) misses.push({ display: isDisplay, want: latexOf(m), got, similarity });
   };
   const labels: MathScores["labels"] = { ref: 0, right: 0, extra: 0, score: null, misses: [], side: { ref: 0, right: 0, score: null } };
+  // A table's cells in the candidate's table, as the table metric maps them, made once a table.
+  const refCells = cellFormulas(ref);
+  const candCells = cellFormulas(cand);
+  const maps = new Map<number, ReturnType<typeof cellMap>>();
+  const mapOf = (rb: number) => maps.get(rb) ?? maps.set(rb, cellMap(ref, cand, al, rb, refCells, candCells)).get(rb);
   for (const m of ref.math) {
     const want = mathTokens(m, m.display);
     if (m.display) {
@@ -1147,10 +1169,22 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
       }
     } else {
       const gap = gapText(cand, al, prev, next, want.length);
+      // A formula alone in a table cell has no words beside it: the candidate's cell the table's rows and
+      // columns map it to holds it, as a formula or as words.
+      const at = !gap.trim() && ref.blocks[unit.block].kind === "table" && unit.index >= 0 ? (mapOf(unit.block)?.cellAt(unit) ?? -1) : -1;
       if (gap.trim()) {
         plainInline++;
         sim = sequenceSimilarity(want, textMathTokens(gap));
         got = `(words) ${gap.trim()}`;
+      } else if (at >= 0 && (candCells.get(at) ?? []).length > 0) {
+        for (const k of candCells.get(at) ?? []) {
+          const s = sequenceSimilarity(want, mathTokens(cand.math[k], false));
+          if (s >= sim) [sim, got] = [s, latexOf(cand.math[k])];
+        }
+      } else if (at >= 0 && cand.units[at].text.trim()) {
+        plainInline++;
+        sim = sequenceSimilarity(want, textMathTokens(cand.units[at].text));
+        got = `(words) ${cand.units[at].text.trim()}`;
       }
     }
     inline.push(sim);
@@ -1463,21 +1497,43 @@ function propertyMisses(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b
     flush left draw alike. */
 const JUSTIFY_CHARS = 100;
 
+/** Each unit's inline formulas, by unit. */
+const formulasOf = new WeakMap<Flat, Map<number, MathItem[]>>();
+
+/** A unit's length as drawn: its characters, each inline formula counted by
+    the glyphs it draws (its MathML's leaves). A reference's formula holds
+    the glyphs as its text, a parse's the page's characters, an import's
+    none: its glyphs count alike on every side. */
+function drawnLength(flat: Flat, u: number): number {
+  let index = formulasOf.get(flat);
+  if (!index) {
+    index = new Map();
+    for (const m of flat.math) if (!m.display && m.unit >= 0) index.set(m.unit, [...(index.get(m.unit) ?? []), m]);
+    formulasOf.set(flat, index);
+  }
+  let n = flat.units[u].text.length;
+  for (const m of index.get(u) ?? []) {
+    const text = m.text ?? "";
+    n += (m.latex !== undefined || m.mathml !== undefined ? mathLeaves(m, false).join("").length : text.length) - text.length;
+  }
+  return n;
+}
+
 /** A title's, a heading's, a paragraph's, or a list's items' alignment as
     the metric compares it. Justified counts only where the reference
     justifies any paragraph (a reference that marks none leaves it
-    unscored), and on a paragraph of JUSTIFY_CHARS or more or a list with an
-    item that long, where a wrap shows it; elsewhere it is flush left.
-    A line centered on the page is centered whether it reads as a heading or
-    a paragraph. */
+    unscored), and on a paragraph of JUSTIFY_CHARS or more as drawn
+    (drawnLength) or a list with an item that long, where a wrap shows it;
+    elsewhere it is flush left. A line centered on the page is centered
+    whether it reads as a heading or a paragraph. */
 function alignKey(justified: boolean) {
   return (flat: Flat, b: number): string | undefined => {
     const block = flat.blocks[b];
     if (block.kind !== "title" && block.kind !== "heading" && block.kind !== "paragraph" && block.kind !== "list") return undefined;
     if (block.align !== "justify") return block.align;
     // A list's items show it where one of them wraps.
-    const chars = Math.max(0, ...flat.unitsOf[b].map((u) => flat.units[u].text.length));
-    const whole = block.kind === "list" ? chars : flat.unitsOf[b].reduce((n, u) => n + flat.units[u].text.length, 0);
+    const lengths = flat.unitsOf[b].map((u) => drawnLength(flat, u));
+    const whole = block.kind === "list" ? Math.max(0, ...lengths) : lengths.reduce((n, x) => n + x, 0);
     return justified && (block.kind === "paragraph" || block.kind === "list") && whole >= JUSTIFY_CHARS ? "justify" : undefined;
   };
 }

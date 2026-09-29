@@ -43,19 +43,36 @@ const movedSource = z.object({
   endOffset: z.number(),
   prefix: z.string(),
   suffix: z.string(),
+  anchoredText: z.string().nullable(),
+  orphaned: z.boolean(),
 });
 const movedLink = z.object({
   id: z.string(),
   fromBlockId: z.string(),
   startOffset: z.number(),
   endOffset: z.number(),
+  quotedText: z.string(),
   prefix: z.string(),
   suffix: z.string(),
+  fromOrphaned: z.boolean(),
   toBlockId: z.string().nullable(),
   toStartOffset: z.number().nullable(),
   toEndOffset: z.number().nullable(),
+  toQuotedText: z.string().nullable(),
   toPrefix: z.string().nullable(),
   toSuffix: z.string().nullable(),
+  toOrphaned: z.boolean(),
+});
+type SourceRow = z.infer<typeof movedSource>;
+const sourceBefore = (s: SourceRow): SourceRow => ({
+  id: s.id,
+  blockId: s.blockId,
+  startOffset: s.startOffset,
+  endOffset: s.endOffset,
+  prefix: s.prefix,
+  suffix: s.suffix,
+  anchoredText: s.anchoredText,
+  orphaned: s.orphaned,
 });
 const joinMeta = z.object({
   first: lineFields,
@@ -194,7 +211,7 @@ export async function POST(req: Request) {
               links: next.links,
               citations: next.citations,
             },
-            sources: sources.map((s) => ({ id: s.id, blockId: s.blockId, startOffset: s.startOffset, endOffset: s.endOffset, prefix: s.prefix, suffix: s.suffix })),
+            sources: sources.map(sourceBefore),
             docLinks: docLinks.map(linkBefore),
           } as Prisma.InputJsonValue,
           userId,
@@ -291,7 +308,7 @@ export async function POST(req: Request) {
         meta: {
           line: { text: block.text, originalText: block.originalText, endTime: block.endTime, styles: block.styles, links: block.links, citations: block.citations },
           newId: created.id,
-          sources: movedSources.map((s) => ({ id: s.id, blockId: s.blockId, startOffset: s.startOffset, endOffset: s.endOffset, prefix: s.prefix, suffix: s.suffix })),
+          sources: movedSources.map(sourceBefore),
           docLinks: movedLinks.map(linkBefore),
         } as Prisma.InputJsonValue,
         userId,
@@ -308,13 +325,17 @@ const linkBefore = (l: LinkRow): LinkRow => ({
   fromBlockId: l.fromBlockId,
   startOffset: l.startOffset,
   endOffset: l.endOffset,
+  quotedText: l.quotedText,
   prefix: l.prefix,
   suffix: l.suffix,
+  fromOrphaned: l.fromOrphaned,
   toBlockId: l.toBlockId,
   toStartOffset: l.toStartOffset,
   toEndOffset: l.toEndOffset,
+  toQuotedText: l.toQuotedText,
   toPrefix: l.toPrefix,
   toSuffix: l.toSuffix,
+  toOrphaned: l.toOrphaned,
 });
 
 /** The lines as a join or a split found them, while they are still as it
@@ -326,7 +347,7 @@ async function undo(editId: string, t: TFunc) {
   if (access instanceof NextResponse) return access;
   const documentId = edit.documentId;
   const line = await db.block.findUnique({ where: { id: edit.blockId } });
-  const putBack = async (tx: Prisma.TransactionClient, sources: z.infer<typeof movedSource>[], docLinks: LinkRow[]) => {
+  const putBack = async (tx: Prisma.TransactionClient, sources: SourceRow[], docLinks: LinkRow[]) => {
     for (const { id, ...fields } of sources) await tx.source.update({ where: { id }, data: fields });
     for (const { id, ...fields } of docLinks) await tx.docLink.update({ where: { id }, data: fields });
   };

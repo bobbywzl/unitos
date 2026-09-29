@@ -70,10 +70,16 @@ export function joined(first: Line, second: Line) {
 
 const withQuote = (span: Span, text: string): Span => ("quotedText" in span ? { ...span, quotedText: text.slice(span.start, span.end) } : span);
 
+// Letters or digits on both sides of a place, in a script that spaces its
+// words: the place is inside a word.
+const inWord = (before: string, after: string) =>
+  /[\p{L}\p{N}]/u.test(before) && /[\p{L}\p{N}]/u.test(after) && !/[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}]/u.test(before + after);
+
 /** Where a line splits: the words before `offset` and the words from it,
-    the spaces between dropped. Null when either side has no words. */
+    the spaces between dropped. Null inside a word, or when either side has
+    no words. */
 export function splitPlace(text: string, offset: number): { headEnd: number; tailStart: number } | null {
-  if (offset <= 0 || offset >= text.length) return null;
+  if (offset <= 0 || offset >= text.length || inWord(text[offset - 1], text[offset])) return null;
   const headEnd = text.slice(0, offset).trimEnd().length;
   const tailStart = text.length - text.slice(offset).trimStart().length;
   return headEnd > 0 && tailStart < text.length ? { headEnd, tailStart } : null;
