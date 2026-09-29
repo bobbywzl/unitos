@@ -5,6 +5,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 import { separateBlocks } from "@/lib/parse/dom-text";
 import { escapeHtml } from "@/lib/parse/office";
 import { columnLetter } from "@/lib/parse/sheets";
+import { cellValue, computeFormula, formulaFormat, movedFormula, shows } from "@/lib/sheet-formulas";
 
 // A slide's, a sheet's, or a table's replica with new words (SPEC.md §27,
 // §16). The one rule holds after every edit: the replica's DOM text — every
@@ -805,22 +806,156 @@ function cellClasses(was: string, html: string): string {
   return out;
 }
 
+/** The formulas of a sheet's grid: each formula's cell, its formula, its
+    words as they show, and the format that shows its value when the sheet
+    computes it here (lib/sheet-formulas.ts), else null: it keeps its value. */
+function gridFormulas(grid: Grid, words: string[][]) {
+  const values = words.map((r) => r.map((w) => cellValue(w)));
+  const get = (r: number, c: number) => values[r]?.[c] ?? null;
+  const out: { r: number; c: number; formula: string; shown: string; format: string | null }[] = [];
+  grid.slots.forEach((row, r) =>
+    row.forEach((slot, c) => {
+      const formula = slot?.origin ? slot.td.getAttribute("title") : null;
+      if (!formula?.startsWith("=")) return;
+      const value = computeFormula(formula, get);
+      out.push({ r, c, formula, shown: words[r][c], format: value === undefined ? null : formulaFormat(words[r][c], value) });
+    }),
+  );
+  return out;
+}
+
+/** `html` with each cell given (a formula's) changed in place: its title,
+    or its words in its own text. A cell whose words stand in more than one
+    run keeps them. */
+function withCells(html: string, cells: { r: number; c: number; title?: string; words?: string }[]): string {
+  const grid = cells.length > 0 ? readGrid(html) : null;
+  if (!grid) return html;
+  const splices: Splice[] = [];
+  for (const { r, c, title, words } of cells) {
+    const td = grid.slots[r]?.[c]?.td;
+    if (!td) continue;
+    const at = grid.place(td);
+    if (title !== undefined && at.attrs.title) splices.push({ start: at.attrs.title.start, end: at.attrs.title.end, source: `title="${escapeHtml(title)}"` });
+    if (words === undefined) continue;
+    const texts: Text[] = [];
+    const walker = td.ownerDocument.createTreeWalker(td, 4 /* NodeFilter.SHOW_TEXT */);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) if (!n.parentElement?.closest(".cell-gap, [data-anchor-skip]")) texts.push(n as Text);
+    if (texts.length === 1) {
+      const text = grid.place(texts[0]);
+      splices.push({ start: text.start, end: text.end, source: escapeHtml(words) });
+    } else if (texts.length === 0) {
+      const gap = td.querySelector(".cell-gap");
+      const point = gap ? grid.place(gap).start : at.inner.end;
+      splices.push({ start: point, end: point, source: escapeHtml(words) });
+    }
+  }
+  return applied(html, splices);
+}
+
+/** The words the formulas the sheet computes show over the grid in `html`,
+    computed again until nothing changes (a formula may read another), for
+    the ones whose words change. */
+function formulaWords(html: string, formulas: { r: number; c: number; formula: string; format: string }[]): { r: number; c: number; words: string }[] {
+  const grid = formulas.length > 0 ? readGrid(html) : null;
+  if (!grid) return [];
+  const words = gridWords(grid);
+  const values = words.map((r) => r.map((w) => cellValue(w)));
+  const get = (r: number, c: number) => values[r]?.[c] ?? null;
+  const shown = new Map<(typeof formulas)[number], string>();
+  for (let pass = 0; pass <= formulas.length; pass++) {
+    let changed = false;
+    for (const f of formulas) {
+      const value = computeFormula(f.formula, get);
+      if (value === undefined) continue;
+      const now = shows(f.format, value);
+      shown.set(f, now);
+      const read = cellValue(now);
+      if (JSON.stringify(read) !== JSON.stringify(values[f.r][f.c])) {
+        values[f.r][f.c] = read;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return formulas.flatMap((f) => {
+    const now = shown.get(f);
+    return now !== undefined && now !== words[f.r][f.c] ? [{ r: f.r, c: f.c, words: now }] : [];
+  });
+}
+
 /** A sheet's replica with `next` for its text — its words cell by cell, and
     rows or columns added or removed (one of the two in one edit) — with
-    what the edit took out; or why not. `cut` is what the edit this one
-    takes back took out: its rows or columns come back as they were. */
-export function sheetWithText(html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null } | { refused: ReplicaRefusal } {
-  const shape = (text: string) => text.split("\n").map((r) => r.split("\t").length).join(",");
-  if (shape(prev) === shape(next)) {
+    what the edit took out, and its text when the formulas the sheet
+    computes changed it; or why not. The grid reads row by row (a line
+    break in a cell's words before its row's last cell), then a chart's
+    data, which stays. The formulas follow: each formula's references move
+    with their cells, and the formulas the sheet computes show their new
+    values; `next` gives a formula's cell its value as it was, or as
+    computed. `cut` is what the edit this one takes back took out: its rows
+    or columns come back as they were. */
+export function sheetWithText(html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null; text?: string } | { refused: ReplicaRefusal } {
+  if (readReplica(html).text !== prev) return { refused: "stale" };
+  const grid = readGrid(html);
+  const was = grid ? gridWords(grid) : [];
+  const gridText = joinRows(was);
+  const tail = prev.startsWith(gridText) && (prev.length === gridText.length || prev[gridText.length] === "\n") ? prev.slice(gridText.length) : null;
+  if (!grid || was.length === 0 || tail === null || JSON.stringify(rowsIn(gridText, grid.width)) !== JSON.stringify(was)) {
+    // A grid the text does not read row by row: its words alone change.
+    const shape = (text: string) => text.split("\n").map((r) => r.split("\t").length).join(",");
+    if (shape(prev) !== shape(next)) return { refused: "grid" };
     const edited = replicaWithText(html, prev, next);
     return "refused" in edited ? edited : { html: cellClasses(html, edited.html), cut: null };
   }
-  if (readReplica(html).text !== prev) return { refused: "stale" };
-  const reshaped = sheetShape(html, prev, next, cut);
-  if ("refused" in reshaped) return reshaped;
-  // The kept cells' new words, then.
-  const edited = replicaWithText(reshaped.html, readReplica(reshaped.html).text, next);
-  return "refused" in edited ? edited : { html: cellClasses(reshaped.html, edited.html), cut: reshaped.cut };
+  // A chart's data under its drawing stays.
+  if (!next.endsWith(tail)) return { refused: "fixed" };
+  const nextGrid = next.slice(0, next.length - tail.length);
+  let now = rowsIn(nextGrid, grid.width);
+  for (let d = 1; !now && d <= 20; d++) {
+    for (const w of [grid.width + d, grid.width - d]) {
+      const rows = w > 0 && !now ? rowsIn(nextGrid, w) : null;
+      if (rows && rows.length === was.length) now = rows;
+    }
+  }
+  if (!now) return { refused: "grid" };
+  const formulas = gridFormulas(grid, was);
+  let shaped: { html: string; cut: SheetCut | null; row: (r: number) => number | null; col: (c: number) => number | null } = { html, cut: null, row: (r) => r, col: (c) => c };
+  if (now.length !== was.length || now[0].length !== grid.width) {
+    const reshaped = sheetShape(html, grid, was, now, cut);
+    if ("refused" in reshaped) return reshaped;
+    shaped = reshaped;
+  }
+  // Each formula stands where its cell went; the references of the ones the
+  // sheet computes move with their cells.
+  const moved: { r: number; c: number; formula: string; format: string | null; shown: string }[] = [];
+  for (const f of formulas) {
+    const r = shaped.row(f.r);
+    const c = shaped.col(f.c);
+    if (r === null || c === null) continue;
+    const formula = f.format === null ? f.formula : movedFormula(f.formula, shaped.row, shaped.col);
+    if (formula === null) return { refused: "reads" };
+    moved.push({ r, c, formula, format: f.format, shown: f.shown });
+  }
+  const titled = withCells(
+    shaped.html,
+    moved.filter((m, i) => m.formula !== formulas.filter((f) => shaped.row(f.r) !== null && shaped.col(f.c) !== null)[i]?.formula).map((m) => ({ r: m.r, c: m.c, title: m.formula })),
+  );
+  // Every cell but a formula's takes next's words; a formula's keeps its own.
+  const formulaAt = (r: number, c: number) => moved.find((m) => m.r === r && m.c === c);
+  const current = gridWords(readGrid(titled)!);
+  const words = now.map((cells, r) => cells.map((w, c) => (formulaAt(r, c) ? current[r][c] : w)));
+  const edited = replicaWithText(titled, readReplica(titled).text, joinRows(words) + tail);
+  if ("refused" in edited) return edited;
+  const computed = formulaWords(
+    edited.html,
+    moved.flatMap((m) => (m.format === null ? [] : [{ r: m.r, c: m.c, formula: m.formula, format: m.format }])),
+  );
+  for (const m of moved) {
+    const value = computed.find((v) => v.r === m.r && v.c === m.c)?.words ?? m.shown;
+    if (now[m.r][m.c] !== m.shown && now[m.r][m.c] !== value) return { refused: "fixed" };
+  }
+  const out = cellClasses(titled, withCells(edited.html, computed));
+  const text = readReplica(out).text;
+  return { html: out, cut: shaped.cut, ...(text !== next ? { text } : {}) };
 }
 
 // ── A slide's lines ────────────────────────────────────────────────────────
