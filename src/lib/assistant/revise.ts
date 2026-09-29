@@ -99,6 +99,13 @@ export function markdownBlocks(markdown: string): NewBlock[] {
       endList();
       continue;
     }
+    // An image takes no place in a document without rich text: it ends the
+    // block before it, as a blank line does.
+    if (/^\s*!\[[^\]]*\]\([^)]*\)\s*$/.test(line)) {
+      endParagraph();
+      endList();
+      continue;
+    }
     const heading = /^\s{0,3}(#{1,6})\s+(.*?)(?:\s+#+)?$/.exec(line);
     if (heading) {
       endParagraph();

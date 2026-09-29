@@ -260,10 +260,37 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
   if (graphicsLeft || graphicsRight) return isProse(buildLines(graphicsLeft ? right : left, page), 2) ? { bands } : null;
   if (leftChars === 0 || rightChars === 0) return null;
   // Two columns of text: most of the region's characters sit beside each
-  // other, and each side is a prose column, however narrow (the Earth
-  // Observer's pull quote beside its article holds 7% of their characters).
-  if (sideChars < total * 0.4) return null;
-  return isColumns(left, page, pageWidth, depth) && isColumns(right, page, pageWidth, depth) ? { bands } : null;
+  // other, each side holds a fair share, and each side is a prose column.
+  const fair = sideChars >= total * 0.4 && leftChars >= sideChars * 0.15 && rightChars >= sideChars * 0.15;
+  if (fair && isColumns(left, page, pageWidth, depth) && isColumns(right, page, pageWidth, depth)) return { bands };
+  // Else one band may hold two columns of its own between the rows across
+  // the gutter: the region reads as what stands above the band, the band's
+  // columns, and what stands under it. The IRS W-9 sets two columns of
+  // instructions under a form of one; the Earth Observer sets a pull quote
+  // beside its article, 7% of their characters.
+  const letters = (side: Side) => chars(side.items);
+  const band = twoSided
+    .filter((b) => letters(b.left) >= 90 && letters(b.right) >= 90)
+    .sort((a, b) => letters(b.left) + letters(b.right) - letters(a.left) - letters(a.right))
+    .find((b) => isColumns(b.left.items, page, pageWidth, depth) && isColumns(b.right.items, page, pageWidth, depth));
+  return band ? { bands: stacked(band, items, graphics) } : null;
+}
+
+// A region cut above and under one band: what stands above it, the band,
+// and what stands under it, each read as a region of its own.
+function stacked(band: Band, items: Item[], graphics: Placed[]): Band[] {
+  const own = new Set([...band.left.items, ...band.right.items]);
+  const ownGraphics = new Set([...band.left.graphics, ...band.right.graphics]);
+  const top = Math.max(...[...own].map((i) => i.y));
+  const whole = (list: Item[], placed: Placed[]): Band => ({ left: { items: list, graphics: placed }, right: { items: [], graphics: [] }, separator: null });
+  const rest = items.filter((i) => !own.has(i));
+  const restGraphics = graphics.filter((p) => !ownGraphics.has(p));
+  const high = (p: Placed) => (p.box.y1 + p.box.y2) / 2 > top;
+  return [
+    whole(rest.filter((i) => i.y > top), restGraphics.filter(high)),
+    { ...band, separator: null },
+    whole(rest.filter((i) => i.y <= top), restGraphics.filter((p) => !high(p))),
+  ].filter((b) => b.left.items.length + b.left.graphics.length + b.right.items.length + b.right.graphics.length > 0);
 }
 
 // A side of a split: a prose column, or columns of its own (a page of three

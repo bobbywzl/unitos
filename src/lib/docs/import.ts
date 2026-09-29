@@ -1154,6 +1154,8 @@ class Converter {
     const attrs: Record<string, unknown> = { latex, blockId: newBlockId() };
     const pageStart = starts.at(-1)?.page;
     if (pageStart !== undefined) attrs.pageStart = pageStart;
+    // The page numbers the equation at the left margin (the parse's leqno).
+    if (tokensOf(block.html).includes("leqno")) attrs.leqno = true;
     this.place(index, [{ type: "blockMath", attrs }]);
   }
 

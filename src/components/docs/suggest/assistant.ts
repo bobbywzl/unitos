@@ -91,12 +91,13 @@ function land(
   // assistant's for someone else do. A style change on the blocks around
   // gives way only to a new style, and meets only a new style: a line this
   // landing made a heading still takes a word fixed in it. An alignment is
-  // a block's change of its own, and gives way only to a new alignment.
-  const clear = (from: number, to: number, kind: "words" | "style" | "alignment" = "words"): SkipReason | null => {
+  // a block's change of its own, and gives way only to a new alignment; so
+  // are its spacing and its indent.
+  const clear = (from: number, to: number, kind: "words" | BlockChange = "words"): SkipReason | null => {
     const earlier = new Set<string>();
     let meets = false;
     const counts = (node: PMNode, mark: Mark) =>
-      node.isInline || mark.type.name !== "modification" || (kind !== "words" && (mark.attrs.attrName === "textAlign") === (kind === "alignment"));
+      node.isInline || mark.type.name !== "modification" || (kind !== "words" && changeOf(mark.attrs.attrName) === kind);
     tr.doc.nodesBetween(from, to, (node) => {
       for (const mark of node.marks) {
         const id = String(mark.attrs.id);
@@ -236,6 +237,29 @@ function land(
         commit((state) => {
           const r = range(state.doc, op.blockId, at, at + op.find.length);
           return r ? (addFootnote(state, r.to, op.text) ?? "object") : "changed";
+        })
+      );
+    }
+    case "set_spacing":
+    case "set_indent": {
+      const block = findBlock(tr.doc, op.blockId);
+      if (!block) return "changed";
+      const values =
+        op.op === "set_spacing"
+          ? { lineSpacing: op.line, spaceBefore: op.before, spaceAfter: op.after }
+          : { indentLeft: op.left, indentRight: op.right, indentFirstLine: op.firstLine };
+      return (
+        clear(block.pos, block.pos + 1, op.op === "set_spacing" ? "spacing" : "indent") ??
+        commit((state) => {
+          const found = findBlock(state.doc, op.blockId);
+          if (!found) return "changed";
+          // The attributes Line & paragraph spacing and the ruler set; a
+          // 0 indent or space is none. Values the block has already: no change.
+          const next = Object.fromEntries(
+            Object.entries(values).flatMap(([name, value]) => (value === undefined ? [] : [[name, value === 0 && name !== "lineSpacing" ? null : value]])),
+          );
+          if (Object.entries(next).every(([name, value]) => (found.node.attrs[name] ?? null) === value)) return state.tr;
+          return state.tr.setNodeMarkup(found.pos, undefined, { ...found.node.attrs, ...next });
         })
       );
     }
@@ -569,9 +593,37 @@ function addFootnote(state: EditorState, pos: number, words: string): Transactio
 /** Markdown as the page editor's blocks, parsed as Paste from Markdown
     parses it. */
 function blocksOf(state: EditorState, markdown: string): Fragment {
-  const html = markdownToHtml(markdown);
-  return (createNodeFromContent(html, state.schema, { slice: false, parseOptions: { preserveWhitespace: "full" } }) as PMNode).content;
+  // An image on a line of its own is an image block, as By URL inserts it;
+  // the lines between are Markdown.
+  const nodes: PMNode[] = [];
+  let text: string[] = [];
+  const flush = () => {
+    if (text.join("").trim()) {
+      const html = markdownToHtml(text.join("\n"));
+      (createNodeFromContent(html, state.schema, { slice: false, parseOptions: { preserveWhitespace: "full" } }) as PMNode).content.forEach((node) => nodes.push(node));
+    }
+    text = [];
+  };
+  for (const line of markdown.split("\n")) {
+    const image = IMAGE_LINE.exec(line);
+    if (image && state.schema.nodes.image) {
+      flush();
+      nodes.push(state.schema.nodes.image.create({ src: image[2], alt: image[1] }));
+    } else text.push(line);
+  }
+  flush();
+  return Fragment.fromArray(nodes);
 }
+
+// An image line as the server keeps it (lib/docs/suggest-ops.ts): a web address.
+const IMAGE_LINE = /^\s*!\[([^\]\n]*)\]\((https?:\/\/\S+?)\)\s*$/i;
+
+/** The block changes that give way only to their own kind. */
+type BlockChange = "style" | "alignment" | "spacing" | "indent";
+const SPACING = new Set(["lineSpacing", "spaceBefore", "spaceAfter"]);
+const INDENT = new Set(["indentLeft", "indentRight", "indentFirstLine"]);
+const changeOf = (attrName: unknown): BlockChange =>
+  attrName === "textAlign" ? "alignment" : SPACING.has(String(attrName)) ? "spacing" : INDENT.has(String(attrName)) ? "indent" : "style";
 
 /** New blocks in a list: a list of its kind goes in as its lines. */
 function fit(parent: PMNode, content: Fragment): Fragment {

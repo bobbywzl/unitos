@@ -54,6 +54,8 @@ const OP_LINES = [
   "- remove_blocks {blockIds, why}: consecutive blocks deleted whole.",
   "- set_style {blockId, style, why}: normal, title, subtitle, h1 to h6, bulleted, numbered, checklist.",
   "- set_alignment {blockId, alignment, why}: left, center, right, or justify.",
+  "- set_spacing {blockId, line?, before?, after?, why}: line spacing as a multiple (1 single, 1.15, 1.5, 2 double); the space before and after the paragraph in points.",
+  "- set_indent {blockId, left?, firstLine?, right?, why}: a paragraph's or a heading's indents in points (36 is half an inch); 0 takes one off. A list line nests by replace_blocks, never by set_indent.",
   '- format_words {blockId, find, format, value?, why}: a format on exact words: bold, italic, underline, or strikethrough; link, value the address ("" takes the link off); color, value #rrggbb; highlight_color, value #rrggbb; font, value the font\'s name; size, value the size in points.',
   "- insert_row {blockId, where, cells, why}: a new table row above or below the row of the cell blockId names. cells: its words, one string per column, left to right.",
   "- remove_row {blockId, why}: the row of the cell blockId names, removed.",
@@ -62,7 +64,7 @@ const OP_LINES = [
   "- remove_column {blockId, why}: the column of the cell blockId names, removed.",
   "- move_column {blockId, toBlockId, where, why}: the column of the cell blockId names, moved left or right of the column of the cell toBlockId names, in the same table.",
   "- insert_footnote {blockId, find, text, why}: a footnote whose number goes right after the words find. text: the footnote's words.",
-  "markdown: # to ###### headings, - bulleted lines, 1. numbered lines, - [ ] checklist lines, **bold**, *italic*, [text](url), a new table as | cell | lines under a | --- | line. No images.",
+  "markdown: # to ###### headings, - bulleted lines, 1. numbered lines, - [ ] checklist lines, **bold**, *italic*, [text](url), a new table as | cell | lines under a | --- | line, an image as ![what it shows](web address) on a line of its own.",
 ];
 
 // A document without rich text: its blocks take the plan card's edits
@@ -110,7 +112,7 @@ export function suggestPrompt(ctx: SuggestCtx): string {
           "Never change a TABLE, FIGURE, PAGE, SLIDE, SHEET, VIDEO, or TRANSCRIPT block, and never remove or replace an equation.",
         ]
       : [
-          "An EQUATION block's words are its TeX, a FIGURE block's words its caption: rewrite_block changes them. An inline equation stands in its block's words as $TeX$: replace_words with find the whole $TeX$ and text the new $TeX$ changes it. Write TeX that KaTeX draws.",
+          "An EQUATION block's words are its TeX, a FIGURE block's words its caption: rewrite_block changes them. A FIGURE block with no words is an image: its caption is a new line under it (insert_blocks after it). An inline equation stands in its block's words as $TeX$: replace_words with find the whole $TeX$ and text the new $TeX$ changes it. Write TeX that KaTeX draws.",
           "Never remove, move, or replace a figure, an image, an equation, a smart chip, or a footnote number. A table cell's words change with replace_words, a table's rows and columns with the row and column ops.",
         ]),
     `Keep the document's language. Write summary and every why in ${languageName(ctx.lang)}.`,
