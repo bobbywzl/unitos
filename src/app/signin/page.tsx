@@ -10,9 +10,10 @@ import { billingOn } from "@/lib/billing/switch";
 import { serverT } from "@/lib/i18n/server";
 import { PlansStory } from "@/app/plans/plans-story";
 import { BetaNotice } from "./beta-notice";
-import { HeroPitch, type PitchRow } from "./hero-pitch";
+import { HeroPitch } from "./hero-pitch";
 import { HeroReel } from "./hero-reel";
 import { ReaderDeck } from "./reader-deck";
+import { TrialBand } from "./trial-band";
 
 export const dynamic = "force-dynamic";
 
@@ -141,15 +142,6 @@ export default async function SignInPage({
   // The hero's first line splits at {item}, where the reel goes.
   const [heroBefore = "", heroAfter = ""] = t("signin.heroA").split("{item}");
   const heroItems = t("signin.heroItems").split("|");
-  // The pitch: the lead line, three rows each stamped Done, then the closer
-  // (hero-pitch.tsx).
-  const pitchRows: PitchRow[] = [
-    { text: t("signin.heroPitchLead"), done: false, lead: true },
-    { text: t("signin.heroPitchRow1"), done: true },
-    { text: t("signin.heroPitchRow2"), done: true },
-    { text: t("signin.heroPitchRow3"), done: true },
-    { text: t("signin.heroPitchClose"), done: false, close: true },
-  ];
 
   return (
     <div
@@ -196,7 +188,9 @@ export default async function SignInPage({
                 {t("signin.heroB")}
               </span>
             </h1>
-            <HeroPitch rows={pitchRows} doneLabel={t("common.done")} />
+            {/* Keyed by its text: a language switch (router.refresh) mounts it
+                fresh, so the new line types in and underlines itself. */}
+            <HeroPitch key={t("signin.heroPitch")} text={t("signin.heroPitch")} />
 
             {error && (
               <p className="relative mt-6 max-w-md rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">
@@ -404,6 +398,11 @@ export default async function SignInPage({
             />
           </div>
         </section>
+
+        {/* The trial band: the lead line and the offer, under the card and
+            the deck, above the plans. Only where sign-in is on: a
+            single-reader instance has no trial. */}
+        {enabled && <TrialBand lead={t("signin.trialLead")} offer={t("signin.trialOffer")} />}
       </main>
 
       {plans && (

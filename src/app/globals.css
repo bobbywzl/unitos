@@ -1527,12 +1527,8 @@ ellipse.anchor-flash {
   transition: none;
 }
 
-/* Sign-in hero pitch (signin/hero-pitch.tsx): a typing caret at the row
-   being typed, and the Done stamp landing like ink hitting paper — a quick
-   overshoot in from an angle, not a fade. Reduced motion cuts the stamp in
-   at full size with no motion; the caret still blinks (it carries no motion,
-   only opacity, and keeps typed vs. not-yet-typed legible without the JS
-   timer needing to know the OS setting). */
+/* Sign-in hero pitch (signin/hero-pitch.tsx): a typing caret while the line
+   types. Reduced motion hides the caret, since the line shows whole at once. */
 .hero-caret {
   display: inline-block;
   width: 0.09em;
@@ -1557,11 +1553,7 @@ ellipse.anchor-flash {
     opacity: 0;
   }
 }
-.hero-stamp {
-  transform-origin: left center;
-}
-
-/* The closing line's underline (signin/hero-pitch.tsx): a clay rule drawn
+/* The pitch's underline (signin/hero-pitch.tsx): a clay rule drawn
    left to right the moment the line has typed in. A background, not a
    pseudo-element, so a line that wraps carries the rule on every row. */
 .hero-rule {
@@ -1569,10 +1561,10 @@ ellipse.anchor-flash {
   background-image: linear-gradient(var(--clay), var(--clay));
   background-repeat: no-repeat;
   background-position: 0 100%;
-  background-size: 0% 2px;
+  background-size: 0% 3px;
 }
 .hero-rule-on {
-  background-size: 100% 2px;
+  background-size: 100% 3px;
 }
 @media (prefers-reduced-motion: no-preference) {
   .hero-rule-on {
@@ -1581,29 +1573,66 @@ ellipse.anchor-flash {
 }
 @keyframes hero-rule-draw {
   from {
-    background-size: 0% 2px;
+    background-size: 0% 3px;
   }
   to {
-    background-size: 100% 2px;
+    background-size: 100% 3px;
   }
+}
+
+/* The trial band's offer (signin/trial-band.tsx): the words filled with a
+   clay-to-gold gradient, a light glint sweeping across them every few
+   seconds, a soft clay glow, and four-point stars that twinkle around them,
+   each on its own delay. Reduced motion keeps the fill, the glow, and the
+   stars, still. */
+.si-trial-offer {
+  background-image: linear-gradient(
+    100deg,
+    #d98a52 0%,
+    #efb279 30%,
+    #fff3dc 45%,
+    #efb279 60%,
+    #d98a52 100%
+  );
+  background-size: 250% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 18px rgba(217, 138, 82, 0.45));
+}
+.si-trial-star {
+  color: #f6cf95;
+  filter: drop-shadow(0 0 6px rgba(255, 214, 150, 0.9));
+  transform: translate(-50%, -50%);
 }
 @media (prefers-reduced-motion: no-preference) {
-  .hero-stamp {
-    animation: hero-stamp-land 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  .si-trial-offer {
+    animation: si-trial-glint 3.2s ease-in-out infinite;
+  }
+  .si-trial-star {
+    opacity: 0;
+    animation: si-trial-twinkle 2.4s ease-in-out infinite;
   }
 }
-@keyframes hero-stamp-land {
+@keyframes si-trial-glint {
   0% {
-    opacity: 0;
-    transform: scale(1.9) rotate(-8deg);
+    background-position: 100% 0;
   }
-  60% {
-    opacity: 1;
-    transform: scale(0.94) rotate(2deg);
-  }
+  60%,
   100% {
+    background-position: 0% 0;
+  }
+}
+@keyframes si-trial-twinkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2) rotate(0deg);
+  }
+  50% {
     opacity: 1;
-    transform: scale(1) rotate(-2deg);
+    transform: translate(-50%, -50%) scale(1) rotate(90deg);
   }
 }
 
