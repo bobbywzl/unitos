@@ -59,12 +59,14 @@ export type StyleSpan = {
 export type TextFont = { family: string; size: number; bold?: true; italic?: true; color?: string };
 
 // An indent as the page sets it, in points, the way the page editor stores a
-// paragraph's (indentLeft, indentFirstLine): left, how far in from the
-// column's left edge the lines start; first, where the first line starts
-// against them (a first-line indent; negative, a hanging indent). A list
-// depth whose words follow its marker on the first line (first ≥ 0) also
-// says where they start, from the marker's start (hang).
-export type Indent = { left: number; first: number; hang?: number };
+// paragraph's (indentLeft, indentFirstLine, indentRight): left, how far in
+// from the column's left edge the lines start; first, where the first line
+// starts against them (a first-line indent; negative, a hanging indent);
+// right, how far in from the column's right edge the lines end (a Word
+// paragraph's w:ind right). A list depth whose words follow its marker on
+// the first line (first ≥ 0) also says where they start, from the marker's
+// start (hang).
+export type Indent = { left: number; first: number; hang?: number; right?: number };
 
 // One inline formula over block plain text: the text keeps the formula's
 // readable characters (σ(𝒜α)), latex is the formula (\sigma(\mathcal{A}_\alpha)).

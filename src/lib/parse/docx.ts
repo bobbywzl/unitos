@@ -355,6 +355,8 @@ type ParaProps = {
   /** The first line's indent against the left indent in twips (w:ind
       firstLine; a hanging indent negative). */
   first: number;
+  /** The right indent in twips: the style's, or the paragraph's own. */
+  right: number;
   /** The paragraph's own left and first-line indents, which win over its
       list level's. */
   ownLeft: number | null;
@@ -426,6 +428,7 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     border: { top: null, bottom: null, left: null, right: null },
     left: 0,
     first: 0,
+    right: 0,
     ownLeft: indentOf(child(pPr, "ind")),
     ownFirst: firstOf(child(pPr, "ind")),
     base,
@@ -460,6 +463,7 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     const ind = child(layer, "ind");
     out.left = indentOf(ind) ?? out.left;
     out.first = firstOf(ind) ?? out.first;
+    out.right = rightOf(ind) ?? out.right;
     const spacing = child(layer, "spacing");
     out.before = spaceOf(spacing, "before") ?? out.before;
     out.after = spaceOf(spacing, "after") ?? out.after;
@@ -481,6 +485,11 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
 /** A left indent (w:ind left, or start), in twips. */
 function indentOf(ind: Element | null): number | null {
   return intAttr(ind, "left") ?? intAttr(ind, "start");
+}
+
+/** A right indent (w:ind right, or end), in twips. */
+function rightOf(ind: Element | null): number | null {
+  return intAttr(ind, "right") ?? intAttr(ind, "end");
 }
 
 /** A first line's indent against the left indent (w:ind firstLine; a
@@ -1514,7 +1523,10 @@ class DocxReader {
         // equation: Word draws it so, in or out of an m:oMathPara.
         const [formula] = words.math;
         if (props.heading === null && props.role !== "title" && words.math.length === 1 && formula.start === 0 && formula.end === words.text.length) {
-          this.push({ type: "EQUATION", text: formula.latex });
+          // Its paragraph's space before and after are the display's.
+          const display: ParsedBlock = { type: "EQUATION", text: formula.latex };
+          this.spaced(display, props, { props, blank: 0 });
+          this.push(display);
           continue;
         }
         const block = this.wordsBlock(words, props);
@@ -1547,10 +1559,13 @@ class DocxReader {
     const block = this.textBlock("PARAGRAPH", words, tokens.length > 0 ? `<p class="${tokens.join(" ")}">${escapeHtml(words.text)}</p>` : undefined);
     this.bordered(block, props);
     // The paragraph's indent as Word sets it. A quotation's inset is the
-    // page editor's quote, unless the quotation draws its own bar.
-    const left = props.left > 0 && props.left < 100_000 ? points(props.left) : 0;
-    const first = Math.abs(props.first) < 100_000 ? points(props.first) : 0;
-    if ((left || first) && (!tokens.includes("quote") || props.border.left)) block.indent = { left, first };
+    // page editor's quote, unless the quotation draws its own bar; its
+    // right indent is its own either way.
+    const inset = !tokens.includes("quote") || props.border.left;
+    const left = inset && props.left > 0 && props.left < 100_000 ? points(props.left) : 0;
+    const first = inset && Math.abs(props.first) < 100_000 ? points(props.first) : 0;
+    const right = props.right > 0 && props.right < 100_000 ? points(props.right) : 0;
+    if (left || first || right) block.indent = { left, first, ...(right ? { right } : {}) };
     this.spaced(block, props, { props, blank: 0 });
     return block;
   }
@@ -1566,13 +1581,14 @@ class DocxReader {
     if (Object.keys(borders).length > 0) block.borders = borders;
   }
 
-  /** A text block (a heading, a paragraph, a list) into the document's
-      spacing, before it is pushed: the text block right above it (no
-      table, figure, equation, or rule between; its notes aside) takes its
-      space after (ParsedBlock.spaceAfter) in points — the space between
-      their paragraphs and the blank paragraphs between them. A heading's
-      space before is so the space after of the block above it. The block
-      starts the next gap; a block with no text block under it has none. */
+  /** A text block (a heading, a paragraph, a list) or a paragraph that is
+      one display equation into the document's spacing, before it is
+      pushed: the block right above it (no table, figure, other equation, or
+      rule between; its notes aside) takes its space after
+      (ParsedBlock.spaceAfter) in points — the space between their
+      paragraphs and the blank paragraphs between them. A heading's space
+      before is so the space after of the block above it. The block starts
+      the next gap; a block with no text block under it has none. */
   private spaced(block: ParsedBlock, first: ParaProps, trail: Spacing) {
     const above = this.lastSpaced;
     if (above && !above.pageEnd && this.blocks.findLast((b) => !b.footnote) === above.block) {

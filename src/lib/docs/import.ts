@@ -137,6 +137,12 @@ type Atom = { start: number; end: number; node: RichNode };
     reads as one wall of words. A PDF's paragraphs take the page's own
     (ParsedBlock.spaceAfter). */
 const PARAGRAPH_SPACE_PT = 10;
+/** The space over and under a PDF's display equation where the parse
+    measured none, in points: TeX's skip around a display. A PDF's and a
+    Word file's displays draw no space of their own (css/import.css): the
+    page editor's margin and KaTeX's 1 em stacked on the page's space after
+    a paragraph set each display in a band about five times the page's. */
+const DISPLAY_SPACE_PT = 6;
 /** A small line (the kicker, a label, a caption) and a display line, as
     text sizes. */
 const SMALL_SIZE = "9pt";
@@ -204,13 +210,15 @@ function borderAttrs(block: ParsedBlock): Record<string, string> {
   return out;
 }
 
-/** An indent as the page editor's paragraph attributes: the left indent
-    within the text column, the first line never left of the column's edge. */
+/** An indent as the page editor's paragraph attributes: the left and right
+    indents within the text column, the first line never left of the
+    column's edge. */
 function indentAttrs(indent: Indent | undefined): Record<string, number> {
   if (!indent || !Number.isFinite(indent.left) || !Number.isFinite(indent.first)) return {};
   const left = Math.min(MAX_INDENT_PT, Math.max(0, Math.round(indent.left * 2) / 2));
   const first = Math.min(MAX_INDENT_PT - left, Math.max(-left, Math.round(indent.first * 2) / 2));
-  return { ...(left ? { indentLeft: left } : {}), ...(first ? { indentFirstLine: first } : {}) };
+  const right = Number.isFinite(indent.right) ? Math.min(MAX_INDENT_PT - left, Math.max(0, Math.round((indent.right ?? 0) * 2) / 2)) : 0;
+  return { ...(left ? { indentLeft: left } : {}), ...(first ? { indentFirstLine: first } : {}), ...(right ? { indentRight: right } : {}) };
 }
 
 function tokensOf(html: string | undefined): string[] {
@@ -421,8 +429,13 @@ function styleLooks(input: ImportInput): Partial<Record<DocStyle, NamedStyle>> {
   // space after the block above it (ParsedBlock.spaceAfter), no more.
   const spaced = input.blocks.some((b) => b.spaceAfter !== undefined);
   for (const [style, counts] of tally) {
-    const top = [...counts.values()].sort((a, b) => b.n - a.n)[0];
-    looks[style] = { ...lookOf(style, top.font), ...(spaced ? { spaceBefore: 0 } : {}) };
+    const looksOf = [...counts.values()].sort((a, b) => b.n - a.n);
+    // Bold and italic only where every heading of the level is: a heading
+    // set so takes the mark (lookMarks), and no mark takes either off (a
+    // heading set upright or in regular weight drew as most of its level).
+    const bold = looksOf.every((l) => l.font.bold === true);
+    const italic = looksOf.every((l) => l.font.italic === true);
+    looks[style] = { ...lookOf(style, looksOf[0].font), bold, italic, ...(spaced ? { spaceBefore: 0 } : {}) };
   }
   return looks;
 }
@@ -773,6 +786,9 @@ class Converter {
       own it did not measure (a page's last); null where it measured none
       (a web page, a text file). */
   private readonly spacing: number | null;
+  /** The blocks right over a display equation: their space after is the
+      space over the display. */
+  private readonly overDisplay = new Set<ParsedBlock>();
 
   constructor(private readonly input: ImportInput) {
     this.looks = styleLooks(input);
@@ -784,6 +800,14 @@ class Converter {
     const { pageless, width, margins } = this.pageSetup;
     this.room = pageless ? PAGELESS_COLUMN_PX : ((width - margins.left - margins.right) * 96) / 72;
     this.linkFootnotes();
+    // The footnotes the page editor keeps at the document's end stand
+    // between no block and its display.
+    let above: ParsedBlock | null = null;
+    input.blocks.forEach((block, index) => {
+      if (this.footnoteIds.has(index)) return;
+      if (block.type === "EQUATION" && above) this.overDisplay.add(above);
+      above = block;
+    });
   }
 
   /** Each reference (ParsedBlock.footnoteRefs) becomes the page editor's
@@ -972,14 +996,24 @@ class Converter {
     if (font.size !== named.size && !role) attrs.fontSize = `${font.size}pt`;
     const marks: RichMark[] = Object.keys(attrs).length > 0 ? [{ type: "textStyle", attrs }] : [];
     if (block.type === "HEADING" && font.bold && !named.bold) marks.push({ type: "bold" });
+    if (block.type === "HEADING" && font.italic && !named.italic) marks.push({ type: "italic" });
     return marks;
   }
 
   /** The space after a block in points: the page's (ParsedBlock.spaceAfter),
-      the page's most common for a block it measured none for, or Docs'
-      "Add space after paragraph" where the parse measures no spacing. */
+      over a PDF's or a Word file's display TeX's skip, the page's most
+      common for a block it measured none for, or Docs' "Add space after
+      paragraph" where the parse measures no spacing. */
   private spaceAfter(block: ParsedBlock): number {
-    return block.spaceAfter ?? this.spacing ?? PARAGRAPH_SPACE_PT;
+    if (block.spaceAfter !== undefined) return block.spaceAfter;
+    if (this.overDisplay.has(block) && this.pageDisplays) return DISPLAY_SPACE_PT;
+    return this.spacing ?? PARAGRAPH_SPACE_PT;
+  }
+
+  /** A PDF's and a Word file's displays: the page editor draws them with
+      the space the page leaves, none of its own (css/import.css). */
+  private get pageDisplays(): boolean {
+    return this.input.kind === "pdf" || this.input.kind === "docx";
   }
 
   /** A list's last line takes the space after its block. */
@@ -1103,11 +1137,15 @@ class Converter {
     else if (role !== "kicker" && this.spaceAfter(block) > 0) attrs.spaceAfter = this.spaceAfter(block);
     const kind = INDENT_TOKENS.find((k) => tokens.includes(k));
     const indent = block.indent ?? (kind ? INDENTS[kind] : undefined);
-    // A bar at the left stands in the indent, its padding from the words:
-    // the words start where the page starts them.
-    const bar = BORDER_VALUE.exec(block.borders?.left ?? "");
-    const inset = bar ? Number(bar[1]) + Number(bar[2] ?? 0) : 0;
-    Object.assign(attrs, indentAttrs(indent && inset ? { left: Math.max(0, indent.left - inset), first: indent.first } : indent), borderAttrs(block));
+    // A bar at a side stands in its indent, its padding from the words:
+    // the words start and end where the page sets them.
+    const inset = (side: string | undefined) => {
+      const bar = BORDER_VALUE.exec(side ?? "");
+      return bar ? Number(bar[1]) + Number(bar[2] ?? 0) : 0;
+    };
+    const [left, right] = [inset(block.borders?.left), inset(block.borders?.right)];
+    const within = indent && (left || right) ? { ...indent, left: Math.max(0, indent.left - left), right: Math.max(0, (indent.right ?? 0) - right) } : indent;
+    Object.assign(attrs, indentAttrs(within), borderAttrs(block));
     const size =
       role === "kicker" || role === "label" || role === "caption" || role === "footnote" ? SMALL_SIZE : role === "display" ? DISPLAY_SIZE : null;
     const extra: RichMark[] = size ? [{ type: "textStyle", attrs: { fontSize: size } }] : [];
@@ -1329,6 +1367,10 @@ class Converter {
     if (pageStart !== undefined) attrs.pageStart = pageStart;
     // The page numbers the equation at the left margin (the parse's leqno).
     if (tokensOf(block.html).includes("leqno")) attrs.leqno = true;
+    // The space under a PDF's or a Word file's display: the page's, else
+    // TeX's skip.
+    const after = this.pageDisplays ? (block.spaceAfter ?? DISPLAY_SPACE_PT) : 0;
+    if (after > 0) attrs.spaceAfter = after;
     this.place(index, [{ type: "blockMath", attrs }]);
   }
 

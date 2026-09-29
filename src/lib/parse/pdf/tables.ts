@@ -9,7 +9,7 @@ import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
 import { isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
 import { mathSpans } from "@/lib/parse/pdf/math/zones";
-import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup, spansFromRuns } from "@/lib/parse/pdf/text";
+import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup, lineEndHyphen, spansFromRuns } from "@/lib/parse/pdf/text";
 import type { Cell, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
 // ── Tables ──────────────────────────────────────────────────────────────────
@@ -231,12 +231,16 @@ function cellHtml(cell: TableCell): string {
     .join("");
 }
 
-// Text appended to a cell: a space between its lines.
+// Text appended to a cell: a space between its lines, and a line-end
+// hyphen decided as in a paragraph: the typesetter's goes ("predic-" over
+// "tion"), a compound's stays.
 function appendToCell(target: TableCell, part: { text: string; runs: Run[] }) {
   if (part.text.length === 0) return;
   const builder = new TextBuilder();
   builder.append({ text: target.text, runs: target.runs }, "");
-  builder.append(part, target.text.length > 0 ? " " : "");
+  const drop = lineEndHyphen(target.text, part.text) === "drop";
+  if (drop) builder.dropTrailingChar();
+  builder.append(part, target.text.length > 0 && !drop ? " " : "");
   target.text = builder.text;
   target.runs = builder.runs;
 }

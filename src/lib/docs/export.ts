@@ -390,6 +390,15 @@ function levelIndent(level: number, width = 0, indents: ListIndent[] | null = nu
   return first < 0 ? { left: tw(left), hanging: tw(-first) } : { left: tw(left), firstLine: first > 0 ? tw(first) : undefined };
 }
 
+/** Where a level's words stand after a marker that does not hang, in
+    twips: the page's place (listIndents' hang, from the marker's start),
+    the tab stop Word's tab after the number goes to; none past the page's
+    depths or under a hanging marker, whose indent is the stop. */
+function levelTab(level: number, indents: ListIndent[] | null): number | undefined {
+  const at = indents?.[level];
+  return at && at[1] >= 0 && at[2] !== undefined && at[2] > 0 ? tw(at[0] + at[1] + at[2]) : undefined;
+}
+
 /** A glyph's width in Arial 11 pt, in twips: about 70 a narrow character
     ("i", ".", "(") and 122 any other. */
 const glyphWidth = (glyph: string) => [...glyph].reduce((w, c) => w + (/[iljtfr.,:;()[\]*'-]/.test(c) ? 70 : 122), 0);
@@ -429,7 +438,12 @@ function listLevels(list: RichNode, drawer: RichNode, depth: number, indents: Li
               isLegalNumberingStyle: /%\d.*%\d/.test(glyph.format) || undefined,
             }),
       start: level === depth ? Number(list.attrs?.start) || 1 : 1,
-      style: { paragraph: { indent: none && !(indents && level < indents.length) ? { left: indent.left } : indent } },
+      style: {
+        paragraph: {
+          indent: none && !(indents && level < indents.length) ? { left: indent.left } : indent,
+          leftTabStop: none ? undefined : levelTab(level, indents),
+        },
+      },
     };
   });
 }
@@ -676,7 +690,14 @@ function blocks(nodes: RichNode[] = [], ctx: Ctx): Block[] {
         break;
       }
       case "blockMath":
-        out.push(para(ctx, { alignment: AlignmentType.CENTER, children: [new TextRun(String(a.latex ?? ""))] }));
+        // An import's display keeps the page's space under it.
+        out.push(
+          para(ctx, {
+            alignment: AlignmentType.CENTER,
+            spacing: num(a.spaceAfter) === undefined ? undefined : { after: tw(a.spaceAfter as number) },
+            children: [new TextRun(String(a.latex ?? ""))],
+          }),
+        );
         break;
       case "figure":
         out.push(...figure(node, ctx));

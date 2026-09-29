@@ -8,7 +8,7 @@
 // before (census class 3: MMWR's Table 1 in six blocks), and prose beside a
 // table joined its rows.
 
-import type { Fill, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
+import type { Fill, PageDrawing, PathBox, Rule } from "@/lib/parse/pdf/drawing";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { joinedRules, latticeGrids, ruleStacks, type Grid, type GridCell } from "@/lib/parse/pdf/lattice";
 import { buildLines } from "@/lib/parse/pdf/lines";
@@ -41,6 +41,8 @@ const inBox = (it: Item, b: Box) => {
   const c = centerOf(it);
   return c.x > b.x1 && c.x < b.x2 && c.y > b.y1 && c.y < b.y2;
 };
+// A line as far from both sides of its cell, within a quarter of its size.
+const balancedIn = (l: Line, b: Box) => Math.abs(l.x - b.x1 - (b.x2 - l.xEnd)) <= l.size * 0.25;
 
 // A sliver between two grid lines closer than this, with no text in it, is
 // no column or row: a frame drawn double, a shaded cell set inside its border.
@@ -95,7 +97,10 @@ function closeSlivers(grid: Grid, items: Item[]): Grid {
 // other column lines than the rows under it, each part the same lines on
 // every row that draws any (the invoice's order details over its lines of
 // goods read as one grid of eight columns). A row across the whole width
-// goes with the part above it.
+// goes with the part above it. A part that draws one column line is no
+// table of its own: its rows are the other part's, a cell merged across
+// (a form's fields: the W-9 sets its 5 and 6 beside one box, its 3a and 3b
+// beside another, and read as two tables).
 function splitStacked(grid: Grid): Grid[] {
   const rows = grid.ys.length - 1;
   const lines = Array.from({ length: rows }, (_, r) =>
@@ -105,6 +110,7 @@ function splitStacked(grid: Grid): Grid[] {
     const above = [...new Set(lines.slice(0, r).filter(Boolean))];
     const below = [...new Set(lines.slice(r).filter(Boolean))];
     if (above.length !== 1 || below.length !== 1 || !lines[r] || rows - r < 2) continue;
+    if (!above[0].includes(",") || !below[0].includes(",")) continue;
     const shared = above[0].split(",").some((k) => below[0].split(",").includes(k));
     if (shared || grid.cells.some((c) => c.row < r && c.row + c.rowspan > r)) continue;
     return [partOf(grid, 0, r), ...splitStacked(partOf(grid, r, rows))];
@@ -435,12 +441,55 @@ function gridHead(grid: Grid, body: Item[], items: Item[]): Item[] {
   return [...above.filter((it) => centerOf(it).y < cut), ...beside];
 }
 
+// A box to tick: a square drawn empty, its four sides ruled, about the size
+// of the words on its line, apart from other squares, words right after it
+// or right before it (a form's boxes: the W-9's seven boxes of line 3a read
+// as a chart's marks, and their form as no table). Its mark is ☐, set as
+// the words beside it.
+const CHECKBOX = "\u2610";
+function checkboxes(drawing: PageDrawing, items: Item[]): { squares: PathBox[]; marks: Item[] } {
+  const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+  const across = (r: Rule, a: number, b: number) => (r.dir === "h" ? r.x1 <= a + 1 && r.x2 >= b - 1 : r.y1 <= a + 1 && r.y2 >= b - 1);
+  const ruled = (p: Box) =>
+    drawing.rules.some((r) => r.dir === "h" && near(r.y1, p.y1) && across(r, p.x1, p.x2)) &&
+    drawing.rules.some((r) => r.dir === "h" && near(r.y1, p.y2) && across(r, p.x1, p.x2)) &&
+    drawing.rules.some((r) => r.dir === "v" && near(r.x1, p.x1) && across(r, p.y1, p.y2)) &&
+    drawing.rules.some((r) => r.dir === "v" && near(r.x1, p.x2) && across(r, p.y1, p.y2));
+  const found = drawing.paths.filter((p) => {
+    const [w, h] = [p.x2 - p.x1, p.y2 - p.y1];
+    return !p.clip && w >= 4 && w <= 16 && Math.abs(w - h) <= w * 0.15 && ruled(p) && !items.some((it) => inBox(it, p));
+  });
+  const squares: PathBox[] = [];
+  const marks: Item[] = [];
+  for (const p of found) {
+    const side = p.x2 - p.x1;
+    if (found.some((q) => q !== p && q.x1 < p.x2 + side * 0.5 && q.x2 > p.x1 - side * 0.5 && q.y1 < p.y2 + side * 0.5 && q.y2 > p.y1 - side * 0.5)) continue;
+    const beside = items.filter(
+      (it) =>
+        it.y >= p.y1 - it.size * 0.4 &&
+        it.y <= (p.y1 + p.y2) / 2 &&
+        ((it.x >= p.x2 && it.x - p.x2 <= it.size * 2) || (it.x + it.w <= p.x1 && p.x1 - (it.x + it.w) <= it.size * 2)),
+    );
+    const word = beside.sort((a, b) => Math.min(Math.abs(a.x - p.x2), Math.abs(p.x1 - a.x - a.w)) - Math.min(Math.abs(b.x - p.x2), Math.abs(p.x1 - b.x - b.w)))[0];
+    if (!word || side < word.size * 0.6 || side > word.size * 1.8) continue;
+    squares.push(p);
+    marks.push({ ...word, str: CHECKBOX, x: p.x1, w: side, href: null, math: false, glyphs: undefined, zone: undefined, sup: undefined, sub: undefined });
+  }
+  return { squares, marks };
+}
+
 // The ruled tables of a page, from its rules and filled boxes: grids first,
 // then the regions of rule stacks outside them.
-export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number, pageHeight: number): TableRegion[] {
+export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, pageHeight: number): TableRegion[] {
   // Blank items (the spaces pdf.js reports between words) say nothing of
   // where text is: one in a sliver between two cells kept the sliver open.
-  const items = all.filter((it) => it.str.trim().length > 0);
+  const words = all.filter((it) => it.str.trim().length > 0);
+  // A form's boxes to tick read as ☐ in their cells; their squares are no
+  // rules of a table and no marks of a chart.
+  const boxes = checkboxes(page, words);
+  const items = [...words, ...boxes.marks];
+  const squared = (r: Rule) => boxes.squares.some((s) => r.x1 >= s.x1 - 1 && r.x2 <= s.x2 + 1 && r.y1 >= s.y1 - 1 && r.y2 <= s.y2 + 1);
+  const drawing = { ...page, rules: page.rules.filter((r) => !squared(r)), paths: page.paths.filter((p) => !boxes.squares.includes(p)) };
   const regions: TableRegion[] = [];
   // A grid inside the rules of a wider table is part of that table: its
   // vertical rules run between some columns only, and the horizontal rules
@@ -1049,10 +1098,11 @@ function filledBelow(groups: Line[][], bounds: number[]): boolean[] {
 }
 
 // A cell's lines as one run of text: wrapped lines joined, a line-end
-// hyphen decided as in a paragraph, never a line break (a newline ends a
-// table row in the table's text).
+// hyphen decided as in a paragraph at every join (a cell's line short of
+// its edge kept "predic-" before "tion"), never a line break (a newline
+// ends a table row in the table's text).
 function linesText(lines: Line[]): { text: string; runs: Run[] } {
-  const { text, runs } = joinGroup(lines);
+  const { text, runs } = joinGroup(lines, true);
   return { text: text.replace(/\n/g, " "), runs };
 }
 
@@ -1062,30 +1112,44 @@ function linesText(lines: Line[]): { text: string; runs: Run[] } {
 function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawing: TableDrawing): TableRow[] {
   const inner = grid.xs.slice(1, -1);
   const pieces = items.flatMap((it) => splitAt(it, inner.filter((x) => x > it.x + it.w * 0.05 && x < it.x + it.w * 0.95)));
+  const cells = cells.flatMap((cell) => unmerged(cell, grid.xs, items, pieces));
   const rowCount = grid.ys.length - 1;
   const rows: TableRow[] = Array.from({ length: rowCount }, () => ({ cells: [] }));
   const size = textSize(items);
-  const cellLines = grid.cells.map((cell) => fractionCell(buildLines(pieces.filter((it) => inBox(it, cell)), page), drawing.rules, size));
+  const cellLines = cells.map((cell) => fractionCell(buildLines(pieces.filter((it) => inBox(it, cell)), page), drawing.rules, size));
   // The cells' padding: the least a line stands from its cell's left edge,
   // and from its right edge (Word's 5.4 pt); more is a line set in.
   const least = (gaps: number[]) => Math.min(10, ...gaps.filter((d) => d >= 0));
   const inset = {
-    left: least(grid.cells.flatMap((cell, k) => cellLines[k].map((l) => l.x - cell.x1))),
-    right: least(grid.cells.flatMap((cell, k) => cellLines[k].map((l) => cell.x2 - l.xEnd))),
+    left: least(cells.flatMap((cell, k) => cellLines[k].map((l) => l.x - cell.x1))),
+    right: least(cells.flatMap((cell, k) => cellLines[k].map((l) => cell.x2 - l.xEnd))),
   };
   // A column set flush right (numbers): most of its lines end at one edge,
   // short of the cell's padding when a narrow column sits beside it
   // (apple-fy24q4's values set in as if indented).
   const flush = new Map<number, number>();
   for (let col = 0; col + 1 < grid.xs.length; col++) {
-    const lines = grid.cells.flatMap((cell, k) => (cell.col === col && cell.colspan === 1 ? cellLines[k] : []));
+    const lines = cells.flatMap((cell, k) => (cell.col === col && cell.colspan === 1 ? cellLines[k] : []));
     const edge = Math.max(...lines.map((l) => l.xEnd));
     if (lines.length >= 2 && lines.filter((l) => edge - l.xEnd <= l.size * 0.3).length * 5 >= lines.length * 3) flush.set(col, edge);
   }
-  grid.cells.forEach((cell, k) => {
+  // A row's cells sit alike: a cell its words fill, each line as far from
+  // both of its sides, is centered when the row's other cells with words
+  // are, two at least (a form's head row).
+  const sits = cells.map((cell, k) => {
+    const lines = cellLines[k];
+    if (lines.length === 0 || !lines.every((l) => balancedIn(l, cell))) return "other";
+    const short = lines.some((l) => l.x - cell.x1 - inset.left > l.size * 0.3 && cell.x2 - inset.right - l.xEnd > l.size * 0.3);
+    return short ? "center" : "full";
+  });
+  const centeredRow = (row: number) => {
+    const own = cells.flatMap((cell, k) => (cell.row === row && cellLines[k].length > 0 ? [sits[k]] : []));
+    return own.filter((s) => s === "center").length >= 2 && !own.includes("other");
+  };
+  cells.forEach((cell, k) => {
     built.push(...cellLines[k]);
     const edge = cell.colspan === 1 ? flush.get(cell.col) : undefined;
-    const words = cellLines[k].length > 0 ? cellParagraphs(cellLines[k], cell, inset, edge) : { text: "", runs: [] };
+    const words = cellLines[k].length > 0 ? cellParagraphs(cellLines[k], cell, inset, edge, sits[k] === "full" && centeredRow(cell.row)) : { text: "", runs: [] };
     const out: TableCell = words.text.trim() === "" ? { text: "", runs: [] } : words;
     if (cell.colspan > 1) out.colspan = cell.colspan;
     if (cell.rowspan > 1) out.rowspan = cell.rowspan;
@@ -1094,6 +1158,22 @@ function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawin
     rows[cell.row].cells.push(out);
   });
   return rows.filter((r) => r.cells.length > 0);
+}
+
+// A cell merged across columns whose phrases stand in those columns, none
+// across a column's line (a quarter of a phrase past it at most), two
+// columns with words at least, is those columns' cells: a form's row whose
+// inner rules are not drawn (the invoice's vehicle row, set under its order
+// row's columns, read as one cell). pieces: the items cut at the lines.
+function unmerged(cell: GridCell, xs: number[], items: Item[], pieces: Item[]): GridCell[] {
+  if (cell.colspan < 2) return [cell];
+  const lines = xs.slice(cell.col + 1, cell.col + cell.colspan);
+  const across = buildLines(items.filter((it) => inBox(it, cell)), 0)
+    .flatMap(phrasesOf)
+    .some((p) => lines.some((x) => Math.min(x - p.x1, p.x2 - x) > (p.x2 - p.x1) * 0.25));
+  const columns = new Set(pieces.filter((it) => inBox(it, cell)).map((it) => columnAt(centerOf(it).x, lines)));
+  if (across || columns.size < 2) return [cell];
+  return Array.from({ length: cell.colspan }, (_, k) => ({ ...cell, x1: xs[cell.col + k], x2: xs[cell.col + k + 1], col: cell.col + k, colspan: 1 }));
 }
 
 // A table's text size: the size three quarters of its words are set in or
@@ -1146,8 +1226,9 @@ function cellFill(cell: Box, table: Box, fills: Fill[]): string | undefined {
 // "By:" lines, each on a line of its own, read as one line).
 // Each paragraph keeps how its lines sit in the cell: centered, flush
 // right, or set in from the cell's left edge. inset: the cells' padding;
-// flush: the right edge of a column set flush right.
-function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: number }, flush?: number): TableCell {
+// flush: the right edge of a column set flush right; centered: the cell's
+// row centers its cells.
+function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: number }, flush?: number, centered = false): TableCell {
   const left = box.x1 + inset.left;
   const right = box.x2 - inset.right;
   const groups: Line[][] = [];
@@ -1168,6 +1249,12 @@ function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: n
   const sitOf = (group: Line[]): Pick<CellParagraph, "align" | "indent"> => {
     const size = group[0].size;
     const indent = Math.min(...group.map((l) => l.x)) - left;
+    // Centered lines whose widest fills the cell start at its padding, as
+    // flush left does: lines each as far from both sides of the cell, one
+    // of them short of both paddings, are centered (a form's heads read
+    // flush left); so are lines that fill a cell of a centered row.
+    const short = group.some((l) => l.x - left > size * 0.3 && right - l.xEnd > size * 0.3);
+    if (group.every((l) => balancedIn(l, box)) && (short || centered)) return { align: "center" };
     if (indent <= size * 0.5) return {};
     if (group.every((l) => Math.abs((l.x + l.xEnd) / 2 - middle) <= Math.max(size * 0.6, (box.x2 - box.x1) * 0.04))) return { align: "center" };
     if (group.every((l) => (flush ?? right) - l.xEnd <= size * 0.3)) return { align: "right" };
@@ -1210,16 +1297,20 @@ function splitAt(it: Item, cuts: number[]): Item[] {
   for (const x of [...cuts, it.x + it.w]) {
     let to = Math.min(n, charsBefore(x));
     if (to < n) {
-      for (let d = 0; d <= 3; d++) {
+      let gap = CJK_START_RE.test(it.str.slice(to - 1)) || CJK_START_RE.test(it.str.slice(to));
+      for (let d = 0; d <= 3 && !gap; d++) {
         if (it.str[to - d - 1] === " " || it.str[to - d] === " ") {
           to -= d;
-          break;
-        }
-        if (it.str[to + d - 1] === " " || it.str[to + d] === " ") {
+          gap = true;
+        } else if (it.str[to + d - 1] === " " || it.str[to + d] === " ") {
           to += d;
-          break;
+          gap = true;
         }
       }
+      // A word the line crosses stays whole, in the cell that holds most of
+      // it (the invoice's "Date:" 3 pt past its column's line read ":" in
+      // the next cell). Chinese sets no spaces: it is cut where the line is.
+      if (!gap) continue;
     }
     to = Math.max(from, Math.min(n, to));
     // A share of the width counts UTF-16 units: a cut never halves a character.
