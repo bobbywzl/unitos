@@ -662,8 +662,12 @@ function runsOfPages(segments: Segment[], chosen: number[]): Segment[][] {
 function titleOf(segments: Segment[], bodySize: number, pages = 1): Segment | undefined {
   const heads = segments.filter((s) => s.page < pages && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4);
   if (heads.length === 0 && pages === 1) {
-    const first = segments.find((s) => s.page === 0 && s.text.trim().length > 0);
-    return first?.type === "HEADING" && first.align === "center" && first.text.length > 4 ? first : undefined;
+    const at = segments.findIndex((s) => s.page === 0 && s.text.trim().length > 0);
+    const first = segments[at];
+    // Prose under it before any table: a statement's title stands over its
+    // table (Apple's statements, a heading of the page).
+    const under = segments.slice(at + 1).find((s) => s.page === 0 && (s.type === "TABLE" || (s.type === "PARAGRAPH" && !/\bcenter\b/.test(s.html ?? "") && s.text.length >= 100)));
+    return first?.type === "HEADING" && first.align === "center" && first.text.length > 4 && under?.type === "PARAGRAPH" ? first : undefined;
   }
   const top = Math.max(0, ...heads.map((s) => s.rawSize!));
   return heads.find((s) => s.rawSize! >= top * 0.97);

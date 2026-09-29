@@ -697,9 +697,10 @@ function isEquationShaped(s: Segment, ctx: PageContext): boolean {
 // The formula's glyphs: the glyphs of its display line, and the glyphs no
 // item reads (a placed accent, a composite's second half: the page's
 // orphans) inside its box, less a label at either end a quad or more apart
-// (its \tag, or \tag* for a proof's end mark). null when an item holds text
-// the drawing has no glyph for (the check could not see it).
-function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; label: string | null; labelGlyphs: Glyph[] } | null {
+// (its \tag, or \tag* for a proof's end mark; left: the page sets it at the
+// left margin, as amsbook does). null when an item holds text the drawing
+// has no glyph for (the check could not see it).
+function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; label: string | null; labelGlyphs: Glyph[]; left: boolean } | null {
   if (line.items.some((i) => !i.glyphs?.length)) return null;
   const top = line.yMax + line.size * 1.2;
   const bottom = line.yMin - line.size * 0.6;
@@ -728,18 +729,21 @@ function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; lab
       dir > 0
         ? Math.min(...rest.map((g) => g.x)) - Math.max(...run.map((g) => g.x + g.w))
         : Math.min(...run.map((g) => g.x)) - Math.max(...rest.map((g) => g.x + g.w));
-    // TeX sets a label a quad at least from a wide formula.
-    return gap >= size * 0.9 ? { glyphs: run, text } : null;
+    // amsmath sets a label half a quad at least from a wide formula
+    // (\mintagsep): the owner's notes set "(1.2.2)" 0.79 em left of a
+    // display with cases, and it read into the formula as its first words.
+    return gap >= size * 0.5 ? { glyphs: run, text } : null;
   };
-  const label = labelAt(glyphs.length - 1, -1) ?? labelAt(0, 1);
-  if (!label) return { glyphs, label: null, labelGlyphs: [] };
+  const right = labelAt(glyphs.length - 1, -1);
+  const label = right ?? labelAt(0, 1);
+  if (!label) return { glyphs, label: null, labelGlyphs: [], left: false };
   const tag = QED_RE.test(label.text) ? `\\tag*{$${label.text === "□" ? "\\square" : "\\blacksquare"}$}` : `\\tag{${label.text.slice(1, -1)}}`;
-  return { glyphs: glyphs.filter((g) => !label.glyphs.includes(g)), label: tag, labelGlyphs: label.glyphs };
+  return { glyphs: glyphs.filter((g) => !label.glyphs.includes(g)), label: tag, labelGlyphs: label.glyphs, left: right === null };
 }
 
 // The equation's LaTeX with its label as \tag, and the box of its glyphs
 // (their drawn extent, the label's included); null when the check fails.
-function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: string; box: Box } | null {
+function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: string; box: Box; left: boolean } | null {
   const found = formulaGlyphs(line, orphans);
   if (!found || found.glyphs.length === 0) return null;
   const glyphs = found.glyphs;
@@ -831,7 +835,7 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
     if (stray) return null;
     const pad = size * 0.15;
     box = { x1: box.x1 - pad, y1: box.y1 - pad, x2: box.x2 + pad, y2: box.y2 + pad };
-    return { latex: found.label ? `${latex} ${found.label}` : latex, box };
+    return { latex: found.label ? `${latex} ${found.label}` : latex, box, left: found.left };
   } catch {
     return null;
   }
@@ -920,7 +924,7 @@ export function displayEquations(
     let start = k;
     // The EQUATION keeps its glyphs' box as a region: a check of the parse,
     // or a later repair, reads the glyphs under it.
-    let equation: { latex: string; box: Box } | null = null;
+    let equation: { latex: string; box: Box; left: boolean } | null = null;
     const line = tex && !missed ? displayOf(segments[k]) : undefined;
     if (line) {
       used.add(line);
@@ -995,6 +999,9 @@ export function displayEquations(
         region: regionOf(equation.box, pageWidth, pageHeight),
         lineSize: size,
         mathShare: 1,
+        // A label the page sets at the left margin (amsbook's leqno): the
+        // import draws the \tag there.
+        ...(equation.left ? { html: '<p class="leqno"></p>' } : {}),
       });
     } else {
       // Its text is the display's glyphs as the text layer reads them, often

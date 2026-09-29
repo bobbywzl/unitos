@@ -183,11 +183,14 @@ export function replicaWithText(html: string, prev: string, next: string): { htm
   return { html: out };
 }
 
-/** A slide whose words are not its words as parsed shows its replica: the
-    picture shows the words as parsed, so it waits (`data-picture-held`)
-    until the words are back. */
-export function slidePicture(html: string, edited: boolean): string {
-  return edited
+/** A slide's own words: its text before the speaker notes. */
+const slideWords = (text: string) => text.replace(/(^|\n)Speaker notes:\n[\s\S]*$/, "");
+
+/** A slide whose own words are not its words as parsed shows its replica:
+    the picture shows the words as parsed, so it waits (`data-picture-held`)
+    until the words are back. The speaker notes are no part of the picture. */
+export function slidePicture(html: string, text: string, parsed: string): string {
+  return slideWords(text) !== slideWords(parsed)
     ? html.replace(/(<div class="slide-frame"[^>]*?) data-picture="1"/, '$1 data-picture-held="1"')
     : html.replace(/(<div class="slide-frame"[^>]*?) data-picture-held="1"/, '$1 data-picture="1"');
 }

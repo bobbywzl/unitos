@@ -58,7 +58,7 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
   const own = extent ?? extentOf(items);
   for (const band of split.bands) {
     if (band.kind) {
-      // A part and a block read in the region's column.
+      // A part reads as a region of its own, a block in the region's column.
       for (const side of [band.left, band.right]) {
         if (side.items.length + side.graphics.length > 0) out.push(...readRegion(side.items, side.graphics, page, pageWidth, depth + 1, undefined, band.kind === "blocks" ? own : extent));
       }
@@ -178,22 +178,36 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
     }
     return out;
   };
-  // The right column's edge: the x where four lines or more right of the
-  // gutter start. An item there, more than half an em after the item before
-  // it across the gutter, opens the right column's line: the Federal
-  // Register sets its three columns 1.0 em apart, and each line of a column
-  // that ran near the gutter took the next column's line into a row across
-  // the page.
-  const starts = new Map<number, number>();
-  for (const item of items) {
-    if (item.x < g || beside(item).some((j) => j.x < item.x && j.x + j.w > g)) continue;
-    const x = Math.round(item.x);
-    starts.set(x, (starts.get(x) ?? 0) + 1);
-  }
-  const counted = (x: number) => (starts.get(x - 1) ?? 0) + (starts.get(x) ?? 0) + (starts.get(x + 1) ?? 0);
-  const edge = [...starts.keys()].map((x) => ({ x, n: counted(x) })).filter((e) => e.n >= 4).sort((a, b) => b.n - a.n)[0]?.x;
+  // The columns' edges: on each side of the gutter, the x where four lines
+  // or more start. An item at the right column's edge, more than half an em
+  // after the item before it across the gutter, opens the right column's
+  // line when that item's line starts at the left column's edge (not a
+  // centered author line whose third name stands at the edge: arXiv
+  // 2411.19946). The Federal Register sets its three columns 1.0 em apart,
+  // and each line of a column that ran near the gutter took the next
+  // column's line into a row across the page.
+  const edgeOf = (right: boolean) => {
+    const starts = new Map<number, number>();
+    for (const item of items) {
+      // The first item of its line on its side of the gutter.
+      const side = right ? item.x >= g : item.x + item.w <= g;
+      if (!side || beside(item).some((j) => j.x < item.x && (right ? j.x + j.w > g : j.x + j.w <= g))) continue;
+      const x = Math.round(item.x);
+      starts.set(x, (starts.get(x) ?? 0) + 1);
+    }
+    const counted = (x: number) => (starts.get(x - 1) ?? 0) + (starts.get(x) ?? 0) + (starts.get(x + 1) ?? 0);
+    return [...starts.keys()].map((x) => ({ x, n: counted(x) })).filter((e) => e.n >= 4).sort((a, b) => b.n - a.n)[0]?.x;
+  };
+  const [leftEdge, rightEdge] = [edgeOf(false), edgeOf(true)];
+  const lineStart = (a: Item) => Math.min(a.x, ...beside(a).filter((j) => j.x + j.w <= g).map((j) => j.x));
   const opens = (a: Item, b: Item, size: number) =>
-    edge !== undefined && a.x + a.w <= g && b.x >= g && Math.abs(b.x - edge) <= 1.5 && b.x - (a.x + a.w) > size * 0.5;
+    rightEdge !== undefined &&
+    leftEdge !== undefined &&
+    a.x + a.w <= g &&
+    b.x >= g &&
+    Math.abs(b.x - rightEdge) <= 1.5 &&
+    b.x - (a.x + a.w) > size * 0.5 &&
+    Math.abs(lineStart(a) - leftEdge) <= size * 2;
   const near = (s: Item) =>
     beside(s).filter((item) => {
       const size = Math.max(s.size, item.size);
@@ -307,10 +321,11 @@ function stacked(band: Band, items: Item[], graphics: Placed[], kind?: "blocks")
 // while a line of one side has no partner. A table's rows share their
 // baselines. The SF 298's foot, "NSN 7540-01-280-5500" beside "Standard
 // Form 298 (Rev. 2-89)" over "Prescribed by ANSI Std. 239-18", read as one
-// paragraph; the IRS W-9's three header boxes as one line.
+// paragraph; the IRS W-9's three header boxes as one line. A stray mark is
+// no block (a slide's page number beside its last bullets).
 function isBlocks(band: Band, page: number): boolean {
   const { left, right } = band;
-  if (left.items.length === 0 || right.items.length === 0 || [...left.items, ...right.items].some((i) => i.math)) return false;
+  if (chars(left.items) < 10 || chars(right.items) < 10 || [...left.items, ...right.items].some((i) => i.math)) return false;
   const size = median([...left.items, ...right.items].map((i) => i.size));
   if (Math.min(...right.items.map((i) => i.x)) - Math.max(...left.items.map((i) => i.x + i.w)) < size * 3) return false;
   const [a, b] = [buildLines(left.items, page), buildLines(right.items, page)];

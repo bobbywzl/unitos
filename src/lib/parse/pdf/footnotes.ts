@@ -263,6 +263,11 @@ function cutColumn(
   return (titlePage && titleNotes(column, end, bodySize, raised)) || (scan && cutScanNotes(column, end, continuing, counted)) || { kept: column, cuts: [] };
 }
 
+/** The first words of a note on a paper's title: its subject
+    classification, keywords, date, and support. */
+const TITLE_NOTE_RE =
+  /^(?:(?:19|20)\d\d )?Mathematics Subject Classification|^Key ?words(?: and phrases)?\b|^Date:|^Received\b|^(?:This (?:work|research) (?:was|is) )?(?:partially |partly )?(?:supported|funded) by\b/i;
+
 /** The notes a first page sets at a column's foot about the title and its
     authors, with no mark in the text: amsart's subject classification,
     keywords, and date (arXiv 2506.08494, 2410.04586: read as paragraphs),
@@ -271,8 +276,6 @@ function cutColumn(
     apart by a gap as wide as three of their lines at most, when one opens
     with a label the page raises or the first reads as such a note. Each
     labeled line opens a note, and so does a line after a gap. */
-const TITLE_NOTE_RE =
-  /^(?:(?:19|20)\d\d )?Mathematics Subject Classification|^Key ?words(?: and phrases)?\b|^Date:|^Received\b|^(?:This (?:work|research) (?:was|is) )?(?:partially |partly )?(?:supported|funded) by\b/i;
 function titleNotes(column: Line[], end: number, bodySize: number, raised: Set<string>): { kept: Line[]; cuts: Cut[] } | null {
   let top = end;
   while (top > 0 && column[top - 1].text.trim() && column[top - 1].size <= bodySize * SMALL && (top === end || column[top - 1].y - column[top].y <= column[top].size * 4)) top--;

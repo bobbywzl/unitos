@@ -828,6 +828,8 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       j = lead[lead.length - 1] + 1;
     }
     // Backward: wrapped header lines directly above (at most 3).
+    const firstEdge = runSeparators(members.map((k) => lines[k]))[0];
+    const left = Math.min(...members.map((k) => lines[k].x));
     let first = members[0];
     let absorbed = 0;
     while (first > 0 && absorbed < 3) {
@@ -844,7 +846,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       // first column into the others, or that stands over the first column
       // alone, set in by a quarter of it (a statement's name and its units,
       // centered over the page: the 10-K, p. 55).
-      if (columns.length >= 2 && ((prev.x < columns[1] - 4 && prev.xEnd > columns[1] + 4) || (prev.xEnd < columns[1] && prev.x > columns[0] + (columns[1] - columns[0]) * 0.25))) break;
+      if (firstEdge !== undefined && ((prev.x < firstEdge && prev.xEnd > firstEdge) || (prev.xEnd < firstEdge && prev.x > left + (firstEdge - left) * 0.25))) break;
       // A first-column line that continues the paragraph above it (same x,
       // one leading below) is that paragraph's last line — a caption's wrap.
       if (!aligned && !indentedPastFirst && first >= 2) {

@@ -26,7 +26,8 @@ export const TEXT_BLOCKS: ReadonlySet<string> = new Set(["PARAGRAPH", "HEADING",
 // A slide's and a sheet's words change in their replica, line by line and
 // cell by cell (lib/replica.ts).
 const WORDS = new Set([...TEXT_BLOCKS, "TRANSCRIPT", "SLIDE", "SHEET"]);
-const REMOVABLE = new Set([...WORDS, "SEPARATOR"]);
+// A slide and a sheet stay: their words change, the deck and the workbook keep their shape.
+const REMOVABLE = new Set([...TEXT_BLOCKS, "TRANSCRIPT", "SEPARATOR"]);
 const FORMATS = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE"]);
 // Blocks that hold their place: none moves, and none goes before the first.
 const FIXED = new Set(["PAGE", "VIDEO", "TRANSCRIPT", "SLIDE", "SHEET"]);

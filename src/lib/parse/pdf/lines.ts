@@ -134,8 +134,9 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     its body at the same size, run past the column at the body's scale.
     Two words are two words: a word whose box runs into the next word's
     ends a space short of it (NASA SP-4408's scan boxes overlap, "Igor"
-    ending at 170.7 and "Lissov" starting at 167.0, and 89 pages read runs
-    of words with no space). */
+    ending at 170.7 and "Lissov" starting at 167.0: 228 blocks on 161 pages
+    read runs of words with no space, 49 on 47 now, where the text layer
+    itself sets none). */
 export function fitOcrItems(items: Item[]) {
   const text = median(items.map((i) => i.size));
   for (let k = items.length - 1; k >= 0; k--) if (charCount(items[k].str) <= 2 && items[k].size > text * 4) items.splice(k, 1);

@@ -355,8 +355,10 @@ type ParaProps = {
   /** The first line's indent against the left indent in twips (w:ind
       firstLine; a hanging indent negative). */
   first: number;
-  /** The paragraph's own left indent, which wins over its list level's. */
+  /** The paragraph's own left and first-line indents, which win over its
+      list level's. */
   ownLeft: number | null;
+  ownFirst: number | null;
   /** The look every run of the paragraph starts from. */
   base: Look;
   /** The paragraph mark is a tracked deletion: the words join the next paragraph. */
@@ -425,6 +427,7 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     left: 0,
     first: 0,
     ownLeft: indentOf(child(pPr, "ind")),
+    ownFirst: firstOf(child(pPr, "ind")),
     base,
     markDeleted: child(child(pPr, "rPr"), "del") !== null,
     outline: null,
@@ -456,10 +459,7 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     }
     const ind = child(layer, "ind");
     out.left = indentOf(ind) ?? out.left;
-    const hanging = intAttr(ind, "hanging");
-    const firstLine = intAttr(ind, "firstLine");
-    if (hanging !== null) out.first = -hanging;
-    else if (firstLine !== null) out.first = firstLine;
+    out.first = firstOf(ind) ?? out.first;
     const spacing = child(layer, "spacing");
     out.before = spaceOf(spacing, "before") ?? out.before;
     out.after = spaceOf(spacing, "after") ?? out.after;
@@ -481,6 +481,13 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
 /** A left indent (w:ind left, or start), in twips. */
 function indentOf(ind: Element | null): number | null {
   return intAttr(ind, "left") ?? intAttr(ind, "start");
+}
+
+/** A first line's indent against the left indent (w:ind firstLine; a
+    hanging indent negative), in twips. */
+function firstOf(ind: Element | null): number | null {
+  const hanging = intAttr(ind, "hanging");
+  return hanging !== null ? -hanging : intAttr(ind, "firstLine");
 }
 
 // ── Borders ─────────────────────────────────────────────────────────────────
@@ -541,7 +548,7 @@ function blankTwips(props: ParaProps, size: number): number {
 
 // ── Numbering ───────────────────────────────────────────────────────────────
 
-type Level = { fmt: string; text: string; start: number; restart: number | null; legal: boolean; font: string; left: number | null };
+type Level = { fmt: string; text: string; start: number; restart: number | null; legal: boolean; font: string; left: number | null; first: number | null };
 
 function readLevel(lvl: Element): Level {
   const rFonts = child(child(lvl, "rPr"), "rFonts");
@@ -552,6 +559,7 @@ function readLevel(lvl: Element): Level {
     restart: intAttr(child(lvl, "lvlRestart"), "val"),
     legal: flag(child(lvl, "isLgl")) ?? false,
     left: indentOf(child(child(lvl, "pPr"), "ind")),
+    first: firstOf(child(child(lvl, "pPr"), "ind")),
     font: attr(rFonts, "ascii") ?? attr(rFonts, "hAnsi") ?? "",
   };
 }
@@ -701,7 +709,7 @@ class Numbering {
       draws it ("1.", "1.1", "(a)", "•"; "" when a number format draws none), and
       the level's indent; null when the list is not defined. The counters
       move on. */
-  next(numId: string, ilvl: number): { marker: string; left: number | null } | null {
+  next(numId: string, ilvl: number): { marker: string; left: number | null; first: number | null } | null {
     const found = this.levels(numId);
     const level = found?.levels[ilvl];
     if (!found || !level) return null;
@@ -729,7 +737,7 @@ class Numbering {
               return formatNumber(level.legal ? "decimal" : (lv?.fmt ?? "decimal"), counters[at] ?? lv?.start ?? 1);
             })
             .trim();
-    return { marker, left: level.left };
+    return { marker, left: level.left, first: level.first };
   }
 }
 
@@ -1051,6 +1059,9 @@ type Sink = { line: () => Line; cut: (piece: Piece) => void; floating: Picture[]
     the list), its marker, its words. */
 type ListLine = {
   indent: number;
+  /** The marker's place against the indent, in twips (w:ind hanging
+      negative), where the page sets one. */
+  first?: number | null;
   marker: string;
   words: Words;
   /** The space above the line in twips when a line of its list stands
@@ -1264,6 +1275,15 @@ class DocxReader {
     for (const line of list.lines) if (line.gap !== undefined) gaps.set(line.gap, (gaps.get(line.gap) ?? 0) + 1);
     const gap = [...gaps].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? 0;
     if (gap > 0) block.itemSpace = points(gap);
+    // Each depth's indent as Word sets it: its first line's words and marker.
+    if (!list.contents) {
+      const indents = steps.map((step, d) => {
+        const line = list.lines.find((l) => depthOf(l.indent) === d);
+        const left = Math.max(0, Math.min(100_000, line?.indent ?? step));
+        return { left: points(left), first: points(Math.max(-left, Math.min(100_000, line?.first ?? 0))) };
+      });
+      if (indents.length > 0) block.listIndents = indents.slice(0, 9);
+    }
     if (list.first && list.trail) this.spaced(block, list.first, list.trail);
     if (list.contents) for (const entry of entries) this.contentsLines.push({ block, ...entry });
     this.push(block, list.notes);
@@ -1395,10 +1415,12 @@ class DocxReader {
       const numbered = props.numId ? this.numbering.next(props.numId, props.ilvl) : null;
       let marker = numbered?.marker ?? null;
       let indent = props.ownLeft ?? numbered?.left ?? props.left + props.ilvl * INDENT_STEP_TWIPS;
+      let first = props.ownFirst ?? numbered?.first ?? props.first;
       if (!marker) {
         const typed = TYPED_MARKER.exec(only.text) ?? BOX_LINE.exec(only.text);
         marker = typed ? typed[1] : null;
         indent = props.left;
+        first = props.first;
         if (typed) only.keep(typed[0].length);
       }
       if (marker) {
@@ -1411,6 +1433,7 @@ class DocxReader {
         // A list line is one line: a line break inside an item is a space.
         this.list.lines.push({
           indent,
+          first,
           marker: marker === "□" ? "☐" : marker,
           words: { ...words, text: words.text.replace(/\n/g, " ") },
           gap: this.listGap(props),

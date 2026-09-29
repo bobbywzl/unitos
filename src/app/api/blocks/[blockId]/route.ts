@@ -138,7 +138,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   if (replica) {
     const edited = replicaWithText(block.html ?? "", block.text, newText);
     if ("refused" in edited) return NextResponse.json({ error: t(REPLICA_REFUSAL[edited.refused]) }, { status: 400 });
-    replicaHtml = block.type === "SLIDE" ? slidePicture(edited.html, newText !== (block.originalText ?? block.text)) : edited.html;
+    replicaHtml = block.type === "SLIDE" ? slidePicture(edited.html, newText, block.originalText ?? block.text) : edited.html;
   }
 
   // Remap every anchor on this block through the edit, the way Google Docs
