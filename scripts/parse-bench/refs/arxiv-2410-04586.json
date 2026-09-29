@@ -59,7 +59,8 @@
     {
      "text": "This article aims to extend classical homological results about the rational normal curves to their weighted analogues. The rational normal curves provide a rich source of examples of many homological properties. In particular, the defining ideals of these curves are determinantal ([Eis05, Proposition 6.1]) with a quadratic Gröbner basis ([Stu, ERT94], [CDNR13, Theorem 3.1.1]), and their coordinate rings are Cohen-Macaulay and Koszul. We consider certain analogues of the rational normal curves in weighted projective spaces, and we show that (weighted variants of) all of these properties hold for these curves."
     }
-   ]
+   ],
+   "spaceAfter": 10
   },
   {
    "kind": "paragraph",
@@ -75,7 +76,8 @@
     {
      "text": "-grading. Since the generalization by Maclagan-Smith of Castelnuovo-Mumford regularity to multigraded polynomial rings ([MS04]), there have been many results on multigraded regularity: [BC17, BHS21, BHS22, CH22, CN20, SVTW06]. There has also been much work on multigraded syzygies: [BE23, BE24a, BE24b, BES20, BKLY21, BS24, BCN22, Cob24, EES15, HNVT22, HS04, HSS06, SVT06, Yan21]. In particular, the generalization of the rational normal curve studied in this article comes from Brown and Erman in [BE23]."
     }
-   ]
+   ],
+   "spaceAfter": 10
   },
   {
    "kind": "paragraph",
@@ -268,7 +270,8 @@
     {
      "text": " is resolved by an Eagon-Northcott complex."
     }
-   ]
+   ],
+   "spaceAfter": 19
   },
   {
    "kind": "paragraph",
@@ -276,7 +279,8 @@
     {
      "text": "In fact, the observations made in the example above hold for all weighted rational curves."
     }
-   ]
+   ],
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -307,7 +311,8 @@
      "text": ". Then we have the following:",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 14
   },
   {
    "kind": "list",
@@ -399,7 +404,10 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify",
+   "itemSpace": 0,
+   "spaceAfter": 19
   },
   {
    "kind": "paragraph",
@@ -415,7 +423,8 @@
     {
      "text": " has the expected codimension for an ideal of minors. Statement (1) was first proven in [BE23] for curves of arbitrary genus, but our methods provide an alternate proof in genus 0 which more closely parallels the algebraic proofs for rational normal curves. Ongoing work of Banks–Ramkumar adds to these parallels by showing that these weighted rational curves are of minimal degree, just as in the classical setting (cf. [Eis07, p. 341])."
     }
-   ]
+   ],
+   "spaceAfter": 10
   },
   {
    "kind": "paragraph",
@@ -423,7 +432,8 @@
     {
      "text": "Theorem A shows how weighted rational curves broadly behave as rational normal curves do, yet it conceals the fact that the internal details are quite different."
     }
-   ]
+   ],
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -532,7 +542,8 @@
     {
      "text": " and a dot indicates an entry is zero. This Betti table exhibits “cancellation” not found in those of the usual rational normal curves. That is, syzygies of the same degree show up in multiple homological degrees. Said another way, one could not predict this Betti table entirely from the Hilbert function, which is a contrast with what happens for rational normal curves."
     }
-   ]
+   ],
+   "spaceAfter": 17
   },
   {
    "kind": "paragraph",
@@ -746,7 +757,8 @@
     {
      "text": " satisfies a generalized Koszul property, introduced by Herzog, Reiner, and Welker in [HRW98, Definition 5.1]."
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -777,7 +789,8 @@
      "text": " is Koszul in the usual sense (Theorem 5.1).",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 17
   },
   {
    "kind": "paragraph",
@@ -785,7 +798,8 @@
     {
      "text": "Theorem B and Theorem A(4) yield a positive answer to Question 7.9 in [BE23] in the case of weighted rational curves."
     }
-   ]
+   ],
+   "spaceAfter": 10
   },
   {
    "kind": "paragraph",
@@ -793,7 +807,8 @@
     {
      "text": "Taken together, Theorems A and B echo the following theme, which is often seen in the nonstandard graded and multigraded settings."
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -837,7 +852,8 @@
     {
      "text": " and that the proofs included here do apply to the usual rational normal curves."
     }
-   ]
+   ],
+   "spaceAfter": 10
   },
   {
    "kind": "paragraph",
@@ -845,7 +861,8 @@
     {
      "text": "This paper is organized as follows: In §2, we define the main object of study, the weighted rational curves. In §3, we prove that the defining ideal of each of these curves is determinantal. In §4, we establish that the generators of these ideals are in fact Gröbner bases with respect to a certain monomial order. In §5, we consider a nonstandard version of the Koszul property and show that it holds for the weighted rational curves."
     }
-   ]
+   ],
+   "spaceAfter": 17
   },
   {
    "kind": "paragraph",
@@ -907,7 +924,8 @@
     {
      "text": " is the point at infinity, which will be the only case of interest throughout this paper."
     }
-   ]
+   ],
+   "spaceAfter": 10
   },
   {
    "kind": "paragraph",
@@ -931,7 +949,8 @@
     {
      "text": " from Example 1.1."
     }
-   ]
+   ],
+   "spaceAfter": 6
   },
   {
    "kind": "paragraph",
@@ -1056,7 +1075,8 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "spaceAfter": 16
   },
   {
    "kind": "paragraph",
@@ -1216,7 +1236,8 @@
     {
      "text": " will be fixed throughout the paper, and so we omit this dependence from the notation."
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -1252,7 +1273,8 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "spaceAfter": 17
   },
   {
    "kind": "paragraph",
@@ -1260,7 +1282,8 @@
     {
      "text": "The following observations follow easily from [BE23]."
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -1307,7 +1330,8 @@
      "text": ".",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 17
   },
   {
    "kind": "paragraph",
@@ -1404,7 +1428,8 @@
     {
      "text": " is not integrally closed."
     }
-   ]
+   ],
+   "spaceAfter": 17
   },
   {
    "kind": "paragraph",
@@ -1420,7 +1445,8 @@
     {
      "text": " is “normally generated” in the sense of their Definition 3.13, which parallels Mumford’s definition ([Mum70]), which algebraically implies the following."
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -1449,7 +1475,8 @@
      "text": " is Cohen-Macaulay.",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 17
   },
   {
    "kind": "paragraph",
@@ -1507,7 +1534,8 @@
     {
      "text": " matrix, all of whose entries are linear, with a single exception. To be precise, we prove the following theorem:"
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -1598,7 +1626,8 @@
      "text": ".",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 17
   },
   {
    "kind": "paragraph",
@@ -1686,7 +1715,8 @@
     {
      "text": ". This relies on the following two results."
     }
-   ]
+   ],
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -1764,7 +1794,8 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "spaceAfter": 16
   },
   {
    "kind": "paragraph",
@@ -1808,7 +1839,8 @@
     {
      "text": " have the same Hilbert series."
     }
-   ]
+   ],
+   "spaceAfter": 10
   },
   {
    "kind": "paragraph",
@@ -2085,7 +2117,8 @@
     {
      "text": ", completing the proof."
     }
-   ]
+   ],
+   "spaceAfter": 17
   },
   {
    "kind": "paragraph",
@@ -2093,7 +2126,8 @@
     {
      "text": "We delay the proofs of Propositions 3.2 and 3.3 to Subsection 3.2, and first give some corollaries."
     }
-   ]
+   ],
+   "spaceAfter": 18
   },
   {
    "kind": "paragraph",
@@ -2121,7 +2155,8 @@
     {
      "text": ", and its graded Betti numbers."
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -2196,7 +2231,8 @@
     {
      "text": " is Cohen-Macaulay."
     }
-   ]
+   ],
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -2214,7 +2250,8 @@
      "text": " is Cohen–Macaulay.",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 21
   },
   {
    "kind": "paragraph",
@@ -2298,7 +2335,8 @@
     {
      "text": " is Cohen-Macaulay."
     }
-   ]
+   ],
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -2503,7 +2541,8 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "spaceAfter": 8
   },
   {
    "kind": "paragraph",

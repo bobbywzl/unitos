@@ -13,6 +13,15 @@ import { serverT } from "@/lib/i18n/server";
 import { classifyPdf } from "@/lib/handwritten/classify";
 import { storePageSizes } from "@/lib/handwritten/page-images";
 import { pageBlockText, pdfPageCount } from "@/lib/handwritten/pages";
+import {
+  PdfPagesError,
+  pdfPagesOf,
+  rangePages,
+  samePdfPages,
+  storedPdfPages,
+  type PageRange,
+  type PdfPages,
+} from "@/lib/pdf-pages";
 import { parsePdf } from "@/lib/parse/pdf";
 import { auditFiguresWithJev } from "@/lib/parse/figure-audit";
 import { wallOf } from "@/lib/parse/page-kind";
@@ -75,6 +84,9 @@ export type IngestOptions = {
   split?: boolean;
   pages?: boolean;
   convert?: boolean;
+  // The PDF's pages the reader chose in the add dialog (SPEC.md §15): the
+  // add imports those pages alone. Absent: every page.
+  pdfPages?: PageRange[];
   // A PDF fetched from a link keeps the link, so adding the URL again dedupes.
   sourceUrl?: string;
   // When the model passes must be done, epoch ms (modelPassDeadline): a pass
@@ -230,8 +242,8 @@ function blockDocumentDetail(reason: BlockDocumentReason | null): string | undef
 const IMPORT_TX_MS = 120_000;
 
 /** The page's look an import's named styles take (a PDF's, a Word file's). */
-type PageLook = Pick<ParsedDocument, "bodyFont" | "titleFont" | "titleAlign">;
-const pageLook = (parsed: PageLook): PageLook => ({ bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign });
+type PageLook = Pick<ParsedDocument, "bodyFont" | "titleFont" | "titleAlign" | "titleLines">;
+const pageLook = (parsed: PageLook): PageLook => ({ bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign, titleLines: parsed.titleLines });
 
 /** A parse as an import: the rich text, the figure media, the page setup. */
 type Converted = { richText: RichNode; figures: ImportFigure[]; pageSetup: PageSetup };
@@ -240,7 +252,8 @@ type Converted = { richText: RichNode; figures: ImportFigure[]; pageSetup: PageS
     them a block document. titleFromOriginal: the title came from the
     original (the PDF's title, the page's, the front matter's), so the
     rich text opens with it in the Title style. The page's look (a PDF's,
-    a Word file's) sets the named styles. */
+    a Word file's) sets the named styles. firstPage: the first of a PDF's
+    chosen pages (SPEC.md §15). */
 function convertImport(
   input: {
     kind: ImportKind;
@@ -248,6 +261,7 @@ function convertImport(
     titleFromOriginal: boolean;
     blocks: ParsedBlock[];
     pageSize?: { width: number; height: number };
+    firstPage?: number;
   } & PageLook,
 ): Converted | "size" {
   // Contents entries point at their headings' orders; the converter links
@@ -290,6 +304,7 @@ async function createImportedDocument(data: {
   fileData?: Uint8Array<ArrayBuffer>;
   converted: Converted;
   pageLabels?: string[];
+  pdfPages?: PdfPages | null;
   references?: DocumentReference[];
   font?: ParsedDocument["font"];
   columnWidth?: number;
@@ -314,6 +329,7 @@ async function createImportedDocument(data: {
           richText: converted.richText as unknown as Prisma.InputJsonValue,
           pageSetup: converted.pageSetup as unknown as Prisma.InputJsonValue,
           pageLabels: data.pageLabels,
+          ...pdfPagesColumn(data.pdfPages),
         },
       });
       await createFigureMedia(tx, document.id, converted.figures);
@@ -344,9 +360,38 @@ const UNEDITED: Prisma.DocumentWhereInput = {
   OR: [{ importRev: null }, { richTextRev: { lte: db.document.fields.importRev } }],
 };
 
-/** The oldest unedited document with these bytes. */
-function dedupeByHash(fileHash: string) {
-  return db.document.findFirst({ where: { fileHash, ...UNEDITED }, orderBy: { createdAt: "asc" } });
+/** The oldest unedited document with these bytes and these chosen pages of
+    a PDF (null: every page, and every file that is no PDF). The same file
+    with other pages is another document (SPEC.md §30). */
+async function dedupeByHash(fileHash: string, pdfPages: PdfPages | null = null) {
+  const found = await db.document.findMany({
+    where: { fileHash, ...UNEDITED },
+    orderBy: { createdAt: "asc" },
+    omit: { fileData: true },
+  });
+  const same = found.find((document) => samePdfPages(storedPdfPages(document), pdfPages));
+  return same ? db.document.findUnique({ where: { id: same.id } }) : null;
+}
+
+/** The chosen pages' column (Document.pdfPages), written only when pages
+    were chosen: null is every page. */
+function pdfPagesColumn(pdfPages: PdfPages | null | undefined): { pdfPages?: Prisma.InputJsonValue } {
+  return pdfPages ? { pdfPages } : {};
+}
+
+/** The chosen pages as the document keeps them, checked against the PDF:
+    a page past its last fails the add (PdfPagesError); every page chosen
+    is every page (null). */
+async function chosenPdfPages(bytes: Uint8Array, ranges: PageRange[] | undefined): Promise<PdfPages | null> {
+  if (!ranges || ranges.length === 0) return null;
+  const pageCount = await pdfPageCount(bytes);
+  if (ranges[ranges.length - 1][1] > pageCount) throw new PdfPagesError(pageCount);
+  return pdfPagesOf(ranges, pageCount);
+}
+
+/** The PDF's pages a document holds, 1-based: its chosen pages, else every page. */
+function documentPages(pdfPages: PdfPages | null, pageCount: number): number[] {
+  return pdfPages ? rangePages(pdfPages.ranges) : Array.from({ length: pageCount }, (_, i) => i + 1);
 }
 
 /** An import edited since it was imported: its rich text moved past the
@@ -406,6 +451,7 @@ async function createDocumentWithBlocks(data: {
   render?: RenderReport | null;
   // Slides and sheets (SPEC.md §27): the stored file's format.
   format?: ParsedDocument["format"];
+  pdfPages?: PdfPages | null;
 }) {
   const blocks = resolveContentsLinks(data.blocks);
   return db.$transaction(async (tx) => {
@@ -421,6 +467,7 @@ async function createDocumentWithBlocks(data: {
         columnWidth: data.columnWidth,
         format: data.format,
         ...renderColumns(data.render ?? null),
+        ...pdfPagesColumn(data.pdfPages),
       },
     });
     await tx.block.createMany({
@@ -467,14 +514,16 @@ async function claimCapturedImages(
   await tx.imageAsset.updateMany({ where: { id: { in: ids }, documentId: null }, data: { documentId } });
 }
 
-// A handwritten document: no text blocks — one PAGE block per PDF page, the
-// bytes kept for the page image route, Circle & ask, and conversion (SPEC.md §16).
+// A handwritten document: no text blocks — one PAGE block per PDF page it
+// holds (every page, or the chosen pages), the bytes kept for the page image
+// route, Circle & ask, and conversion (SPEC.md §16).
 async function createHandwrittenDocument(data: {
   title: string;
   sourceUrl?: string;
   fileHash: string;
   fileData: Uint8Array<ArrayBuffer>;
-  pageCount: number;
+  pages: number[];
+  pdfPages: PdfPages | null;
   convert: boolean;
 }) {
   return db.$transaction(async (tx) => {
@@ -489,9 +538,10 @@ async function createHandwrittenDocument(data: {
         // OFF records the reader's "do not convert": nothing auto-starts, the
         // strip offers Convert to text (SPEC.md §16).
         conversionStatus: data.convert ? "NONE" : "OFF",
+        ...pdfPagesColumn(data.pdfPages),
       },
     });
-    await tx.block.createMany({ data: pageBlockRows(document.id, data.pageCount) });
+    await tx.block.createMany({ data: pageBlockRows(document.id, data.pages) });
     return document;
   });
 }
@@ -506,13 +556,14 @@ async function storePageSizesQuietly(documentId: string, bytes: Uint8Array): Pro
   }
 }
 
-function pageBlockRows(documentId: string, pageCount: number) {
-  return Array.from({ length: pageCount }, (_, i) => ({
+/** One PAGE row for each page, 1-based, in order. */
+function pageBlockRows(documentId: string, pages: number[]) {
+  return pages.map((page, i) => ({
     documentId,
     order: i,
     type: "PAGE" as const,
-    text: pageBlockText(i + 1),
-    page: i + 1,
+    text: pageBlockText(page),
+    page,
   }));
 }
 
@@ -525,6 +576,8 @@ function pageBlockRows(documentId: string, pageCount: number) {
 // handwritten document with conversionStatus NONE. With instructions, the
 // structure pass runs over the parsed blocks — the other lever instructions
 // have on a PDF (§15); userId is who the classification records usage under.
+// opts.pdfPages: the pages the reader chose (§15); the document holds those
+// pages alone, as an article or as handwritten pages, and keeps the choice.
 export async function ingestPdf(
   bytes: Uint8Array<ArrayBuffer>,
   filename: string,
@@ -533,15 +586,16 @@ export async function ingestPdf(
   userId: string | null = null,
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
-  const existing = await dedupeByHash(fileHash);
+  const pdfPages = await chosenPdfPages(bytes, opts.pdfPages);
+  const existing = await dedupeByHash(fileHash, pdfPages);
   if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
-  const parsed = await parsePdf(bytes);
-  const pageCount = await pdfPageCount(bytes);
+  const parsed = await parsePdf(bytes, { pages: pdfPages ? rangePages(pdfPages.ranges) : undefined });
+  const pages = documentPages(pdfPages, pdfPages?.count ?? (await pdfPageCount(bytes)));
   const kind = opts.pages
     ? "handwritten"
-    : await classifyPdf(bytes, parsed.blocks, pageCount, userId);
+    : await classifyPdf(bytes, parsed.blocks, pages, userId);
   if (kind === "handwritten") {
     onProgress?.("save");
     const document = await createHandwrittenDocument({
@@ -549,7 +603,8 @@ export async function ingestPdf(
       sourceUrl: opts.sourceUrl,
       fileHash,
       fileData: bytes,
-      pageCount,
+      pages,
+      pdfPages,
       convert: opts.convert !== false,
     });
     await storePageSizesQuietly(document.id, bytes);
@@ -566,6 +621,7 @@ export async function ingestPdf(
         titleFromOriginal: Boolean(parsed.title),
         blocks,
         pageSize: parsed.pageSize,
+        firstPage: pages[0],
         ...pageLook(parsed),
       })
     : null;
@@ -579,6 +635,7 @@ export async function ingestPdf(
           fileData: bytes,
           converted,
           pageLabels: parsed.pageLabels,
+          pdfPages,
           userId,
         })
       : await createDocumentWithBlocks({
@@ -587,6 +644,7 @@ export async function ingestPdf(
           fileHash,
           fileData: bytes,
           blocks,
+          pdfPages,
         });
   return { document, deduped: false };
 }
@@ -988,6 +1046,8 @@ export async function reparseDocument(
   // version "Before re-parse" keeps whatever stands at the write.
   const baseRev = replaceEdits ? null : document.richTextRev;
   const t = await serverT();
+  // A PDF's chosen pages (SPEC.md §15): the re-parse reads the same pages.
+  const pdfPages = storedPdfPages(document);
 
   // A slides or sheets document (SPEC.md §27) parses its stored file with
   // its own parser; the slides' stored pictures carry over by slide number.
@@ -1048,12 +1108,12 @@ export async function reparseDocument(
     if (!document.fileData) throw new Error("Document has no stored file");
     if (!isPdfBytes(new Uint8Array(document.fileData))) throw new Error("Only a PDF has pages");
     onProgress?.("save");
-    const pageCount = await pdfPageCount(new Uint8Array(document.fileData));
+    const pages = documentPages(pdfPages, pdfPages?.count ?? (await pdfPageCount(new Uint8Array(document.fileData))));
     await db.$transaction(async (tx) => {
       // An import leaves the page editor: its words stay as a version.
       if (wasImport) await keepTextBeforeReparse(tx, documentId, baseRev, t("api.reparseVersionName"));
       await tx.block.deleteMany({ where: { documentId } });
-      await tx.block.createMany({ data: pageBlockRows(documentId, pageCount) });
+      await tx.block.createMany({ data: pageBlockRows(documentId, pages) });
       await tx.document.update({
         where: { id: documentId },
         data: {
@@ -1089,7 +1149,7 @@ export async function reparseDocument(
     onProgress?.("parse");
     const bytes = new Uint8Array(document.fileData);
     if (isPdfBytes(bytes)) {
-      const parsed = await parsePdf(bytes);
+      const parsed = await parsePdf(bytes, { pages: pdfPages ? rangePages(pdfPages.ranges) : undefined });
       blocks = parsed.blocks;
       kind = "pdf";
       originalTitle = parsed.title;
@@ -1152,6 +1212,7 @@ export async function reparseDocument(
           titleFromOriginal: Boolean(originalTitle),
           blocks,
           pageSize,
+          firstPage: pdfPages?.ranges[0][0],
           ...look,
         })
       : null;

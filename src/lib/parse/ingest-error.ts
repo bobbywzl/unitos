@@ -1,5 +1,6 @@
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { FetchPageError } from "@/lib/parse/fetch-page";
+import { PdfPagesError } from "@/lib/pdf-pages";
 
 // Why an add failed, in plain words: what went wrong and what to do next. The
 // ingest, upload review, and re-parse routes send this instead of the raw
@@ -11,6 +12,7 @@ export function describeIngestError(
   kind: "url" | "pdf" | "file" | "reparse",
 ): string {
   if (err instanceof FetchPageError) return describeFetchError(err, t);
+  if (err instanceof PdfPagesError) return t("api.pdfPagesPast", { n: err.pageCount });
   const name = err instanceof Error ? err.name : "";
   const message = err instanceof Error ? err.message : String(err);
   const text = `${name} ${message}`.toLowerCase();

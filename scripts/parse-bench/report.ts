@@ -1,5 +1,5 @@
 import type { Doc } from "./adapt";
-import { freeScores, type PdfText } from "./free";
+import type { FreeScores, PdfText } from "./free";
 import type { GlyphScores } from "./glyphs";
 import { flatten, SCORED, score, type Flat } from "./metrics";
 import type { Font, RefDoc } from "./model";
@@ -14,6 +14,8 @@ type Input = {
   pdf?: PdfText;
   pages?: [number, number];
   glyphs?: { parse: GlyphScores; import?: GlyphScores };
+  freeParse?: FreeScores;
+  freeImport?: FreeScores;
 };
 
 const clip = (text: string, n = 240) => {
@@ -116,9 +118,9 @@ function referenceDetail(ref: RefDoc, candidate: Doc) {
   const r2 = (x: number | null) => (x === null ? "—" : x.toFixed(2));
   const roles = s.roles;
   console.log(
-    `Roles: alignment ${r2(roles.align)}, indentation ${r2(roles.indent)}, captions ${r2(roles.captions)}, checkbox states ${r2(roles.checks)}, separators ${r2(roles.separators)}, quotations ${r2(roles.quotes)}, equation labels ${r2(s.math.labels.score)}.`,
+    `Roles: alignment ${r2(roles.align)}, indentation ${r2(roles.indent)}, indent sizes ${r2(roles.indentSize)}, spacing ${r2(roles.spacing)}, captions ${r2(roles.captions)}, checkbox states ${r2(roles.checks)}, separators ${r2(roles.separators)}, quotations ${r2(roles.quotes)}, equation labels ${r2(s.math.labels.score)}, their side ${r2(s.math.labels.side.score)}.`,
   );
-  for (const [name, misses] of [["alignment", roles.misses.align], ["indentation", roles.misses.indent]] as const) {
+  for (const [name, misses] of [["alignment", roles.misses.align], ["indentation", roles.misses.indent], ["indent size", roles.misses.indentSize], ["spacing", roles.misses.spacing]] as const) {
     if (misses.length === 0) continue;
     console.log(`  ${name} wrong (${misses.length}; the reference's → the candidate's):`);
     for (const miss of misses.slice(0, 10)) console.log(`    ${miss.ref} → ${miss.cand}: ${miss.text}`);
@@ -193,9 +195,9 @@ function referenceDetail(ref: RefDoc, candidate: Doc) {
   }
 }
 
-function freeDetail(pdf: PdfText, candidate: Doc, word: boolean) {
+/** The run's own reference-free scores of the candidate (so the composite is the table's). */
+function freeDetail(f: FreeScores, candidate: Doc) {
   const c = flatten(candidate);
-  const f = freeScores(pdf, c, undefined, word);
   console.log(`\nWithout a reference: composite ${f.composite.toFixed(1)}.`);
   console.log(
     f.coverage.blind
@@ -207,7 +209,7 @@ function freeDetail(pdf: PdfText, candidate: Doc, word: boolean) {
   console.log(`  Extra most:   ${list(f.coverage.extra)}`);
   console.log(`Furniture lines found by position: ${f.furniture.strings}; ${f.furniture.leaked} leak, ${f.furniture.leaks} times.`);
   for (const leak of f.furniture.found.slice(0, 40)) {
-    console.log(`  "${clip(leak.text, 100)}"`);
+    console.log(`  "${clip(leak.text, 100)}"${leak.pictured ? ` (${leak.pictured} in a figure's picture)` : ""}`);
     for (const m of leak.at.slice(0, 6)) {
       const tok = c.toks[m.tok];
       console.log(`    … ${clip(c.units[m.unit].text.slice(Math.max(0, tok.start - 60), tok.end + 60), 160)}`);
@@ -217,6 +219,11 @@ function freeDetail(pdf: PdfText, candidate: Doc, word: boolean) {
   for (const l of f.numberLines.found.slice(0, 20)) console.log(`  "${l.text}" in … ${clip(c.units[l.unit].text, 100)}`);
   console.log(`Garbled glyphs: ${f.garbles.count}.`);
   for (const g of f.garbles.found.slice(0, 40)) console.log(`  ${g.kind}: "${g.match}" in … ${clip(g.text, 100)}`);
+  if (f.look) {
+    const r2 = (x: number | null) => (x === null ? "—" : x.toFixed(2));
+    console.log(`The import's look: inline formulas at their words' size ${r2(f.look.formulas)}, crops at their printed width ${r2(f.look.figures)}, Word borders ${r2(f.look.borders)}.`);
+    for (const m of f.look.misses.slice(0, 20)) console.log(`  ${m}`);
+  }
 }
 
 function glyphDetail(g: GlyphScores) {
@@ -235,7 +242,8 @@ export function detailReport(r: Input, mode: "parse" | "import") {
   const candidate = r.docs[mode];
   console.log(`\n${r.entry.id} (${r.entry.category}) — the ${mode}${r.pages ? `, pages ${r.pages[0]}–${r.pages[1]}` : ", every page"}`);
   if (r.ref) referenceDetail(r.ref, candidate);
-  if (r.pdf) freeDetail(r.pdf, candidate, !r.entry.pdf && Boolean(r.entry.docx));
+  const free = mode === "parse" ? r.freeParse : r.freeImport;
+  if (free) freeDetail(free, candidate);
   const glyphs = r.glyphs?.[mode];
   if (glyphs) glyphDetail(glyphs);
 }

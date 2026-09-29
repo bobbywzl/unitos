@@ -14,6 +14,9 @@ export const OFFICE_CSS = String.raw`
 }
 .reader-slide .slide {
   position: relative;
+  /* The shapes' z-index stays inside the slide: floating cards (the plan
+     card, the popovers) stay above it. */
+  isolation: isolate;
   width: 100%;
   overflow: hidden;
   background: #ffffff;

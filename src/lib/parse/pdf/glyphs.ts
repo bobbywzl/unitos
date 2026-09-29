@@ -50,6 +50,14 @@ export const SPACING_ACCENTS: Record<string, string> = {
 
 export type FontFlags = Omit<Flags, "href"> & { math: boolean };
 
+// Adobe's names run weight and shape together after the family, abbreviated:
+// "Bd" bold, "Blk" black, "It" italic, "Obl" oblique ("HelveticaNeueLTStd-
+// BdIt", "MyriadPro-SemiboldSemiCnIt", "FormataOTFMdIt", "HelveticaLTStd-
+// Obl"). The W-9's bold and italic, MMWR's italic, and PLOS's formulas'
+// letters read as plain.
+const ADOBE_BOLD_RE = /(?:^|[-a-z])(?:Bd|Blk)(?:Cn|SemiCn|It|Obl)*$/;
+const ADOBE_ITALIC_RE = /(?:^|[-a-z])(?:It|Obl)$/;
+
 export function fontFlags(name: string | null): FontFlags {
   const n = (name ?? "").replace(/^[A-Z]{6}\+/, ""); // subset prefix "HAAAAA+"
   const family = mathFamily(n);
@@ -58,9 +66,12 @@ export function fontFlags(name: string | null): FontFlags {
     // Modern names carry weight and shape in abbreviations, not words, and
     // so do Libertine's and Biolinum's (acmart: LinLibertineTB bold,
     // LinLibertineTI italic; a paper's 986 bold and 254 italic characters
-    // read as plain).
-    bold: /bold|black|heavy|semi ?bold|demi|medi(?:ital|obli)?$|^CMBX|^CMB\d|^CMSSBX|^CMBSY|^LM(?:Roman|Sans|Mono)\d*-Bold|^Lin(?:Libertine|Biolinum)T[BZ]I?$/i.test(n),
-    italic: /italic|oblique|ital$|obli$|^CMTI|^CMSL|^CMBXTI|^CMSSI|^CMITT|^CMSLTT|slanted|^Lin(?:Libertine|Biolinum)T[BZ]?I$/i.test(n),
+    // read as plain), and Adobe's.
+    bold:
+      /bold|black|heavy|semi ?bold|demi|medi(?:ital|obli)?$|^CMBX|^CMB\d|^CMSSBX|^CMBSY|^LM(?:Roman|Sans|Mono)\d*-Bold|^Lin(?:Libertine|Biolinum)T[BZ]I?$/i.test(n) ||
+      ADOBE_BOLD_RE.test(n),
+    italic:
+      /italic|oblique|ital$|obli$|^CMTI|^CMSL|^CMBXTI|^CMSSI|^CMITT|^CMSLTT|slanted|^Lin(?:Libertine|Biolinum)T[BZ]?I$/i.test(n) || ADOBE_ITALIC_RE.test(n),
     mono: /mono|courier|consolas|menlo|typewriter|^CMTT|^CMSLTT|^CMITT|cursor/i.test(n),
     // A small-caps font draws lowercase letters as small capitals; the text
     // layer gives them lowercase. Computer Modern's CMCSC, its T1 twins SFCC
@@ -88,9 +99,12 @@ export function fontFlags(name: string | null): FontFlags {
 export type MathFamily = "oml" | "oms" | "omx" | "msa" | "msb" | "euf" | "rsfs" | "lasy" | "esint" | "ot1";
 
 const FAMILIES: [RegExp, MathFamily][] = [
-  [/^(CMMIB?\d|LMMathItalic)/i, "oml"],
-  [/^(CMB?SY\d|LMMathSymbols)/i, "oms"],
-  [/^(CMEX\d|LMMathExtension)/i, "omx"],
+  // MathDesign's math italic and symbols, and Belleek's extension font
+  // (MathTime's free twin), keep TeX's codes: arXiv 2506.06352's ≻ and ⊂,
+  // IEEE Access's braces drawn in pieces.
+  [/^(CMMIB?\d|LMMathItalic|MathDesign-.+-MathItalic-)/i, "oml"],
+  [/^(CMB?SY\d|LMMathSymbols|MathDesign-.+-Symbol-\d)/i, "oms"],
+  [/^(CMEX\d|LMMathExtension|BLEX$)/i, "omx"],
   [/^MSAM\d/i, "msa"],
   [/^MSBM\d/i, "msb"],
   [/^EUF[MB]\d/i, "euf"],
@@ -124,7 +138,22 @@ export type MathVariant = "bold" | "bf" | "sf" | "tt";
 type UnicodeFont =
   | { kind: "katex"; face: string; style: string }
   | { kind: "opentype"; name: string }
+  | { kind: "tex"; italic: boolean; bullets: boolean; sized: boolean }
   | null;
+
+// Math fonts whose text layer reads right but whose codes follow no TeX
+// family throughout: STIX's first fonts (OpenStax), newtxmath's and
+// Libertine's (acmart), MathTime's (IEEE Access, Springer), MnSymbol and
+// Euler (PLOS), and OpenSymbol (LibreOffice Math). Their formulas read as
+// words: 23 of arXiv 2609.29669's 30 inline formulas, and all 31 of the
+// Math Guide's table of operators. Each glyph reads by its character, as
+// an OpenType math font's does; a letter of an italic one is math italic.
+// OpenSymbol also draws a list's bullets and dashes: those are no math.
+// MathTime's extension font (MTEX) numbers its glyphs anew in each PDF
+// (Springer's ∑ at 0x08): each is a big operator, a sized delimiter, or a
+// piece, and stays unread.
+const UNICODE_TEX_RE = /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MTEX|MnSymbol|EURM|OpenSymbol)/;
+const ITALIC_MATH_RE = /Italic|MI(B|\d)*$|txmia|MathMI|^EURM/;
 
 // OpenType math fonts by name (Latin Modern's Type 1 math fonts are TeX's
 // own families; MathDesign's are 8-bit TeX encodings).
@@ -135,7 +164,13 @@ function unicodeFont(base: string): UnicodeFont {
   let kind = fontKinds.get(base);
   if (kind === undefined) {
     const katex = /^KaTeX_(\w+)-(\w+)$/.exec(base);
-    kind = katex ? { kind: "katex", face: katex[1], style: katex[2] } : OPENTYPE_MATH_RE.test(base) ? { kind: "opentype", name: base } : null;
+    kind = katex
+      ? { kind: "katex", face: katex[1], style: katex[2] }
+      : OPENTYPE_MATH_RE.test(base)
+        ? { kind: "opentype", name: base }
+        : UNICODE_TEX_RE.test(base)
+          ? { kind: "tex", italic: ITALIC_MATH_RE.test(base), bullets: /^OpenSymbol/.test(base), sized: /^MTEX/.test(base) }
+          : null;
     fontKinds.set(base, kind);
   }
   return kind;
@@ -239,6 +274,22 @@ function openTypeChar(char: string): Tex | null {
   return texOf(char, FAMILY_ORDER);
 }
 
+/** A character of a math font of TeX's world read by its character
+    (UNICODE_TEX_RE). Its big operators, sized delimiters, and pieces stay
+    unread: their boxes are the font's own, which no table holds, and a
+    limit placed by a wrong box reads as a script (the formula fails). An
+    en dash in a math font is a minus (OpenStax's "x – μ"); OpenSymbol's
+    bullet and dash are a list's. */
+function texWorldChar(char: string, italic: boolean, bullets: boolean): Tex | null {
+  if (bullets && /^[•–—…‰·]$/.test(char)) return null;
+  if (char === "–") return { family: "oms", code: 0x00 };
+  // The micro sign is μ.
+  const c = char.normalize("NFKC");
+  const letter = /^([A-Za-z]|\p{Script=Greek})$/u.test(c);
+  const tex = (italic && letter ? texOf(c, ["oml"]) : null) ?? openTypeChar(c);
+  return tex?.family === "omx" ? null : tex;
+}
+
 /** A glyph of an OpenType math font whose character has sizes (a
     delimiter, a big operator, a radical): LuaLaTeX's code is the glyph id;
     another producer's glyph tells itself by its advance. */
@@ -282,17 +333,74 @@ function katexChar(char: string, face: string, style: string): Tex | null {
   }
 }
 
+// TeX's text fonts under other names — Latin Modern (lmodern), cm-super
+// (Computer Modern in T1), MathDesign's OT1 fonts — draw a formula's digits,
+// + = ( ), and upright letters as CMR does, their codes in TeX's text layout
+// (OT1, or T1, which shares OT1's letters, digits, and signs). A glyph whose
+// code draws the same character in OT1 reads as CMR's. Read as any other
+// text font, Latin Modern's "=" and digits ended every formula they stood
+// in: arXiv 2506.06752's "k − 1" read "k −", and the "=" of each ⟹ failed 9
+// of its 16 displays. A font a browser embeds under such a name numbers its
+// glyphs otherwise (synth-notes-html's LMRoman10-Bold sets "P" at 0x53): it
+// takes no family unless most of its glyphs agree.
+const TEX_TEXT_RE = /^(LMRoman(?!Caps)|LMSans|SF(?:RM|BX|BI|TI|SL|SS|SX|SI)\d|MathDesign-.+-OT1-)/;
+function texTextFonts(glyphs: Glyph[]) {
+  const fonts = new Map<string, { agree: Glyph[]; count: number }>();
+  for (const g of glyphs) {
+    if (g.family !== null || g.unicode.trim() === "" || !TEX_TEXT_RE.test(g.base)) continue;
+    let font = fonts.get(g.font);
+    if (!font) fonts.set(g.font, (font = { agree: [], count: 0 }));
+    font.count++;
+    if (texOf(g.unicode, ["ot1"])?.code === g.code) font.agree.push(g);
+  }
+  for (const { agree, count } of fonts.values()) {
+    if (agree.length < count * 0.8) continue;
+    for (const g of agree) {
+      g.family = "ot1";
+      // The alphabet the name says, as CMSS and CMBX say it (layout.ts). A
+      // leaning sans letter is a math letter: Beamer sets math in LMSans
+      // Oblique ("w = 256", synth-slides-tex).
+      if (/^(LMSans|SFS[SXI])/.test(g.base)) {
+        if (!isItalicFont(g.base)) g.variant = "sf";
+      } else if (/Bold|Demi|^SFB[XI]/.test(g.base)) g.variant = "bf";
+    }
+  }
+}
+
+/** A font's lean and weight by its name (fontFlags), read once a font: a
+    formula's letter in an italic one is a math letter, not \mathrm, and in
+    a bold one \mathbf (layout.ts). */
+const looks = new Map<string, { italic: boolean; bold: boolean }>();
+function fontLook(base: string): { italic: boolean; bold: boolean } {
+  let look = looks.get(base);
+  if (look === undefined) {
+    const { italic, bold } = fontFlags(base);
+    looks.set(base, (look = { italic, bold }));
+  }
+  return look;
+}
+export const isItalicFont = (base: string) => fontLook(base).italic;
+export const isBoldFont = (base: string) => fontLook(base).bold;
+
 /** The page's glyphs with each glyph of a math font set in Unicode given
     the TeX family and code of the same symbol (its own box where its font
-    draws it otherwise, and its alphabet). A glyph no table knows keeps no
-    family: a formula it is in fails the check. */
+    draws it otherwise, and its alphabet), and each glyph of a TeX text font
+    under another name the family of CMR's (texTextFonts). A glyph no table
+    knows keeps no family: a formula it is in fails the check. */
 export function unicodeMath(glyphs: Glyph[]): Glyph[] {
+  texTextFonts(glyphs);
   for (const g of glyphs) {
     if (g.family !== null) continue;
     const font = unicodeFont(g.base);
     if (!font || g.unicode.trim() === "" || g.size <= 0) continue;
+    // Word maps some of Cambria Math's glyphs to their letter twice ("𝑝𝑝",
+    // pdftotext too): one glyph is one letter. Read as two, it took no
+    // family, and the NPS thesis's p_{00} read as a word before {}_{00}.
+    const [first, second, ...more] = g.unicode;
+    if (first === second && more.length === 0 && /\p{L}/u.test(first)) g.unicode = first;
     let tex: Tex | null | undefined;
     if (font.kind === "katex") tex = katexChar(g.unicode, font.face, font.style);
+    else if (font.kind === "tex") tex = font.sized ? null : texWorldChar(g.unicode, font.italic, font.bullets);
     else {
       tex = openTypeSized(g, font.name);
       if (tex === undefined) tex = openTypeChar(g.unicode);
@@ -303,8 +411,37 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
     if (tex.box) g.box = tex.box;
     if (tex.variant) g.variant = tex.variant;
   }
+  // On a page whose math fonts set no Latin letter, a formula takes its
+  // letters from the text's italic: MathDesign's from Utopia's (arXiv
+  // 2506.06352's \mathcal{L}(t)), MathTime's from Times', LibreOffice's
+  // from Liberation Serif's (the Math Guide's A∖B); and on one whose math
+  // fonts set no digit, its digits from the text's font. Such a glyph may
+  // join the math beside it (math/zones.ts). Where a math font sets them,
+  // the text's are prose: a theorem's italic words, and a table's "53.4"
+  // before its gain set in math (arXiv 2411.19946).
+  const latin = glyphs.some((g) => g.family === "oml" && /^[A-Za-z]$/.test(mathGlyph("oml", g.code)?.unicode ?? ""));
+  const digits = glyphs.some((g) => g.family !== null && /^[0-9]$/.test(g.unicode));
+  for (const g of glyphs) {
+    if (g.family !== null) continue;
+    if ((!latin && /^[A-Za-z]$/.test(g.unicode) && isItalicFont(g.base)) || (!digits && /^[0-9]$/.test(g.unicode))) textMath.add(g);
+  }
   return glyphs;
 }
+
+/** A glyph of a math font read by its character that no table reads (a
+    big operator, a sized delimiter, a piece of one: texWorldChar): it is
+    math, and the formula it stands in fails the check. Read as text, it
+    cut its formula in two, and each half passed (Springer's matrices read
+    "−1 1 0" as −11 0). OpenSymbol's bullets are no math. */
+export function isUnreadMath(g: Glyph): boolean {
+  const font = unicodeFont(g.base);
+  return font?.kind === "tex" && g.unicode.trim() !== "" && !(font.bullets && /^[•–—…‰·]$/.test(g.unicode));
+}
+
+const textMath = new WeakSet<Glyph>();
+/** A text font's italic letter or digit on a page whose math fonts set
+    none (unicodeMath): a formula's own where it stands against math. */
+export const isTextMath = (g: Glyph) => textMath.has(g);
 
 // A big operator or a radical: its glyph hangs from its origin, so a line
 // places it by its center (lines.ts). The integrals after ∐ are esint's.
@@ -384,7 +521,9 @@ export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
   for (const g of glyphs) {
     if (g.family === null || g.family === "ot1") continue;
     const entry = mathGlyph(g.family, g.code);
-    if (!entry) texts.set(g, g.unicode.replace(CONTROL_CHARS_RE, ""));
+    // A font read by its character reads as its text layer does: the
+    // Math Guide's ∖ is no backslash, though TeX's code for both is one.
+    if (!entry || unicodeFont(g.base)?.kind === "tex") texts.set(g, g.unicode.replace(CONTROL_CHARS_RE, ""));
     else texts.set(g, entry.cls === "piece" ? (PIECE_TEXT[entry.piece ?? ""] ?? "") : entry.unicode);
   }
   const textOf = (g: Glyph) => texts.get(g) ?? g.unicode;

@@ -54,12 +54,34 @@ if (typeof mathWithSum.sumPrecise !== "function") {
 // block joined across a page break keeps where each later page begins, and
 // the parse keeps the first page's size and the PDF's page labels — an
 // import's page starts and page setup come from them.
+//
+// The pages the reader chose at the add (SPEC.md §15) are the parse's pages:
+// it reads them as if the PDF held only them, and each block keeps the PDF's
+// own number for its page.
+
+/** pages: the PDF's pages the blocks come from, 1-based (the reader's
+    choice at the add); absent or empty, every page. */
+export type PdfParseOptions = { pages?: number[] };
+
+// A choice of fewer pages than this reads the pages nearest it too, until
+// it reads this many: page furniture drops only on evidence from other
+// pages (furniture.ts). Their words are read for that and never kept.
+const FURNITURE_PAGES = 6;
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
-export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
+export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Promise<PdfParse> {
   // pdf.js transfers (detaches) the buffer it receives — parse a copy so callers keep theirs.
   const pdf = await getDocumentProxy(new Uint8Array(data), PDF_CMAPS);
+  // The chosen pages (chosen[i] is the PDF's number for the parse's page i),
+  // and the pages read.
+  const chosen = chosenPages(pdf.numPages, opts.pages);
+  const kept = new Set(chosen);
+  const read = pagesToRead(chosen, pdf.numPages);
+  // Every page read, for the furniture: its lines, height, and 0-based number.
+  const readLines: Line[][] = [];
+  const readHeights: number[] = [];
+  const readPages: number[] = [];
 
   const pages: Line[][] = [];
   const pageHeights: number[] = [];
@@ -70,13 +92,14 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   const flagsByFont = new Map<string, FontFlags>();
   const unnamedFonts = new Set<string>();
 
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
+  for (const pageNumber of read) {
+    const keep = kept.has(pageNumber);
+    const page = await pdf.getPage(pageNumber);
     const viewport = page.getViewport({ scale: 1 });
     const content = await page.getTextContent();
     // Font programs resolve during operator-list building; afterwards the
     // real font names (Carlito-Bold, DejaVuSansMono, …) are readable.
-    let drawing: PageDrawing = { glyphs: [], rules: [], fills: [], images: [], paths: [] };
+    let drawing: PageDrawing = { glyphs: [], rules: [], fills: [], images: [], paths: [], shades: [] };
     try {
       const ops = (await page.getOperatorList()) as { fnArray: number[]; argsArray: unknown[] };
       const fonts: FontLookup = (id) => {
@@ -92,7 +115,6 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     } catch {
       // Broken page resources: fall back to no style flags and no drawing.
     }
-    pageDrawings.push(drawing);
     let uriRegions: UriRegion[] = [];
     try {
       const annots = (await page.getAnnotations()) as Array<Record<string, unknown>>;
@@ -271,8 +293,6 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     // own coordinates, every crop sat 4.4% too high and 6.2% too far right,
     // and 19 lines at figures' feet were in neither the text nor a crop.
     if (viewX1 !== 0 || viewY1 !== 0) toPageBox(items, drawing, viewX1, viewY1);
-    pageHeights.push(viewport.height);
-    pageWidths.push(viewport.width);
     // The tables the page's rules draw leave the text flow before the column
     // split, and before the graphics: a table's shaded cells never read as a
     // drawing, its words never as a drawing's labels. Each table comes back
@@ -283,20 +303,20 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     const inTable = (b: Box) => tables.some((t) => b.x1 >= t.box.x1 - 2 && b.x2 <= t.box.x2 + 2 && b.y1 >= t.box.y1 - 2 && b.y2 <= t.box.y2 + 2);
     // A graphic's labels and caption leave the text before lines are built.
     const found = pageGraphics({ ...drawing, paths: drawing.paths.filter((b) => !inTable(b)) }, text, viewport.width, viewport.height);
-    graphics.push(found);
     const inGraphics = new Set(found.flatMap((graphic) => [...graphic.labels, ...graphic.caption]));
-    pages.push(placeTables(pageLines(takeTables(text.filter((i) => !inGraphics.has(i)), tables), viewport.width, p - 1, found)));
+    // A kept page's lines count their page among the kept pages; a page read
+    // for the furniture's evidence alone counts none.
+    const lines = placeTables(pageLines(takeTables(text.filter((i) => !inGraphics.has(i)), tables), viewport.width, keep ? pages.length : -1, found));
     // Each inline formula's LaTeX, from its glyphs and the page's rules.
-    resolveZones(pages[pages.length - 1], drawing);
+    resolveZones(lines, drawing);
     // From here on only a TeX page's display equations read the page's
     // glyphs (math/display.ts), and a ruled table's and a caption's items,
     // which keep theirs: their lines are built again when the page is
     // segmented. Any other page lets its glyphs go (a scanned book of 517
     // pages held its 1.67M glyphs, 300 MB, to the end of the parse).
     const tex = isTexPage(drawing.glyphs);
-    pageFlags.push({ tex, ocr });
     if (!tex) {
-      for (const line of pages[pages.length - 1]) {
+      for (const line of lines) {
         for (const item of line.items) {
           item.glyphs = undefined;
           if (item.zone) item.zone.glyphs = [];
@@ -306,13 +326,24 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     }
     // pdf.js keeps each page's operator list until the page is cleaned up.
     page.cleanup();
+    readLines.push(lines);
+    readHeights.push(viewport.height);
+    readPages.push(pageNumber - 1);
+    if (!keep) continue;
+    pages.push(lines);
+    pageHeights.push(viewport.height);
+    pageWidths.push(viewport.width);
+    pageDrawings.push(drawing);
+    graphics.push(found);
+    pageFlags.push({ tex, ocr });
   }
 
   // The document's words and compounds, for its line-end hyphens.
-  collectHyphenation(pages);
+  collectHyphenation(readLines);
 
-  // Running heads, feet, and page numbers drop before anything is segmented.
-  const cleaned = dropFurniture(pages, pageHeights);
+  // Running heads, feet, and page numbers drop before anything is segmented,
+  // on the evidence of every page read; then the kept pages go on alone.
+  const cleaned = dropFurniture(readLines, readHeights, readPages).filter((_, k) => kept.has(readPages[k] + 1));
 
   // Document metrics. A ruled table's rows count as lines of its page, as
   // they did before tables left the text flow: a statement made of tables
@@ -404,7 +435,7 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     const pageSegments = segmentPage(shown, ctx);
     if (ocr) for (const s of pageSegments) if (s.rawSize !== undefined) s.rawSize *= bodySize / pageBody;
     const withEquations = displayEquations(pageSegments, shown, ctx, pageWidths[p], pageHeights[p]);
-    const withFigures = attachFigureRegions(withEquations, lines, ctx, pageWidths[p], pageHeights[p], graphics[p], p);
+    const withFigures = attachFigureRegions(withEquations, lines, ctx, pageWidths[p], pageHeights[p], graphics[p], p, pages[p]);
     // Then a TeX page's displays its display lines missed, once the figures
     // took their own words.
     const missed = { graphics: graphics[p].map((g) => g.box) };
@@ -435,8 +466,8 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   );
 
   // A paragraph's halves join, on its page (a column break, a float
-  // between) and across pages.
-  segments = mergeAcrossPages(joinOnPage(segments));
+  // between) and across pages, but never across pages the choice left out.
+  segments = runsOfPages(joinOnPage(segments), chosen).flatMap(mergeAcrossPages);
   // A table's caption is the table's, once its rows joined across pages.
   segments = attachTableCaptions(segments);
 
@@ -491,7 +522,9 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   // (a title that took the line under it as its scripts read as that
   // line's size).
   const titleSegment = deckTitle ?? titleOf(segments, bodySize);
-  const title = titleSegment?.text ?? null;
+  // One line: the title is the document's name in every add path. A line
+  // break the writer set stays in the heading's own text.
+  const title = titleSegment?.text.replace(/\s*\n\s*/g, " ") ?? null;
   const titleRuns = titleSegment?.runs?.filter((r) => (r.look?.size ?? 0) >= (titleSegment.rawSize ?? 0) - 0.5);
   const titleFont = titleSegment ? spansFromRuns(titleSegment.text, titleRuns?.length ? titleRuns : titleSegment.runs).font : undefined;
 
@@ -514,15 +547,17 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
       skipBold: s.type === "HEADING",
       skipMono: s.type === "CODE",
     });
-    // Every block keeps the page its first words are on (1-based), and a
-    // block joined across page breaks where each later page begins. FIGURE
-    // blocks keep their region for the figure image route.
-    const block: ParsedBlock = { type: s.type, text: s.text, page: firstPageOf(s) + 1 };
+    // Every block keeps the page its first words are on (the PDF's own
+    // number, 1-based), and a block joined across page breaks where each
+    // later page begins. FIGURE blocks keep their region for the figure
+    // image route.
+    const block: ParsedBlock = { type: s.type, text: s.text, page: chosen[firstPageOf(s)] };
     if (s.html) block.html = s.html;
     if (s.breaks && s.breaks.length > 0) {
-      block.pageStarts = s.breaks.map((b) => ({ offset: b.offset, page: b.page + 1 }));
+      block.pageStarts = s.breaks.map((b) => ({ offset: b.offset, page: chosen[b.page] }));
     }
     if ((s.type === "FIGURE" || s.type === "EQUATION") && s.region) block.region = s.region;
+    if (s.type === "FIGURE" && s.mathCrop) block.mathCrop = true;
     const allLinks = [...(s.links ?? []), ...links];
     if (styles.length > 0) block.styles = styles;
     const math = s.type === "PARAGRAPH" || s.type === "LIST" || s.type === "HEADING" ? mathSpans(s.text, s.runs) : [];
@@ -532,6 +567,9 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
     if (s.footnoteRefs) block.footnoteRefs = s.footnoteRefs;
     if (font && (s.type === "PARAGRAPH" || s.type === "HEADING" || s.type === "LIST")) block.font = font;
     if (s.spaceAfter !== undefined) block.spaceAfter = s.spaceAfter;
+    if (s.indent) block.indent = s.indent;
+    if (s.listIndents) block.listIndents = s.listIndents;
+    if (s.itemSpace !== undefined) block.itemSpace = s.itemSpace;
     return block;
   });
 
@@ -544,10 +582,12 @@ export async function parsePdf(data: Uint8Array): Promise<PdfParse> {
   if (bodyFont) parsed.bodyFont = bodyFont;
   if (titleFont) parsed.titleFont = titleFont;
   if (titleSegment?.align) parsed.titleAlign = titleSegment.align;
+  const titleLines = titleSegment?.text.split(/\s*\n\s*/).map((line) => line.trim()).filter(Boolean) ?? [];
+  if (titleLines.length > 1) parsed.titleLines = titleLines;
   return parsed;
 }
 
-type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign">;
+type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign" | "titleLines">;
 
 // A page's items and drawing moved by the page box's corner, so (0, 0) is
 // the box's bottom left. The corner is rounded to whole steps of 2^-20 pt:
@@ -577,14 +617,75 @@ function toPageBox(items: Item[], drawing: PageDrawing, cornerX: number, cornerY
   }
 }
 
+// The pages the blocks come from: the chosen pages the PDF holds, in order,
+// else every page.
+function chosenPages(pageCount: number, pages: number[] | undefined): number[] {
+  const within = [...new Set(pages ?? [])].filter((p) => Number.isInteger(p) && p >= 1 && p <= pageCount).sort((a, b) => a - b);
+  return within.length > 0 ? within : Array.from({ length: pageCount }, (_, i) => i + 1);
+}
+
+// The pages a parse reads: the chosen pages, and while they are fewer than
+// FURNITURE_PAGES, the nearest pages around them (the earlier of two as
+// near), in the PDF's order.
+function pagesToRead(chosen: number[], pageCount: number): number[] {
+  if (chosen.length >= Math.min(FURNITURE_PAGES, pageCount)) return chosen;
+  const kept = new Set(chosen);
+  const distance = (p: number) => Math.min(...chosen.map((c) => Math.abs(c - p)));
+  const others = Array.from({ length: pageCount }, (_, i) => i + 1)
+    .filter((p) => !kept.has(p))
+    .sort((a, b) => distance(a) - distance(b) || a - b);
+  return [...chosen, ...others.slice(0, FURNITURE_PAGES - chosen.length)].sort((a, b) => a - b);
+}
+
+// The segments in runs of pages that follow one another in the PDF: a
+// segment's page is its index among the chosen pages, and a run ends where
+// the choice leaves pages out.
+function runsOfPages(segments: Segment[], chosen: number[]): Segment[][] {
+  const runs: Segment[][] = [];
+  let prev: Segment | undefined;
+  for (const s of segments) {
+    const apart = prev !== undefined && chosen[s.page] - chosen[prev.page] !== s.page - prev.page;
+    if (!prev || apart) runs.push([]);
+    runs[runs.length - 1].push(s);
+    prev = s;
+  }
+  return runs;
+}
+
 // The title: the first of the biggest headings on the first page. A title
 // is set larger than the body text; a body-size bold heading on the first
 // page ("Problem 1: …") is the first section, not the title. A paper that
 // sets its title in two languages, one under the other at one size, has the
 // first for its title (a Japanese paper's English title a tenth of a point
-// larger took the title).
+// larger took the title). With no heading on the first page set larger
+// than the body, a centered heading that opens the first page is the title:
+// amsart sets its title in bold capitals at the body's size (arXiv
+// 2506.08494, 2410.04586), and a Word contract in bold centered lines.
 function titleOf(segments: Segment[], bodySize: number, pages = 1): Segment | undefined {
-  const heads = segments.filter((s) => s.page < pages && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4);
+  // Most of a title's letters are set large: the W-9's form number, "W-9"
+  // at 24 pt after "Form" at 7 pt, stood over the form's 14 pt "Request for
+  // Taxpayer Identification Number and Certification". A heading whose runs
+  // carry no size counts as large.
+  const large = (s: Segment) => {
+    let big = 0;
+    let all = 0;
+    for (const r of s.runs ?? []) {
+      if (!r.look) return true;
+      const letters = s.text.slice(r.start, r.end).match(/\p{L}/gu)?.length ?? 0;
+      all += letters;
+      if (r.look.size >= bodySize * 1.14) big += letters;
+    }
+    return all === 0 || big * 2 > all;
+  };
+  const heads = segments.filter((s) => s.page < pages && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4 && large(s));
+  if (heads.length === 0 && pages === 1) {
+    const at = segments.findIndex((s) => s.page === 0 && s.text.trim().length > 0);
+    const first = segments[at];
+    // Prose under it before any table: a statement's title stands over its
+    // table (Apple's statements, a heading of the page).
+    const under = segments.slice(at + 1).find((s) => s.page === 0 && (s.type === "TABLE" || (s.type === "PARAGRAPH" && !/\bcenter\b/.test(s.html ?? "") && s.text.length >= 100)));
+    return first?.type === "HEADING" && first.align === "center" && first.text.length > 4 && under?.type === "PARAGRAPH" ? first : undefined;
+  }
   const top = Math.max(0, ...heads.map((s) => s.rawSize!));
   return heads.find((s) => s.rawSize! >= top * 0.97);
 }
@@ -612,10 +713,12 @@ function points(value: number): number {
 // PDF names a page with no number), kept only when they name the pages
 // otherwise than 1..n — as pdf.js's own viewer does. A page left unnamed
 // reads as its number. A label is a margin note ("xii", "A-12"): a longer
-// one is cut, so a crafted prefix cannot swell the page data.
+// one is cut, so a crafted prefix cannot swell the page data, and cut by
+// characters: the database refuses a string that holds half of a surrogate
+// pair, and the add with it.
 const PAGE_LABEL_MAX = 24;
 function pageLabelsOf(labels: string[] | null, pageCount: number): string[] | undefined {
   if (!labels || labels.length !== pageCount) return undefined;
-  const named = labels.map((label, i) => label.trim().slice(0, PAGE_LABEL_MAX) || String(i + 1));
+  const named = labels.map((label, i) => Array.from(label.trim().toWellFormed()).slice(0, PAGE_LABEL_MAX).join("") || String(i + 1));
   return named.every((label, i) => label === String(i + 1)) ? undefined : named;
 }

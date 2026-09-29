@@ -47,6 +47,7 @@ import {
 } from "@/components/reader/figure-capture";
 import { setRevealFlag } from "@/components/reader/reveal";
 import {
+  blockDocumentLine,
   keptBlockDocument,
   UploadAssistant,
   uploadItemTitle,
@@ -454,7 +455,7 @@ export function DocumentBar({
         }),
       );
       router.refresh();
-      if (result.blockDocument) showNotice(t("panes.uploadBlockDocument"), 8000);
+      if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
       if (figures) setFigureCapture(null);
     } catch (err) {
       if (err instanceof EditedImportAnswer) {
@@ -574,12 +575,12 @@ export function DocumentBar({
   // send gets an emit callback so a chunked upload can report progress before the
   // server response starts streaming.
   // blockDocument: the size guard kept the document out of the page editor
-  // (SPEC.md §29); the bar says so once the document opens.
+  // (SPEC.md §29): its line, which the bar shows once the document opens.
   async function runIngest(
     fileLabel: string,
     kind: "pdf" | "url" | "video" | "youtube" | "media" | "drive",
     send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
-  ): Promise<{ id: string; title: string; deduped: boolean; blockDocument: boolean }> {
+  ): Promise<{ id: string; title: string; deduped: boolean; blockDocument: ReturnType<typeof blockDocumentLine> | null }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });
     const emit = (stage: string, detail?: string) =>
       setPhase((p) => (p ? { ...p, steps: advanceIngestSteps(p.steps, stage, detail) } : p));
@@ -590,11 +591,11 @@ export function DocumentBar({
       throw new Error(detail?.error ?? statusMessage(t, res.status));
     }
     let result: IngestEvent | null = null;
-    let blockDocument = false;
+    let blockDocument: ReturnType<typeof blockDocumentLine> | null = null;
     for await (const event of readNdjson<IngestEvent>(res)) {
       if ("stage" in event) {
         emit(event.stage, event.detail);
-        if (event.stage === "save" && event.detail) blockDocument = keptBlockDocument(event.detail);
+        if (event.stage === "save" && event.detail) blockDocument = keptBlockDocument(event.detail) ? blockDocumentLine(event.detail) : null;
       } else {
         result = event;
       }
@@ -721,7 +722,7 @@ export function DocumentBar({
       );
       setDialog(false);
       openAdded(result.id);
-      if (result.blockDocument) showNotice(t("panes.uploadBlockDocument"), 8000);
+      if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
@@ -866,7 +867,7 @@ export function DocumentBar({
       );
       setDialog(false);
       openAdded(result.id);
-      if (result.blockDocument) showNotice(t("panes.uploadBlockDocument"), 8000);
+      if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
@@ -906,7 +907,7 @@ export function DocumentBar({
 
   // Delete document: the document leaves the project and the library
   // (DELETE /api/documents/[documentId]; its annotations go with it, and
-  // notes that quote it keep their text).
+  // notes that quote it keep their quotes).
   async function deleteDocument(documentId: string) {
     closeList();
     if (!confirm(t("panes.confirmDeleteDocument"))) return;

@@ -6,6 +6,7 @@
 // column of text is a column of its own, and its place in the order is where
 // its figure goes.
 
+import { median } from "@/lib/parse/pdf/geometry";
 import { buildLines } from "@/lib/parse/pdf/lines";
 import type { Box, Item, Line } from "@/lib/parse/pdf/types";
 
@@ -47,12 +48,30 @@ export function pageLines(items: Item[], pageWidth: number, page: number, graphi
   return lines;
 }
 
-function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: number, depth: number, lines?: Line[]): Piece[] {
-  const split = depth < 3 ? findSplit(items, graphics, page, pageWidth) : null;
-  if (!split) return leaf(items, graphics, lines);
+// extent: the column the region's lines were read in, when it is not the
+// region's own (blocks side by side in a column).
+function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: number, depth: number, lines?: Line[], extent?: [number, number]): Piece[] {
+  const split = depth < 3 ? findSplit(items, graphics, page, pageWidth, depth) : null;
+  if (!split) return leaf(items, graphics, lines, extent);
   const out: Piece[] = [];
   let aboveWhole = false;
+  const own = extent ?? extentOf(items);
   for (const band of split.bands) {
+    const note = band.kind === "columns" ? sideNote(band, page) : null;
+    if (note) {
+      // A note reads after the paragraph beside its top.
+      for (const list of [note.before, note.note, note.after]) if (list.length > 0) out.push(...readRegion(list, [], page, pageWidth, depth + 1));
+      aboveWhole = false;
+      continue;
+    }
+    if (band.kind && band.kind !== "columns") {
+      // A part reads as a region of its own, a block in the region's column.
+      for (const side of [band.left, band.right]) {
+        if (side.items.length + side.graphics.length > 0) out.push(...readRegion(side.items, side.graphics, page, pageWidth, depth + 1, undefined, band.kind === "blocks" ? own : extent));
+      }
+      aboveWhole = false;
+      continue;
+    }
     // A band where neither side is prose (a wide table's rows, a form under
     // two columns of text) reads in one pass, so its rows stay whole. A
     // band of a line or two a side (between an overfull line and a float)
@@ -75,18 +94,20 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
   return out;
 }
 
+const extentOf = (items: Item[]): [number, number] => [Math.min(...items.map((i) => i.x)), Math.max(...items.map((i) => i.x + i.w))];
+
 // One column: its lines top to bottom, and each graphic after the lines
 // above it and the lines beside it on its left (a slide's text beside its
 // photo reads first); graphics on one row read left to right. lines: the
 // items' lines, when the band test built them.
-function leaf(items: Item[], graphics: Placed[], lines?: Line[]): Piece[] {
+function leaf(items: Item[], graphics: Placed[], lines?: Line[], column?: [number, number]): Piece[] {
   const sorted = [...graphics].sort((a, b) => {
     const overlap = Math.min(a.box.y2, b.box.y2) - Math.max(a.box.y1, b.box.y1);
     const shorter = Math.min(a.box.y2 - a.box.y1, b.box.y2 - b.box.y1);
     return overlap > shorter * 0.5 ? a.box.x1 - b.box.x1 : b.box.y2 - a.box.y2;
   });
   const out: Piece[] = [];
-  const extent: [number, number] = [Math.min(...items.map((i) => i.x)), Math.max(...items.map((i) => i.x + i.w))];
+  const extent = column ?? extentOf(items);
   let rest = items;
   for (const graphic of sorted) {
     const { x1, x2, y1, y2 } = graphic.box;
@@ -101,15 +122,20 @@ function leaf(items: Item[], graphics: Placed[], lines?: Line[]): Piece[] {
 }
 
 type Side = { items: Item[]; graphics: Placed[] };
-type Band = { left: Side; right: Side; separator: Piece | null };
+// A band: its two sides beside the gutter, then the row across the gutter
+// under it. A part (what stands above or under one band) reads as a region
+// of its own; blocks are a band's sides set side by side in the region's
+// column (stacked).
+type Band = { left: Side; right: Side; separator: Piece | null; kind?: "part" | "blocks" | "columns" };
 
 // The gutter of a region, and its bands, when the region reads as columns:
 // few characters cross the gutter, and in the bands with something on both
 // sides, each side is prose set in a column (or graphics only, beside a
 // column of text). A wide table also leaves a gutter, but its sides are
 // short cells: those regions stay in one pass so rows keep their reading
-// order.
-function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: number): { bands: Band[] } | null {
+// order. depth: how many regions this one lies in (a side tested as columns
+// of its own counts one more).
+function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: number, depth: number): { bands: Band[] } | null {
   if (items.length === 0) return null;
   const x0 = Math.min(...items.map((i) => i.x), ...graphics.map((p) => p.box.x1));
   const x1 = Math.max(...items.map((i) => i.x + i.w), ...graphics.map((p) => p.box.x2));
@@ -129,8 +155,11 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
     }
   }
   if (!best || best.cross / total >= 0.5) return null;
-  const g = best.g;
+  return splitAt(items, graphics, page, pageWidth, depth, best.g, total);
+}
 
+// The region cut at the gutter g, when it reads as columns there.
+function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: number, depth: number, g: number, total: number): { bands: Band[] } | null {
   // Rows that span the gutter: the items that cross it, the items on either
   // side of it with no more than a word's gap between them, up to 1.2 em (a
   // full-width caption whose word gap fell on the gutter was read as two
@@ -140,8 +169,8 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   // items has one word over the gutter and the rest on either side).
   const byY = [...items].sort((a, b) => a.y - b.y);
   const maxSize = Math.max(...items.map((i) => i.size));
-  const near = (s: Item) => {
-    // The items near s's baseline: a binary search for the window's start.
+  // The items near s's baseline: a binary search for the window's start.
+  const beside = (s: Item) => {
     let lo = 0;
     let hi = byY.length;
     while (lo < hi) {
@@ -152,12 +181,46 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
     const out: Item[] = [];
     for (let k = lo; k < byY.length && byY[k].y <= s.y + maxSize * 0.5; k++) {
       const item = byY[k];
-      const size = Math.max(s.size, item.size);
-      const gap = Math.max(item.x - (s.x + s.w), s.x - (item.x + item.w));
-      if (item !== s && Math.abs(item.y - s.y) < size * 0.5 && gap < size * 1.2) out.push(item);
+      if (item !== s && Math.abs(item.y - s.y) < Math.max(s.size, item.size) * 0.5) out.push(item);
     }
     return out;
   };
+  // The columns' edges: on each side of the gutter, the x where four lines
+  // or more start. An item at the right column's edge, more than half an em
+  // after the item before it across the gutter, opens the right column's
+  // line when that item's line starts at the left column's edge (not a
+  // centered author line whose third name stands at the edge: arXiv
+  // 2411.19946). The Federal Register sets its three columns 1.0 em apart,
+  // and each line of a column that ran near the gutter took the next
+  // column's line into a row across the page.
+  const edgeOf = (right: boolean) => {
+    const starts = new Map<number, number>();
+    for (const item of items) {
+      // The first item of its line on its side of the gutter.
+      const side = right ? item.x >= g : item.x + item.w <= g;
+      if (!side || beside(item).some((j) => j.x < item.x && (right ? j.x + j.w > g : j.x + j.w <= g))) continue;
+      const x = Math.round(item.x);
+      starts.set(x, (starts.get(x) ?? 0) + 1);
+    }
+    const counted = (x: number) => (starts.get(x - 1) ?? 0) + (starts.get(x) ?? 0) + (starts.get(x + 1) ?? 0);
+    return [...starts.keys()].map((x) => ({ x, n: counted(x) })).filter((e) => e.n >= 4).sort((a, b) => b.n - a.n)[0]?.x;
+  };
+  const [leftEdge, rightEdge] = [edgeOf(false), edgeOf(true)];
+  const lineStart = (a: Item) => Math.min(a.x, ...beside(a).filter((j) => j.x + j.w <= g).map((j) => j.x));
+  const opens = (a: Item, b: Item, size: number) =>
+    rightEdge !== undefined &&
+    leftEdge !== undefined &&
+    a.x + a.w <= g &&
+    b.x >= g &&
+    Math.abs(b.x - rightEdge) <= 1.5 &&
+    b.x - (a.x + a.w) > size * 0.5 &&
+    Math.abs(lineStart(a) - leftEdge) <= size * 2;
+  const near = (s: Item) =>
+    beside(s).filter((item) => {
+      const size = Math.max(s.size, item.size);
+      const gap = Math.max(item.x - (s.x + s.w), s.x - (item.x + item.w));
+      return gap < size * 1.2 && !(item.x > s.x ? opens(s, item, size) : opens(item, s, size));
+    });
   const spanning = new Set(items.filter((i) => i.x < g && i.x + i.w > g));
   for (const item of items) {
     if (item.x + item.w > g) continue;
@@ -223,9 +286,88 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   if (leftChars === 0 || rightChars === 0) return null;
   // Two columns of text: most of the region's characters sit beside each
   // other, each side holds a fair share, and each side is a prose column.
-  if (sideChars < total * 0.4) return null;
-  if (leftChars < sideChars * 0.15 || rightChars < sideChars * 0.15) return null;
-  return isColumn(left, page) && isColumn(right, page) ? { bands } : null;
+  const fair = sideChars >= total * 0.4 && leftChars >= sideChars * 0.15 && rightChars >= sideChars * 0.15;
+  if (fair && isColumns(left, page, pageWidth, depth) && isColumns(right, page, pageWidth, depth)) return { bands };
+  // Else one band may hold two columns of its own between the rows across
+  // the gutter: the region reads as what stands above the band, the band's
+  // columns, and what stands under it. The IRS W-9 sets two columns of
+  // instructions under a form of one; the Earth Observer sets a pull quote
+  // beside its article, 7% of their characters. Each side's lines follow
+  // one another at the text's leading: a table's first column of labels,
+  // a row's height apart, is no column (arXiv 2609.29669's Table 2).
+  const letters = (side: Side) => chars(side.items);
+  const band = twoSided
+    .filter((b) => letters(b.left) >= 90 && letters(b.right) >= 90)
+    .sort((a, b) => letters(b.left) + letters(b.right) - letters(a.left) - letters(a.right))
+    .find((b) => [b.left.items, b.right.items].every((side) => isColumns(side, page, pageWidth, depth) && isDense(buildLines(side, page))));
+  if (band) return { bands: stacked(band, items, graphics, "columns") };
+  const blocks = twoSided.find((b) => isBlocks(b, page));
+  return blocks ? { bands: stacked(blocks, items, graphics, "blocks") } : null;
+}
+
+// A region cut above and under one band: what stands above it, the band,
+// and what stands under it, each read as a region of its own; the band's
+// sides are columns, or blocks in the region's column.
+function stacked(band: Band, items: Item[], graphics: Placed[], kind: "blocks" | "columns"): Band[] {
+  const own = new Set([...band.left.items, ...band.right.items]);
+  const ownGraphics = new Set([...band.left.graphics, ...band.right.graphics]);
+  const top = Math.max(...[...own].map((i) => i.y));
+  const part = (list: Item[], placed: Placed[]): Band => ({ left: { items: list, graphics: placed }, right: { items: [], graphics: [] }, separator: null, kind: "part" });
+  const rest = items.filter((i) => !own.has(i));
+  const restGraphics = graphics.filter((p) => !ownGraphics.has(p));
+  const high = (p: Placed) => (p.box.y1 + p.box.y2) / 2 > top;
+  return [
+    part(rest.filter((i) => i.y > top), restGraphics.filter(high)),
+    { ...band, separator: null, kind },
+    part(rest.filter((i) => i.y <= top), restGraphics.filter((p) => !high(p))),
+  ].filter((b) => b.left.items.length + b.left.graphics.length + b.right.items.length + b.right.graphics.length > 0);
+}
+
+// A note beside a column: the band's narrow side, a seventh of its
+// characters or less, set in another size or in italic, with no graphic (a
+// pull quote, a side note). It reads after the wide side's paragraph that
+// holds its top, as the reader meets it (the Earth Observer's pull quote
+// stands beside the article's first paragraph).
+function sideNote(band: Band, page: number): { before: Item[]; note: Item[]; after: Item[] } | null {
+  const [note, wide] = chars(band.left.items) < chars(band.right.items) ? [band.left, band.right] : [band.right, band.left];
+  if (note.graphics.length > 0 || wide.graphics.length > 0 || chars(note.items) * 7 > chars(note.items) + chars(wide.items)) return null;
+  const size = (list: Item[]) => median(list.map((i) => i.size));
+  const italic = (list: Item[]) => list.filter((i) => i.italic).length * 2 > list.length;
+  if (Math.abs(size(note.items) - size(wide.items)) < size(wide.items) * 0.1 && italic(note.items) === italic(wide.items)) return null;
+  // The paragraph's end: the first line at or under the note's top whose
+  // gap to the next line is wider than the lines' pitch.
+  const lines = buildLines(wide.items, page);
+  const top = Math.max(...note.items.map((i) => i.y));
+  const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
+  const pitch = median(gaps);
+  const end = lines.findIndex((l, k) => l.y <= top && (k === lines.length - 1 || gaps[k] > pitch * 1.3));
+  if (end < 0) return null;
+  const cut = lines[end].y - lines[end].size * 0.5;
+  return { before: wide.items.filter((i) => i.y > cut), note: note.items, after: wide.items.filter((i) => i.y <= cut) };
+}
+
+// Blocks side by side, not a table's columns: two sides a wide gutter
+// apart (three ems or more) whose lines share a baseline once at most,
+// while a line of one side has no partner. A table's rows share their
+// baselines. The SF 298's foot, "NSN 7540-01-280-5500" beside "Standard
+// Form 298 (Rev. 2-89)" over "Prescribed by ANSI Std. 239-18", read as one
+// paragraph; the IRS W-9's three header boxes as one line. A stray mark is
+// no block (a slide's page number beside its last bullets).
+function isBlocks(band: Band, page: number): boolean {
+  const { left, right } = band;
+  if (chars(left.items) < 10 || chars(right.items) < 10 || [...left.items, ...right.items].some((i) => i.math)) return false;
+  const size = median([...left.items, ...right.items].map((i) => i.size));
+  if (Math.min(...right.items.map((i) => i.x)) - Math.max(...left.items.map((i) => i.x + i.w)) < size * 3) return false;
+  const [a, b] = [buildLines(left.items, page), buildLines(right.items, page)];
+  const paired = a.filter((l) => b.some((m) => Math.abs(m.y - l.y) <= 0.5)).length;
+  return paired <= 1 && Math.max(a.length, b.length) > paired;
+}
+
+// A side of a split: a prose column, or columns of its own (a page of three
+// columns cut at its first gutter holds two on its right: the Federal
+// Register).
+function isColumns(items: Item[], page: number, pageWidth: number, depth: number): boolean {
+  return isColumn(items, page) || (depth < 2 && findSplit(items, [], page, pageWidth, depth + 1) !== null);
 }
 
 // A prose column: its lines start at the column's edge or the paragraph
@@ -249,10 +391,20 @@ function isColumn(items: Item[], page: number): boolean {
   return (sorted[0] ?? 0) + (sorted[1] ?? 0) >= all * 0.62 && isProse(lines, 6);
 }
 
+// Lines set at the text's leading: most follow the line above a line and a
+// half of their size apart or less.
+function isDense(lines: Line[]): boolean {
+  const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
+  return gaps.length > 0 && median(gaps) <= median(lines.map((l) => l.size)) * 1.6;
+}
+
+// Prose: letters, most of them in lines of 15 letters or more. A column of
+// amounts under a line of words is none (the 10-K's statement of
+// comprehensive income, p. 55, read its labels and its values apart).
 function isProse(lines: Line[], minLines: number): boolean {
   if (lines.length < minLines) return false;
   const letters = (l: Line) => l.text.replace(/[^\p{L}]/gu, "").length;
   const all = lines.reduce((n, l) => n + letters(l), 0);
   const prose = lines.filter((l) => l.cells.length === 1 && letters(l) >= 15).reduce((n, l) => n + letters(l), 0);
-  return all > 0 && prose >= all * 0.6;
+  return all > 0 && prose >= all * 0.6 && all * 2 >= lines.reduce((n, l) => n + l.text.replace(/\s/g, "").length, 0);
 }

@@ -154,7 +154,8 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 0
     },
     {
       "kind": "heading",
@@ -215,7 +216,8 @@
           ],
           "checked": false
         }
-      ]
+      ],
+      "itemSpace": 0
     },
     {
       "kind": "heading",
@@ -506,7 +508,8 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 0
     }
   ],
   "furniture": [],

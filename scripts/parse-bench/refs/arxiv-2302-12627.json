@@ -24,7 +24,8 @@
     {
      "text": "Rebecca M. Lewis∗ and Heather S. Battey"
     }
-   ]
+   ],
+   "spaceAfter": 11
   },
   {
    "kind": "paragraph",
@@ -91,7 +92,8 @@
     {
      "text": " independent individuals, usual practice is to identify a single low-dimensional model. Motivated by scientific studies in which subject-matter understanding is sought rather than immediate predictive success, [13] argued that when several reasonable explanations are statistically indistinguishable, one should aim to specify a confidence set of models. The arguments for this are in our view compelling, yet there may be some flexibility in how the broad goal is operationalised. The following approach was suggested in [13]."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -164,7 +166,12 @@
     {
      "text": " is an enumeration of those small sets of variables that fit the data equivalently well in a suitable statistical sense."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -179,7 +186,12 @@
     {
      "text": " throughout the present paper and proceeds as follows."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 9
   },
   {
    "kind": "list",
@@ -301,7 +313,10 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify",
+   "itemSpace": 8,
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -309,7 +324,8 @@
     {
      "text": "A form of this procedure is presented in pseudo-code in Section S1 of the supplementary material [36]."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -357,7 +373,11 @@
     {
      "text": " point to fragility of the method on the data at hand and thereby guide the choice of tuning parameters."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "paragraph",
@@ -372,7 +392,12 @@
     {
      "text": "[31]. Some published applications of Cox reduction include [3], [4], [33], [39]."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -380,7 +405,12 @@
     {
      "text": "Among the most relevant procedures proposed elsewhere in the high-dimensional literature is the multi-environment knockoff filter discussed by [37], although this generally comes with a different type of theoretical guarantee. The confidence set of [13] identifies a number of models that are by definition statistically indistinguishable, whereas the knockoff procedure returns a single model with a control on the false discovery rate [1, 8]."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -388,7 +418,12 @@
     {
      "text": "In a low-dimensional context, confidence sets of models have been emphasised repeatedly by Cox (see e.g., [11], [15], [16, Appendix A.2.5]). They have been considered from a different perspective in [29], which begins with a collection of candidate models and aims to identify those with the smallest expected loss at a given significance level. In [29], the relative explanatory power of pairs of models in the candidate set are compared, whereas [13] uses the comprehensive model as a reference set against which to gauge the adequacy of each submodel. If no submodel achieves comparable fit, the model confidence set of [13] is empty, whereas the set of [29] contains several models with equally poor fit. Bayesian approaches to model selection and the resulting credible sets of models are in the same vein, with obvious operational differences. For example, the posterior distributions in [38] and [28] assign non-zero weight to multiple models."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -396,7 +431,12 @@
     {
      "text": "The purpose of the present paper is to provide theoretical insight into the construction of the model confidence set proposed by [13], revealing situations that lead the procedure to partially fail, either by discarding a genuinely relevant variable in the reduction phase, or by discarding the true model at the model assessment phase. Several modifications to the original proposal are possible, of which some were mentioned in [2] but others are new to the present paper, having emerged from theoretical analyses contained herein."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -428,7 +468,12 @@
     {
      "text": ". Such alternatives are discussed in Sections 5. An analysis of Cox reduction is presented in Section 6."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -492,7 +537,11 @@
     {
      "text": ". Such a modelling assumption, while convenient for sharpening terminology and notation, plays a negligible role in results of Section 6. A referee indicated p. 106 of Scheffé [41], which emphasises the role of randomisation to ensure statistical inferences from a notional normal-theory linear model are fair approximations under more realistic generative models. See also the comments on binary outcomes in Section 9.4."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "heading",
@@ -1460,7 +1509,8 @@
     {
      "text": " is needed, otherwise the true model is necessarily excluded. Algorithm 1 in Section S1 of the supplementary material of [36] provides pseudo-code for the model assessment phase."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -1524,7 +1574,11 @@
     {
      "text": ". We begin by describing the local behaviour of the test using Le Cam’s formulation of asymptotic normality. We then extend the results by examining more general departures from the null hypothesis."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "paragraph",
@@ -2185,7 +2239,8 @@
      "text": "Assume the following:",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 9
   },
   {
    "kind": "list",
@@ -2256,7 +2311,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 9
   },
   {
    "kind": "equation",

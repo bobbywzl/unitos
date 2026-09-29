@@ -88,7 +88,8 @@
     {
      "text": " Department of Physics, The Chinese University of Hong Kong, Shatin, New Territories, Hong Kong, China"
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -100,7 +101,12 @@
     {
      "text": " Department of Physics, The Hong Kong University of Science and Technology, Clear Water Bay, Kowloon, Hong Kong, China"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 24
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -112,7 +118,12 @@
     {
      "text": " Center for Field Theory and Particle Physics, Department of Physics, Fudan University, Shanghai 200433, China"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 45
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -124,7 +135,8 @@
     {
      "text": " State Key Laboratory of Surface Physics, Fudan University, Shanghai 200433, China"
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -136,7 +148,8 @@
     {
      "text": " Department of Physics and HK Institute of Quantum Science & Technology,"
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -188,7 +201,12 @@
     {
      "text": " — Symmetry and its breaking are at the very heart of modern physics—from phenomena such as Bose-Einstein condensation, magnetization, and superconductivity in condensed matter to the Higgs mechanism in high-energy physics [1]. Yet, the discovery of the fractional quantum Hall effect ushered in an era of topological phases that transcend the traditional Landau paradigm [2–4]. The intricate interplay between symmetry and topology has, in turn, given rise to a myriad of new concepts, notably symmetry-protected topological (SPT) order and symmetry-enriched topological (SET) order, which have attracted extensive recent attention. ."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 5
   },
   {
    "kind": "paragraph",
@@ -212,7 +230,11 @@
     {
      "text": "[5]. The ESB can be determined by the inherent topological nature of the TO, without necessitating the explicit ground state wavefunctions. So it is a kind of intrinsic symmetry breaking rooted in the universal many-body entanglement structure of the TO. While the renowned LSM theorem can limit possible ground states [6–12] by only forbidding the gapped symmetric featureless state, the ESB, however, imposes stricter constraints on ground states than LSM-type theorems by ruling out certain TOs."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "paragraph",
@@ -733,7 +755,12 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -829,7 +856,12 @@
     {
      "text": " to denote either the permutations of the loop itself or its gauge flux)."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -845,7 +877,12 @@
     {
      "text": " of gauge fluxes."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -869,7 +906,11 @@
     {
      "text": ", where"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "equation",
@@ -3954,7 +3995,11 @@
     {
      "text": " is still compatible with such a 3D fTO. We also discussed a framework for exploring ESB for generic 3D fTOs. We further conjecture that parity violation in the Standard Model might arise from the vacuum being certain Ising 3D fTO, and it is a kind of ESB phenomenon."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "paragraph",
@@ -3966,7 +4011,11 @@
     {
      "text": " — S.Q Ning thanks X.G Wen, H.T Lam and A. Raz for enlightening discussions at the PITP summer school. This work is supported by funding from Hong Kong’s Research Grants Council (GRF No. 14308223, RFS2324-4S02, AoE/P-404/18, CRF C7012-21GF, CRS HKU701/24). S.Q.N. is supported by a CRF from the Research Grants Council of the Hong Kong (No. C7037-22GF). Y.Q. is supported by National Key R&D Program of China (Grant No. 2022YFA1403402), by National Natural Science Foundation of China (Grant No. 12174068) and by the Science and Technology Commission of Shanghai Municipality (Grant No. 23JC1400600). C.W. is supported by Research Grants Council of Hong Kong (GRF 17300220 and GRF 17311322) and National Natural Science Foundation of China (Grant No. 12222416)."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "list",
@@ -4915,7 +4964,9 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify",
+   "itemSpace": 0
   }
  ],
  "furniture": [

@@ -44,7 +44,7 @@ export type Marker = {
 const BULLET_GLYPH_RE = /^([•▪◦‣●○■□◆❖➢➤►✓✔])\s*(?=\S)/;
 const BULLET_WORD_RE = /^([-–—*·∙])\s+/;
 // Word's second-level bullet: a letter "o" set in Courier New before words
-// that are not monospace (a report's nested items read as lines of text).
+// that are not monospace (nested Word list items read as lines of text).
 const COURIER_O_RE = /^o\s+(?=\S)/;
 const BOX_RE = /^([☐☑☒])\s+/;
 const CITE_RE = /^\[(\d{1,3}|[A-Z][A-Za-z+'’-]{0,15}\d{2,4}[a-z]?)\]\s+/;
@@ -140,9 +140,12 @@ function setApart(line: { text: string; runs: Run[] }, from: number, length: num
 }
 
 /** The next marker continues the list of `prev`: the same family and shape
-    and the next value. Bullets, boxes, and author-year labels always do. */
+    and the next value. Bullets, boxes, and author-year labels always do. A
+    starred number goes on its sequence (a hard exercise, "*15" after
+    "14": Grinstead's exercises ran together in one paragraph). */
 export function follows(prev: Marker, next: Marker): boolean {
-  if (prev.family !== next.family || prev.shape !== next.shape) return false;
+  const shape = (m: Marker) => m.shape.replace(/^\*/, "");
+  if (prev.family !== next.family || shape(prev) !== shape(next)) return false;
   if (next.family === "bullet" || next.family === "box") return true;
   if (next.family === "cite") return prev.value === 0 ? next.value === 0 : next.value === prev.value + 1;
   return next.value === prev.value + 1;
@@ -157,4 +160,12 @@ export function isGlyphMarker(m: Marker): boolean {
 /** The marker opens its family's sequence: "1.", "(a)", "i.", "[1]". */
 export function opensSequence(m: Marker): boolean {
   return m.family === "bullet" || m.family === "box" || (m.family === "cite" && m.value <= 1) || m.value === 1;
+}
+
+/** A number or a letter and ")" that close a parenthesis the line above
+    left open are the text's, no marker: "X ~ N(5," over "6) represents
+    weight gains…" (OpenStax p. 4, read as an item "6)"). */
+export function closesParen(prev: { text: string }, next: { text: string }): boolean {
+  const open = (prev.text.match(/\(/g) ?? []).length - (prev.text.match(/\)/g) ?? []).length;
+  return open > 0 && /^\s*[\p{L}\p{N}]{1,3}\)/u.test(next.text);
 }

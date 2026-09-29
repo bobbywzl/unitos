@@ -45,7 +45,7 @@ async function loadExport(notebookId: string) {
     notes: s.notes.map((n) => ({
       content: n.content,
       citations: n.sources.map((src) => ({
-        documentTitle: src.document.title,
+        documentTitle: src.document?.title ?? "",
         blockId: src.blockId,
       })),
     })),

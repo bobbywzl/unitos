@@ -11,6 +11,7 @@
  * To add a document: write specs/<name>.ts exporting a Spec (the blocks with the builders of spec.ts, and a
  * layout for each rendering), list it in SPECS, run this, and add each new id to corpus.json.
  */
+import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -83,6 +84,9 @@ async function main() {
           ...(spec.notes ? { notes: spec.notes } : {}),
         };
         writeFileSync(join(ROOT, REFS, `${id}.json`), `${JSON.stringify(ref, null, 2)}\n`);
+        // The look the page shows beyond the words, measured on the PDF (look.py): indent sizes, spacing, the
+        // labels' side.
+        execFileSync("python3", [join(ROOT, "scripts/parse-bench/look.py"), join(ROOT, REFS, `${id}.json`), "--write", "--quiet"], { stdio: "inherit" });
         const loaded = loadRef(join(ROOT, REFS, `${id}.json`));
         if ("problems" in loaded) throw new Error(`${id}: the reference does not load: ${loaded.problems.join("; ")}`);
         rows.push([id, checkRendering(leaves, pages, fallback)]);

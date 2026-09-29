@@ -7,11 +7,13 @@ import { useT } from "@/components/lang-provider";
 import { insertContext, insertT, toast } from "@/components/docs/insert/context";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { MediaHtml } from "@/components/reader/figure-media";
+import { captionParts, captionStylesOf, type CaptionStyle } from "@/lib/docs/schema";
 
 // A figure object (SPEC.md §29): an import's figure, one block atom in the
 // page. It draws the figure as the block reader does (.reader-figure): a
-// web page's figure from its html, a PDF's figure as the crop of its page
-// under its caption. The media is the document's FigureMedia row, which the
+// web page's figure from its html, a PDF's figure as the crop of its page at
+// the size the PDF prints it, over its caption in the marks the page sets it
+// in (captionStyles). The media is the document's FigureMedia row, which the
 // page sends; the rich text holds only its id, so no save and no paste can
 // put markup in the page. A click opens the figure's tools
 // (DOCS_EVENT.figureTools); the caption is the figure's, never typed into.
@@ -25,7 +27,8 @@ export type FigureMediaView = {
   page: number | null;
   region: unknown | null;
   src: string | null;
-  /** A PDF crop's size in px (lib/figure-crop.ts): its place holds before it loads. */
+  /** A PDF crop's size in px as the PDF prints it (lib/figure-crop.ts): it
+      draws at that size, and its place holds before it loads. */
   size: { width: number; height: number } | null;
 };
 
@@ -74,9 +77,39 @@ function figureOf(node: PMNode, imported: ImportedEditor | null, editor: Editor 
     blockId: typeof node.attrs.blockId === "string" ? node.attrs.blockId : "",
     html: media?.html ?? null,
     caption: media ? media.caption : typeof node.attrs.caption === "string" ? node.attrs.caption : "",
+    styles: captionStylesOf(node.attrs.captionStyles) ?? [],
     src: media ? (media.html ? null : media.src) : ownPage ? figureImageUrl(documentId, mediaId) : null,
     size: media?.size ?? null,
   };
+}
+
+/** A caption style's element (the page editor's own for each mark). */
+const CAPTION_TAGS: Record<CaptionStyle["style"], [string, Record<string, string>]> = {
+  bold: ["strong", {}],
+  italic: ["em", {}],
+  underline: ["u", {}],
+  strike: ["s", {}],
+  smallCaps: ["span", { style: "font-variant: small-caps" }],
+  sub: ["sub", {}],
+  sup: ["sup", {}],
+};
+
+/** A caption's words in the marks the page sets them in, as the view's
+    elements. */
+function captionContent(caption: string, styles: CaptionStyle[]) {
+  return captionParts(caption, styles).map((part, k) =>
+    part.styles.reduce<ReturnType<typeof h> | string>((inner, style) => {
+      const [tag, attrs] = CAPTION_TAGS[style];
+      return h(tag, { key: k, ...(attrs.style ? { style: { fontVariant: "small-caps" } } : {}) }, inner);
+    }, part.text),
+  );
+}
+
+/** The same as a copy's html (renderHTML): words, or a spec that holds them. */
+function captionSpec(caption: string, styles: CaptionStyle[]): (DOMOutputSpec | string)[] {
+  return captionParts(caption, styles).map((part) =>
+    part.styles.reduce<DOMOutputSpec | string>((inner, style) => [CAPTION_TAGS[style][0], CAPTION_TAGS[style][1], inner], part.text),
+  );
 }
 
 /** What a press inside a figure leaves to the figure's own parts: a video's
@@ -129,25 +162,28 @@ function useFigureClicks(el: HTMLElement | null, editor: Editor, blockId: string
   }, [el, editor, blockId]);
 }
 
-/** A PDF figure: its crop over its caption, as the block reader draws it. A
-    crop that does not load leaves the caption. */
+/** A PDF figure: its crop at its printed size over its caption, in the
+    caption's own marks. A crop that does not load leaves the caption. */
 function CropFigure({
   blockId,
   src,
   size,
   caption,
+  styles,
 }: {
   blockId: string;
   src: string | null;
   size: { width: number; height: number } | null;
   caption: string;
+  styles: CaptionStyle[];
 }) {
   const t = useT();
   const [failed, setFailed] = useState<string | null>(null);
   const shown = src && failed !== src ? src : null;
   return h(
     "div",
-    { className: "reader-figure docs-figure-crop", "data-block-id": blockId || undefined },
+    // The caption keeps to the figure's width.
+    { className: "reader-figure docs-figure-crop", "data-block-id": blockId || undefined, style: shown && size ? { maxWidth: size.width } : undefined },
     shown
       ? h("img", {
           key: shown,
@@ -165,7 +201,7 @@ function CropFigure({
           onError: () => setFailed(shown),
         })
       : null,
-    caption ? h("p", { className: "docs-figure-caption" }, caption) : null,
+    caption ? h("p", { className: "docs-figure-caption" }, ...captionContent(caption, styles)) : null,
     // Nothing to draw: the object still shows where it stands.
     !shown && !caption ? h("p", { className: "docs-figure-empty" }, t("docsInsert.figure")) : null,
   );
@@ -180,7 +216,7 @@ function FigureView({ node, editor }: NodeViewProps) {
     { ref: setEl, className: "docs-figure-body" },
     figure.html
       ? h(MediaHtml, { blockId: figure.blockId, className: "reader-figure", html: figure.html })
-      : h(CropFigure, { blockId: figure.blockId, src: figure.src, size: figure.size, caption: figure.caption }),
+      : h(CropFigure, { blockId: figure.blockId, src: figure.src, size: figure.size, caption: figure.caption, styles: figure.styles }),
   );
 }
 
@@ -255,6 +291,9 @@ export const Figure = Node.create<FigureOptions>({
         renderHTML: (attrs) => (attrs.mediaId ? { "data-media-id": String(attrs.mediaId) } : {}),
       },
       caption: { default: "", rendered: false },
+      // The caption's marks as its page sets them (lib/docs/schema.ts
+      // captionStylesOf); the caption itself stays words, not rich text.
+      captionStyles: { default: null, rendered: false },
       page: { default: null, rendered: false },
       region: { default: null, rendered: false },
       // A PDF page that begins at the figure (insert/page-start.ts).
@@ -285,7 +324,7 @@ export const Figure = Node.create<FigureOptions>({
     }
     const parts: DOMOutputSpec[] = [];
     if (figure.src) parts.push(["img", { src: figure.src, alt: "" }]);
-    if (figure.caption) parts.push(["p", { class: "docs-figure-caption" }, figure.caption]);
+    if (figure.caption) parts.push(["p", { class: "docs-figure-caption" }, ...captionSpec(figure.caption, figure.styles)]);
     return ["div", attrs, ["div", { class: "reader-figure docs-figure-crop" }, ...parts]];
   },
 

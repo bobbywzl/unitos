@@ -6,6 +6,7 @@
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
 import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
+import { isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
 import { mathSpans } from "@/lib/parse/pdf/math/zones";
 import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup, spansFromRuns } from "@/lib/parse/pdf/text";
@@ -404,6 +405,10 @@ export function boldHeaderRows(rows: TableRow[]): number {
   return n;
 }
 
+// A cell of a value: an amount, a share, or a count ("$ 2,174", "(357)",
+// "21.0 %").
+const NUMERIC_CELL_RE = /^[$€£¥]?\s*\(?[-−–]?[\d.,]+\)?\s*%?$/;
+
 // Row starts in a run of lines split into cells. Rows come from the run's
 // vertical rhythm: with two gap sizes present, the small gap is a wrapped
 // cell line and the large one a row break; with one gap size, every line is
@@ -434,12 +439,22 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
   const hasFirst = cellsOf.map((cells) => cells[0].text.length > 0);
   const anchors: number[] = [];
   let lastFirst = -1;
+  // A statement's labels: a group's name ends in a colon, and a label that
+  // wraps sets its values on its last line.
+  const valued = (k: number) => cellsOf[k].slice(1).some((c) => c.text.length > 0);
+  const colon = (k: number) => cellsOf[k][0].text.trim().endsWith(":");
   run.forEach((line, k) => {
     if (!hasFirst[k]) return;
     // A wrap: only the first column continues, or the first cell starts
     // lowercase ("Concealing" / "uncertainty know" — both columns wrapped).
+    // A line of the first column alone opens a row under a group's name, or
+    // under a row with its values when it names a group or its values come
+    // on its next line (the 10-K's statement of comprehensive income, p. 55,
+    // read two rows as one at each such line).
     const firstOnly = cellsOf[k].every((cell, idx) => idx === 0 || cell.text.length === 0);
-    const continues = firstOnly || /^[a-z]/.test(cellsOf[k][0].text);
+    const valuesNext = k + 1 < run.length && /^\p{Ll}/u.test(cellsOf[k + 1][0].text) && valued(k + 1);
+    const opens = lastFirst >= 0 && (colon(lastFirst) || (valued(lastFirst) && (colon(k) || valuesNext)));
+    const continues = (firstOnly && !opens) || /^[a-z]/.test(cellsOf[k][0].text);
     const wrap =
       continues &&
       lastFirst >= 0 &&
@@ -451,9 +466,20 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
     anchors.length >= 2 && anchors.some((k) => k > 0 && !hasFirst[k - 1]);
   const gapAt = (m: number) => run[m - 1].y - run[m].y;
   const rowStarts: number[] = [0];
+  // The first anchor's other cells hold values, under head lines with no
+  // first column: the head lines are head rows, a row for each line that
+  // fills other columns than the line above it ("Year Ended December 31,"
+  // over the years over the amounts: the 10-K's OI&E statement, p. 78, read
+  // its heads into its first row).
+  const filled = (k: number) => cellsOf[k].map((c) => (c.text.length > 0 ? "1" : "0")).join("");
+  const values = anchors.length > 0 && cellsOf[anchors[0]].slice(1).some((c) => c.text) && cellsOf[anchors[0]].slice(1).every((c) => !c.text || NUMERIC_CELL_RE.test(c.text.trim()));
+  if (anchorRows && values && anchors[0] > 0) {
+    for (let m = 1; m < anchors[0]; m++) if (filled(m) !== filled(m - 1)) rowStarts.push(m);
+    rowStarts.push(anchors[0]);
+  }
   if (anchorRows) {
     // Lines above the first anchor: their own row when one gap stands out.
-    if (anchors[0] > 1) {
+    if (anchors[0] > 1 && !values) {
       let widest = 1;
       let smallest = Infinity;
       for (let m = 1; m <= anchors[0]; m++) {
@@ -502,10 +528,22 @@ export function rowsOf(cellsOf: Cell[][], rowStarts: number[], columnCount: numb
   return rows;
 }
 
+// A run's columns: the gutters its lines leave open. The lines over its
+// first line that starts at the table's left edge are heads, a head over
+// several columns among them ("Year Ended December 31," over a
+// statement's years, "As of December 31, 2023" over its assets and
+// liabilities): they part no gutter (the 10-K's OI&E statement read two
+// years as one column, p. 78).
+function runSeparators(run: Line[]): number[] {
+  const left = Math.min(...run.map((l) => l.x));
+  const first = Math.max(0, run.findIndex((l) => l.x <= left + 3));
+  return withoutSignColumns(run, columnSeparators(run.slice(first), run.slice(0, first)));
+}
+
 // One table out of a run of gap-aligned lines. Columns come from the coverage
 // scan; rows from the run's rhythm (rowStartsOf).
 export function tableFromRun(run: Line[], leading: number): Segment {
-  const separators = withoutSignColumns(run, columnSeparators(run));
+  const separators = runSeparators(run);
   const columnCount = separators.length + 1;
   const page = run[0].page;
   // No gutter runs the whole way down when the wide gaps sit at a different
@@ -618,6 +656,23 @@ export function isProseColumns(lines: Line[], ocr: boolean): boolean {
   return lines.length > 0 && prose * 2 >= lines.length;
 }
 
+// A lead-in: a sentence of eight words or more that ends in a colon over the
+// table ("Components of OI&E were as follows (in millions):"), no head or
+// row of it. A group's name in a statement is shorter ("Derivatives not
+// designated as hedging instruments:").
+export function leadIn(text: string): boolean {
+  const words = text.trim();
+  return words.endsWith(":") && words.split(/\s+/).length >= 8;
+}
+
+// A line that opens with a bullet is a list's item, no cell's wrapped line:
+// a résumé's bullets under each entry's two lines (a title and its dates, a
+// place and its town) ran into the entry's table.
+function bulleted(line: Line): boolean {
+  const marker = readMarker(line);
+  return marker !== null && isGlyphMarker(marker);
+}
+
 // Form lines: every cell a label awaiting its words ("Name:"), a blank to
 // fill ("____"), or boxes to tick, with no rule drawn around them (a ruled
 // form is found by its grid, ruled.ts).
@@ -678,6 +733,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
         continue;
       }
       if (next.size > ctx.bodySize * 1.15) break;
+      if (bulleted(next) || leadIn(next.text)) break;
       const columns = clusterColumns(members.map((k) => lines[k]));
       const aligned = isAlignedLine(next, columns);
       const leftOnly = isLeftOnly(next, columns);
@@ -761,12 +817,31 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       i++;
       continue;
     }
+    // A run with no gutter down it, over lines of one cell too, is no table:
+    // tableFromRun joined all its lines into one paragraph (a statement's
+    // last rows, the sentence under them, and the next statement: the 10-K,
+    // p. 71). Its leading lines of cells are one when a gutter runs down
+    // them; the other lines go back to the other readers. Lines of cells
+    // alone stay one paragraph (an author line whose names stand apart).
+    const columned = (ks: number[]) => runSeparators(ks.map((k) => lines[k])).length > 0;
+    const single = members.findIndex((k) => lines[k].cells.length < 2);
+    if (single >= 0 && !columned(members)) {
+      const lead = members.slice(0, single);
+      if (lead.length < 2 || !columned(lead)) {
+        i++;
+        continue;
+      }
+      members.splice(lead.length);
+      j = lead[lead.length - 1] + 1;
+    }
     // Backward: wrapped header lines directly above (at most 3).
+    const firstEdge = runSeparators(members.map((k) => lines[k]))[0];
+    const left = Math.min(...members.map((k) => lines[k].x));
     let first = members[0];
     let absorbed = 0;
     while (first > 0 && absorbed < 3) {
       const prev = lines[first - 1];
-      if (prev.cells.length !== 1 || runOf[first - 1] !== -1) break;
+      if (prev.cells.length !== 1 || runOf[first - 1] !== -1 || bulleted(prev) || leadIn(prev.text)) break;
       if (prev.size > ctx.bodySize * 1.15) break;
       const gap = prev.y - lines[first].y;
       if (gap < 0 || gap > prev.size * ctx.leading * 1.35) break;
@@ -774,6 +849,11 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       const aligned = isAlignedLine(prev, columns);
       const indentedPastFirst = prev.x > columns[0] + 8;
       if (!aligned && !indentedPastFirst && !isLeftOnly(prev, columns)) break;
+      // A title over the table is no head: a line that reaches from the
+      // first column into the others, or that stands over the first column
+      // alone, set in by a quarter of it (a statement's name and its units,
+      // centered over the page: the 10-K, p. 55).
+      if (firstEdge !== undefined && ((prev.x < firstEdge && prev.xEnd > firstEdge) || (prev.xEnd < firstEdge && prev.x > left + (firstEdge - left) * 0.25))) break;
       // A first-column line that continues the paragraph above it (same x,
       // one leading below) is that paragraph's last line — a caption's wrap.
       if (!aligned && !indentedPastFirst && first >= 2) {

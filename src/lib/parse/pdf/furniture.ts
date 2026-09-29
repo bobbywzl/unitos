@@ -4,9 +4,9 @@
 // size, and weight of furniture on other pages. parsePdf drops them before
 // segmentation.
 //
-// A fixed band (the top and bottom 8.5% of the page) missed most heads: a
-// book of lecture notes and Grinstead–Snell set them 13% down, the Supreme Court's
-// slip opinions 15% and 18.5% down in two rows, a scanned book's foot sits
+// A fixed band (the top and bottom 8.5% of the page) missed most heads:
+// Grinstead–Snell sets them 13% down, the Supreme Court's slip opinions
+// 15% and 18.5% down in two rows, a scanned book's foot sits
 // 83% down (census class 4). So each page's own first and last rows are the
 // candidates, and a candidate drops only on evidence from other pages.
 
@@ -42,14 +42,22 @@ type Side = "head" | "foot";
 // notice 18.5 pt under "Per Curiam").
 type Candidate = { row: Row; side: Side; strong: boolean };
 
-export type FurnitureDrop = { page: number; line: Line; why: "repeat" | "page number" | "place" | "cell" | "continued" | "band" };
+export type FurnitureDrop = { page: number; line: Line; why: "repeat" | "page number" | "place" | "cell" | "continued" | "band" | "blank" };
 
-const LONE_NUMBER_RE = /^[-–—\s]*(?:(?:page|p\.)\s*)?(\d{1,4}|[ivxlc]{1,7})(?:\s*(?:of|\/)\s*\d{1,4})?[-–—\s]*$/i;
+// A period may close the number: the 10-K prints "53." at each foot, and
+// its 97 page numbers stayed in the text.
+const LONE_NUMBER_RE = /^[-–—\s]*(?:(?:page|p\.)\s*)?(\d{1,4}|[ivxlc]{1,7})\.?(?:\s*(?:of|\/)\s*\d{1,4})?[-–—\s]*$/i;
+// The notice a book or a thesis prints on a page it leaves empty: the only
+// words of their page on six pages of the NPS thesis.
+const BLANK_PAGE_RE = /^\(?(?:this page (?:is |has been )?(?:intentionally|deliberately) left blank|(?:page )?intentionally left blank)\.?\)?$/i;
 // A long table's foot on each page it breaks at (LaTeX longtable, Word).
 const CONTINUED_RE = /^\(?continued (?:on (?:the )?next page|overleaf)\)?\.?$/i;
 
-export function findFurniture(pages: Line[][], pageHeights: number[]): FurnitureDrop[] {
-  const rows = pages.map((lines, p) => rowsOf(lines, p, pageHeights[p]));
+// pageNumbers: each page's 0-based number in the PDF, where the pages are
+// not all of it (a parse of the pages the reader chose, parsePdf); a page
+// number counts with these.
+export function findFurniture(pages: Line[][], pageHeights: number[], pageNumbers?: number[]): FurnitureDrop[] {
+  const rows = pages.map((lines, p) => rowsOf(lines, pageNumbers?.[p] ?? p, pageHeights[p]));
   const { lead, bodySize } = measures(pages, rows);
   const candidates = rows.flatMap((pageRows) => candidatesOf(pageRows, lead));
   const strong = candidates.filter((c) => c.strong);
@@ -61,8 +69,8 @@ export function findFurniture(pages: Line[][], pageHeights: number[]): Furniture
   const dropped = new Map<Row, FurnitureDrop["why"]>();
 
   // The pages whose strong candidates carry a number at the same distance
-  // from the page's index as one of the row's: page numbers. A restart (a
-  // packet of documents) starts a new distance.
+  // from the page's index as one of the row's: page numbers. A restart
+  // (documents bound in one file) starts a new distance.
   const tracks = (row: Row): number => {
     let best = 0;
     for (const n of row.numbers) {
@@ -89,8 +97,8 @@ export function findFurniture(pages: Line[][], pageHeights: number[]): Furniture
 
   // A head is furniture only above the text block of the other pages, a
   // foot only below it: any other row of another page that reaches the
-  // candidate's edge and does not read like it puts it inside. The legal
-  // packet starts pages with section titles, and a landscape page's table
+  // candidate's edge and does not read like it puts it inside. A contract
+  // may start pages with section titles, and a landscape page's table
   // caption sits where the other pages' first lines do.
   const allowed = Math.max(pageCount >= 5 ? 1 : 0, Math.floor(pageCount * 0.1));
   const known = new Map<Candidate, boolean>();
@@ -101,6 +109,9 @@ export function findFurniture(pages: Line[][], pageHeights: number[]): Furniture
     rows.map((pageRows) => pageRows.filter((r) => !strongRows.has(r) && !Number.isNaN(edge(r))).sort((a, b) => edge(a) - edge(b)));
   const byTop = byEdge((r) => r.top);
   const byBottom = byEdge((r) => r.bottom);
+  // A page number in another numbering reads like it: roman before arabic
+  // (the NPS thesis kept "i" to "xiv", the arabic numbers of its weak feet
+  // standing at their place).
   const outside = (c: Candidate): boolean => {
     const hit = known.get(c);
     if (hit !== undefined) return hit;
@@ -110,7 +121,7 @@ export function findFurniture(pages: Line[][], pageHeights: number[]): Furniture
     for (const pageRows of head ? byTop : byBottom) {
       for (const r of pageRows) {
         if (!((head ? r.top : r.bottom) <= edge + 2)) break;
-        if (r.page !== c.row.page && !same(r, c.row) && !sameOffset(r, c.row)) {
+        if (r.page !== c.row.page && !same(r, c.row) && !sameOffset(r, c.row) && !(r.lone && c.row.lone)) {
           inside++;
           break;
         }
@@ -135,6 +146,12 @@ export function findFurniture(pages: Line[][], pageHeights: number[]): Furniture
     }
     return false;
   };
+
+  // 0. The notice of a page left blank, its page's only words but its number.
+  for (const pageRows of rows) {
+    const words = pageRows.filter((r) => !r.lone);
+    if (words.length === 1 && BLANK_PAGE_RE.test(words[0].text)) dropped.set(words[0], "blank");
+  }
 
   // 1. Strong candidates with evidence of their own.
   for (const c of strong) {
@@ -161,15 +178,36 @@ export function findFurniture(pages: Line[][], pageHeights: number[]): Furniture
     if (fits) dropped.set(c.row, "place");
   }
 
-  // 3. A strong candidate with a cell that reads like dropped furniture:
-  // the journal's foot opening the first page's head, next to the preprint
-  // date.
+  // 3. A strong candidate with a cell that reads like dropped furniture: the
+  // journal's foot opening the first page's head, next to the preprint date.
+  // A row of two cells or more may match a cell of dropped furniture too: the
+  // W-9's "Form W-9 (Rev. 3-2024)", beside each later page's number in its
+  // head, beside its catalog number at the first page's foot. A row of one
+  // cell never does: amsart's running heads repeat the author's name and the
+  // title, and the first page sets them alone on their lines.
   const byKey = new Map<string, Row>();
-  for (const d of dropped.keys()) if (/\p{L}.*\p{L}/u.test(d.key) && d.key.length >= 8) byKey.set(d.key, d);
+  const byCell = new Map<string, Row>();
+  const keep = (map: Map<string, Row>, key: string, d: Row) => {
+    if (/\p{L}.*\p{L}/u.test(key) && key.length >= 8 && !map.has(key)) map.set(key, d);
+  };
+  for (const d of dropped.keys()) {
+    keep(byKey, d.key, d);
+    for (const line of d.lines) for (const cell of line.cells) keep(byCell, keyOf(cell.text), d);
+  }
   for (const c of strong) {
-    if (dropped.has(c.row) || !outside(c)) continue;
-    const cells = c.row.lines.flatMap((l) => l.cells.map((cell) => byKey.get(keyOf(cell.text))));
-    if (cells.some((d) => d !== undefined && closeSize(c.row, d))) dropped.set(c.row, "cell");
+    if (dropped.has(c.row)) continue;
+    const keys = c.row.lines.flatMap((l) => l.cells.map((cell) => keyOf(cell.text)));
+    const matches = (map: Map<string, Row>) =>
+      keys.some((k) => {
+        const d = map.get(k);
+        return d !== undefined && closeSize(c.row, d);
+      });
+    // Set smaller than the body, a row of cells needs no place outside the
+    // other pages' text: the W-9's later pages run their text lower than
+    // its first page's foot.
+    const whole = matches(byKey) && outside(c);
+    const part = keys.length >= 2 && matches(byCell) && (outside(c) || c.row.size < bodySize * 0.95);
+    if (whole || part) dropped.set(c.row, "cell");
   }
 
   const drops: FurnitureDrop[] = [];
@@ -180,16 +218,16 @@ export function findFurniture(pages: Line[][], pageHeights: number[]): Furniture
   for (const [p, lines] of pages.entries()) {
     const h = pageHeights[p];
     for (const line of lines) {
-      if (gone.has(line) || !/^\d{1,4}$/.test(line.text) || (line.y >= h * 0.08 && line.y <= h * 0.92)) continue;
-      drops.push({ page: p, line, why: "band" });
+      if (gone.has(line) || !/^\d{1,4}\.?$/.test(line.text) || (line.y >= h * 0.08 && line.y <= h * 0.92)) continue;
+      drops.push({ page: pageNumbers?.[p] ?? p, line, why: "band" });
     }
   }
   return drops;
 }
 
 // The pages' lines without their furniture.
-export function dropFurniture(pages: Line[][], pageHeights: number[]): Line[][] {
-  const gone = new Set(findFurniture(pages, pageHeights).map((d) => d.line));
+export function dropFurniture(pages: Line[][], pageHeights: number[], pageNumbers?: number[]): Line[][] {
+  const gone = new Set(findFurniture(pages, pageHeights, pageNumbers).map((d) => d.line));
   return pages.map((lines) => lines.filter((l) => !gone.has(l)));
 }
 

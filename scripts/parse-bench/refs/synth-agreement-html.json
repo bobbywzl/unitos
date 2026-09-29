@@ -27,7 +27,8 @@
         "shape": "serif",
         "size": 11,
         "bold": true
-      }
+      },
+      "spaceAfter": 9
     },
     {
       "kind": "paragraph",
@@ -36,7 +37,8 @@
           "text": "(a Delaware limited partnership)"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "spaceAfter": 9
     },
     {
       "kind": "paragraph",
@@ -94,7 +96,8 @@
         {
           "text": "”);"
         }
-      ]
+      ],
+      "spaceAfter": 9
     },
     {
       "kind": "paragraph",
@@ -110,7 +113,8 @@
         {
           "text": "”);"
         }
-      ]
+      ],
+      "spaceAfter": 9
     },
     {
       "kind": "paragraph",
@@ -118,7 +122,8 @@
         {
           "text": "NOW, THEREFORE, in consideration of the mutual covenants set forth below, the parties agree as follows:"
         }
-      ]
+      ],
+      "spaceAfter": 9
     },
     {
       "kind": "list",
@@ -376,7 +381,8 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 2
     },
     {
       "kind": "heading",
@@ -557,7 +563,8 @@
           ],
           "checked": false
         }
-      ]
+      ],
+      "itemSpace": 2
     },
     {
       "kind": "heading",
@@ -579,7 +586,8 @@
         {
           "text": " How did the Subscriber learn of the Partnership?"
         }
-      ]
+      ],
+      "spaceAfter": 9
     },
     {
       "kind": "list",
@@ -620,7 +628,9 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 2,
+      "spaceAfter": 9
     },
     {
       "kind": "paragraph",
@@ -652,7 +662,8 @@
         {
           "text": " What is the source of the funds for the Capital Commitment? Check all that apply."
         }
-      ]
+      ],
+      "spaceAfter": 9
     },
     {
       "kind": "list",
@@ -697,7 +708,8 @@
           ],
           "checked": false
         }
-      ]
+      ],
+      "itemSpace": 2
     },
     {
       "kind": "heading",

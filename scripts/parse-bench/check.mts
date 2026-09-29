@@ -2,12 +2,12 @@
 // adapters on tiny parses and imports, and the math canonical form on pairs
 // that must and must not score 1. Run: npx tsx scripts/parse-bench/check.mts
 import { readFileSync } from "node:fs";
-import type { RichNode } from "@/lib/docs/schema";
+import { listLevelsOf, type RichNode } from "@/lib/docs/schema";
 import type { ParsedBlock } from "@/lib/parse/types";
 import type { Glyph } from "@/lib/parse/pdf/drawing";
 import { fromImport, fromParse, printedNotes, type Doc, type DocBlock } from "./adapt";
-import { freeScores, ocrSame, type PdfText } from "./free";
-import { glyphScores, placeEquations, type PageGlyphs } from "./glyphs";
+import { borderScore, formulaScaleOf, freeScores, furnitureOf, mathPart, ocrSame, type PdfText } from "./free";
+import { glyphScores, placeCrops, placeEquations, type PageGlyphs } from "./glyphs";
 import { mathTokens, sequenceSimilarity } from "./math";
 import { flatten, score, type Scores } from "./metrics";
 import type { RefBlock, Span } from "./model";
@@ -184,6 +184,54 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   );
 }
 {
+  // A label no list level draws stays as the words an unmarked item opens with: it is the reference's marker
+  // when the words open with exactly it.
+  const labelled: RefBlock[] = [
+    {
+      kind: "list",
+      items: [
+        { depth: 0, marker: "[Bil95]", spans: [{ text: "Billingsley, Probability and Measure, Wiley." }] },
+        { depth: 0, marker: "[Wil91]", spans: [{ text: "Williams, Probability with Martingales, Cambridge." }] },
+      ],
+    },
+  ];
+  const worded: DocBlock = {
+    kind: "list",
+    items: [
+      { depth: 0, marker: "", spans: [{ text: "[Bil95] Billingsley, Probability and Measure, Wiley." }] },
+      { depth: 0, marker: "", spans: [{ text: "[Wil9] Williams, Probability with Martingales, Cambridge." }] },
+    ],
+  };
+  const s = score({ blocks: labelled }, [], { blocks: [worded] }).scores;
+  check("lists: an unmarked item that opens with the reference's label has that marker", s.lists.found === 2 && s.lists.marked === 1, `found ${s.lists.found}, marked ${s.lists.marked}`);
+}
+{
+  // A formula alone in a table cell has no words beside it: it is read from the cell the table maps it to.
+  const intro = "The table lists each command and the symbol it draws.";
+  const table = (result: Span): RefBlock => ({
+    kind: "table",
+    rows: [
+      { cells: [{ spans: [{ text: "Command" }] }, { spans: [{ text: "Result" }] }] },
+      { cells: [{ spans: [{ text: "sqrt" }] }, { spans: [result] }] },
+    ],
+  });
+  const ref: RefBlock[] = [para(intro), table({ text: "√x", latex: "\\sqrt{x}" })];
+  const asFormula = score({ blocks: ref }, [], { blocks: [para(intro), table({ text: "", latex: "\\sqrt{x}" })] }).scores;
+  const asWords = score({ blocks: ref }, [], { blocks: [para(intro), table({ text: "√x" })] }).scores;
+  check(
+    "math: a formula alone in a table cell is read from the cell the table maps it to",
+    near(asFormula.math.inline, 1) && asWords.math.plainInline === 1 && (asWords.math.inline ?? 0) > 0,
+    `formula ${asFormula.math.inline}, words ${asWords.math.inline} (${asWords.math.plainInline})`,
+  );
+}
+{
+  // The free math part: a check passed 1, failed 0, a crop half; no part without a checked display.
+  check(
+    "free: a crop scores half of a checked display, and brings in no math part alone",
+    near(mathPart({ checked: 2, passed: 2, mathImages: 1 }), 2.5 / 3) && mathPart({ checked: 0, passed: 0, mathImages: 1 }) === null && near(mathPart({ checked: 1, passed: 0, mathImages: 0 }), 0),
+  );
+}
+{
   // An import's list in its own level formats (`listLevels` on the outermost list).
   const levels = JSON.stringify([
     { counter: "decimal", format: "%0." },
@@ -200,6 +248,19 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     "import: a list's own level formats draw its markers",
     list?.kind === "list" && list.items.map((it) => it.marker).join(",") === "3.,a).,b).",
     list?.kind === "list" ? list.items.map((it) => it.marker).join(",") : JSON.stringify(list),
+  );
+  // A bullet list whose first level draws no marker (an empty bullet: a bibliography's entries) and whose second
+  // draws one: the unmarked lines read as the parse reads an unmarked list, where the page editor can draw one.
+  const unmarkedLevels = JSON.stringify([{ bullet: "" }, ...Array.from({ length: 8 }, () => ({ bullet: "◦" }))]);
+  const bullets = fromImport({
+    type: "doc",
+    content: [{ type: "bulletList", attrs: { listLevels: unmarkedLevels }, content: [item("Adams, River flows", { type: "bulletList", content: [item("Gauges")] })] }],
+  }).blocks[0];
+  const drawn = listLevelsOf(unmarkedLevels) ? ",•" : "•,•";
+  check(
+    "import: a line whose level draws no marker has none",
+    bullets?.kind === "list" && bullets.items.map((it) => it.marker).join(",") === drawn,
+    bullets?.kind === "list" ? bullets.items.map((it) => it.marker).join(",") : JSON.stringify(bullets),
   );
 }
 {
@@ -221,6 +282,42 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     )
     .join("; ");
   check("import: an item's later paragraph reads as its own, and the items after it keep their depth", shape === "list 0:Birds 1:Owls; paragraph/center (kind); list 1:Wrens", shape);
+}
+{
+  // A display equation in a list item (a list the converter resumed after it), the paragraph after it, and a
+  // table, a code block, a rule, and a picture in an item read as at the top level, between two lists.
+  const line = (text: string): RichNode => ({ type: "paragraph", content: [{ type: "text", text }] });
+  const item = (...content: RichNode[]): RichNode => ({ type: "listItem", content });
+  const cell = (text: string): RichNode => ({ type: "tableCell", content: [line(text)] });
+  const doc: RichNode = {
+    type: "doc",
+    content: [
+      {
+        type: "orderedList",
+        content: [
+          item(line("Toss a coin three times."), { type: "blockMath", attrs: { latex: "\\Omega=\\{HHH,HHT\\}" } }, line("(see Example 1.6)."), {
+            type: "orderedList",
+            content: [item(line("Two heads."))],
+          }),
+          item(
+            line("Count the cases."),
+            { type: "table", content: [{ type: "tableRow", content: [cell("Heads"), cell("Tails")] }] },
+            { type: "codeBlock", content: [{ type: "text", text: "count(cases)" }] },
+            { type: "horizontalRule" },
+            { type: "image", attrs: { src: "coin.png" } },
+          ),
+        ],
+      },
+    ],
+  };
+  const shape = fromImport(doc)
+    .blocks.map((b) => (b.kind === "list" ? `list ${b.items.map((it) => `${it.depth}:${it.spans.map((s) => s.text).join("")}`).join(" ")}` : b.kind))
+    .join("; ");
+  check(
+    "import: a display, a table, a code block, a rule, and a picture in a list item read as at the top level",
+    shape === "list 0:Toss a coin three times.; equation; paragraph; list 1:Two heads. 0:Count the cases.; table; code; separator; figure",
+    shape,
+  );
 }
 {
   const s = run(edit((b) => (b[4] = { kind: "figure", mathImage: "∫ 1 0 f(x) dx = 1 (1.1)" })));
@@ -420,6 +517,11 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("free: a formula's glyphs cover the words the text layer splits it into", near(free.recall, 1) && near(free.precision, 1), `recall ${free.recall}, precision ${free.precision}`);
   const bare = freeScores(pdf, flatten({ blocks: [sentence] })).coverage;
   check("free: a diagram's labels are words to cover only without the figure", (bare.recall ?? 1) < 1, `recall ${bare.recall}`);
+  // A display's crop shows every line in it, long ones too; a figure's long line is still a word to cover.
+  const displayPdf: PdfText = { ...pdf, raw: [["Let 2k1 t be small.", "S n equals the sum of the first n terms"]], lines: [line("Let 2k1 t be small.", 100), line("S n equals the sum of the first n terms", 400)] };
+  const crop = freeScores(displayPdf, flatten({ blocks: [sentence, { ...diagram, mathImage: "" }] })).coverage;
+  const picture = freeScores(displayPdf, flatten({ blocks: [sentence, diagram] })).coverage;
+  check("free: a display's crop shows its lines, a figure's long line is a word to cover", near(crop.recall, 1) && (picture.recall ?? 1) < 1, `crop ${crop.recall}, figure ${picture.recall}`);
   // Word's hollow bullet read as "o" before an item the candidate draws with a dash; a title broken in capitals.
   const wordPdf: PdfText = { ...pdf, raw: [["o Sand settles behind every bar.", "THE RIVER COM-", "PARED WITH LAKES"]], lines: [] };
   const item: DocBlock = { kind: "list", items: [{ depth: 1, marker: "-", spans: [{ text: "Sand settles behind every bar." }] }] };
@@ -439,6 +541,9 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   const cell: DocBlock = { kind: "table", rows: [{ cells: [{ spans: [{ text: "Storage" }, { text: "2", sup: true }] }] }] };
   const marked = freeScores(markPdf, flatten({ blocks: [cell, para("The yard grew.")] })).coverage;
   check("free: a word and its raised mark count whether the text layer joins them or not", near(marked.recall, 1) && near(marked.precision, 1), `recall ${marked.recall}, precision ${marked.precision}`);
+  // Word's math letters, which its text layer reads twice.
+  const doubled = freeScores({ ...pdf, raw: [["Let 𝑝𝑝 and εε be small."]], lines: [] }, flatten({ blocks: [para("Let 𝑝 and ε be small.")] })).coverage;
+  check("free: a math letter the text layer reads twice is one letter", near(doubled.recall, 1) && near(doubled.precision, 1), `recall ${doubled.recall}, precision ${doubled.precision}`);
   // A page number printed with a period ("54."): the candidate's line of it is a page-number line.
   const numbered = freeScores({ ...pdf, raw: [["The yard grew."]], lines: [] }, flatten({ blocks: [para("The yard grew."), para("54.")] }));
   check("free: a line that is a page number and a period counts as a page-number line", numbered.numberLines.count === 1, `count ${numbered.numberLines.count}`);
@@ -713,6 +818,35 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     content: [{ type: "figure", attrs: { caption: "x2", page: 1, region: JSON.stringify(whole), pageStart: 1 } }],
   });
   check("glyphs: an import's figure keeps its page and region", figure.blocks[0]?.at?.page === 1 && figure.blocks[0].at.region.kind === "path");
+  // A display's crop with no caption (the import's) or a garbled one (the parse's) shows its symbols as the
+  // page draws them: none is lost or misread.
+  const cropped = (caption: string | undefined) => glyphScores([page], doc("x2", [{ kind: "figure", ...(caption === undefined ? {} : { mathImage: caption }), at: { page: 1, region: around(32, 52) } }]), undefined);
+  check("glyphs: a crop's symbols count as printed, captioned or not", cropped(undefined).garbles === 0 && cropped("6= F").garbles === 0, `${JSON.stringify(cropped(undefined).missing)} ${JSON.stringify(cropped("6= F").missing)}`);
+  // A cmex brace hangs below its origin, which stands at its top: a crop whose region starts just under the top
+  // holds it whole.
+  const braced: PageGlyphs = { width: 600, height: 800, glyphs: [g("omx", 40, "(", 390, 444), g("oml", 0x78, "x", 400, 400)] };
+  const brace = glyphScores([braced], doc("", [{ kind: "figure", at: { page: 1, region: around(60, 70) } }]), undefined);
+  check("glyphs: a crop holds the cmex brace that hangs into it", brace.hazards === 1 && brace.garbles === 0, JSON.stringify(brace.missing));
+  // A cmex ∑ set at a script's size (an exponent's) is at the script's level; a norm's bars are one symbol
+  // however KaTeX draws them (‖ or ∥).
+  const exponent: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 100, 400), g("omx", 0x50, "∑", 106, 404, 7), g("oml", 0x64, "d", 112, 404, 7)] };
+  const scriptSum = glyphScores([exponent], doc("", [{ kind: "equation", latex: "x^{\\sum d}", at: { page: 1, region: around(15, 20) } }]), undefined);
+  check("glyphs: a cmex glyph set at a script's size takes the script's level", scriptSum.checked === 1 && scriptSum.passed === 1, JSON.stringify(scriptSum.fails));
+  const bars: PageGlyphs = { width: 600, height: 800, glyphs: [g("oms", 0x6b, "k", 100, 400), g("oml", 0x78, "x", 106, 400), g("oms", 0x6b, "k", 112, 400)] };
+  // A candidate's LaTeX may hold ‖ itself, which KaTeX draws with a warning about its metrics: kept out of the output.
+  const warn = console.warn;
+  console.warn = () => {};
+  const norm = glyphScores([bars], doc("", [{ kind: "equation", latex: "‖x‖", at: { page: 1, region: around(15, 20) } }]), undefined);
+  console.warn = warn;
+  check("glyphs: a norm's bars drawn as ‖ or ∥ are one symbol", norm.checked === 1 && norm.passed === 1, JSON.stringify(norm.fails));
+  // The import's crop of a display has no caption: it is an equation picture where the parse's is one.
+  const parseCrops: Doc = { blocks: [{ kind: "figure", mathImage: "6= F", at: { page: 1, region: around(32, 52) } }, { kind: "figure", caption: [{ text: "Figure 1: The dam." }], at: { page: 1, region: whole } }] };
+  const importCrops: Doc = { blocks: [{ kind: "figure", at: { page: 1, region: around(32, 52) } }, { kind: "figure", at: { page: 1, region: whole } }] };
+  placeCrops(parseCrops, importCrops);
+  check(
+    "glyphs: an import's uncaptioned figure is a display's crop where the parse's at its place is one",
+    importCrops.blocks[0].kind === "figure" && importCrops.blocks[0].mathImage === "" && importCrops.blocks[1].kind === "figure" && importCrops.blocks[1].mathImage === undefined,
+  );
 }
 
 // ── Words and garbles ───────────────────────────────────────────────────────
@@ -938,6 +1072,217 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     first.kind === "paragraph" && first.spans.map((s) => s.text).join("") === "page two begins" && first.spans[0].italic === true,
     first.kind === "paragraph" ? first.spans.map((s) => s.text).join("") : first.kind,
   );
+}
+
+// ── The look beyond the words: indents, spacing, labels, the page editor's drawing ──
+
+{
+  // amsbook's 5 pt first-line indent, a list's items spaced 4 pt apart, an equation numbered at the left.
+  const REF_LOOK: RefBlock[] = [
+    { kind: "paragraph", spans: [{ text: "A channel carries water from its source to its mouth, and its banks shape the flow." }], indent: "first", indentPt: { left: 0, first: 5 }, spaceAfter: 6 },
+    {
+      kind: "list",
+      items: [
+        { depth: 0, marker: "(a)", spans: [{ text: "Gravel bars form where the current slows down in the bend." }] },
+        { depth: 0, marker: "(b)", spans: [{ text: "Sand settles behind every bar the river leaves." }] },
+      ],
+      itemSpace: 4,
+      spaceAfter: 0,
+    },
+    { kind: "paragraph", spans: [{ text: "The last paragraph closes the section with one more claim." }] },
+    { kind: "equation", latex: "x = 1", label: "(1.1)", labelSide: "left" },
+  ];
+  const parsed = (first: number, itemSpace: number | undefined, leqno: boolean): ParsedBlock[] => [
+    { type: "PARAGRAPH", text: "A channel carries water from its source to its mouth, and its banks shape the flow.", html: '<p class="indent-first"></p>', page: 1, indent: { left: 0, first }, spaceAfter: 6 },
+    { type: "LIST", text: "(a) Gravel bars form where the current slows down in the bend.\n(b) Sand settles behind every bar the river leaves.", page: 1, spaceAfter: 0, ...(itemSpace !== undefined ? { itemSpace } : {}) },
+    { type: "PARAGRAPH", text: "The last paragraph closes the section with one more claim.", page: 1 },
+    { type: "EQUATION", text: "x = 1 \\tag{1.1}", page: 1, ...(leqno ? { html: '<p class="leqno"></p>' } : {}) },
+  ];
+  const right = score({ blocks: REF_LOOK }, [], fromParse({ title: null, blocks: parsed(5, 4, true) })).scores;
+  check("look: an indent at the page's size, items spaced as the page, a label at its side score 1", near(right.roles.indentSize, 1) && near(right.roles.spacing, 1) && near(right.math.labels.side.score, 1), `${JSON.stringify(right.roles)} side ${right.math.labels.side.score}`);
+  const wrong = score({ blocks: REF_LOOK }, [], fromParse({ title: null, blocks: parsed(36, undefined, false) })).scores;
+  check(
+    "look: a half-inch indent for 5 pt, tight items, a label at the other side score 0",
+    near(wrong.roles.indentSize, 0) && near(wrong.roles.spacing, 2 / 3) && near(wrong.math.labels.side.score, 0) && near(wrong.math.labels.score, 1),
+    `${JSON.stringify(wrong.roles)} side ${wrong.math.labels.side.score}`,
+  );
+  // A justified list whose items wrap: the list's alignment counts where the reference justifies.
+  const justified: RefBlock[] = [
+    { kind: "paragraph", spans: [{ text: "The river report opens here with a first paragraph long enough to wrap across the column twice at least." }], align: "justify" },
+    { kind: "list", align: "justify", items: [{ depth: 0, marker: "(a)", spans: [{ text: "Gravel bars form where the current slows down in the bend, and sand settles behind every bar the river leaves." }] }] },
+  ];
+  const listed = (html: string | undefined): ParsedBlock[] => [
+    { type: "PARAGRAPH", text: "The river report opens here with a first paragraph long enough to wrap across the column twice at least.", html: '<p class="justify"></p>', page: 1 },
+    { type: "LIST", text: "(a) Gravel bars form where the current slows down in the bend, and sand settles behind every bar the river leaves.", page: 1, ...(html ? { html } : {}) },
+  ];
+  const ragged = score({ blocks: justified }, [], fromParse({ title: null, blocks: listed(undefined) })).scores;
+  const flush = score({ blocks: justified }, [], fromParse({ title: null, blocks: listed('<ul class="justify"></ul>') })).scores;
+  check("look: a list justified where the page justifies its items; ragged is wrong", near(flush.roles.align, 1) && (ragged.roles.align ?? 1) < 1, `justified ${flush.roles.align}, ragged ${ragged.roles.align}`);
+  // A justified paragraph that wraps only with its inline formula: the formula counts by the glyphs it draws on
+  // every side (an import's formula holds no text), so the paragraph reads as justified on both.
+  const opening = "The river report opens here with a first paragraph long enough to wrap across the column twice at least.";
+  const before = "Let the variables of the sample be independent, each with mean zero and variance one; then ";
+  const formula = "\\mathbf{E}(X_1+\\cdots+X_n)^2=n";
+  const withFormula: RefBlock[] = [
+    { kind: "paragraph", spans: [{ text: opening }], align: "justify" },
+    { kind: "paragraph", spans: [{ text: before }, { text: "E(X1+⋯+Xn)2=n", latex: formula }, { text: " holds." }], align: "justify" },
+  ];
+  const justifiedImport = fromImport({
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { textAlign: "justify" }, content: [{ type: "text", text: opening }] },
+      {
+        type: "paragraph",
+        attrs: { textAlign: "justify" },
+        content: [{ type: "text", text: before }, { type: "inlineMath", attrs: { latex: formula } }, { type: "text", text: " holds." }],
+      },
+    ],
+  });
+  const glyphs = score({ blocks: withFormula }, [], justifiedImport).scores;
+  check("look: a justified paragraph's inline formulas count by the glyphs they draw", near(glyphs.roles.align, 1), `align ${glyphs.roles.align}`);
+  // The import: indents and spaces in points, a list's items' own alignment and space, the number's side.
+  const text = (t: string, size?: string): RichNode => ({ type: "text", text: t, ...(size ? { marks: [{ type: "textStyle", attrs: { fontSize: size } }] } : {}) });
+  const item = (t: string, attrs: Record<string, unknown>): RichNode => ({ type: "listItem", content: [{ type: "paragraph", attrs, content: [text(t)] }] });
+  const imported = fromImport({
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { indentFirstLine: 5, spaceAfter: 6 }, content: [text("A channel carries water from its source to its mouth, and its banks shape the flow.")] },
+      {
+        type: "orderedList",
+        content: [
+          item("Gravel bars form where the current slows down in the bend.", { spaceAfter: 4, textAlign: "justify" }),
+          item("Sand settles behind every bar the river leaves.", { textAlign: "justify" }),
+        ],
+      },
+      { type: "paragraph", attrs: { spaceBefore: 2, borderBottom: "0.75 solid #4472c4 1", borderTop: "0 solid #000000 0" }, content: [text("The last paragraph closes the section with one more claim.")] },
+      { type: "blockMath", attrs: { latex: "x = 1 \\tag{1.1}", leqno: true } },
+      { type: "figure", attrs: { caption: "Figure 1: The river at the upper gauge.", captionStyles: JSON.stringify([{ start: 0, end: 9, style: "bold" }]) } },
+    ],
+  }).blocks;
+  const [p0, l1, p2, e3, f4] = imported;
+  check(
+    "import: a figure's caption keeps its bold label",
+    f4?.kind === "figure" && f4.caption?.[0]?.text === "Figure 1:" && f4.caption[0].bold === true && f4.caption[1]?.bold === undefined,
+    JSON.stringify(f4),
+  );
+  check(
+    "import: indents and spaces in points, items' alignment and space, borders, and the label's side",
+    p0.kind === "paragraph" && p0.indentPt?.first === 5 && p0.spaceAfter === 6 && l1.kind === "list" && l1.align === "justify" && l1.itemSpace === 4 && l1.spaceAfter === 2 && p2.kind === "paragraph" && p2.borders?.join() === "bottom" && e3.kind === "equation" && e3.labelSide === "left",
+    JSON.stringify(imported.map((b) => ({ kind: b.kind, ...("indentPt" in b ? { indentPt: b.indentPt } : {}), ...("spaceAfter" in b ? { spaceAfter: b.spaceAfter } : {}), ...("itemSpace" in b ? { itemSpace: b.itemSpace } : {}), ...(b.borders ? { borders: b.borders } : {}) }))),
+  );
+  // A scan's notes, which raise no mark: a small paragraph opening with its number once the body has begun.
+  const body = "At the end of the war the country lay in ruins, and yet within months its engineers were at work on the captured rockets, reading the drawings left behind in the tunnels and the test stands of the north.";
+  const notes = fromImport({
+    type: "doc",
+    attrs: {},
+    content: [
+      { type: "paragraph", content: [text(body)] },
+      { type: "paragraph", content: [text("2. Anna Berg, Rivers of the North, pp. 44-45.", "9pt")] },
+      { type: "paragraph", content: [text("1945 was the year the war ended in Europe and in the Pacific.", "9pt")] },
+    ],
+  }).blocks;
+  check(
+    "import: a small paragraph opening with a note's number is a footnote, a year is not",
+    notes[1]?.kind === "footnote" && notes[1].label === "2" && notes[2]?.kind === "paragraph",
+    JSON.stringify(notes.map((b) => b.kind)),
+  );
+  // The parse's crop of a display the glyph check failed is an equation image, whatever its words.
+  const crop = fromParse({ title: null, blocks: [{ type: "FIGURE", text: "Figure the river", page: 1, mathCrop: true, region: { x: 10, y: 10, w: 50, h: 5 } as never }] }).blocks[0];
+  check("parse: a display's crop is an equation image", crop?.kind === "figure" && crop.mathImage !== undefined);
+  // KaTeX's 1.21em, and the page editor's rule that sets a formula at its words' size.
+  const katexCss = ".katex{font:normal 1.21em KaTeX_Main,Times New Roman,serif;line-height:1.2}.katex *{border-color:currentColor}";
+  check(
+    "look: a formula draws at KaTeX's 1.21em until the page editor's rule sets 1em",
+    formulaScaleOf(katexCss, [".docs-prose .docs-math { display: inline-block; }"]) === 1.21 && formulaScaleOf(katexCss, ["/* a note { } */ .docs-prose .docs-math .katex { font-size: 1em; }"]) === 1,
+  );
+  // A Word file's borders: a Heading 1's rule under it, a quote's bar beside it.
+  const word = [
+    { words: "results", sides: ["bottom" as const] },
+    { words: "the market moved", sides: ["left" as const] },
+    { words: "revenue grew", sides: [] },
+  ];
+  const drawn = flatten({ blocks: [{ kind: "heading", level: 1, spans: [{ text: "Results" }], borders: ["bottom"] }, { kind: "paragraph", spans: [{ text: "The market moved." }], borders: ["left"] }, para("Revenue grew.")] });
+  const bare = flatten({ blocks: [{ kind: "heading", level: 1, spans: [{ text: "Results" }] }, para("The market moved."), para("Revenue grew.")] });
+  check("look: a Word file's borders drawn score 1, none drawn 0", near(borderScore(word, drawn), 1) && near(borderScore(word, bare), 0), `${borderScore(word, drawn)} ${borderScore(word, bare)}`);
+  // An import's Title and quote blocks draw their borders: a Word Title's rule under it, a quote's bar beside it.
+  const paragraph = (text: string, attrs: Record<string, unknown>): RichNode => ({ type: "paragraph", attrs, content: [{ type: "text", text }] });
+  const report = (bar: boolean): RichNode => ({
+    type: "doc",
+    content: [
+      paragraph("Annual report", { docStyle: "title", borderBottom: "0.75 solid #4472c4 4" }),
+      { type: "heading", attrs: { level: 1, borderBottom: "0.5 solid #000000 1" }, content: [{ type: "text", text: "Results" }] },
+      { type: "blockquote", content: [paragraph("The market moved.", bar ? { borderLeft: "1.5 solid #000000 0" } : {})] },
+      paragraph("Revenue grew.", {}),
+    ],
+  });
+  const titled = [{ words: "annual report", sides: ["bottom" as const] }, ...word];
+  const withBar = borderScore(titled, flatten(fromImport(report(true))));
+  const noBar = borderScore(titled, flatten(fromImport(report(false))));
+  check("look: an import's Title and quote count their borders", near(withBar, 1) && (noBar ?? 1) < 1, `${withBar} ${noBar}`);
+}
+
+{
+  // Furniture found by position: a head on every page, a page number that counts, the front matter's
+  // roman numbers; and what stands at one height by chance.
+  const lines: PdfText["lines"] = [];
+  const at = (page: number, top: number, left: number, text: string) => lines.push({ page, top, bottom: top + 10, left, right: left + 6 * text.length, text });
+  for (let p = 1; p <= 10; p++) {
+    if (p >= 2) at(p, 30, 250, "RIVERS AND LAKES");
+    for (const top of [100, 400, 600]) at(p, top, 72, `Body words of page ${p} at ${top}, long enough to be a line of the text.`);
+    at(p, 740, 300, p <= 3 ? ["i", "ii", "iii"][p - 1] : String(p));
+  }
+  at(3, 60, 72, "Introduction");
+  at(7, 60, 72, "Introduction");
+  for (const [p, left] of [[4, 80], [5, 100], [6, 120]]) at(p, 60, left, "Tip");
+  for (const [p, n] of [[5, 2], [6, 11], [8, 13]]) at(p, 45, 72, `Note ${n}.`);
+  at(4, 58, 72, "I.");
+  const found = new Set(furnitureOf(lines, new Map(Array.from({ length: 10 }, (_, k) => [k + 1, { width: 612, height: 792 }]))).map((l) => `${l.page} ${l.text}`));
+  const has = (key: string) => found.has(key);
+  check(
+    "free: a head on every page and page numbers that count, arabic and roman, are furniture",
+    has("5 RIVERS AND LAKES") && has("6 6") && has("2 ii") && has("3 iii"),
+    [...found].slice(0, 12).join(" | "),
+  );
+  check(
+    "free: a chapter's heading on pages far apart, a label at other places, notes that do not count, and a chapter's I. are no furniture",
+    !has("3 Introduction") && !has("5 Tip") && !has("6 Note 11.") && !has("4 I."),
+    [...found].filter((k) => /Introduction|Tip|Note|I\./.test(k)).join(" | "),
+  );
+  // A page number next to a heading's own words is no leak; one alone is.
+  const pageNumber = { page: 2, top: 740, bottom: 750, left: 300, right: 306, text: "2" };
+  const numberPdf: PdfText = {
+    first: 1,
+    pages: 2,
+    raw: [["2 VHE OBSERVATIONS", "The telescope saw the source."], ["2"]],
+    lines: [
+      { page: 1, top: 100, bottom: 110, left: 72, right: 250, text: "2 VHE OBSERVATIONS" },
+      { page: 1, top: 130, bottom: 140, left: 72, right: 250, text: "The telescope saw the source." },
+      pageNumber,
+    ],
+    furniture: [pageNumber],
+    sizes: new Map([[1, { width: 612, height: 792 }], [2, { width: 612, height: 792 }]]),
+  };
+  const heading: DocBlock = { kind: "heading", level: 1, spans: [{ text: "2 VHE OBSERVATIONS" }] };
+  const own = freeScores(numberPdf, flatten({ blocks: [heading, para("The telescope saw the source.")] })).furniture;
+  const leaked = freeScores(numberPdf, flatten({ blocks: [heading, para("The telescope saw the source."), para("2")] }));
+  check("free: a heading's number is its own; a page number alone leaks and is a page-number line", own.leaked === 0 && leaked.furniture.leaked === 1 && leaked.numberLines.count === 1, `${own.leaked} ${leaked.furniture.leaked} ${leaked.numberLines.count}`);
+  // A figure's region that reaches up to the running head: the crop draws it, a leak.
+  const head = { page: 1, top: 30, bottom: 40, left: 200, right: 400, text: "RIVERS AND LAKES" };
+  const headPdf: PdfText = { ...numberPdf, pages: 1, raw: [["RIVERS AND LAKES", "The telescope saw the source."]], lines: [head, numberPdf.lines[1]], furniture: [head] };
+  const figureAt = (top: number): DocBlock => ({ kind: "figure", at: { page: 1, region: { kind: "path", points: [[10, top], [90, top], [90, 40], [10, 40]] } } });
+  const tall = freeScores(headPdf, flatten({ blocks: [figureAt(3), para("The telescope saw the source.")] })).furniture;
+  const short = freeScores(headPdf, flatten({ blocks: [figureAt(10), para("The telescope saw the source.")] })).furniture;
+  check("free: a running head inside a figure's region leaks; below it, none", tall.leaked === 1 && tall.found[0]?.pictured === 1 && short.leaked === 0, `${tall.leaked} ${short.leaked}`);
+  // A chart's label a run of pages repeats inside the body is no running head, whatever the furniture finder says.
+  const tick = { page: 1, top: 300, bottom: 310, left: 200, right: 220, text: "0.8" };
+  const below = { page: 1, top: 500, bottom: 510, left: 72, right: 250, text: "The dam held the flood." };
+  const chartPdf: PdfText = { ...headPdf, raw: [["RIVERS AND LAKES", "The telescope saw the source.", "0.8", "The dam held the flood."]], lines: [head, numberPdf.lines[1], tick, below], furniture: [head, tick] };
+  const chart: DocBlock = { kind: "figure", at: { page: 1, region: { kind: "path", points: [[10, 30], [90, 30], [90, 60], [10, 60]] } } };
+  const ticked = freeScores(chartPdf, flatten({ blocks: [para("The telescope saw the source."), chart, para("The dam held the flood.")] })).furniture;
+  check("free: a furniture line inside the body of a figure (a chart's tick) is no leak", ticked.leaked === 0, `leaked ${ticked.leaked}`);
+  // A display read as words holds a line "12": no page-number line.
+  const display = freeScores({ ...numberPdf, furniture: [] }, flatten({ blocks: [para("MSE = 1\n12\nI=0")] }));
+  check("free: a number on a line inside a block is no page-number line", display.numberLines.count === 0, `count ${display.numberLines.count}`);
 }
 
 {

@@ -9,7 +9,9 @@
 //      between dollar signs;
 //   4. every parse figure has a figure object, with its media;
 //   5. page starts rise, one for each page that holds words;
-//   6. the size numbers are the rich text's.
+//   6. the size numbers are the rich text's;
+// and no string of the rich text holds half of a surrogate pair (the
+// database refuses the import).
 // It also reads what a reader would miss: the masthead (the kicker, one
 // Title, the Subtitle), each row's page and how the AI prefix names it,
 // each cell's place (C1), the words after each page start against the
@@ -18,11 +20,13 @@
 // Nothing is stored.
 //
 // Usage:
-//   npx tsx --tsconfig tsconfig.json scripts/qa/import-convert.ts [--offline] [--json <file>] [--verbose] [source …]
+//   npx tsx --tsconfig tsconfig.json scripts/qa/import-convert.ts [--offline] [--json <file>] [--verbose] [--pages <45-60,70>] [source …]
 // A source is a web page's or a PDF's URL, a .pdf, .md, or .txt path, or
 // synthetic:pdf, synthetic:url, synthetic:markdown (fixtures built below).
 // With no source: the sources in scripts/qa/import-compare-sources.txt,
 // every scripts/eval/fixtures/*.md, and the three synthetic fixtures.
+// --pages parses each PDF's chosen pages alone, as an add with the Pages
+// field set does (SPEC.md §15): its page starts name the PDF's own pages.
 // --offline skips URLs. A web page is the walk's parse without the model
 // passes, which is what the add stores under the model mock. The exit code
 // is 1 when a check fails; a NOTE never fails the run.
@@ -48,6 +52,7 @@ import { MARKDOWN_EXTENSIONS } from "@/lib/markdown-file";
 import { fetchPage } from "@/lib/parse/fetch-page";
 import { parseMarkdownDocument } from "@/lib/parse/markdown-document";
 import { parsePdf } from "@/lib/parse/pdf";
+import { rangePages, readPageRanges } from "@/lib/pdf-pages";
 import { pruneReferences } from "@/lib/parse/references";
 import type { DocumentReference, ParsedBlock, TextFont } from "@/lib/parse/types";
 import { parseHtmlContent, resolveContentsLinks } from "@/lib/parse/url";
@@ -100,7 +105,11 @@ const offline = argv.includes("--offline");
 const verbose = argv.includes("--verbose");
 const jsonAt = argv.indexOf("--json");
 const jsonOut = jsonAt >= 0 ? argv[jsonAt + 1] : null;
-const named = argv.filter((a, i) => !a.startsWith("--") && !(jsonAt >= 0 && i === jsonAt + 1));
+const pagesAt = argv.indexOf("--pages");
+const pagesArg = pagesAt >= 0 ? readPageRanges(argv[pagesAt + 1] ?? "", null) : null;
+if (pagesArg && "error" in pagesArg) throw new Error(`--pages: ${pagesArg.error}`);
+const chosenPages = pagesArg && "ranges" in pagesArg && pagesArg.ranges ? rangePages(pagesArg.ranges) : undefined;
+const named = argv.filter((a, i) => !a.startsWith("--") && !(jsonAt >= 0 && i === jsonAt + 1) && !(pagesAt >= 0 && i === pagesAt + 1));
 
 function defaultSources(): string[] {
   const list = join(ROOT, "scripts/qa/import-compare-sources.txt");
@@ -314,6 +323,24 @@ const ANY_MARKER =
   /^\s*([-*•▪◦‣●·∙○■□◆❖➢➤►✓✔–—](?:\s+[☐☑☒])?|[☐☑☒]|(?:\d{1,3}\.)+\d{1,3}\.?|\((?:[a-z]{1,5}|\d{1,3})\)|(?:[A-Z]{1,2}-)?(?:[a-z]{1,5}|\d{1,3})(?:\)\.?|\.\)?)|\*?\d{1,3}|\[\d{1,3}\])\s+/i;
 const LISTS = new Set(["bulletList", "orderedList", "taskList"]);
 
+/** A span's words line by line: a row's span ends at a line break, and a
+    drawn list line's marker is the list's, no words (a theorem's italic
+    ran on over the next item's "(b)"). A contents list and lines a list
+    cannot draw keep their markers as words. */
+const drawnList = (b: Block) =>
+  b.type === "LIST" &&
+  !tokensOf(b).includes("contents") &&
+  !(b.links ?? []).some((l) => l.targetOrder !== undefined) &&
+  b.text.split("\n").every((line) => !line.trim() || ANY_MARKER.test(`${line} `));
+const lineWords = (b: Block, s: { start: number }, words: string) =>
+  words
+    .split("\n")
+    .map((line, k) => {
+      const atStart = k > 0 || !b.text.slice(b.text.lastIndexOf("\n", s.start - 1) + 1, s.start).trim();
+      return atStart && drawnList(b) ? `${line} `.replace(ANY_MARKER, "") : line;
+    })
+    .filter((w) => norm(w));
+
 /** Each list line of the rich text in reading order: its words, its depth,
     and its marker as the page editor draws it (components/docs/toolbar/
     lists.ts: the outermost list's levels and the line's numbers). */
@@ -455,7 +482,8 @@ function blockUnits(b: Block, i: number): Unit[] {
     case "SEPARATOR":
       return [];
     case "FIGURE":
-      return [unit("figure", b.text, 0)];
+      // A display equation's crop has no caption (lib/docs/import.ts).
+      return [unit("figure", b.mathCrop ? "" : b.text, 0)];
     case "TABLE":
       return [unit("table", normTable(indexedText(b)), 0)];
     case "LIST": {
@@ -675,7 +703,11 @@ function lookChecks(f: Fixture, doc: RichNode, check: (ok: boolean, name: string
   });
   const want = f.blocks
     .filter((b) => b.type !== "FIGURE" && b.type !== "CODE" && b.type !== "TABLE")
-    .flatMap((b) => (b.styles ?? []).filter((s) => /^(strike|font:|size:)/.test(s.style)).flatMap((s) => outsideMath(b, s).map((words) => ({ key: s.style, words: norm(words) }))));
+    .flatMap((b) =>
+      (b.styles ?? [])
+        .filter((s) => /^(strike|font:|size:)/.test(s.style))
+        .flatMap((s) => outsideMath(b, s).flatMap((words) => lineWords(b, s, words)).map((words) => ({ key: s.style, words: norm(words) }))),
+    );
   const lost = want.filter(({ key, words }) => words && !(marked.get(key) ?? []).some((text) => norm(text).includes(words)));
   if (want.length > 0) check(lost.length === 0, "every strikethrough, face, and size is a mark", `${want.length} in the parse${lost.length ? `; lost ${lost.length}: ${lost.slice(0, 3).map((x) => `${x.key} "${clip(x.words, 30)}"`).join(" | ")}` : ""}`);
   // A paragraph's alignment token is its paragraph's alignment (a caption
@@ -746,13 +778,17 @@ async function checkFixture(f: Fixture): Promise<Report> {
         titleFromOriginal: f.titleFromOriginal,
         blocks: f.blocks,
         ...(f.pageSize ? { pageSize: f.pageSize } : {}),
+        ...(f.kind === "pdf" && chosenPages ? { firstPage: chosenPages[0] } : {}),
         bodyFont: f.bodyFont,
         titleFont: f.titleFont,
         titleAlign: f.titleAlign,
       }),
     );
   } catch (err) {
-    fail("richTextFromImport runs", String(err instanceof Error ? (err.stack ?? err.message) : err).split("\n").slice(0, 4).join(" | "));
+    const reason = String(err instanceof Error ? (err.stack ?? err.message) : err).split("\n").slice(0, 4).join(" | ");
+    fail("richTextFromImport runs", reason);
+    // The sanitizer refuses half of a surrogate pair outside production.
+    if (/surrogate pair/.test(reason)) fail("no lone surrogate in the rich text", reason);
     return report;
   }
   report.ms.convert = Math.round(performance.now() - t0);
@@ -760,6 +796,19 @@ async function checkFixture(f: Fixture): Promise<Report> {
   const json = JSON.stringify(doc);
   report.jsonBytes = Buffer.byteLength(json);
   report.size = out.size;
+
+  // No lone surrogate: the database refuses a string that holds half of a
+  // surrogate pair, and the import with it (the NPS thesis's formulas began
+  // inside a math letter). Every string counts: words and attributes.
+  const halves: string[] = [];
+  walk(doc, (node) => {
+    for (const v of [node.text, ...Object.values(node.attrs ?? {}), ...(node.marks ?? []).flatMap((m) => Object.values(m.attrs ?? {}))]) {
+      if (typeof v !== "string" || v.isWellFormed()) continue;
+      const at = v.search(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+      halves.push(`${node.type} "${clip(v.slice(Math.max(0, at - 40), at + 10).toWellFormed(), 60)}"`);
+    }
+  });
+  check(halves.length === 0, "no lone surrogate in the rich text", halves.length > 0 ? `${halves.length}: ${halves.slice(0, 3).join(" | ")}` : "");
 
   // 1. Sanitized equals itself.
   t0 = performance.now();
@@ -925,7 +974,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
     }
     if (usedMedia.has(mediaId)) figureProblems.push(`block ${i}: mediaId ${mediaId} used twice`);
     usedMedia.add(mediaId);
-    if (norm(String(a.caption ?? "")) !== norm(b.text)) figureProblems.push(`block ${i}: caption "${clip(String(a.caption ?? ""), 30)}" ≠ "${clip(b.text, 30)}"`);
+    if (norm(String(a.caption ?? "")) !== norm(b.mathCrop ? "" : b.text)) figureProblems.push(`block ${i}: caption "${clip(String(a.caption ?? ""), 30)}" ≠ "${clip(b.text, 30)}"`);
     if (m.caption !== a.caption) figureProblems.push(`block ${i}: media caption differs from the object's`);
     if ((b.html ?? null) !== m.html) figureProblems.push(`block ${i}: media html ${m.html === null ? "null" : `${m.html.length} chars`} ≠ parse html ${b.html ? `${b.html.length} chars` : "null"}`);
     if ((b.page ?? null) !== (a.page ?? null) || (b.page ?? null) !== m.page) figureProblems.push(`block ${i}: page ${String(a.page)}/${String(m.page)} ≠ ${String(b.page ?? null)}`);
@@ -1211,6 +1260,26 @@ async function checkFixture(f: Fixture): Promise<Report> {
     ];
     const wrong = want.filter(([text, depth, marker]) => !items.some((it) => it.text === text && it.depth === depth && it.marker === marker));
     check(wrong.length === 0, "every list marker family draws as its list", wrong.length ? `${wrong.length} of ${want.length}: ${wrong.map(([text]) => text).join(" | ")}` : `${want.length} lines`);
+
+    // A list whose first line stands a level in keeps its lines' depths:
+    // siblings stay siblings ("(b)" drew "(2)", its line a level too deep),
+    // and each depth stands where the page sets its lines (the page's
+    // depths 1 and 2, not 0 and 1).
+    const parts: [string, number, string][] = [
+      ["the first part", 0, "(a)"],
+      ["its first case", 1, "(1)"],
+      ["its second case", 1, "(2)"],
+      ["the second part", 0, "(b)"],
+      ["a case of the second part", 1, "(1)"],
+    ];
+    const off = parts.filter(([text, depth, marker]) => !items.some((it) => it.text === text && it.depth === depth && it.marker === marker));
+    const list = (doc.content ?? []).find((n) => n.type === "orderedList" && inlineText(n.content?.[0]?.content?.[0] ?? { type: "text" }) === "the first part");
+    const depths = list?.attrs?.listIndents;
+    check(
+      off.length === 0 && depths === "[[38,-18],[54,-16]]",
+      "a list whose first line stands a level in keeps each line's depth, at the page's depths",
+      `${off.length ? `${off.length} of ${parts.length} off: ${off.map(([text]) => text).join(" | ")}` : `${parts.length} lines`}; depths ${String(depths ?? "none")}`,
+    );
   }
 
   // Every list's markers draw as the parse prints them (round 2): a
@@ -1307,23 +1376,6 @@ async function checkFixture(f: Fixture): Promise<Report> {
   const STYLES = ["bold", "italic", "underline", "code", "smallCaps", "sub", "sup"];
   const inRows = (style: string, b?: Block) =>
     STYLES.includes(style) || style.startsWith("highlight:") || (style.startsWith("color:") && b?.type !== "HEADING");
-  // A span's words line by line: a row's span ends at a line break, and a
-  // drawn list line's marker is the list's, no words (a theorem's italic
-  // ran on over the next item's "(b)"). A contents list and lines a list
-  // cannot draw keep their markers as words.
-  const drawnList = (b: Block) =>
-    b.type === "LIST" &&
-    !tokensOf(b).includes("contents") &&
-    !(b.links ?? []).some((l) => l.targetOrder !== undefined) &&
-    b.text.split("\n").every((line) => !line.trim() || ANY_MARKER.test(`${line} `));
-  const lineWords = (b: Block, s: { start: number }, words: string) =>
-    words
-      .split("\n")
-      .map((line, k) => {
-        const atStart = k > 0 || !b.text.slice(b.text.lastIndexOf("\n", s.start - 1) + 1, s.start).trim();
-        return atStart && drawnList(b) ? `${line} `.replace(ANY_MARKER, "") : line;
-      })
-      .filter((w) => norm(w));
   const styleWant = f.blocks
     .filter((b) => b.type !== "FIGURE" && b.type !== "CODE")
     .flatMap((b) =>
@@ -1434,22 +1486,45 @@ async function checkFixture(f: Fixture): Promise<Report> {
       `${eqWant.length} in the parse (${regions} with a region), ${eqHave.length} equations; ${report.figures} figure objects and ${out.figures.length} media for ${parseFigures.length} parse figures${lostEq.length ? `; lost ${lostEq.length}: ${lostEq.slice(0, 2).map((x) => clip(x, 40)).join(" | ")}` : ""}`,
     );
   }
-  // A paragraph's indent (a class token of the parse) is the page editor's
-  // indents, half an inch a step: [indentLeft, indentFirstLine].
+  // A paragraph's indent is the page editor's indents: the page's measure
+  // (ParsedBlock.indent, in points), else half an inch a step of the kind
+  // its class token names: [indentLeft, indentFirstLine].
   const INDENT_ATTRS: Record<string, [number | null, number | null]> = { "indent-first": [null, 36], "indent-hanging": [36, -36], "indent-block": [36, null] };
+  const measured = (b: Block): [number | null, number | null] | null => {
+    if (!b.indent) return null;
+    const left = Math.min(432, Math.max(0, Math.round(b.indent.left * 2) / 2));
+    const first = Math.min(432 - left, Math.max(-left, Math.round(b.indent.first * 2) / 2));
+    return [left || null, first || null];
+  };
+  // Paragraphs pair by their words, the k-th of the parse with the k-th of
+  // the page: two with the same words may stand at two indents. A table's
+  // cells, a list's lines, and the Title are no parse paragraphs; a
+  // paragraph a list item holds after its line is (a list that resumes).
+  const byWords = new Map<string, RichNode[]>();
+  const paragraphsOf = (node: RichNode) => {
+    if (node.type === "table") return;
+    if (node.type === "paragraph") {
+      const words = node.attrs?.docStyle !== "title" ? norm(inlineText(node)) : "";
+      if (words) byWords.set(words, [...(byWords.get(words) ?? []), node]);
+      return;
+    }
+    const line = node.type === "listItem" || node.type === "taskItem" ? 1 : 0;
+    for (const child of (node.content ?? []).slice(line)) paragraphsOf(child);
+  };
+  paragraphsOf(doc);
+  const taken = new Map<string, number>();
   const indented = f.blocks.flatMap((b) => {
-    const token = b.type === "PARAGRAPH" ? tokensOf(b).find((k) => k in INDENT_ATTRS) : undefined;
-    return token ? [{ b, token }] : [];
+    if (b.type !== "PARAGRAPH") return [];
+    const words = norm(indexedText(b));
+    const k = taken.get(words) ?? 0;
+    taken.set(words, k + 1);
+    const token = tokensOf(b).find((t) => t in INDENT_ATTRS);
+    const want = measured(b) ?? (token ? INDENT_ATTRS[token] : null);
+    return want && (want[0] !== null || want[1] !== null) ? [{ b, token: token ?? "indent", want, node: byWords.get(words)?.[k] }] : [];
   });
   if (indented.length) {
-    const byWords = new Map<string, RichNode>();
-    walk(doc, (n) => {
-      const words = n.type === "paragraph" ? norm(inlineText(n)) : "";
-      if (words && !byWords.has(words)) byWords.set(words, n);
-    });
-    const wrong = indented.filter(({ b, token }) => {
-      const n = byWords.get(norm(indexedText(b)));
-      const [left, first] = INDENT_ATTRS[token];
+    const wrong = indented.filter(({ want, node: n }) => {
+      const [left, first] = want;
       return !n || (n.attrs?.indentLeft ?? null) !== left || (n.attrs?.indentFirstLine ?? null) !== first;
     });
     check(
@@ -1545,10 +1620,10 @@ async function pdfFixture(name: string, bytes: Uint8Array): Promise<Fixture> {
     bodyFont?: TextFont;
     titleFont?: TextFont;
     titleAlign?: "center" | "right";
-  } = await parsePdf(new Uint8Array(bytes));
+  } = await parsePdf(new Uint8Array(bytes), { pages: chosenPages });
   const parseMs = performance.now() - t0;
   return {
-    name,
+    name: chosenPages ? `${name} (pages ${argv[pagesAt + 1]})` : name,
     kind: "pdf",
     title: parsed.title ?? name.replace(/\.pdf$/i, ""),
     titleFromOriginal: parsed.title !== null,
@@ -1636,6 +1711,7 @@ function syntheticPdf(): Fixture {
   const l24 = "- the set A ⊂ X\n- the map f : X → Y on page fifteen";
   const m25 = "A bound 1 + 1/n that a page start cuts, and an empty formula here.";
   const s26 = "It has struck words, red words, lit words, sans words, and small words in one line.";
+  const l27 = "i. The number K is called the constant.";
   const table = pdfTable([["Model", "BLEU", "Cost"], ["Base", "27.3", "3.3"], ["Big", "28.4", "23.0"]], true);
   const blocks: Block[] = [
     { type: "PARAGRAPH", text: p0, page: 1, styles: [{ ...span(p0, "bold words"), style: "bold" }], links: [{ ...span(p0, "a link"), href: "https://example.com/" }] },
@@ -1692,6 +1768,17 @@ function syntheticPdf(): Fixture {
     ] },
     { type: "PARAGRAPH", text: "September 28, 2026", html: '<p class="right">', page: 16, font: { family: "Times New Roman", size: 11 }, spaceAfter: 0 },
     { type: "PARAGRAPH", text: "A note set small in a sans face.", page: 16, font: { family: "Arial", size: 9 }, spaceAfter: 14 },
+    // A list whose first line stands a level in: an exercise's parts after
+    // the lines that define its events, its cases two levels in.
+    {
+      type: "LIST",
+      text: "  (a) the first part\n    (1) its first case\n    (2) its second case\n  (b) the second part\n    (1) a case of the second part",
+      page: 16,
+      listIndents: [{ left: 5, first: 0 }, { left: 38, first: -18 }, { left: 54, first: -16 }],
+    },
+    // A list line that opens with a formula (a sentence's end the parse
+    // read as the numeral "i."): its words and the formula stay.
+    { type: "LIST", text: l27, page: 16, math: [mathSpan(l27, "i", "i"), mathSpan(l27, "K", "K")] },
   ];
   // Footnotes: a reference raised in a paragraph and one in a list line,
   // each footnote after its block, its label first; a table's note with no

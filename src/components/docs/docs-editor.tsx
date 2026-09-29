@@ -35,6 +35,7 @@ import type { Highlight } from "@/components/reader/block-view";
 import { api } from "@/lib/api";
 import { inlineText } from "@/lib/docs/blocks";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
+import { pageRangesLabel, type PageRange } from "@/lib/pdf-pages";
 
 // The page editor (SPEC.md §29): a blank document is written here the way a
 // Google Doc is written — a title row, the toolbar, and white pages on a gray
@@ -50,14 +51,16 @@ const FONTS_LINK_ID = "unitos-docs-fonts";
 /** An import (SPEC.md §29): a document made from a PDF, a web page, a
     Markdown or text file, or a Word file, as the page sends it. origin: the
     address, or "" for an uploaded file; pages: a PDF's page count;
-    importRev: the revision the import or its last re-parse stored (a
-    re-parse builds the page editor anew); edited: changed since then
-    (richTextRev > importRev); shared: attached to a project another account
-    owns, so Editing and Suggesting are off. */
+    pdfPages: the PDF's pages the reader chose at the add (SPEC.md §15),
+    null for every page; importRev: the revision the import or its last
+    re-parse stored (a re-parse builds the page editor anew); edited:
+    changed since then (richTextRev > importRev); shared: attached to a
+    project another account owns, so Editing and Suggesting are off. */
 export type Imported = {
   kind: "pdf" | "url" | "markdown" | "docx";
   origin: string;
   pages: number | null;
+  pdfPages?: PageRange[] | null;
   importRev: number;
   edited: boolean;
   shared: boolean;
@@ -103,7 +106,8 @@ function siteOf(address: string): string {
 }
 
 /** Where an import came from, after its title: "Imported from" the site, a
-    link to the page; a PDF and its page count; a text file; or a Word file.
+    link to the page; a PDF and its page count, or the pages the reader
+    chose of it ("PDF · pages 45–60 of 409"); a text file; or a Word file.
     Muted, the accent on hover. */
 function ImportLine({ imported }: { imported: Imported }) {
   const t = useT();
@@ -130,7 +134,19 @@ function ImportLine({ imported }: { imported: Imported }) {
   }
   if (imported.kind === "pdf") {
     const n = imported.pages;
-    parts.push(<span key="pdf">{n ? t("docsPage.importPdf", { n, s: n === 1 ? "" : "s" }) : "PDF"}</span>);
+    const chosen = imported.pdfPages;
+    parts.push(
+      <span key="pdf">
+        {n && chosen
+          ? t(chosen.length === 1 && chosen[0][0] === chosen[0][1] ? "docsPage.importPdfPage" : "docsPage.importPdfPages", {
+              pages: pageRangesLabel(chosen),
+              n,
+            })
+          : n
+            ? t("docsPage.importPdf", { n, s: n === 1 ? "" : "s" })
+            : "PDF"}
+      </span>,
+    );
   } else if (imported.kind === "markdown" && !imported.origin) {
     parts.push(<span key="file">{t("docsPage.importTextFile")}</span>);
   } else if (imported.kind === "docx" && !imported.origin) {

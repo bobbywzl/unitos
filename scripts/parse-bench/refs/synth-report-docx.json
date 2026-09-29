@@ -136,7 +136,9 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 2,
+      "spaceAfter": 8
     },
     {
       "kind": "paragraph",
@@ -727,7 +729,8 @@
         {
           "text": "The operations team will take the following steps before the peak season:"
         }
-      ]
+      ],
+      "spaceAfter": 8
     },
     {
       "kind": "list",
@@ -759,7 +762,8 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 2
     },
     {
       "kind": "heading",
@@ -780,7 +784,8 @@
         {
           "text": " is the share of parcels delivered by the date promised at the time of shipment."
         }
-      ]
+      ],
+      "spaceAfter": 8
     },
     {
       "kind": "paragraph",

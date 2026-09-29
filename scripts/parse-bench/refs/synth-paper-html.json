@@ -25,7 +25,8 @@
       "font": {
         "shape": "serif",
         "size": 11
-      }
+      },
+      "spaceAfter": 14
     },
     {
       "kind": "paragraph",
@@ -45,7 +46,8 @@
         "shape": "serif",
         "size": 8.8,
         "bold": true
-      }
+      },
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -89,7 +91,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 36
+      },
+      "spaceAfter": 1
     },
     {
       "kind": "paragraph",
@@ -106,7 +113,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 9
+      },
+      "spaceAfter": 1
     },
     {
       "kind": "paragraph",
@@ -116,7 +128,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 9
+      }
     },
     {
       "kind": "heading",
@@ -150,7 +166,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 9
+      }
     },
     {
       "kind": "heading",
@@ -170,7 +190,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 9
+      }
     },
     {
       "kind": "heading",
@@ -682,7 +706,12 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 9
+      },
+      "spaceAfter": 2
     },
     {
       "kind": "paragraph",
@@ -692,7 +721,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 9
+      }
     },
     {
       "kind": "table",
@@ -861,7 +894,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 9
+      }
     },
     {
       "kind": "heading",
@@ -882,7 +919,11 @@
         }
       ],
       "align": "justify",
-      "indent": "first"
+      "indent": "first",
+      "indentPt": {
+        "left": 0,
+        "first": 9
+      }
     },
     {
       "kind": "heading",
@@ -999,7 +1040,9 @@
             }
           ]
         }
-      ]
+      ],
+      "align": "justify",
+      "itemSpace": 0
     },
     {
       "kind": "footnote",

@@ -1,14 +1,15 @@
 // A page's lines cut into segments. Readers are tried in this order:
-// contents lists, tables, code listings, label lines, headings (headings.ts),
-// lists (lists.ts), and paragraphs (paragraphs.ts). Each takes the lines from
+// contents lists, tables, code listings, label lines, an algorithm's lines
+// (lists.ts), headings (headings.ts), references and lists (lists.ts), and
+// paragraphs (paragraphs.ts). Each takes the lines from
 // one index on and says where it stopped; the first that takes the line
 // makes its segments.
 
 import { TOC_ENTRY_RE, TOC_LABEL_RE, TOC_TAIL_RE, isContentsEntry, readContentsEntries, twoColumnList } from "@/lib/parse/pdf/contents";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { readHeading } from "@/lib/parse/pdf/headings";
-import { closeLists, joinMarkerCells, readList } from "@/lib/parse/pdf/lists";
-import { readParagraph } from "@/lib/parse/pdf/paragraphs";
+import { closeLists, joinMarkerCells, readAlgorithm, readList, readReferences } from "@/lib/parse/pdf/lists";
+import { markEdges, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { tableFromRegion } from "@/lib/parse/pdf/ruled";
 import { findTableRuns, isLabelLine, tableFromRun } from "@/lib/parse/pdf/tables";
 import { isMonoLine, lineAsPart } from "@/lib/parse/pdf/text";
@@ -24,6 +25,7 @@ const PROOF_END_RE = /^[□■∎]$/;
 export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
   const segments: Segment[] = [];
   const lines = joinMarkerCells(pageLines);
+  markEdges(lines, ctx);
   // A document's first page opens no list the last document left open.
   if (lines[0]?.page === 0) closeLists();
   const runOf = findTableRuns(lines, ctx);
@@ -101,14 +103,44 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
       readCodeListing(lines, i, ctx, runOf) ??
       readRuleLine(lines, i) ??
       readLabelLine(lines, i, ctx) ??
+      readAlgorithm(lines, i, ctx, runOf) ??
       readHeading(lines, i, ctx, runOf) ??
+      readReferences(lines, i, ctx, runOf) ??
       readList(lines, i, ctx, runOf) ??
       readParagraph(lines, i, ctx, runOf);
-    if (step.segments.some((s) => s.type === "HEADING")) closeLists();
+    const heading = step.segments.findLast((s) => s.type === "HEADING");
+    if (heading) closeLists(heading.text);
     segments.push(...step.segments);
     i = step.next;
   }
+  markPullQuotes(segments);
   return withDrawnSeparators(segments, starts, lines, ctx, runOf);
+}
+
+// ── Pull quotes ─────────────────────────────────────────────────────────────
+
+// A paragraph set in a column under half as wide as a paragraph of its page
+// that holds four in five of its words: a pull quote, the text's own words
+// set apart ("Many Earth science missions, both airborne and on orbit, …"
+// beside the paragraph it quotes, the Earth Observer p. 7: read as a
+// paragraph).
+function markPullQuotes(segments: Segment[]): void {
+  const wordsOf = (text: string) => text.toLowerCase().match(/\p{L}{3,}/gu) ?? [];
+  const width = (s: Segment) => (s.box ? s.box.x2 - s.box.x1 : 0);
+  for (const s of segments) {
+    if (s.type !== "PARAGRAPH" || /\b(?:quote|caption|center)\b/.test(s.html ?? "")) continue;
+    const words = wordsOf(s.text);
+    if (words.length < 8) continue;
+    const quoted = segments.some((t) => {
+      if (t === s || t.type !== "PARAGRAPH" || t.text.length <= s.text.length || width(s) * 2 > width(t)) return false;
+      const theirs = new Set(wordsOf(t.text));
+      return words.filter((w) => theirs.has(w)).length >= words.length * 0.8;
+    });
+    if (!quoted) continue;
+    const tokens = /class="([^"]*)"/.exec(s.html ?? "")?.[1].split(/\s+/).filter(Boolean) ?? [];
+    s.html = `<p class="${[...tokens.filter((t) => !t.startsWith("indent")), "quote"].join(" ")}"></p>`;
+    delete s.indent;
+  }
 }
 
 // ── Separators ──────────────────────────────────────────────────────────────

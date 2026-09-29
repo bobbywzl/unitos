@@ -28,7 +28,8 @@
     {
      "text": " #"
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -36,7 +37,8 @@
     {
      "text": "Department of Computer Science, Aarhus University, Denmark"
     }
-   ]
+   ],
+   "spaceAfter": 5
   },
   {
    "kind": "paragraph",
@@ -48,7 +50,8 @@
     {
      "text": " #"
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -56,7 +59,8 @@
     {
      "text": "Department of Computer Science, Aarhus University, Denmark"
     }
-   ]
+   ],
+   "spaceAfter": 5
   },
   {
    "kind": "paragraph",
@@ -68,7 +72,8 @@
     {
      "text": " #"
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -76,7 +81,8 @@
     {
      "text": "Department of Computer Science, Aarhus University, Denmark"
     }
-   ]
+   ],
+   "spaceAfter": 5
   },
   {
    "kind": "paragraph",
@@ -88,7 +94,8 @@
     {
      "text": " #"
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -96,7 +103,8 @@
     {
      "text": "Department of Computer Science, Aarhus University, Denmark"
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -130,7 +138,8 @@
     {
      "text": "Quantum circuits consist of gates applied to qubits. Current quantum hardware platforms impose connectivity restrictions on binary CX gates. Hence, Layout Synthesis is an important step to transpile quantum circuits before they can be executed. Since CX gates are noisy, it is important to reduce the CX count or CX depth of the mapped circuits."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -138,7 +147,12 @@
     {
      "text": "We provide a new and efficient encoding of Quantum-circuit Layout Synthesis in SAT. Previous SAT encodings focused on gate count and CX-gate count. Our encoding instead guarantees that we find mapped circuits with minimal circuit depth or minimal CX-gate depth. We use incremental SAT solving and parallel plans for an efficient encoding. This results in speedups of more than 10-100x compared to OLSQ2, which guarantees depth-optimality. But minimizing depth still takes more time than minimizing gate count with Q-Synth."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -146,7 +160,12 @@
     {
      "text": "We correlate the noise reduction achieved by simulating circuits after (CX)-count and (CX)-depth reduction. We find that minimizing for CX-count correlates better with reducing noise than minimizing for CX-depth. However, taking into account both CX-count and CX-depth provides the best noise reduction."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   },
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -154,7 +173,8 @@
     {
      "text": "2012 ACM Subject Classification Hardware → Quantum computation; Computing methodologies → Planning for deterministic actions"
     }
-   ]
+   ],
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -162,7 +182,8 @@
     {
      "text": "Keywords and phrases Quantum Layout Synthesis, Transpiling, Circuit Mapping, Incremental SAT, Parallel Plans"
     }
-   ]
+   ],
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -170,7 +191,8 @@
     {
      "text": "Supplementary Material Software (Github): https://github.com/anbclausen/quills Software and Experimental Data (Zenodo link): https://doi.org/10.5281/zenodo.15606051"
     }
-   ]
+   ],
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -178,7 +200,8 @@
     {
      "text": "Funding This research was partially funded by the Innovation Fund Denmark project “Automated Planning for Quantum Circuit Optimization”. This research was also partially funded by the European Innovation Council through Accelerator grant no. 190124924."
     }
-   ]
+   ],
+   "spaceAfter": 10
   },
   {
    "kind": "paragraph",
@@ -211,7 +234,12 @@
     {
      "text": "Note that the QLS problem may admit many possible solutions. One can easily schedule all gates by eagerly adding SWAP gates to bring distant logical qubits closer together. Although the primary objective of QLS is to handle connectivity restrictions, the secondary objective is to maximize hardware performance. In the current Noisy Intermediate Scale Quantum (NISQ) era, qubits are noisy, and every gate adds to the error. Reducing noise is crucial for practical quantum computing. While there does not exist a single metric that predicts actual hardware performance, there exist some simple metrics like gate-count that are indicative. Since binary CX gates can be up to 10 times more error-prone than unary gates, the number of CX gates (CX-count metric) is more relevant than just gate count [14]. Since SWAP gates are usually implemented by 3 CX gates each, solutions with too many SWAPs should be avoided. Several heuristic approaches have been proposed that reduce the additional SWAP gates. The most famous is SABRE [13] (available in IBM’s Qiskit), which implements a very fast heuristic to find a correct layout mapping. The tool MQT QMAP provides a heuristic approach based on the A*-algorithm [28]. There exist a myriad of other heuristic approaches that focus on CX-count optimization, we refer to [22] for a detailed survey. While heuristic approaches are fast, their solutions are often far from optimal [15]. Unfortunately, the optimal QLS problem is NP-hard [23]. The problem remains hard when considering natural restrictions on the coupling graph, like planar graphs [6] and bipartite graphs [11], and it is even conjectured to be NP-hard for simple linear neighbor graphs [8]. Thus, unless P=NP, one needs exhaustive exact approaches for (near)-optimal solutions."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   },
+   "spaceAfter": 3
   },
   {
    "kind": "paragraph",
@@ -235,7 +263,12 @@
     {
      "text": " SWAPs. Recent SAT approaches proposed encodings whose makespan corresponds to the number of inserted SWAP gates instead of the number of CX-gates. Since there are typically fewer SWAP gates than CX gates, such SAT encodings significantly outperform earlier approaches [20]."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   },
+   "spaceAfter": 3
   },
   {
    "kind": "paragraph",
@@ -250,7 +283,12 @@
     {
      "text": ". It is essential to execute gates in the circuit before the qubits become unstable. To reduce execution time, multiple gates can be executed in parallel, provided they are independent, i.e., do not act on the same qubits. This makes circuit depth an important metric, since it captures this notion of parallel execution. Since CX-gates are up to 10x slower compared to unary gates, we focus on reducing the CX-depth of the circuit. This metric counts the longest chain of dependent CX-gates."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 16
+   },
+   "spaceAfter": 3
   },
   {
    "kind": "paragraph",
@@ -258,7 +296,12 @@
     {
      "text": "Optimization of circuit depth has been explored in [15] in the context of SMT solving. Their tool OLSQ2 is the state-of-the-art tool for depth-optimal synthesis. In practice, optimization of (CX)-depth is harder than (CX)-count. Unlike (CX)-count optimization, the makespan of an encoding optimizing (CX)-depth must be at least the (CX)-depth of the initial circuit. Since the (CX)-depth is typically higher than the number of SWAPs, depth optimal synthesis becomes much harder in practice. Compared to the SAT based state-of-the-art tool Q-Synth v2 for CX-count optimization, OLSQ2 is indeed up to 5 orders of magnitude slower [20, 15]. Even the best SMT-based near-optimal tool TB-OLSQ2 is up to 2 orders of magnitude slower compared to Q-Synth v2 [20]. SAT-based tools are shown to significantly outperform SMT-based tools for QLS [20, 27]. The natural next step is to investigate if an efficient SAT-based depth optimal encoding is feasible."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 16
+   },
+   "spaceAfter": 15
   },
   {
    "kind": "paragraph",
@@ -310,7 +353,12 @@
     {
      "text": "A second contribution is an extensive experiment, comparing various tools with respect to their running time and their performance in actual (CX)-count and (CX)-depth metrics. We compare our new tool with SABRE, Q-Synth and (TB)-OLSQ2. We run these tools on a standard set of quantum circuit benchmarks, obtained from [15, 20] and on the coupling graph of a number of standard quantum platforms (with 5-80 qubits). Our tool is often more than 10-100x faster compared to previous tools with guaranteed depth-optimality, but still slower than size-optimal tools."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -318,7 +366,11 @@
     {
      "text": "Finally, we investigate how the various optimization metrics correlate with a reduction in noise, which is the ultimate goal of optimal QLS. Following the approach in [12, 26], we simulate all mapped circuits on a quantum platform with and without simulated noise, using the Qiskit simulator, and compute the Hellinger distance [4, 7, 18] of these runs. Surprisingly, we find that a reduction in CX-count correlates better with noise reduction than CX-depth. However, taking both measures, CX-count + CX-depth, into account leads to the best noise reduction, motivating the importance of our contribution."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "figure",
@@ -447,7 +499,11 @@
     {
      "text": "’), has a depth-optimal solution on the platform Guadalupe of depth 64 using 31 SWAP gates, while a size-optimal circuit uses only 5 SWAP gates, but has depth 71."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "heading",
@@ -556,7 +612,12 @@
     {
      "text": "Building and solving the SAT encoding."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 16
+   },
+   "spaceAfter": 4
   },
   {
    "kind": "list",
@@ -787,7 +848,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 0
   },
   {
    "kind": "paragraph",
@@ -1265,7 +1327,12 @@
     {
      "text": " variable is special and is used for incremental SAT solving; it provides context to the SAT solver about previous attempts to find a solution, essentially reducing the search space of the solver. SWAP gates are scheduled over 3 time steps since they are commonly implemented as three consecutive CX gates. In the following, we describe each part of the constraints added for each time step."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -1329,7 +1396,8 @@
     {
      "text": " denotes the set of unary gates."
     }
-   ]
+   ],
+   "spaceAfter": 13
   },
   {
    "kind": "paragraph",
@@ -1421,7 +1489,11 @@
      "text": "ConnectivityConstraints",
      "italic": true
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 16
+   }
   },
   {
    "kind": "equation",
@@ -1582,7 +1654,11 @@
     {
      "text": " in the dependency graph of the input circuit."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "equation",
@@ -1596,7 +1672,11 @@
     {
      "text": "To ensure that gates are not skipped or applied twice, constraint 9 ensures that a gate is ‘advanced’ if and only if it was ‘current’ or ‘advanced’ in the previous time step. Likewise, a gate is ‘current’ or ‘delayed’ if and only if it was ‘delayed’ in the previous time step."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 16
+   }
   },
   {
    "kind": "equation",
@@ -1626,7 +1706,11 @@
     {
      "text": ") to denote the transitive closure of the successor (predecessor) relation in the dependency graph. We do this to improve the automatic propagation of the dependency constraints."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 16
+   }
   },
   {
    "kind": "equation",
@@ -1640,7 +1724,11 @@
     {
      "text": "Whenever a gate is ‘current’, the physical qubit(s) that it is being applied on must be ‘usable’, i.e., not undergoing a SWAP. This is encoded for binary gates in constraint 11 and for unary gates in constraint 12. These constraints ensure that a gate and a SWAP are not applied at the same time step."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 16
+   }
   },
   {
    "kind": "equation",
@@ -1707,7 +1795,11 @@
     {
      "text": "The ‘swap’ variables indicate the last time step of a SWAP gate. To ensure that gates are not scheduled on top of SWAPs we require that if the ‘swap touched’ variable is set for a qubit, it is not available for gates to be scheduled on it for this and the preceding two time steps as seen in constraint 14. Also, as encoded in constraint 15, the ‘swap’ variables must all be set to false for the first three time steps."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "equation",
@@ -1727,7 +1819,11 @@
     {
      "text": "Nothing stops the SAT solver from swapping unmapped physical qubits. Such SWAPs are referred to as ’spurious SWAPs’. To ensure that no spurious SWAPs are scheduled, we require that at least one physical qubit in a SWAP must have a logical qubit mapped to it in constraint 16. We denote a SWAP with only one mapped physical qubit ’ancillary SWAP’. Ancillary SWAPs can be disabled by requiring that both physical qubits participating in a SWAP be occupied. We only present results allowing ancillary SWAPs."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "equation",
@@ -1757,7 +1853,11 @@
     {
      "text": " is also set. Constraint 18 says that if the swap touched variable is not set for a qubit, its mapping is preserved from the last time step. Finally, constraint 19 says that when the swap variable for two qubits is set, the mappings for them switch compared to the previous time step."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "equation",

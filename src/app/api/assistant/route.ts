@@ -17,19 +17,22 @@ import {
   MAX_OUTPUT_TOKENS,
   STREAM_ERROR_TOKEN,
   STREAM_PLAN_TOKEN,
+  SUGGEST_DEADLINE_MS,
 } from "@/lib/derive/config";
 import { loadProfile, sectionSkeleton } from "@/lib/derive/context";
 import {
   ACTIONS_FENCE,
   enrichActions,
   parseActionsFence,
+  planShape,
   splitActionsFence,
   type DocumentEdits,
 } from "@/lib/assistant/plan";
+import { runRevise } from "@/lib/assistant/revise";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { importShared } from "@/lib/docs/server";
 import { takesSuggestions } from "@/lib/docs/suggest-ops";
-import { streamTextTo } from "@/lib/derive/text-stream";
+import { HEARTBEAT_MS, streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
 import { rankDocumentsForQuestion } from "@/lib/digest/rank";
 import { corpusSystem, documentSystem } from "@/lib/digest/render";
@@ -41,9 +44,12 @@ import { featureCall } from "@/lib/feature-models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
+import { transcriptContext } from "@/lib/assistant/transcript";
+import { sheetKeepLines } from "@/lib/replica";
 import { parseBody } from "@/lib/validate";
 
-export const maxDuration = 120;
+// A revise action reads the document part by part after the answer (lib/assistant/revise.ts).
+export const maxDuration = 300;
 
 // Assistant panel with two scopes, both reading the digest (SPEC.md §7).
 // Scope ids stay as wire values: document = This page (the open document
@@ -104,6 +110,7 @@ export async function POST(req: Request) {
 }
 
 async function handle(req: Request, t: TFunc) {
+  const started = Date.now();
   if (!kimiConfigured()) {
     return NextResponse.json({ error: t("api.assistantNeedsKey") }, { status: 503 });
   }
@@ -182,7 +189,17 @@ async function handle(req: Request, t: TFunc) {
           // An import another account's project holds takes no edits.
           const edits: DocumentEdits =
             !open || !takesSuggestions(open) ? "blocks" : (await importShared(data.documentId!)) ? "none" : "suggestions";
-          return { sections, attachedDocs: attached.map((nd) => nd.document), edits };
+          // What each sheet keeps as it is, for the rules on sheets; a
+          // video's or an audio's voices, chapters, and anchored words.
+          const [sheets, transcript] = await Promise.all([
+            open?.format === "sheets"
+              ? db.block
+                  .findMany({ where: { documentId: data.documentId!, type: "SHEET" }, orderBy: { order: "asc" }, select: { id: true, type: true, html: true } })
+                  .then(sheetKeepLines)
+              : [],
+            transcriptContext(data.documentId!),
+          ]);
+          return { sections, attachedDocs: attached.map((nd) => nd.document), edits, format: open?.format ?? null, sheets, transcript };
         })()
       : null;
   const messages: ModelMessage[] = [{ role: "system", content: system }];
@@ -247,6 +264,8 @@ async function handle(req: Request, t: TFunc) {
             otherDocuments: act.attachedDocs.filter((d) => d.id !== data.documentId),
             edits: act.edits,
             caretBlockId: data.caretBlockId,
+            sheets: act.sheets,
+            transcript: act.transcript?.lines ?? null,
           }
         : undefined,
     });
@@ -327,24 +346,68 @@ async function handle(req: Request, t: TFunc) {
     let cancelled = false;
     // The plan (SPEC.md §7): the fence's content as actions, validated and
     // enriched against the real document, so the client executes ready-made
-    // requests after the reader approves them. A fence that does not read
-    // as actions is one warning.
-    const planFrom = async (content: string) => {
-      const raw = parseActionsFence(content);
+    // requests after the reader approves them. Each action that does not
+    // read is a warning and the others stand; a fence where nothing reads
+    // is one warning. A suggest action that does not read runs with the
+    // answer, which says what will change, as its instruction.
+    //
+    // A revise action (a document without rich text) is read part by part
+    // now (lib/assistant/revise.ts): the plan carries the block actions it
+    // finds in its place. Heartbeat spaces keep the stream open meanwhile;
+    // the answer's end is trimmed, so they never show.
+    const planFrom = async (answer: string, content: string, send: (chunk: string) => void) => {
+      const raw = parseActionsFence(content, answer, act!.edits);
       if (!raw) return { actions: [], warnings: [t("api.warnActionsUnreadable")] };
       const blocks = await db.block.findMany({
         where: { documentId: data.documentId! },
         orderBy: { order: "asc" },
-        select: { id: true, type: true, text: true },
+        select: { id: true, type: true, text: true, html: true, startTime: true, endTime: true, speaker: true },
       });
-      return enrichActions(raw, {
+      const ctx = {
         documentId: data.documentId!,
         edits: act!.edits,
+        format: act!.format,
         blocks,
+        transcript: act!.transcript,
         attachedIds: new Set(act!.attachedDocs.map((d) => d.id)),
         sectionIds: new Set(act!.sections.map((s) => s.id)),
         t,
-      });
+      };
+      const plan = enrichActions(raw, ctx);
+      const revise = plan.actions.find((a) => a.type === "revise");
+      if (!revise) return plan;
+      const heartbeat = setInterval(() => send(" "), HEARTBEAT_MS);
+      try {
+        const document = await db.document.findUnique({ where: { id: data.documentId! }, select: { title: true, references: true } });
+        const deadline = AbortSignal.timeout(Math.max(1_000, started + SUGGEST_DEADLINE_MS - Date.now()));
+        const revised = await runRevise({
+          userId: user.id,
+          document: { title: document?.title ?? "", references: document?.references ?? null, blocks },
+          shape: planShape(ctx),
+          profile,
+          lang,
+          t,
+          command: question,
+          instruction: revise.instruction,
+          material: answer.slice(0, 20_000) || null,
+          history: (data.history ?? [])
+            .filter((turn) => turn.content.trim())
+            .slice(-20)
+            .map((turn) => ({ role: turn.role, content: turn.content.slice(0, 8000) })),
+          blockIds: revise.blockIds,
+          caretBlockId: data.caretBlockId ?? null,
+          thinking: data.thinking ?? "deep",
+          signal: AbortSignal.any([req.signal, deadline]),
+          deadline,
+        });
+        const at = plan.actions.indexOf(revise);
+        return {
+          actions: [...plan.actions.slice(0, at), ...revised.actions, ...plan.actions.slice(at + 1)],
+          warnings: [...plan.warnings, ...revised.warnings],
+        };
+      } finally {
+        clearInterval(heartbeat);
+      }
     };
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -400,7 +463,7 @@ async function handle(req: Request, t: TFunc) {
             // The text before the fence, whole: the relay held back what
             // could have been the fence's start.
             flush();
-            if (content !== null) send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(content))}`);
+            if (content !== null) send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(text, content, send))}`);
           }
           // The check (SPEC.md §25): the answer against its rubric, after
           // the reader has it; a weak answer is flagged for the loop.

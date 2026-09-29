@@ -14,7 +14,9 @@ import { KATEX_MACROS } from "@/lib/katex";
 
 class MathView implements NodeView {
   dom: HTMLElement;
-  private latex = "";
+  /** What the view last drew: the TeX, and for an equation on its own line
+      the side of its number. */
+  private drawn = "";
 
   constructor(
     private node: PMNode,
@@ -39,8 +41,12 @@ class MathView implements NodeView {
     const latex = String(this.node.attrs.latex ?? "");
     const blockId = this.node.attrs.blockId as string | null | undefined;
     if (blockId) this.dom.setAttribute("data-block-id", blockId);
-    if (latex === this.latex && this.dom.childNodes.length > 0) return;
-    this.latex = latex;
+    // An import's equation numbered at the left margin, as the page sets it
+    // (amsmath's leqno).
+    const leqno = this.display && this.node.attrs.leqno === true;
+    const drawn = `${leqno ? "left" : "right"} ${latex}`;
+    if (drawn === this.drawn && this.dom.childNodes.length > 0) return;
+    this.drawn = drawn;
     if (!latex.trim()) {
       this.dom.classList.add("is-empty");
       this.dom.textContent = insertT(this.editor)("docsInsert.newEquation");
@@ -50,6 +56,7 @@ class MathView implements NodeView {
     try {
       katex.render(latex, this.dom, {
         displayMode: this.display,
+        leqno,
         throwOnError: false,
         strict: "ignore",
         trust: false,
@@ -206,6 +213,18 @@ const DocsInlineMath = InlineMath.extend({
 });
 
 const DocsBlockMath = BlockMath.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      // The equation's number at the left margin (KaTeX's leqno); null, at
+      // the right.
+      leqno: {
+        default: null,
+        parseHTML: (el) => (el.hasAttribute("data-leqno") ? true : null),
+        renderHTML: (attrs) => (attrs.leqno === true ? { "data-leqno": "" } : {}),
+      },
+    };
+  },
   addNodeView() {
     return ({ node, editor, getPos }) => new MathView(node, editor, getPos, true);
   },

@@ -6,12 +6,15 @@
 //   2. KaTeX renders every entry's command;
 //   3. composites: each construct TeX builds from two glyphs (≠ ↦ ⟹ ≅ …),
 //      and the symbols the text layer garbles, typeset without and with
-//      pdfTeX's Unicode map, read as their characters in parsePdf's text.
+//      pdfTeX's Unicode map, read as their characters in parsePdf's text;
+//   4. displays that once passed the check wrong: each EQUATION on their
+//      pages reads as one of the page's formulas (a crop or words pass);
+//      so does each formula of invented pages of the same shape.
 // Needs pdflatex. The exit code is 1 when a check fails.
 //
 //   npx tsx scripts/math-fonts/check.mts [--verbose]
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import katex from "katex";
@@ -54,6 +57,51 @@ function sourceOf(family: MathFamily, code: number, e: MathGlyph): string | null
   if ((family === "omx" || family === "esint") && e.cls === "op") return `$${e.display ? "\\displaystyle" : "\\textstyle"}${e.latex}$`;
   if (family === "ot1" && e.upright) return `$\\mathrm{${e.latex}}$`;
   return `$${e.latex}$`;
+}
+
+// KaTeX's MathML with spacing, attributes, and empty operators set aside
+// (scripts/parse-bench/math-layout.mts); spaced: every space the LaTeX
+// writes stays, as one mark.
+function canon(tex: string, spaced = false): string {
+  const space = spaced ? "<space/>" : "";
+  try {
+    return katex
+      .renderToString(tex, { output: "mathml", throwOnError: true, displayMode: true })
+      .replace(/<annotation[\s\S]*?<\/annotation>/, "")
+      .replace(/<mspace[^>]*\/?>(<\/mspace>)?/g, space)
+      .replace(/<mtext>[\s ⁡-⁤]*<\/mtext>/g, space)
+      .replace(/(<space\/>)+/g, space)
+      .replace(/<mo[^>]*><\/mo>/g, "")
+      .replace(/ (?!mathvariant|linethickness)[a-z]+="[^"]*"/g, "")
+      .replace(/<\/?mrow>/g, "")
+      .replace(/\s+/g, " ");
+  } catch (err) {
+    return `ERR ${(err as Error).message}`;
+  }
+}
+
+// A page's displays that once passed the check wrong: each EQUATION on the
+// page (or each whose LaTeX pick matches) reads as one of the right
+// formulas, its \tag aside; a crop or words pass.
+// inline: the case reads the blocks' inline formulas, not their EQUATIONs;
+// spaced: the spaces they write count.
+type DisplayCase = { page: number; pick?: RegExp; right: string[]; inline?: boolean; spaced?: boolean };
+
+function wrongDisplays(blocks: { type: string; text: string; page?: number; math?: { latex: string }[] }[], cases: DisplayCase[]): string[] {
+  const out: string[] = [];
+  for (const b of blocks) {
+    const formulas = [
+      ...(b.type === "EQUATION" ? [{ latex: b.text.replace(/\s*\\tag\*?\{[^}]*\}\s*$/, ""), inline: false }] : []),
+      ...(b.math ?? []).map((m) => ({ latex: m.latex, inline: true })),
+    ];
+    for (const f of formulas) {
+      for (const c of cases) {
+        if (c.page !== b.page || Boolean(c.inline) !== f.inline || (c.pick && !c.pick.test(f.latex))) continue;
+        if (!c.right.some((r) => canon(r, c.spaced) === canon(f.latex, c.spaced))) out.push(`p. ${b.page}: ${f.latex}`);
+      }
+    }
+  }
+  return out;
 }
 
 function typeset(dir: string, name: string, preamble: string, pages: string[]): string {
@@ -205,6 +253,129 @@ try {
     console.log(`composites, ${regime.endsWith("0") ? "no Unicode map" : "pdfTeX's Unicode map"}: ${good} of ${composites.length} read right`);
     if (good < composites.length) failed = true;
   }
+
+  // 4: displays that once passed the check wrong. Typeset in Times with
+  // mathptmx, a formula's letters are a text italic's, as Springer's
+  // MathTime sets them: round 2 read them as \mathrm. The corpus's pages run
+  // when .bench holds them: Springer's (12) passed without the braces its
+  // extension font hangs over its first row, (29) without the limits under
+  // its two "lim"s, the page's last line; arXiv 2506.08494's Theorems 8
+  // and 12 read their exponent Σd_j/2 as a big operator after the bracket,
+  // (2.12) paired its norm with the absolute value's first bar, and (2.14)
+  // set λ's subscript "max" on λ's baseline.
+  const cases: { tex: string; words: string }[] = [
+    { tex: "\\lim_{x\\to\\pm\\infty} a(x,t) = \\lim_{x\\to\\pm\\infty} b(x,t) = 0.", words: "The display ends the page, its limits on the page's last line." },
+    { tex: "\\max_{k\\le n} |S_k| \\le \\sup_{t\\in[0,1]} |B_t|.", words: "A display with limits under two names stands between two sentences." },
+  ];
+  const sheet = cases.map((c, i) => `${c.words} Case ${i + 1} follows.\\begin{equation}${c.tex}\\end{equation}${i === 0 ? "" : "Words follow the display."}`);
+  const times = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "displays", `${packages}\n\\usepackage{mathptmx}`, sheet))));
+  const wrong = wrongDisplays(times.blocks, cases.map((c, i) => ({ page: i + 1, right: [c.tex] })));
+  const bold = "(\\mathbf{n},\\mathbf{m}";
+  const norm = "\\left\\|\\prod_{j=1}^{n}f_j(\\xi_j)\\right\\|";
+  const corpus: { file: string; cases: DisplayCase[] }[] = [
+    {
+      // Inline: "|x| = {" before the cases' rows lost its brace, the rows
+      // passing as \begin{aligned}; a √ over a fraction lost its root.
+      file: "synthetic/synth-math-tex.pdf",
+      cases: [
+        { page: 6, inline: true, pick: /x,/, right: ["|x|=\\begin{cases} x, & x\\ge 0, \\\\ -x, & x<0 \\end{cases}"] },
+        { page: 7, inline: true, pick: /n-1/, right: ["\\sqrt{\\frac{\\sum_{i=1}^n(x_i-\\bar{x})^2}{n-1}}"] },
+      ],
+    },
+    {
+      file: "real/springer-bmb-01377.pdf",
+      cases: [
+        { page: 6, right: [`\\frac{\\partial p}{\\partial t}${bold},t)=(\\mathcal{D}+\\mathcal{R})p${bold},t).`, `\\varphi${bold})=\\lim_{t\\to\\infty}p${bold},t)`, `0=(\\mathcal{D}+\\mathcal{R})\\varphi${bold}).`] },
+        {
+          page: 11,
+          right: [
+            "A\\xrightarrow{k_2}B\\xrightarrow{k_3}\\emptyset.",
+            "\\frac{\\partial a}{\\partial t}=D_A\\frac{\\partial^2a}{\\partial x^2}-k_2a+2k_1\\delta(x),",
+            "\\frac{\\partial b}{\\partial t}=D_B\\frac{\\partial^2b}{\\partial x^2}+k_2a-k_3b,",
+            "\\lim_{x\\to\\pm\\infty}a(x,t)=\\lim_{x\\to\\pm\\infty}b(x,t)=0.",
+          ],
+        },
+      ],
+    },
+    {
+      file: "arxiv/2506.08494v1.pdf",
+      cases: [
+        {
+          page: 4,
+          pick: /\\eta_\{j\}/,
+          right: ["\\left\\|\\prod_{j=1}^{n}\\left|(\\widehat{g}_j/\\widehat{e_{t_j}})(\\eta_j)\\right|^{p_j}\\right\\|_\\alpha\\le\\left\\|\\prod_{j=1}^{n}\\left|(g_j/e_{t_j})(\\xi_j)\\right|^{p_j}\\right\\|_1"],
+        },
+        {
+          page: 4,
+          pick: /\\mu\\xi/,
+          right: [
+            "\\left\\|e^{\\frac{|\\xi|^2}{2q\\lambda_{\\max}}}\\prod_{j=1}^{n}\\widehat{g}_j(\\mu\\xi_j)\\right\\|_q\\le(p\\lambda_{\\min})^{\\frac{\\sum k_j}{2}}\\left\\|e^{\\frac{|\\xi|^2}{2p\\lambda_{\\min}}}\\prod_{j=1}^{n}g_j(\\xi_j)\\right\\|_p",
+          ],
+        },
+        { page: 5, pick: /d_\{j\}/, right: [`${norm}_q\\le\\max\\left\\{\\frac{1}{p\\lambda_{\\min}-1},q\\lambda_{\\max}-1\\right\\}^{\\sum d_j/2}${norm}_p`] },
+        { page: 7, pick: /d_\{j\}/, right: [`${norm}_q\\le\\left(\\frac{q\\lambda_{\\min}-1}{p\\lambda_{\\min}-1}\\right)^{\\sum d_j/2}${norm}_p`] },
+      ],
+    },
+  ];
+  for (const { file, cases: pageCases } of corpus) {
+    const pdf = join(import.meta.dirname, "..", "..", ".bench", file);
+    if (!existsSync(pdf)) {
+      console.log(`displays: .bench/${file} not there, skipped`);
+      continue;
+    }
+    const parsed = await parsePdf(new Uint8Array(readFileSync(pdf)), { pages: pageCases.map((c) => c.page) });
+    wrong.push(...wrongDisplays(parsed.blocks, pageCases));
+  }
+  // Two formulas a word space apart read as two, or as one that writes the
+  // space: read as one without it, the letters either side of the space
+  // were a product (G ∪ HG, H ∈ ℱ), which the glyph check cannot see. On
+  // the page they are the glue a control space inside one formula is.
+  const pairs: { words: string; right: string[] }[] = [
+    { words: "The family is closed under $G \\cup H$ $G, H \\in \\mathcal{F}$, as the next lemma shows for every family.", right: ["G\\cup H", "G,H\\in\\mathcal{F}", "G\\cup H\\ G,H\\in\\mathcal{F}"] },
+    { words: "For each pair we have $s \\le t$ $t \\le u$ and so the order is a chain of the elements.", right: ["s\\le t", "t\\le u", "s\\le t\\ t\\le u"] },
+    { words: "The two sums $x = 2$ $y = 3$ are the first values the recursion takes in this example.", right: ["x=2", "y=3", "x=2\\ y=3"] },
+    // The tightest line TeX sets: a word space of 0.222 em, after a letter
+    // with no italic correction.
+    { words: "{\\spaceskip=0.222em\\relax In a tight line $p \\in x$ $q \\in Q$ still are two formulas.}", right: ["p\\in x", "q\\in Q", "p\\in x\\ q\\in Q"] },
+    // A quad inside one formula stays, or splits it in two right formulas.
+    { words: "The rule $f(x) = 1 \\quad x > 0$ holds for the positive values.", right: ["f(x)=1\\quad x>0", "f(x)=1", "x>0"] },
+  ];
+  const pairPages = pairs.map((c) => `\\parbox{\\textwidth}{${c.words}}`);
+  const pairParse = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "pairs", packages, pairPages))));
+  wrong.push(...wrongDisplays(pairParse.blocks, pairs.map((c, i) => ({ page: i + 1, inline: true, spaced: true, pick: /\\cup|\\le|\\in|=|>/, right: c.right }))));
+  // Limits side by side, each centered on its operator or name a thin space
+  // from the next, and the words of one limit as far apart: grown along the
+  // baseline, two sums read as one sum with both lower limits
+  // (\sum_{i=1j=1}^{n}\sum^{m}), two lim as one; a subarray's second row,
+  // wider than its first, went to the words under the display. The glyph
+  // check cannot see either.
+  const limitCases: { tex: string; right?: string }[] = [
+    { tex: "\\sum_{i=1}^{n}\\sum_{j=1}^{m} a_{ij}" },
+    { tex: "\\sum_{j=1}^{k}\\sum_{p,q=1}^{n} a_{jpq}" },
+    { tex: "\\lim_{s \\to +\\infty}\\lim_{t \\to +\\infty} g(s, t)" },
+    { tex: "\\max_{x \\in X}\\max_{y \\in Y} h(x, y)" },
+    { tex: "\\min_{x \\text{ feasible}}\\max_{y \\in Y} g(x, y)" },
+    { tex: "\\lim_{x \\to 0 \\text{ and } y \\to 0} f(x, y)" },
+    { tex: "\\sum_{g' \\in S(g)}\\bigwedge_{h \\in G} x_{g'h}" },
+    { tex: "\\sum_{\\begin{subarray}{l} i \\in \\Lambda \\\\ 0 < j < n \\end{subarray}} P(i, j)", right: "\\sum_{\\substack{i \\in \\Lambda \\\\ 0 < j < n}} P(i, j)" },
+  ];
+  const around = "The quantity below is the one the argument needs, and every term of it is finite for the values we take here.";
+  const limitPages = limitCases.map((c) => `${around} ${around}\\[ ${c.tex} \\]${around} ${around}`);
+  const limitParse = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "limits", packages, limitPages))));
+  wrong.push(...wrongDisplays(limitParse.blocks, limitCases.map((c, i) => ({ page: i + 1, right: [c.tex, ...(c.right ? [c.right] : [])] }))));
+  // A list's bullet a math font draws (acmart's itemize, newtxmath's •) is
+  // the item's marker, never its formula's: "• scan(Pred)" read
+  // \bullet\text{ scan}, and the import drew two bullets.
+  const acm = join(import.meta.dirname, "..", "..", ".bench", "real", "acm-damon25-3736236.pdf");
+  if (existsSync(acm)) {
+    const parsed = await parsePdf(new Uint8Array(readFileSync(acm)), { pages: [3] });
+    for (const b of parsed.blocks) {
+      for (const m of b.math ?? []) if (/^\s*\\(bullet|cdot|circ|ast|star)\b/.test(m.latex)) wrong.push(`p. ${b.page}: a formula takes the item's bullet: ${m.latex}`);
+    }
+  } else console.log("displays: .bench/real/acm-damon25-3736236.pdf not there, skipped");
+  for (const w of wrong) console.log(`WRONG DISPLAY ${w}`);
+  console.log(`displays that once passed wrong: ${wrong.length === 0 ? "none reads wrong" : `${wrong.length} read wrong`}`);
+  if (wrong.length > 0) failed = true;
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

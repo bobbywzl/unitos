@@ -34,7 +34,8 @@
      "text": "Colleen Hibbert-Kapler,",
      "bold": true
     }
-   ]
+   ],
+   "spaceAfter": 1
   },
   {
    "kind": "paragraph",
@@ -43,7 +44,8 @@
      "text": "Attorney, Ethics and Legal Compliance.",
      "italic": true
     }
-   ]
+   ],
+   "spaceAfter": 1
   },
   {
    "kind": "paragraph",
@@ -51,7 +53,8 @@
     {
      "text": "[FR Doc. 2025–10462 Filed 6–9–25; 8:45 am]"
     }
-   ]
+   ],
+   "spaceAfter": 1
   },
   {
    "kind": "paragraph",
@@ -72,7 +75,8 @@
      "text": "ENVIRONMENTAL PROTECTION AGENCY",
      "bold": true
     }
-   ]
+   ],
+   "spaceAfter": 8
   },
   {
    "kind": "paragraph",
@@ -81,7 +85,8 @@
      "text": "40 CFR Part 180",
      "bold": true
     }
-   ]
+   ],
+   "spaceAfter": 5
   },
   {
    "kind": "paragraph",
@@ -90,7 +95,8 @@
      "text": "[EPA–HQ–OPP–2023–0454; FRL–12177–02–OCSPP]",
      "bold": true
     }
-   ]
+   ],
+   "spaceAfter": 6
   },
   {
    "kind": "paragraph",
@@ -120,7 +126,8 @@
     {
      "text": " Environmental Protection Agency (EPA)."
     }
-   ]
+   ],
+   "spaceAfter": 2
   },
   {
    "kind": "paragraph",
@@ -132,7 +139,8 @@
     {
      "text": " Final rule."
     }
-   ]
+   ],
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -144,7 +152,8 @@
     {
      "text": " The Environmental Protection Agency (EPA or Agency) is finalizing several tolerance actions under the Federal Food, Drug, and Cosmetic Act (FFDCA) that the Agency previously determined were necessary or appropriate during the registration review conducted under the Federal Insecticide, Fungicide, and Rodenticide Act (FIFRA). During registration review, EPA reviews all aspects of a pesticide case, including existing tolerances, to ensure that the pesticide continues to meet the standard for registration under FIFRA."
     }
-   ]
+   ],
+   "spaceAfter": 2
   },
   {
    "kind": "paragraph",
@@ -156,7 +165,8 @@
     {
      "text": " This rule is effective on June 10, 2025. For actions in this final rule that lower or revoke existing tolerances, the expiration date for the existing tolerance is December 10, 2025. Objections and requests for hearings must be received on or before August 11, 2025, and must be filed in accordance with the instructions provided in 40 CFR part 178 (see also Unit I.D. of this document)."
     }
-   ]
+   ],
+   "spaceAfter": 4
   },
   {
    "kind": "paragraph",
@@ -182,7 +192,8 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "spaceAfter": 2
   },
   {
    "kind": "paragraph",
@@ -239,7 +250,12 @@
      "text": "You may be potentially affected by this action if you are an agricultural producer, food manufacturer, or pesticide manufacturer. The following list of North American Industrial Classification System (NAICS) codes is not intended to be exhaustive, but rather provides a guide to help readers determine whether this document might apply to them:"
     }
    ],
-   "indent": "first"
+   "indent": "first",
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "list",
@@ -280,7 +296,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 0
   },
   {
    "kind": "paragraph",
@@ -322,7 +339,12 @@
      "text": " of September 6, 2024 (89 FR 72775 (FRL–12177–01–OCSPP)), because EPA previously determined these tolerance actions were necessary or appropriate during registration review of the pesticide active ingredients identified in Unit III. of this final rule. The tolerance actions for each pesticide active ingredient are described in Unit III. of the proposed rule and may include but are not limited to the following types of actions:"
     }
    ],
-   "indent": "first"
+   "indent": "first",
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "list",
@@ -381,7 +403,9 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 0,
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -397,7 +421,11 @@
      "text": ". Where applicable, these adjustments for specific pesticides are reflected in the final regulatory text."
     }
    ],
-   "indent": "first"
+   "indent": "first",
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -416,7 +444,11 @@
      "text": "FFDCA section 408(e), 21 U.S.C. 346a(e), authorizes EPA to establish, modify, or revoke tolerances or exemptions from the requirement of a tolerance on its own initiative. After providing a 60-day public comment period, EPA may finalize the rule. EPA provided a 60-day comment period and is now finalizing the rule."
     }
    ],
-   "indent": "first"
+   "indent": "first",
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "paragraph",
@@ -434,7 +466,11 @@
      "text": "Under FIFRA section 3(g), 7 U.S.C. 136a(g), EPA is required to periodically review all registered pesticides and determine if those pesticides continue to meet the standard for registration under FIFRA. To learn more about the registration review, please see Unit II.C. of the proposed rule ‘‘Pesticide Tolerances; Implementing Registration Review Decisions for Certain Pesticides (Capric (Decanoic) Acid, Caprylic (Octanoic) Acid, and Pelargonic (Nonanoic) Acid)’’ (89 FR 72775, September 6, 2024 (FRL–12177–01–OCSPP))."
     }
    ],
-   "indent": "first"
+   "indent": "first",
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -453,7 +489,11 @@
      "text": "Under FFDCA section 408(g), 21 U.S.C. 346a(g), any person may file an objection to any aspect of this regulation and may also request a hearing on those objections. If you fail to file an objection to the final rule within the time period specified in the final rule, you will have waived the right to raise any issues resolved in the final rule. You must file your objection or request a hearing on this regulation in accordance with the instructions provided in 40 CFR part 178. To ensure proper receipt by EPA, you must identify the chemical specific docket ID number as provided in Unit III. in the subject line on the first page of your submission. All objections and requests for a hearing must be in writing"
     }
    ],
-   "indent": "first"
+   "indent": "first",
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   }
  ]
 }

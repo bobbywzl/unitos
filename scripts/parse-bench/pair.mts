@@ -219,6 +219,24 @@ async function settle(page: Page, box: { top: number; bottom: number } | null = 
   }, box);
 }
 
+/** A step run again once the page editor stands again, when the page
+    navigated under it: a dev server reloads while other sessions edit
+    files, and a long run stopped partway with "Execution context was
+    destroyed". */
+async function steady<T>(page: Page, step: () => Promise<T>, ready: () => Promise<void>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await step();
+    } catch (err) {
+      const lost = err instanceof Error && /Execution context was destroyed|navigation|Target page, context or browser has been closed/i.test(err.message);
+      if (!lost || attempt >= 3) throw err;
+      console.log(`the page navigated (${err.message.split("\n")[0]}): measuring again`);
+      await page.waitForLoadState("domcontentloaded");
+      await ready();
+    }
+  }
+}
+
 /** The PDF page and the import's page side by side, as one PNG. */
 async function composePair(browser: Browser, pdfPng: Buffer, importPng: Buffer | null, title: string, note: string): Promise<Buffer> {
   const context = await browser.newContext({ deviceScaleFactor: DPR, viewport: { width: 800, height: 600 } });
@@ -288,17 +306,20 @@ async function main() {
     const page = await context.newPage();
     const link = `${BASE}/n/${notebookId}?doc=${documentId}`;
     await page.goto(link, { waitUntil: "domcontentloaded" });
-    if (isImport) {
-      await page.waitForFunction(() => (document.querySelector(".docs-prose")?.textContent ?? "").trim().length > 0);
-      await page.waitForFunction(() => Boolean((window as unknown as { __docsEditor?: unknown }).__docsEditor));
-    } else {
-      await page.waitForSelector("article.reader-prose [data-block-id]");
-    }
-    await settle(page);
+    const ready = async () => {
+      if (isImport) {
+        await page.waitForFunction(() => (document.querySelector(".docs-prose")?.textContent ?? "").trim().length > 0);
+        await page.waitForFunction(() => Boolean((window as unknown as { __docsEditor?: unknown }).__docsEditor));
+      } else {
+        await page.waitForSelector("article.reader-prose [data-block-id]");
+      }
+      await settle(page);
+    };
+    await steady(page, ready, ready);
     for (const n of pages) {
       const pdfPng = join(scratch, `pdf-${n}`);
       execFileSync("pdftoppm", ["-f", String(n), "-l", String(n), "-r", String(96 * DPR), "-png", "-singlefile", join(ROOT, file), pdfPng]);
-      const shot = isImport ? await importPicture(page, n) : null;
+      const shot = isImport ? await steady(page, () => importPicture(page, n), ready) : null;
       const note = isImport ? `No page start names page ${n}.` : "The add kept a block document (the size guard): no import to show.";
       const png = await composePair(browser, readFileSync(`${pdfPng}.png`), shot, `${id}, page ${n}`, note);
       const path = join(out, `${id}-p${n}.png`);

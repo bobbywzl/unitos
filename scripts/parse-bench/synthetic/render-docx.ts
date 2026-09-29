@@ -54,7 +54,7 @@ export type DocxLayout = {
   /** Sizes in points of the title and each heading level. */
   headingSizes: Partial<Record<Level | 0, number>>;
   headingColor?: string;
-  /** A color for the title or a heading level, past headingColor (a report's Heading 3 in its own blue). */
+  /** A color for the title or a heading level, past headingColor (a Heading 3 in its own blue). */
   headingColors?: Partial<Record<Level | 0, string>>;
   /** Headings in bold (Word's default); Google Docs sets them in the regular weight. */
   headingBold?: boolean;

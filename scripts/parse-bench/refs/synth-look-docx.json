@@ -30,7 +30,8 @@
         "shape": "sans",
         "size": 12,
         "color": "#595959"
-      }
+      },
+      "spaceAfter": 11
     },
     {
       "kind": "paragraph",
@@ -45,7 +46,8 @@
         "shape": "sans",
         "size": 15,
         "color": "#2e75b6"
-      }
+      },
+      "spaceAfter": 8
     },
     {
       "kind": "paragraph",
@@ -170,7 +172,8 @@
           "text": "The grid is sound where crews kept to the schedule, and weakest where new equipment arrived late. Poles and crews took the largest share of the spending, and storage spending rose quickest."
         }
       ],
-      "align": "justify"
+      "align": "justify",
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -556,7 +559,8 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 2
     },
     {
       "kind": "heading",

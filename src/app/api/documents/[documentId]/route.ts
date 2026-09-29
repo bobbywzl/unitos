@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpDocument, bumpNotebook, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { ANNOTATIONS_SECTION_TITLE } from "@/lib/derive/config";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
@@ -33,11 +34,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: s
   return NextResponse.json(updated);
 }
 
-// Delete a document from the library. Detaches from all notebooks; blocks
-// cascade. The sources in it go: a note keeps its text and loses the source,
-// and an annotation with no source left in another document goes with the
-// document (an annotation anchored nowhere would read as a sidebar
-// conversation, SPEC.md §7).
+// Delete a document from the library (SPEC.md §5). It detaches from every
+// project; its blocks and links go with it, and so do its annotations: the
+// notes of a project's hidden Annotations section whose every source quotes
+// it, marks on text that is gone. A note that quotes it keeps its words and
+// its quotes, orphaned, and an assistant conversation stays in the history:
+// their sources lose the document (onDelete SetNull).
 export async function DELETE(_req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
   const { documentId } = await ctx.params;
@@ -46,33 +48,41 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ documentId:
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
 
-  const cited = await db.source.findMany({
+  const citing = await db.source.findMany({
     where: { documentId },
-    select: { noteId: true, note: { select: { section: { select: { hidden: true, notebookId: true } } } } },
+    select: {
+      noteId: true,
+      note: {
+        select: {
+          derivationType: true,
+          section: { select: { hidden: true, title: true, notebookId: true } },
+          sources: { select: { documentId: true } },
+        },
+      },
+    },
   });
-  const annotationIds = [...new Set(cited.filter((s) => s.note.section.hidden).map((s) => s.noteId))];
-  const anchoredElsewhere = new Set(
-    (
-      await db.source.findMany({
-        where: { noteId: { in: annotationIds }, documentId: { not: documentId } },
-        select: { noteId: true },
-      })
-    ).map((s) => s.noteId),
+  const annotations = new Set(
+    citing
+      .filter(
+        ({ note }) =>
+          note.section.hidden &&
+          note.section.title === ANNOTATIONS_SECTION_TITLE &&
+          note.derivationType !== "SYNTHESIS" &&
+          note.sources.every((s) => s.documentId === documentId),
+      )
+      .map((c) => c.noteId),
   );
-  const goneAnnotationIds = annotationIds.filter((id) => !anchoredElsewhere.has(id));
-  const citingNotebookIds = new Set(cited.map((s) => s.note.section.notebookId));
+  const notebooks = new Set(citing.map(({ note }) => note.section.notebookId));
 
   // Bump before the attachments go, so every corpus that carried it refreshes.
-  const bumped = await bumpDocument(documentId);
+  await bumpDocument(documentId);
   await db.$transaction([
-    db.note.deleteMany({ where: { id: { in: goneAnnotationIds } } }),
-    db.source.deleteMany({ where: { documentId } }),
+    db.note.deleteMany({ where: { id: { in: [...annotations] } } }),
+    db.source.updateMany({ where: { documentId }, data: { orphaned: true } }),
     db.notebookDocument.deleteMany({ where: { documentId } }),
     db.document.delete({ where: { id: documentId } }),
   ]);
-  // A project whose notes cited it without carrying it refreshes too.
-  for (const notebookId of citingNotebookIds) {
-    if (!(notebookId in bumped)) await bumpNotebook(notebookId);
-  }
+  // The projects whose notes quoted it refresh their quotes.
+  for (const id of notebooks) await bumpNotebook(id);
   return NextResponse.json({ ok: true });
 }

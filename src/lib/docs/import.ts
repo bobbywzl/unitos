@@ -2,6 +2,7 @@ import type { DocStyle } from "@/components/docs/extensions";
 import { listFormat, sameLevel } from "@/components/docs/toolbar/lists";
 import { DEFAULT_STYLES, STYLE_ATTR, styleChanges, type NamedStyle } from "@/components/docs/toolbar/styles";
 import {
+  CAPTION_STYLES,
   DEFAULT_PAGE_SETUP,
   formatParts,
   INDEXED_NODE_TYPES,
@@ -9,6 +10,7 @@ import {
   newBlockId,
   sanitizeRichText,
   ZWSP,
+  type CaptionStyle,
   type ListCounter,
   type ListLevel,
   type PageSetup,
@@ -26,7 +28,7 @@ import {
   type CellNotes,
   type Piece,
 } from "@/lib/docs/import-table";
-import type { PageStart, ParsedBlock, StyleSpan, TextFont } from "@/lib/parse/types";
+import type { Indent, PageStart, ParsedBlock, StyleSpan, TextFont } from "@/lib/parse/types";
 import type { Region } from "@/lib/video/types";
 
 // The converter (SPEC.md §29): an import — a PDF, a web page, a Markdown or
@@ -39,17 +41,24 @@ import type { Region } from "@/lib/video/types";
 //   PARAGRAPH  a paragraph; "\n" a line break; its layout tokens the page
 //              editor's own formats: kicker and label small, caption small
 //              and centered, display large, meta the Subtitle, quote inside
-//              a blockquote, center and right the alignment, an indent
-//              (first-line, hanging, block) the paragraph's indents
+//              a blockquote, center and right the alignment; its indent the
+//              paragraph's indents at the page's measure, and a Word
+//              paragraph's borders its borders
 //   HEADING    a heading of its level; one that repeats the title is the Title
 //   LIST       lists from the marker lines, nested two spaces a level, the
 //              markers drawn by the list (a Markdown task line a checklist
-//              line); a contents list is one paragraph per entry, each entry
-//              a link to its heading
+//              line; a line with no marker an item of a level that draws
+//              none), its depths, alignment, and the space between its
+//              items as the page sets them; a contents list is one
+//              paragraph per entry, each entry a link to its heading
 //   TABLE      a table (lib/docs/import-table.ts)
-//   CODE       a code block        EQUATION  an equation on its own line
+//   CODE       a code block        EQUATION  an equation on its own line,
+//                                            its number at the page's side
 //   SEPARATOR  a horizontal line   FIGURE    a figure object, its media a
-//                                            FigureMedia row (the figures)
+//                                            FigureMedia row (the figures);
+//                                            a PDF caption keeps its marks,
+//                                            a display equation's crop has
+//                                            none
 // Inside the words, the parse's styles become marks (a lowered or raised run
 // subscript or superscript; a color, a highlight, a face, and a size the
 // text style), and an inline formula becomes an inline equation of its TeX
@@ -90,11 +99,18 @@ export type ImportInput = {
   blocks: ParsedBlock[];
   /** A PDF's first page, in points. */
   pageSize?: { width: number; height: number };
+  /** The PDF's page the import begins at: 1, or the first page the reader
+      chose (SPEC.md §15). The Title's page start, the title's own
+      footnotes, and a heading that repeats the title stand on it. */
+  firstPage?: number;
   /** The page's look (a PDF's, a Word file's): the body's (Normal text),
       and the title's with its alignment (the Title). */
   bodyFont?: TextFont;
   titleFont?: TextFont;
   titleAlign?: "center" | "right";
+  /** The title's lines where the writer broke it (a PDF's): the Title
+      keeps the break. */
+  titleLines?: string[];
 };
 
 export type ImportResult = {
@@ -125,8 +141,13 @@ const PARAGRAPH_SPACE_PT = 10;
     text sizes. */
 const SMALL_SIZE = "9pt";
 const DISPLAY_SIZE = "21pt";
-/** One indent step, as the page editor's (components/docs/extensions.ts). */
+/** One indent step, as the page editor's (components/docs/extensions.ts):
+    an indent a parse names but does not measure, and a contents entry's
+    level. */
 const INDENT_PT = 36;
+/** The deepest indent the converter keeps, in points: a page's indent is
+    within its text column. */
+const MAX_INDENT_PT = 432;
 /** The most words one text node may hold (lib/docs/schema.ts richNodeSchema). */
 const MAX_TEXT = 200_000;
 /** The longest equation the rich text keeps as an equation (an attribute's
@@ -141,16 +162,56 @@ const PAGELESS_COLUMN_PX = 600;
 const ROLES = ["kicker", "meta", "label", "display", "quote", "caption", "footnote"] as const;
 type Role = (typeof ROLES)[number];
 
-// A paragraph's indent as the parse measured it (lib/parse/pdf: a class
-// token on its html), as the page editor's indents: one step, half an inch,
-// as Tab and Increase indent move a line. Under a hanging indent the first
-// line stands at the edge and the others a step in, as Docs stores it.
+// A paragraph's indent as the page sets it (ParsedBlock.indent, in points),
+// as the page editor's indents: the lines' left indent and the first line's
+// against it (negative: a hanging indent, the first line out at the edge),
+// as Docs stores them. A parse that names an indent's kind (a class token on
+// its html) without its measure gets one step, half an inch, as Tab and
+// Increase indent move a line. Round 2 drew every indent half an inch: a
+// 5 pt first-line indent drew seven times too deep.
 const INDENT_TOKENS = ["indent-first", "indent-hanging", "indent-block"] as const;
-const INDENTS: Record<(typeof INDENT_TOKENS)[number], Record<string, number>> = {
-  "indent-first": { indentFirstLine: INDENT_PT },
-  "indent-hanging": { indentLeft: INDENT_PT, indentFirstLine: -INDENT_PT },
-  "indent-block": { indentLeft: INDENT_PT },
+const INDENTS: Record<(typeof INDENT_TOKENS)[number], Indent> = {
+  "indent-first": { left: 0, first: INDENT_PT },
+  "indent-hanging": { left: INDENT_PT, first: -INDENT_PT },
+  "indent-block": { left: INDENT_PT, first: 0 },
 };
+
+/** A list's depths as the outermost list's listIndents (lib/docs/schema.ts
+    listIndentsOf): each depth's [left, first], within the text column as a
+    paragraph's indents are, and where the words after a marker that does
+    not hang start (hang); null when the page sets none. */
+function listIndentsAttr(indents: Indent[] | undefined): string | null {
+  const pairs = (indents ?? []).slice(0, 9).map((indent) => {
+    const attrs = indentAttrs(indent);
+    const [left, first] = [attrs.indentLeft ?? 0, attrs.indentFirstLine ?? 0];
+    const hang = first >= 0 && indent.hang !== undefined && Number.isFinite(indent.hang) ? Math.min(MAX_INDENT_PT, Math.round(indent.hang * 2) / 2) : 0;
+    return hang > 0 ? [left, first, hang] : [left, first];
+  });
+  return pairs.length > 0 && pairs.length === Math.min(9, indents?.length ?? 0) ? JSON.stringify(pairs) : null;
+}
+
+/** A paragraph's borders as the page editor's (a Word file's rule under a
+    heading, its bar beside a quote), each side as the parse writes it. */
+const BORDER_ATTRS = { top: "borderTop", right: "borderRight", bottom: "borderBottom", left: "borderLeft" } as const;
+const BORDER_VALUE = /^(\d{1,2}(?:\.\d{1,2})?) (?:solid|dotted|dashed) #[0-9a-fA-F]{6}(?: (\d{1,2}(?:\.\d{1,2})?))?$/;
+
+function borderAttrs(block: ParsedBlock): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [side, name] of Object.entries(BORDER_ATTRS) as [keyof typeof BORDER_ATTRS, string][]) {
+    const value = block.borders?.[side];
+    if (value && BORDER_VALUE.test(value)) out[name] = value;
+  }
+  return out;
+}
+
+/** An indent as the page editor's paragraph attributes: the left indent
+    within the text column, the first line never left of the column's edge. */
+function indentAttrs(indent: Indent | undefined): Record<string, number> {
+  if (!indent || !Number.isFinite(indent.left) || !Number.isFinite(indent.first)) return {};
+  const left = Math.min(MAX_INDENT_PT, Math.max(0, Math.round(indent.left * 2) / 2));
+  const first = Math.min(MAX_INDENT_PT - left, Math.max(-left, Math.round(indent.first * 2) / 2));
+  return { ...(left ? { indentLeft: left } : {}), ...(first ? { indentFirstLine: first } : {}) };
+}
 
 function tokensOf(html: string | undefined): string[] {
   const m = /^<[a-z][a-z0-9]*\b[^>]*\bclass="([^"]*)"/i.exec(html ?? "");
@@ -310,6 +371,23 @@ function styleMark(style: StyleSpan["style"], named: NamedStyle): RichMark | nul
   return null;
 }
 
+/** A PDF figure's caption styles (the figure object's captionStyles): the
+    parse's plain styles over the caption, as the JSON the object keeps, so
+    the caption keeps its bold label (a Japanese white paper's figure label
+    drew regular); null when it has none. A style that cuts a character in
+    two is left out. */
+function captionStylesFor(block: ParsedBlock, caption: string): string | null {
+  const halfway = (at: number) => at > 0 && at < caption.length && /[\uDC00-\uDFFF]/.test(caption[at]);
+  const styles: CaptionStyle[] = [];
+  for (const s of block.styles ?? []) {
+    const end = Math.min(s.end, caption.length);
+    const style = s.style as CaptionStyle["style"];
+    if (!CAPTION_STYLES.includes(style) || s.start < 0 || end <= s.start || halfway(s.start) || halfway(end)) continue;
+    styles.push({ start: s.start, end, style });
+  }
+  return styles.length > 0 ? JSON.stringify(styles.slice(0, 100)) : null;
+}
+
 /** The named styles an import's look sets, as "Update 'Heading 1' to match"
     sets them (SPEC.md §29 Named styles): Normal text takes the body's face,
     size, and color; the Title the title's look; each heading level the look
@@ -392,11 +470,18 @@ type ListType = "bulletList" | "orderedList" | "taskList";
 type Count = { counter: ListCounter; value: number };
 
 type ListLine = {
+  /** The line's depth in the lists (nestLines). */
   depth: number;
-  /** The depth the indent gives, for a list drawn as paragraphs. */
+  /** The depth the indent gives: the parse's, two spaces a level. */
   indent: number;
+  /** Where the page sets the line's depth (its block's listIndents at
+      `indent`), when the page says. */
+  printed?: Indent;
   /** The list the line belongs to; null when its start is no marker. */
   type: ListType | null;
+  /** The line's start is no marker: an item of a level that draws none (a
+      bibliography's entry, an algorithm's step; unmarkedLines). */
+  unmarked?: boolean;
   checked: boolean;
   /** A bullet's glyph as the line prints it. */
   bullet?: string;
@@ -447,6 +532,7 @@ function listLine(line: Source): ListLine {
   const indent = /^ */.exec(line.text)?.[0].length ?? 0;
   const whole = sliceSource(line, indent, line.text.length, true);
   const out: ListLine = { depth: Math.floor(indent / 2), indent: Math.floor(indent / 2), type: null, checked: false, words: whole, whole };
+  const unmarked: ListLine = { ...out, unmarked: true };
   const text = whole.text;
   let m: RegExpExecArray | null;
   let cut = 0;
@@ -471,7 +557,7 @@ function listLine(line: Source): ListLine {
   } else {
     const found = counterAt(text);
     const count = found && countOf(found.token);
-    if (!found || !count) return out;
+    if (!found || !count) return unmarked;
     out.type = "orderedList";
     out.count = { ...count, before: found.before, after: found.after };
     if (/^[ivx]$/i.test(found.token)) {
@@ -479,6 +565,10 @@ function listLine(line: Source): ListLine {
     }
     cut = found.length;
   }
+  // A marker is never a formula's characters: a line that opens with one
+  // (a sentence's end, "i. The number K is…", read as the numeral "i.")
+  // keeps its words and the formula, with no marker.
+  if (whole.atoms?.some((a) => a.start < cut)) return unmarked;
   out.words = sliceSource(whole, cut, whole.text.length, true);
   return out;
 }
@@ -520,6 +610,42 @@ function levelsOfLines(lines: ListLine[], printed: boolean): void {
         : `${parents.join(".")}.%${k}${count.after}`;
     if (formatParts(format, k)) line.level = { counter: count.counter, format };
     else line.type = null;
+  }
+}
+
+/** Each line's depth: how many lines still open above it are set less
+    deep. A line goes at most one level deeper than the line before it, and
+    lines set alike stay siblings wherever the first line stands. A list
+    whose first line stood a level in took that line out a level and each
+    line after it a level deeper than its sibling above ("(b)" drew
+    "(2)"). */
+function nestLines(lines: ListLine[]): void {
+  const open: number[] = [];
+  for (const line of lines) {
+    while (open.length > 0 && open[open.length - 1] >= line.indent) open.pop();
+    line.depth = open.length;
+    open.push(line.indent);
+  }
+}
+
+/** Where the page sets each depth of the lines, from its first line at that
+    depth (ListLine.printed): undefined from the first depth the page does
+    not say on, where the list sheet goes on a half inch a depth. */
+function depthIndents(lines: ListLine[]): Indent[] | undefined {
+  const out: Indent[] = [];
+  for (const line of lines) if (!(line.depth in out) && line.printed) out[line.depth] = line.printed;
+  let n = 0;
+  while (n in out) n++;
+  return n > 0 ? out.slice(0, n) : undefined;
+}
+
+/** Lines with no marker as items of a bulleted list whose level is an empty
+    bullet: the page draws no marker there (lib/docs/schema.ts ListLevel). */
+function unmarkedLines(lines: ListLine[]): void {
+  for (const line of lines) {
+    if (!line.unmarked) continue;
+    line.type = "bulletList";
+    line.level = { bullet: "" };
   }
 }
 
@@ -619,7 +745,7 @@ class Converter {
   private quote: RichNode | null = null;
   /** The last list block drawn as lists: its lines, and its nodes from
       out[at], for a list that resumes after it. */
-  private lastList: { lines: ListLine[]; nodes: RichNode[]; at: number } | null = null;
+  private lastList: { lines: ListLine[]; nodes: RichNode[]; at: number; itemSpace: number } | null = null;
   /** The last page whose start is placed, and page starts a block could not
       hold, for the next block. */
   private page = 0;
@@ -688,9 +814,10 @@ class Converter {
     // their numbers stand at the Title's end, the mark's in place of it.
     const title = this.input.titleFromOriginal ? (this.input.title ?? "").replace(/\s+/g, " ").trim() : "";
     if (this.input.kind !== "pdf" || !title) return;
+    const first = this.input.firstPage ?? 1;
     const loose = blocks
       .map((block, index) => ({ label: block.footnote?.label.trim(), index }))
-      .filter(({ label, index }) => label !== undefined && (blocks[index].page ?? 1) <= 1 && !this.footnoteIds.has(index) && blocks[index].text.trim());
+      .filter(({ label, index }) => label !== undefined && (blocks[index].page ?? first) <= first && !this.footnoteIds.has(index) && blocks[index].text.trim());
     const marked = loose.find(({ label }) => label && title.endsWith(label) && /[\p{L})\].,:;!?]$/u.test(title.slice(0, -label.length)));
     if (marked) this.titleMark = marked.label ?? "";
     for (const { index } of [...(marked ? [marked] : []), ...loose.filter(({ label }) => label === "")]) {
@@ -733,10 +860,11 @@ class Converter {
     const title = this.input.titleFromOriginal ? (this.input.title ?? "").replace(/\s+/g, " ").trim() : "";
     // A heading among the first blocks that repeats the title is the Title,
     // where it stands; else the Title comes first, after the kicker.
+    const first = this.input.firstPage ?? 1;
     const repeat = title
       ? blocks
           .slice(0, TITLE_REACH)
-          .findIndex((b) => b.type === "HEADING" && sameWords(b.text, title) && (!this.paged || (b.page ?? 1) <= 1))
+          .findIndex((b) => b.type === "HEADING" && sameWords(b.text, title) && (!this.paged || (b.page ?? first) <= first))
       : -1;
     let lead = 0;
     while (lead < blocks.length && blocks[lead].type === "PARAGRAPH" && tokensOf(blocks[lead].html).includes("kicker")) lead++;
@@ -903,9 +1031,10 @@ class Converter {
   // ── Blocks ──
 
   private title(title: string, blocks: ParsedBlock[]) {
-    // A PDF's title stands on its first page.
-    const starts: PageStart[] = this.paged && this.page < 1 ? [{ offset: 0, page: 1 }] : [];
-    if (starts.length > 0) this.page = 1;
+    // A PDF's title stands on the import's first page.
+    const first = this.input.firstPage ?? 1;
+    const starts: PageStart[] = this.paged && this.page < first ? [{ offset: 0, page: first }] : [];
+    if (starts.length > 0) this.page = first;
     const meta = blocks.slice(0, TITLE_REACH).find((b) => b.type === "PARAGRAPH" && tokensOf(b.html).includes("meta"));
     const heading = blocks.find((b) => b.type === "HEADING");
     const centered =
@@ -918,7 +1047,11 @@ class Converter {
     // masthead, byline, or first heading centers it.
     const align = this.input.titleAlign ?? (this.input.titleFont ? null : centered ? "center" : null);
     if (align) attrs.textAlign = align;
-    this.push(paragraphNode(this.titleContent(inline({ text: title, spans: [], starts })), attrs));
+    // The writer's line breaks stay in the Title (two centered lines), when
+    // its lines are the title's words.
+    const lines = this.input.titleLines;
+    const text = lines && lines.join(" ").replace(/\s+/g, " ").trim() === title ? lines.join("\n") : title;
+    this.push(paragraphNode(this.titleContent(inline({ text, spans: [], starts })), attrs));
   }
 
   private block(block: ParsedBlock, index: number, isTitle: boolean) {
@@ -968,8 +1101,13 @@ class Converter {
     if (align) attrs.textAlign = align;
     if (role === "meta") attrs.docStyle = "subtitle";
     else if (role !== "kicker" && this.spaceAfter(block) > 0) attrs.spaceAfter = this.spaceAfter(block);
-    const indent = INDENT_TOKENS.find((k) => tokens.includes(k));
-    if (indent) Object.assign(attrs, INDENTS[indent]);
+    const kind = INDENT_TOKENS.find((k) => tokens.includes(k));
+    const indent = block.indent ?? (kind ? INDENTS[kind] : undefined);
+    // A bar at the left stands in the indent, its padding from the words:
+    // the words start where the page starts them.
+    const bar = BORDER_VALUE.exec(block.borders?.left ?? "");
+    const inset = bar ? Number(bar[1]) + Number(bar[2] ?? 0) : 0;
+    Object.assign(attrs, indentAttrs(indent && inset ? { left: Math.max(0, indent.left - inset), first: indent.first } : indent), borderAttrs(block));
     const size =
       role === "kicker" || role === "label" || role === "caption" || role === "footnote" ? SMALL_SIZE : role === "display" ? DISPLAY_SIZE : null;
     const extra: RichMark[] = size ? [{ type: "textStyle", attrs: { fontSize: size } }] : [];
@@ -982,10 +1120,10 @@ class Converter {
     const align = alignOf(tokensOf(block.html));
     const content = inline(this.sourceOf(block, starts, isTitle ? "title" : undefined));
     if (isTitle) {
-      this.place(index, [paragraphNode(this.titleContent(content), align ? { docStyle: "title", textAlign: align } : { docStyle: "title" })]);
+      this.place(index, [paragraphNode(this.titleContent(content), { docStyle: "title", ...(align ? { textAlign: align } : {}), ...borderAttrs(block) })]);
       return;
     }
-    const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId() };
+    const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId(), ...borderAttrs(block) };
     if (align) attrs.textAlign = align;
     // The page's own space after the heading, where it measured one.
     if (block.spaceAfter !== undefined) attrs.spaceAfter = block.spaceAfter;
@@ -1003,7 +1141,9 @@ class Converter {
       }
       if (waiting.length > 0) line.starts = [...waiting, ...line.starts];
       waiting = [];
-      lines.push(listLine(line));
+      const l = listLine(line);
+      l.printed = block.listIndents?.[l.indent];
+      lines.push(l);
     }
     this.carry(waiting);
     if (lines.length === 0) return;
@@ -1012,32 +1152,62 @@ class Converter {
     const contents =
       tokensOf(block.html).includes("contents") || (block.links ?? []).some((l) => l.targetOrder !== undefined);
     if (!contents && this.resume(lines, block, index)) return;
-    // A line goes at most one level deeper than the line before it.
-    let depth = -1;
-    for (const l of lines) depth = l.depth = Math.min(l.depth, depth + 1);
+    nestLines(lines);
     levelsOfLines(lines, this.printed);
+    unmarkedLines(lines);
     if (contents || lines.some((l) => l.type === null)) {
       // A contents list, or lines the page editor's lists cannot draw:
-      // a paragraph per line, the words as they stand, indented as printed.
-      const nodes = lines.map((l) => paragraphNode(inline(l.whole), l.indent > 0 ? { indentLeft: l.indent * INDENT_PT } : {}));
+      // a paragraph per line, the words as they stand, indented as printed
+      // (a contents entry a step a level, as its links' depth reads).
+      const printedAt = (l: ListLine) => (contents ? undefined : block.listIndents?.[Math.min(l.indent, block.listIndents.length - 1)]);
+      const nodes = lines.map((l) =>
+        paragraphNode(inline(l.whole), indentAttrs(printedAt(l) ?? (l.indent > 0 ? { left: l.indent * INDENT_PT, first: 0 } : undefined))),
+      );
+      this.lineLook(nodes, block);
       this.spaceLast(nodes, block);
       this.place(index, nodes);
       this.lastList = null;
       return;
     }
     const nodes = this.lists(lines);
+    this.lineLook(lines.flatMap((l) => (l.node ? [l.node] : [])), block);
     this.spaceLast(nodes, block);
     this.place(index, nodes);
-    this.lastList = { lines, nodes, at: this.out.length - nodes.length };
+    this.lastList = { lines, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block) };
   }
 
-  /** The lines as lists, each outermost list in its format. */
+  /** The space between a list's items, in points (ParsedBlock.itemSpace). */
+  private itemSpace(block: ParsedBlock): number {
+    const space = block.itemSpace ?? 0;
+    return Number.isFinite(space) && space > 0 ? Math.min(72, Math.round(space * 2) / 2) : 0;
+  }
+
+  /** A list's lines as the page sets them: the list's alignment (items
+      set justified, as their paragraphs are), and the space between two
+      items; the last line takes the block's space after (spaceLast). */
+  private lineLook(paragraphs: RichNode[], block: ParsedBlock) {
+    const align = alignOf(tokensOf(block.html));
+    const space = this.itemSpace(block);
+    for (const node of paragraphs) {
+      node.attrs ??= {};
+      if (align) node.attrs.textAlign = align;
+      if (space) node.attrs.spaceAfter = space;
+    }
+  }
+
+  /** The lines as lists, each outermost list in its format and, but a
+      checklist, at its page's depths (depthIndents). A list with no marker
+      on any line draws none at every level, so a line moved a level in or
+      out stays unmarked. */
   private lists(lines: ListLine[]): RichNode[] {
     const tops: Top[] = [];
     const nodes = listsAt(lines, 0, 0, tops).nodes;
+    const listIndents = listIndentsAttr(depthIndents(lines));
+    const unmarked = lines.every((l) => l.unmarked);
     for (const top of tops) {
-      const attrs = listFormat(top.node.type, top.seen);
-      if (attrs) top.node.attrs = { ...top.node.attrs, ...attrs };
+      const seen = unmarked ? Array.from({ length: 9 }, () => ({ bullet: "" })) : top.seen;
+      const attrs = { ...listFormat(top.node.type, seen), ...(listIndents && top.node.type !== "taskList" ? { listIndents } : {}) };
+      if (Object.keys(attrs).length > 0) top.node.attrs = { ...top.node.attrs, ...attrs };
     }
     return nodes;
   }
@@ -1052,21 +1222,26 @@ class Converter {
       the last thing placed but those blocks, or the lines do not go on it. */
   private resume(lines: ListLine[], block: ParsedBlock, index: number): boolean {
     const last = this.lastList;
-    if (!last || lines[0].depth < 1 || this.quote) return false;
+    if (!last || lines[0].indent < 1 || this.quote) return false;
     const between = this.out.slice(last.at + last.nodes.length);
     const placed = last.nodes.every((node, k) => this.out[last.at + k] === node);
     if (!placed || between.length > 2 || between.some((n) => n.type !== "paragraph" && n.type !== "blockMath")) return false;
     const tail = last.lines[last.lines.length - 1];
-    let depth = tail.depth;
-    for (const l of lines) depth = l.depth = Math.min(l.depth, depth + 1);
     const all = [...last.lines, ...lines];
+    nestLines(all);
     levelsOfLines(all, this.printed);
+    unmarkedLines(lines);
     if (lines.some((l) => l.type === null)) return false;
-    // The list's last line is no longer its last.
-    if (tail.node?.attrs) delete tail.node.attrs.spaceAfter;
+    // The list's last line is no longer its last: it takes the space
+    // between the items.
+    if (tail.node?.attrs) {
+      if (last.itemSpace) tail.node.attrs.spaceAfter = last.itemSpace;
+      else delete tail.node.attrs.spaceAfter;
+    }
     tail.more = [...(tail.more ?? []), ...between];
     this.out.splice(last.at);
     const nodes = this.lists(all);
+    this.lineLook(lines.flatMap((l) => (l.node ? [l.node] : [])), block);
     this.spaceLast(nodes, block);
     // A link to the resumed block lands on its first line.
     const first = lines[0].node;
@@ -1076,7 +1251,7 @@ class Converter {
       if (typeof first.attrs.blockId === "string") this.firstIds.set(index, first.attrs.blockId);
     }
     for (const node of nodes) this.push(node);
-    this.lastList = { lines: all, nodes, at: this.out.length - nodes.length };
+    this.lastList = { lines: all, nodes, at: this.out.length - nodes.length, itemSpace: this.itemSpace(block) };
     return true;
   }
 
@@ -1120,11 +1295,15 @@ class Converter {
 
   private figure(block: ParsedBlock, index: number, starts: PageStart[]) {
     const mediaId = newBlockId();
-    const caption = clip(block.text, MAX_CAPTION_CHARS);
+    // A display equation kept as a crop has no caption: its text is the
+    // display's glyphs as the text layer reads them, often garbled (about
+    // 125 crops in the corpus drew them under the equation).
+    const caption = block.mathCrop ? "" : clip(block.text, MAX_CAPTION_CHARS);
     const page = this.input.kind === "pdf" && typeof block.page === "number" ? block.page : null;
     const region = block.region ?? null;
     const pageStart = starts.at(-1)?.page ?? null;
     this.figures.push({ mediaId, html: this.input.kind === "pdf" ? null : block.html ?? null, caption, page, region });
+    const captionStyles = this.input.kind === "pdf" ? captionStylesFor(block, caption) : null;
     this.place(index, [
       {
         type: "figure",
@@ -1132,6 +1311,7 @@ class Converter {
           blockId: newBlockId(),
           mediaId,
           caption,
+          ...(captionStyles ? { captionStyles } : {}),
           page,
           region: region ? JSON.stringify(region) : null,
           pageStart,
@@ -1147,6 +1327,8 @@ class Converter {
     const attrs: Record<string, unknown> = { latex, blockId: newBlockId() };
     const pageStart = starts.at(-1)?.page;
     if (pageStart !== undefined) attrs.pageStart = pageStart;
+    // The page numbers the equation at the left margin (the parse's leqno).
+    if (tokensOf(block.html).includes("leqno")) attrs.leqno = true;
     this.place(index, [{ type: "blockMath", attrs }]);
   }
 

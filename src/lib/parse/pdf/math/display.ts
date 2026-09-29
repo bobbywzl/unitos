@@ -14,12 +14,12 @@
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
-import { sameFlags } from "@/lib/parse/pdf/glyphs";
+import { isUnreadMath, sameFlags } from "@/lib/parse/pdf/glyphs";
 import { regionOf, unionBox } from "@/lib/parse/pdf/geometry";
 import { ATTACH_PUNCT_RE, spaceGap } from "@/lib/parse/pdf/lines";
 import { BULLET_RE } from "@/lib/parse/pdf/markers";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
-import { braceLabelBoxes, hangingFamily, hangingGlyph } from "@/lib/parse/pdf/math/layout";
+import { braceLabelBoxes, hangingFamily, hangingGlyph, LIMIT_OPS } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import { balanced, orphanGlyphs, paintsRule, resolveZone } from "@/lib/parse/pdf/math/zones";
 import type { Box, Cell, Item, Line, MathZone, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
@@ -43,6 +43,8 @@ const MATH_WORDS = new Set([
 
 // A formula's relations and operators: a display states or applies one.
 const RELATION_RE = /[=<>≤≥≈∼≃≅≡≠∝≪≫≺≻→←↔⇒⇐⇔⟶⟹⟺↦∈∉∋⊂⊆⊃⊇∑∏∫∮⋀⋁⋃⋂+×∪∩⊕⊗∧∨]/;
+// A display's next row opens with its relation or its operator.
+const CONTINUES_RE = /^(:=|[=<>≤≥≈∼≃≅≡≠∝≪≫⇒⇔⟹⟺+−-])/;
 
 // ── Display lines on a TeX page ─────────────────────────────────────────────
 
@@ -166,14 +168,30 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
   return "text";
 }
 
+// The operator names that take limits ("lim", "max") among an item's
+// glyphs: where each stands.
+function limitNames(glyphs: Glyph[]): { x1: number; x2: number; y: number; size: number }[] {
+  const out: { x1: number; x2: number; y: number; size: number }[] = [];
+  for (let k = 0; k < glyphs.length; ) {
+    let end = k;
+    while (end < glyphs.length && /^[A-Za-z]$/.test(glyphs[end].unicode)) end++;
+    if (LIMIT_OPS.has(glyphs.slice(k, end).map((g) => g.unicode).join(""))) {
+      out.push({ x1: glyphs[k].x, x2: glyphs[end - 1].x + glyphs[end - 1].w, y: glyphs[k].y, size: glyphs[k].size });
+    }
+    k = Math.max(end, k + 1);
+  }
+  return out;
+}
+
 // A fragment belongs to the display beside it only when the display holds
 // it: a fraction bar between it and one of the display's lines; a big
 // operator, brace, or delimiter it
 // sits over, under, or beside (a limit, a label under a brace, a matrix
-// entry); or a line of the display it sits close under or over, inside the
-// display's width (an array's row). A page's first or last line is held by
-// the first two only: a page number under a formula is no part of it.
-function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces: Glyph[]): boolean {
+// entry); an operator name it sits under (a limit); or a line of the
+// display it sits close under or over, inside the display's width (an
+// array's row). A page's first or last line is held by the first three
+// only: a page number under a formula is no part of it.
+function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces: Glyph[], display: Line[]): boolean {
   const x1 = frag.x;
   const x2 = frag.xEnd;
   const em = frag.size;
@@ -209,9 +227,21 @@ function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces
     const beside = frag.y <= box.top && frag.y >= box.bottom;
     if ((on && close) || beside) return true;
   }
+  // Each glyph under an operator name that takes limits: Springer's (29)
+  // set "x → ±∞" under each "lim" on the page's last line, and the display
+  // passed with both bare.
+  const names = near.flatMap((l) => l.items.flatMap((item) => limitNames(item.glyphs ?? [])));
+  const glyphs = frag.items.flatMap((item) => item.glyphs ?? []);
+  const under = (g: Glyph) =>
+    names.some((n) => g.x + g.w / 2 > n.x1 - n.size && g.x + g.w / 2 < n.x2 + n.size && n.y - g.y > n.size * 0.3 && n.y - g.y < n.size * 1.3);
+  if (glyphs.length > 0 && glyphs.every((g) => g.unicode.trim() === "" || under(g))) return true;
   if (edge) return false;
-  const left = Math.min(...near.map((l) => l.x));
-  const right = Math.max(...near.map((l) => l.xEnd));
+  // The display's width is all its lines': a limit's second row, wider than
+  // its first, stands past the first alone (a subarray's rows align left,
+  // and the display passed with the second row left out as words).
+  const wide = [...near, ...display].filter((l) => l !== frag);
+  const left = Math.min(...wide.map((l) => l.x));
+  const right = Math.max(...wide.map((l) => l.xEnd));
   return x1 >= left - em && x2 <= right + em && near.some((l) => Math.abs(l.y - frag.y) < Math.max(em, l.size) * 1.3);
 }
 
@@ -536,10 +566,23 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       (o, n) => o !== l && kinds[n] !== "text" && (kinds[n] !== "fragment" || band.includes(o)) && Math.abs(o.y - l.y) <= Math.max(o.size, l.size) * 1.6,
     );
   const out: Line[] = [];
+  // A row that opens with a relation or an operator ("= …", "+ …") goes on
+  // the display over it, however far its sums set the rows apart (such
+  // rows read as displays of their own), when the two read as one formula,
+  // or when neither reads alone (Springer's rows of a lone "+" stood apart
+  // from the crop they end). A row that reads alone
+  // under a display that does not stays an equation of its own (arXiv
+  // 2410.04586 p. 7: "= ez^e[…]" under a crop of double sums).
+  const continues = new Set<Line>();
+  let last: { line: Line; band: Line[] } | null = null;
+  let orphans: Glyph[] | null = null;
+  const reads = (l: Line) => equationOf(l, (orphans ??= orphanGlyphs(lines, ctx.drawing)), ctx) !== null;
+  const labeled = (band: Line[]) => band.some((l) => kinds[lines.indexOf(l)] === "label" || unlabeled(l).label !== null);
   let k = 0;
   while (k < lines.length) {
     if (kinds[k] === "text") {
       out.push(lines[k]);
+      last = null;
       k++;
       continue;
     }
@@ -555,15 +598,18 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       const reach = kinds[j] === "label" && QED_RE.test(next.text.trim()) ? 2.6 : 1.6;
       // A limit over the next row's sum stands a little farther from the
       // row above (a display of several rows, each with its sums).
-      const limit = kinds[j] === "fragment" && prev.y - next.y <= size * 2.2 && attached(next, around(next, band), rules, edge(next), braces);
+      const limit = kinds[j] === "fragment" && prev.y - next.y <= size * 2.2 && attached(next, around(next, band), rules, edge(next), braces, band);
       // Rows a tall delimiter holds are one display, however far apart.
       const held = fences.some((f) => [prev, next].every((l) => l.y >= f.y1 && l.y <= f.y2 && l.x >= f.x2 - 1 && l.x - f.x2 < l.size * 3));
-      if ((prev.y - next.y > size * reach && !limit && !held) || prev.y < next.y) break;
+      const x1 = Math.min(...band.map((l) => l.x));
+      const x2 = Math.max(...band.map((l) => l.xEnd));
+      if ((prev.y - next.y > size * reach && !limit && !held) || prev.y < next.y) {
+        if (kinds[j] === "math" && CONTINUES_RE.test(unlabeled(next).text.trim()) && prev.y - next.y <= size * 3.5 && next.x >= x1 - size) continues.add(next);
+        break;
+      }
       // A display's lines sit side by side at most a few ems apart (a
       // fraction's numerator beside a big operator); a label at the margin
       // stands farther.
-      const x1 = Math.min(...band.map((l) => l.x));
-      const x2 = Math.max(...band.map((l) => l.xEnd));
       if (kinds[j] !== "label" && (next.xEnd < x1 - size * 6 || next.x > x2 + size * 6) && !band.every((l) => kinds[lines.indexOf(l)] === "label")) break;
       const label = kinds[j] === "label" || unlabeled(next).label !== null ? 1 : 0;
       if (labels + label > 1) break;
@@ -571,13 +617,14 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       // aligned row's lone "=" over its fraction's denominator).
       const after = lines[j + 1];
       const between = after !== undefined && kinds[j + 1] === "math" && next.y - after.y <= size * 1.6 && next.y < prev.y;
-      if (kinds[j] === "fragment" && !between && !attached(next, around(next, band), rules, edge(next), braces)) break;
+      if (kinds[j] === "fragment" && !between && !attached(next, around(next, band), rules, edge(next), braces, band)) break;
       labels += label;
       band.push(next);
     }
     // A fragment that opened the band holds only if the band holds it.
-    while (band.length > 1 && kinds[lines.indexOf(band[0])] === "fragment" && !attached(band[0], around(band[0], band), rules, edge(band[0]), braces)) {
+    while (band.length > 1 && kinds[lines.indexOf(band[0])] === "fragment" && !attached(band[0], around(band[0], band), rules, edge(band[0]), braces, band)) {
       out.push(band.shift()!);
+      last = null;
       k++;
     }
     const kindIn = (l: Line) => kinds[lines.indexOf(l)];
@@ -608,9 +655,23 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
     const alone = (l: Line) => spaced(l) && (centered(l) || (set(l) && detached(l)));
     const math = band.some((l) => kindIn(l) === "math" && (labels > 0 || band.length > 1 || alone(l)));
     const bar = band.length > 1 && band.some((l) => kindIn(l) === "fragment") && (labels > 0 || band.some(set)) && rules.some((r) => r.dir === "h" && band.some((a) => band.some((b) => r.y1 < a.y && r.y1 > b.y && r.x1 < a.xEnd && r.x2 > a.x)));
-    if (math || bar) out.push(join(band));
-    else out.push(...band);
     k += band.length;
+    if (last && continues.has(band[0]) && !(labeled(last.band) && labeled(band))) {
+      const whole = join([...last.band, ...band]);
+      if (reads(whole) || (!reads(last.line) && !reads(join(band)))) {
+        out[out.length - 1] = whole;
+        last = { line: whole, band: [...last.band, ...band] };
+        continue;
+      }
+    }
+    if (math || bar) {
+      const line = join(band);
+      out.push(line);
+      last = { line, band };
+    } else {
+      out.push(...band);
+      last = null;
+    }
   }
   return out;
 }
@@ -697,9 +758,10 @@ function isEquationShaped(s: Segment, ctx: PageContext): boolean {
 // The formula's glyphs: the glyphs of its display line, and the glyphs no
 // item reads (a placed accent, a composite's second half: the page's
 // orphans) inside its box, less a label at either end a quad or more apart
-// (its \tag, or \tag* for a proof's end mark). null when an item holds text
-// the drawing has no glyph for (the check could not see it).
-function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; label: string | null; labelGlyphs: Glyph[] } | null {
+// (its \tag, or \tag* for a proof's end mark; left: the page sets it at the
+// left margin, as amsbook does). null when an item holds text the drawing
+// has no glyph for (the check could not see it).
+function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; label: string | null; labelGlyphs: Glyph[]; left: boolean } | null {
   if (line.items.some((i) => !i.glyphs?.length)) return null;
   const top = line.yMax + line.size * 1.2;
   const bottom = line.yMin - line.size * 0.6;
@@ -728,18 +790,21 @@ function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; lab
       dir > 0
         ? Math.min(...rest.map((g) => g.x)) - Math.max(...run.map((g) => g.x + g.w))
         : Math.min(...run.map((g) => g.x)) - Math.max(...rest.map((g) => g.x + g.w));
-    // TeX sets a label a quad at least from a wide formula.
-    return gap >= size * 0.9 ? { glyphs: run, text } : null;
+    // amsmath sets a label half a quad at least from a wide formula
+    // (\mintagsep): a label set 0.79 em left of a display with cases read
+    // into the formula as its first words.
+    return gap >= size * 0.5 ? { glyphs: run, text } : null;
   };
-  const label = labelAt(glyphs.length - 1, -1) ?? labelAt(0, 1);
-  if (!label) return { glyphs, label: null, labelGlyphs: [] };
+  const right = labelAt(glyphs.length - 1, -1);
+  const label = right ?? labelAt(0, 1);
+  if (!label) return { glyphs, label: null, labelGlyphs: [], left: false };
   const tag = QED_RE.test(label.text) ? `\\tag*{$${label.text === "□" ? "\\square" : "\\blacksquare"}$}` : `\\tag{${label.text.slice(1, -1)}}`;
-  return { glyphs: glyphs.filter((g) => !label.glyphs.includes(g)), label: tag, labelGlyphs: label.glyphs };
+  return { glyphs: glyphs.filter((g) => !label.glyphs.includes(g)), label: tag, labelGlyphs: label.glyphs, left: right === null };
 }
 
 // The equation's LaTeX with its label as \tag, and the box of its glyphs
 // (their drawn extent, the label's included); null when the check fails.
-function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: string; box: Box } | null {
+function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: string; box: Box; left: boolean } | null {
   const found = formulaGlyphs(line, orphans);
   if (!found || found.glyphs.length === 0) return null;
   const glyphs = found.glyphs;
@@ -760,6 +825,7 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
       !b.clip &&
       b.x1 >= line.x - size * 1.5 &&
       b.x1 < line.xEnd + size * 0.6 &&
+      b.x2 <= line.xEnd + size * 1.5 &&
       ((b.y1 >= low - size && b.y2 <= high + size) || (b.x2 - b.x1 < size * 0.6 && b.y2 > low && b.y1 < high)) &&
       !paintsRule(b, ctx.drawing.rules),
   );
@@ -786,7 +852,9 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
     // would be missing from the LaTeX.
     // A symbol of a font the tables do not know may hang from its origin
     // like an integral (esint's ∫ read as "ˆ", arXiv 2411.09614 p. 5): an
-    // em over the box counts.
+    // em over the box counts. So may an unread glyph of a math font: the
+    // braces of Springer's (12) hang from an em over its first row, which
+    // passed without them.
     // A rule at the formula's bottom edge with glyphs just under it is a
     // fraction cut in two: its denominator went to the next line (arXiv
     // 2410.04586 p. 9 read it as an \underline).
@@ -809,18 +877,34 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
       g.x + g.w / 2 < box.x2 &&
       g.y > box.y1 - size &&
       g.y < box.y2 + size;
+    // So is a glyph under or over one of its big operators, where a limit
+    // stands: a limit on a line of its own that the display's lines left out
+    // (its words set in a text italic, "g′ ∈ fullS(g)") passed with its
+    // operators bare, arXiv 2506.06752 (10).
+    // So is a glyph under an operator name that takes limits: Springer's
+    // (29) passed with its two "lim"s bare.
+    const ops = atoms.filter((a) => a.cls === "op" && (a.entry?.display || hangingFamily(a.fam)));
+    const names = line.items.flatMap((item) => limitNames(item.glyphs ?? []));
+    const limit = (g: Glyph) => {
+      const cx = g.x + g.w / 2;
+      return (
+        g.size < size * 0.85 &&
+        (ops.some((op) => cx > op.x1 - size * 0.2 && cx < op.x2 + size * 0.2 && ((g.y < op.bottom && g.y > op.bottom - size * 0.9) || (g.y > op.top && g.y < op.top + size * 0.45))) ||
+          names.some((n) => cx > n.x1 - n.size * 0.5 && cx < n.x2 + n.size * 0.5 && g.y < n.y - n.size * 0.3 && g.y > n.y - n.size * 1.3))
+      );
+    };
     const stray = ctx.drawing.glyphs.some((g) => {
       if (own.has(g) || (g.family === null && g.unicode.trim() === "")) return false;
-      if (past(g) || beyond(g) || brace(g)) return true;
+      if (past(g) || beyond(g) || brace(g) || limit(g)) return true;
       if (labels.some((b) => g.x + g.w / 2 > b.x1 && g.x + g.w / 2 < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
       if (g.x + g.w / 2 <= box.x1 || g.x + g.w / 2 >= box.x2) return false;
-      const hangs = g.family === null && !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]$/u.test(g.unicode);
-      return g.y > box.y1 && g.y < box.y2 + (hangs ? g.size : 0);
+      const hangs = g.family === null && (isUnreadMath(g) || !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]$/u.test(g.unicode));
+      return g.y >= box.y1 - size * 0.05 && g.y < box.y2 + (hangs ? g.size : 0);
     });
     if (stray) return null;
     const pad = size * 0.15;
     box = { x1: box.x1 - pad, y1: box.y1 - pad, x2: box.x2 + pad, y2: box.y2 + pad };
-    return { latex: found.label ? `${latex} ${found.label}` : latex, box };
+    return { latex: found.label ? `${latex} ${found.label}` : latex, box, left: found.left };
   } catch {
     return null;
   }
@@ -909,7 +993,7 @@ export function displayEquations(
     let start = k;
     // The EQUATION keeps its glyphs' box as a region: a check of the parse,
     // or a later repair, reads the glyphs under it.
-    let equation: { latex: string; box: Box } | null = null;
+    let equation: { latex: string; box: Box; left: boolean } | null = null;
     const line = tex && !missed ? displayOf(segments[k]) : undefined;
     if (line) {
       used.add(line);
@@ -984,8 +1068,13 @@ export function displayEquations(
         region: regionOf(equation.box, pageWidth, pageHeight),
         lineSize: size,
         mathShare: 1,
+        // A label the page sets at the left margin (amsbook's leqno): the
+        // import draws the \tag there.
+        ...(equation.left ? { html: '<p class="leqno"></p>' } : {}),
       });
     } else {
+      // Its text is the display's glyphs as the text layer reads them, often
+      // garbled: the import shows the crop with no caption (mathCrop).
       out.push({
         type: "FIGURE",
         text: group
@@ -998,6 +1087,7 @@ export function displayEquations(
         region: regionOf(crop, pageWidth, pageHeight),
         lineSize: group[0].lineSize,
         mathShare: 1,
+        mathCrop: true,
       });
     }
     k = m;

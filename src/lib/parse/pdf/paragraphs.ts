@@ -10,6 +10,7 @@ import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
 import { BULLET_RE, GLYPH_BULLET_RE, isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { boldShare, endsBold, fillsMargin, joinGroup, startsWithBoldLead } from "@/lib/parse/pdf/text";
 import type { Line, PageContext, Segment, Step } from "@/lib/parse/pdf/types";
+import type { Indent } from "@/lib/parse/types";
 
 // The column's right edge near a band of lines [from, to): the widest prose
 // line (single cell, longer than 40 characters, in the same column) within
@@ -34,16 +35,19 @@ export function proseEdge(lines: Line[], from: number, to: number): number {
 
 // The prose edge when two lines near the band end at it: a column's edge,
 // not a slide's longest line (a citation's two lines on a slide split where
-// the first line ended, as if at a sentence's end).
+// the first line ended, as if at a sentence's end). With no two near, the
+// edge three lines of the page share that start where the band does, in
+// its column: among short typed lines four lines hold no full one (dated
+// lines, a page's first lines), and the writer's line breaks ran together.
 function sharedEdge(lines: Line[], from: number, to: number): number {
   const edge = proseEdge(lines, from, to);
-  const size = lines[from].size;
-  let near = 0;
-  for (let k = Math.max(0, from - 4); k < Math.min(lines.length, to + 4); k++) {
-    const l = lines[k];
-    if (l.cells.length === 1 && l.xEnd <= edge && l.xEnd >= edge - size * 2 && !otherColumn(l, lines[from])) near++;
-  }
-  return near >= 2 ? edge : 0;
+  const band = lines[from];
+  const size = band.size;
+  const near = (l: Line, at: number) => l.cells.length === 1 && l.xEnd <= at && l.xEnd >= at - size * 2 && !otherColumn(l, band);
+  if (lines.slice(Math.max(0, from - 4), to + 4).filter((l) => near(l, edge)).length >= 2) return edge;
+  const own = lines.filter((l) => l.cells.length === 1 && !l.table && Math.abs(l.x - band.x) <= size && !otherColumn(l, band));
+  const page = Math.max(0, ...own.filter((l) => [...l.text].length > 40).map((l) => l.xEnd));
+  return own.filter((l) => near(l, page)).length >= 3 ? page : 0;
 }
 
 // Line l was read in another column than line `of`: a two-column page's title
@@ -56,6 +60,97 @@ function otherColumn(l: Line, of: Line): boolean {
   const b = lineColumn(of);
   if (!a || !b) return false;
   return Math.abs(a[0] - b[0]) > of.size || Math.abs(a[1] - b[1]) > of.size;
+}
+
+// Each line's column edge, set for a page by markEdges.
+const edges = new WeakMap<Line, number>();
+
+/** Where each line's column starts (leftEdge reads it): the leftmost place
+    the lines of its column start at, among the lines of one cell, read in
+    its column, that reach over it, from 85% of its size to half as large
+    again (a caption set smaller beside the text is no edge of it; the body
+    is the edge of an abstract set smaller and in). The extent the column
+    split keeps reaches past that edge where anything stands in the
+    column's margin (Elsevier's right column: every paragraph read as set
+    in by 10 pt), and spans a side column or a float read with the text
+    (PLOS pp. 2 and 6, Nature p. 1: 165 to 178 pt). A line with no such
+    place (a box on a form) starts its own column: nothing sets it in. */
+export function markEdges(lines: Line[], ctx: PageContext) {
+  const near = (a: number, b: number, tolerance: number) => Math.abs(a - b) <= tolerance;
+  for (const line of lines) {
+    const size = line.size;
+    const column = lineColumn(line);
+    const xs = lines
+      .filter((l) => {
+        if (l === line || l.cells.length !== 1 || l.size < size * 0.85 || l.size > size * 1.5) return false;
+        if (l.x >= line.xEnd - size || l.xEnd <= line.x + size) return false;
+        const other = lineColumn(l);
+        return !column || !other || (near(column[0], other[0], 1) && near(column[1], other[1], 1));
+      })
+      .map((l) => l.x)
+      .sort((a, b) => a - b);
+    // Starts within a fifth of an em of one another are one place (an OCR
+    // layer's lines, a third). The edge is the leftmost place that two
+    // lines start at, and a third as many as at the busiest place: a form's
+    // labels set in under a few lines at the margin keep the margin, and a
+    // label in the margin (one line) is no edge.
+    const tolerance = Math.max(1, size * (ctx.ocr ? 0.3 : 0.2));
+    const places: number[][] = [];
+    for (const x of xs) {
+      const place = places[places.length - 1];
+      if (place && x - place[0] <= tolerance) place.push(x);
+      else places.push([x]);
+    }
+    const busiest = Math.max(0, ...places.map((p) => p.length));
+    const edge = places.find((p) => p.length >= 2 && p.length * 3 >= busiest);
+    edges.set(line, edge ? edge[Math.floor(edge.length / 2)] : line.x);
+  }
+}
+
+// The left edge of the column a line was read in (markEdges); for a line
+// not marked, the page's column (PageContext.columnLeft), or the extent of
+// a column further right.
+export function leftEdge(line: Line, ctx: PageContext): number {
+  const edge = edges.get(line);
+  if (edge !== undefined) return edge;
+  const column = lineColumn(line);
+  if (!column) return ctx.columnLeft;
+  // The page's column is measured to a whole point; its extent to the glyph.
+  return column[0] > ctx.columnLeft + line.size || Math.abs(column[0] - ctx.columnLeft) <= 1 ? column[0] : ctx.columnLeft;
+}
+
+// The first-line indent a page's paragraphs share, in points: the step most
+// first lines are set in by, to a half point, over a line back at the
+// column's left edge at the text's leading. A first line stands under a
+// line that stopped short of the column's right edge, or apart from it.
+// Two such lines at least, else none. amsbook sets its paragraphs in by
+// half an em, under isIndented's reach.
+const pageSteps = new WeakMap<Line[], number | null>();
+function paragraphStep(lines: Line[], ctx: PageContext): number | null {
+  let step = pageSteps.get(lines);
+  if (step !== undefined) return step;
+  const counts = new Map<number, number>();
+  lines.forEach((line, k) => {
+    const next = lines[k + 1];
+    const above = lines[k - 1];
+    if (!next || line.cells.length !== 1 || next.cells.length !== 1 || lineColumn(line) !== lineColumn(next) || sizesDiffer(line, next, ctx)) return;
+    const shift = line.x - next.x;
+    const gap = line.y - next.y;
+    if (shift < line.size * 0.25 || shift > line.size * 4 || Math.abs(next.x - leftEdge(next, ctx)) > line.size * 0.5) return;
+    if (gap <= 0 || gap > next.size * ctx.leading * 1.3) return;
+    const opens =
+      !above ||
+      lineColumn(above) !== lineColumn(line) ||
+      above.y - line.y > line.size * ctx.leading * 1.3 ||
+      !fillsMargin(above, line, columnEdges(lines, k - 1, ctx).right);
+    if (!opens) return;
+    const key = Math.round(shift * 2) / 2;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+  const best = [...counts].sort((a, b) => b[1] - a[1])[0];
+  step = best && best[1] >= 2 ? best[0] : null;
+  pageSteps.set(lines, step);
+  return step;
 }
 
 export function isIndented(line: Line, ctx: PageContext): boolean {
@@ -271,6 +366,32 @@ export function lineAlign(lines: Line[], from: number, to: number, ctx: PageCont
   return null;
 }
 
+/** Line k stops short of its column's right edge on a page set justified:
+    it ends its paragraph or its list item, and the line under it is no wrap
+    of it (a hint under an exercise's last item joined the item). */
+export function stopsShort(lines: Line[], k: number, ctx: PageContext): boolean {
+  if (!justifiedPage(lines, ctx)) return false;
+  const right = columnEdges(lines, k, ctx).right;
+  return right > 0 && right - lines[k].xEnd > lines[k].size * 0.33;
+}
+
+/** A list's items set justified, as lineAlign reads a paragraph: every line
+    of an item but its last fills the column to its right edge, on a page
+    set justified, and one item of two lines at least shows it. A page may
+    justify its items as it does its paragraphs, and the import drew the
+    items ragged. */
+export function justifiedItems(lines: Line[], items: Line[][], ctx: PageContext): boolean {
+  const wrapped = items.filter((item) => item.length >= 2);
+  if (wrapped.length === 0 || !justifiedPage(lines, ctx)) return false;
+  return wrapped.every((item) =>
+    item.slice(0, -1).every((l) => {
+      const k = lines.indexOf(l);
+      const right = k >= 0 ? columnEdges(lines, k, ctx).right : 0;
+      return right > 0 && Math.abs(right - l.xEnd) <= l.size * 0.33;
+    }),
+  );
+}
+
 // A title's lines, set larger than the body, centered on one another:
 // their middles agree within a tenth of their size, and they start at
 // different places. On a slide or a title page the widest line is the
@@ -380,14 +501,19 @@ export function isFirstLineIndent(lines: Line[], i: number, ctx: PageContext, ru
   const line = lines[i];
   const after = lines[i + 1];
   const marker = after ? readMarker(after) : null;
+  // Set in from the next line's column's edge (markEdges): in the page's
+  // right column every paragraph split after its first line (Elsevier,
+  // Nature: 17 pt read as a block indent).
+  const edge = after ? leftEdge(after, ctx) : ctx.columnLeft;
   return (
     line.cells.length === 1 &&
     !(BULLET_RE.test(line.text) && line.size <= ctx.bodySize * 1.15) &&
-    isIndented(line, ctx) &&
+    line.x > edge + line.size * 0.6 &&
+    line.x < edge + line.size * 6 &&
     after !== undefined &&
     runOf[i + 1] === -1 &&
     after.cells.length === 1 &&
-    Math.abs(after.x - ctx.columnLeft) <= 3 &&
+    Math.abs(after.x - edge) <= 3 &&
     // The indent against the paragraph's next line: up to 3.2 em, or up to
     // 5 em when the line runs to the column's edge as a wrapped first line
     // does (Word's half-inch indent is 3.3 em at 11 pt, and its first lines
@@ -404,6 +530,21 @@ export function isFirstLineIndent(lines: Line[], i: number, ctx: PageContext, ru
   );
 }
 
+// The width of a line's first word, across the items the text layer cut it
+// into where its look changes: the first item alone read an opening quote
+// as the whole word (“ of “Partnership”),), and a wrapped line as one the
+// writer broke (synth-agreement-html).
+function firstWord(line: Line): number {
+  let end = line.x;
+  for (const item of [...line.items].sort((a, b) => a.x - b.x)) {
+    if (item.x > end + line.size * 0.12 && end > line.x) break;
+    const cut = item.str.search(/\S\s/);
+    if (cut >= 0) return Math.max(line.firstWordWidth, item.x + (item.w * (cut + 1)) / item.str.length - line.x);
+    end = item.x + item.w;
+  }
+  return Math.max(line.firstWordWidth, end - line.x);
+}
+
 // A float's label alone on its line: "TABLE I", "Figure 3.".
 const FLOAT_LABEL_RE = /^(?:fig\.?|figure|table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+)[.:]?$/i;
 
@@ -418,6 +559,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
   const group: Line[] = [line];
   const colEdge = proseEdge(lines, i, i);
   const sentenceEdge = sharedEdge(lines, i, i);
+  const step = paragraphStep(lines, ctx);
   let j = i + 1;
   while (j < lines.length) {
     const next = lines[j];
@@ -429,26 +571,38 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
     // lines, a court's centered caption): their shifts are no indent, and
     // their ends say nothing of the paragraph's end.
     const centered = isCentered(lines, j - 1, ctx) && isCentered(lines, j, ctx);
+    // A line set in by the page's own first-line indent under a paragraph's
+    // line at the column's edge opens the next paragraph, under a full line
+    // too: amsbook's half-em indent is under isIndented's reach, and
+    // paragraphs ran into the one above. A paragraph's second line under its
+    // first may be a hanging indent.
+    const stepsIn =
+      step !== null &&
+      group.length >= 2 &&
+      !centered &&
+      Math.abs(next.x - prev.x - step) <= next.size * 0.15 &&
+      Math.abs(prev.x - leftEdge(prev, ctx)) <= prev.size * 0.5;
     // A line that stops short of the column's edge after a sentence ends its
     // paragraph when the next line opens a sentence: the next line's first
     // word would have fit, so the break was the writer's. In a document with
     // no space between paragraphs it is the only sign (a Google Docs
-    // export's paragraphs and a report's table notes read as one before).
+    // export's paragraphs and table notes read as one before).
     // With no sentence's end, the line stops short by an em more than that
-    // word: a note's dated lines ("2013: …" under "2011-2012: …") and a
-    // paper's author lines ran together.
-    const roomy = prev.xEnd + prev.size * 1.28 + next.firstWordWidth < sentenceEdge;
+    // word: dated lines one under another and a paper's author lines ran
+    // together.
+    const word = firstWord(next);
+    const roomy = prev.xEnd + prev.size * 1.28 + word < sentenceEdge;
     const endsShort =
       !centered &&
       sentenceEdge > 0 &&
       (prevTerminal || roomy) &&
-      !fillsMargin(prev, next, sentenceEdge) &&
+      prev.xEnd + prev.size * 0.28 + word <= sentenceEdge - 1 &&
       OPENS_SENTENCE_RE.test(next.text);
     // A line that opens with a raised label (an affiliation's "1Department
     // of Physics…", a note's "²") starts a paragraph of its own: the
     // affiliations of arxiv-2504-02736 ran into one.
     const first = next.runs[0];
-    const labelled = first !== undefined && first.start === 0 && first.sup === true && /^[\d*∗†‡§¶‖,\s]+$/u.test(next.text.slice(0, first.end));
+    const labelled = first !== undefined && first.start === 0 && first.sup === true && !first.zone && /^[\d*∗†‡§¶‖,\s]+$/u.test(next.text.slice(0, first.end));
     // A hanging indent (a reference entry, a glossary term): the second
     // line steps in by one to three ems under a first line that wrapped —
     // it ran to the margin, or broke mid-sentence.
@@ -489,6 +643,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       // (real-jnlp-31-47-p1).
       (next.size > body * (ctx.ocr ? 1.3 : 1.14) && !(centered && !ctx.ocr && Math.abs(next.size - prev.size) <= 0.5)) ||
       endsShort ||
+      stepsIn ||
       labelled ||
       // A centered line under a shorter one whose room would have taken its
       // first word, wider by as much on each side: the writer broke the
@@ -547,37 +702,88 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
   if (text.length > 0 && monoChars / text.length > 0.85) {
     return { segments: [{ type: "CODE", text, page: line.page, runs, ...geom(group) }], next: j };
   }
-  const tokens = layoutTokens(lines, i, j, ctx, text);
+  const { tokens, indent } = layout(lines, i, j, ctx, text);
   const html = tokens.length > 0 ? `<p class="${tokens.join(" ")}"></p>` : undefined;
-  return { segments: [{ type: "PARAGRAPH", text, ...(html ? { html } : {}), page: line.page, runs, ...geom(group) }], next: j };
+  return { segments: [{ type: "PARAGRAPH", text, ...(html ? { html } : {}), ...(indent ? { indent } : {}), page: line.page, runs, ...geom(group) }], next: j };
 }
 
-// What a paragraph's lines show of its layout, as the class tokens the reader
-// and the import converter read: its alignment ("center", "right", or
+// What a paragraph's lines show of its layout: the class tokens the reader
+// and the import converter read — its alignment ("center", "right", or
 // "justify", lineAlign), "caption" for a table's or a figure's caption, and
-// its indent — "indent-first" (the first line set in from the others),
-// "indent-hanging" (the others set in from the first), or "indent-block"
-// (every line set in from the column's edge). One line alone shows no
-// indent, and neither does a centered or flush-right one.
-function layoutTokens(lines: Line[], from: number, to: number, ctx: PageContext, text: string): string[] {
+// its indent's kind: "indent-first" (the first line set in from the
+// others), "indent-hanging" (the others set in from the first), or
+// "indent-block" (every line set in from the column's edge) — and the
+// indent's size (ParsedBlock.indent). A centered or flush-right paragraph
+// shows no indent. One line alone set in by the page's first-line indent
+// shows that indent, and set in otherwise a block indent (a form's label
+// lines under its item; one-line definitions set in by the page's indent
+// read flush).
+export function layout(lines: Line[], from: number, to: number, ctx: PageContext, text: string): { tokens: string[]; indent?: Indent } {
   const tokens: string[] = [];
   const group = lines.slice(from, to);
-  const size = group[0].size;
+  const first = group[0];
+  const size = first.size;
   const align = lineAlign(lines, from, to, ctx);
   if (align) tokens.push(align);
   if (CAPTION_RE.test(text)) tokens.push("caption");
-  if (align === "center" || align === "right" || group.length < 2) return tokens;
-  const rest = group.slice(1);
-  const restX = rest[0].x;
-  if (!rest.every((l) => Math.abs(l.x - restX) <= size * 0.5)) return tokens;
-  const shift = group[0].x - restX;
-  // A block's indent is from its own column's left edge: against the page's
-  // first column, every paragraph of the second read as set in.
-  const left = lineColumn(rest[0])?.[0] ?? ctx.columnLeft;
-  if (shift >= size * 0.5 && shift <= size * 4) tokens.push("indent-first");
-  else if (-shift >= size * 0.5 && -shift <= size * 4) tokens.push("indent-hanging");
-  else if (Math.abs(shift) <= size * 0.5 && restX > left + size) tokens.push("indent-block");
-  return tokens;
+  if (align === "center" || align === "right") return { tokens };
+  // A block's indent is from its own column's left edge (markEdges): against
+  // the page's first column, every paragraph of the second read as set in.
+  const left = leftEdge(group[group.length > 1 ? 1 : 0], ctx);
+  // A block indent leaves the column's words room: a quarter of the column
+  // at most, and the widest line fits after it (a form's box read as set in
+  // 461 pt of a 468 pt text width, and the page editor broke its words; a
+  // column read with a float's edge set every paragraph in by 165 pt).
+  const right = Math.max(lineColumn(first)?.[1] ?? 0, ...group.map((l) => l.xEnd));
+  const widest = Math.max(...group.map((l) => l.xEnd - l.x));
+  const fits = (inset: number) => inset <= (right - left) / 4 && inset + widest <= right - left + size;
+  let indent: Indent | null = null;
+  if (group.length === 1) {
+    const step = paragraphStep(lines, ctx);
+    const inset = first.x - left;
+    // A line that runs to the column's edge over a line back at the edge is
+    // a paragraph's first line read alone: its inset is the paragraph's
+    // first-line indent (a double-spaced report's half inch, 36 pt, read as
+    // a block indent: its lines stand farther apart than a paragraph's).
+    const next = lines[to];
+    const wraps =
+      next !== undefined &&
+      next.cells.length === 1 &&
+      next.y < first.y &&
+      !sizesDiffer(next, first, ctx) &&
+      Math.abs(next.x - leftEdge(next, ctx)) <= size * 0.5 &&
+      Math.abs(leftEdge(next, ctx) - left) <= size * 0.5 &&
+      fillsMargin(first, next, right);
+    // Set in by the page's step from the column's edge, or from the column
+    // split's extent where it stands a little left of that edge: a column's
+    // references set their labels in by 3 pt, and the acknowledgment's one
+    // line over them lost its first-line indent.
+    const column = lineColumn(first);
+    const stepped = (x: number) => step !== null && Math.abs(first.x - x - step) <= size * 0.15;
+    if (step !== null && (stepped(left) || (column !== undefined && column[0] < left && left - column[0] <= size && stepped(column[0])))) indent = { left: 0, first: step };
+    else if (inset >= size && wraps && inset <= size * 5) indent = { left: 0, first: inset };
+    else if (inset >= size && fits(inset)) indent = { left: inset, first: 0 };
+  } else {
+    const xs = group.slice(1).map((l) => l.x).sort((a, b) => a - b);
+    const restX = xs[Math.floor(xs.length / 2)];
+    if (!xs.every((x) => Math.abs(x - restX) <= size * 0.5)) return { tokens };
+    const shift = first.x - restX;
+    const inset = restX - left;
+    // A first-line indent from a third of an em: amsbook's is half of one,
+    // and at half an em rounding decided (paragraphs read flush). An OCR
+    // layer's lines jitter by that much.
+    if (shift >= size * (ctx.ocr ? 0.5 : 0.3) && shift <= size * 4) indent = { left: inset >= size && fits(inset) ? inset : 0, first: shift };
+    else if (-shift >= size * 0.5 && -shift <= size * 4) {
+      // A hanging first line stands at the column's edge or right of it:
+      // where most of a bibliography's lines are its entries' wraps, the
+      // column's edge is theirs.
+      const base = Math.min(left, first.x);
+      indent = { left: fits(restX - base) ? restX - base : -shift, first: shift };
+    } else if (Math.abs(shift) <= size * 0.5 && inset > size && fits(inset)) indent = { left: inset, first: 0 };
+  }
+  if (!indent) return { tokens };
+  tokens.push(indent.first > 0 ? "indent-first" : indent.first < 0 ? "indent-hanging" : "indent-block");
+  return { tokens, indent: { left: Math.round(indent.left), first: Math.round(indent.first) } };
 }
 
 /** The space after each text block of a page (ParsedBlock.spaceAfter): the

@@ -80,7 +80,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 16
   },
   {
    "kind": "title",
@@ -98,7 +99,8 @@
      "text": "The Shortest Possible Introduction"
     }
    ],
-   "align": "center"
+   "align": "center",
+   "spaceAfter": 23
   },
   {
    "kind": "paragraph",
@@ -107,7 +109,8 @@
      "text": "David Wiley, Lumen Learning"
     }
    ],
-   "align": "center"
+   "align": "center",
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -162,7 +165,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 0
   }
  ]
 }

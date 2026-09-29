@@ -9,10 +9,11 @@
 // page's rules are known (resolveZones).
 
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
-import { isUnicodeMathFont } from "@/lib/parse/pdf/glyphs";
+import { isBoldFont, isTextMath, isUnicodeMathFont, isUnreadMath } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
-import { braceLabelBoxes, type Atom } from "@/lib/parse/pdf/math/layout";
+import { braceLabelBoxes, hangingGlyph, type Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
+import { wholeChars } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, MathZone, Run } from "@/lib/parse/pdf/types";
 import type { MathSpan } from "@/lib/parse/types";
 
@@ -34,10 +35,16 @@ const OPNAMES = new Set([
 // letters too (synth-math-html's \dfrac{1}{2} had no glyph to start a
 // formula, and \text{if } cut its formula in two).
 const isMathGlyph = (g: Glyph) =>
-  (g.family !== null && MATH_FAMILIES.has(g.family)) || (g.family === "ot1" && (g.code <= 0x0a || isUnicodeMathFont(g.base)));
+  (g.family !== null && MATH_FAMILIES.has(g.family)) ||
+  (g.family === "ot1" && (g.code <= 0x0a || isUnicodeMathFont(g.base))) ||
+  (g.family === null && isUnreadMath(g));
 
 function kind(g: Glyph, size: number): Kind {
   if (isMathGlyph(g)) return "math";
+  // A text font's digit joins the math beside it as CMR's does where the
+  // page's formulas take their digits from the text's font (glyphs.ts
+  // isTextMath: MathDesign's Utopia, LibreOffice's Liberation Serif).
+  if (g.family === null) return isTextMath(g) && /^[0-9]$/.test(g.unicode) ? "attach" : "text";
   if (g.family !== "ot1") return "text";
   if (g.size < size * 0.85 || ATTACH_RE.test(g.unicode)) return "attach";
   // An accent over a math letter (\hat, \bar, \dot) is the text font's.
@@ -60,26 +67,39 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
     cur = [];
     const count = (ch: string) => z.filter((g) => g.unicode === ch).length;
     // A sentence's colon or semicolon after a formula, and a bracket it
-    // does not close, are the sentence's.
+    // does not close, are the sentence's; a half-open interval's ")" closes
+    // its "[" ("[a, b)" lost its bracket and read as words).
     for (;;) {
       const last = z[z.length - 1];
-      if (!last || last.family !== "ot1") break;
-      if (/^[;:]$/.test(last.unicode) || (last.unicode === ")" && count(")") > count("("))) z = z.slice(0, -1);
+      if (!last || (last.family !== "ot1" && last.family !== null)) break;
+      if (/^[;:]$/.test(last.unicode) || (last.unicode === ")" && count(")") + count("]") > count("(") + count("["))) z = z.slice(0, -1);
       else break;
     }
+    // A text font's bracket the formula never closes, a word space after
+    // the formula's last glyph, opens the sentence's aside: "values in ℝ (a
+    // real number" read "ℝ(a", which no check passes. An extension font's
+    // delimiter is the formula's, whatever its text layer says (a tall "{"
+    // reads "(": "|x| = {" before cases lost its brace).
+    const text = (h: Glyph) => h.family === "ot1" || h.family === null;
+    const brackets = (from: number, re: RegExp) => z.slice(from).filter((h) => text(h) && re.test(h.unicode)).length;
+    const aside = z.findIndex((g, n) => n > 0 && text(g) && /^[([]$/.test(g.unicode) && gapOf(z[n - 1], g) > 0.2 * size && brackets(n + 1, /^[)\]]$/) <= brackets(n + 1, /^[([]$/));
+    if (aside > 0) z = z.slice(0, aside);
     // A footnote mark set apart before the formula, the sentence's colon,
     // or a bracket the formula does not close, is the sentence's.
     for (;;) {
       const first = z[0];
-      if (!first || first.family !== "ot1") break;
+      if (!first || (first.family !== "ot1" && first.family !== null)) break;
       const mark = first.size < size * 0.85 && z[1] !== undefined && gapOf(first, z[1]) > 0.15 * size;
       const punct = /^[:;!]$/.test(first.unicode);
       const bracket = /^[([]$/.test(first.unicode) && !z.slice(1).some((g) => g.unicode === ")" || g.unicode === "]");
       if (mark || punct || bracket) z = z.slice(1);
       else break;
     }
-    // A list item's marker at the cell's start ("(a)", "(ii)", "3.") is the
-    // item's, not its first formula's ("(a) x ≥ 0" read as one formula).
+    // A list item's marker at the cell's start ("(a)", "(ii)", "3.", a
+    // bullet a math font draws: acmart's itemize, "• scan(Pred)" read
+    // \bullet\text{ scan}, two bullets in the import) is the item's, not
+    // its first formula's ("(a) x ≥ 0" read as one formula).
+    if (z[0] === glyphs[0] && /^[•∙◦⋆∗·]$/.test(z[0].unicode) && z[1] !== undefined && gapOf(z[0], z[1]) > 0.15 * size) z = z.slice(1);
     if (z[0] === glyphs[0]) {
       for (let n = 2; n < Math.min(7, z.length); n++) {
         const head = z.slice(0, n).map((g) => g.unicode).join("");
@@ -89,10 +109,22 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
         }
       }
     }
+    // A number set in bold before a word space is an exercise's number
+    // ("*33 2n balls", Grinstead–Snell p. 125, read \mathbf{33}2n): the
+    // item's, not its formula's.
+    let bold = 0;
+    while (bold < z.length && /^[0-9]$/.test(z[bold].unicode) && isBoldFont(z[bold].base)) bold++;
+    if (bold > 0 && bold < z.length && gapOf(z[bold - 1], z[bold]) > 0.15 * size) z = z.slice(bold);
     // Math by font, or small glyphs stacked one over the other (a fraction
     // of digits: \frac{1}{2} sets no math-font glyph).
+    // A URL's slashes are the math italic's (url.sty sets them in math): a
+    // run whose only math is slashes is no formula (arXiv 2506.06352's
+    // "arbital.com/p/…" read "\operatorname{com}/\mathrm{p}/", and its
+    // link was lost), unless it is a number over a number ("1/2").
     const stacked = z.some((a) => z.some((b) => a !== b && a.size < size * 0.85 && b.size < size * 0.85 && Math.abs(a.y - b.y) > size * 0.4 && a.x < b.x + b.w && b.x < a.x + a.w));
-    if (!stacked && !z.some((g) => kind(g, size) === "math")) return;
+    const math = z.filter((g) => kind(g, size) === "math");
+    const url = math.every((g) => g.unicode === "/") && !/^[0-9]+\/[0-9]+$/.test(z.map((g) => g.unicode).join(""));
+    if (!stacked && (math.length === 0 || url)) return;
     // A lone raised symbol after a word (a footnote's dagger) is a mark,
     // not a formula: every glyph small, none on the line.
     if (!stacked && z.every((g) => g.size < size * 0.85)) return;
@@ -123,9 +155,11 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       // "Var(" or "sgn x" set tight: a name; "sets:" is a word and its colon.
       const opens = after !== undefined && (kinds[j] === "math" || after.unicode === "(");
       // A bold letter stands a relation's space from its neighbors
-      // (\mathbf{x} = y); a roman one touches them (\mathrm{d}x), where a
-      // word space, however tight, is a fifth of an em.
-      const near = (/^CMBX/i.test(g.base) ? 0.3 : 0.12) * size;
+      // (\mathbf{x} = y), and so does a text italic's letter a page's math
+      // takes (glyphs.ts isTextMath: the Math Guide's A∖B); a roman one
+      // touches them (\mathrm{d}x), where a word space, however tight, is a
+      // fifth of an em.
+      const near = (/^CMBX/i.test(g.base) || isTextMath(g) ? 0.3 : 0.12) * size;
       const letter = word.length === 1 && ((cur.length > 0 && gap < near) || (nextMath && afterGap < near));
       const name = word.length <= 4 && opens && afterGap < 0.12 * size;
       if (opname || letter || name) cur.push(...glyphs.slice(k, j));
@@ -170,7 +204,11 @@ function charSpans(item: Item): [number, number][] {
     let end: number;
     if (read !== "" && item.str.startsWith(read, i)) end = i + read.length;
     else if (read === "" || g.w <= g.size * 0.01) end = i;
-    else end = Math.min(item.str.length, i + 1);
+    // One glyph, one character, and a character past the Basic Multilingual
+    // Plane is two UTF-16 units: Cambria Math's 𝑝 reads "𝑝𝑝" in the text
+    // layer, and a cut one unit in began the NPS thesis's formulas with half
+    // a letter (the import's save failed).
+    else end = Math.min(item.str.length, i + ((item.str.codePointAt(i) ?? 0) > 0xffff ? 2 : 1));
     spans.push([i, end]);
     i = end;
   }
@@ -179,8 +217,11 @@ function charSpans(item: Item): [number, number][] {
 
 // A part of an item: its glyphs [from, to) and their string. The spaces
 // after a part stay with it, so the line puts exactly one space between it
-// and the next part.
-function part(item: Item, spans: [number, number][], from: number, to: number, zone: MathZone | undefined): Item {
+// and the next part. A part of a formula is raised or lowered as its glyphs
+// stand against the formula's baseline (base): a formula that fails the
+// check keeps its scripts as the words' sub and sup (x_n read "xn"); one
+// that passes drops them (resolveZones), its LaTeX holds them.
+function part(item: Item, spans: [number, number][], from: number, to: number, zone: MathZone | undefined, base: number | undefined): Item {
   const glyphs = item.glyphs!.slice(from, to);
   const start = from === 0 ? 0 : spans[from][0];
   const end = to === spans.length ? item.str.length : spans[to][0];
@@ -189,16 +230,18 @@ function part(item: Item, spans: [number, number][], from: number, to: number, z
   const xEnd = to === spans.length ? item.x + item.w : last.x + last.w;
   const out: Item = { ...item, str: item.str.slice(start, end), x, w: Math.max(0, xEnd - x), glyphs, zone };
   if (zone) {
-    out.sup = false;
-    out.sub = false;
+    // The thresholds lines.ts markShifts reads a text's scripts by.
+    const rise = base === undefined || glyphs.some((g) => g.size > zone.size * 0.9) ? 0 : glyphs[0].y - base;
+    out.sup = rise >= zone.size * 0.15;
+    out.sub = rise <= -zone.size * 0.1;
   }
   return out;
 }
 
 /** The line's items with its formulas cut out: an item inside a formula
-    carries its zone (its sub- and superscript flags off: they belong to
-    the formula's LaTeX), an item a formula starts or ends in splits
-    there. cells: where each cell of the line starts in items. */
+    carries its zone (and its raise: part), an item a formula starts or
+    ends in splits there. cells: where each cell of the line starts in
+    items. */
 export function splitZones(items: Item[], cells: number[]): Item[] {
   const out: Item[] = [];
   const bounds = [...cells, items.length];
@@ -226,6 +269,9 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
       .filter((g) => g.family !== null || g.unicode.trim() !== "")
       .sort((a, b) => a.x - b.x || b.y - a.y);
     const zoneOf = new Map<Glyph, MathZone>();
+    // Each formula's baseline: where most of its full-size glyphs stand (a
+    // big operator or a tall delimiter hangs from its origin, apart).
+    const baseOf = new Map<MathZone, number>();
     // An item with no glyphs is text a formula cannot run through.
     const breaks = cellItems.filter((it) => !it.glyphs?.length).map((it) => it.x);
     for (const z of zonesOf(glyphs, size)) {
@@ -234,6 +280,11 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
       if (breaks.some((x) => x > x1 && x < x2)) continue;
       const zone: MathZone = { glyphs: z, size, latex: "", ok: false, open: false };
       for (const g of z) zoneOf.set(g, zone);
+      const ys = z.filter((g) => g.size > size * 0.9 && !hangingGlyph(g)).map((g) => Math.round(g.y * 10) / 10);
+      const counts = new Map<number, number>();
+      for (const y of ys) counts.set(y, (counts.get(y) ?? 0) + 1);
+      const base = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (base !== undefined) baseOf.set(zone, base);
     }
     for (const item of cellItems) {
       const glyphs = item.glyphs ?? [];
@@ -253,7 +304,8 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
       let from = 0;
       for (let k = 1; k <= glyphs.length; k++) {
         if (k < glyphs.length && (zones[k] === zones[from] || spans[k][0] === spans[from][0])) continue;
-        out.push(part(item, spans, from, k, zones[from]));
+        const zone = zones[from];
+        out.push(part(item, spans, from, k, zone, zone && baseOf.get(zone)));
         from = k;
       }
     }
@@ -282,7 +334,8 @@ export function orphanGlyphs(lines: Line[], drawing: PageDrawing): Glyph[] {
 
 /** Each zone on the page's lines gets its LaTeX, checked against its
     glyphs (and the page's glyphs no item reads that sit on it); a zone
-    that fails stays plain text. */
+    that fails stays plain text, its scripts raised and lowered (part), and
+    one that passes drops its scripts' sub and sup: its LaTeX holds them. */
 export function resolveZones(lines: Line[], drawing: PageDrawing) {
   // Read at the first zone: most pages of prose have none.
   let orphans: Glyph[] | null = null;
@@ -294,6 +347,14 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
       seen.add(zone);
       orphans ??= orphanGlyphs(lines, drawing);
       resolveZone(zone, drawing, orphans);
+    }
+  }
+  if (seen.size === 0) return;
+  for (const line of lines) {
+    for (const r of [...line.runs, ...line.cells.flatMap((c) => c.runs)]) {
+      if (!r.zone?.ok) continue;
+      r.sup = false;
+      r.sub = false;
     }
   }
 }
@@ -326,12 +387,16 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
   // arXiv 2502.02648 p. 11).
   const columns = drawing.rules.filter((r) => r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low - em && r.y2 < high + em * 1.2);
   const pad = columns.length > 0 ? em * 0.6 : 1;
+  // A radical's vinculum starts at its sign and may run past the last
+  // glyph under it (synth-math-tex's √ over a fraction, by a third of a point).
+  const vinculum = (r: Rule) =>
+    zone.glyphs.some((g) => g.family !== null && mathGlyph(g.family, g.code)?.cls === "radical" && Math.abs(g.x + g.w - r.x1) < em * 0.2);
   const near = [
     ...drawing.rules.filter(
       (r) =>
         r.dir === "h" &&
         r.x1 >= x1 - pad &&
-        r.x2 <= x2 + pad &&
+        r.x2 <= x2 + (vinculum(r) ? em : pad) &&
         r.y1 > low - em &&
         r.y1 < high + em &&
         glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2),
@@ -342,11 +407,14 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
   // a tall delimiter (KaTeX draws them so), which may start an em left
   // of the glyphs, or just right of them (a closing delimiter), and run
   // past them (the rows it holds that the formula lacks).
+  // A box that reaches an em and a half past them is none of theirs: a
+  // table cell's frame around the formula (the Math Guide's cells failed).
   const paths = drawing.paths.filter(
     (b) =>
       !b.clip &&
       b.x1 >= x1 - em * 1.5 &&
       b.x1 < x2 + em * 0.6 &&
+      b.x2 <= x2 + em * 1.5 &&
       ((b.y1 > low - em * 2 && b.y2 < high + em * 2) || (b.x2 - b.x1 < em * 0.6 && b.y2 > low && b.y1 < high + em)) &&
       !paintsRule(b, drawing.rules),
   );
@@ -396,7 +464,9 @@ function strayInside(atoms: Atom[], own: Set<Glyph>, page: Glyph[]): boolean {
   return page.some((g) => {
     if (own.has(g) || g.hidden || g.unicode.trim() === "") return false;
     const cx = g.x + g.w / 2;
-    if (cx > x1 && cx < x2 && g.y > y1 && g.y < y2) return true;
+    // A glyph on the lowest limit's baseline is inside too: a lower limit's
+    // "=1" that another line took left \sum_{k}^{r}, which passed.
+    if (cx > x1 && cx < x2 && g.y >= y1 - em * 0.05 && g.y < y2) return true;
     if (labels.some((b) => cx > b.x1 && cx < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
     return g.size < em * 0.8 && g.x >= x2 && g.x < x2 + em * 0.3 && g.y > base + em * 0.2 && g.y < y2;
   });
@@ -424,16 +494,41 @@ export function mathSpans(text: string, runs: Run[] | undefined): MathSpan[] {
   // zone that failed the check stay text.
   const seen = new Map<MathZone, number>();
   for (const s of spans) for (const z of s.zones) seen.set(z, (seen.get(z) ?? 0) + 1);
-  const out: MathSpan[] = [];
+  const parts: MathSpan[] = [];
   for (const s of spans) {
     if (!s.zones.every((z) => z.ok && seen.get(z) === 1)) continue;
     let { start, end } = s;
     while (start < end && /\s/.test(text[start])) start++;
     while (end > start && /\s/.test(text[end - 1])) end--;
-    const latex = s.zones.map((z) => z.latex).join(" ");
-    // A formula a text word cut in two ("m(" and ") = m(" around HH) reads
-    // as two formulas with a bracket each: both stay text.
-    if (end > start && balanced(latex)) out.push({ start, end, latex });
+    ({ start, end } = wholeChars(text, start, end));
+    if (end > start) parts.push({ start, end, latex: s.zones.map((z) => z.latex).join(" ") });
+  }
+  // A formula a text word cut in two ("m(" and ") = m(" around HH) reads
+  // as two formulas with a bracket each: both stay text. A set whose
+  // braces hold words ("{t ∈ ℝ such that g(t) ≥ 1}", broken across lines
+  // too: TeX's source sets it as three formulas and two words) keeps its
+  // parts, the brace open in the first and closed in the last, when the
+  // few words between them are all that stands between.
+  const out: MathSpan[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (!balanced(p.latex) && /\\lbrace/.test(p.latex)) {
+      let latex = p.latex;
+      let j = i;
+      while (j + 1 < parts.length && j - i < 3 && !balanced(latex)) {
+        const between = text.slice(parts[j].end, parts[j + 1].start);
+        // A part that ends in a hyphen ends a compound word ("σ-algebra").
+        if (!/^[\s\p{L}]*$/u.test(between) || (between.match(/\p{L}+/gu) ?? []).length > 4 || /-$/.test(parts[j].latex)) break;
+        latex += ` ${parts[j + 1].latex}`;
+        j++;
+      }
+      if (j > i && balanced(latex)) {
+        out.push(...parts.slice(i, j + 1));
+        i = j;
+        continue;
+      }
+    }
+    if (balanced(p.latex)) out.push(p);
   }
   return out;
 }

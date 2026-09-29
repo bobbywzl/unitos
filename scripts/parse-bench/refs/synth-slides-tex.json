@@ -333,7 +333,11 @@
         {
           "text": "The gain holds on both benchmarks and saturates near 64 global tokens."
         }
-      ]
+      ],
+      "indentPt": {
+        "left": 0,
+        "first": 11
+      }
     },
     {
       "kind": "heading",
@@ -396,7 +400,11 @@
           "text": "Next: documents with tables and equations.",
           "italic": true
         }
-      ]
+      ],
+      "indentPt": {
+        "left": 0,
+        "first": 2
+      }
     },
     {
       "kind": "heading",

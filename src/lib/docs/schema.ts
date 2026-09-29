@@ -178,7 +178,9 @@ function safeColor(value: unknown): string | null {
   return typeof value === "string" && (HEX.test(value) || RGB.test(value)) ? value : null;
 }
 
-const CELL_BORDER = /^\d{1,2}(\.\d{1,2})? (solid|dotted|dashed) #[0-9a-fA-F]{6}$/;
+// A side of a table cell ("1 solid #000000"), or of a paragraph, which may
+// add the room between the line and the words ("2.5 solid #2e75b6 14").
+const BORDER_SIDE = /^\d{1,2}(\.\d{1,2})? (solid|dotted|dashed) #[0-9a-fA-F]{6}( \d{1,2}(\.\d{1,2})?)?$/;
 const DASHES = new Set(["solid", "dotted", "dashed"]);
 /** The highest page number a page start or a figure may name. */
 const MAX_PAGE = 100_000;
@@ -206,10 +208,49 @@ const ATOM_TYPES: ReadonlySet<string> = new Set(["figure", "pageStart"]);
 /** The only attributes an import's node or mark keeps: a figure object's
     media is its FigureMedia row, never markup in the rich text. */
 const ONLY_ATTRS: Record<string, ReadonlySet<string>> = {
-  figure: new Set(["blockId", "mediaId", "caption", "page", "region", "pageStart"]),
+  figure: new Set(["blockId", "mediaId", "caption", "captionStyles", "page", "region", "pageStart"]),
   pageStart: new Set(["page"]),
   citation: new Set(["refId"]),
 };
+
+/** The styles a figure object's caption keeps from its page (a PDF's bold
+    label, italic words, raised and lowered characters): its captionStyles,
+    a JSON list of {start, end, style} over the caption's characters. The
+    caption stays a plain string (FigureMedia.caption, the row's words). */
+export const CAPTION_STYLES = ["bold", "italic", "underline", "strike", "smallCaps", "sub", "sup"] as const;
+export type CaptionStyle = { start: number; end: number; style: (typeof CAPTION_STYLES)[number] };
+
+/** A caption's styles from its captionStyles, or null when the value is
+    not such a list. */
+export function captionStylesOf(value: unknown): CaptionStyle[] | null {
+  if (typeof value !== "string" || value.length > 4000) return null;
+  let list: unknown;
+  try {
+    list = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(list) || list.length === 0 || list.length > 100) return null;
+  const styles: CaptionStyle[] = [];
+  for (const item of list) {
+    const { start, end, style } = (item ?? {}) as { start?: unknown; end?: unknown; style?: unknown };
+    if (!Number.isInteger(start) || !Number.isInteger(end) || !CAPTION_STYLES.includes(style as CaptionStyle["style"])) return null;
+    const [from, to] = [start as number, end as number];
+    if (from < 0 || to <= from || to > MAX_CAPTION_CHARS) return null;
+    styles.push({ start: from, end: to, style: style as CaptionStyle["style"] });
+  }
+  return styles;
+}
+
+/** A caption cut where its styles begin and end: each part's words and the
+    styles over them. Styles past the caption's end are left out. */
+export function captionParts(caption: string, styles: CaptionStyle[]): { text: string; styles: CaptionStyle["style"][] }[] {
+  const cuts = [...new Set([0, caption.length, ...styles.flatMap((s) => [s.start, s.end]).filter((at) => at < caption.length)])].sort((a, b) => a - b);
+  return cuts.slice(0, -1).map((from, k) => ({
+    text: caption.slice(from, cuts[k + 1]),
+    styles: [...new Set(styles.filter((s) => s.start <= from && s.end >= cuts[k + 1]).map((s) => s.style))],
+  }));
+}
 
 /** A dropdown chip's options, a JSON list of {label, color}: kept only as
     short labels with hex colors. */
@@ -242,9 +283,11 @@ export type ListLevel = { bullet: string } | { counter: ListCounter; format: str
 
 /** The words around a list line's numbers ("(", ")", "A-", "1."): up to six
     letters, digits, and punctuation marks, none a quote, a backslash, or a
-    percent sign. A bullet: one to three visible characters of that kind. */
+    percent sign. A bullet: up to three visible characters of that kind;
+    none ("") draws no marker, as Google Docs' glyph type NONE (an import's
+    list without markers: a bibliography, an algorithm's steps). */
 const MARKER_TEXT = /^(?:(?!["\\%])[\p{L}\p{N}\p{P}]){0,6}$/u;
-const BULLET_TEXT = /^[^\s"\\%\p{C}]{1,3}$/u;
+const BULLET_TEXT = /^[^\s"\\%\p{C}]{0,3}$/u;
 
 /** A level's glyph format as the page can draw it: the text before the
     numbers, between them, and after. One number is the level's own (%k);
@@ -269,8 +312,40 @@ export function formatParts(format: string, level: number): { before: string; se
   return legal ? { before, sep, after } : null;
 }
 
+/** Where a list's depths stand as its page sets them (an import's
+    listIndents, on the outermost list): one [left, first] pair a depth, in
+    points, as a paragraph's indents (lib/parse/types.ts Indent): the
+    wrapped lines' left, and the marker's place against it (negative: the
+    marker hangs before the words). A marker that does not hang may say
+    where the words after it start, from its own start (hang). At most
+    nine; the depths past them go on a half inch a depth. */
+export type ListIndent = [left: number, first: number, hang?: number];
+
+/** A list's depths from its `listIndents` (a JSON string), or null when it
+    is not one to nine depths within the page. */
+export function listIndentsOf(value: unknown): ListIndent[] | null {
+  if (typeof value !== "string" || value.length > 400) return null;
+  let list: unknown;
+  try {
+    list = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(list) || list.length === 0 || list.length > 9) return null;
+  const ok = (pair: unknown): pair is ListIndent =>
+    Array.isArray(pair) &&
+    (pair.length === 2 || pair.length === 3) &&
+    pair.every((n) => typeof n === "number" && Number.isFinite(n)) &&
+    pair[0] >= 0 &&
+    pair[0] <= 432 &&
+    pair[0] + pair[1] >= 0 &&
+    pair[0] + pair[1] <= 432 &&
+    (pair.length === 2 || (pair[1] >= 0 && pair[2] > 0 && pair[2] <= 432));
+  return list.every(ok) ? list : null;
+}
+
 /** A list's nine levels from its `listLevels` (a JSON string), or null
-    when it is not nine levels the page can draw: a bullet of one to three
+    when it is not nine levels the page can draw: a bullet of up to three
     characters, or a known counter with a format formatParts reads. */
 export function listLevelsOf(value: unknown): ListLevel[] | null {
   if (typeof value !== "string" || value.length > 2000) return null;
@@ -307,20 +382,24 @@ function cleanAttr(name: string, value: unknown): unknown {
     case "backgroundColor":
     case "borderColor":
       return safeColor(value);
-    // A table cell's side ("1 solid #000000") and an image's border dash.
+    // A table cell's and a paragraph's sides, and an image's border dash.
     case "borderTop":
     case "borderRight":
     case "borderBottom":
     case "borderLeft":
-      return typeof value === "string" && CELL_BORDER.test(value) ? value : null;
+      return typeof value === "string" && BORDER_SIDE.test(value) ? value : null;
     case "borderDash":
       return typeof value === "string" && DASHES.has(value) ? value : null;
     case "dropdownOptions":
       return safeDropdownOptions(value);
-    // A list's own levels, written the one way JSON writes them.
+    // A list's own levels and depths, written the one way JSON writes them.
     case "listLevels": {
       const levels = listLevelsOf(value);
       return levels ? JSON.stringify(levels) : null;
+    }
+    case "listIndents": {
+      const indents = listIndentsOf(value);
+      return indents ? JSON.stringify(indents) : null;
     }
     case "fontFamily":
       return typeof value === "string" && FONT_FAMILY.test(value) ? value : null;
@@ -334,6 +413,10 @@ function cleanAttr(name: string, value: unknown): unknown {
       return typeof value === "string" && BLOCK_ID.test(value) ? value : null;
     case "caption":
       return typeof value === "string" ? clip(value, MAX_CAPTION_CHARS) : null;
+    case "captionStyles": {
+      const styles = captionStylesOf(value);
+      return styles ? JSON.stringify(styles) : null;
+    }
     case "region":
       return safeRegion(value);
     // A PDF page: a figure's, a page start's, and the page a code block, an
@@ -363,7 +446,8 @@ function cleanAttrs(attrs: Record<string, unknown> | undefined, type: string): R
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(attrs)) {
     if (!ATTR_NAME.test(key) || (only && !only.has(key))) continue;
-    out[key] = cleanAttr(key, value);
+    const clean = cleanAttr(key, value);
+    out[key] = typeof clean === "string" ? wellFormed(clean) : clean;
   }
   return out;
 }
@@ -401,6 +485,25 @@ function cleanSuggestion({ type, attrs = {} }: RichMark): RichMark | null {
   return { type, attrs: { id, type: kind, attrName: name, previousValue: value(previousValue), newValue: value(newValue) } };
 }
 
+/** Half of a surrogate pair: a character past the Basic Multilingual Plane
+    (the math letters 𝑝 and 𝒜) cut in two. */
+const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+let loneSurrogateLogged = false;
+
+/** A string as the database takes it: the database client refuses a string
+    that holds half of a surrogate pair, and the whole save with it. In
+    development that fails with the words around it; in production the half
+    is dropped and logged once. */
+function wellFormed(text: string): string {
+  if (text.isWellFormed()) return text;
+  const at = text.search(LONE_SURROGATE_RE);
+  const words = JSON.stringify(text.slice(Math.max(0, at - 60), at + 20));
+  if (process.env.NODE_ENV !== "production") throw new Error(`The rich text holds half of a surrogate pair: ${words}`);
+  if (!loneSurrogateLogged) console.error(`[rich text] dropped half of a surrogate pair: ${words}`);
+  loneSurrogateLogged = true;
+  return text.replace(LONE_SURROGATE_RE, "");
+}
+
 /** The rich text as it may be stored: unknown node and mark types dropped,
     every attribute checked (cleanAttr), a link without a safe href, an image
     without a safe src, a figure object without a mediaId, a page start
@@ -427,8 +530,9 @@ export function sanitizeRichText(input: RichNode): RichNode | null {
       return mark ? [mark] : [];
     });
     if (node.type === "text") {
-      if (!node.text) return null;
-      out.text = node.text;
+      const text = node.text ? wellFormed(node.text) : "";
+      if (!text) return null;
+      out.text = text;
       if (marks.length > 0) out.marks = marks;
       return out;
     }

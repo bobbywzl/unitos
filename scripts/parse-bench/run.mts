@@ -31,8 +31,8 @@ import { parsePdf } from "@/lib/parse/pdf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { resolveContentsLinks } from "@/lib/parse/url";
 import { fromImport, fromParse, printedNotes, type Doc } from "./adapt";
-import { forgetText, freeScores, pdfText, type FreeScores, type PdfText } from "./free";
-import { forgetGlyphs, glyphScores, pdfGlyphs, placeEquations, type GlyphScores } from "./glyphs";
+import { forgetText, freeScores, lookScores, pdfText, wordBorders, type FreeScores, type PageSetup, type PdfText } from "./free";
+import { forgetGlyphs, glyphScores, pdfGlyphs, placeCrops, placeEquations, type GlyphScores } from "./glyphs";
 import { loadCorpus, loadRef, refPath, REF_DIRS, ROOT, type CorpusEntry } from "./load";
 import { flatten, score, type Scores } from "./metrics";
 import type { RefDoc } from "./model";
@@ -63,6 +63,9 @@ type Parsed = {
   title: string | null;
   blocks: ParsedBlock[];
   richText: RichNode | null;
+  /** A PDF's first page and the import's page setup, in points: where the page editor draws a crop. */
+  pageSize?: { width: number; height: number };
+  pageSetup?: PageSetup;
   importError?: string;
   /** The import's rows and bytes when the size guard keeps it a block document. */
   guarded?: { rows: number; json: number };
@@ -119,7 +122,7 @@ function parseFile(path: string): Promise<Parsed> {
       // not the parse's.
       const look: Look = { bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign };
       try {
-        const { richText, size } = richTextFromImport({
+        const { richText, size, pageSetup } = richTextFromImport({
           kind: word ? "docx" : "pdf",
           title: parsed.title ?? basename(path).replace(/\.(pdf|docx)$/i, ""),
           titleFromOriginal: Boolean(parsed.title),
@@ -128,8 +131,13 @@ function parseFile(path: string): Promise<Parsed> {
           ...look,
         });
         since("import", t1);
+        // The add saves the rich text as JSON in Postgres, which refuses a lone
+        // surrogate (a formula cut inside a Cambria Math letter): the add shows
+        // "Could not read this PDF" where the benchmark scored the import.
+        const lone = loneSurrogate(richText);
+        if (lone) throw new Error(`the rich text holds a lone surrogate the save refuses, in "${lone}"`);
         const guarded = size.rows > GUARD.rows || size.json > GUARD.json ? { rows: size.rows, json: size.json } : undefined;
-        return { title: parsed.title, blocks: parsed.blocks, richText, ms, ...look, ...(guarded ? { guarded } : {}) };
+        return { title: parsed.title, blocks: parsed.blocks, richText, pageSize: parsed.pageSize, pageSetup, ms, ...look, ...(guarded ? { guarded } : {}) };
       } catch (err) {
         since("import", t1);
         return { title: parsed.title, blocks: parsed.blocks, richText: null, importError: err instanceof Error ? err.message : String(err), ms, ...look };
@@ -138,6 +146,19 @@ function parseFile(path: string): Promise<Parsed> {
     parses.set(path, hit);
   }
   return hit;
+}
+
+/** The first string of a node or its attributes that holds a lone surrogate, cut short; or null. */
+function loneSurrogate(node: RichNode): string | null {
+  const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  const strings = [node.text ?? "", ...Object.values(node.attrs ?? {}).filter((v): v is string => typeof v === "string"), ...(node.marks ?? []).flatMap((m) => Object.values(m.attrs ?? {}).filter((v): v is string => typeof v === "string"))];
+  const hit = strings.find((text) => lone.test(text));
+  if (hit) return hit.slice(0, 40);
+  for (const child of node.content ?? []) {
+    const found = loneSurrogate(child);
+    if (found) return found;
+  }
+  return null;
 }
 
 const texts = new Map<string, PdfText>();
@@ -202,6 +223,7 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   result.guarded = parsed.guarded;
   let t0 = performance.now();
   const docs = { parse: fromParse(parsed, pages), import: parsed.richText ? fromImport(parsed.richText, pages, ref ? printedNotes(ref.blocks) : undefined) : { blocks: [] } };
+  if (parsed.richText) placeCrops(docs.parse, docs.import);
   result.docs = docs;
   if (ref) {
     const reference: Doc = { blocks: ref.blocks, fonts: ref.fonts };
@@ -213,6 +235,9 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   const pdfPath = path.replace(/\.docx$/i, ".pdf");
   if (!existsSync(pdfPath)) return result;
   result.pdf = pdfTextOf(pdfPath, pages);
+  // The text layer and its furniture are the reference-free checks' (a 500-page scan's took most of the time
+  // the line charged to the glyph checks).
+  t0 = since("free", t0);
   const glyphs = /\.pdf$/i.test(file) ? await quietly(() => pdfGlyphs(pdfPath)) : null;
   if (glyphs) {
     if (parsed.richText) placeEquations(docs.parse, docs.import);
@@ -221,7 +246,11 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   t0 = since("glyphs", t0);
   const word = /\.docx$/i.test(file);
   result.freeParse = freeScores(result.pdf, flatten(docs.parse), result.glyphs?.parse, word);
-  if (parsed.richText) result.freeImport = freeScores(result.pdf, flatten(docs.import), result.glyphs?.import, word);
+  if (parsed.richText) {
+    const imported = flatten(docs.import);
+    const look = lookScores(imported, { page: parsed.pageSize, setup: parsed.pageSetup, word: word ? wordBorders(path) : undefined });
+    result.freeImport = freeScores(result.pdf, imported, result.glyphs?.import, word, look);
+  }
   since("free", t0);
   return result;
 }
@@ -279,6 +308,9 @@ function numbers(s: Scores): Record<string, number | null> {
     roles: s.roles.score,
     align: s.roles.align,
     indent: s.roles.indent,
+    indentSize: s.roles.indentSize,
+    spacing: s.roles.spacing,
+    labelSide: s.math.labels.side.score,
     captions: s.roles.captions,
     checks: s.roles.checks,
     separators: s.roles.separators,
@@ -302,6 +334,10 @@ function freeNumbers(f: FreeScores): Record<string, number | null> {
     math: f.math,
     numberLines: f.numberLines.count,
     garbles: f.garbles.count,
+    look: f.look?.score ?? null,
+    lookFormulas: f.look?.formulas ?? null,
+    lookFigures: f.look?.figures ?? null,
+    lookBorders: f.look?.borders ?? null,
   };
 }
 

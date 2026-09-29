@@ -33,7 +33,8 @@ function timeRange(start: number | null, end: number | null): string | null {
 function sourceRef(s: DigestSource): string {
   const time = timeRange(s.startTime, s.endTime);
   const place = s.quote ? `"${s.quote}"${time ? ` at ${time}` : ""}` : (time ?? '""');
-  return `${place} (${s.documentTitle} [document ${s.documentId}])${s.orphaned ? " (orphaned)" : ""}`;
+  const document = s.documentId ? `${s.documentTitle} [document ${s.documentId}]` : "a deleted document";
+  return `${place} (${document})${s.orphaned ? " (orphaned)" : ""}`;
 }
 
 // A corpus-level note: id, section, kind, status, content, sources.

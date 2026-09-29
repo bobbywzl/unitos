@@ -143,20 +143,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: t("api.noteNotFound") }, { status: 404 });
     }
     content = annotation.content;
-    copiedSources = annotation.sources.map((source) => ({
-      documentId: source.documentId,
-      blockId: source.blockId,
-      startOffset: source.startOffset,
-      endOffset: source.endOffset,
-      quotedText: source.quotedText,
-      prefix: source.prefix,
-      suffix: source.suffix,
-      orphaned: source.orphaned,
-      layer: source.layer,
-      startTime: source.startTime,
-      endTime: source.endTime,
-      ...(source.region === null ? {} : { region: source.region as Prisma.InputJsonValue }),
-    }));
+    // A source whose document was deleted has no passage left to copy.
+    copiedSources = annotation.sources.flatMap((source) =>
+      source.documentId === null
+        ? []
+        : [
+            {
+              documentId: source.documentId,
+              blockId: source.blockId,
+              startOffset: source.startOffset,
+              endOffset: source.endOffset,
+              quotedText: source.quotedText,
+              prefix: source.prefix,
+              suffix: source.suffix,
+              orphaned: source.orphaned,
+              layer: source.layer,
+              startTime: source.startTime,
+              endTime: source.endTime,
+              ...(source.region === null ? {} : { region: source.region as Prisma.InputJsonValue }),
+            },
+          ],
+    );
   }
   if (!content.trim()) return NextResponse.json({ error: t("api.validationFailed") }, { status: 400 });
 

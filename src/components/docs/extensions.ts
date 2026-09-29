@@ -145,10 +145,47 @@ function ptAttr(name: string, css: (v: number) => string) {
   };
 }
 
+/** A paragraph's border side, Docs' Borders and shading (an import's Word
+    paragraph borders, w:pBdr: a rule under a heading, a bar beside a
+    quote): "<width pt> <solid|dotted|dashed> #rrggbb <padding pt>", the
+    padding the room between the line and the words. The paragraph's space
+    before and after stay outside its lines, as margins in place of its
+    padding: a rule sits under the words, not under the space after, and a
+    bar runs down the words alone. */
+const PARAGRAPH_BORDER = /^(\d{1,2}(?:\.\d{1,2})?) (solid|dotted|dashed) (#[0-9a-fA-F]{6})(?: (\d{1,2}(?:\.\d{1,2})?))?$/;
+
+function borderAttr(side: "top" | "right" | "bottom" | "left") {
+  const name = `border${side[0].toUpperCase()}${side.slice(1)}`;
+  return {
+    default: null,
+    parseHTML: (el: HTMLElement) => el.getAttribute(`data-border-${side}`),
+    renderHTML: (attrs: Record<string, unknown>) => {
+      const value = attrs[name];
+      const m = typeof value === "string" ? PARAGRAPH_BORDER.exec(value) : null;
+      if (!m) return {};
+      const css = [`border-${side}: ${m[1]}pt ${m[2]} ${m[3]}`, `padding-${side}: ${m[4] ?? 0}pt`];
+      const lined = (key: string) => typeof attrs[key] === "string" && PARAGRAPH_BORDER.test(attrs[key] as string);
+      // The space before and after as margins: a lined edge keeps its own
+      // side's padding, and beside a bar an edge without a line has none.
+      // Beside a bar the space is also --docs-bar-top and -bottom: where
+      // barred paragraphs follow one another, it lies inside their one bar
+      // (css/import.css).
+      for (const [edge, key, space] of [["top", "borderTop", attrs.spaceBefore], ["bottom", "borderBottom", attrs.spaceAfter]] as const) {
+        if (key !== name && (side === "top" || side === "bottom" || lined(key))) continue;
+        const pt = `${typeof space === "number" ? space : 0}pt`;
+        if (key !== name) css.push(`padding-${edge}: 0`, `--docs-bar-${edge}: ${pt}`);
+        css.push(`margin-${edge}: ${pt}`);
+      }
+      return { [`data-border-${side}`]: value, style: css.join("; ") };
+    },
+  };
+}
+
 /** Google Docs' paragraph formatting: line spacing, space before and after,
-    left, right, and first-line indents, and the Title and Subtitle styles
-    (a heading is its own node). Spacing is padding, so a paragraph's space
-    after and the next one's space before add up, as in Docs. */
+    left, right, and first-line indents, borders, and the Title and
+    Subtitle styles (a heading is its own node). Spacing is padding, so a
+    paragraph's space after and the next one's space before add up, as in
+    Docs. */
 const ParagraphFormat = Extension.create({
   name: "docsParagraph",
   addGlobalAttributes() {
@@ -162,6 +199,11 @@ const ParagraphFormat = Extension.create({
           indentLeft: ptAttr("indent-left", (v) => `margin-left: ${v}pt`),
           indentRight: ptAttr("indent-right", (v) => `margin-right: ${v}pt`),
           indentFirstLine: ptAttr("indent-first-line", (v) => `text-indent: ${v}pt`),
+          // After the spacing: a bordered side's padding and margin win.
+          borderTop: borderAttr("top"),
+          borderRight: borderAttr("right"),
+          borderBottom: borderAttr("bottom"),
+          borderLeft: borderAttr("left"),
         },
       },
       {

@@ -91,6 +91,8 @@ export function pdfGlyphs(path: string): Promise<PageGlyphs[] | null> {
 
 const INVISIBLE = /[\s​-‍⁠﻿]/u;
 const drawnMemo = new Map<string, string[] | null>();
+/** One symbol KaTeX draws two ways: a norm's bars, ‖ (U+2016) or ∥ (U+2225), as \| or \left\| sets it. */
+const SAME_SYMBOL: Record<string, string> = { "‖": "∥" };
 
 /** Each symbol KaTeX draws for a formula (display style), with its script
     level from the HTML's sizing classes (size 5–6: 0, 3–4: 1, 1–2: 2), as
@@ -119,7 +121,7 @@ function drawn(latex: string): string[] | null {
         continue;
       }
       const text = (m[2] ?? "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
-      for (const ch of text.normalize("NFKC")) if (!INVISIBLE.test(ch)) out.push(`${ch}@${stack.at(-1) ?? 0}`);
+      for (const ch of text.normalize("NFKC")) if (!INVISIBLE.test(ch)) out.push(`${SAME_SYMBOL[ch] ?? ch}@${stack.at(-1) ?? 0}`);
     }
   }
   drawnMemo.set(latex, out);
@@ -226,7 +228,9 @@ function atomsOf(glyphs: PageGlyph[]): Atom[] | null {
 
 /** The symbols the atoms draw, each atom rendered alone at its script level
     (its size against the formula's largest glyph outside the extension
-    font: 0.85 or more is 0, 0.6 or more is 1, else 2); null when KaTeX
+    font: 0.85 or more is 0, 0.6 or more is 1, else 2; an extension font's
+    glyph is 0 down to 0.75, and one set in a script's size is a script's,
+    as the app's check has it: the ∑ of an exponent); null when KaTeX
     cannot read an atom. Pieces and radical signs draw as rules or pictures
     in KaTeX: they are left out on both sides. */
 function atomSymbols(atoms: Atom[]): string[] | null {
@@ -235,7 +239,7 @@ function atomSymbols(atoms: Atom[]): string[] | null {
   for (const a of atoms) {
     if (a.piece || a.cls === "piece" || a.cls === "radical" || !a.tex) continue;
     const r = a.size / big;
-    const level = a.fam === "omx" ? 0 : r >= 0.85 ? 0 : r >= 0.6 ? 1 : 2;
+    const level = (a.fam === "omx" && r >= 0.75) || r >= 0.85 ? 0 : r >= 0.6 ? 1 : 2;
     const own = drawn(a.cls === "accent" ? `${a.tex}{}` : a.tex);
     if (!own) return null;
     for (const s of own) {
@@ -259,13 +263,18 @@ function surplus(a: Map<string, number>, b: Map<string, number>): string[] {
 
 /** The glyphs whose origin lies in a region of a page (percent of the page,
     y from the top, as the parser writes regions), word spaces aside. A math
-    font's blank glyph stays: it is a symbol the text layer read as a space. */
+    font's blank glyph stays: it is a symbol the text layer read as a space.
+    A cmex glyph (a big delimiter, a radical, a large operator) hangs below
+    its origin, which stands at its top: it is in where the em under its
+    origin meets the region (a cases brace whose top stands above a crop's
+    edge, whose picture holds it whole). */
 function glyphsIn(page: PageGlyphs, region: Region): PageGlyph[] {
   const b = regionBounds(region);
   return page.glyphs.filter((g) => {
     const x = (g.x / page.width) * 100;
     const y = ((page.height - g.y) / page.height) * 100;
-    return x >= b.x1 && x <= b.x2 && y >= b.y1 && y <= b.y2 && (g.unicode.trim() !== "" || (g.family !== null && MATH.has(g.family)));
+    const hang = g.family === "omx" ? (g.size / page.height) * 100 : 0;
+    return x >= b.x1 && x <= b.x2 && y + hang >= b.y1 && y <= b.y2 && (g.unicode.trim() !== "" || (g.family !== null && MATH.has(g.family)));
   });
 }
 
@@ -314,7 +323,8 @@ function printedText(doc: Doc): string {
         parts.push(mathLeaves(b, true).join(""), b.label ?? "");
         break;
       case "figure":
-        if (b.mathImage) parts.push(b.mathImage);
+        // A crop's glyphs are counted from its region (glyphScores).
+        if (b.mathImage && !b.at) parts.push(b.mathImage);
         spans(b.caption);
         break;
       case "code":
@@ -360,6 +370,21 @@ export function placeEquations(parse: Doc, imported: Doc) {
   }
 }
 
+/** The import's crop of a display draws no caption: it is the equation's
+    picture where the parse's figure at its place (its page and region) is
+    one, as the parse reads its own crop (adapt.ts). Its picture shows no
+    words: its glyph text is none. */
+export function placeCrops(parse: Doc, imported: Doc) {
+  const key = (at: { page: number; region: Region }) => {
+    const b = regionBounds(at.region);
+    return [at.page, b.x1, b.y1, b.x2, b.y2].map((n) => n.toFixed(3)).join(" ");
+  };
+  const crops = new Set(parse.blocks.flatMap((b) => (b.kind === "figure" && b.mathImage !== undefined && b.at ? [key(b.at)] : [])));
+  for (const block of imported.blocks) {
+    if (block.kind === "figure" && block.at && block.mathImage === undefined && !block.caption && crops.has(key(block.at))) block.mathImage = "";
+  }
+}
+
 /** The glyph checks of one candidate on its scored pages. */
 export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, number] | undefined): GlyphScores {
   const inRange = (p: number) => !range || (p >= range[0] && p <= range[1]);
@@ -368,24 +393,44 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
   const expected = new Map<string, number>();
   const risky = new Set<string>();
   let hazards = 0;
+  const symbolOf = (g: PageGlyph) => {
+    const entry = g.family && MATH.has(g.family) ? mathGlyph(g.family, g.code) : null;
+    if (!entry || entry.cls === "accent") return null;
+    const symbol = entry.piece === "not" ? NEGATED : entry.piece === "mapstochar" ? MAPSTO : entry.piece || !entry.unicode ? null : classOf(entry.unicode.normalize("NFC"));
+    return symbol ? { symbol, wrong: entry.piece ? g.unicode !== "" : g.unicode.normalize("NFC") !== entry.unicode.normalize("NFC") } : null;
+  };
   pages.forEach((page, i) => {
     if (!inRange(i + 1)) return;
     for (const g of page.glyphs) {
-      if (!g.family || !MATH.has(g.family)) continue;
-      const entry = mathGlyph(g.family, g.code);
-      if (!entry || entry.cls === "accent") continue;
-      const symbol = entry.piece === "not" ? NEGATED : entry.piece === "mapstochar" ? MAPSTO : entry.piece || !entry.unicode ? null : classOf(entry.unicode.normalize("NFC"));
-      if (!symbol) continue;
-      expected.set(symbol, (expected.get(symbol) ?? 0) + 1);
-      const wrong = entry.piece ? g.unicode !== "" : g.unicode.normalize("NFC") !== entry.unicode.normalize("NFC");
-      if (wrong) {
+      const read = symbolOf(g);
+      if (!read) continue;
+      expected.set(read.symbol, (expected.get(read.symbol) ?? 0) + 1);
+      if (read.wrong) {
         hazards++;
-        risky.add(symbol);
+        risky.add(read.symbol);
       }
     }
   });
   const printed = new Map<string, number>();
   for (const ch of printedText(doc).normalize("NFC")) printed.set(classOf(ch), (printed.get(classOf(ch)) ?? 0) + 1);
+  // A crop shows its glyphs as the page draws them: none of them is lost or
+  // misread. Each symbol counts as often as the region draws it or its text
+  // reads it, whichever is more (the import's crop has no caption; the
+  // parse's text may hold a symbol the region's edge cuts off).
+  for (const block of doc.blocks) {
+    if (block.kind !== "figure" || !block.at) continue;
+    const page = inRange(block.at.page) ? pages[block.at.page - 1] : undefined;
+    const counts = new Map<string, number>();
+    for (const g of page ? glyphsIn(page, block.at.region) : []) {
+      const read = symbolOf(g);
+      if (read) counts.set(read.symbol, (counts.get(read.symbol) ?? 0) + 1);
+    }
+    const text = new Map<string, number>();
+    for (const ch of (block.mathImage ?? "").normalize("NFC")) text.set(classOf(ch), (text.get(classOf(ch)) ?? 0) + 1);
+    for (const symbol of new Set([...counts.keys(), ...text.keys()])) {
+      printed.set(symbol, (printed.get(symbol) ?? 0) + Math.max(counts.get(symbol) ?? 0, text.get(symbol) ?? 0));
+    }
+  }
   const missing: [string, number][] = [...risky]
     .map((s): [string, number] => [s, (expected.get(s) ?? 0) - (printed.get(s) ?? 0)])
     .filter(([, n]) => n > 0)

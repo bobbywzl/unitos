@@ -79,7 +79,10 @@ function checkLatex(latex: string, atoms: Atom[], unknown: Glyph[], display: boo
     if (!a.tex || a.cls === "piece" || a.cls === "radical") continue;
     if (a.fam === "omx" && (a.cls === "open" || a.cls === "close")) continue;
     const r = a.size / size;
-    const level = hangingFamily(a.fam) ? 0 : r >= 0.85 ? 0 : r >= 0.6 ? 1 : 2;
+    // An extension font's glyph stands at the text's level whatever its
+    // font's size; one set in a script's size is a script's (the ∑ of an
+    // exponent Σd_j/2, arXiv 2506.08494 p. 5).
+    const level = (hangingFamily(a.fam) && r >= 0.75) || r >= 0.85 ? 0 : r >= 0.6 ? 1 : 2;
     const own = symbolLevels(a.cls === "accent" ? `${a.tex}{}` : a.tex, display) ?? [];
     for (const x of own) {
       const at = x.lastIndexOf("@");

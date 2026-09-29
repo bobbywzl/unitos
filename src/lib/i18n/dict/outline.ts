@@ -82,6 +82,9 @@ const en = {
   // A quote in a note points back to the reader (SPEC.md §6).
   quoteJump: "Jump to this quote in the reader",
   quoteUnresolved: "This quote's place in the document is gone",
+  // A quote whose document was deleted keeps its words (SPEC.md §5).
+  quoteDocumentDeleted: "This quote's document was deleted",
+  deletedDocument: "Deleted document",
   // A quote dragged from the reader (lib/quote-drag.ts): the caret says where it lands.
   dropQuoteHere: "Let go to put the quote here",
   dropQuoteIntoNote: "Let go to add the quote to this note",
@@ -275,6 +278,8 @@ const zh: Record<keyof typeof en, string> = {
   mergedNote: "合并的笔记",
   quoteJump: "跳到阅读器中这段引用的位置",
   quoteUnresolved: "这段引用在文档中的位置已不存在",
+  quoteDocumentDeleted: "这段引用所在的文档已删除",
+  deletedDocument: "已删除的文档",
   dropQuoteHere: "松开即把引用放在这里",
   dropQuoteIntoNote: "松开即把引用加入此笔记",
   mergeTitle: "把选中的笔记合并为一条：文本原样保留，上面的笔记在前",

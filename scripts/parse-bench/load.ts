@@ -42,6 +42,7 @@ const level = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z
 const align = z.enum(["center", "right", "justify"]).optional();
 const fontSchema = z.strictObject({ shape: z.enum(["serif", "sans", "mono"]), size: z.number().positive(), bold: t, color: color.optional() });
 const font = fontSchema.optional();
+const points = z.number().min(0).optional();
 
 const blockSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("title"), spans, align, font }),
@@ -51,6 +52,8 @@ const blockSchema = z.discriminatedUnion("kind", [
     spans,
     align,
     indent: z.enum(["first", "hanging", "block"]).optional(),
+    indentPt: z.strictObject({ left: z.number().min(0), first: z.number() }).optional(),
+    spaceAfter: points,
     font,
   }),
   z.strictObject({
@@ -58,9 +61,12 @@ const blockSchema = z.discriminatedUnion("kind", [
     items: z.array(
       z.strictObject({ depth: z.number().int().min(0), marker: z.string(), spans, checked: z.boolean().optional() }),
     ),
+    align,
+    itemSpace: points,
+    spaceAfter: points,
     font,
   }),
-  z.strictObject({ kind: z.literal("equation"), latex: z.string(), mathml: z.string().optional(), label: z.string().optional() }),
+  z.strictObject({ kind: z.literal("equation"), latex: z.string(), mathml: z.string().optional(), label: z.string().optional(), labelSide: z.enum(["left", "right"]).optional() }),
   z.strictObject({
     kind: z.literal("table"),
     caption: spans.optional(),

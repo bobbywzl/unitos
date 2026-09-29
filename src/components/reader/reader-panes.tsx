@@ -370,8 +370,19 @@ export function ReaderPanes({
       className={`relative flex h-full min-h-0 min-w-0 ${view === "stack" ? "flex-col" : "flex-row"}`}
     >
       {/* Bottom-left: clear of the article menu (top-left) and the sticky
-          Extract controls (top-right). */}
-      <div ref={menuRef} className="absolute bottom-4 left-4 z-30 print:hidden">
+          Extract controls (top-right). Below md with the sheet open
+          (data-sheet-open, workspace.tsx), bottom-right: the sheet cuts the
+          reader short, which brings its bottom-left up to the page editor's
+          Show tabs & outlines at the canvas's top-left. While the menu is
+          open it stands at z-40, the layer of the app's menus
+          (docs/css/layer.css), over the page editor's header, which a short
+          reader brings under the menu. */}
+      <div
+        ref={menuRef}
+        className={`absolute bottom-4 left-4 max-md:in-data-sheet-open:right-4 max-md:in-data-sheet-open:left-auto print:hidden ${
+          menu ? "z-40" : "z-30"
+        }`}
+      >
         <button
           onClick={() => setMenu((v) => !v)}
           data-track="view"
@@ -383,7 +394,7 @@ export function ReaderPanes({
         </button>
         <Presence show={menu} exit="menu">
         {menu && (
-          <div className="menu-in absolute bottom-full left-0 mb-1.5 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float">
+          <div className="menu-in absolute bottom-full left-0 mb-1.5 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float max-md:in-data-sheet-open:right-0 max-md:in-data-sheet-open:left-auto">
             {(["normal", "side", "stack"] as const).map((kind) => (
               <button
                 key={kind}

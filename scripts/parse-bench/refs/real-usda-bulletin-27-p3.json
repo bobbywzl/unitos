@@ -47,7 +47,8 @@
      "text": "Cook,"
     }
    ],
-   "align": "center"
+   "align": "center",
+   "spaceAfter": 2
   },
   {
    "kind": "paragraph",
@@ -75,7 +76,8 @@
     {
      "text": "As the true dietary value of commercial meat preparations, especially bouillon cubes, fluid and semisolid meat extracts, commercially bottled meat juices, and similar preparations offered for sale, is not generally understood by the people, and as these articles are erroneously believed to be convenient forms of concentrated meat, the Bureau of Chemistry has undertaken to determine their actual food value. Complete analyses have been made of ten of the leading brands of bouillon cubes manufactured in the United States and Germany, and collected on the New York market in 1912. One purpose of this investigation was to determine whether the term “bouillon,” which is defined as a broth prepared from meat, may justly be used foy many of these cubes which, while not nutritious, have a certain value as a flavoring medium and as a stimulating and appetizing drink."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",

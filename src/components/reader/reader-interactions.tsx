@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { api } from "@/lib/api";
-import { blockKind } from "@/lib/block-kind";
+import { formatKind, type BlockKind, type FormatKind } from "@/lib/block-kind";
 import { definable, defineKey } from "@/lib/define";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
@@ -465,11 +465,13 @@ type SpeechRec = {
 const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 // Format targets of a format_block action, shown in the plan card.
-const FORMAT_KIND_KEY: Record<"paragraph" | "h1" | "h2" | "h3", TKey> = {
+const FORMAT_KIND_KEY: Record<BlockKind, TKey> = {
   paragraph: "reader.kindParagraph",
   h1: "reader.kindH1",
   h2: "reader.kindH2",
   h3: "reader.kindH3",
+  list: "reader.kindList",
+  numbered: "reader.kindNumbered",
 };
 
 /** The concrete target of a plan action, shown before Apply so approval is
@@ -496,16 +498,28 @@ function actionDetail(
     case "edit_block":
       return t("reader.detailTo", { text: clip(action.newText) });
     case "insert_paragraph":
-      return `“${clip(action.text)}”`;
+      return `${action.kind && action.kind !== "paragraph" ? `${t(FORMAT_KIND_KEY[action.kind])} · ` : ""}“${clip(action.text)}”`;
     case "remove_block":
       return `“${clip(blockText(action.blockId))}”`;
     case "link": {
       const target =
-        documents.find((d) => d.id === action.toDocumentId)?.title ?? t("reader.aDocument");
+        action.href ?? documents.find((d) => d.id === action.toDocumentId)?.title ?? t("reader.aDocument");
       return `“${clip(action.anchor.quotedText, 60)}” → ${target}`;
     }
     case "format_block":
       return `“${clip(blockText(action.blockId), 60)}” → ${t(FORMAT_KIND_KEY[action.kind])}`;
+    case "move_block":
+      return action.afterBlockId === null
+        ? t("reader.detailMoveStart", { what: clip(blockText(action.blockId), 50) })
+        : t("reader.detailMoveAfter", { what: clip(blockText(action.blockId), 50), after: clip(blockText(action.afterBlockId), 50) });
+    case "join_lines":
+      return t("reader.detailJoinLines", { first: clip(blockText(action.blockId), 45), second: clip(blockText(action.nextBlockId), 45) });
+    case "split_line":
+      return t("reader.detailSplitLine", { before: clip(blockText(action.blockId).slice(0, action.offset).trim(), 45), after: clip(action.quote, 45) });
+    case "set_speaker":
+      return `“${clip(blockText(action.blockId), 60)}” → ${action.name}`;
+    case "rename_speaker":
+      return `${action.previousName} → ${action.name}`;
     default:
       return null;
   }
@@ -522,7 +536,13 @@ const ACTION_LABEL_KEY: Record<AssistantAction["type"], TKey> = {
   link: "reader.actionLink",
   format_block: "reader.actionFormat",
   style: "reader.actionStyle",
+  move_block: "reader.actionMove",
   suggest: "reader.actionSuggest",
+  revise: "reader.actionRevise",
+  join_lines: "reader.actionJoinLines",
+  split_line: "reader.actionSplitLine",
+  set_speaker: "reader.actionSetSpeaker",
+  rename_speaker: "reader.actionRenameSpeaker",
 };
 
 // The assistant's commands on selected words (SPEC.md §29), in the chips'
@@ -1738,7 +1758,7 @@ export function ReaderInteractions({
   const [commentsView, setCommentsView] = useState<CommentsView>("all");
   const commentsHidden = commentsView === "hidden";
   // The page editor's card column (layer/comment-card.tsx CardColumn): the
-  // cards stand in it, over the notes tray when the pane has no room.
+  // cards stand in it, inside the pane, never over the notes tray.
   const [columnHost, setColumnHost] = useState<HTMLDivElement | null>(null);
   const inColumn = (cards: React.ReactNode) => (columnHost ? createPortal(cards, columnHost) : cards);
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
@@ -3570,6 +3590,22 @@ export function ReaderInteractions({
     container.addEventListener("docs:margin", onMargin);
     return () => container.removeEventListener("docs:margin", onMargin);
   }, [blankDocument]);
+  // A comment the reader just made, where the margin has no room for the
+  // cards at rest (a split pane, or no room beside the page even with the
+  // page at the canvas's left edge): only the open card shows there, so the
+  // new comment's card opens, under its words, once the stored comment is
+  // in. Not when the reader has moved on to a toolbar or another card.
+  const madeCommentRef = useRef<string[]>([]);
+  useEffect(() => {
+    const sourceId = madeCommentRef.current.find((id) => annotationBubbles[id]);
+    if (!sourceId) return;
+    madeCommentRef.current = [];
+    const container = containerRef.current;
+    if (!richTextRef.current || !container || popoverRef.current || marginCardOpenRef.current) return;
+    const page = splitRef.current ? null : pageGeometry(container, docsShiftRef.current);
+    if (page && marginPlace(page)) return;
+    window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
+  }, [annotationBubbles]);
   // Every painted comment has its card in the column, one line each; the
   // open one is its CommentCard. None minimized, hidden, or in a split pane.
   const columnComments =
@@ -5178,6 +5214,7 @@ export function ReaderInteractions({
       // Each mark learns its stored source (one per segment, in the passage's
       // order), and one whose stored copy is already in goes.
       const note = (await res.json().catch(() => null)) as { sources?: { id: string; blockId: string }[] } | null;
+      if (input.comment) madeCommentRef.current = (note?.sources ?? []).map((s) => s.id);
       const sources = [...(note?.sources ?? [])];
       const ids = new Map<object, string | undefined>(
         optimistic.map(({ blockId, mark }) => {
@@ -6126,6 +6163,11 @@ export function ReaderInteractions({
     const undo: { description: string; run: () => Promise<unknown> }[] = [];
     let applied = 0;
     const failed: string[] = [];
+    // A block as the plan's earlier actions left it: the routes answer with it.
+    const changed = new Map<string, BlockData>();
+    const current = (id: string) => changed.get(id) ?? blocks.find((b) => b.id === id);
+    // New blocks after one block land in the plan's order: each after the one before.
+    const lastInserted = new Map<string, string>();
     for (const action of actions) {
       try {
         switch (action.type) {
@@ -6140,8 +6182,9 @@ export function ReaderInteractions({
             break;
           }
           case "edit_block": {
-            const before = blocks.find((b) => b.id === action.blockId)?.text ?? null;
-            await api(`/api/blocks/${action.blockId}`, "PATCH", { text: action.newText });
+            const before = current(action.blockId)?.text ?? null;
+            const saved = await api<BlockData>(`/api/blocks/${action.blockId}`, "PATCH", { text: action.newText });
+            changed.set(action.blockId, saved);
             if (before !== null) {
               undo.push({
                 description: action.description,
@@ -6151,12 +6194,26 @@ export function ReaderInteractions({
             break;
           }
           case "insert_paragraph": {
+            const place = action.afterBlockId ?? "";
             const created = await api<{ id: string }>("/api/blocks", "POST", {
               documentId,
-              afterBlockId: action.afterBlockId,
+              afterBlockId: lastInserted.get(place) ?? action.afterBlockId,
               text: action.text,
+              ...(action.kind ? { kind: action.kind } : {}),
             });
+            lastInserted.set(place, created.id);
             undo.push({ description: action.description, run: () => api(`/api/blocks/${created.id}`, "DELETE") });
+            break;
+          }
+          case "move_block": {
+            // The answer names the block it stood after: Undo moves it back.
+            const moved = await api<{ previousAfterBlockId: string | null }>(`/api/blocks/${action.blockId}/move`, "POST", {
+              afterBlockId: action.afterBlockId,
+            });
+            undo.push({
+              description: action.description,
+              run: () => api(`/api/blocks/${action.blockId}/move`, "POST", { afterBlockId: moved.previousAfterBlockId }),
+            });
             break;
           }
           case "remove_block": {
@@ -6218,6 +6275,20 @@ export function ReaderInteractions({
             break;
           }
           case "link": {
+            if (action.href !== undefined) {
+              // A web address on the words: the answer names the address
+              // they had before, and Undo puts it back ("" takes it off).
+              const range = { startOffset: action.anchor.startOffset, endOffset: action.anchor.endOffset };
+              const linked = await api<{ previous: string | null }>(`/api/blocks/${action.anchor.blockId}/link`, "POST", {
+                ...range,
+                href: action.href,
+              });
+              undo.push({
+                description: action.description,
+                run: () => api(`/api/blocks/${action.anchor.blockId}/link`, "POST", { ...range, href: linked.previous ?? "" }),
+              });
+              break;
+            }
             const link = await api<{ id: string }>("/api/links", "POST", {
               fromDocumentId: documentId,
               toDocumentId: action.toDocumentId,
@@ -6227,15 +6298,62 @@ export function ReaderInteractions({
             break;
           }
           case "format_block": {
-            const block = blocks.find((b) => b.id === action.blockId);
-            const before = block ? blockKind(block.type, block.html, block.text) : null;
-            await api(`/api/blocks/${action.blockId}`, "PATCH", { kind: action.kind });
-            if (before !== null && before !== action.kind) {
+            // A list's markers change with its kind (the route writes them),
+            // so Undo sends the text back with the kind.
+            const block = current(action.blockId);
+            const before = block ? formatKind(block.type, block.html, block.text) : null;
+            const saved = await api<BlockData>(`/api/blocks/${action.blockId}`, "PATCH", { kind: action.kind });
+            changed.set(action.blockId, saved);
+            if (block && before !== null && before !== action.kind) {
               undo.push({
                 description: action.description,
-                run: () => api(`/api/blocks/${action.blockId}`, "PATCH", { kind: before }),
+                run: () => api(`/api/blocks/${action.blockId}`, "PATCH", { kind: before, text: block.text }),
               });
             }
+            break;
+          }
+          case "join_lines": {
+            // A transcript's lines (SPEC.md §11): the answer names the edit,
+            // and Undo gives both lines back as they were.
+            const joined = await api<{ editId: string }>("/api/blocks/lines", "POST", {
+              op: "join",
+              blockId: action.blockId,
+              nextBlockId: action.nextBlockId,
+            });
+            undo.push({ description: action.description, run: () => api("/api/blocks/lines", "POST", { op: "undo", editId: joined.editId }) });
+            break;
+          }
+          case "split_line": {
+            // The place as the line reads now: the plan's earlier actions may
+            // have changed its words.
+            const text = current(action.blockId)?.text;
+            const at = text?.indexOf(action.quote) ?? -1;
+            const cut = await api<{ editId: string }>("/api/blocks/lines", "POST", {
+              op: "split",
+              blockId: action.blockId,
+              offset: at > 0 ? at : action.offset,
+            });
+            undo.push({ description: action.description, run: () => api("/api/blocks/lines", "POST", { op: "undo", editId: cut.editId }) });
+            break;
+          }
+          case "set_speaker": {
+            const set = await api<{ previous: string | null }>("/api/blocks/lines", "POST", {
+              op: "speaker",
+              blockId: action.blockId,
+              speakerId: action.speakerId,
+            });
+            undo.push({
+              description: action.description,
+              run: () => api("/api/blocks/lines", "POST", { op: "speaker", blockId: action.blockId, speakerId: set.previous }),
+            });
+            break;
+          }
+          case "rename_speaker": {
+            await api(`/api/documents/${documentId}/speakers`, "PATCH", { speakerId: action.speakerId, name: action.name });
+            undo.push({
+              description: action.description,
+              run: () => api(`/api/documents/${documentId}/speakers`, "PATCH", { speakerId: action.speakerId, name: action.previousName }),
+            });
             break;
           }
           case "style": {
@@ -6484,11 +6602,7 @@ export function ReaderInteractions({
     setEditMode(!editMode);
   }
 
-  async function formatBlock(
-    blockId: string,
-    kind: "paragraph" | "h1" | "h2" | "h3" | "list" | "numbered",
-    text?: string,
-  ) {
+  async function formatBlock(blockId: string, kind: FormatKind, text?: string) {
     const was = blocksRef.current.find((b) => b.id === blockId);
     const wasKind = blockFormatKind(was);
     const wasText = was?.text;
@@ -6656,14 +6770,9 @@ export function ReaderInteractions({
   }
 
 /** The format a stored block is in, for a step that puts it back. */
-function blockFormatKind(
-  block: { type: string; html: string | null; text: string } | undefined,
-): "paragraph" | "h1" | "h2" | "h3" | "list" | "numbered" | null {
-  if (!block) return null;
-  if (block.type === "LIST") return /^\s*\d{1,3}[.)]\s/.test(block.text) ? "numbered" : "list";
-  if (block.type !== "HEADING") return "paragraph";
-  const level = /^<h([1-3])/.exec(block.html ?? "")?.[1] ?? "2";
-  return `h${level}` as "h1" | "h2" | "h3";
+/** A block's format as Undo restores it: a code block is code again. */
+function blockFormatKind(block: { type: string; html: string | null; text: string } | undefined): FormatKind | null {
+  return block ? formatKind(block.type, block.html, block.text) : null;
 }
 
   // Merge anchor, extraction, term, and link layers per block.

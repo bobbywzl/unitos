@@ -84,6 +84,14 @@ const RAIL_BUTTON_ON = "relative flex size-[38px] items-center justify-center ro
 // to the documents. md+ only — below md the tray is a sheet, never a screen.
 const STRIP_BUTTON =
   "absolute top-1/2 z-30 hidden size-8 -translate-y-1/2 items-center justify-center rounded-full bg-card text-sand-600 shadow-float hover:text-clay-800 md:flex print:hidden";
+// The sheet's height below md: 60% of the room between the header and the
+// bottom bar, at least 400px so the assistant's thread keeps a few lines
+// above its input, and never so tall that less than 150px of the page shows
+// above it. A set height, not a cap: the assistant pins its input to the
+// sheet's foot and scrolls its thread, which needs a height to fill.
+const SHEET_HEIGHT = "max-md:h-[min(max(60%,400px),calc(100%-150px))]";
+// md and up: the tray is the side column; below it, the sheet.
+const MD_QUERY = "(min-width: 768px)";
 
 // Tray width bounds: the bar between the reader and the tray drags within
 // these, so it can never overextend — the tray keeps a readable minimum and
@@ -186,6 +194,14 @@ export function Workspace({
   // bottom bar; mobileTray tracks it. On md+ the md: overrides put the same
   // aside back in the side column, so the flag is inert there.
   const [mobileTray, setMobileTray] = useState(false);
+  // A jump opens the sheet below md, as the bottom bar does. On md+ the flag
+  // stays as it is: the rail reads it to tell a second press on the open tab.
+  const openSheet = useCallback(() => {
+    if (!window.matchMedia(MD_QUERY).matches) setMobileTray(true);
+  }, []);
+  // The tray's aside: a jump looks for its card here, not in the page editor,
+  // whose note marks carry the note's id too.
+  const trayRef = useRef<HTMLElement>(null);
   // The tray's width on md+: dragged by the bar between the reader and the
   // tray, clamped by clampTrayWidth, remembered per browser.
   const [trayWidth, setTrayWidth] = useState(TRAY_DEFAULT);
@@ -404,45 +420,55 @@ export function Workspace({
     };
   }, [collapsed, split, revealTray]);
 
-  // Issue cards jump to their note: open the tray on notes, open the note if
-  // it is collapsed (the card listens for dissect:open-note), scroll, flash.
+  // Issue cards jump to their note: open the tray on notes (below md, the
+  // sheet), open the note if it is collapsed (the card listens for
+  // dissect:open-note), scroll, flash.
   useEffect(() => {
-    const flash = (el: HTMLElement) => {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("anchor-flash");
-      setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+    // Scroll to the tray's card and flash it. Below md the sheet that holds
+    // it may still be opening: the flash waits for the card to show, a frame
+    // at a time, a second at most.
+    const flash = (selector: string, frames = 60) => {
+      const el = trayRef.current?.querySelector<HTMLElement>(selector);
+      if (el && el.getClientRects().length > 0) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("anchor-flash");
+        setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+      } else if (frames > 0 && !window.matchMedia(MD_QUERY).matches) {
+        requestAnimationFrame(() => flash(selector, frames - 1));
+      }
     };
     const onShowNote = (e: Event) => {
       const { noteId } = (e as CustomEvent<{ noteId: string }>).detail;
       setCollapsed(false);
       setTab("notes");
       rememberTray({ collapsed: false, tab: "notes" });
+      openSheet();
       revealTray();
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent("dissect:open-note", { detail: { noteId } }));
         // The next frame: the opened card has its full height to center on.
-        requestAnimationFrame(() => {
-          const el = document.querySelector<HTMLElement>(`[data-note-id="${noteId}"]`);
-          if (el) flash(el);
-        });
+        requestAnimationFrame(() => flash(`[data-note-id="${noteId}"]`));
       }, 100);
     };
-    // Clicking a highlight in the text focuses its card in the Annotations
+    // A mark the reader has no card for focuses its card in the Annotations
     // tab, opening the card if it is collapsed (dissect:open-annotation).
+    // The reader answers that open-annotation with focus-annotation again,
+    // since it still has no card: the answer is ignored, or the two events
+    // would go back and forth for as long as the mark is there.
+    let reopening: string | null = null;
     const onFocusAnnotation = (e: Event) => {
       const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
+      if (sourceId === reopening) return;
       setCollapsed(false);
       setTab("annotations");
       rememberTray({ collapsed: false, tab: "annotations" });
+      openSheet();
       revealTray();
       setTimeout(() => {
+        reopening = sourceId;
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
-        requestAnimationFrame(() => {
-          const el = document.querySelector<HTMLElement>(
-            `[data-annotation-source-id="${sourceId}"]`,
-          );
-          if (el) flash(el);
-        });
+        reopening = null;
+        requestAnimationFrame(() => flash(`[data-annotation-source-id="${sourceId}"]`));
       }, 150);
     };
     // The page editor's Show all comments opens the Annotations tab.
@@ -450,6 +476,7 @@ export function Workspace({
       setCollapsed(false);
       setTab("annotations");
       rememberTray({ collapsed: false, tab: "annotations" });
+      openSheet();
       revealTray();
     };
     // The Extract tab opens the corpus extract page (SPEC.md §13).
@@ -467,7 +494,7 @@ export function Workspace({
       window.removeEventListener("dissect:show-annotations", onShowAnnotations);
       window.removeEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     };
-  }, [revealTray, rememberTray]);
+  }, [revealTray, rememberTray, openSheet]);
 
   // Post-hydration restore on purpose: localStorage is client-only, so the
   // SSR pass must render the default width. Window resizes re-clamp, so the
@@ -576,9 +603,15 @@ export function Workspace({
     <div
       // A note floats over the article: the article column moves left (globals.css, .reader-column).
       data-note-floating={actions.floating ? "" : undefined}
+      // The sheet is open (below md): the Reader view button moves to the
+      // reader's bottom right (reader-panes.tsx).
+      data-sheet-open={mobileTray ? "" : undefined}
       // One column that can never grow past the browser: a pane's widest
       // line stays inside its pane instead of pushing the rail off screen.
-      className="content-in grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-[68px_1fr] bg-paper print:block print:h-auto"
+      // Below md the height is the visible screen's (dvh), so the sheet,
+      // which sits in the layout, ends at the bottom bar even while a phone
+      // browser shows its toolbar.
+      className="content-in grid h-screen grid-cols-[minmax(0,1fr)] grid-rows-[68px_1fr] bg-paper max-md:h-dvh print:block print:h-auto"
     >
       <header
         data-track-surface="topbar"
@@ -675,10 +708,16 @@ export function Workspace({
       <div className="relative flex min-h-0 min-w-0 pb-[calc(54px+env(safe-area-inset-bottom))] md:pb-0 print:block print:pb-0">
         {/* The strip: in a split view (globals.css .reader-strip) the reader
             keeps the strip's full width and the tray column follows past its
-            right edge; in Normal view it is a plain row, reader then tray. */}
+            right edge; in Normal view it is a plain row, reader then tray.
+            Below md it is a column: the reader, then the tray's sheet under
+            it, so the reader ends where the sheet starts and every line of
+            the document can scroll into view above it. It clips the sheet
+            while it slides up from the bar. */}
         <div
           ref={stripRef}
-          className={`flex min-h-0 min-w-0 flex-1 print:block ${split ? "reader-strip" : ""}`}
+          className={`flex min-h-0 min-w-0 flex-1 max-md:flex-col max-md:overflow-clip max-md:print:overflow-visible print:block ${
+            split ? "reader-strip" : ""
+          }`}
         >
         <div
           className={`relative min-w-0 flex-1 overflow-hidden print:overflow-visible ${
@@ -693,16 +732,17 @@ export function Workspace({
         </div>
 
         {/* The tray column: on md+ it slides shut to zero width when collapsed
-            and the reader takes the room; below md the aside inside is a
-            bottom sheet, shown while mobileTray is set. In a split view the
-            width changes at once — the strip's scroll is the motion. */}
+            and the reader takes the room; below md it is the bottom sheet's
+            row under the reader, SHEET_HEIGHT tall while mobileTray is set
+            and empty otherwise. In a split view the width changes at once —
+            the strip's scroll is the motion. */}
         <div
           ref={trayColumnRef}
           style={{ "--tray-w": `${trayWidth}px` } as React.CSSProperties}
           inert={(collapsed && !mobileTray) || undefined}
           className={`tray-column flex min-h-0 shrink-0 md:overflow-hidden ${
             resizing || split ? "tray-column-resizing" : ""
-          } ${collapsed ? "md:w-0" : "md:w-[var(--tray-w)]"}`}
+          } ${collapsed ? "md:w-0" : "md:w-[var(--tray-w)]"} ${mobileTray ? SHEET_HEIGHT : ""}`}
         >
           {/* The bar between the reader and the tray: drag to resize, arrow
               keys nudge, double-click resets. It floats over the tray's left
@@ -733,10 +773,11 @@ export function Workspace({
             />
           </div>
           <aside
+            ref={trayRef}
             data-track-surface="tray"
             className={`${
               mobileTray
-                ? "sheet-in fixed inset-x-0 bottom-[calc(54px+env(safe-area-inset-bottom))] z-30 flex max-h-[70dvh] rounded-t-[24px] border-t shadow-float md:static md:z-auto md:max-h-none md:rounded-none md:border-t-0 md:shadow-none"
+                ? "sheet-in z-30 flex rounded-t-[24px] border-t shadow-float md:z-auto md:rounded-none md:border-t-0 md:shadow-none"
                 : "hidden md:flex"
             } min-h-0 w-full min-w-0 shrink flex-col gap-3.5 border-line bg-sand-100 p-[18px] pb-4 md:w-[var(--tray-w)] md:shrink-0 md:border-l print:hidden`}
           >

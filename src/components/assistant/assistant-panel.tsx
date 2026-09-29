@@ -1653,8 +1653,12 @@ export function AssistantPanel({
     );
   }
 
+  // Below md, in the tray's bottom sheet, the head and Recommended scroll
+  // and the rows and the composer stay at the sheet's foot, as in a
+  // conversation; on md+ the whole layout scrolls in the tray.
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 max-md:flex max-md:h-full max-md:flex-col">
+      <div className="space-y-3 max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto">
       {head}
       {documentId && (
         <div className="space-y-2">
@@ -1731,6 +1735,7 @@ export function AssistantPanel({
           )}
         </div>
       )}
+      </div>
 
       {scopeRow}
       <p className="text-xs text-sand-500">{scopeChoice ? t(scopeChoice.hintKey) : null}</p>

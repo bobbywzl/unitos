@@ -27,6 +27,7 @@ import { describeIngestError } from "@/lib/parse/ingest-error";
 import { ingestMediaUrl } from "@/lib/video/ingest-media-url";
 import { runTranscription } from "@/lib/video/transcription-job";
 import { parseBody } from "@/lib/validate";
+import { pageRangesSchema } from "@/lib/pdf-pages";
 
 // Google Drive upload (SPEC.md §14): the client holds a short-lived Drive
 // OAuth token (per-visit grant, or minted from the linked account's refresh
@@ -41,7 +42,7 @@ export const maxDuration = 120;
 // name and mimeType come from the picker; a pasted link sends the fileId
 // alone and the facts come from Drive metadata. instructions, pages, and
 // convert are the upload assistant's check output (SPEC.md §15, §16), same as
-// every other PDF add path.
+// every other PDF add path. pdfPages: a PDF's pages the reader chose (§15).
 const bodySchema = z.object({
   notebookId: z.string().min(1),
   fileId: z.string().min(1),
@@ -49,6 +50,7 @@ const bodySchema = z.object({
   mimeType: z.string().min(1).optional(),
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
+  pdfPages: pageRangesSchema.optional(),
 });
 
 export async function POST(req: Request) {
@@ -225,7 +227,7 @@ export async function POST(req: Request) {
         bytes,
         filename,
         onProgress,
-        { pages: data.pages, convert: data.convert },
+        { pages: data.pages, convert: data.convert, pdfPages: kind === "pdf" ? data.pdfPages : undefined },
         user?.id ?? null,
       );
     } catch (err) {

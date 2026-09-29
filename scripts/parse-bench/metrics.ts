@@ -20,9 +20,10 @@ import { garblesOf, wordsOf, type Garble } from "./text";
 //   styles      mean F1 of the styles the reference marks (bold, italic, underline, strikethrough,
 //               small caps, sub, sup, text color, highlight)
 //   footnotes   mean of notes found, notes linked from their mark, and the notes' words F1
-//   roles       mean of alignment (titles, headings, paragraphs; justified where a wrap shows it),
-//               indentation, and captions F1, checkbox states, separators and quotations found,
-//               and printed equation labels right
+//   roles       mean of alignment (titles, headings, paragraphs, list items; justified where a wrap
+//               shows it), indentation, and captions F1, indent sizes and spacing as the page
+//               measures them, checkbox states, separators and quotations found, and printed
+//               equation labels right and on the page's side
 //   fonts       per role (body, title, each heading level, caption, footnote): the face's shape,
 //               its size (the body's in points, the others' as a ratio to the body), bold, color
 
@@ -54,6 +55,7 @@ export const FREE_WEIGHTS = {
   numbers: 10, // no line that is only a page number
   garbles: 10, // no garbled glyph, by string and by the math font's code
   math: 10, // display equations as LaTeX that draws the page's symbols (glyphs.ts)
+  look: 10, // the import's inline formulas at their words' size, crops at their printed width, a Word file's borders
 } as const;
 
 // ── The flat view ───────────────────────────────────────────────────────────
@@ -777,7 +779,9 @@ const sameMarker = (a: string, b: string) => (bulletLike(a) && bulletLike(b)) ||
     math alone stands between its found neighbors); then its depth and its
     marker are compared (every bullet glyph is one marker). A candidate's
     marker is the one it draws: the parse's printed marker, the import's
-    list format (a marker left in the words is no marker). */
+    list format (a marker left in the words is no marker), or, for an
+    unmarked item, the reference's marker its words open with (a label no
+    list level draws, "[Bil95]"). */
 export function listScores(ref: Flat, cand: Flat, al: Alignment): ListScores {
   const votes = new Map<number, Map<number, number>>(); // ref unit → cand unit → words
   const back = new Map<number, Map<number, number>>(); // cand unit → ref unit → words
@@ -852,7 +856,11 @@ export function listScores(ref: Flat, cand: Flat, al: Alignment): ListScores {
     else misses.push({ unit: ru, cand: cu, why: `depth ${theirs.depth}, not ${mine.depth}` });
     const level = (byDepth[mine.depth] ??= { found: 0, marked: 0 });
     level.found++;
-    if (sameMarker(mine.marker, theirs.marker)) {
+    // A label no list level draws ("[Bil95]") stays as the words an unmarked item opens with: that is its marker,
+    // drawn as the page draws it.
+    const words = cand.units[cu].text.trimStart();
+    const worded = theirs.marker === "" && mine.marker !== "" && words.startsWith(mine.marker) && (words.length === mine.marker.length || /\s/.test(words[mine.marker.length]));
+    if (sameMarker(mine.marker, theirs.marker) || worded) {
       marked++;
       level.marked++;
     } else misses.push({ unit: ru, cand: cu, why: `marker "${theirs.marker}", not "${mine.marker}"` });
@@ -919,6 +927,62 @@ function cellFormulas(flat: Flat): Map<number, number[]> {
   return out;
 }
 
+/** A formula's canonical tokens, and a cell's words as the table metric compares them. */
+const tokensOf = (flat: Flat, k: number) => mathTokens(flat.math[k], false);
+const plain = (text: string) => text.normalize("NFKC").replace(/\s+/g, "");
+
+/** A reference table's cells in the candidate table that owns it: rows and
+    columns map one to one, by the most words and formulas shared, and those
+    no word or formula maps keep their place when that place is free. */
+function cellMap(ref: Flat, cand: Flat, al: Alignment, rb: number, refFormulas: Map<number, number[]>, candFormulas: Map<number, number[]>) {
+  const cb = al.owner[rb];
+  const body = ref.unitsOf[rb].filter((u) => ref.units[u].index >= 0);
+  const rowVotes = new Map<string, number>();
+  const colVotes = new Map<string, number>();
+  const key = (a: number, b: number) => `${a},${b}`;
+  const vote = (ru: Unit, cu: Unit) => {
+    rowVotes.set(key(ru.row, cu.row), (rowVotes.get(key(ru.row, cu.row)) ?? 0) + 1);
+    colVotes.set(key(ru.col, cu.col), (colVotes.get(key(ru.col, cu.col)) ?? 0) + 1);
+  };
+  for (const u of body) {
+    for (let i = ref.units[u].first; i < ref.units[u].end; i++) {
+      const j = al.aTo[i];
+      if (j < 0) continue;
+      const cu = cand.units[cand.toks[j].unit];
+      if (cu.block !== cb || cu.index < 0) continue;
+      vote(ref.units[u], cu);
+    }
+  }
+  // A formula the owning table's cells hold once, read alike or as the same characters, votes too.
+  const ownerCells = cb >= 0 ? cand.unitsOf[cb].filter((u) => cand.units[u].index >= 0) : [];
+  for (const u of body) {
+    for (const k of refFormulas.get(u) ?? []) {
+      const want = tokensOf(ref, k);
+      const reading = plain(ref.math[k].text ?? "");
+      const alike = ownerCells.filter(
+        (cu) => (candFormulas.get(cu) ?? []).some((c) => sequenceSimilarity(want, tokensOf(cand, c)) >= SAME_FORMULA) || (reading !== "" && plain(cand.units[cu].text) === reading),
+      );
+      if (alike.length === 1) vote(ref.units[u], cand.units[alike[0]]);
+    }
+  }
+  const rows = assign(rowVotes);
+  const cols = assign(colVotes);
+  // Rows and columns no word or formula maps keep their place when that place is free (a table of formulas
+  // read as words).
+  const byPlace = (map: Map<number, number>, from: number[], to: number[]) => {
+    const taken = new Set(map.values());
+    for (const r of new Set(from)) {
+      if (map.has(r) || !to.includes(r) || taken.has(r)) continue;
+      map.set(r, r);
+      taken.add(r);
+    }
+  };
+  byPlace(rows, body.map((u) => ref.units[u].row), ownerCells.map((u) => cand.units[u].row));
+  byPlace(cols, body.map((u) => ref.units[u].col), ownerCells.map((u) => cand.units[u].col));
+  const cellAt = (unit: Unit) => ownerCells.find((c) => cand.units[c].row === rows.get(unit.row) && cand.units[c].col === cols.get(unit.col)) ?? -1;
+  return { cb, body, rows, cols, cellAt };
+}
+
 /** Tables: a table word is in place when it lands in the candidate table
     that owns its table, in the row and column its row and column map to
     (rows and columns map one to one, by the most words and formulas shared).
@@ -930,59 +994,13 @@ export function tableScores(ref: Flat, cand: Flat, al: Alignment): TableScores {
   const refFormulas = cellFormulas(ref);
   const candFormulas = cellFormulas(cand);
   const formulaPlaced = new Set<number>();
-  const tokensOf = (flat: Flat, k: number) => mathTokens(flat.math[k], false);
-  const plain = (text: string) => text.normalize("NFKC").replace(/\s+/g, "");
   let refWords = 0;
   let hits = 0;
   let outside = 0;
   const misses: TableScores["misses"] = [];
   ref.blocks.forEach((block, rb) => {
     if (block.kind !== "table") return;
-    const cb = al.owner[rb];
-    const body = ref.unitsOf[rb].filter((u) => ref.units[u].index >= 0);
-    const rowVotes = new Map<string, number>();
-    const colVotes = new Map<string, number>();
-    const key = (a: number, b: number) => `${a},${b}`;
-    const vote = (ru: Unit, cu: Unit) => {
-      rowVotes.set(key(ru.row, cu.row), (rowVotes.get(key(ru.row, cu.row)) ?? 0) + 1);
-      colVotes.set(key(ru.col, cu.col), (colVotes.get(key(ru.col, cu.col)) ?? 0) + 1);
-    };
-    for (const u of body) {
-      for (let i = ref.units[u].first; i < ref.units[u].end; i++) {
-        const j = al.aTo[i];
-        if (j < 0) continue;
-        const cu = cand.units[cand.toks[j].unit];
-        if (cu.block !== cb || cu.index < 0) continue;
-        vote(ref.units[u], cu);
-      }
-    }
-    // A formula the owner's cells hold once, read alike or as the same characters, votes too.
-    const ownerCells = cb >= 0 ? cand.unitsOf[cb].filter((u) => cand.units[u].index >= 0) : [];
-    for (const u of body) {
-      for (const k of refFormulas.get(u) ?? []) {
-        const want = tokensOf(ref, k);
-        const reading = plain(ref.math[k].text ?? "");
-        const alike = ownerCells.filter(
-          (cu) => (candFormulas.get(cu) ?? []).some((c) => sequenceSimilarity(want, tokensOf(cand, c)) >= SAME_FORMULA) || (reading !== "" && plain(cand.units[cu].text) === reading),
-        );
-        if (alike.length === 1) vote(ref.units[u], cand.units[alike[0]]);
-      }
-    }
-    const rows = assign(rowVotes);
-    const cols = assign(colVotes);
-    // Rows and columns no word or formula maps keep their place when that place is free (a table of formulas
-    // read as words).
-    const byPlace = (map: Map<number, number>, from: number[], to: number[]) => {
-      const taken = new Set(map.values());
-      for (const r of new Set(from)) {
-        if (map.has(r) || !to.includes(r) || taken.has(r)) continue;
-        map.set(r, r);
-        taken.add(r);
-      }
-    };
-    byPlace(rows, body.map((u) => ref.units[u].row), ownerCells.map((u) => cand.units[u].row));
-    byPlace(cols, body.map((u) => ref.units[u].col), ownerCells.map((u) => cand.units[u].col));
-    const cellAt = (unit: Unit) => ownerCells.find((c) => cand.units[c].row === rows.get(unit.row) && cand.units[c].col === cols.get(unit.col)) ?? -1;
+    const { cb, body, rows, cols, cellAt } = cellMap(ref, cand, al, rb, refFormulas, candFormulas);
     for (const u of body) {
       const unit = ref.units[u];
       for (const k of refFormulas.get(u) ?? []) {
@@ -1059,7 +1077,15 @@ export type MathScores = {
   /** Printed equation labels ("(1.2)"), compared apart from the formula:
       reference labels on an equation with the same label, candidate labels
       the reference does not print. */
-  labels: { ref: number; right: number; extra: number; score: number | null; misses: { want: string; got: string }[] };
+  labels: {
+    ref: number;
+    right: number;
+    extra: number;
+    score: number | null;
+    misses: { want: string; got: string }[];
+    /** Of the labels right, those on the page's side (the right, or the left where the reference says so). */
+    side: { ref: number; right: number; score: number | null };
+  };
   /** Reference equations the candidate shows as images. */
   images: number;
   /** Reference equations and inline formulas the candidate reads as plain words. */
@@ -1074,7 +1100,8 @@ const latexOf = (m: { latex?: string; mathml?: string }) => m.latex ?? (m.mathml
 /** Math: each reference formula against its counterpart, by the similarity
     of canonical forms. A display equation's counterpart is its owner; an
     inline formula's is a candidate formula between the matched words around
-    it, or else the candidate's words there read as math. An image scores 0. */
+    it, or else the candidate's words there read as math; a formula alone in
+    a table cell, the candidate cell's (cellMap). An image scores 0. */
 export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
   const misses: MathScores["misses"] = [];
   const display: number[] = [];
@@ -1085,7 +1112,12 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
   const miss = (isDisplay: boolean, m: MathItem, got: string, similarity: number) => {
     if (similarity < 0.999) misses.push({ display: isDisplay, want: latexOf(m), got, similarity });
   };
-  const labels: MathScores["labels"] = { ref: 0, right: 0, extra: 0, score: null, misses: [] };
+  const labels: MathScores["labels"] = { ref: 0, right: 0, extra: 0, score: null, misses: [], side: { ref: 0, right: 0, score: null } };
+  // A table's cells in the candidate's table, as the table metric maps them, made once a table.
+  const refCells = cellFormulas(ref);
+  const candCells = cellFormulas(cand);
+  const maps = new Map<number, ReturnType<typeof cellMap>>();
+  const mapOf = (rb: number) => maps.get(rb) ?? maps.set(rb, cellMap(ref, cand, al, rb, refCells, candCells)).get(rb);
   for (const m of ref.math) {
     const want = mathTokens(m, m.display);
     if (m.display) {
@@ -1094,8 +1126,13 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
       if (m.label) {
         labels.ref++;
         const theirs = other?.kind === "equation" ? (other.label ?? "") : "";
-        if (theirs && normLabel(theirs) === normLabel(m.label)) labels.right++;
-        else labels.misses.push({ want: m.label, got: other?.kind === "equation" ? theirs || "(no label)" : `(${other?.kind ?? "missing"})` });
+        if (theirs && normLabel(theirs) === normLabel(m.label)) {
+          labels.right++;
+          const block = ref.blocks[m.block];
+          const want = block.kind === "equation" ? (block.labelSide ?? "right") : "right";
+          labels.side.ref++;
+          if (other?.kind === "equation" && (other.labelSide ?? "right") === want) labels.side.right++;
+        } else labels.misses.push({ want: m.label, got: other?.kind === "equation" ? theirs || "(no label)" : `(${other?.kind ?? "missing"})` });
       }
       let sim = 0;
       let got = "(missing)";
@@ -1132,10 +1169,22 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
       }
     } else {
       const gap = gapText(cand, al, prev, next, want.length);
+      // A formula alone in a table cell has no words beside it: the candidate's cell the table's rows and
+      // columns map it to holds it, as a formula or as words.
+      const at = !gap.trim() && ref.blocks[unit.block].kind === "table" && unit.index >= 0 ? (mapOf(unit.block)?.cellAt(unit) ?? -1) : -1;
       if (gap.trim()) {
         plainInline++;
         sim = sequenceSimilarity(want, textMathTokens(gap));
         got = `(words) ${gap.trim()}`;
+      } else if (at >= 0 && (candCells.get(at) ?? []).length > 0) {
+        for (const k of candCells.get(at) ?? []) {
+          const s = sequenceSimilarity(want, mathTokens(cand.math[k], false));
+          if (s >= sim) [sim, got] = [s, latexOf(cand.math[k])];
+        }
+      } else if (at >= 0 && cand.units[at].text.trim()) {
+        plainInline++;
+        sim = sequenceSimilarity(want, textMathTokens(cand.units[at].text));
+        got = `(words) ${cand.units[at].text.trim()}`;
       }
     }
     inline.push(sim);
@@ -1148,6 +1197,7 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
     if (mine?.kind !== "equation" || !mine.label) labels.extra++;
   });
   labels.score = labels.ref > 0 ? labels.right / labels.ref : null;
+  labels.side.score = labels.side.ref > 0 ? labels.side.right / labels.side.ref : null;
   const mean = (list: number[]) => (list.length > 0 ? list.reduce((a, b) => a + b, 0) / list.length : null);
   const d = mean(display);
   const i = mean(inline);
@@ -1383,6 +1433,10 @@ export type RoleScores = {
   align: number | null;
   /** First-line, hanging, and block indents of paragraphs: F1 of those indented alike, where the reference marks any. */
   indent: number | null;
+  /** Paragraphs whose indent the reference measures: the share indented alike at the page's size. */
+  indentSize: number | null;
+  /** The space under paragraphs and lists and between a list's items, where the reference measures it: the share alike. */
+  spacing: number | null;
   /** Caption words (a figure's, a table's) in a caption of the candidate: F1, where the reference has captions. */
   captions: number | null;
   /** Checklist items: the share of the reference's whose counterpart item has its box and state. */
@@ -1392,8 +1446,8 @@ export type RoleScores = {
   quotes: number | null;
   /** The mean of the roles the reference has, printed equation labels among them (the composite's part). */
   score: number | null;
-  /** The blocks alignment and indentation count wrong, for the detail report. */
-  misses: { align: PropertyMiss[]; indent: PropertyMiss[] };
+  /** The blocks alignment, indentation, indent sizes, and spacing count wrong, for the detail report. */
+  misses: { align: PropertyMiss[]; indent: PropertyMiss[]; indentSize: PropertyMiss[]; spacing: PropertyMiss[] };
 };
 
 /** A block a property counts wrong: the reference's value and the
@@ -1417,7 +1471,6 @@ function propertyF1(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b: nu
     whose counterpart differs, then a candidate block whose main reference
     block differs. `none` names a side that sets none. */
 function propertyMisses(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b: number) => string | undefined, none: string): PropertyMiss[] {
-  const text = (flat: Flat, b: number) => flat.unitsOf[b].map((u) => flat.units[u].text).join(" ").replace(/\s+/g, " ").trim().slice(0, 60);
   const out: PropertyMiss[] = [];
   const seen = new Set<string>();
   ref.blocks.forEach((_, rb) => {
@@ -1427,7 +1480,7 @@ function propertyMisses(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b
     const got = cb >= 0 ? (of(cand, cb) ?? none) : "not found";
     if (got === want) return;
     seen.add(`${rb}:${cb}`);
-    out.push({ ref: want, cand: got, text: text(ref, rb) });
+    out.push({ ref: want, cand: got, text: blockText(ref, rb) });
   });
   cand.blocks.forEach((_, cb) => {
     const got = of(cand, cb);
@@ -1435,7 +1488,7 @@ function propertyMisses(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b
     const rb = al.main[cb];
     const want = rb >= 0 ? (of(ref, rb) ?? none) : "not found";
     if (want === got || seen.has(`${rb}:${cb}`)) return;
-    out.push({ ref: want, cand: got, text: text(cand, cb) });
+    out.push({ ref: want, cand: got, text: blockText(cand, cb) });
   });
   return out;
 }
@@ -1444,20 +1497,105 @@ function propertyMisses(ref: Flat, cand: Flat, al: Alignment, of: (flat: Flat, b
     flush left draw alike. */
 const JUSTIFY_CHARS = 100;
 
-/** A title's, a heading's, or a paragraph's alignment as the metric compares
-    it. Justified counts only where the reference justifies any paragraph
-    (a reference that marks none leaves it unscored) and on a paragraph of
-    JUSTIFY_CHARS or more, where a wrap shows it; elsewhere it is flush left.
-    A line centered on the page is centered whether it reads as a heading or
-    a paragraph. */
+/** Each unit's inline formulas, by unit. */
+const formulasOf = new WeakMap<Flat, Map<number, MathItem[]>>();
+
+/** A unit's length as drawn: its characters, each inline formula counted by
+    the glyphs it draws (its MathML's leaves). A reference's formula holds
+    the glyphs as its text, a parse's the page's characters, an import's
+    none: its glyphs count alike on every side. */
+function drawnLength(flat: Flat, u: number): number {
+  let index = formulasOf.get(flat);
+  if (!index) {
+    index = new Map();
+    for (const m of flat.math) if (!m.display && m.unit >= 0) index.set(m.unit, [...(index.get(m.unit) ?? []), m]);
+    formulasOf.set(flat, index);
+  }
+  let n = flat.units[u].text.length;
+  for (const m of index.get(u) ?? []) {
+    const text = m.text ?? "";
+    n += (m.latex !== undefined || m.mathml !== undefined ? mathLeaves(m, false).join("").length : text.length) - text.length;
+  }
+  return n;
+}
+
+/** A title's, a heading's, a paragraph's, or a list's items' alignment as
+    the metric compares it. Justified counts only where the reference
+    justifies any paragraph (a reference that marks none leaves it
+    unscored), and on a paragraph of JUSTIFY_CHARS or more as drawn
+    (drawnLength) or a list with an item that long, where a wrap shows it;
+    elsewhere it is flush left. A line centered on the page is centered
+    whether it reads as a heading or a paragraph. */
 function alignKey(justified: boolean) {
   return (flat: Flat, b: number): string | undefined => {
     const block = flat.blocks[b];
-    if (block.kind !== "title" && block.kind !== "heading" && block.kind !== "paragraph") return undefined;
+    if (block.kind !== "title" && block.kind !== "heading" && block.kind !== "paragraph" && block.kind !== "list") return undefined;
     if (block.align !== "justify") return block.align;
-    const chars = flat.unitsOf[b].reduce((n, u) => n + flat.units[u].text.length, 0);
-    return justified && block.kind === "paragraph" && chars >= JUSTIFY_CHARS ? "justify" : undefined;
+    // A list's items show it where one of them wraps.
+    const lengths = flat.unitsOf[b].map((u) => drawnLength(flat, u));
+    const whole = block.kind === "list" ? Math.max(0, ...lengths) : lengths.reduce((n, x) => n + x, 0);
+    return justified && (block.kind === "paragraph" || block.kind === "list") && whole >= JUSTIFY_CHARS ? "justify" : undefined;
   };
+}
+
+/** A measure within 2 pt or a quarter of the page's: an indent, a space. */
+const nearPoints = (got: number, want: number) => Math.abs(got - want) <= Math.max(2, 0.25 * Math.abs(want));
+
+/** Indent sizes: each reference paragraph whose indent the page measures
+    (indentPt) against its counterpart's: its first line starting alike, and
+    its other lines too where the page sets them in, within 2 pt or a
+    quarter (a one-line paragraph set in reads as a first-line indent or a
+    block indent alike). A page may set its paragraphs 5 pt in where the
+    page editor drew every indent at half an inch. */
+function indentSizes(ref: Flat, cand: Flat, al: Alignment): { score: number | null; misses: PropertyMiss[] } {
+  const show = (x: { left: number; first: number } | undefined) => (x ? `${x.left}/${x.first} pt` : "none");
+  let total = 0;
+  let right = 0;
+  const misses: PropertyMiss[] = [];
+  ref.blocks.forEach((block, rb) => {
+    if (block.kind !== "paragraph" || !block.indentPt) return;
+    total++;
+    const cb = al.owner[rb];
+    const other = cb >= 0 ? cand.blocks[cb] : null;
+    const got = other?.kind === "paragraph" ? other.indentPt : undefined;
+    const want = block.indentPt;
+    if (got && nearPoints(got.left + got.first, want.left + want.first) && (want.left === 0 || nearPoints(got.left, want.left))) right++;
+    else misses.push({ ref: show(block.indentPt), cand: other ? show(got) : "not found", text: blockText(ref, rb) });
+  });
+  return { score: total > 0 ? right / total : null, misses };
+}
+
+/** Spacing: the space the reference measures under a paragraph or a list
+    (to the next one below it in its column) and between a list's items,
+    against its counterpart's, within 2 pt or a quarter. A block the
+    candidate runs into the next one is the paragraphs metric's, and a
+    block whose candidate says no space (a parse that measured none there;
+    the import always draws one) is not counted here. A page may space a
+    checklist's items or a list's paragraphs 4 to 6 pt apart where the page
+    editor drew them tight. */
+function spacingScores(ref: Flat, cand: Flat, al: Alignment): { score: number | null; misses: PropertyMiss[] } {
+  let total = 0;
+  let right = 0;
+  const misses: PropertyMiss[] = [];
+  const judge = (rb: number, want: number, got: number | undefined, what: string) => {
+    total++;
+    if (got !== undefined && nearPoints(got, want)) right++;
+    else misses.push({ ref: `${what} ${want} pt`, cand: got === undefined ? "none" : `${got} pt`, text: blockText(ref, rb) });
+  };
+  ref.blocks.forEach((block, rb) => {
+    if (block.kind !== "paragraph" && block.kind !== "list") return;
+    const cb = al.owner[rb];
+    const other = cb >= 0 ? cand.blocks[cb] : null;
+    const said = other?.kind === "paragraph" || other?.kind === "list" ? other.spaceAfter : undefined;
+    if (block.spaceAfter !== undefined && said !== undefined && al.owner[rb + 1] !== cb) judge(rb, block.spaceAfter, said, "after");
+    if (block.kind === "list" && block.itemSpace !== undefined) judge(rb, block.itemSpace, other?.kind === "list" ? (other.itemSpace ?? 0) : undefined, "between items");
+  });
+  return { score: total > 0 ? right / total : null, misses };
+}
+
+/** A block's first words, for the detail report. */
+function blockText(flat: Flat, b: number): string {
+  return flat.unitsOf[b].map((u) => flat.units[u].text).join(" ").replace(/\s+/g, " ").trim().slice(0, 60);
 }
 
 /** The roles and marks the page's layout carries: alignment, indentation,
@@ -1467,6 +1605,8 @@ export function roleScores(ref: Flat, cand: Flat, al: Alignment, blocks: BlockSc
     const block = flat.blocks[b];
     return block.kind === "paragraph" ? block.indent : undefined;
   };
+  // A list's items count only where the reference justifies its paragraphs too (a reference that marks
+  // no paragraph justified leaves the look unscored).
   const justified = ref.blocks.some((block) => block.kind === "paragraph" && block.align === "justify");
   // Captions: a figure's caption unit, a table's (index -1), a caption paragraph.
   const isCaption = (flat: Flat, u: number) => {
@@ -1495,16 +1635,25 @@ export function roleScores(ref: Flat, cand: Flat, al: Alignment, blocks: BlockSc
     return x && x.ref > 0 ? x.found / x.ref : null;
   };
   const align = alignKey(justified);
+  const sizes = indentSizes(ref, cand, al);
+  const spacing = spacingScores(ref, cand, al);
   const roles = {
     align: propertyF1(ref, cand, al, align),
     indent: propertyF1(ref, cand, al, indent),
+    indentSize: sizes.score,
+    spacing: spacing.score,
     captions: refCaption > 0 ? f1Of(candCaption > 0 ? candHits / candCaption : 0, hits / refCaption) : null,
     checks: lists.checks.ref > 0 ? lists.checks.right / lists.checks.ref : null,
     separators: kind("separator"),
     quotes: kind("quote"),
   };
-  const misses = { align: roles.align === null ? [] : propertyMisses(ref, cand, al, align, "left"), indent: roles.indent === null ? [] : propertyMisses(ref, cand, al, indent, "none") };
-  return { ...roles, score: meanOf([...Object.values(roles), math.labels.score]), misses };
+  const misses = {
+    align: roles.align === null ? [] : propertyMisses(ref, cand, al, align, "left"),
+    indent: roles.indent === null ? [] : propertyMisses(ref, cand, al, indent, "none"),
+    indentSize: sizes.misses,
+    spacing: spacing.misses,
+  };
+  return { ...roles, score: meanOf([...Object.values(roles), math.labels.score, math.labels.side.score]), misses };
 }
 
 export type FontScores = {

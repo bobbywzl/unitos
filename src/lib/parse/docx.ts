@@ -158,6 +158,8 @@ type StyleDef = {
   rPr: Element | null;
   /** A table style that sets its first row apart (tblStylePr firstRow). */
   firstRow: boolean;
+  /** A table style's table properties (its borders). */
+  tblPr: Element | null;
 };
 
 type Styles = {
@@ -191,6 +193,7 @@ function readStyles(zip: OfficeZip, rels: Map<string, Relationship>): Styles {
       pPr: child(style, "pPr"),
       rPr: child(style, "rPr"),
       firstRow: children(style, "tblStylePr").some((c) => attr(c, "type") === "firstRow"),
+      tblPr: child(style, "tblPr"),
     });
   }
   const defaults = descendants(doc, "docDefaults")[0];
@@ -344,11 +347,18 @@ type ParaProps = {
   numId: string | null;
   ilvl: number;
   align: "center" | "right" | "justify" | null;
-  border: { top: boolean; bottom: boolean; left: boolean; right: boolean };
+  /** Each side's border (w:pBdr) as the page editor stores a paragraph's
+      side (borderSide); null for none. */
+  border: Record<BorderSideName, string | null>;
   /** The left indent in twips: the style's, or the paragraph's own. */
   left: number;
-  /** The paragraph's own left indent, which wins over its list level's. */
+  /** The first line's indent against the left indent in twips (w:ind
+      firstLine; a hanging indent negative). */
+  first: number;
+  /** The paragraph's own left and first-line indents, which win over its
+      list level's. */
   ownLeft: number | null;
+  ownFirst: number | null;
   /** The look every run of the paragraph starts from. */
   base: Look;
   /** The paragraph mark is a tracked deletion: the words join the next paragraph. */
@@ -413,9 +423,11 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     numId: null,
     ilvl: 0,
     align: null,
-    border: { top: false, bottom: false, left: false, right: false },
+    border: { top: null, bottom: null, left: null, right: null },
     left: 0,
+    first: 0,
     ownLeft: indentOf(child(pPr, "ind")),
+    ownFirst: firstOf(child(pPr, "ind")),
     base,
     markDeleted: child(child(pPr, "rPr"), "del") !== null,
     outline: null,
@@ -441,11 +453,13 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     const lvl = intAttr(child(layer, "outlineLvl"), "val");
     if (lvl !== null) outline = lvl;
     const bdr = child(layer, "pBdr");
-    for (const side of ["top", "bottom", "left", "right"] as const) {
-      const b = child(bdr, side);
-      if (b) out.border[side] = !["none", "nil"].includes(attr(b, "val") ?? "none");
+    for (const side of BORDER_SIDES) {
+      const b = child(bdr, side) ?? (side === "left" ? child(bdr, "start") : side === "right" ? child(bdr, "end") : null);
+      if (b) out.border[side] = borderSide(b);
     }
-    out.left = indentOf(child(layer, "ind")) ?? out.left;
+    const ind = child(layer, "ind");
+    out.left = indentOf(ind) ?? out.left;
+    out.first = firstOf(ind) ?? out.first;
     const spacing = child(layer, "spacing");
     out.before = spaceOf(spacing, "before") ?? out.before;
     out.after = spaceOf(spacing, "after") ?? out.after;
@@ -467,6 +481,32 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
 /** A left indent (w:ind left, or start), in twips. */
 function indentOf(ind: Element | null): number | null {
   return intAttr(ind, "left") ?? intAttr(ind, "start");
+}
+
+/** A first line's indent against the left indent (w:ind firstLine; a
+    hanging indent negative), in twips. */
+function firstOf(ind: Element | null): number | null {
+  const hanging = intAttr(ind, "hanging");
+  return hanging !== null ? -hanging : intAttr(ind, "firstLine");
+}
+
+// ── Borders ─────────────────────────────────────────────────────────────────
+
+type BorderSideName = "top" | "right" | "bottom" | "left";
+const BORDER_SIDES: BorderSideName[] = ["top", "right", "bottom", "left"];
+
+/** A border side (a w:pBdr, w:tcBorders, or w:tblBorders child) as the page
+    editor stores one: "<width pt> <solid|dotted|dashed> #rrggbb" and, for
+    a paragraph, the room between the line and the words (w:space, points);
+    null for none. Word's width is eighths of a point; "auto" is black. */
+function borderSide(el: Element, withSpace = true): string | null {
+  const val = attr(el, "val") ?? "none";
+  if (val === "none" || val === "nil") return null;
+  const dash = /^dot/.test(val) && !/dash/i.test(val) ? "dotted" : /dash/i.test(val) ? "dashed" : "solid";
+  const width = Math.min(12, Math.max(0.13, Math.round(((intAttr(el, "sz") ?? 4) / 8) * 100) / 100));
+  const color = hexColor(attr(el, "color")) ?? "#000000";
+  const space = Math.min(31, Math.max(0, intAttr(el, "space") ?? 0));
+  return `${width} ${dash} ${color}${withSpace ? ` ${space}` : ""}`;
 }
 
 /** The most space the page editor sets before or after a paragraph, 1584
@@ -508,7 +548,20 @@ function blankTwips(props: ParaProps, size: number): number {
 
 // ── Numbering ───────────────────────────────────────────────────────────────
 
-type Level = { fmt: string; text: string; start: number; restart: number | null; legal: boolean; font: string; left: number | null };
+/** A numbering level: its number format and text, its counter's start and
+    restart, its font, its indent, and what follows its number (w:suff:
+    "tab", the default, "space", or "nothing"). */
+type Level = {
+  fmt: string;
+  text: string;
+  start: number;
+  restart: number | null;
+  legal: boolean;
+  font: string;
+  left: number | null;
+  first: number | null;
+  suffix: string;
+};
 
 function readLevel(lvl: Element): Level {
   const rFonts = child(child(lvl, "rPr"), "rFonts");
@@ -519,7 +572,9 @@ function readLevel(lvl: Element): Level {
     restart: intAttr(child(lvl, "lvlRestart"), "val"),
     legal: flag(child(lvl, "isLgl")) ?? false,
     left: indentOf(child(child(lvl, "pPr"), "ind")),
+    first: firstOf(child(child(lvl, "pPr"), "ind")),
     font: attr(rFonts, "ascii") ?? attr(rFonts, "hAnsi") ?? "",
+    suffix: attr(child(lvl, "suff"), "val") ?? "tab",
   };
 }
 
@@ -666,9 +721,9 @@ class Numbering {
 
   /** The marker of the next item of list `numId` at level `ilvl`, as Word
       draws it ("1.", "1.1", "(a)", "•"; "" when a number format draws none), and
-      the level's indent; null when the list is not defined. The counters
-      move on. */
-  next(numId: string, ilvl: number): { marker: string; left: number | null } | null {
+      the level's indent and suffix; null when the list is not defined. The
+      counters move on. */
+  next(numId: string, ilvl: number): { marker: string; left: number | null; first: number | null; suffix: string } | null {
     const found = this.levels(numId);
     const level = found?.levels[ilvl];
     if (!found || !level) return null;
@@ -696,7 +751,7 @@ class Numbering {
               return formatNumber(level.legal ? "decimal" : (lv?.fmt ?? "decimal"), counters[at] ?? lv?.start ?? 1);
             })
             .trim();
-    return { marker, left: level.left };
+    return { marker, left: level.left, first: level.first, suffix: level.suffix };
   }
 }
 
@@ -1016,7 +1071,19 @@ type Sink = { line: () => Line; cut: (piece: Piece) => void; floating: Picture[]
 
 /** A list line: its left indent in twips (its depth is the indent's rank in
     the list), its marker, its words. */
-type ListLine = { indent: number; marker: string; words: Words };
+type ListLine = {
+  indent: number;
+  /** The marker's place against the indent, in twips (w:ind hanging
+      negative), where the page sets one. */
+  first?: number | null;
+  marker: string;
+  words: Words;
+  /** The space above the line in twips when a line of its list stands
+      right above it (spaceBetween and the blank paragraphs between), and
+      the line's alignment. */
+  gap?: number;
+  align: ParaProps["align"];
+};
 /** A list being read: its lines, whether it is a contents list, the notes
     its lines cite, its first line's paragraph (the space above the list),
     and the gap running on from its last line. */
@@ -1027,7 +1094,44 @@ type OpenList = { lines: ListLine[]; contents: boolean; notes: Note[]; first?: P
 type Spacing = { props: ParaProps; blank: number; pageEnd?: boolean };
 /** A table cell: its html, its words, the columns and rows it spans, the
     note marks in its words (offsets into them), and its fill. */
-type TableCell = { html: string; text: string; colspan: number; rowspan: number; notes?: (Span & { note: Note })[]; fill?: HexColor | null };
+type TableCell = {
+  html: string;
+  text: string;
+  colspan: number;
+  rowspan: number;
+  notes?: (Span & { note: Note })[];
+  fill?: HexColor | null;
+  /** The cell's own borders (w:tcBorders): a side it sets, null for none. */
+  borders?: Partial<Record<BorderSideName, string | null>>;
+};
+
+/** A table's borders: its style's, then its own (w:tblBorders), each edge
+    a side's value or null for none; an edge no layer sets is absent. */
+type TableBorders = Partial<Record<BorderSideName | "insideH" | "insideV", string | null>>;
+
+function tableBorders(layers: (Element | null)[]): TableBorders {
+  const out: TableBorders = {};
+  for (const layer of layers) {
+    const borders = child(layer, "tblBorders");
+    for (const edge of ["top", "right", "bottom", "left", "insideH", "insideV"] as const) {
+      const el = child(borders, edge) ?? (edge === "left" ? child(borders, "start") : edge === "right" ? child(borders, "end") : null);
+      if (el) out[edge] = borderSide(el, false);
+    }
+  }
+  return out;
+}
+
+/** A cell's own borders (w:tcBorders). */
+function cellBorders(tc: Element): TableCell["borders"] {
+  const borders = child(child(tc, "tcPr"), "tcBorders");
+  if (!borders) return undefined;
+  const out: NonNullable<TableCell["borders"]> = {};
+  for (const side of BORDER_SIDES) {
+    const el = child(borders, side) ?? (side === "left" ? child(borders, "start") : side === "right" ? child(borders, "end") : null);
+    if (el) out[side] = borderSide(el, false);
+  }
+  return out;
+}
 
 /** Letters by the size they are set in (half points as points), into a
     table's tally: the table's text size is the size most of them take. */
@@ -1176,10 +1280,34 @@ class DocxReader {
       entries.push({ start: joined.text.length, end: joined.text.length + line.words.text.length });
       joined.add(line.words);
     });
-    const block = this.textBlock("LIST", joined, list.contents ? '<ul class="contents"></ul>' : undefined);
+    // The list's alignment, when its lines share one (justified items),
+    // and the space between its items: the gap most of them leave.
+    const align = list.lines.every((l) => l.align === list.lines[0].align) ? list.lines[0].align : null;
+    const tokens = [...(list.contents ? ["contents"] : []), ...(align ? [align] : [])];
+    const block = this.textBlock("LIST", joined, tokens.length > 0 ? `<ul class="${tokens.join(" ")}"></ul>` : undefined);
+    const gaps = new Map<number, number>();
+    for (const line of list.lines) if (line.gap !== undefined) gaps.set(line.gap, (gaps.get(line.gap) ?? 0) + 1);
+    const gap = [...gaps].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? 0;
+    if (gap > 0) block.itemSpace = points(gap);
+    // Each depth's indent as Word sets it: its first line's words and marker.
+    if (!list.contents) {
+      const indents = steps.map((step, d) => {
+        const line = list.lines.find((l) => depthOf(l.indent) === d);
+        const left = Math.max(0, Math.min(100_000, line?.indent ?? step));
+        return { left: points(left), first: points(Math.max(-left, Math.min(100_000, line?.first ?? 0))) };
+      });
+      if (indents.length > 0) block.listIndents = indents.slice(0, 9);
+    }
     if (list.first && list.trail) this.spaced(block, list.first, list.trail);
     if (list.contents) for (const entry of entries) this.contentsLines.push({ block, ...entry });
     this.push(block, list.notes);
+  }
+
+  /** The space above a list line that follows a line of its list, in
+      twips; undefined for a list's first line or across a page's end. */
+  private listGap(props: ParaProps): number | undefined {
+    const trail = this.list?.trail;
+    return trail && !trail.pageEnd ? trail.blank + spaceBetween(trail.props, props) : undefined;
   }
 
   private closeCode() {
@@ -1288,7 +1416,7 @@ class DocxReader {
         this.closeList();
         this.list = { lines: [], contents: true, notes: [] };
       }
-      this.list.lines.push({ indent: (props.toc ?? 1) * INDENT_STEP_TWIPS, marker: "", words });
+      this.list.lines.push({ indent: (props.toc ?? 1) * INDENT_STEP_TWIPS, marker: "", words, gap: this.listGap(props), align: props.align });
       this.list.first ??= props;
       this.list.trail = { props, blank: 0 };
       this.contentsEntries += 1;
@@ -1296,18 +1424,27 @@ class DocxReader {
     }
 
     // A list item: Word's numbering, or a marker typed before a tab. Its
-    // indent: the paragraph's own, else its level's, else its style's.
+    // indent: the paragraph's own, else its level's, else its style's. A
+    // level whose number format draws none ("none") is a list line with no
+    // marker, as Google Docs reads it (the page editor's empty bullet).
     if (only && props.heading === null && props.role !== "title") {
       const numbered = props.numId ? this.numbering.next(props.numId, props.ilvl) : null;
       let marker = numbered?.marker ?? null;
       let indent = props.ownLeft ?? numbered?.left ?? props.left + props.ilvl * INDENT_STEP_TWIPS;
+      let first = props.ownFirst ?? numbered?.first ?? props.first;
       if (!marker) {
         const typed = TYPED_MARKER.exec(only.text) ?? BOX_LINE.exec(only.text);
-        marker = typed ? typed[1] : null;
-        indent = props.left;
-        if (typed) only.keep(typed[0].length);
+        if (typed) {
+          marker = typed[1];
+          indent = props.left;
+          first = props.first;
+          only.keep(typed[0].length);
+        }
       }
-      if (marker) {
+      // After no marker, the number's tab takes the first line's words to
+      // the hanging indent's stop: they stand at the indent.
+      if (marker === "" && numbered?.suffix === "tab" && first < 0) first = 0;
+      if (marker !== null) {
         const words = only.finish(false);
         this.closeCode();
         if (!this.list || this.list.contents) {
@@ -1315,7 +1452,14 @@ class DocxReader {
           this.list = { lines: [], contents: false, notes: [] };
         }
         // A list line is one line: a line break inside an item is a space.
-        this.list.lines.push({ indent, marker: marker === "□" ? "☐" : marker, words: { ...words, text: words.text.replace(/\n/g, " ") } });
+        this.list.lines.push({
+          indent,
+          first,
+          marker: marker === "□" ? "☐" : marker,
+          words: { ...words, text: words.text.replace(/\n/g, " ") },
+          gap: this.listGap(props),
+          align: props.align,
+        });
         this.list.first ??= props;
         this.list.trail = { props, blank: 0 };
         this.list.notes.push(...words.notes.map((n) => n.note));
@@ -1389,6 +1533,7 @@ class DocxReader {
       const block = this.textBlock("HEADING", words, `<h${level}${align}>${escapeHtml(words.text)}</h${level}>`, { headingBold: true });
       if (props.role === "title") this.titles.add(block);
       if (props.outline === 9) this.unlisted.add(block);
+      this.bordered(block, props);
       this.spaced(block, props, { props, blank: 0 });
       return block;
     }
@@ -1400,8 +1545,25 @@ class DocxReader {
     else if (props.role === "quote" || (props.border.left && props.left > 0 && !props.border.right)) tokens.push("quote");
     if (props.align) tokens.push(props.align);
     const block = this.textBlock("PARAGRAPH", words, tokens.length > 0 ? `<p class="${tokens.join(" ")}">${escapeHtml(words.text)}</p>` : undefined);
+    this.bordered(block, props);
+    // The paragraph's indent as Word sets it. A quotation's inset is the
+    // page editor's quote, unless the quotation draws its own bar.
+    const left = props.left > 0 && props.left < 100_000 ? points(props.left) : 0;
+    const first = Math.abs(props.first) < 100_000 ? points(props.first) : 0;
+    if ((left || first) && (!tokens.includes("quote") || props.border.left)) block.indent = { left, first };
     this.spaced(block, props, { props, blank: 0 });
     return block;
+  }
+
+  /** A paragraph's borders (w:pBdr), the style's and its own: a rule
+      under a heading, a bar beside a quote. */
+  private bordered(block: ParsedBlock, props: ParaProps) {
+    const borders: NonNullable<ParsedBlock["borders"]> = {};
+    for (const side of BORDER_SIDES) {
+      const value = props.border[side];
+      if (value) borders[side] = value;
+    }
+    if (Object.keys(borders).length > 0) block.borders = borders;
   }
 
   /** A text block (a heading, a paragraph, a list) into the document's
@@ -1800,8 +1962,8 @@ class DocxReader {
     const spanOf = (tc: Element) => Math.max(1, intAttr(child(child(tc, "tcPr"), "gridSpan"), "val") ?? 1);
     // A table of one cell a row is a box around paragraphs (a callout, a
     // framed note): its content reads as the document's own. One shaded cell
-    // of one paragraph is a label bar, a table with its fill (a report's
-    // white words on a navy bar read as a plain paragraph).
+    // of one paragraph is a label bar, a table with its fill (white words on
+    // a navy bar read as a plain paragraph).
     const only = rows.length === 1 && cellsOf(rows[0]).length === 1 ? cellsOf(rows[0])[0] : null;
     const bar =
       only !== null &&
@@ -1853,6 +2015,24 @@ class DocxReader {
     // gap, and a covered slot's gap rides in the last cell drawn before it,
     // in its row or the row above.
     const heads = header.indexOf(false) === -1 ? rows.length : header.indexOf(false);
+    // Each cell's sides: its own, else the table's edge or inside line
+    // where it stands (a hairline colored grid drew as one-point black
+    // lines).
+    const edges = tableBorders([...style.map((s) => s.tblPr), tblPr]);
+    const sidesOf = (cell: TableCell, r: number, c: number): string => {
+      const at: Record<BorderSideName, string | null | undefined> = {
+        top: cell.borders?.top !== undefined ? cell.borders.top : r === 0 ? edges.top : edges.insideH,
+        bottom: cell.borders?.bottom !== undefined ? cell.borders.bottom : r + cell.rowspan >= grid.length ? edges.bottom : edges.insideH,
+        left: cell.borders?.left !== undefined ? cell.borders.left : c === 0 ? edges.left : edges.insideV,
+        right: cell.borders?.right !== undefined ? cell.borders.right : c + cell.colspan >= cols ? edges.right : edges.insideV,
+      };
+      return BORDER_SIDES.flatMap((side) => {
+        const value = at[side];
+        if (value === undefined) return [];
+        const [width, dash, color] = (value ?? "0 solid #000000").split(" ");
+        return [`border-${side}:${width}pt ${dash} ${color}`];
+      }).join(";");
+    };
     const drawn: string[][] = [];
     const rowCells = grid.map((row, r) => {
       const tag = r < heads ? "th" : "td";
@@ -1864,8 +2044,8 @@ class DocxReader {
           return;
         }
         const { cell } = slot;
-        const fill = cell.fill ? ` style="background-color:${cell.fill}"` : "";
-        const spans = `${cell.colspan > 1 ? ` colspan="${cell.colspan}"` : ""}${cell.rowspan > 1 ? ` rowspan="${cell.rowspan}"` : ""}${fill}`;
+        const css = [cell.fill ? `background-color:${cell.fill}` : "", sidesOf(cell, r, c)].filter(Boolean).join(";");
+        const spans = `${cell.colspan > 1 ? ` colspan="${cell.colspan}"` : ""}${cell.rowspan > 1 ? ` rowspan="${cell.rowspan}"` : ""}${css ? ` style="${css}"` : ""}`;
         const parts = [`<${tag}${spans}>`, cell.html, gap];
         cells.push(parts);
         drawn.push(parts);
@@ -1960,7 +2140,8 @@ class DocxReader {
     const text = paragraphs.map((p) => p.text).filter(Boolean).join(" ");
     const fill = shadeColor(child(child(tc, "tcPr"), "shd"));
     const plain = paragraphs.length === 1 && !paragraphs[0].align && !paragraphs[0].indent;
-    if (plain) return { html: paragraphs[0].html, text, colspan: 1, rowspan: 1, notes: marks, fill };
+    const borders = cellBorders(tc);
+    if (plain) return { html: paragraphs[0].html, text, colspan: 1, rowspan: 1, notes: marks, fill, borders };
     let seen = false;
     const html = paragraphs
       .map((p) => {
@@ -1971,7 +2152,7 @@ class DocxReader {
         return `${gap}<p${attrs}>${p.html}</p>`;
       })
       .join("");
-    return { html, text, colspan: 1, rowspan: 1, notes: marks, fill };
+    return { html, text, colspan: 1, rowspan: 1, notes: marks, fill, borders };
   }
 }
 

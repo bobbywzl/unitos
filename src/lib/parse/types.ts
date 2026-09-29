@@ -58,6 +58,14 @@ export type StyleSpan = {
 // half point, bold, italic, and the color (#rrggbb; none for black).
 export type TextFont = { family: string; size: number; bold?: true; italic?: true; color?: string };
 
+// An indent as the page sets it, in points, the way the page editor stores a
+// paragraph's (indentLeft, indentFirstLine): left, how far in from the
+// column's left edge the lines start; first, where the first line starts
+// against them (a first-line indent; negative, a hanging indent). A list
+// depth whose words follow its marker on the first line (first ≥ 0) also
+// says where they start, from the marker's start (hang).
+export type Indent = { left: number; first: number; hang?: number };
+
 // One inline formula over block plain text: the text keeps the formula's
 // readable characters (σ(𝒜α)), latex is the formula (\sigma(\mathcal{A}_\alpha)).
 // A block document draws the text; an import turns the span into an inline
@@ -126,6 +134,24 @@ export type ParsedBlock = {
   // blank line, a Word paragraph's space after); absent where a figure, a
   // table, or the page's end follows. The import's space after.
   spaceAfter?: number;
+  // PDF paragraphs: the indent the page sets; absent where every line starts
+  // at the column's edge. The html's indent token names its kind.
+  indent?: Indent;
+  // PDF lists: each depth's indent (an item's marker stands at left + first,
+  // its wrapped lines at left), and the space the page leaves between two
+  // items beyond the line pitch, in points (absent: none). A list's
+  // alignment is a token of its html, as a paragraph's.
+  listIndents?: Indent[];
+  itemSpace?: number;
+  // Word paragraphs: the borders the paragraph's style and its own
+  // properties draw (w:pBdr: a rule under a heading, a bar beside a quote),
+  // each side as the page editor stores a paragraph's: "<width pt>
+  // <solid|dotted|dashed> #rrggbb <padding pt>".
+  borders?: { top?: string; right?: string; bottom?: string; left?: string };
+  // PDF FIGUREs: the crop of a display equation that failed the glyph check.
+  // Its text is the display's glyphs as the text layer reads them (often
+  // garbled), so the import shows it with no caption.
+  mathCrop?: true;
   // URL blocks, in memory only: the id of the element the block came from
   // (its own id, or the id of a wrapper whose first block it is), the target
   // a contents entry's targetFragment resolves against. Stripped before save.
@@ -177,6 +203,10 @@ export type ParsedDocument = {
   bodyFont?: TextFont;
   titleFont?: TextFont;
   titleAlign?: "center" | "right";
+  // PDF parses: the title's lines where the writer broke it (a title set as
+  // two centered lines), when it has more than one. `title` stays one line:
+  // it is the document's name.
+  titleLines?: string[];
 };
 
 /** Document.references as stored Json → typed entries. Defensive: bad rows drop. */
@@ -320,7 +350,23 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     The import draws the page's list markers at every level. Word: the
 //     same look, space after paragraphs, notes in table cells, and a contents
 //     field built from its headings.
+// 22: the parse loop's round 3 (SPEC.md §30, §31) — PDF: columns with a
+//     narrow gutter, and three columns, split; blocks side by side read in
+//     order; a scan's overlapping word boxes keep their spaces. A paragraph's
+//     indent is measured in points; a list keeps each depth's indents, the
+//     space between its items, and its justified items; an algorithm's lines
+//     and a references list with no markers are lists with no marker; a
+//     bullet the page draws opens an item, and no bullet is invented.
+//     Division labels, a statement's title, and a centered title on the
+//     first page are headings; a page number with a period and a roman one
+//     drop; a first page's notes are footnotes; a pull quote is a quote. More
+//     math fonts read as TeX's; a formula that fails its check keeps its
+//     scripts; an equation number keeps its side; a display crop carries no
+//     caption; a list's bullet never joins a formula. A figure's crop never
+//     takes in a running head, a running foot, a page number, or a footnote.
+//     Word: paragraph borders, indents, the space between list items, and
+//     cell borders.
 // Slides and sheets (SPEC.md §27) parse with their own parsers
 // (lib/parse/slides.ts, lib/parse/sheets.ts) and re-parse only on request:
 // they carry no version of their own.
-export const PARSER_VERSION = 21;
+export const PARSER_VERSION = 22;

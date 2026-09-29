@@ -1,7 +1,7 @@
 import { JSDOM } from "jsdom";
 import type { DocStyle } from "@/components/docs/extensions";
 import { firstFamily, fontStack } from "@/components/docs/fonts";
-import { listMarker } from "@/components/docs/toolbar/lists";
+import { levelMarker, lineLevel, listMarker } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, type NamedStyle } from "@/components/docs/toolbar/styles";
 import type { RichMark, RichNode } from "@/lib/docs/schema";
 import type { ParsedBlock, TextFont } from "@/lib/parse/types";
@@ -36,7 +36,10 @@ export type DocBlock = RefBlock & {
   role?: "caption" | "contents";
   /** A figure or an equation of a PDF: its page and its region there (percent of the page). */
   at?: { page: number; region: Region };
+  /** A Word paragraph's borders as the candidate draws them: the sides that have one. */
+  borders?: Side[];
 };
+export type Side = "top" | "right" | "bottom" | "left";
 /** A document as the model holds it. `fonts`: a reference's fonts by role;
     a candidate's body font, the size its other roles are measured against. */
 export type Doc = { blocks: DocBlock[]; fonts?: Fonts };
@@ -412,6 +415,11 @@ function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => b
   const font = face ? { font: face } : {};
   const tokens = classTokens(block.html);
   const align = alignOf(tokens);
+  // The space the parse measured under the block (none where a figure, a table, or the page's end follows).
+  const spaced = block.spaceAfter !== undefined ? { spaceAfter: block.spaceAfter } : {};
+  // A Word paragraph's borders (w:pBdr).
+  const sides = (["top", "right", "bottom", "left"] as const).filter((side) => block.borders?.[side]);
+  const bordered = sides.length > 0 ? { borders: [...sides] } : {};
   if (block.footnote) {
     // A footnote's text opens with its label, which the model keeps apart.
     const label = block.footnote.label;
@@ -423,21 +431,23 @@ function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => b
     case "HEADING": {
       const into = spansOf();
       const n = Number(/^<h([1-6])/i.exec(block.html ?? "")?.[1] ?? 2);
-      return into.hasText ? { kind: "heading", level: level(n), spans: into.spans, ...(align ? { align } : {}), ...font, ...breaks(into) } : null;
+      return into.hasText ? { kind: "heading", level: level(n), spans: into.spans, ...(align ? { align } : {}), ...font, ...bordered, ...breaks(into) } : null;
     }
     case "LIST": {
       // A contents list: its class, or lines that link to headings (the converter's test).
       const contents = /\bclass="[^"]*\bcontents\b/.test(block.html ?? "") || (block.links ?? []).some((l) => l.targetOrder !== undefined);
       const list = parseList(block, pageAt, inRange, contents);
-      return list ? { ...list, ...font, ...(contents ? { role: "contents" as const } : {}) } : null;
+      if (!list || list.kind !== "list") return null;
+      // Its items' alignment is a token of its html; no itemSpace is no space between them.
+      return { ...list, ...font, ...(align ? { align } : {}), itemSpace: block.itemSpace ?? 0, ...spaced, ...(contents ? { role: "contents" as const } : {}) };
     }
     case "TABLE":
       return parseTable(block, pageAt, inRange);
     case "EQUATION":
-      return whole && text.trim() ? { ...equation(text), ...at } : null;
+      return whole && text.trim() ? { ...equation(text), ...(tokens.includes("leqno") ? { labelSide: "left" as const } : {}), ...at } : null;
     case "FIGURE": {
       if (!whole) return null;
-      if (isMathText(text)) return { kind: "figure", mathImage: text.trim(), ...at };
+      if (block.mathCrop || isMathText(text)) return { kind: "figure", mathImage: text.trim(), ...at };
       const into = spansOf();
       return into.hasText ? { kind: "figure", caption: into.spans, ...font, ...at } : { kind: "figure", ...at };
     }
@@ -451,13 +461,16 @@ function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => b
     default: {
       const into = spansOf();
       if (!into.hasText) return null;
-      if (tokens.includes("quote")) return { kind: "quote", spans: into.spans, ...breaks(into) };
+      if (tokens.includes("quote")) return { kind: "quote", spans: into.spans, ...bordered, ...breaks(into) };
       const indent = tokens.includes("indent-first") ? "first" : tokens.includes("indent-hanging") ? "hanging" : tokens.includes("indent-block") ? "block" : undefined;
       return {
         kind: "paragraph",
         spans: into.spans,
         ...(align ? { align } : {}),
         ...(indent ? { indent } : {}),
+        ...(block.indent ? { indentPt: { left: block.indent.left, first: block.indent.first } } : {}),
+        ...spaced,
+        ...bordered,
         ...(tokens.includes("caption") ? { role: "caption" as const } : {}),
         ...font,
         ...breaks(into),
@@ -490,8 +503,6 @@ export function fromParse(
 
 const LISTS = new Set(["bulletList", "orderedList", "taskList"]);
 const CHIPS = new Set(["dateChip", "personChip", "fileChip", "dropdownChip"]);
-/** The page editor's indent step, in points (components/docs/extensions.ts). */
-const INDENT_PT = 36;
 
 function lookOf(marks: RichMark[] | undefined): Look {
   const look: Look = {};
@@ -534,16 +545,19 @@ const NOTE_SYMBOLS: Record<string, string> = { "\\dagger": "†", "\\ddagger": "
     in one small size throughout that opens with its label raised ("² Two of
     the top ten…"), as the parse view reads it, or with a note symbol on the
     line ("* All costs are in U.S. dollars.", a table's note under MMWR's
-    tables; the converter may set the symbol as an inline formula). Only
-    once the body has begun (ImportReader.begun), or right under a table: an
-    affiliation under the authors opens with a raised number in a small size
-    too. */
-function unlinkedNote(node: RichNode): { label: string; rest: RichNode } | null {
+    tables; the converter may set the symbol as an inline formula), or,
+    under the body's size, with its number on the line (a scan's notes,
+    which raise no mark: "2. Rivers of the North, p. 44.", "I." as OCR reads 1).
+    Only once the body has begun (ImportReader.begun), or right under a
+    table: an affiliation under the authors opens with a raised number in a
+    small size too. */
+function unlinkedNote(node: RichNode, bodySize: number): { label: string; rest: RichNode } | null {
   const content = node.content ?? [];
   // Page starts before the label stay with the words.
   const at = content.findIndex((c) => c.type !== "pageStart");
   const first = content[at];
-  if (!content.every((c) => c.type !== "text" || c.marks?.some((m) => m.type === "textStyle" && m.attrs?.fontSize))) return null;
+  const sizes = content.flatMap((c) => (c.type === "text" ? [sizeInPt(c.marks?.find((m) => m.type === "textStyle")?.attrs?.fontSize)] : []));
+  if (sizes.some((size) => size === null)) return null;
   const after = (from: number) => {
     const next = content[from];
     return next?.type === "text" ? [{ ...next, text: (next.text ?? "").trimStart() }, ...content.slice(from + 1)] : content.slice(from);
@@ -559,10 +573,13 @@ function unlinkedNote(node: RichNode): { label: string; rest: RichNode } | null 
     if (!/^(?:\d{1,3}|[*∗†‡§¶‖∥⋆#]{1,4})$/.test(label)) return null;
     return { label, rest: { ...node, content: [...content.slice(0, at), ...after(at + 1)] } };
   }
+  const small = sizes.every((size) => size !== null && size < bodySize);
   const symbol = /^([*∗†‡§¶‖∥⋆])\1?(?=\s)/.exec(text);
-  if (!symbol) return null;
-  const rest = text.slice(symbol[0].length).trimStart();
-  return { label: symbol[0], rest: { ...node, content: [...content.slice(0, at), ...(rest ? [{ ...first, text: rest }] : []), ...content.slice(at + 1)] } };
+  const number = !symbol && small ? /^(\d{1,3}|I{1,2})[.)]?(?=\s)/.exec(text) : null;
+  const found = symbol ?? number;
+  if (!found) return null;
+  const rest = text.slice(found[0].length).trimStart();
+  return { label: symbol ? symbol[0] : found[1], rest: { ...node, content: [...content.slice(0, at), ...(rest ? [{ ...first, text: rest }] : []), ...content.slice(at + 1)] } };
 }
 
 /** A paragraph set the way the converter sets a table's caption
@@ -576,11 +593,48 @@ function isCaption(node: RichNode): boolean {
 }
 
 /** A paragraph's indentation from the page editor's attributes: a first
-    line set in, set out (hanging), or the whole paragraph set in. */
-function indentOf(attrs: Record<string, unknown> | undefined): "first" | "hanging" | "block" | undefined {
+    line set in, set out (hanging), or the whole paragraph set in; and its
+    size in points. */
+function indentOf(attrs: Record<string, unknown> | undefined): Pick<Extract<DocBlock, { kind: "paragraph" }>, "indent" | "indentPt"> {
   const first = Number(attrs?.indentFirstLine ?? 0) || 0;
   const left = Number(attrs?.indentLeft ?? 0) || 0;
-  return first > 0 ? "first" : first < 0 ? "hanging" : left > 0 ? "block" : undefined;
+  const indent = first > 0 ? "first" : first < 0 ? "hanging" : left > 0 ? "block" : undefined;
+  return indent ? { indent, indentPt: { left, first } } : {};
+}
+
+/** A paragraph's borders as the page editor draws them (borderTop, …:
+    "<width pt> <style> <color> <padding pt>"; a width of 0 draws none). */
+function bordersOf(attrs: Record<string, unknown> | undefined): { borders?: Side[] } {
+  const sides = (["top", "right", "bottom", "left"] as const).filter((side) => {
+    const value = attrs?.[`border${side[0].toUpperCase()}${side.slice(1)}`];
+    return typeof value === "string" && Number.parseFloat(value) > 0;
+  });
+  return sides.length > 0 ? { borders: sides } : {};
+}
+
+/** A figure's caption as spans: its words, and the styles its page gives
+    them (the figure object's captionStyles, a JSON list of {start, end,
+    style}: a bold label). */
+function captionSpans(caption: string, stored: unknown): Span[] {
+  let list: unknown = [];
+  try {
+    list = typeof stored === "string" ? JSON.parse(stored) : [];
+  } catch {
+    list = [];
+  }
+  const styles = (Array.isArray(list) ? (list as unknown[]) : []).flatMap((x) => {
+    const { start, end, style } = (x ?? {}) as { start?: unknown; end?: unknown; style?: unknown };
+    const flag = FLAGS.find((f) => f === style);
+    return typeof start === "number" && typeof end === "number" && flag ? [{ start, end, style: flag }] : [];
+  });
+  const cuts = [...new Set([0, caption.length, ...styles.flatMap((x) => [x.start, x.end]).filter((at) => at > 0 && at < caption.length)])].sort((a, b) => a - b);
+  const into = new Spans();
+  for (let k = 0; k + 1 < cuts.length; k++) {
+    const span: Span = { text: caption.slice(cuts[k], cuts[k + 1]) };
+    for (const x of styles) if (x.start <= cuts[k] && x.end >= cuts[k + 1]) span[x.style] = true;
+    into.add(span);
+  }
+  return into.spans;
 }
 
 class ImportReader {
@@ -595,8 +649,10 @@ class ImportReader {
   private readonly notes = new Map<string, { n: number; page: number }>();
   /** Paragraphs taken for contents entries because they read like headings: kept only in runs of three. */
   readonly headingLike = new Set<DocBlock>();
-  /** A contents entry's depth: its left indent in the page editor's steps. */
+  /** A contents entry's left indent in points: the entries' indents, in order, are their depths. */
   readonly entryDepth = new Map<DocBlock, number>();
+  /** The space the page editor draws over each block (its space before): it adds to the space after the block above. */
+  readonly spaceBefore = new Map<DocBlock, number>();
 
   /** `labels`: the page's own mark for a footnote id, where a reference
       gives it (printedLabels); `headings`: the words of every heading of the
@@ -641,6 +697,12 @@ class ImportReader {
   /** A block's alignment as drawn: its own, else its named style's. */
   private alignOf(node: RichNode, style: DocStyle): Align | undefined {
     return alignValue(node.attrs?.textAlign) ?? alignValue(this.styles[style].align);
+  }
+
+  /** The space the page editor draws under and over a block, in points: its own, else its named style's. */
+  private spacingOf(node: RichNode | undefined, style: DocStyle): { after: number; before: number } {
+    const own = (key: "spaceAfter" | "spaceBefore") => (typeof node?.attrs?.[key] === "number" ? (node.attrs[key] as number) : this.styles[style][key]);
+    return { after: own("spaceAfter"), before: own("spaceBefore") };
   }
 
   private here(): boolean {
@@ -727,7 +789,7 @@ class ImportReader {
       case "paragraph":
       case "heading": {
         // A table's note stands right under the table, wherever the body stands.
-        const note = node.type === "paragraph" && (this.begun || this.blocks.at(-1)?.kind === "table") ? unlinkedNote(node) : null;
+        const note = node.type === "paragraph" && (this.begun || this.blocks.at(-1)?.kind === "table") ? unlinkedNote(node, this.styles.normal.size) : null;
         if (note) {
           const into = new Spans();
           this.inline(note.rest, into);
@@ -740,11 +802,15 @@ class ImportReader {
         const heading = node.type === "heading" ? level(Number(node.attrs?.level)) : null;
         const style: DocStyle = heading ? `h${heading}` : node.attrs?.docStyle === "title" ? "title" : node.attrs?.docStyle === "subtitle" ? "subtitle" : "normal";
         const align = this.alignOf(node, style);
-        const drawn = { ...(align ? { align } : {}), font: this.faceOf(node, style) };
-        if (heading) return this.push({ kind: "heading", level: heading, spans: into.spans, ...drawn }, into);
-        if (style === "title") return this.push({ kind: "title", spans: into.spans, ...drawn }, into);
-        if (quoted) return this.push({ kind: "quote", spans: into.spans }, into);
-        const indent = indentOf(node.attrs);
+        const drawn = { ...(align ? { align } : {}), font: this.faceOf(node, style), ...bordersOf(node.attrs) };
+        const space = this.spacingOf(node, style);
+        const placed = (block: DocBlock) => {
+          this.spaceBefore.set(block, space.before);
+          this.push(block, into);
+        };
+        if (heading) return placed({ kind: "heading", level: heading, spans: into.spans, ...drawn });
+        if (style === "title") return placed({ kind: "title", spans: into.spans, ...drawn });
+        if (quoted) return placed({ kind: "quote", spans: into.spans, ...bordersOf(node.attrs) });
         // A contents entry: a paragraph that links to a heading, or one of
         // three or more in a row that read like headings, page numbers aside
         // (a contents list the converter could not link; a running head that
@@ -753,10 +819,10 @@ class ImportReader {
         const linked = into.spans.some((span) => span.href?.startsWith("#heading="));
         const like = this.headings.has(words.join(" ")) || (/^\d+$/.test(words.at(-1) ?? "") && this.headings.has(words.slice(0, -1).join(" ")));
         const role = linked || like ? ("contents" as const) : isCaption(node) ? ("caption" as const) : undefined;
-        const block: DocBlock = { kind: "paragraph", spans: into.spans, ...(indent ? { indent } : {}), ...(role ? { role } : {}), ...drawn };
+        const block: DocBlock = { kind: "paragraph", spans: into.spans, ...indentOf(node.attrs), spaceAfter: space.after, ...(role ? { role } : {}), ...drawn };
         if (like && !linked) this.headingLike.add(block);
-        if (linked || like) this.entryDepth.set(block, Math.max(0, Math.round((Number(node.attrs?.indentLeft ?? 0) || 0) / INDENT_PT)));
-        return this.push(block, into);
+        if (linked || like) this.entryDepth.set(block, Number(node.attrs?.indentLeft ?? 0) || 0);
+        return placed(block);
       }
       case "bulletList":
       case "orderedList":
@@ -765,7 +831,7 @@ class ImportReader {
       case "table":
         return this.table(node);
       case "blockMath":
-        if (this.here()) this.push(equation(String(node.attrs?.latex ?? "")));
+        if (this.here()) this.push({ ...equation(String(node.attrs?.latex ?? "")), ...(node.attrs?.leqno === true ? { labelSide: "left" as const } : {}) });
         return;
       case "figure": {
         if (!this.here()) return;
@@ -775,7 +841,7 @@ class ImportReader {
         const at = region && typeof node.attrs?.page === "number" ? { at: { page: node.attrs.page, region } } : {};
         if (isMathText(caption)) return this.push({ kind: "figure", mathImage: caption.trim(), ...at });
         const font: Font = { shape: shapeOf(this.styles.normal.font ?? "Arial"), ...FIGURE_CAPTION };
-        return this.push(caption.trim() ? { kind: "figure", caption: [{ text: caption }], font, ...at } : { kind: "figure", ...at });
+        return this.push(caption.trim() ? { kind: "figure", caption: captionSpans(caption, node.attrs?.captionStyles), font, ...at } : { kind: "figure", ...at });
       }
       case "image":
         if (this.here()) this.push({ kind: "figure" });
@@ -800,22 +866,42 @@ class ImportReader {
     }
   }
 
-  /** A list's items, by depth. An item's first block is its words; a later
-      paragraph or heading in it is drawn as its own block, with its own
-      alignment (a centered label under an item's fill-in line), so it is
-      read as its own block between two lists, and the items after it keep
-      their depth. The item's other later blocks join its words. */
+  /** A list's items, by depth. An item's first block is its words; each
+      later block in it but a list (a paragraph, a display equation, a
+      table, a figure, a code block, a rule) is drawn as its own block, with
+      its own look (a centered label under an item's fill-in line), so it
+      is read as at the top level, between two lists, and the items after
+      it keep their depth. */
   private list(node: RichNode) {
     const font = this.faceOf(node, "normal");
     let items: Item[] = [];
     let breaks: Break[] = [];
     let marks: NoteMark[] = [];
+    // Each item's first paragraph as drawn: its alignment and the space under and over it.
+    let looks: { align?: Align; after: number; before: number }[] = [];
     const flush = () => {
-      if (items.length > 0) this.settle();
-      if (items.length > 0) this.blocks.push({ kind: "list", items, font, ...(breaks.length > 0 ? { breaks } : {}), ...(marks.length > 0 ? { marks } : {}) });
-      [items, breaks, marks] = [[], [], []];
+      if (items.length > 0) {
+        this.settle();
+        // The items' alignment is the one most of them take; the space between two items is the one most
+        // pairs leave; the last item's space after is the list's.
+        const most = <T>(list: T[]) => [...list.reduce((m, v) => m.set(v, (m.get(v) ?? 0) + 1), new Map<T, number>())].sort((a, b) => b[1] - a[1])[0]?.[0];
+        const align = most(looks.map((look) => look.align ?? "left"));
+        const gaps = looks.slice(1).map((look, k) => looks[k].after + look.before);
+        const block: DocBlock = {
+          kind: "list",
+          items,
+          font,
+          ...(align && align !== "left" ? { align: align as Align } : {}),
+          itemSpace: gaps.length > 0 ? (most(gaps) ?? 0) : 0,
+          spaceAfter: looks.at(-1)?.after ?? 0,
+          ...(breaks.length > 0 ? { breaks } : {}),
+          ...(marks.length > 0 ? { marks } : {}),
+        };
+        this.spaceBefore.set(block, looks[0]?.before ?? 0);
+        this.blocks.push(block);
+      }
+      [items, breaks, marks, looks] = [[], [], [], []];
     };
-    const own = (child: RichNode) => child.type === "paragraph" || child.type === "heading";
     // Each line's number at each level, from the outermost list down: the
     // page editor draws a numbered line's marker from them and the outermost
     // list's level formats (listMarker).
@@ -826,23 +912,25 @@ class ImportReader {
         const children = item.content ?? [];
         const lead = children.findIndex((child) => !LISTS.has(child.type));
         const into = new Spans();
-        children.forEach((child, k) => {
-          if (LISTS.has(child.type) || (k > lead && own(child))) return;
-          if (k > lead) into.add({ text: " " });
-          if (child.type === "paragraph") this.inline(child, into);
-          else this.words(child, into);
-        });
+        if (children[lead]?.type === "paragraph") this.inline(children[lead], into);
+        else if (children[lead]) this.words(children[lead], into);
         if (into.hasText) {
+          const first = children[lead]?.type === "paragraph" ? children[lead] : undefined;
+          const space = this.spacingOf(first, "normal");
+          looks.push({ align: alignValue(first?.attrs?.textAlign), after: space.after, before: space.before });
           const checked = item.attrs?.checked === true;
+          // A bullet line draws a bullet, or no marker where its level's bullet is empty (a bibliography's
+          // entries, an algorithm's steps): "", as the parse reads an unmarked list.
+          const bullet = levelMarker(lineLevel(node, depth, false), numbers) === "" ? "" : "•";
           const marker =
-            list.type === "taskList" ? (checked ? "☑" : "☐") : list.type === "orderedList" ? listMarker(node, numbers) : "•";
+            list.type === "taskList" ? (checked ? "☑" : "☐") : list.type === "orderedList" ? listMarker(node, numbers) : bullet;
           for (const at of into.breaks) breaks.push({ unit: items.length, at });
           for (const m of into.marks) marks.push({ unit: items.length, ...m });
           items.push(list.type === "taskList" ? { depth, marker, spans: into.spans, checked } : { depth, marker, spans: into.spans });
         }
         children.forEach((child, k) => {
           if (LISTS.has(child.type)) visit(child, depth + 1, numbers);
-          else if (k > lead && own(child)) {
+          else if (k > lead) {
             flush();
             this.node(child, false);
           }
@@ -924,14 +1012,23 @@ export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[]
     if (j - i < 3) for (let k = i; k < j; k++) if (reader.headingLike.has(blocks[k])) delete blocks[k].role;
     i = Math.max(j, i + 1);
   }
+  // The space between two blocks is the first's space after and the second's space before (the page
+  // editor pads both).
+  blocks.forEach((block, i) => {
+    const next = blocks[i + 1];
+    if ((block.kind === "paragraph" || block.kind === "list") && block.spaceAfter !== undefined && next) block.spaceAfter += reader.spaceBefore.get(next) ?? 0;
+  });
   return { blocks: contentsLists(blocks, reader.entryDepth), fonts: { body: reader.faceOf({ type: "paragraph" }, "normal") } };
 }
 
 /** The converter writes a contents list as one paragraph per entry, each a
     link to its heading (SPEC.md §30): a run of entries reads as the list it
     stands for, each entry an item, its section number the marker, its
-    indent the depth. */
-function contentsLists(blocks: DocBlock[], depths: Map<DocBlock, number>): DocBlock[] {
+    indent the depth (the entries' indents, from the least, are depths 0,
+    1, …). */
+function contentsLists(blocks: DocBlock[], indents: Map<DocBlock, number>): DocBlock[] {
+  const steps = [...new Set(indents.values())].sort((a, b) => a - b);
+  const depths = new Map([...indents].map(([block, indent]) => [block, steps.indexOf(indent)]));
   const out: DocBlock[] = [];
   for (let i = 0; i < blocks.length; ) {
     if (blocks[i].kind !== "paragraph" || blocks[i].role !== "contents") {

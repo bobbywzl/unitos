@@ -10,7 +10,7 @@ import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { insertContext } from "@/components/docs/insert/context";
 import { isMac } from "@/components/docs/keys";
 import { viewingCopy } from "@/components/docs/page/download";
-import { levelStyle, listSheet, presetNamed } from "@/components/docs/toolbar/lists";
+import { indentStyle, levelStyle, listSheet, presetNamed } from "@/components/docs/toolbar/lists";
 import { blockText, runAutocorrect } from "@/components/docs/typing/autocorrect";
 import { wordAt } from "@/components/docs/typing/chars";
 import { findPlugin } from "@/components/docs/typing/find";
@@ -34,7 +34,7 @@ import { armPlainPaste, imageFiles, insertImageFiles, notePaste, pastedHtml, pla
 import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
 import { tracePlugin } from "@/components/docs/typing/trace";
 import { replaceWithChip, urlChipPlugin } from "@/components/docs/typing/url-chip";
-import { listLevelsOf } from "@/lib/docs/schema";
+import { listIndentsOf, listLevelsOf } from "@/lib/docs/schema";
 
 // The page editor's typing (SPEC.md §29): Google Docs' keys, autocorrect,
 // paste, and find. It runs first (priority 1001), so its keys win over
@@ -73,6 +73,20 @@ const DocsTyping = Extension.create({
             renderHTML: (attrs) => {
               const levels = listLevelsOf(attrs.listLevels);
               return levels ? { "data-list-levels": attrs.listLevels, style: levelStyle(levels) } : {};
+            },
+          },
+          // Where its depths stand as its page sets them (an import's):
+          // the list sheet draws each depth's words there, its first line,
+          // and its marker before the words (listSheet).
+          listIndents: {
+            default: null,
+            parseHTML: (el) => {
+              const indents = listIndentsOf(el.getAttribute("data-list-indents"));
+              return indents ? JSON.stringify(indents) : null;
+            },
+            renderHTML: (attrs) => {
+              const indents = listIndentsOf(attrs.listIndents);
+              return indents ? { "data-list-indents": attrs.listIndents, style: indentStyle(indents) } : {};
             },
           },
         },

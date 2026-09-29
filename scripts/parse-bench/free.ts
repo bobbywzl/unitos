@@ -1,9 +1,15 @@
 import { execFileSync } from "node:child_process";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { figureCropSize } from "@/lib/figure-crop";
+import { attr, child, descendants, parseXmlPart, unzipOffice } from "@/lib/parse/office";
 import { regionBounds } from "@/lib/video/types";
+import type { DocBlock, Side } from "./adapt";
 import type { GlyphScores } from "./glyphs";
+import { ROOT } from "./load";
 import { mathLeaves } from "./math";
 import { FREE_WEIGHTS, furnitureMatches, type Flat } from "./metrics";
-import { garblesOf, normText, PAGE_NUMBER_RE, wordsOf } from "./text";
+import { garblesOf, normText, PAGE_NUMBER_RE, pageNumberOf, wordsOf } from "./text";
 
 // Checks that need no reference: the PDF's own text (pdftotext) against the
 // candidate's words, and detectors for what should never be in a parse.
@@ -20,7 +26,18 @@ function run(args: string[]): string {
 }
 
 const keyOf = (text: string) => normText(text).replace(/\d+/g, "#");
-const lettersOf = (text: string) => normText(text).replace(/[^\p{L}]/gu, "");
+/** A line's letters and its words of four letters or more, read once per text (a book's heads repeat). */
+const readings = new Map<string, { letters: string; words: string[] }>();
+function readingOf(text: string): { letters: string; words: string[] } {
+  let hit = readings.get(text);
+  if (!hit) {
+    const norm = normText(text);
+    if (readings.size > 50_000) readings.clear();
+    readings.set(text, (hit = { letters: norm.replace(/[^\p{L}]/gu, ""), words: norm.split(/[^\p{L}]+/u).filter((w) => w.length >= 4) }));
+  }
+  return hit;
+}
+const lettersOf = (text: string) => readingOf(text).letters;
 /** A caption's label opening a line ("図表Ⅰ-2-1-3", "Figure 4", "TABLE II"):
     a report sets every chart's caption at one height, so the label repeats
     with its number changed, but it is the figure's, never the page's. */
@@ -33,33 +50,20 @@ function labelWords(text: string): number {
   const cjk = words.filter((w) => CJK_RE.test(w.w)).length;
   return words.length - cjk + cjk / 4;
 }
+/** A math letter (Unicode's math alphanumerics, Greek) twice in a row: the
+    text layer of Word's Cambria Math reads each such glyph twice, where the
+    parse reads it once (the NPS thesis's "𝑝𝑝00"). */
+const DOUBLED_RE = /([\u{1D400}-\u{1D7FF}\p{Script=Greek}])\1/gu;
 /** A long table's foot on each page it breaks at (LaTeX's longtable, Word). */
 const CONTINUED_RE = /^\(?continued (?:on (?:the )?next page|overleaf)\)?\.?$/i;
-/** A line that is a page number, and the number: "12", "12.", "- 12 -", "Page 3 of 12". */
-const NUMBER_LINE_RE = /^[-–— ]*(?:(?:page|p\.)\s*)?(\d{1,4})\.?(?:\s*(?:of|\/)\s*\d{1,4})?[-–— ]*$/i;
 
 type Layout = { lines: Line[]; furniture: Line[]; sizes: Map<number, { width: number; height: number }> };
+type Sizes = Layout["sizes"];
 
-/** Every page's lines with their place, and the furniture lines among them.
-    Furniture stands in a page's first or last two rows, wherever those rows
-    are (heads sit 12–19% down a page, a scan's foot at 81–83%, census class
-    4), and shows it on other pages of the whole document, a range's pages or
-    not:
-    - a page number: a lone number that keeps its distance from the page's
-      index at one height on several pages (2302.12627 prints them 85% down
-      the page), or a lone number in the page's outer 8%;
-    - a repeat: the same words, digits aside and OCR's misreadings forgiven
-      ("CHALLENGE TO APOLLO", "CHALLENGE TO _POLLO"), at the same height on
-      several pages;
-    - "Continued on next page" in the last rows;
-    - a short line on a row half made of those: the head that names each
-      page's section beside its page number, the Supreme Court's "(Slip
-      Opinion)" beside its first page's head;
-    - text set sideways in the page's margin (arXiv's identifier).
-    The parse's finder (lib/parse/pdf/furniture.ts) reads the same kinds of
-    evidence from pdf.js's lines; this one reads pdftotext's boxes. */
+/** Every page's lines with their place (pdftotext -tsv), and the furniture
+    lines among them (furnitureOf). */
 function layoutOf(pdf: string): Layout {
-  const sizes = new Map<number, { width: number; height: number }>();
+  const sizes: Sizes = new Map();
   const byKey = new Map<string, Line>();
   for (const row of run(["-tsv", pdf, "-"]).split("\n").slice(1)) {
     const f = row.split("\t");
@@ -73,8 +77,63 @@ function layoutOf(pdf: string): Layout {
     if (level === 5 && entry) entry.text = entry.text ? `${entry.text} ${f[11]}` : f[11];
   }
   const lines = [...byKey.values()].filter((l) => l.text.trim());
+  return { lines, furniture: furnitureOf(lines, sizes), sizes };
+}
+
+/** Each page's rows: lines whose tops lie within 3 pt, left to right, the
+    pages in their order. */
+function rowsOf(lines: Line[]): Line[][] {
+  const byPage = new Map<number, Line[]>();
+  for (const l of lines) {
+    const list = byPage.get(l.page);
+    if (list) list.push(l);
+    else byPage.set(l.page, [l]);
+  }
+  const rows: Line[][] = [];
+  for (const page of [...byPage.keys()].sort((a, b) => a - b)) {
+    const start = rows.length;
+    for (const l of (byPage.get(page) ?? []).sort((a, b) => a.top - b.top)) {
+      const row = rows.length > start ? rows[rows.length - 1] : null;
+      if (row && Math.abs(row[0].top - l.top) < 3) row.push(l);
+      else rows.push([l]);
+    }
+    for (const row of rows.slice(start)) row.sort((a, b) => a.left - b.left);
+  }
+  return rows;
+}
+
+/** The furniture lines among a document's lines. Furniture stands in a
+    page's first or last two rows, wherever those rows are (heads sit 12–19%
+    down a page, a scan's foot at 81–83%, census class 4), and shows it on
+    other pages of the whole document, a range's pages or not:
+    - a page number: a lone number (arabic, or lowercase roman in the front
+      matter) that keeps its distance from the page's index at one height on
+      several pages (2302.12627 prints them 85% down the page), or a lone
+      number in the page's outer 8%; "I." over a chapter is its number;
+    - a repeat: the same words at the same height (3% of the page) and the
+      same place across the page (its left edge, right edge, or middle
+      within 2% of the page's width), OCR's misreadings forgiven
+      ("CHALLENGE TO APOLLO", "CHALLENGE TO _POLLO"), with its numbers the
+      same or counting with the pages ("Page 3 of 12"; not the 10-K's "Note
+      2." and "Note 11." that open pages, nor a figure's DOI), on several
+      pages each within two pages of the next: a head stands on every page
+      or every other one, where a chapter's first heading ("Introduction" in
+      the Math Guide) or a box's label ("Tip") stands at one place by chance
+      on pages far apart. Once found, the same words at that height and size
+      are furniture on every page (facing pages set a head at the other
+      side), but a first page's title set larger is no running head;
+    - "Continued on next page" in the last rows;
+    - a short line on a row half made of those: the head that names each
+      page's section beside its page number, the Supreme Court's "(Slip
+      Opinion)" beside its first page's head;
+    - text set sideways in the page's margin (arXiv's identifier), which the
+      parse never reads as text.
+    The parse's finder (lib/parse/pdf/furniture.ts) reads the same kinds of
+    evidence from pdf.js's lines; this one reads pdftotext's boxes. */
+export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
   const furniture = new Set<Line>();
   const size = (l: Line) => sizes.get(l.page) ?? { width: 612, height: 792 };
+  const needed = sizes.size <= 8 ? 2 : 3;
   for (const l of lines) {
     const tall = l.bottom - l.top;
     if (tall > 30 && tall > 3 * (l.right - l.left) && (l.right < 0.1 * size(l).width || l.left > 0.9 * size(l).width)) furniture.add(l);
@@ -84,20 +143,17 @@ function layoutOf(pdf: string): Layout {
   const edgeRows: Line[][] = [];
   const lastRows: Line[][] = [];
   const outermost = new Set<Line>();
-  for (const page of sizes.keys()) {
-    const rows: Line[][] = [];
-    for (const l of lines.filter((x) => x.page === page && !furniture.has(x)).sort((a, b) => a.top - b.top)) {
-      const row = rows.at(-1);
-      if (row && Math.abs(row[0].top - l.top) < 3) row.push(l);
-      else rows.push([l]);
-    }
-    for (const row of rows) row.sort((a, b) => a.left - b.left);
+  const allRows = rowsOf(lines.filter((l) => !furniture.has(l)));
+  for (let i = 0; i < allRows.length; ) {
+    let j = i;
+    while (j < allRows.length && allRows[j][0].page === allRows[i][0].page) j++;
+    const rows = allRows.slice(i, j);
     edgeRows.push(...new Set([...rows.slice(0, 2), ...rows.slice(-2)]));
     lastRows.push(...rows.slice(-2));
     for (const l of [...(rows[0] ?? []), ...(rows.at(-1) ?? [])]) outermost.add(l);
+    i = j;
   }
   const candidates = edgeRows.flat();
-  const needed = sizes.size <= 8 ? 2 : 3;
   const near = (a: { page: number; top: number }, b: { top: number }) => Math.abs(a.top - b.top) <= 0.03 * (sizes.get(a.page)?.height ?? 792);
   const outer = (l: Line) => l.bottom < 0.08 * size(l).height || l.top > 0.92 * size(l).height;
 
@@ -106,10 +162,12 @@ function layoutOf(pdf: string): Layout {
   // stands apart from the page numbers' height); a lone number at that
   // distance in a page's first or last row (a paper sets its first page's
   // number at the foot, the others' in the head); a lone number in the
-  // page's outer 8%.
+  // page's outer 8%. Roman numbers count apart from arabic ones.
   const numbered = candidates.flatMap((l) => {
-    const m = NUMBER_LINE_RE.exec(l.text.trim());
-    return m ? [{ line: l, offset: Number(m[1]) - l.page }] : [];
+    const n = pageNumberOf(l.text);
+    const roman = !/\d/.test(l.text);
+    if (n === null || (roman && l.text !== l.text.toLowerCase())) return [];
+    return [{ line: l, offset: `${roman ? "roman" : "arabic"} ${n - l.page}` }];
   });
   for (const { line, offset } of numbered) {
     const pages = new Set(numbered.filter((o) => o.offset === offset && near(o.line, line)).map((o) => o.line.page));
@@ -120,42 +178,91 @@ function layoutOf(pdf: string): Layout {
   for (const l of candidates) if (outer(l) && PAGE_NUMBER_RE.test(l.text.trim())) furniture.add(l);
 
   // Repeats: a line or a whole row of three letters or more (a diagram's
-  // label "o3" tops pages too) that reads the same at the same height (3% of
-  // the page) on `needed` pages. A row, since pdftotext cuts a head at its
+  // label "o3" tops pages too). A row, since pdftotext cuts a head at its
   // gaps where OCR reads it whole on other pages ("CHALLENGE", "TO",
   // "P, POLLO").
-  type Unit = { lines: Line[]; text: string; page: number; top: number };
+  type Unit = { lines: Line[]; text: string; key: string; letters: string; page: number; top: number; left: number; right: number; height: number; numbers: number[] };
+  const unitOf = (ls: Line[], text: string): Unit => ({
+    lines: ls,
+    text,
+    key: keyOf(text),
+    letters: lettersOf(text),
+    page: ls[0].page,
+    top: ls[0].top,
+    left: Math.min(...ls.map((l) => l.left)),
+    right: Math.max(...ls.map((l) => l.right)),
+    height: Math.max(...ls.map((l) => l.bottom - l.top)),
+    numbers: (text.match(/\d+/g) ?? []).map(Number),
+  });
   const units: Unit[] = [
-    ...candidates.map((l) => ({ lines: [l], text: l.text, page: l.page, top: l.top })),
-    ...edgeRows.filter((r) => r.length > 1).map((r) => ({ lines: r, text: r.map((l) => l.text.trim()).join(" "), page: r[0].page, top: r[0].top })),
-  ].filter((u) => lettersOf(u.text).length >= 3 && !CAPTION_LABEL_RE.test(u.text));
-  const byText = new Map<string, Unit[]>();
-  for (const u of units) byText.set(keyOf(u.text), [...(byText.get(keyOf(u.text)) ?? []), u]);
+    ...candidates.map((l) => unitOf([l], l.text)),
+    ...edgeRows.filter((r) => r.length > 1).map((r) => unitOf(r, r.map((l) => l.text.trim()).join(" "))),
+  ]
+    .filter((u) => u.letters.length >= 3 && !CAPTION_LABEL_RE.test(u.text))
+    .sort((a, b) => a.top - b.top);
+  // The units near a unit's height, from the list sorted by height (a book's thousands of rows).
+  const reach = 0.03 * Math.max(792, ...[...sizes.values()].map((x) => x.height));
+  const nearby = (u: Unit): Unit[] => {
+    let lo = 0;
+    for (let hi = units.length; lo < hi; ) {
+      const mid = (lo + hi) >> 1;
+      if (units[mid].top < u.top - reach) lo = mid + 1;
+      else hi = mid;
+    }
+    const out: Unit[] = [];
+    for (let k = lo; k < units.length && units[k].top <= u.top + reach; k++) if (near(units[k], u)) out.push(units[k]);
+    return out;
+  };
+  const aligned = (a: Unit, b: Unit) => {
+    const slack = 0.02 * (sizes.get(a.page)?.width ?? 612);
+    return Math.abs(a.left - b.left) <= slack || Math.abs(a.right - b.right) <= slack || Math.abs(a.left + a.right - b.left - b.right) / 2 <= slack;
+  };
+  // The same numbers, or numbers that move with the page.
+  const counts = (a: Unit, b: Unit) => a.numbers.length === b.numbers.length && a.numbers.every((n, k) => n === b.numbers[k] || b.numbers[k] - n === b.page - a.page);
+  // OCR's two readings of one line: letters within a fifth first (cheap), then ocrSame.
+  const ocr = (a: Unit, b: Unit) => {
+    const n = Math.min(a.letters.length, b.letters.length);
+    return n >= 10 && Math.abs(a.letters.length - b.letters.length) <= n * 0.2 && ocrSame(a.text, b.text);
+  };
+  const same = (a: Unit, b: Unit) => (a.key === b.key && counts(a, b)) || ocr(a, b);
+  // The most pages in a row, each within two pages of the next.
+  const run = (pages: Set<number>) => {
+    const sorted = [...pages].sort((a, b) => a - b);
+    let best = 0;
+    sorted.forEach((p, k) => {
+      let n = 1;
+      while (k + n < sorted.length && sorted[k + n] - sorted[k + n - 1] <= 2) n++;
+      best = Math.max(best, n);
+    });
+    return best;
+  };
+  const repeats = new Set<Unit>();
   for (const u of units) {
-    const pages = new Set((byText.get(keyOf(u.text)) ?? []).filter((o) => near(o, u)).map((o) => o.page));
-    if (pages.size < needed) for (const o of units) if (!pages.has(o.page) && near(o, u) && ocrSame(u.text, o.text)) pages.add(o.page);
-    if (pages.size >= needed) for (const l of u.lines) furniture.add(l);
+    const around = nearby(u).filter((o) => aligned(o, u));
+    const pages = new Set(around.filter((o) => o.key === u.key && counts(u, o)).map((o) => o.page));
+    if (run(pages) < needed) for (const o of around) if (!pages.has(o.page) && ocr(u, o)) pages.add(o.page);
+    if (run(pages) >= needed) repeats.add(u);
   }
+  const sized = (a: Unit, b: Unit) => Math.abs(a.height - b.height) <= 0.3 * Math.max(a.height, b.height);
+  for (const u of units) if (repeats.has(u) || nearby(u).some((r) => repeats.has(r) && sized(r, u) && same(r, u))) for (const l of u.lines) furniture.add(l);
   for (const l of lastRows.flat()) if (CONTINUED_RE.test(l.text.trim())) furniture.add(l);
   // A row half furniture is furniture: a table's row at a page's top holds
   // one cell that repeats ("closed") among cells that do not.
   for (const row of edgeRows) {
     if (row.filter((l) => furniture.has(l)).length * 2 >= row.length) for (const l of row) if (l.text.trim().split(/\s+/).length <= 8) furniture.add(l);
   }
-  return { lines, furniture: lines.filter((l) => furniture.has(l)), sizes };
+  return lines.filter((l) => furniture.has(l));
 }
 
 /** Two lines with the same words as OCR reads them on two pages: letters
     within a fifth, and every word of four letters or more close to one of
     the other's, so two captions that differ in one word stay apart. */
 export function ocrSame(a: string, b: string): boolean {
-  const [la, lb] = [lettersOf(a), lettersOf(b)];
-  const n = Math.min(la.length, lb.length);
-  if (n < 10 || editDistance(la, lb, Math.floor(n * 0.2)) > Math.floor(n * 0.2)) return false;
-  const words = (t: string) => normText(t).split(/[^\p{L}]+/u).filter((w) => w.length >= 4);
+  const [ra, rb] = [readingOf(a), readingOf(b)];
+  const n = Math.min(ra.letters.length, rb.letters.length);
+  if (n < 10 || editDistance(ra.letters, rb.letters, Math.floor(n * 0.2)) > Math.floor(n * 0.2)) return false;
   const close = (w: string, list: string[]) => list.some((v) => editDistance(w, v, Math.floor(w.length / 3)) <= Math.floor(w.length / 3));
-  const [wa, wb] = [words(a), words(b)];
-  return wa.every((w) => close(w, wb)) && wb.every((w) => close(w, wa));
+  return ra.words.every((w) => close(w, rb.words)) && rb.words.every((w) => close(w, ra.words));
 }
 
 /** Levenshtein distance, stopping once it passes max. */
@@ -195,35 +302,235 @@ export function pdfText(pdf: string, pages?: [number, number]): PdfText {
   return { first: pages?.[0] ?? 1, pages: new Set(lines.map((l) => l.page)).size, raw, lines, furniture: layout.furniture.filter(inRange), sizes: layout.sizes };
 }
 
-type Leaks = { strings: number; leaked: number; leaks: number; clean: number | null; found: { text: string; at: { unit: number; tok: number }[] }[] };
+type Leaks = {
+  strings: number;
+  leaked: number;
+  leaks: number;
+  clean: number | null;
+  /** Each leaked string: where the candidate's words hold it, and how many of its lines a figure's picture shows. */
+  found: { text: string; at: { unit: number; tok: number }[]; pictured?: number }[];
+};
+
+/** The lines alone on their row: a page number stands alone, a table's
+    cell or a list's marker the text layer reads apart shares its row. */
+function aloneOnRow(lines: Line[]): Set<Line> {
+  return new Set(rowsOf(lines).flatMap((row) => (row.length === 1 ? row : [])));
+}
+
+/** Does a word list hold a run of words, in order, one after another? */
+function holds(words: string[], run: string[]): boolean {
+  for (let i = 0; i + run.length <= words.length; i++) if (run.every((w, k) => words[i + k] === w)) return true;
+  return false;
+}
+
+/** The candidate's figures that show a line of the PDF: its middle inside
+    the figure's region (a crop draws its region as the page does). */
+function picturedBy(pdf: PdfText, cand: Flat): (line: Line) => Extract<DocBlock, { kind: "figure" }>[] {
+  const figures = cand.blocks.flatMap((b) => (b.kind === "figure" && b.at ? [b] : []));
+  return (line) => {
+    const size = pdf.sizes.get(line.page);
+    if (!size) return [];
+    const [x, y] = [((line.left + line.right) / 2 / size.width) * 100, ((line.top + line.bottom) / 2 / size.height) * 100];
+    return figures.filter((f) => {
+      if (!f.at || f.at.page !== line.page) return false;
+      const b = regionBounds(f.at.region);
+      return x >= b.x1 && x <= b.x2 && y >= b.y1 && y <= b.y2;
+    });
+  };
+}
 
 /** Furniture lines' words at the candidate's edges (table cells aside: a
-    cell may hold a number), past the times the same line stands among the
-    PDF's other lines (a chapter title that is also the running head). The
-    candidate's title is the page's own line where the running head repeats
-    it, and a footnote's label or mark is no page number. */
+    cell may hold a number), past the times the same line stands alone on
+    its row among the PDF's other lines (a chapter title that is also the
+    running head; a list's marker or a table's cell the text layer reads
+    apart shares its row and forgives nothing). A string is the page's own
+    words where the candidate's word next to it stands next to it in one of
+    the PDF's other lines: a heading's number ("2 VHE OBSERVATIONS"), a
+    caption's ("Table 3"), a paragraph that opens with a company's name.
+    The candidate's title is the page's own line where the running head
+    repeats it, and a footnote's label or mark is no page number. A
+    furniture line at the page's edge inside a figure's region leaks too:
+    the crop draws it (a figure's region that reaches up to the running
+    head). */
 function leaksOf(pdf: PdfText, furniture: Line[], cand: Flat): Leaks {
   const furnitureSet = new Set(furniture);
+  const alone = aloneOnRow(pdf.lines);
   const others = new Map<string, number>();
-  for (const l of pdf.lines) if (!furnitureSet.has(l)) others.set(normText(l.text), (others.get(normText(l.text)) ?? 0) + 1);
+  for (const l of pdf.lines) if (!furnitureSet.has(l) && alone.has(l)) others.set(normText(l.text), (others.get(normText(l.text)) ?? 0) + 1);
+  // The PDF's other lines and rows (a heading the text layer reads as two
+  // lines on one row, "第 1 節" and its title), as words.
+  const kept = pdf.lines.filter((l) => !furnitureSet.has(l));
+  const rows = rowsOf(kept).filter((row) => row.length > 1);
+  const own = [...kept.map((l) => l.text), ...rows.map((row) => row.map((l) => l.text).join(" "))].map((t) => wordsOf(t).map((w) => w.w));
   const strings = [...new Set(furniture.map((f) => f.text.trim()))].filter((f) => wordsOf(f).length > 0);
-  const matches = furnitureMatches(
-    cand,
-    strings.map((f) => wordsOf(f).map((w) => w.w)),
-    false,
-    false,
-  ).map((list) => list.filter((m) => cand.blocks[cand.units[m.unit].block].kind !== "title"));
+  const words = strings.map((f) => wordsOf(f).map((w) => w.w));
+  const inLine = (run: string[]) => own.some((line) => holds(line, run));
+  const beside = (m: { unit: number; tok: number }, x: number) => {
+    const unit = cand.units[m.unit];
+    const k = words[x].length;
+    const before = m.tok > unit.first ? cand.toks[m.tok - 1].w : null;
+    const after = m.tok + k < unit.end ? cand.toks[m.tok + k].w : null;
+    return (before !== null && inLine([before, ...words[x]])) || (after !== null && inLine([...words[x], after]));
+  };
+  const matches = furnitureMatches(cand, words, false, false).map((list, x) => list.filter((m) => cand.blocks[cand.units[m.unit].block].kind !== "title" && !beside(m, x)));
+  // A crop shows a running head, a running foot, or a page number: a
+  // furniture line at its page's edge (no other line above a head, none
+  // below a foot) inside a figure's region. A chart's label a run of pages
+  // repeats inside the body is none.
+  const shown = picturedBy(pdf, cand);
+  const body = new Map<number, { top: number; bottom: number }>();
+  for (const l of kept) {
+    const b = body.get(l.page);
+    body.set(l.page, { top: Math.min(b?.top ?? l.top, l.top), bottom: Math.max(b?.bottom ?? l.bottom, l.bottom) });
+  }
+  const atEdge = (f: Line) => {
+    const b = body.get(f.page);
+    return !b || f.bottom <= b.top || f.top >= b.bottom;
+  };
+  const pictured = new Map<string, number>();
+  for (const f of furniture) if (atEdge(f) && shown(f).length > 0) pictured.set(f.text.trim(), (pictured.get(f.text.trim()) ?? 0) + 1);
   let leaked = 0;
   let leaks = 0;
   const found: Leaks["found"] = [];
   strings.forEach((text, x) => {
-    const excess = matches[x].length - (others.get(normText(text)) ?? 0);
+    const inPictures = pictured.get(text) ?? 0;
+    const excess = Math.max(0, matches[x].length - (others.get(normText(text)) ?? 0)) + inPictures;
     if (excess <= 0) return;
     leaked++;
     leaks += excess;
-    found.push({ text, at: matches[x] });
+    found.push({ text, at: matches[x], ...(inPictures > 0 ? { pictured: inPictures } : {}) });
   });
   return { strings: strings.length, leaked, leaks, clean: strings.length > 0 ? 1 - leaked / strings.length : null, found };
+}
+
+// ── The import's look ───────────────────────────────────────────────────────
+//
+// What the page editor draws that a page sets and no reference records: an
+// inline formula at its words' size, a PDF figure at its printed width, a
+// Word paragraph's borders. The page sets each; the checks read the page
+// editor's own rules and the import.
+
+let formulaScaleMemo: number | null = null;
+
+/** The size the page editor draws a formula at over its paragraph's words:
+    KaTeX's stylesheet sets `.katex { font: … 1.21em … }` (a web font's
+    x-height: a formula drew 21% larger than its words), unless the page
+    editor's CSS (components/docs) sets the formula's size again. */
+export function formulaScale(): number {
+  if (formulaScaleMemo !== null) return formulaScaleMemo;
+  const files = (dir: string): string[] => readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? files(join(dir, f)) : f.endsWith(".css") ? [join(dir, f)] : []));
+  const own = files(join(ROOT, "src", "components", "docs")).map((f) => readFileSync(f, "utf8"));
+  formulaScaleMemo = formulaScaleOf(readFileSync(join(ROOT, "node_modules", "katex", "dist", "katex.min.css"), "utf8"), own);
+  return formulaScaleMemo;
+}
+
+/** The formula's size from the stylesheets: the page editor's rule for a
+    formula's `.katex` (under `.docs-math`) when one sets a size, else
+    KaTeX's own. */
+export function formulaScaleOf(katexCss: string, ownCss: string[]): number {
+  const rule = (css: string, selector: RegExp) => {
+    for (const m of css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!m[1].split(",").some((sel) => selector.test(sel.trim()))) continue;
+      const size = /font(?:-size)?\s*:[^;]*?([\d.]+)(em|%)/.exec(m[2]);
+      if (size) return size[2] === "%" ? Number(size[1]) / 100 : Number(size[1]);
+    }
+    return null;
+  };
+  return ownCss.map((css) => rule(css, /\.docs-math\b.*\.katex$/)).find((x) => x !== null) ?? rule(katexCss, /^\.katex$/) ?? 1;
+}
+
+type Box = { width: number; height: number };
+/** The import's page: its size and margins in points (the converter's page setup). */
+export type PageSetup = Box & { margins: { top: number; right: number; bottom: number; left: number } };
+
+/** Each PDF figure's crop as the page editor draws it (figureCropSize, at
+    most the text's width) against the size the page prints it at, scaled
+    down only where the page editor's text box is smaller: right within a
+    tenth. A crop drawn at the column's width drew a two-column paper's
+    figure twice its printed size. */
+export function figureWidths(cand: Flat, page: Box, setup: PageSetup): { right: number; total: number; misses: string[] } {
+  const px = 96 / 72;
+  const room = { width: (setup.width - setup.margins.left - setup.margins.right) * px, height: (setup.height - setup.margins.top - setup.margins.bottom) * px };
+  let right = 0;
+  let total = 0;
+  const misses: string[] = [];
+  for (const block of cand.blocks) {
+    if (block.kind !== "figure" || !block.at) continue;
+    const b = regionBounds(block.at.region);
+    const printed = { width: ((b.x2 - b.x1) / 100) * page.width * px, height: ((b.y2 - b.y1) / 100) * page.height * px };
+    if (!(printed.width > 0 && printed.height > 0)) continue;
+    const want = printed.width * Math.min(1, room.width / printed.width, room.height / printed.height);
+    const drawn = Math.min(figureCropSize(block.at.region, { ...page, margins: setup.margins }).width, room.width);
+    total++;
+    if (Math.abs(drawn - want) <= 0.1 * want) right++;
+    else misses.push(`p${block.at.page}: drawn ${Math.round(drawn)} px, printed ${Math.round(want)} px`);
+  }
+  return { right, total, misses };
+}
+
+/** A Word file's paragraphs with borders (w:pBdr, the paragraph's own, else
+    its style's or a style it is based on): the words each opens with and
+    its sides. */
+export function wordBorders(path: string): { words: string; sides: Side[] }[] {
+  const zip = unzipOffice(new Uint8Array(readFileSync(path)));
+  const styles = parseXmlPart(zip, "word/styles.xml");
+  const doc = parseXmlPart(zip, "word/document.xml");
+  const byId = new Map(descendants(styles, "style").map((st) => [attr(st, "styleId") ?? "", st]));
+  const fallback = descendants(styles, "style").find((st) => attr(st, "type") === "paragraph" && attr(st, "default") === "1");
+  const sidesOf = (pBdr: Element | null): Side[] | null => {
+    if (!pBdr) return null;
+    const names: [Side, string[]][] = [["top", ["top"]], ["right", ["right", "end"]], ["bottom", ["bottom"]], ["left", ["left", "start"]]];
+    return names.filter(([, tags]) => tags.some((tag) => !["none", "nil", null].includes(attr(child(pBdr, tag), "val")))).map(([side]) => side);
+  };
+  const styleSides = (id: string | null, seen = new Set<string>()): Side[] | null => {
+    const st = id ? byId.get(id) : fallback;
+    if (!st || seen.has(id ?? "")) return null;
+    seen.add(id ?? "");
+    return sidesOf(child(st, "pPr", "pBdr")) ?? styleSides(attr(child(st, "basedOn"), "val"), seen);
+  };
+  const out: { words: string; sides: Side[] }[] = [];
+  for (const p of descendants(doc, "p")) {
+    const sides = sidesOf(child(p, "pPr", "pBdr")) ?? styleSides(attr(child(p, "pPr", "pStyle"), "val"));
+    const words = wordsOf(descendants(p, "t").map((t) => t.textContent ?? "").join("")).slice(0, 8).map((w) => w.w).join(" ");
+    if (words) out.push({ words, sides: sides ?? [] });
+  }
+  return out;
+}
+
+/** The candidate's paragraphs, headings, titles, and quote blocks drawn
+    with a border, and the Word file's, paired by the words they open with:
+    F1 of those with the same sides. A Word style may draw a rule under a
+    heading and a bar beside a quote block. */
+export function borderScore(word: { words: string; sides: Side[] }[], cand: Flat): number | null {
+  const key = (sides: Side[] | undefined) => [...(sides ?? [])].sort().join(" ");
+  const opening = (b: number) => wordsOf(cand.unitsOf[b].map((u) => cand.units[u].text).join(" ")).slice(0, 8).map((w) => w.w).join(" ");
+  const theirs = new Map<string, string>();
+  cand.blocks.forEach((block, b) => {
+    if (block.kind === "paragraph" || block.kind === "heading" || block.kind === "title" || block.kind === "quote") theirs.set(opening(b), key(block.borders));
+  });
+  const mine = new Map(word.map((p) => [p.words, key(p.sides)]));
+  const want = word.filter((p) => p.sides.length > 0);
+  const got = [...theirs].filter(([, sides]) => sides !== "");
+  if (want.length === 0 && got.length === 0) return null;
+  const recall = want.length > 0 ? want.filter((p) => theirs.get(p.words) === key(p.sides)).length / want.length : 1;
+  const precision = got.length > 0 ? got.filter(([words, sides]) => mine.get(words) === sides).length / got.length : 0;
+  return recall + precision > 0 ? (2 * recall * precision) / (recall + precision) : 0;
+}
+
+/** The import's look, where each check applies: its inline formulas drawn
+    at their words' size (within 5%), its crops at their printed width, a
+    Word file's borders. */
+export type LookScores = { formulas: number | null; figures: number | null; borders: number | null; score: number | null; misses: string[] };
+
+export function lookScores(cand: Flat, input: { page?: Box; setup?: PageSetup; word?: { words: string; sides: Side[] }[] }): LookScores {
+  const inline = cand.math.some((m) => !m.display);
+  const formulas = inline ? (Math.abs(formulaScale() - 1) <= 0.05 ? 1 : 0) : null;
+  const widths = input.page && input.setup ? figureWidths(cand, input.page, input.setup) : null;
+  const figures = widths && widths.total > 0 ? widths.right / widths.total : null;
+  const borders = input.word ? borderScore(input.word, cand) : null;
+  const parts = [formulas, figures, borders].filter((x): x is number => x !== null);
+  const misses = [...(formulas === 0 ? [`inline formulas drawn at ${formulaScale()} times their words' size`] : []), ...(widths?.misses ?? [])];
+  return { formulas, figures, borders, score: parts.length > 0 ? parts.reduce((a, b) => a + b, 0) / parts.length : null, misses };
 }
 
 export type FreeScores = {
@@ -243,24 +550,11 @@ export type FreeScores = {
   furniture: Leaks;
   numberLines: { count: number; score: number; found: { unit: number; text: string }[] };
   garbles: { count: number; score: number; found: { kind: string; match: string; unit: number; text: string }[] };
-  /** Display equations as LaTeX the glyph check passes, over every display the page sets in TeX's math fonts. */
+  /** Display equations as LaTeX the glyph check passes, a crop at half, over the displays checked and cropped (mathPart). */
   math: number | null;
+  /** The import's look (lookScores); none for a parse. */
+  look: LookScores | null;
 };
-
-/** The candidate's lines: its units cut at line breaks and where pages
-    begin (tables, lists, and code aside). */
-function candidateLines(cand: Flat): { unit: number; text: string }[] {
-  const out: { unit: number; text: string }[] = [];
-  cand.units.forEach((unit, u) => {
-    const kind = cand.blocks[unit.block].kind;
-    if (kind === "table" || kind === "list" || kind === "code") return;
-    const cuts = [...new Set([0, unit.text.length, ...unit.breaks])].sort((a, b) => a - b);
-    for (let k = 0; k + 1 < cuts.length; k++) {
-      for (const line of unit.text.slice(cuts[k], cuts[k + 1]).split("\n")) if (line.trim()) out.push({ unit: u, text: line.trim() });
-    }
-  });
-  return out;
-}
 
 function countWords(texts: string[]): Map<string, number> {
   const out = new Map<string, number>();
@@ -316,7 +610,18 @@ const BLIND = 0.5;
     of it, which leaves an empty contents field empty where the parse builds
     the contents list from the headings: a contents list's words are left
     out (they repeat the headings). */
-export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word = false): FreeScores {
+/** The math part: each display checked as LaTeX scores 1 when it passes and 0
+    when it fails, and each crop of a display half (a right formula over its
+    crop over wrong words). It stands only where a display is checked: a crop
+    alone (a page whose formulas no check reads, set in Times) brings in no
+    part at 0. A page whose displays are all crops has no math part, as one
+    whose displays are words has none, and loses no garbles or coverage as
+    the words do. */
+export function mathPart(glyphs: Pick<GlyphScores, "checked" | "passed" | "mathImages">): number | null {
+  return glyphs.checked > 0 ? (glyphs.passed + glyphs.mathImages / 2) / (glyphs.checked + glyphs.mathImages) : null;
+}
+
+export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word = false, look: LookScores | null = null): FreeScores {
   const { words: printed, glyphs: formulaGlyphs, raised } = printedWords(cand, !word);
   const candBag = countWords([]);
   for (const w of printed) candBag.set(w, (candBag.get(w) ?? 0) + 1);
@@ -336,21 +641,14 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
   // A diagram's labels are the figure's, not words to cover: short lines
   // (three words at most, a CJK character a quarter word) inside a region
   // the candidate shows as a figure. A paragraph shown as a picture still is
-  // (its lines are long).
-  const figures = cand.blocks.flatMap((b) => (b.kind === "figure" && b.at ? [b.at] : []));
-  const labels = pdf.lines.filter((l) => {
-    const size = pdf.sizes.get(l.page);
-    if (!size || labelWords(l.text) > 3) return false;
-    const [x, y] = [((l.left + l.right) / 2 / size.width) * 100, ((l.top + l.bottom) / 2 / size.height) * 100];
-    return figures.some((f) => {
-      const b = regionBounds(f.region);
-      return f.page === l.page && x >= b.x1 && x <= b.x2 && y >= b.y1 && y <= b.y2;
-    });
-  });
+  // (its lines are long); a display's crop shows every line in it.
+  const shown = picturedBy(pdf, cand);
+  const labels = pdf.lines.filter((l) => shown(l).some((f) => f.mathImage !== undefined || labelWords(l.text) <= 3));
   pdf.raw.forEach((rawLines, p) => {
     const lines = rawLines.map((line) => {
-      // A raised footnote label runs into its note's first word ("1All amounts…").
-      const own = line.replace(/^(\s*\d{1,3})(?=\p{Lu}\p{Ll})/u, "$1 ");
+      // A raised footnote label runs into its note's first word ("1All amounts…"),
+      // and Word's math letters read twice ("𝑝𝑝00", "εε") are one letter each.
+      const own = line.replace(/^(\s*\d{1,3})(?=\p{Lu}\p{Ll})/u, "$1 ").replace(DOUBLED_RE, "$1");
       const hollow = /^\s*o\s+(\S.*)$/.exec(own);
       const left = hollow ? (items.get(opening(hollow[1])) ?? 0) : 0;
       if (!hollow || left <= 0) return own;
@@ -421,8 +719,13 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
   const f1 = recall === null || precision === null ? null : recall + precision > 0 ? (2 * recall * precision) / (recall + precision) : 0;
   const furniture = leaksOf(pdf, pdf.furniture, cand);
   const furnitureSet = new Set(pdf.furniture);
-  const numbers = candidateLines(cand).filter((l) => PAGE_NUMBER_RE.test(l.text));
-  const ownNumbers = pdf.lines.filter((l) => !furnitureSet.has(l) && PAGE_NUMBER_RE.test(l.text.trim())).length;
+  // A block that is only a page number; a line inside a block ("12" of a
+  // display read as words) is no page number's leak.
+  const numbers = cand.units.flatMap((unit, u) => (!["table", "list", "code"].includes(cand.blocks[unit.block].kind) && PAGE_NUMBER_RE.test(unit.text.trim()) ? [{ unit: u, text: unit.text.trim() }] : []));
+  // The PDF's own lone numbers that are no furniture (a figure's axis): a
+  // table's cell shares its row and forgives nothing.
+  const alone = aloneOnRow(pdf.lines);
+  const ownNumbers = pdf.lines.filter((l) => !furnitureSet.has(l) && alone.has(l) && PAGE_NUMBER_RE.test(l.text.trim())).length;
   const numberCount = Math.max(0, numbers.length - ownNumbers);
   const garbled: FreeScores["garbles"]["found"] = [];
   cand.units.forEach((unit, u) => {
@@ -433,13 +736,13 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
   // none is forgiven here. The glyphs' codes see what no string shows (a lost
   // ϵ, ℱ read as F); the larger count stands.
   const garbleExcess = Math.max(garbled.length, glyphs?.garbles ?? 0);
-  const displays = glyphs ? glyphs.checked + glyphs.mathImages : 0;
   const parts: Record<keyof typeof FREE_WEIGHTS, number | null> = {
     coverage: f1,
     furniture: furniture.clean,
     numbers: Math.max(0, 1 - numberCount / Math.max(1, pdf.pages)),
     garbles: Math.max(0, 1 - garbleExcess / (5 + cand.toks.length / 100)),
-    math: glyphs && displays > 0 ? glyphs.passed / displays : null,
+    math: glyphs ? mathPart(glyphs) : null,
+    look: look?.score ?? null,
   };
   let sum = 0;
   let weight = 0;
@@ -465,5 +768,6 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
     numberLines: { count: numberCount, score: parts.numbers ?? 0, found: numbers },
     garbles: { count: garbleExcess, score: parts.garbles ?? 0, found: garbled },
     math: parts.math,
+    look,
   };
 }

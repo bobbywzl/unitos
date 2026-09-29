@@ -270,6 +270,22 @@ export function isMonoLine(line: Line): boolean {
 
 const WORD_RE = /[\p{L}\p{N}]/u;
 
+/** Whether an offset falls between the two halves of a surrogate pair: a
+    character past the Basic Multilingual Plane (the math letters 𝑝 and 𝒜)
+    is two UTF-16 units. */
+export function insidePair(text: string, at: number): boolean {
+  if (at <= 0 || at >= text.length) return false;
+  const [high, low] = [text.charCodeAt(at - 1), text.charCodeAt(at)];
+  return high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff;
+}
+
+/** A span's edges on whole characters: an edge inside a surrogate pair moves
+    out to the pair's edge. Half a pair in an import's rich text makes the
+    database refuse the whole document (the NPS thesis could not be added). */
+export function wholeChars(text: string, start: number, end: number): { start: number; end: number } {
+  return { start: insidePair(text, start) ? start - 1 : start, end: insidePair(text, end) ? end + 1 : end };
+}
+
 // The look most of a block's letters take (ParsedBlock.font): the face and
 // the size of the most letters (a formula's glyphs, a footnote mark, and a
 // code run aside), bold and italic when most letters are, and the color
@@ -335,7 +351,7 @@ export function spansFromRuns(
     let { start, end } = range;
     while (start < end && /\s/.test(text[start])) start++;
     while (end > start && /\s/.test(text[end - 1])) end--;
-    return { start, end };
+    return wholeChars(text, start, end);
   };
   const whole = (range: { start: number; end: number }): boolean =>
     text.slice(0, range.start).trim() === "" && text.slice(range.end).trim() === "";
@@ -381,7 +397,7 @@ export function spansFromRuns(
     if (!r.href) continue;
     const last = links[links.length - 1];
     if (last && last.href === r.href && r.start - last.end <= 1) {
-      last.end = r.end;
+      last.end = wholeChars(text, last.start, r.end).end;
       last.quotedText = text.slice(last.start, last.end);
     } else {
       const { start, end } = trim(r);

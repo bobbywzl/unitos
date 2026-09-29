@@ -22,6 +22,7 @@ import { parseYouTubeId } from "@/lib/video/youtube";
 import { parseBody } from "@/lib/validate";
 import { isMarkdownFile } from "@/lib/markdown-file";
 import { isSheetsFile } from "@/lib/office-file";
+import { pageRangesSchema } from "@/lib/pdf-pages";
 
 // A split add parses one very long page and saves several documents; the AI
 // passes on such a page need the headroom.
@@ -76,13 +77,26 @@ const urlSchema = z.object({
 });
 
 // pages and convert are the PDF directives (SPEC.md §16), set by the upload
-// assistant's import pick, "1"/"0" as form fields.
+// assistant's import pick, "1"/"0" as form fields. pdfPages: the PDF's pages
+// the reader chose (SPEC.md §15), the ranges as JSON; absent, every page.
 const fileFieldsSchema = z.object({
   notebookId: z.string().min(1),
   filename: z.string().min(1),
   pages: z.enum(["0", "1"]).default("0"),
   convert: z.enum(["0", "1"]).default("1"),
+  pdfPages: z.preprocess(jsonField, pageRangesSchema.optional()),
 });
+
+// A form field that holds JSON, read; not JSON, it stays text and fails
+// its schema.
+function jsonField(value: unknown): unknown {
+  if (typeof value !== "string") return value ?? undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
 
 // Which of the slides and sheets formats an uploaded file is (SPEC.md §27):
 // a .pptx or .xlsx by its zip's parts, a .csv/.tsv by its name or type
@@ -132,6 +146,7 @@ export async function POST(req: Request) {
       filename: file instanceof File ? file.name : "document.pdf",
       pages: form.get("pages") ?? "0",
       convert: form.get("convert") ?? "1",
+      pdfPages: form.get("pdfPages"),
     });
     if (!fields.success) {
       return NextResponse.json({ error: t("api.validationFailed"), issues: fields.error.issues }, { status: 400 });
@@ -222,7 +237,7 @@ export async function POST(req: Request) {
           bytes,
           filename,
           onProgress,
-          { pages, convert: fields.data.convert === "1" },
+          { pages, convert: fields.data.convert === "1", pdfPages: fields.data.pdfPages },
           user?.id ?? null,
         );
         await attachDocument(fields.data.notebookId, document.id);
