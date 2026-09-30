@@ -64,6 +64,7 @@ const BLOCK_ATTRS: Record<string, TKey> = {
   shading: "docs.bordersAndShading",
   chart: "docsInsert.chart",
   drawing: "docsInsert.drawing",
+  suppressLineNumbers: "docsPage.suppressLineNumbers",
 };
 const LISTS: Record<string, TKey> = {
   bulletList: "docs.bulletedList",

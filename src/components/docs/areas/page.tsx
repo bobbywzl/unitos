@@ -25,6 +25,7 @@ import { HorizontalRuler, VerticalRuler } from "@/components/docs/page/ruler";
 import { CompareDialog } from "@/components/docs/page/compare-dialog";
 import { CopyDialog } from "@/components/docs/page/make-copy";
 import { DetailsDialog } from "@/components/docs/page/details-dialog";
+import { LineNumberColumn, LineNumbersDialog, useLineNumbers } from "@/components/docs/page/line-numbers";
 import { PageSetupDialog, readPageDefault } from "@/components/docs/page/setup-dialog";
 import { PAGE_EVENT, pageStore, usePageState, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
 import { WatermarkMark } from "@/components/docs/page/watermark";
@@ -272,6 +273,9 @@ export function PageCanvas({
     page.querySelectorAll("[data-hf-slot]").forEach((el) => ro.observe(el));
     return () => ro.disconnect();
   }, [setup, pages]);
+
+  // Tools > Line numbers: each page's numbered lines (none in pageless).
+  const lineRows = useLineNumbers(editor, pageRef, pageless ? null : (setup.lineNumbers ?? null));
 
   const area = useMemo(() => {
     if (compact) return () => ({ top: 0, bottom: frame.height });
@@ -533,6 +537,7 @@ export function PageCanvas({
                     style={{ top: i * frame.pitch, height: frame.height, "--docs-sheet-i": i } as React.CSSProperties}
                   >
                     {setup.watermark && !compact && <WatermarkMark mark={setup.watermark} frame={frame} />}
+                    {lineRows && <LineNumberColumn lines={lineRows[i] ?? []} frame={frame} />}
                     {(["header", "footer"] as const).map((a) => {
                       const slot = slotFor(setup, a, i);
                       const doc = setup[slot];
@@ -580,6 +585,7 @@ export function PageCanvas({
       {dialog === "compare" && <CompareDialog editor={editor} onClose={closeDialog} />}
       {dialog === "watermark" && <WatermarkDialog store={store} onClose={closeDialog} />}
       {dialog === "details" && <DetailsDialog editor={editor} onClose={closeDialog} />}
+      {dialog === "lineNumbers" && <LineNumbersDialog editor={editor} store={store} onClose={closeDialog} />}
     </>
   );
 }

@@ -43,7 +43,7 @@ type PageState = {
   outlineOpen: boolean;
   outlineWidth: number;
   textWidth: TextWidth;
-  dialog: "setup" | "pageNumbers" | "headerFormat" | "copy" | "compare" | "watermark" | "details" | null;
+  dialog: "setup" | "pageNumbers" | "headerFormat" | "copy" | "compare" | "watermark" | "details" | "lineNumbers" | null;
   /** The header or footer being edited, and on which page. */
   editing: { area: HeaderArea; page: number } | null;
   /** The page setup's save, for the title row's status. */
