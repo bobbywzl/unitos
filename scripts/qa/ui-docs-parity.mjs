@@ -8,12 +8,13 @@
 // Insert > Chart; DRAWING is Insert > Drawing; COMPARE is Tools > Compare
 // documents; ODDEVEN is Headers & footers > Different odd & even; WATERMARK
 // is Insert > Watermark; DETAILS is File > Details; LINENUMBERS is Tools >
-// Line numbers; MASK is the image toolbar's Mask image. Each check prints
-// PASS or FAIL with its evidence; each case leaves a screenshot (light
-// theme, 1440×900; the dark case in dark).
+// Line numbers; MASK is the image toolbar's Mask image; TRANSLATE is Tools >
+// Translate document. Each check prints PASS or FAIL with its evidence;
+// each case leaves a screenshot (light theme, 1440×900; the dark case in
+// dark).
 //
 // Usage:
-//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE ODDEVEN WATERMARK DETAILS LINENUMBERS MASK] [--label after] [--keep]
+//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE ODDEVEN WATERMARK DETAILS LINENUMBERS MASK TRANSLATE] [--label after] [--keep]
 // With no group named, every group runs. Env: BASE (default
 // http://localhost:3111), SHOT_DIR (default <tmp>/ui-docs-parity), CHROME
 // (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3492), DATABASE_URL
@@ -1811,6 +1812,132 @@ GROUPS.MASK = async () => {
   const reset = await maskDrawn(page);
   const cleared = await storedImage(id, (a) => (a.mask ?? null) === null);
   check(G, star.clip === 'url("#docs-mask-star")' && none.clip === "none" && reset.clip === "none" && Boolean(cleared), "Star draws a star; Rectangle takes the mask off; Reset image does too", `${star.clip}, ${none.clip}, ${reset.clip}`);
+  check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
+  await close();
+};
+
+// ── Tools > Translate document ──────────────────────────────────────────────
+
+/** A stored document's text blocks in order: kind, where it stands, its
+    words (an object as {its kind}), and each text's marks. */
+function textBlocks(doc) {
+  const out = [];
+  const walk = (node, path) => {
+    if (node.type === "paragraph" || node.type === "heading" || node.type === "codeBlock") {
+      const content = node.content ?? [];
+      out.push({
+        type: node.type,
+        in: path.join(">"),
+        text: content.map((c) => (c.type === "hardBreak" ? "\n" : c.type === "text" ? c.text : `{${c.type}}`)).join(""),
+        marks: content.filter((c) => c.type === "text").map((c) => (c.marks ?? []).map((m) => m.type).join("+")),
+      });
+      return;
+    }
+    for (const child of node.content ?? []) walk(child, node.type === "doc" ? path : [...path, node.type]);
+  };
+  walk(doc, []);
+  return out;
+}
+
+/** Tools > Translate document from Search the menus: the rows, the language it offers, the name. */
+async function translateDialog(page, lang) {
+  await clickIn(page, "The survey");
+  const rows = await searchMenus(page, "translate document");
+  await page.waitForSelector(".docs-translate-dialog", { timeout: 10_000 });
+  const offered = await page.locator('[data-track="docs:translate:lang"]').inputValue();
+  if (lang) await page.locator('[data-track="docs:translate:lang"]').selectOption(lang);
+  const name = await page.locator('[data-track="docs:translate:name"]').inputValue();
+  return { rows, offered, name };
+}
+
+/** Translate, then the copy it opens: its id once its page shows `tag`. */
+async function translateCopy(page, from, tag) {
+  await page.locator('[data-track="docs:translate:run"]').click();
+  await page.waitForFunction(
+    ([from, tag]) => new URLSearchParams(location.search).get("doc") !== from && document.querySelector(".docs-prose")?.textContent.includes(tag),
+    [from, tag],
+    { timeout: 120_000 },
+  );
+  await sleep(800);
+  const id = new URL(page.url()).searchParams.get("doc");
+  ctx.documents.push(id);
+  return id;
+}
+
+GROUPS.TRANSLATE = async () => {
+  const G = "TRANSLATE";
+  const text = (words, marks) => ({ type: "text", text: words, ...(marks ? { marks: marks.map((type) => ({ type })) } : {}) });
+  const para = (content) => ({ type: "paragraph", attrs: { blockId: blockId() }, content });
+  const item = (words) => ({ type: "listItem", content: [para([text(words)])] });
+  const cell = (words) => ({ type: "tableCell", content: [para([text(words)])] });
+  const content = [
+    { type: "heading", attrs: { level: 2, blockId: blockId() }, content: [text("Survey")] },
+    para([text("The survey covered the "), text("north", ["bold"]), text(" field.")]),
+    para([text("Every word here is bold.", ["bold"])]),
+    { type: "bulletList", content: [item("Walk the fence line."), item("Count the birds.")] },
+    { type: "table", content: [{ type: "tableRow", content: [cell("Station"), cell("Birds")] }] },
+    { type: "codeBlock", attrs: { blockId: blockId() }, content: [text("count = birds + 1")] },
+    para([text("The rate is "), { type: "inlineMath", attrs: { latex: "r^2" } }, text(" per hour.")]),
+    para([text("First line"), { type: "hardBreak" }, text("second line")]),
+  ];
+  const id = await richDocument("Survey notes", content);
+  const { page, errors, close } = await newPage();
+  await openEditor(page, id, "per hour");
+  const original = JSON.stringify((await api(`/api/documents/${id}/rich-text`)).body.richText);
+
+  // 1. Tools > Translate document: the copy's name, and Chinese offered for English words.
+  const first = await translateDialog(page, null);
+  await shot(page, "translate-1-dialog");
+  const toast = page
+    .waitForFunction(() => document.body.textContent.includes("kept its own words"), null, { timeout: 60_000 })
+    .then(() => true)
+    .catch(() => false);
+  const zhId = await translateCopy(page, id, "[ZH]");
+  await shot(page, "translate-2-copy");
+  const zh = textBlocks((await api(`/api/documents/${zhId}/rich-text`)).body.richText);
+  const zhTitle = (await api(`/api/documents/${zhId}/details?notebookId=${ctx.notebookId}`)).body.title;
+  const expected = [
+    ["heading", "", "[ZH] Survey", [""]],
+    ["paragraph", "", "[ZH] The survey covered the north field.", [""]],
+    ["paragraph", "", "[ZH] Every word here is bold.", ["bold"]],
+    ["paragraph", "bulletList>listItem", "[ZH] Walk the fence line.", [""]],
+    ["paragraph", "bulletList>listItem", "[ZH] Count the birds.", [""]],
+    ["paragraph", "table>tableRow>tableCell", "[ZH] Station", [""]],
+    ["paragraph", "table>tableRow>tableCell", "[ZH] Birds", [""]],
+    ["codeBlock", "", "count = birds + 1", [""]],
+    ["paragraph", "", "The rate is {inlineMath} per hour.", ["", ""]],
+    ["paragraph", "", "[ZH] First line\nsecond line", ["", ""]],
+  ];
+  const got = zh.map((b) => [b.type, b.in, b.text, b.marks]);
+  check(G, first.rows.some((r) => r.startsWith("Translate document")) && first.name === "Translated copy of Survey notes" && first.offered === "zh" && zhTitle === "Translated copy of Survey notes" && JSON.stringify(got) === JSON.stringify(expected), "Translate document: a copy named as Docs names it, every paragraph, heading, list line, and cell translated in place; code and the paragraph with an equation keep their words; a paragraph all in bold stays bold", `${JSON.stringify(first)}; ${zhTitle}; ${JSON.stringify(got)}`);
+  const unchanged = JSON.stringify((await api(`/api/documents/${id}/rich-text`)).body.richText) === original;
+  check(G, (await toast) && unchanged, "a toast says the paragraph with an equation kept its words; the document itself stays as it was", `toast ${await toast}; original unchanged ${unchanged}`);
+
+  // 2. Into English: the words come back tagged [EN].
+  await openEditor(page, id, "per hour");
+  await translateDialog(page, "en");
+  const enId = await translateCopy(page, id, "[EN]");
+  const en = textBlocks((await api(`/api/documents/${enId}/rich-text`)).body.richText);
+  check(G, en[0]?.text === "[EN] Survey" && en[1]?.text === "[EN] The survey covered the north field.", "English: the copy's words are the English translation", JSON.stringify(en.slice(0, 2).map((b) => b.text)));
+
+  // 3. When the translation fails, the dialog says why and no copy stays.
+  await openEditor(page, id, "per hour");
+  const count = () => db.notebookDocument.count({ where: { notebookId: ctx.notebookId } });
+  const before = await count();
+  await page.route("**/api/documents/*/translate", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "Translation failed: the service did not answer." }) })
+      : route.continue(),
+  );
+  await translateDialog(page, null);
+  await page.locator('[data-track="docs:translate:run"]').click();
+  await page.waitForSelector(".docs-translate-dialog [role='alert']", { timeout: 30_000 }).catch(() => {});
+  const said = await page.locator(".docs-translate-dialog [role='alert']").textContent().catch(() => null);
+  await shot(page, "translate-3-failed");
+  await sleep(1500);
+  const after = await count();
+  await page.unroute("**/api/documents/*/translate");
+  check(G, said === "Translation failed: the service did not answer." && after === before, "a failed translation says why in the dialog, and the copy it made is gone", `${said}; documents ${before} → ${after}`);
   check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
   await close();
 };

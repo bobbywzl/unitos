@@ -26,6 +26,7 @@ import { CompareDialog } from "@/components/docs/page/compare-dialog";
 import { CopyDialog } from "@/components/docs/page/make-copy";
 import { DetailsDialog } from "@/components/docs/page/details-dialog";
 import { LineNumberColumn, LineNumbersDialog, useLineNumbers } from "@/components/docs/page/line-numbers";
+import { TranslateDialog } from "@/components/docs/page/translate-dialog";
 import { PageSetupDialog, readPageDefault } from "@/components/docs/page/setup-dialog";
 import { PAGE_EVENT, pageStore, usePageState, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
 import { WatermarkMark } from "@/components/docs/page/watermark";
@@ -586,6 +587,7 @@ export function PageCanvas({
       {dialog === "watermark" && <WatermarkDialog store={store} onClose={closeDialog} />}
       {dialog === "details" && <DetailsDialog editor={editor} onClose={closeDialog} />}
       {dialog === "lineNumbers" && <LineNumbersDialog editor={editor} store={store} onClose={closeDialog} />}
+      {dialog === "translate" && <TranslateDialog editor={editor} onClose={closeDialog} />}
     </>
   );
 }
