@@ -72,6 +72,7 @@ import {
   type RichMark,
   type RichNode,
 } from "@/lib/docs/schema";
+import { isMask, maskPath, type Mask } from "@/lib/docs/mask";
 import { FADED_OPACITY, watermarkImageSize } from "@/lib/docs/watermark";
 import { CROP_PAD, CROP_PAGE_WIDTH, WHOLE_PAGE_WIDTH } from "@/lib/figure-crop";
 import { cropPageRegion, renderPdfPage } from "@/lib/handwritten/pages";
@@ -783,20 +784,27 @@ async function imageBytes(src: string): Promise<Uint8Array | null> {
 }
 
 /** Image bytes as Word takes them: cut by `crop` (the part of each side, top
-    right bottom left), at `opacity`, and a format Word reads (anything else,
-    an svg too, is redrawn as a PNG). */
-async function picture(bytes: Uint8Array, crop: number[] = [0, 0, 0, 0], opacity = 1): Promise<Picture | null> {
-  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+    right bottom left), at `opacity`, inside `mask` (Mask image: the pixels
+    outside the shape clear), and a format Word reads (anything else, an svg
+    too, is redrawn as a PNG). */
+async function picture(bytes: Uint8Array, crop: number[] = [0, 0, 0, 0], opacity = 1, mask: Mask | null = null): Promise<Picture | null> {
+  const { createCanvas, loadImage, Path2D } = await import("@napi-rs/canvas");
   const image = await loadImage(Buffer.from(bytes)).catch(() => null);
   if (!image || !(image.width > 0 && image.height > 0)) return null;
   const [top, right, bottom, left] = crop;
   const type = WORD_TYPES[sniffImage(bytes) ?? ""];
-  if (type && top + right + bottom + left === 0 && opacity === 1) return { data: bytes, type, width: image.width, height: image.height };
+  if (type && top + right + bottom + left === 0 && opacity === 1 && !mask) return { data: bytes, type, width: image.width, height: image.height };
   const width = Math.max(1, Math.round(image.width * (1 - left - right)));
   const height = Math.max(1, Math.round(image.height * (1 - top - bottom)));
   const canvas = createCanvas(width, height);
   const g = canvas.getContext("2d");
   g.globalAlpha = opacity;
+  if (mask) {
+    // The shape's path is drawn in a unit box: stretched to the image, it clips.
+    const shape = new Path2D();
+    shape.addPath(new Path2D(maskPath(mask)), { a: width, b: 0, c: 0, d: height, e: 0, f: 0 });
+    g.clip(shape);
+  }
   g.drawImage(image, image.width * left, image.height * top, width, height, 0, 0, width, height);
   return { data: canvas.toBuffer("image/png"), type: "png", width, height };
 }
@@ -806,7 +814,7 @@ async function pictureOf(node: RichNode): Promise<Picture | null> {
   const bytes = await imageBytes(String(node.attrs?.src ?? ""));
   if (!bytes) return null;
   const crop = ["cropTop", "cropRight", "cropBottom", "cropLeft"].map((key) => Math.min(0.95, Math.max(0, num(node.attrs?.[key]) ?? 0)));
-  return picture(bytes, crop);
+  return picture(bytes, crop, 1, isMask(node.attrs?.mask) ? node.attrs.mask : null);
 }
 
 // ── The watermark ───────────────────────────────────────────────────────────
