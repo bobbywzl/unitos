@@ -7,12 +7,12 @@
 // all, and Tools > Spelling and grammar > Personal dictionary; CHART is
 // Insert > Chart; DRAWING is Insert > Drawing; COMPARE is Tools > Compare
 // documents; ODDEVEN is Headers & footers > Different odd & even; WATERMARK
-// is Insert > Watermark. Each check prints PASS or FAIL with its evidence;
-// each case leaves a screenshot (light theme, 1440×900; the dark case in
-// dark).
+// is Insert > Watermark; DETAILS is File > Details. Each check prints PASS
+// or FAIL with its evidence; each case leaves a screenshot (light theme,
+// 1440×900; the dark case in dark).
 //
 // Usage:
-//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE ODDEVEN WATERMARK] [--label after] [--keep]
+//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE ODDEVEN WATERMARK DETAILS] [--label after] [--keep]
 // With no group named, every group runs. Env: BASE (default
 // http://localhost:3111), SHOT_DIR (default <tmp>/ui-docs-parity), CHROME
 // (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3492), DATABASE_URL
@@ -1481,6 +1481,69 @@ GROUPS.WATERMARK = async () => {
   const removed = await page.evaluate(() => document.querySelectorAll(".docs-watermark").length);
   const cleared = await storedWatermark(id, (w) => w === null);
   check(G, removed === 0 && Boolean(cleared), "Remove watermark: no page draws one; saved", `${removed}`);
+  check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
+  await close();
+};
+
+// ── File > Details ──────────────────────────────────────────────────────────
+
+/** The Document details dialog's rows: label and value. */
+const detailRows = (page) =>
+  page.evaluate(() =>
+    Object.fromEntries([...document.querySelectorAll(".docs-details-dialog [data-details-row]")].map((row) => [row.querySelector("dt").textContent, row.querySelector("dd").textContent])),
+  );
+
+async function openDetails(page) {
+  await clickIn(page, "The survey");
+  const rows = await searchMenus(page, "details");
+  await page.waitForSelector(".docs-details-dialog [data-details-row]", { timeout: 15_000 });
+  await sleep(300);
+  return rows;
+}
+
+GROUPS.DETAILS = async () => {
+  const G = "DETAILS";
+  const id = await blankDocument("Details", ["The survey covered the north field and the river bank.", "We counted birds at dawn."]);
+  const outer = await api(`/api/notebooks/${ctx.notebookId}/folders`, "POST", { title: "Fieldwork" });
+  const inner = await api(`/api/notebooks/${ctx.notebookId}/folders`, "POST", { title: "2026 season", parentId: outer.body.id });
+  await api(`/api/notebooks/${ctx.notebookId}/documents/${id}`, "PATCH", { folderId: inner.body.id });
+  // The walk's project, as main() names it.
+  const projectTitle = `QA docs parity ${STAMP}`;
+  const { page, errors, close } = await newPage();
+  await openEditor(page, id, "north field");
+
+  // 1. File > Details: Location, Owner, Modified, Modified by, Created; OK has the focus.
+  const rows = await openDetails(page);
+  const shown = await detailRows(page);
+  const focused = await page.evaluate(() => document.activeElement?.getAttribute("data-track"));
+  await shot(page, "details-1-dialog");
+  const date = (v) => typeof v === "string" && !Number.isNaN(Date.parse(v.replace(/(\d)(AM|PM)/, "$1 $2")));
+  check(G, rows.some((r) => r.startsWith("Details")) && shown.Location === `${projectTitle} › Fieldwork › 2026 season` && shown.Owner === "me" && date(shown.Modified) && shown["Modified by"] === "me" && date(shown.Created) && focused === "docs:details:ok", "File > Details: the project and its folders, the owner, when modified and by whom, when created; OK has the focus", `${JSON.stringify(rows)}; ${JSON.stringify(shown)}; focus ${focused}`);
+
+  // 2. Enter closes it; an edit moves Modified.
+  await page.keyboard.press("Enter");
+  await sleep(400);
+  const closed = await page.evaluate(() => !document.querySelector(".docs-details-dialog"));
+  const before = (await api(`/api/documents/${id}/details?notebookId=${ctx.notebookId}`)).body;
+  await clickIn(page, "We counted");
+  await page.keyboard.press("End");
+  await page.keyboard.type(" Then at noon.");
+  await saved(page);
+  const after = (await api(`/api/documents/${id}/details?notebookId=${ctx.notebookId}`)).body;
+  check(G, closed && Date.parse(after.modifiedAt) > Date.parse(before.modifiedAt) && after.createdAt === before.createdAt, "Enter closes it; an edit moves Modified and leaves Created", `${before.modifiedAt} → ${after.modifiedAt}`);
+
+  // 3. Viewing mode reads it too.
+  await setMode(page, "viewing");
+  await openDetails(page);
+  const viewing = await detailRows(page);
+  await page.locator('[data-track="docs:details:ok"]').click();
+  await setMode(page, "editing");
+  check(G, viewing.Location === shown.Location, "in Viewing mode, File > Details shows the same", JSON.stringify(viewing));
+
+  // 4. The route checks what it is asked: no project, 400; a project the document is not in, 404.
+  const missing = await api(`/api/documents/${id}/details`);
+  const elsewhere = await api(`/api/documents/${id}/details?notebookId=cnotaproject${STAMP}`);
+  check(G, missing.status === 400 && elsewhere.status === 404, "the route answers 400 without a project and 404 for a project the document is not in", `${missing.status}, ${elsewhere.status}`);
   check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
   await close();
 };

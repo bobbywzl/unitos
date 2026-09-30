@@ -222,6 +222,15 @@ registerDocsCommands([
     enabled: (editor) => insertContext(editor)?.projectEditor === true,
   },
   {
+    // File > Details: where the document sits, its owner, when it was
+    // modified and made (page/details-dialog.tsx). A viewer may read them.
+    id: "page:details",
+    label: "docsPage.details",
+    menu: "file",
+    keywords: ["details", "document details", "info", "information", "owner", "location", "created", "modified", "详细信息"],
+    run: (editor) => store(editor)?.set({ dialog: "details" }),
+  },
+  {
     // Tools > Compare documents: a copy with another document's differences
     // as suggestions (page/compare-dialog.tsx), made as Make a copy is.
     id: "page:compare",

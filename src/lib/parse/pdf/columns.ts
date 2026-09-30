@@ -381,13 +381,18 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
   // A note beside a column, a gutter apart (sideNote): the band it stands
   // in is columns, and the note reads beside the paragraph at its top.
   if (twoSided.length === 1 && isNoteBand(twoSided[0], page)) return { bands: stacked(twoSided[0], items, graphics, "columns", page) };
-  // Blocks a band's gutter finds (bandGutter) hold words on both sides (a
-  // contents list's page numbers beside its entries are its table's), and
-  // are no figure's labels: the rows under the band, short ones up to a
-  // "Figure N" caption, say they are (a flowchart's boxes over its caption,
-  // NASA TM p. 14).
+  // Blocks a band's gutter finds (bandGutter) stand beside each other (a
+  // court's caption line over a run-in heading at the column's edge is no
+  // pair), hold words on both sides (a contents list's page numbers beside
+  // its entries are its table's), and are no figure's labels: the rows
+  // under the band, short ones up to a "Figure N" caption, say they are (a
+  // flowchart's boxes over its caption, NASA TM p. 14).
   const wordy = (side: Side) => side.items.reduce((n, i) => n + i.str.replace(/[^\p{L}]/gu, "").length, 0) * 2 >= chars(side.items);
-  const blocks = twoSided.find((b) => isBlocks(b, page) && !(banded && (overCaption(bands, b) || !wordy(b.left) || !wordy(b.right))));
+  const abreast = (b: Band) => {
+    const [l, r] = [b.left.items.map((i) => i.y), b.right.items.map((i) => i.y)];
+    return Math.min(Math.max(...l), Math.max(...r)) >= Math.max(Math.min(...l), Math.min(...r));
+  };
+  const blocks = twoSided.find((b) => isBlocks(b, page) && !(banded && (overCaption(bands, b) || !wordy(b.left) || !wordy(b.right) || !abreast(b))));
   return blocks ? { bands: stacked(blocks, items, graphics, "blocks", page) } : null;
 }
 

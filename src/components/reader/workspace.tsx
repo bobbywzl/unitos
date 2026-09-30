@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
   CorpusDistillationView,
@@ -38,6 +38,7 @@ import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
 import { ProgressBar } from "@/components/progress-bar";
+import { LoadingDots } from "@/components/thinking";
 import { SaveIndicator } from "@/components/save-indicator";
 import { OpenDocumentProvider } from "@/components/reader/open-document-context";
 import {
@@ -68,6 +69,13 @@ import {
 } from "@/lib/reading-position";
 
 type Tab = "notes" | "assistant" | "distill" | "annotations" | "edits";
+
+/** The back arrow, and three dots in a wave while the dashboard opens: the
+    press answers at once, and the dashboard lands half a second later. */
+function BackArrow() {
+  const { pending } = useLinkStatus();
+  return pending ? <LoadingDots /> : <ArrowLeftIcon size={18} />;
+}
 
 const TAB_TITLES: Record<Tab, TKey> = {
   notes: "panes.notes",
@@ -625,7 +633,7 @@ export function Workspace({
           data-tip={t("panes.allCorporaTitle")}
           className="flex size-[38px] shrink-0 items-center justify-center rounded-full text-sand-700 hover:bg-clay-100 hover:text-clay-800"
         >
-          <ArrowLeftIcon size={18} />
+          <BackArrow />
         </Link>
         <NotebookTitle id={notebook.id} title={notebook.title} />
         <span aria-hidden className="hidden size-[5px] shrink-0 rounded-full bg-sand-400 sm:block" />
