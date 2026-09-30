@@ -759,10 +759,13 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
   const rows = trs.map((tr) => {
     pinning = pinning && tr.parentElement?.tagName.toLowerCase() === "thead";
     const cells = cellsOf(tr).map((cell) => {
-      // The cell's fill and its sides as the page sets them.
+      // The cell's fill, its sides, and where its words sit, as the page
+      // sets them.
       const attrs: Record<string, string> = {};
       const fill = colorOf(cell, "background-color");
       if (fill) attrs.backgroundColor = fill;
+      const valign = styleOf(cell, "vertical-align");
+      if (valign === "middle" || valign === "bottom") attrs.valign = valign;
       for (const [name, side] of Object.entries(CELL_SIDES)) {
         const value = sideOf(cell, side);
         if (value) attrs[name] = value;

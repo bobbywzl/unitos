@@ -1251,10 +1251,24 @@ function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawin
     const own = cells.flatMap((cell, k) => (cell.row === row && cellLines[k].length > 0 ? [sits[k]] : []));
     return own.filter((s) => s === "center").length >= 2 && !own.includes("other");
   };
+  // A cell's words sit at its foot when the room over them passes the room
+  // under them by an em and twice over (a signature row's X on its line, a
+  // form's "Date:"), and in its middle when the two are alike, each over
+  // half an em (a slide's marks in tall rows).
+  const valignOf = (cell: GridCell, lines: Line[]): TableCell["valign"] => {
+    if (lines.length === 0) return undefined;
+    const [first, last] = [lines[0], lines[lines.length - 1]];
+    const over = cell.y2 - first.y - first.size * 0.92;
+    const under = last.y - last.size * 0.23 - cell.y1;
+    if (over > under * 2 && over - under > first.size) return "bottom";
+    if (Math.min(over, under) > first.size * 0.5 && Math.abs(over - under) <= Math.max(over, under) * 0.25) return "middle";
+    return undefined;
+  };
   cells.forEach((cell, k) => {
     built.push(...cellLines[k]);
     const edge = cell.colspan === 1 ? flush.get(cell.col) : undefined;
     const fill = cellFill(cell, grid.box, drawing.fills);
+    const valign = splits[cell.row] === 1 ? valignOf(cell, cellLines[k]) : undefined;
     const n = splits[cell.row];
     const parts = n > 1 ? Array.from({ length: n }, (_, i) => cellLines[k].slice(i, i + 1)) : [cellLines[k]];
     parts.forEach((lines, i) => {
@@ -1263,6 +1277,7 @@ function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawin
       if (cell.colspan > 1) out.colspan = cell.colspan;
       if (cell.rowspan > 1) out.rowspan = cell.rowspan;
       if (fill) out.fill = fill;
+      if (valign && out.text) out.valign = valign;
       rows[cell.row][i].cells.push(out);
     });
   });

@@ -58,9 +58,10 @@ export function translatedCopy(doc: RichNode, translations: Readonly<Record<stri
     }
     if (node.type === "figure" && text) {
       translated += 1;
-      // The caption's styles name places in the words it had.
+      // The caption's styles and formulas name places in the words it had.
       const attrs: Record<string, unknown> = { ...node.attrs, caption: text };
       delete attrs.captionStyles;
+      delete attrs.captionMath;
       return { ...node, attrs };
     }
     return node.content ? { ...node, content: node.content.map(walk) } : node;

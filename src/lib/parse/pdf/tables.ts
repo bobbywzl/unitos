@@ -23,8 +23,9 @@ const FACE_RE = /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/;
 // (which joins them with a space), and how its lines sit in the cell:
 // centered, flush right, or set in from the cell's left edge (points).
 export type CellParagraph = { start: number; end: number; align?: "center" | "right"; indent?: number };
-// fill: the cell's shading (#rrggbb).
-export type TableCell = { text: string; runs: Run[]; colspan?: number; rowspan?: number; paragraphs?: CellParagraph[]; fill?: string };
+// fill: the cell's shading (#rrggbb); valign: where its words sit in a row
+// taller than they are (at the top when unset).
+export type TableCell = { text: string; runs: Run[]; colspan?: number; rowspan?: number; paragraphs?: CellParagraph[]; fill?: string; valign?: "middle" | "bottom" };
 // height: a ruled row's height on the page, in points, where the page
 // sets it taller than its words (a form's field row, a signature row).
 export type TableRow = { cells: TableCell[]; height?: number };
@@ -291,6 +292,7 @@ export function tableSegment(
         const style = [
           ...(c.fill && HEX_RE.test(c.fill) ? [`background-color:${c.fill}`] : []),
           ...(cellIdx === tall ? [`height:${points(row.height ?? 0)}pt`] : []),
+          ...(c.valign ? [`vertical-align:${c.valign}`] : []),
         ];
         return `<${tag}${spans}${style.length > 0 ? ` style="${style.join(";")}"` : ""}>${cellHtml(c)}${gap}</${tag}>`;
       })
@@ -801,6 +803,17 @@ function besideMarks(line: Line, above: Line | undefined): boolean {
   );
 }
 
+// A line cut to its first cell, in place (other readers keep the line).
+function firstCellOnly(line: Line) {
+  const [first, next] = line.cells;
+  const end = first.text.length;
+  line.items = line.items.filter((it) => it.x + it.w / 2 < next.x);
+  line.cells = [first];
+  line.text = first.text;
+  line.runs = line.runs.filter((r) => r.start < end).map((r) => ({ ...r, end: Math.min(r.end, end) }));
+  line.xEnd = Math.max(...line.items.map((it) => it.x + it.w));
+}
+
 // A row set tight: a short line of one cell whose words stand an em apart or
 // more, a number among them (Grinstead–Snell's Table 6.2: "HHH 1" under "X
 // Y", its columns closer than a cell's gap). Its parts count as its cells.
@@ -839,8 +852,12 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
   // Prose beside a form's boxes is a line of one cell: its first cell goes
   // on the sentence of the line above it, and its other cells are marks
   // alone (the W-9's Part I beside its SSN boxes: "… However, for a" |
-  // "resident alien, … For other  –  –").
-  const cells = lines.map((line, k) => (besideMarks(line, lines[k - 1]) || proseLine(line) ? 1 : Math.max(line.cells.length, tightCells(line))));
+  // "resident alien, … For other  –  –"). The marks are the boxes', no
+  // words of the sentence: the line keeps its first cell.
+  lines.forEach((line, k) => {
+    if (besideMarks(line, lines[k - 1])) firstCellOnly(line);
+  });
+  const cells = lines.map((line) => (proseLine(line) ? 1 : Math.max(line.cells.length, tightCells(line))));
   let runId = 0;
   let i = 0;
   while (i < lines.length) {

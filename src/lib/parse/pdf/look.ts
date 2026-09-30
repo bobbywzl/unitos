@@ -6,7 +6,7 @@
 // exports underline labels and highlight phrases, and the parse read none
 // of it.
 
-import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
+import type { Glyph, PageDrawing } from "@/lib/parse/pdf/drawing";
 import { faceOf } from "@/lib/parse/pdf/faces";
 import { CONTROL_CHARS_RE, itemText, normalizeGlyphs, symbolFont, symbolText } from "@/lib/parse/pdf/glyphs";
 import type { Item, Look } from "@/lib/parse/pdf/types";
@@ -143,13 +143,8 @@ function drawnMarks(glyphs: Glyph[], drawing: PageDrawing): Map<Glyph, Marks> {
   const set = (list: Glyph[], marks: Marks) => {
     for (const g of list) out.set(g, { ...out.get(g), ...marks });
   };
-  // A box's edge is no underline: a rule a vertical rule meets, ending on
-  // it or crossing it (the W-9's Sign Here box under the last line of its
-  // certification's instructions read as underlined, p. 1).
-  const edge = (rule: Rule) =>
-    drawing.rules.some((v) => v.dir === "v" && v.x1 >= rule.x1 - 1 && v.x1 <= rule.x2 + 1 && v.y1 <= rule.y1 + 1.5 && v.y2 >= rule.y1 - 1.5);
   for (const rule of drawing.rules) {
-    if (rule.dir !== "h" || rule.x2 - rule.x1 < 2 || rule.thickness > 3 || edge(rule)) continue;
+    if (rule.dir !== "h" || rule.x2 - rule.x1 < 2 || rule.thickness > 3) continue;
     // An underline: the rule under the words' baseline, down to a
     // descender's depth (Google Docs a tenth of an em, TeX's \underline
     // under the descenders); a strikethrough: through their x-height.
