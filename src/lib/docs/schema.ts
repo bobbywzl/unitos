@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { parseChart } from "@/lib/docs/chart";
 import { parseDrawing } from "@/lib/docs/drawing";
+import { watermarkSchema, type Watermark } from "@/lib/docs/watermark";
 import { regionSchema } from "@/lib/video/types";
 
 // A document's rich text (SPEC.md §29): Tiptap (ProseMirror) JSON, of a blank
@@ -714,6 +715,9 @@ export type PageSetup = {
   evenFooter?: RichNode | null;
   /** The first page's number; absent = 1. */
   pageNumberStart?: number;
+  /** Insert > Watermark: words or an image behind the text of every page
+      (lib/docs/watermark.ts); absent or null = none. */
+  watermark?: Watermark | null;
 };
 
 /** Letter, 1 in margins, pages, white: a new document's page (SPEC.md §29). */
@@ -747,6 +751,7 @@ export const pageSetupSchema = z.object({
   evenHeader: richDocSchema.nullable().optional(),
   evenFooter: richDocSchema.nullable().optional(),
   pageNumberStart: z.number().int().min(0).max(999).optional(),
+  watermark: watermarkSchema.nullable().optional(),
 });
 
 /** The stored page setup, or the default when it is missing or broken. */
