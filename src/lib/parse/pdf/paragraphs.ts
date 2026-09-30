@@ -312,10 +312,12 @@ function sharesMiddle(lines: Line[], k: number, ctx: PageContext): boolean {
   if (line.cells.length !== 1 || fillsColumn(lines, k, ctx)) return false;
   const middle = (line.x + line.xEnd) / 2;
   const { left, right } = columnEdges(lines, k, ctx);
-  // A line that runs to the column's right edge from its left edge or a
-  // first-line indent is a paragraph's, not a centered one: two justified
-  // lines under a centered heading shared its middle (MMWR p. 3).
-  const full = (l: Line) => right > 0 && Math.abs(right - l.xEnd) <= l.size * 0.33 && l.x - left <= l.size * 2;
+  // A line at the body's size that runs to the column's right edge from its
+  // left edge or a first-line indent is a paragraph's, not a centered one:
+  // two justified lines under a centered heading shared its middle (MMWR p.
+  // 3). A heading's line, set in another size, may fill the column over its
+  // centered last line (arXiv 2502.02648 p. 8).
+  const full = (l: Line) => right > 0 && Math.abs(right - l.xEnd) <= l.size * 0.33 && l.x - left <= l.size * 2 && Math.abs(l.size - ctx.bodySize) <= ctx.bodySize * 0.05;
   if (full(line)) return false;
   const column = lineColumn(line);
   const center = right > 0 ? (left + right) / 2 : column ? (column[0] + column[1]) / 2 : middle;

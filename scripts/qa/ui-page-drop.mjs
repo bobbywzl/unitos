@@ -606,8 +606,14 @@ GROUPS.BLOCK = async () => {
 
   // 1. Reading: a PNG dropped on the second block lands right after it.
   let p = await blockPoint("The second");
-  await drag(cdp, p.x, p.y, fileDrag(path("png")), { drop: false });
-  const line = await page.evaluate(() => document.querySelector("[data-reader-root] [data-drop-line]")?.getBoundingClientRect().top ?? null);
+  // The pane may still be coming to life: the drag goes over again until
+  // the page answers it.
+  let line = null;
+  for (let i = 0; i < 4 && line === null; i++) {
+    await drag(cdp, p.x, p.y, fileDrag(path("png")), { drop: false });
+    line = await until(() => page.evaluate(() => document.querySelector("[data-reader-root] [data-drop-line]")?.getBoundingClientRect().top ?? null), 400, 50);
+    if (line === null) await cancel(cdp, p.x, p.y, fileDrag(path("png")));
+  }
   const lineShot = await shot(page, "block-1-drop-line");
   check("BLOCK", line !== null && Math.abs(line - p.bottom) < 8, "reading: the drop line shows under the block while a PNG is over it", `line at ${line === null ? "none" : Math.round(line)}, block ends at ${Math.round(p.bottom)}; ${lineShot}`);
   await cancel(cdp, p.x, p.y, fileDrag(path("png")));
