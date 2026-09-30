@@ -307,7 +307,7 @@ async function searchMenus(page, words) {
   return rows;
 }
 const toolbarShown = (page) => page.evaluate(() => {
-  const bar = document.querySelector(".docs-toolbar");
+  const bar = document.querySelector('.docs-header [role="toolbar"]');
   return Boolean(bar && bar.getBoundingClientRect().height > 0);
 });
 
@@ -332,6 +332,8 @@ GROUPS.FULLSCREEN = async () => {
   await page.keyboard.press("End");
   await page.keyboard.type(" Typed in full screen.");
   await page.keyboard.press("Shift+Home");
+  // The page reads the selection the key made on the browser's next turn.
+  await sleep(300);
   await page.keyboard.press("Control+b");
   await sleep(300);
   const typed = await page.evaluate(() => {
