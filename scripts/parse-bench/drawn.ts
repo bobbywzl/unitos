@@ -21,6 +21,24 @@ import type { Flat } from "./metrics";
 type Rule = { selectors: string[]; declarations: Map<string, string> };
 let rulesMemo: { own: Rule[]; katex: Rule[] } | null = null;
 
+/** A selector list's selectors: its commas outside parentheses and brackets
+    (`:is(td, th)` is one selector's). */
+function selectorsOf(list: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] === "(" || list[i] === "[") depth++;
+    else if (list[i] === ")" || list[i] === "]") depth--;
+    else if (list[i] === "," && depth === 0) {
+      out.push(list.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  out.push(list.slice(start).trim());
+  return out.filter(Boolean);
+}
+
 function rulesOf(css: string): Rule[] {
   const out: Rule[] = [];
   for (const m of css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
@@ -29,9 +47,72 @@ function rulesOf(css: string): Rule[] {
       const at = d.indexOf(":");
       if (at > 0) declarations.set(d.slice(0, at).trim().toLowerCase(), d.slice(at + 1).replace(/!important/, "").trim());
     }
-    out.push({ selectors: m[1].split(",").map((s) => s.trim()), declarations });
+    out.push({ selectors: selectorsOf(m[1]), declarations });
   }
   return out;
+}
+
+/** A selector's specificity as one number: ids, then classes, attributes,
+    and pseudo-classes, then types and pseudo-elements. `:is()`, `:not()`,
+    and `:has()` count their most specific argument, `:where()` none. */
+function specificity(selector: string): number {
+  let [a, b, c] = [0, 0, 0];
+  const closing = (at: number) => {
+    let depth = 0;
+    for (let i = at; i < selector.length; i++) {
+      if (selector[i] === "(") depth++;
+      else if (selector[i] === ")" && --depth === 0) return i;
+    }
+    return selector.length;
+  };
+  const name = (at: number) => /^[\w-]*/.exec(selector.slice(at))?.[0] ?? "";
+  for (let i = 0; i < selector.length; ) {
+    const ch = selector[i];
+    if (ch === "#" || ch === ".") {
+      if (ch === "#") a++;
+      else b++;
+      i += 1 + name(i + 1).length;
+    } else if (ch === "[") {
+      b++;
+      const end = selector.indexOf("]", i);
+      i = end < 0 ? selector.length : end + 1;
+    } else if (ch === ":") {
+      const element = selector[i + 1] === ":";
+      const pseudo = name(i + (element ? 2 : 1));
+      i += (element ? 2 : 1) + pseudo.length;
+      const args = selector[i] === "(" ? selector.slice(i + 1, closing(i)) : null;
+      if (args !== null) i = closing(i) + 1;
+      if (element) c++;
+      else if (args !== null && ["is", "not", "has"].includes(pseudo)) {
+        const inner = Math.max(0, ...selectorsOf(args).map(specificity));
+        a += Math.floor(inner / 10000);
+        b += Math.floor(inner / 100) % 100;
+        c += inner % 100;
+      } else if (pseudo !== "where") b++;
+    } else if (/[a-zA-Z]/.test(ch)) {
+      c++;
+      i += name(i).length;
+    } else i++;
+  }
+  return a * 10000 + b * 100 + c;
+}
+
+/** The look checks judge a PDF's import: the page editor's shell carries
+    data-import="pdf" (docs-editor.tsx). A selector that names another kind
+    of import alone draws nothing on it. */
+function applies(selector: string): boolean {
+  const kinds = [...selector.matchAll(/\[data-import="([^"]*)"\]/g)].map((m) => m[1]);
+  return kinds.length === 0 || kinds.includes("pdf");
+}
+
+/** A value with its custom properties read: the element's own (`vars`),
+    else the fallback ("var(--docs-cell-padding, 0 5pt)" is "0 5pt"). */
+function resolved(value: string, vars: Record<string, string>): string {
+  let out = value;
+  for (let m = /var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*))?\)/.exec(out); m; m = /var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*))?\)/.exec(out)) {
+    out = out.slice(0, m.index) + (vars[m[1]] ?? m[2]?.trim() ?? "") + out.slice(m.index + m[0].length);
+  }
+  return out.trim();
 }
 
 /** The page editor's rules (every stylesheet under components/docs) and KaTeX's. */
@@ -53,16 +134,23 @@ function points(value: string | undefined, em: number): number | null {
   return m[2] === "px" ? n * 0.75 : m[2] === "em" || m[2] === "rem" ? n * em : m[2] === "pt" || n === 0 ? n : null;
 }
 
-/** A box's space on one side from the last rule that sets it: `margin` or `padding`, the shorthand
-    ("6pt 0", "4px") or the side's own property. */
-function side(rules: Rule[], matches: (selector: string) => boolean, property: "margin" | "padding", which: "top" | "bottom", em: number): number | null {
+/** A box's space on one side as the browser's cascade sets it: `margin` or
+    `padding`, the shorthand ("6pt 0", "4px") or the side's own property,
+    from the most specific rule that sets it, the last in file order among
+    rules as specific (an import's rules, `[data-import="pdf"]`, win over the
+    page editor's own though an earlier file holds them). */
+function side(rules: Rule[], matches: (selector: string) => boolean, property: "margin" | "padding", which: "top" | "bottom", em: number, vars: Record<string, string> = {}): number | null {
+  const cascade = rules
+    .map((rule, order) => ({ rule, order, weight: Math.max(-1, ...rule.selectors.filter((s) => matches(s) && applies(s)).map(specificity)) }))
+    .filter((r) => r.weight >= 0)
+    .sort((x, y) => x.weight - y.weight || x.order - y.order);
   let value: number | null = null;
-  for (const rule of rules) {
-    if (!rule.selectors.some(matches)) continue;
+  for (const { rule } of cascade) {
     for (const [key, raw] of rule.declarations) {
-      if (key === `${property}-${which}`) value = points(raw, em) ?? value;
+      const text = resolved(raw, vars);
+      if (key === `${property}-${which}`) value = points(text, em) ?? value;
       else if (key === property) {
-        const parts = raw.split(/\s+/);
+        const parts = text.split(/\s+/);
         value = points(parts[which === "top" ? 0 : parts.length >= 3 ? 2 : 0], em) ?? value;
       }
     }
@@ -77,14 +165,16 @@ export type DisplayGaps = { edges: number; right: number; score: number | null; 
 /** The space the page editor draws above and below a display's formula
     (text of `em` points) past its neighbors' own: the math block's margin
     and padding, and KaTeX's display margin inside it (collapsed into the
-    block's margin where the block has no padding). */
-export function displaySpace(em: number): { top: number; bottom: number } {
+    block's margin where the block has no padding). An import's display
+    carries its space after as its own padding under it (`after`, points:
+    insert/math.ts), which wins over the stylesheet's. */
+export function displaySpace(em: number, after?: number): { top: number; bottom: number } {
   const { own, katex } = stylesheets();
   const block = (s: string) => /\.docs-math-block$/.test(s);
   const display = (s: string) => /\.katex-display$/.test(s);
   const drawn = (which: "top" | "bottom") => {
     const margin = side(own, block, "margin", which, em) ?? 0;
-    const pad = side(own, block, "padding", which, em) ?? 0;
+    const pad = which === "bottom" && after !== undefined && after > 0 ? after : (side(own, block, "padding", which, em) ?? 0);
     const inner = side(own, display, "margin", which, em) ?? side(katex, (s) => s === ".katex-display", "margin", which, em) ?? 0;
     return pad > 0 ? margin + pad + inner : Math.max(margin, inner);
   };
@@ -101,8 +191,6 @@ export function displaySpace(em: number): { top: number; bottom: number } {
     another display), or whose page leaves more than 36 pt, is not judged. */
 export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText): DisplayGaps {
   const styles = readStyles({ attrs: rich.attrs ?? {} });
-  const space = displaySpace(styles.normal.size);
-  const drawn = (which: "top" | "bottom") => space[which];
   const placed = parse.blocks.filter((b) => b.kind === "equation" && b.at);
   let next = 0;
   let edges = 0;
@@ -132,8 +220,9 @@ export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText): DisplayGa
       else misses.push(`p${at.page}: ${what} ${Math.round(drawnPt)} pt, the page's ${Math.round(page)} pt`);
     };
     const [before, after] = [nodes[i - 1], nodes[i + 1]];
-    if (before?.type === "paragraph") judge(above ? y1 - above.bottom : null, spacing(before, "spaceAfter") + drawn("top"), "above");
-    if (after?.type === "paragraph") judge(below ? below.top - y2 : null, drawn("bottom") + spacing(after, "spaceBefore"), "below");
+    const drawn = displaySpace(styles.normal.size, typeof node.attrs?.spaceAfter === "number" ? node.attrs.spaceAfter : undefined);
+    if (before?.type === "paragraph") judge(above ? y1 - above.bottom : null, spacing(before, "spaceAfter") + drawn.top, "above");
+    if (after?.type === "paragraph") judge(below ? below.top - y2 : null, drawn.bottom + spacing(after, "spaceBefore"), "below");
   });
   return { edges, right, score: edges > 0 ? right / edges : null, misses };
 }
@@ -145,10 +234,13 @@ export type RowHeights = { tables: number; right: number; score: number | null; 
 /** The height the page editor draws a table row of one line in: the cell
     paragraph's line height (its line spacing times the stylesheet's
     factor, at `size` points) with the cell's padding above and below and
-    its rule. */
-export function rowHeight(size: number, lineSpacing: number): number {
+    its rule. An import's table may carry its cells' padding (`padding`,
+    "top right bottom left" in points: insert/table.ts sets it as
+    --docs-cell-padding). */
+export function rowHeight(size: number, lineSpacing: number, padding?: string): number {
   const { own } = stylesheets();
-  const cell = (s: string) => /\.docs-prose (?:td|th)$/.test(s);
+  const cell = (s: string) => /\.docs-prose (?:td|th|:is\(td, ?th\))$/.test(s);
+  const vars: Record<string, string> = padding ? { "--docs-cell-padding": padding.trim().split(/\s+/).map((v) => `${v}pt`).join(" ") } : {};
   const para = (s: string) => /\.docs-prose p$/.test(s);
   let factor = 1.15;
   for (const rule of own) {
@@ -156,22 +248,25 @@ export function rowHeight(size: number, lineSpacing: number): number {
     const m = /calc\(\s*var\(--docs-ls\s*,\s*[\d.]+\)\s*\*\s*([\d.]+)\s*\)/.exec(rule.declarations.get("line-height") ?? "");
     if (m) factor = Number(m[1]);
   }
-  const pad = (side(own, cell, "padding", "top", size) ?? 0) + (side(own, cell, "padding", "bottom", size) ?? 0);
+  const pad = (side(own, cell, "padding", "top", size, vars) ?? 0) + (side(own, cell, "padding", "bottom", size, vars) ?? 0);
   return size * lineSpacing * factor + pad + 0.75;
 }
 
 /** A table row's height: the page's, the median step from one row to the
     next where each of their cells is one line of the page, against the page
-    editor's for a row of one line (rowHeight); right within a fifth (Word
-    and a PDF's tables set cells with no space above or below the words,
-    where the page editor pads each cell). */
+    editor's for the same rows: a row of one line (rowHeight), or the row's
+    own least height where it is taller (an import's ruled row, drawn as the
+    row's height); right within a fifth (Word and a PDF's tables set cells
+    with no space above or below the words, where the page editor pads each
+    cell). */
 export function rowHeights(cand: Flat, placed: number[][], pdf: PdfText): RowHeights {
   let tables = 0;
   let right = 0;
   const misses: string[] = [];
   cand.blocks.forEach((block, b) => {
     if (block.kind !== "table" || !block.cells) return;
-    const drawnPt = rowHeight(block.cells.size, block.cells.lineSpacing);
+    const line = rowHeight(block.cells.size, block.cells.lineSpacing, block.cells.padding);
+    const least = block.cells.minHeights ?? [];
     const rows = new Map<number, number[]>();
     for (const u of cand.unitsOf[b]) {
       const unit = cand.units[u];
@@ -184,9 +279,11 @@ export function rowHeights(cand: Flat, placed: number[][], pdf: PdfText): RowHei
       const lines = units.map((u) => pdf.lines[placed[u][0]]);
       tops.push({ row, top: Math.min(...lines.map((l) => l.top)), page: lines[0].page });
     }
-    const steps = tops.slice(1).flatMap((t, k) => (t.row === tops[k].row + 1 && t.page === tops[k].page && t.top > tops[k].top ? [t.top - tops[k].top] : []));
-    if (steps.length < 2) return;
-    const page = steps.sort((a, c) => a - c)[Math.floor(steps.length / 2)];
+    const pairs = tops.slice(1).flatMap((t, k) => (t.row === tops[k].row + 1 && t.page === tops[k].page && t.top > tops[k].top ? [{ page: t.top - tops[k].top, drawn: Math.max(line, least[tops[k].row] ?? 0) }] : []));
+    if (pairs.length < 2) return;
+    const median = (values: number[]) => values.sort((a, c) => a - c)[Math.floor(values.length / 2)];
+    const page = median(pairs.map((p) => p.page));
+    const drawnPt = median(pairs.map((p) => p.drawn));
     tables++;
     if (Math.abs(drawnPt - page) <= 0.2 * page) right++;
     else misses.push(`a table's rows drawn ${Math.round(drawnPt)} pt apart, the page's ${Math.round(page)} pt`);

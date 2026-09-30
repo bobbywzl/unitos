@@ -66,27 +66,30 @@ export function requestFigureCapture(documentId: string): void {
 }
 
 // A picture frame with a small image sliding into it, over and over: the
-// figure on its way. Still under reduced motion (globals.css).
+// figure on its way. Still under reduced motion (globals.css). The image is
+// its own svg over the frame's, so the compositor slides it: a moving shape
+// inside an svg lays out and paints the whole page on every frame.
 export function MovingFigureIcon({ size = 16 }: { size?: number }) {
+  const svg = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  } as const;
   return (
-    <svg
-      className="figure-moving-icon shrink-0"
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <g className="figure-moving-icon-slide">
+    <span aria-hidden className="figure-moving-icon relative shrink-0" style={{ width: size, height: size }}>
+      <svg {...svg} className="block">
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+      </svg>
+      <svg {...svg} className="figure-moving-icon-slide absolute inset-0">
         <circle cx="9" cy="10" r="1.4" fill="currentColor" stroke="none" />
         <path d="M6 16l3.5-3.5 2.5 2.5 3-3.5L18 16" />
-      </g>
-    </svg>
+      </svg>
+    </span>
   );
 }
 

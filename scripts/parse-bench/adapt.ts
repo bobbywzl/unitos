@@ -38,9 +38,11 @@ export type DocBlock = RefBlock & {
   at?: { page: number; region: Region };
   /** A Word paragraph's borders as the candidate draws them: the sides that have one. */
   borders?: Side[];
-  /** An import's table: the size in points and the line spacing its first cell's words take, which a
-      row's height follows (drawn.ts rowHeight). */
-  cells?: { size: number; lineSpacing: number };
+  /** An import's table: the size in points and the line spacing its cells' words take (the table's
+      cellSize, else its first cell's words), its cells' padding when it carries one ("top right
+      bottom left" in points), and each kept row's least height in points (0 for none), which a
+      row's height follows (drawn.ts rowHeight, rowHeights). */
+  cells?: { size: number; lineSpacing: number; padding?: string; minHeights?: number[] };
 };
 export type Side = "top" | "right" | "bottom" | "left";
 /** A document as the model holds it. `fonts`: a reference's fonts by role;
@@ -961,6 +963,7 @@ class ImportReader {
 
   private table(node: RichNode) {
     const rows: Row[] = [];
+    const minHeights: number[] = [];
     // Footnote marks by the cell's place among the table's cells.
     const marks: NoteMark[] = [];
     let index = 0;
@@ -982,6 +985,7 @@ class ImportReader {
       // A row whose words are all on pages out of range is not scored.
       if (cells.some((c) => c.spans.some((s) => s.text.trim() || s.latex !== undefined)) || this.here()) {
         rows.push({ cells });
+        minHeights.push(typeof tr.attrs?.minHeight === "number" && tr.attrs.minHeight > 0 ? tr.attrs.minHeight : 0);
         for (const list of rowMarks) {
           for (const m of list) marks.push({ unit: index, ...m });
           index++;
@@ -1007,8 +1011,10 @@ class ImportReader {
     const first = node.content?.[0]?.content?.[0]?.content?.[0];
     const run = first?.content?.find((c) => c.type === "text");
     const cells = {
-      size: sizeInPt(run?.marks?.find((m) => m.type === "textStyle")?.attrs?.fontSize) ?? this.styles.normal.size,
+      size: typeof node.attrs?.cellSize === "number" ? node.attrs.cellSize : (sizeInPt(run?.marks?.find((m) => m.type === "textStyle")?.attrs?.fontSize) ?? this.styles.normal.size),
       lineSpacing: typeof first?.attrs?.lineSpacing === "number" ? first.attrs.lineSpacing : this.styles.normal.lineSpacing,
+      ...(typeof node.attrs?.cellPadding === "string" ? { padding: node.attrs.cellPadding } : {}),
+      ...(minHeights.some((h) => h > 0) ? { minHeights } : {}),
     };
     this.blocks.push({ kind: "table", ...(caption ? { caption: caption.spans, ...(caption.font ? { font: caption.font } : {}) } : {}), rows, ...(marks.length > 0 ? { marks } : {}), cells });
   }

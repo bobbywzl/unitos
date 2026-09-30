@@ -578,6 +578,15 @@ GROUPS.VIEW = async () => {
 
 // ── The block reader ────────────────────────────────────────────────────────
 
+/** Open a document in the block reader and wait until the page has come to
+    life: the notes tray's voice button is a client control. */
+async function openReader(page, documentId) {
+  await page.goto(`${BASE}/n/${ctx.notebookId}?doc=${documentId}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("article.reader-prose [data-block-id]", { timeout: 120_000 });
+  await page.waitForSelector('[data-track="voice-note"]', { timeout: 120_000 }).catch(() => {});
+  await sleep(600);
+}
+
 /** Edit mode, as a person enters it: a double-click on the block that starts
     with `words` (again, while the page is still coming to life), which
     takes the focus. */
@@ -594,9 +603,7 @@ GROUPS.BLOCK = async () => {
   const id = await blockDocument("read");
   const { page, cdp, posts, errors, close } = await newPage();
   const rows = async () => (await db.block.findMany({ where: { documentId: id }, orderBy: { order: "asc" }, select: { type: true, text: true, html: true } })).map((r) => (r.type === "FIGURE" ? `FIGURE(${/src="\/api\/images\//.test(r.html ?? "") ? "stored" : /src="([^"]+)"/.exec(r.html ?? "")?.[1] ?? "?"})` : `${r.type}(${r.text.split(" ").slice(0, 2).join(" ")})`)).join(" ");
-  await page.goto(`${BASE}/n/${ctx.notebookId}?doc=${id}`, { waitUntil: "domcontentloaded" });
-  await page.waitForSelector("article.reader-prose [data-block-id]", { timeout: 120_000 });
-  await sleep(1000);
+  await openReader(page, id);
   const blockPoint = async (words) =>
     page.evaluate((words) => {
       const el = [...document.querySelectorAll("article.reader-prose [data-block-id], article.reader-prose [data-edit-block]")].find((e) => e.textContent.startsWith(words));
@@ -675,8 +682,7 @@ GROUPS.BLOCK = async () => {
   }
 
   // 5. Edit mode: a WebP pasted while the third block is edited lands after it.
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector("article.reader-prose [data-block-id]", { timeout: 120_000 });
+  await openReader(page, id);
   await editBlock(page, "The third");
   const pasted = await paste(page, "webp");
   const r5 = await until(async () => (/PARAGRAPH\(The third\) FIGURE/.test(await rows()) ? rows() : null), 15_000);
@@ -702,9 +708,7 @@ GROUPS.TOAST = async () => {
         ? route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: LONG_TOAST }) })
         : route.continue(),
     );
-    await page.goto(`${BASE}/n/${ctx.notebookId}?doc=${id}`, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector("article.reader-prose [data-block-id]", { timeout: 120_000 });
-    await sleep(1200);
+    await openReader(page, id);
     const needle = LONG_TOAST.slice(0, 30);
     const find = (text) => [...document.querySelectorAll("span")].find((s) => s.textContent.includes(text) && s.className.includes("bg-ink"));
     let shown = null;
