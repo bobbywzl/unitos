@@ -269,6 +269,7 @@ class ImageView implements NodeView {
     img.filter = filterOf(a);
     img.opacity = a.transparency ? String(1 - a.transparency / 100) : "";
     // Mask image: the image inside its shape, and the border along the shape.
+    if (a.mask) ensureMaskClips();
     this.frame.style.clipPath = a.mask ? `url(#${maskClipId(a.mask)})` : "";
     this.frame.style.outline =
       !a.mask && a.borderColor && a.borderWidth > 0 ? `${a.borderWidth}pt ${a.borderDash} ${a.borderColor}` : "";
@@ -283,13 +284,14 @@ class ImageView implements NodeView {
       this.edge = null;
       return;
     }
-    ensureMaskClips();
     if (!this.edge) {
       this.edge = document.createElementNS(SVG_NS, "svg");
       this.edge.setAttribute("class", "docs-img-edge");
       this.edge.setAttribute("viewBox", "0 0 1 1");
       this.edge.setAttribute("preserveAspectRatio", "none");
       this.edge.setAttribute("aria-hidden", "true");
+      // Over the frame, its size, the stroke free to spill past the shape.
+      this.edge.setAttribute("style", "position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none");
       this.edge.append(document.createElementNS(SVG_NS, "path"));
       this.frame.after(this.edge);
     }

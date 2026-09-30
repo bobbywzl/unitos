@@ -19,6 +19,7 @@ import {
   ImageOptionsIcon,
   InFrontIcon,
   InLineIcon,
+  MaskIcon,
   RefreshIcon,
   ResetIcon,
   RotateIcon,
@@ -40,6 +41,7 @@ import {
 } from "@/components/docs/insert/image";
 import { ImageSourcePicker } from "@/components/docs/insert/image-source";
 import { FloatingBox, LengthField, PanelSection, Seg, SidePanel, useEditorTick, useViewportTick } from "@/components/docs/insert/ui";
+import { MASKS, maskPath, type Mask } from "@/lib/docs/mask";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The image's controls (SPEC.md §29), Google Docs' way: under a selected
@@ -54,6 +56,28 @@ const MODES: [Wrap, TKey, (p: { size?: number }) => ReactNode][] = [
   ["behind", "docsInsert.behindText", BehindTextIcon],
   ["front", "docsInsert.inFrontOfText", InFrontIcon],
 ];
+
+/** Mask image's shapes, the image's own rectangle first. */
+const MASK_LABELS: Record<Mask | "none", TKey> = {
+  none: "docsInsert.maskNone",
+  rounded: "docsInsert.maskRounded",
+  oval: "docsInsert.maskOval",
+  triangle: "docsInsert.maskTriangle",
+  diamond: "docsInsert.maskDiamond",
+  pentagon: "docsInsert.maskPentagon",
+  hexagon: "docsInsert.maskHexagon",
+  star: "docsInsert.maskStar",
+  heart: "docsInsert.maskHeart",
+};
+
+/** A shape as a menu row's symbol. */
+function ShapeIcon({ mask }: { mask: Mask | null }) {
+  return (
+    <svg width={18} height={18} viewBox="-0.08 -0.08 1.16 1.16" aria-hidden focusable="false">
+      <path d={mask ? maskPath(mask) : "M0,0 H1 V1 H0 Z"} fill="none" stroke="currentColor" strokeWidth={0.09} strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 /** Margins from the text, in points: 0", 1/16", 1/8", 1/4", 3/8", 1/2", 3/4", 1". */
 const MARGINS: [number, string][] = [
@@ -155,6 +179,24 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
           {isChartImage(hit.node) && button("docsInsert.editChart", <ChartIcon />, () => emitInsert(editor, { type: "chart", pos: hit.pos }))}
           {isDrawingImage(hit.node) && button("docsInsert.editDrawing", <DrawingIcon />, () => emitInsert(editor, { type: "drawing", pos: hit.pos }))}
           {button("docsInsert.cropImage", <CropIcon />, () => imageViewAt(editor.view, hit.pos)?.startCrop())}
+          <DropBtn label={t("docsInsert.maskImage")} track="image-mask" face={<MaskIcon />}>
+            {(close) =>
+              [null, ...MASKS].map((mask) => (
+                <MenuItem
+                  key={mask ?? "none"}
+                  checked={a.mask === mask}
+                  icon={<ShapeIcon mask={mask} />}
+                  track={`docs:mask:${mask ?? "none"}`}
+                  onSelect={() => {
+                    close();
+                    set({ mask });
+                  }}
+                >
+                  {t(MASK_LABELS[mask ?? "none"])}
+                </MenuItem>
+              ))
+            }
+          </DropBtn>
           <BorderButtons
             track="image"
             widthLabel="docsInsert.borderWeight"
