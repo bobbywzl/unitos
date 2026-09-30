@@ -167,7 +167,10 @@ class Paginator {
   private onPointerUp = () => {
     if (!this.pointerDown) return;
     this.pointerDown = false;
-    this.refresh();
+    // A pass the press held back runs now. A press that changed nothing (a
+    // click, a selection) needs none: a pass reads every line of the
+    // document, 100 ms on a long import.
+    if (this.touched !== null) this.schedule();
   };
 
   update(view: EditorView, prev: EditorState) {

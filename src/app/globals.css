@@ -1348,28 +1348,62 @@ ellipse.anchor-flash {
 
 /* The onboarding feature look (components/nudges.tsx): the next thing to try
    glows — a pulsing clay ring on the target, or on the caption when the
-   target is the whole article — and one translucent caption sits beside it. */
-@keyframes nudge-glow {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 3px color-mix(in srgb, var(--clay) 55%, transparent),
-      0 0 18px 4px color-mix(in srgb, var(--clay) 40%, transparent);
-  }
-  50% {
-    box-shadow:
-      0 0 0 5px color-mix(in srgb, var(--clay) 35%, transparent),
-      0 0 32px 10px color-mix(in srgb, var(--clay) 55%, transparent);
+   target is the whole article — and one translucent caption sits beside it.
+   The ring is drawn twice over the target, at rest (::before) and at its
+   widest (::after), and the pulse fades one into the other. An opacity
+   animation runs on the compositor, so a glowing page paints nothing per
+   frame; a pulsing box-shadow repainted the whole page 60 times a second.
+   The New glow (.new-glow) is drawn the same way. A target keeps its own
+   position; a static one turns relative, so the two rings sit on it. */
+@layer components {
+  .nudge-glow,
+  .new-glow {
+    position: relative;
   }
 }
-.nudge-glow {
+.nudge-glow,
+.new-glow {
+  box-shadow: none;
+}
+.nudge-glow::before,
+.nudge-glow::after,
+.new-glow::before,
+.new-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.nudge-glow::before {
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--clay) 55%, transparent),
     0 0 18px 4px color-mix(in srgb, var(--clay) 40%, transparent);
 }
+.nudge-glow::after {
+  opacity: 0;
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--clay) 35%, transparent),
+    0 0 32px 10px color-mix(in srgb, var(--clay) 55%, transparent);
+}
 @media (prefers-reduced-motion: no-preference) {
-  .nudge-glow {
-    animation: nudge-glow 1.8s ease-in-out infinite;
+  .nudge-glow::before,
+  .new-glow::before {
+    animation: glow-rest 1.8s ease-in-out infinite;
+  }
+  .nudge-glow::after,
+  .new-glow::after {
+    animation: glow-wide 1.8s ease-in-out infinite;
+  }
+}
+@keyframes glow-rest {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes glow-wide {
+  50% {
+    opacity: 1;
   }
 }
 
@@ -2272,7 +2306,8 @@ li[data-checked] > .note-box::before {
 }
 
 /* The figure on its way (figure-capture.tsx): the picture slides into its
-   frame, over and over. Still under reduced motion. */
+   frame, over and over. Still under reduced motion. The picture is an svg of
+   its own, and 37.5% of its width is 9 of the icon's 24 units. */
 @media (prefers-reduced-motion: no-preference) {
   .figure-moving-icon-slide {
     animation: figure-slide 1.8s ease-in-out infinite;
@@ -2280,7 +2315,7 @@ li[data-checked] > .note-box::before {
 }
 @keyframes figure-slide {
   0% {
-    transform: translateX(-9px);
+    transform: translateX(-37.5%);
     opacity: 0;
   }
   30%,
@@ -2289,7 +2324,7 @@ li[data-checked] > .note-box::before {
     opacity: 1;
   }
   100% {
-    transform: translateX(9px);
+    transform: translateX(37.5%);
     opacity: 0;
   }
 }
@@ -3426,29 +3461,17 @@ li[data-checked] > .note-box::before {
 /* The New glow (SPEC.md §18, components/new-feature.tsx): a control a
    release added pulses in sage until it is pressed; the pill names it. The
    onboarding nudge's glow is clay (.nudge-glow): the two never show on one
-   control at once. */
-@keyframes new-glow {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 2px color-mix(in srgb, var(--sage-500) 60%, transparent),
-      0 0 14px 3px color-mix(in srgb, var(--sage-500) 40%, transparent);
-  }
-  50% {
-    box-shadow:
-      0 0 0 4px color-mix(in srgb, var(--sage-500) 35%, transparent),
-      0 0 26px 8px color-mix(in srgb, var(--sage-500) 55%, transparent);
-  }
-}
-.new-glow {
+   control at once. The two rings and the pulse are .nudge-glow's. */
+.new-glow::before {
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--sage-500) 60%, transparent),
     0 0 14px 3px color-mix(in srgb, var(--sage-500) 40%, transparent);
 }
-@media (prefers-reduced-motion: no-preference) {
-  .new-glow {
-    animation: new-glow 1.8s ease-in-out infinite;
-  }
+.new-glow::after {
+  opacity: 0;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--sage-500) 35%, transparent),
+    0 0 26px 8px color-mix(in srgb, var(--sage-500) 55%, transparent);
 }
 .new-pill {
   display: inline-flex;
