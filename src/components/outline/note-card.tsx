@@ -199,8 +199,8 @@ function useCommands(actions: OutlineActions): NoteCommands {
 // Expand all on a notes full page of 135 notes drew every body in one frame:
 // 260 ms before the press showed anything. Under Expand all, a card in view
 // or near it opens at once and a card out of view opens a few frames later,
-// the nearest first, CARDS_A_FRAME a frame. A card opened alone, and every
-// card while the view folds them, opens at once wherever it is.
+// the nearest first, CARDS_A_FRAME a frame. In the folded view, a card
+// opened by its chevron shows whole at once, wherever it is.
 const NEAR_PX = 300;
 const CARDS_A_FRAME = 10;
 type StagedCard = { distance: number; open: () => void };
