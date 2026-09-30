@@ -365,3 +365,11 @@ textarea.docs-field {
 .docs-shell[data-full-screen] .docs-vruler {
   display: none;
 }
+
+/* Tools > Compare documents (page/compare-dialog.tsx): what Compare makes,
+   and why it made nothing. */
+.docs-compare-note {
+  margin: 0;
+  color: var(--docs-muted);
+  font: 400 13px/18px var(--docs-ui-font);
+}
