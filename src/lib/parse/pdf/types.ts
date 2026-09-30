@@ -3,7 +3,7 @@
 
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
 import type { Grid } from "@/lib/parse/pdf/lattice";
-import type { ParsedBlock } from "@/lib/parse/types";
+import type { ParsedBlock, TabStop } from "@/lib/parse/types";
 
 // sup and sub: set smaller than its line and raised or lowered off the line's
 // baseline (a footnote reference, "1st", H₂O). The line decides (lines.ts
@@ -47,7 +47,9 @@ export type Item = Flags & {
   glyphs?: Glyph[];
   table?: TableRegion; // a ruled table's place in the text flow (ruled.ts takeTables)
 };
-export type Run = Flags & { start: number; end: number };
+// A run over a tab (text.ts) carries its stop, and fill when the page
+// draws a fill-in rule under it (an underlined tab).
+export type Run = Flags & { start: number; end: number; tab?: TabStop & { fill?: true } };
 export type Cell = { x: number; text: string; runs: Run[] };
 export type Line = {
   cells: Cell[];

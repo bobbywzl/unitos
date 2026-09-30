@@ -102,6 +102,11 @@ export type LinkSpan = {
 // its marker included; in a table, at the row.
 export type PageStart = { offset: number; page: number };
 
+// A tab stop: where a "\t" in a block's text goes, in points from the
+// column's left edge: the words after the tab start at a left stop, center
+// on a center stop, and end at a right stop.
+export type TabStop = { at: number; align: "left" | "center" | "right" };
+
 export type ParsedBlock = {
   type: BlockType;
   text: string;
@@ -136,6 +141,11 @@ export type ParsedBlock = {
   // blank line, a Word paragraph's space after); absent where a figure, a
   // table, or the page's end follows. The import's space after.
   spaceAfter?: number;
+  // PDF and Word paragraphs, headings, and lists: the tab stops of the
+  // tabs in the text, in order (a form's fields, a pair set flush right, a
+  // proof's box). A PDF sets a right stop only at its column's right edge,
+  // and an underlined tab is a fill-in rule.
+  tabStops?: TabStop[];
   // Word paragraphs: the line spacing Word sets (w:spacing w:line under
   // the auto rule), as a multiple of single spacing, as Docs sets one.
   lineSpacing?: number;
