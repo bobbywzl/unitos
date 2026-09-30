@@ -650,10 +650,12 @@ function runSeparators(run: Line[]): number[] {
   // A group's label among rows of three cells or more, from the table's left
   // edge (and a value at its end), crosses the gutters the rows leave open:
   // the rows alone part the columns (arXiv 2609.29669's "§3.1 Policy /
-  // manipulation suites" joined Table 3's Benchmark and Year columns).
+  // manipulation suites" joined Table 3's Benchmark and Year columns). A
+  // row of marks alone is no row ("*  *  *  *  *" between the Federal
+  // Register's paragraphs, p. 4).
   const body = run.slice(first);
   const rows = body.filter((l) => !isGroupLabel(l, left));
-  const scan = rows.filter((l) => l.cells.length >= 3).length >= 2 ? rows : body;
+  const scan = rows.filter((l) => l.cells.length >= 3 && /[\p{L}\p{N}]/u.test(l.text)).length >= 2 ? rows : body;
   return withoutSignColumns(run, columnSeparators(scan, run.slice(0, first)));
 }
 
@@ -1035,10 +1037,13 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       i++;
       continue;
     }
-    // Lines closer than a row's height are a formula's stacked parts: a
-    // fraction's numerator and denominator over and under the gap it leaves
-    // in its sentence (arXiv 2502.02648 p. 10: "2N" over "at b =" over "5").
-    if (members.some((k, n) => n > 0 && lines[members[n - 1]].y - lines[k].y < lines[k].size * 0.7)) {
+    // Lines closer than a row's height, one of them a few characters, are a
+    // formula's stacked parts: a fraction's numerator and denominator over
+    // and under the gap it leaves in its sentence (arXiv 2502.02648 p. 10:
+    // "2N" over "at b =" over "5"). A cell's raised citation marks stand as
+    // close over their words ("[26, 29]" in arXiv 2303.01056's Table 1).
+    const part = (line: Line) => line.text.replace(/\s/g, "").length <= 3;
+    if (members.some((k, n) => n > 0 && lines[members[n - 1]].y - lines[k].y < lines[k].size * 0.7 && (part(lines[members[n - 1]]) || part(lines[k])))) {
       i++;
       continue;
     }

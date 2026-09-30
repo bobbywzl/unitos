@@ -25,7 +25,7 @@
      "text": "Fabrice Baudoin Hongyi Chen Cheng Ouyang"
     }
    ],
-   "spaceAfter": 11
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
@@ -2818,7 +2818,14 @@
      "mathml": "<math display=\"inline\"><mrow><mi>u</mi><mo>=</mo><mrow><mo stretchy=\"false\">{</mo><mrow><mrow><mi>u</mi><mo>⁡</mo><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow></mrow><mo>;</mo><mrow><mrow><mo stretchy=\"false\">(</mo><mi>t</mi><mo>,</mo><mi>x</mi><mo stretchy=\"false\">)</mo></mrow><mo>∈</mo><mrow><msub><mi mathvariant=\"normal\">ℝ</mi><mo>+</mo></msub><mo lspace=\"0.222em\" rspace=\"0.222em\">×</mo><mi>M</mi></mrow></mrow></mrow><mo stretchy=\"false\">}</mo></mrow></mrow></math>"
     },
     {
-     "text": " is called a random field solution of (17) in the Itô-Walsh sense [Wal86] if the following conditions are met:",
+     "text": " is called a random field solution of (",
+     "italic": true
+    },
+    {
+     "text": "17"
+    },
+    {
+     "text": ") in the Itô-Walsh sense [Wal86] if the following conditions are met:",
      "italic": true
     }
    ],
@@ -2928,7 +2935,14 @@
        "mathml": "<math display=\"inline\"><mi>u</mi></math>"
       },
       {
-       "text": " satisfies (18) almost surely for all ",
+       "text": " satisfies (",
+       "italic": true
+      },
+      {
+       "text": "18"
+      },
+      {
+       "text": ") almost surely for all ",
        "italic": true
       },
       {
@@ -3034,5 +3048,5 @@
  ],
  "license": "open",
  "provenance": "latexml",
- "notes": "arXiv 2411.09614v2 (probability; article, one column, printed contents), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Macros expanded: \\absolutevalue \\derivative \\evaluated \\norm \\partialderivative."
+ "notes": "arXiv 2411.09614v2 (probability; article, one column, printed contents), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Macros expanded: \\absolutevalue \\derivative \\evaluated \\norm \\partialderivative. Bold and italic set from the page's faces where LaTeXML's HTML has none or another (front matter labels and affiliations, caption labels, run-in heads, cross-references)."
 }

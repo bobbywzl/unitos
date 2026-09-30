@@ -43,7 +43,7 @@
      "sup": true
     }
    ],
-   "spaceAfter": 2
+   "spaceAfter": 3
   },
   {
    "kind": "paragraph",
@@ -53,7 +53,11 @@
      "sup": true
     },
     {
-     "text": " Department of Physical Sciences, Indian Institute of Science Education and Research Kolkata, Mohanpur 741246, India"
+     "text": " "
+    },
+    {
+     "text": "Department of Physical Sciences, Indian Institute of Science Education and Research Kolkata, Mohanpur 741246, India",
+     "italic": true
     }
    ],
    "indentPt": {
@@ -70,10 +74,14 @@
      "sup": true
     },
     {
-     "text": " Department of Physics, University of Connecticut, Storrs, Connecticut 06269, USA"
+     "text": " "
+    },
+    {
+     "text": "Department of Physics, University of Connecticut, Storrs, Connecticut 06269, USA",
+     "italic": true
     }
    ],
-   "spaceAfter": 5
+   "spaceAfter": 7
   },
   {
    "kind": "paragraph",
@@ -4352,5 +4360,5 @@
  ],
  "license": "open",
  "provenance": "latexml",
- "notes": "arXiv 2502.02648v2 (physics (random matrices); revtex, two columns), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Macros expanded: \\Ecal \\Tr \\absolutevalue."
+ "notes": "arXiv 2502.02648v2 (physics (random matrices); revtex, two columns), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Macros expanded: \\Ecal \\Tr \\absolutevalue. Bold and italic set from the page's faces where LaTeXML's HTML has none or another (front matter labels and affiliations, caption labels, run-in heads, cross-references)."
 }

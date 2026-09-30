@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { regionBounds } from "@/lib/video/types";
 import type { DocBlock } from "./adapt";
-import type { PdfText } from "./free";
+import { captionScores, captionSides, cropOverlaps, pictureScores, type CaptionScores, type CaptionSides, type CropOverlaps, type Picture, type PictureScores } from "./floats";
+import { rowsOf, type PdfText } from "./free";
+import type { InkBand, Rect } from "./paint";
 import type { Flat } from "./metrics";
 import { wordsOf } from "./text";
 
@@ -183,7 +185,7 @@ const byPage = new WeakMap<PdfText, Map<number, Line[]>>();
     measure left of it (not a line across two columns), the leftmost place
     where two of them or more start within a point; on another page
     (`page`), its lines at the line's place across the page. */
-function columnEdge(pdf: PdfText, line: Line, measure: number, own: Set<Line>, page = line.page): number | null {
+export function columnEdge(pdf: PdfText, line: Line, measure: number, own: Set<Line>, page = line.page): number | null {
   let pages = byPage.get(pdf);
   if (!pages) {
     pages = new Map();
@@ -413,14 +415,15 @@ function labelValue(label: string): { series: string; n: number } | null {
 export type LabelScores = { pairs: number; wrong: number; score: number | null; found: { page: number; labels: string }[] };
 
 /** Page labels in order: the page editor draws each page's label in the
-    margin ("p. 7"; the PDF's own label, else the page's number), so two
-    pages one after the other must count on in their series: a label that
-    repeats or runs backwards (a scan's unnamed pages given their PDF
-    numbers among named ones: 1, 3, 2, 3) is wrong. The scored pages are
-    judged with a page on each side. */
+    margin ("p. 7"; the PDF's own label, nothing for an empty one, the
+    page's number past the labels: page-start.ts), so two pages one after
+    the other must count on in their series: a label that repeats or runs
+    backwards (a scan's unnamed pages given their PDF numbers among named
+    ones: 1, 3, 2, 3) is wrong. A page drawn with no label pairs with none.
+    The scored pages are judged with a page on each side. */
 export function labelScores(labels: string[] | undefined, pageCount: number, pages: [number, number] | undefined): LabelScores {
   if (!labels || labels.length === 0) return { pairs: 0, wrong: 0, score: null, found: [] };
-  const name = (p: number) => labels[p - 1] || String(p);
+  const name = (p: number) => labels[p - 1] ?? String(p);
   const [from, to] = pages ? [Math.max(1, pages[0] - 1), Math.min(pageCount, pages[1] + 1)] : [1, pageCount];
   let pairs = 0;
   let wrong = 0;
@@ -434,6 +437,300 @@ export function labelScores(labels: string[] | undefined, pageCount: number, pag
     found.push({ page: p + 1, labels: `${name(p)} → ${name(p + 1)}` });
   }
   return { pairs, wrong, score: pairs > 0 ? 1 - wrong / pairs : null, found };
+}
+
+/** The page's ink as poppler draws it (paint.ts): the bands of rows in a box, and the rightmost ink in one. */
+export type PageInk = { bands: (page: number, box: Rect) => InkBand[]; right: (page: number, box: Rect) => number | null };
+
+// ── The Title's marks ───────────────────────────────────────────────────────
+
+export type TitleMarks = { marks: number; wrong: number; score: number | null; found: { text: string }[] };
+
+/** A note mark the page does not print on its title: a candidate's Title
+    that carries a footnote mark (the page editor draws its number) where the
+    page's title lines (linesOfUnits) print none after the title's words (a
+    raised number, "∗", "†", …). A note the page prints with no mark (a first
+    page's "Mathematics Subject Classification") keeps none on the Title. The
+    score is the share of the candidate's marked titles whose mark the page
+    prints. */
+export function titleMarks(pdf: PdfText, cand: Flat, placed: number[][]): TitleMarks {
+  let marks = 0;
+  let wrong = 0;
+  const found: TitleMarks["found"] = [];
+  const SYMBOLS = /[*∗†‡§¶⋆✉#]/u;
+  cand.blocks.forEach((block, b) => {
+    if (block.kind !== "title") return;
+    for (const u of cand.unitsOf[b]) {
+      const unit = cand.units[u];
+      if (unit.marks.length === 0) continue;
+      const lines = placed[u].map((i) => pdf.lines[i]);
+      if (lines.length === 0) continue;
+      marks++;
+      const own = cand.toks.slice(unit.first, unit.end).filter((t) => !t.note);
+      const left = new Map<string, number>();
+      for (const t of own) left.set(t.w, (left.get(t.w) ?? 0) + 1);
+      const take = (w: string) => {
+        const n = left.get(w) ?? 0;
+        if (n <= 0) return false;
+        left.set(w, n - 1);
+        return true;
+      };
+      const printed = lines.map((l) => l.text).join(" ");
+      const textOwn = own.map((t) => unit.text.slice(t.start, t.end)).join(" ");
+      const marked =
+        [...printed].some((ch) => SYMBOLS.test(ch) && !textOwn.includes(ch)) ||
+        wordsOf(printed).some((w) => {
+          if (take(w.w)) return false;
+          const glued = /^(.*?\D)(\d{1,2})$/u.exec(w.w);
+          return /^\d{1,2}$/.test(w.w) || (glued !== null && take(glued[1]));
+        });
+      if (marked) continue;
+      wrong++;
+      found.push({ text: unit.text.slice(0, 80) });
+    }
+  });
+  return { marks, wrong, score: marks > 0 ? 1 - wrong / marks : null, found };
+}
+
+// ── A block's space after ───────────────────────────────────────────────────
+
+export type FarSpace = { blocks: number; wrong: number; score: number | null; found: { page: number; space: number; shown: number | null; text: string }[] };
+
+/** Space after a block over 48 pt with no block following closely: a
+    paragraph or a list the candidate gives 48 pt or more of space under it,
+    unless the page leaves that blank (within a quarter, 12 pt at least)
+    under its last line, in its column, down to the candidate's next block.
+    Measured to a block far down the column (past a figure the candidate
+    lost, across a sidebar, to the notes at the page's foot), the space is a
+    blank half a page tall in the page editor. The page's ink (poppler's
+    drawing: words, a picture, a rule) tells where something follows. The
+    score is the share of such blocks whose space the page leaves. */
+export function farSpace(pdf: PdfText, ink: PageInk, cand: Flat, placed: number[][]): FarSpace {
+  let blocks = 0;
+  let wrong = 0;
+  const found: FarSpace["found"] = [];
+  cand.blocks.forEach((block, b) => {
+    if ((block.kind !== "paragraph" && block.kind !== "list") || (block.spaceAfter ?? 0) < 48) return;
+    const lines = cand.unitsOf[b].flatMap((u) => placed[u]).map((i) => pdf.lines[i]);
+    const last = lastLine(pdf, cand, b, lines);
+    if (!last) return;
+    const size = pdf.sizes.get(last.page);
+    if (!size) return;
+    const mine = [last, ...lines.filter((l) => l.page === last.page && Math.abs(l.bottom - last.bottom) < 200)];
+    const box = { x1: Math.max(0, Math.min(...mine.map((l) => l.left)) - 2), x2: Math.min(size.width, Math.max(...mine.map((l) => l.right)) + 2), y1: last.bottom + 1, y2: size.height };
+    if (box.y2 - box.y1 < 4) return;
+    blocks++;
+    const next = ink.bands(last.page, box).find((band) => band.bottom - band.top >= 0.5);
+    const space = block.spaceAfter ?? 0;
+    const shown = next ? next.top - last.bottom : null;
+    // The blank is the page's own where the candidate's next block starts right under it (a title page's gap).
+    const after = cand.blocks.findIndex((_, k) => k > b && cand.unitsOf[k].some((u) => placed[u].length > 0));
+    const first = after >= 0 ? cand.unitsOf[after].flatMap((u) => placed[u]).map((i) => pdf.lines[i])[0] : undefined;
+    const follows = next !== undefined && first !== undefined && first.page === last.page && first.top >= next.top - 3 && first.top <= next.bottom + 3;
+    if (shown !== null && follows && Math.abs(shown - space) <= Math.max(12, 0.25 * space)) return;
+    wrong++;
+    found.push({ page: last.page, space: Math.round(space), shown: shown === null ? null : Math.round(shown), text: cand.units[cand.unitsOf[b][0]].text.slice(0, 80) });
+  });
+  return { blocks, wrong, score: blocks > 0 ? 1 - wrong / blocks : null, found };
+}
+
+/** A block's last line on the page: of the page's lines that hold the
+    block's last three words, the one with the fewest words the block does
+    not hold, on a page its other lines stand on where one does (a running
+    foot repeats a masthead's words; a line on another page repeats a
+    common phrase). */
+function lastLine(pdf: PdfText, cand: Flat, b: number, placed: Line[]): Line | null {
+  const words = cand.unitsOf[b].flatMap((u) => cand.toks.slice(cand.units[u].first, cand.units[u].end).map((t) => t.w));
+  const tail = words.slice(-3);
+  if (tail.length === 0) return null;
+  const own = new Set(words);
+  const pages = new Set(placed.map((l) => l.page));
+  let best: Line | null = null;
+  let bestKey = Infinity;
+  for (const l of pdf.lines) {
+    const lw = wordsOf(l.text).map((w) => w.w);
+    let at = -1;
+    for (let k = 0; k + tail.length <= lw.length && at < 0; k++) if (tail.every((w, j) => lw[k + j] === w)) at = k;
+    if (at < 0) continue;
+    const key = lw.filter((w) => !own.has(w)).length + (pages.size === 0 || pages.has(l.page) ? 0 : 1000);
+    if (key < bestKey) [best, bestKey] = [l, key];
+  }
+  return best;
+}
+
+// ── A run-in head's indent ──────────────────────────────────────────────────
+
+export type RunInIndents = { heads: number; wrong: number; score: number | null; found: { page: number; set: number; drawn: number; text: string }[] };
+
+/** A run-in head's indent: a run-in heading (a paragraph's bold lead,
+    "3.2.1. Two examples.") stands where the page starts its line, its
+    column's edge plus the paragraph's first-line indent (amsbook sets it
+    18 pt in), and the candidate sets it at its own indent (runIn). Right
+    within 2 pt or a quarter. The score is the share of the run-in heads
+    judged that stand at the page's indent. */
+export function runInIndents(pdf: PdfText, cand: Flat, placed: number[][]): RunInIndents {
+  let heads = 0;
+  let wrong = 0;
+  const found: RunInIndents["found"] = [];
+  cand.blocks.forEach((block, b) => {
+    if (block.kind !== "heading" || !block.runIn) return;
+    const u = cand.unitsOf[b][0];
+    const line = u === undefined ? undefined : pdf.lines[placed[u][0]];
+    if (!line) return;
+    const words = cand.toks.slice(cand.units[u].first, cand.units[u].end).map((t) => t.w);
+    if (!wordsOf(line.text).map((w) => w.w).join(" ").startsWith(words.slice(0, 3).join(" "))) return;
+    const edge = columnEdge(pdf, line, line.right - line.left, new Set([line]));
+    if (edge === null || line.left < edge - 2) return;
+    heads++;
+    const set = line.left - edge;
+    if (Math.abs(block.runIn.indent - set) <= Math.max(2, 0.25 * set)) return;
+    wrong++;
+    found.push({ page: line.page, set: Math.round(set * 10) / 10, drawn: block.runIn.indent, text: cand.units[u].text.slice(0, 60) });
+  });
+  return { heads, wrong, score: heads > 0 ? 1 - wrong / heads : null, found };
+}
+
+// ── The end-of-proof box ────────────────────────────────────────────────────
+
+export type ProofBoxes = { boxes: number; wrong: number; score: number | null; found: { page: number; text: string }[] };
+
+/** A box that ends a proof (□ ∎ ■, a formula \square, \Box, \blacksquare, \qed). */
+const BOX_CHAR_RE = /[□∎■◻▪]\s*$/u;
+const BOX_LATEX_RE = /^\s*\\(?:square|Box|blacksquare|qed|qedsymbol|openbox)\s*$/;
+
+/** The end-of-proof box's place: where the page sets a proof's closing box
+    at its column's right edge (amsthm's \qed, drawn as a glyph or as rules),
+    a clear gap after the line's last word, the candidate sets it there: a
+    tab right before the box (to a right tab stop at the column's edge). A
+    box set right after the last word by the candidate draws there. The
+    page's box: its word on the line (pdftotext), else its ink (poppler's
+    drawing). The score is the share of such boxes the candidate sets at
+    the right edge. */
+export function proofBoxes(pdf: PdfText, ink: PageInk, cand: Flat, placed: number[][]): ProofBoxes {
+  let boxes = 0;
+  let wrong = 0;
+  const found: ProofBoxes["found"] = [];
+  const boxAt = (u: number): number | null => {
+    const unit = cand.units[u];
+    const text = unit.text.replace(/\s+$/, "");
+    if (BOX_CHAR_RE.test(text)) return text.length - 1;
+    const last = cand.math.filter((m) => m.unit === u && !m.display).at(-1);
+    return last && last.latex !== undefined && BOX_LATEX_RE.test(last.latex) && (last.to ?? 0) >= text.length && last.from !== undefined ? last.from : null;
+  };
+  cand.blocks.forEach((block, b) => {
+    if (block.kind !== "paragraph" && block.kind !== "list") return;
+    const u = cand.unitsOf[b].at(-1);
+    if (u === undefined) return;
+    const at = boxAt(u);
+    if (at === null) return;
+    const lines = cand.unitsOf[b].flatMap((x) => placed[x]).map((i) => pdf.lines[i]);
+    const last = lastLine(pdf, cand, b, lines);
+    if (!last) return;
+    // The column's right edge: the right end most of the page's lines in this column reach.
+    const column = pdf.lines.filter((l) => l.page === last.page && Math.abs(l.left - Math.min(last.left, ...lines.map((x) => x.left))) <= 3);
+    const right = Math.max(last.right, ...column.map((l) => l.right));
+    const words = (last.words ?? []).filter((w) => /[\p{L}\p{N}]/u.test(w.text));
+    const wordsEnd = words.at(-1)?.right ?? last.right;
+    const boxWord = (last.words ?? []).find((w) => BOX_CHAR_RE.test(w.text) && w.left > wordsEnd);
+    const boxRight = boxWord ? boxWord.right : ink.right(last.page, { x1: wordsEnd + 2, x2: right + 6, y1: last.top, y2: last.bottom });
+    if (boxRight === null || boxRight < right - 3 || boxRight - wordsEnd < 12) return;
+    boxes++;
+    const unit = cand.units[u];
+    if (/\t\s*$/.test(unit.text.slice(0, at)) || (block.kind === "paragraph" && block.align === "right" && unit.text.trim().length <= 2)) return;
+    wrong++;
+    found.push({ page: last.page, text: unit.text.slice(Math.max(0, at - 50), at + 1) });
+  });
+  return { boxes, wrong, score: boxes > 0 ? 1 - wrong / boxes : null, found };
+}
+
+// ── A grid of numbers read as prose ─────────────────────────────────────────
+
+export type GridProse = { grids: number; prose: number; score: number | null; found: { page: number; text: string }[] };
+
+/** A number as a table's cell prints it: "120", "0.25", "1,024", "(565)", "−3", "12%", "$ 5". */
+const NUMBER_RE = /^[−–+($]?\d[\d,.]*\)?%?$/u;
+
+/** Grids of numbers the candidate reads as prose: three rows of the page or
+    more, one under the next, each split by wide gaps (6 pt or more between
+    two words) into cells, two side by side and half of all or more
+    numbers, the number cells ending at the same places (within 3 pt, two
+    columns or more): a table set without rules (a factorial's values
+    beside n). The candidate's reading of a grid: the longest run of its
+    words (in reading order, across units) that repeats the grid's words
+    row by row, half of them or more; the grid is read as prose when most
+    of that run stands in paragraphs or list items, not in a table's cells.
+    A grid whose words the candidate holds in no such run is not judged.
+    The score is the share of the page's grids read as a table. */
+export function gridProse(pdf: PdfText, cand: Flat): GridProse {
+  // The candidate's word pairs, each at the places it starts.
+  let pairs: Map<string, number[]> | null = null;
+  const pairsOf = () => {
+    if (pairs) return pairs;
+    pairs = new Map();
+    for (let t = 0; t + 1 < cand.toks.length; t++) {
+      const key = `${cand.toks[t].w} ${cand.toks[t + 1].w}`;
+      const list = pairs.get(key);
+      if (!list) pairs.set(key, [t]);
+      else if (list.length < 2000) list.push(t);
+    }
+    return pairs;
+  };
+  // The longest run of the candidate's words that repeats a stretch of `words`: its start and length.
+  const longest = (words: string[]) => {
+    let best = { at: -1, length: 0 };
+    for (let j = 0; j + 1 < words.length; j++) {
+      for (const t of pairsOf().get(`${words[j]} ${words[j + 1]}`) ?? []) {
+        let n = 2;
+        while (j + n < words.length && t + n < cand.toks.length && cand.toks[t + n].w === words[j + n]) n++;
+        if (n > best.length) best = { at: t, length: n };
+      }
+    }
+    return best;
+  };
+  let grids = 0;
+  let prose = 0;
+  const found: GridProse["found"] = [];
+  const pages = [...new Set(pdf.lines.map((l) => l.page))];
+  for (const page of pages) {
+    const rows = rowsOf(pdf.lines.filter((l) => l.page === page));
+    // A row's cells: its words split where the gap passes 6 pt.
+    const cellsOf = (row: Line[]) => {
+      const words = row.flatMap((l) => l.words ?? []).sort((a, c) => a.left - c.left);
+      const cells: { right: number; text: string[] }[] = [];
+      words.forEach((w, k) => {
+        if (k === 0 || w.left - words[k - 1].right >= 6) cells.push({ right: w.right, text: [w.text] });
+        else Object.assign(cells[cells.length - 1], { right: w.right, text: [...cells[cells.length - 1].text, w.text] });
+      });
+      return cells;
+    };
+    const numeric = rows.map((row) => {
+      const cells = cellsOf(row);
+      const isNumber = cells.map((c) => c.text.every((t) => NUMBER_RE.test(t)));
+      const numbers = cells.filter((_, k) => isNumber[k]);
+      const sideBySide = isNumber.some((x, k) => x && isNumber[k + 1]);
+      return { row, cells, ends: numbers.map((c) => c.right), ok: sideBySide && numbers.length * 2 >= cells.length };
+    });
+    for (let k = 0; k < numeric.length; ) {
+      let j = k;
+      while (j < numeric.length && numeric[j].ok && (j === k || numeric[j].row[0].top - numeric[j - 1].row[0].top <= 3 * (numeric[j - 1].row[0].bottom - numeric[j - 1].row[0].top))) j++;
+      const run = numeric.slice(k, j);
+      k = Math.max(j, k + 1);
+      if (run.length < 3) continue;
+      // Two columns or more whose number cells end at one place in three rows or more.
+      const ends = run.flatMap((r) => r.ends);
+      const columns = new Set(ends.filter((e) => run.filter((r) => r.ends.some((x) => Math.abs(x - e) <= 3)).length >= 3).map((e) => Math.round(e / 6)));
+      if (columns.size < 2) continue;
+      const words = run.flatMap((r) => r.cells.flatMap((c) => wordsOf(c.text.join(" ")).map((w) => w.w)));
+      const reading = longest(words);
+      if (reading.length * 2 < words.length) continue;
+      grids++;
+      const kinds = cand.toks.slice(reading.at, reading.at + reading.length).map((t) => cand.blocks[cand.units[t.unit].block].kind);
+      if (kinds.filter((kind) => kind !== "table").length * 2 <= kinds.length) continue;
+      prose++;
+      found.push({ page, text: run.map((r) => r.row.map((l) => l.text).join("  ")).join(" | ").slice(0, 120) });
+    }
+  }
+  return { grids, prose, score: grids > 0 ? 1 - prose / grids : null, found };
 }
 
 // ── The checks together ─────────────────────────────────────────────────────
@@ -450,9 +747,20 @@ export type LayoutScores = {
   crops: CropScores;
   labels: LabelScores;
   face: FaceCheck;
+  pictures: PictureScores;
+  captions: CaptionScores;
+  overlaps: CropOverlaps;
+  sides: CaptionSides;
+  marks: TitleMarks;
+  spaces: FarSpace;
+  grids: GridProse;
+  runIns: RunInIndents;
+  proofs: ProofBoxes;
   /** The reference-free composite's parts (free.ts): reading order across columns; the page's structure (no
-      prose in a table's cells or a crop, no figure in pieces); the page's look the parse reads (indents, the
-      body's face, page labels). */
+      prose in a table's cells or a crop, no figure in pieces, every picture in a figure, every caption with its
+      figure or table and on its table's side, no crops over each other, no mark on the Title the page lacks,
+      no grid of numbers read as prose); the page's look the parse reads (indents, the body's face, page
+      labels, the space under a block, a run-in head's indent, the end-of-proof box at the right edge). */
   order: number | null;
   structure: number | null;
   layout: number | null;
@@ -465,13 +773,24 @@ const meanOf = (list: (number | null)[]) => {
 
 /** The checks against the page's lines and fonts for one candidate:
     `drawn`, the shape of the face it draws its body in; `face`, the PDF's
-    body face (bodyFace); `labels`, its page labels judged (labelScores). */
-export function layoutScores(pdf: PdfText, cand: Flat, placed: number[][], input: { drawn?: Shape; face: FaceTally | null; labels: LabelScores }): LayoutScores {
+    body face (bodyFace); `labels`, its page labels judged (labelScores);
+    `pictures`, the pictures the pages show (floats.ts contentImages);
+    `ink`, the page's ink (paint.ts). */
+export function layoutScores(pdf: PdfText, cand: Flat, placed: number[][], input: { drawn?: Shape; face: FaceTally | null; labels: LabelScores; pictures: Picture[]; ink: PageInk }): LayoutScores {
   const columns = columnScores(pdf, cand, placed);
   const indents = indentScores(pdf, cand, placed);
   const tables = tableScores(cand, placed);
   const figures = figureScores(pdf, cand);
   const crops = cropScores(pdf, cand);
+  const pictures = pictureScores(pdf, cand, input.pictures);
+  const captions = captionScores(cand);
+  const overlaps = cropOverlaps(pdf, cand);
+  const sides = captionSides(pdf, cand, placed);
+  const marks = titleMarks(pdf, cand, placed);
+  const spaces = farSpace(pdf, input.ink, cand, placed);
+  const grids = gridProse(pdf, cand);
+  const runIns = runInIndents(pdf, cand, placed);
+  const proofs = proofBoxes(pdf, input.ink, cand, placed);
   const want = input.face?.shape ?? null;
   const drawn = input.drawn ?? null;
   const face: FaceCheck = { family: input.face?.family ?? null, want, drawn, score: want && drawn ? (want === drawn ? 1 : 0) : null };
@@ -483,8 +802,17 @@ export function layoutScores(pdf: PdfText, cand: Flat, placed: number[][], input
     crops,
     labels: input.labels,
     face,
+    pictures,
+    captions,
+    overlaps,
+    sides,
+    marks,
+    spaces,
+    grids,
+    runIns,
+    proofs,
     order: columns.score,
-    structure: meanOf([tables.score, figures.score, crops.score]),
-    layout: meanOf([indents.score, face.score, input.labels.score]),
+    structure: meanOf([tables.score, figures.score, crops.score, pictures.score, captions.score, overlaps.score, sides.score, marks.score, grids.score]),
+    layout: meanOf([indents.score, face.score, input.labels.score, spaces.score, runIns.score, proofs.score]),
   };
 }

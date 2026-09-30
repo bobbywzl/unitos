@@ -104,6 +104,9 @@ export type MathItem = {
   label?: string;
   /** An inline formula's plain reading, when its source gives one. */
   text?: string;
+  /** An inline formula's place in its unit's text: [from, to). */
+  from?: number;
+  to?: number;
   /** An equation shown as an image: the glyph text read from it. */
   image?: string;
 };
@@ -172,7 +175,7 @@ function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: 
     text += span.text;
     if (span.latex !== undefined || span.mathml !== undefined) {
       flush(start);
-      flat.math.push({ block, unit: u, at: flat.toks.length, display: false, latex: span.latex, mathml: span.mathml, text: span.text });
+      flat.math.push({ block, unit: u, at: flat.toks.length, display: false, latex: span.latex, mathml: span.mathml, text: span.text, from: start, to: text.length });
       stretch = text.length;
       continue;
     }
@@ -251,6 +254,58 @@ export function flatten(doc: Doc): Flat {
     }
   });
   return flat;
+}
+
+/** A candidate's inline formulas by the page each stands on (its block's
+    first page, a page more for each page that begins before it in its
+    block), as their LaTeX. */
+export function formulasByPage(flat: Flat): Record<number, string[]> {
+  const out: Record<number, string[]> = {};
+  const byUnit = new Map<number, MathItem[]>();
+  for (const m of flat.math) if (!m.display && (m.latex ?? m.mathml)) byUnit.set(m.unit, [...(byUnit.get(m.unit) ?? []), m]);
+  flat.blocks.forEach((block, b) => {
+    let page = block.page ?? 1;
+    for (const u of flat.unitsOf[b]) {
+      const unit = flat.units[u];
+      for (const m of byUnit.get(u) ?? []) (out[page + unit.breaks.filter((at) => at <= (m.from ?? 0)).length] ??= []).push(m.latex ?? m.mathml ?? "");
+      page += unit.breaks.length;
+    }
+  });
+  return out;
+}
+
+/** The inline formulas a saved run held on each page that the candidate no
+    longer holds there (nor on a page beside it): each saved formula takes
+    the candidate's same LaTeX first, else one whose canonical form is 0.8
+    like it or more. A regression that turns right formulas back into words
+    moves no score when the words are all there (round 4's "F: ℝ ↦ [0, 1]"):
+    the saved run's formulas show it. */
+export function lostFormulas(saved: Record<number, string[]>, now: Record<number, string[]>): { page: number; latex: string }[] {
+  const left = new Map(Object.entries(now).map(([page, list]) => [Number(page), [...list]]));
+  const lost: { page: number; latex: string }[] = [];
+  const pending: { page: number; latex: string }[] = [];
+  for (const [page, list] of Object.entries(saved)) {
+    for (const latex of list) {
+      const here = left.get(Number(page)) ?? [];
+      const k = here.indexOf(latex);
+      if (k >= 0) here.splice(k, 1);
+      else pending.push({ page: Number(page), latex });
+    }
+  }
+  for (const f of pending) {
+    const want = mathTokens({ latex: f.latex }, false);
+    let best: { list: string[]; k: number; sim: number } | null = null;
+    for (const page of [f.page, f.page - 1, f.page + 1]) {
+      (left.get(page) ?? []).forEach((latex, k, list) => {
+        const sim = sequenceSimilarity(want, mathTokens({ latex }, false));
+        if (sim >= 0.8 && (!best || sim > best.sim)) best = { list, k, sim };
+      });
+    }
+    const hit = best as { list: string[]; k: number; sim: number } | null;
+    if (hit) hit.list.splice(hit.k, 1);
+    else lost.push(f);
+  }
+  return lost;
 }
 
 // ── Word matching ───────────────────────────────────────────────────────────
@@ -1112,11 +1167,47 @@ export type MathScores = {
 
 const latexOf = (m: { latex?: string; mathml?: string }) => m.latex ?? (m.mathml ? "(MathML)" : "");
 
+/** Inline formulas one right after another in a unit, no word between them
+    ("z = x−μ/σ = 1−5/6" set as two formulas with an "=" between, or as one):
+    each such formula's run, by its index in flat.math. Where one formula
+    ends and the next begins is a writer's choice the page does not show. */
+function formulaRuns(flat: Flat): Map<number, number[]> {
+  const runs = new Map<number, number[]>();
+  let run: number[] = [];
+  const close = () => {
+    if (run.length > 1) for (const k of run) runs.set(k, run);
+    run = [];
+  };
+  flat.math.forEach((m, k) => {
+    const last = run.length > 0 ? flat.math[run[run.length - 1]] : null;
+    const next = last && !m.display && last.unit === m.unit && last.to !== undefined && m.from !== undefined && wordsOf(flat.units[m.unit].text.slice(last.to, m.from)).length === 0;
+    if (!next) close();
+    if (!m.display) run.push(k);
+  });
+  close();
+  return runs;
+}
+
+/** A run's formulas read as one: each formula's tokens, and the signs between them. */
+function runTokens(flat: Flat, run: number[]): string[] {
+  const out: string[] = [];
+  run.forEach((k, i) => {
+    const m = flat.math[k];
+    const prev = i > 0 ? flat.math[run[i - 1]] : null;
+    if (prev) out.push(...textMathTokens(flat.units[m.unit].text.slice(prev.to, m.from)));
+    out.push(...mathTokens(m, false));
+  });
+  return out;
+}
+
 /** Math: each reference formula against its counterpart, by the similarity
     of canonical forms. A display equation's counterpart is its owner; an
     inline formula's is a candidate formula between the matched words around
     it, or else the candidate's words there read as math; a formula alone in
-    a table cell, the candidate cell's (cellMap). An image scores 0. */
+    a table cell, the candidate cell's (cellMap). A run of formulas with no
+    word between them reads as one on either side (formulaRuns): a candidate
+    formula that holds two of the reference's and the "=" between them scores
+    both. An image scores 0. */
 export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
   const misses: MathScores["misses"] = [];
   const display: number[] = [];
@@ -1133,7 +1224,9 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
   const candCells = cellFormulas(cand);
   const maps = new Map<number, ReturnType<typeof cellMap>>();
   const mapOf = (rb: number) => maps.get(rb) ?? maps.set(rb, cellMap(ref, cand, al, rb, refCells, candCells)).get(rb);
-  for (const m of ref.math) {
+  const [refRuns, candRuns] = [formulaRuns(ref), formulaRuns(cand)];
+  const candIndex = new Map(cand.math.map((m, k) => [m, k]));
+  for (const [k, m] of ref.math.entries()) {
     const want = mathTokens(m, m.display);
     if (m.display) {
       const cb = al.owner[m.block];
@@ -1181,6 +1274,21 @@ export function mathScores(ref: Flat, cand: Flat, al: Alignment): MathScores {
       for (const hit of hits) {
         const s = sequenceSimilarity(want, mathTokens(hit, false));
         if (s >= sim) [sim, got] = [s, latexOf(hit)];
+      }
+      // The formula, or its run, against the candidate's formula, or the candidate's run.
+      const mine = refRuns.get(k);
+      const wants = mine ? [want, runTokens(ref, mine)] : [want];
+      for (const hit of hits) {
+        const theirs = candRuns.get(candIndex.get(hit) ?? -1);
+        if (!mine && !theirs) continue;
+        const gots: [string[], string][] = [[mathTokens(hit, false), latexOf(hit)]];
+        if (theirs) gots.push([runTokens(cand, theirs), theirs.map((j) => latexOf(cand.math[j])).join(" ")]);
+        for (const w of wants) {
+          for (const [tokens, latex] of gots) {
+            const s = sequenceSimilarity(w, tokens);
+            if (s > sim) [sim, got] = [s, latex];
+          }
+        }
       }
     } else {
       const gap = gapText(cand, al, prev, next, want.length);

@@ -38,7 +38,7 @@
      "text": "Department of Computer Science, Aarhus University, Denmark"
     }
    ],
-   "spaceAfter": 5
+   "spaceAfter": 3
   },
   {
    "kind": "paragraph",
@@ -60,7 +60,7 @@
      "text": "Department of Computer Science, Aarhus University, Denmark"
     }
    ],
-   "spaceAfter": 5
+   "spaceAfter": 3
   },
   {
    "kind": "paragraph",
@@ -82,7 +82,7 @@
      "text": "Department of Computer Science, Aarhus University, Denmark"
     }
    ],
-   "spaceAfter": 5
+   "spaceAfter": 3
   },
   {
    "kind": "paragraph",
@@ -119,7 +119,14 @@
    "label": "∗",
    "spans": [
     {
-     "text": "This is the technical report for A. B. Jakobsen, A. B. Clausen, J. van de Pol and I. Shaik, Depth-Optimal Quantum Layout Synthesis as SAT. In: Proc. IC on Theory and Applications of Satisfiability Testing, SAT 2025, (SAT’25), Glasgow, UK, 2025."
+     "text": "This is the technical report for A. B. Jakobsen, A. B. Clausen, J. van de Pol and I. Shaik, "
+    },
+    {
+     "text": "Depth-Optimal Quantum Layout Synthesis as SAT",
+     "italic": true
+    },
+    {
+     "text": ". In: Proc. IC on Theory and Applications of Satisfiability Testing, SAT 2025, (SAT’25), Glasgow, UK, 2025."
     }
    ]
   },
@@ -171,7 +178,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "2012 ACM Subject Classification Hardware → Quantum computation; Computing methodologies → Planning for deterministic actions"
+     "text": "2012 ACM Subject Classification",
+     "bold": true
+    },
+    {
+     "text": " Hardware → Quantum computation; Computing methodologies → Planning for deterministic actions"
     }
    ],
    "spaceAfter": 9
@@ -180,7 +191,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Keywords and phrases Quantum Layout Synthesis, Transpiling, Circuit Mapping, Incremental SAT, Parallel Plans"
+     "text": "Keywords and phrases",
+     "bold": true
+    },
+    {
+     "text": " Quantum Layout Synthesis, Transpiling, Circuit Mapping, Incremental SAT, Parallel Plans"
     }
    ],
    "spaceAfter": 9
@@ -189,7 +204,25 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Supplementary Material Software (Github): https://github.com/anbclausen/quills Software and Experimental Data (Zenodo link): https://doi.org/10.5281/zenodo.15606051"
+     "text": "Supplementary Material",
+     "bold": true
+    },
+    {
+     "text": " "
+    },
+    {
+     "text": "Software (Github",
+     "italic": true
+    },
+    {
+     "text": "): https://github.com/anbclausen/quills "
+    },
+    {
+     "text": "Software and Experimental Data (Zenodo link",
+     "italic": true
+    },
+    {
+     "text": "): https://doi.org/10.5281/zenodo.15606051"
     }
    ],
    "spaceAfter": 9
@@ -198,16 +231,24 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Funding This research was partially funded by the Innovation Fund Denmark project “Automated Planning for Quantum Circuit Optimization”. This research was also partially funded by the European Innovation Council through Accelerator grant no. 190124924."
+     "text": "Funding",
+     "bold": true
+    },
+    {
+     "text": " This research was partially funded by the Innovation Fund Denmark project “Automated Planning for Quantum Circuit Optimization”. This research was also partially funded by the European Innovation Council through Accelerator grant no. 190124924."
     }
    ],
-   "spaceAfter": 10
+   "spaceAfter": 9
   },
   {
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Acknowledgements This paper is based on the MSc-thesis of Anna B. Jakobsen and Anders B. Clausen. They contributed equally to this work. We thank Kostiantyn V. Milkevych for porting Quills to Q-Synth v4."
+     "text": "Acknowledgements",
+     "bold": true
+    },
+    {
+     "text": " This paper is based on the MSc-thesis of Anna B. Jakobsen and Anders B. Clausen. They contributed equally to this work. We thank Kostiantyn V. Milkevych for porting Quills to Q-Synth v4."
     }
    ]
   },
@@ -301,7 +342,7 @@
     "left": 0,
     "first": 16
    },
-   "spaceAfter": 15
+   "spaceAfter": 14
   },
   {
    "kind": "paragraph",
@@ -376,7 +417,28 @@
    "kind": "figure",
    "caption": [
     {
-     "text": "(a) An Example circuit. (b) CX-depth optimal circuit with 1 extra SWAP. Figure 1 Example circuit, before and after mapping on a linear neighbour graph. The dotted box represents the extra SWAP gate implemented as 3 CX gates. Time steps "
+     "text": "("
+    },
+    {
+     "text": "a",
+     "bold": true
+    },
+    {
+     "text": ") An Example circuit. ("
+    },
+    {
+     "text": "b",
+     "bold": true
+    },
+    {
+     "text": ") CX-depth optimal circuit with 1 extra SWAP. "
+    },
+    {
+     "text": "Figure 1",
+     "bold": true
+    },
+    {
+     "text": " Example circuit, before and after mapping on a linear neighbour graph. The dotted box represents the extra SWAP gate implemented as 3 CX gates. Time steps "
     },
     {
      "text": "t0",
@@ -534,7 +596,11 @@
    "kind": "figure",
    "caption": [
     {
-     "text": "Figure 2 Mapped circuit with only 2 parallel steps in the context of CX-count optimization."
+     "text": "Figure 2",
+     "bold": true
+    },
+    {
+     "text": " Mapped circuit with only 2 parallel steps in the context of CX-count optimization."
     }
    ]
   },
@@ -627,7 +693,11 @@
      "marker": "",
      "spans": [
       {
-       "text": "Input: Coupling map "
+       "text": "Input",
+       "bold": true
+      },
+      {
+       "text": ": Coupling map "
       },
       {
        "text": "𝒫",
@@ -1318,7 +1388,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Table 1 presents the variables used in the encoding. For each time step, a set of variables is generated for the constraints of that time step. The asm"
+     "text": "Table 1",
+     "bold": true
+    },
+    {
+     "text": " presents the variables used in the encoding. For each time step, a set of variables is generated for the constraints of that time step. The asm"
     },
     {
      "text": "t",
@@ -1892,5 +1966,5 @@
  ],
  "license": "open",
  "provenance": "latexml",
- "notes": "arXiv 2506.06752v1 (quantum computing, algorithms; LIPIcs, algorithms), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Fixed where LaTeXML differs from the PDF: \"Coupling map\" → \"Input: Coupling map\". The author names are set bold on the page (the PDF's font is a bold face); round 2 marks them, by hand: the builder reads the author area from pdftotext, which gives no weight."
+ "notes": "arXiv 2506.06752v1 (quantum computing, algorithms; LIPIcs, algorithms), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Fixed where LaTeXML differs from the PDF: \"Coupling map\" → \"Input: Coupling map\". The author names are set bold on the page (the PDF's font is a bold face); round 2 marks them, by hand: the builder reads the author area from pdftotext, which gives no weight. Bold and italic set from the page's faces where LaTeXML's HTML has none or another (front matter labels and affiliations, caption labels, run-in heads, cross-references)."
 }

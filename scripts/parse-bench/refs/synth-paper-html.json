@@ -26,7 +26,7 @@
         "shape": "serif",
         "size": 11
       },
-      "spaceAfter": 14
+      "spaceAfter": 15
     },
     {
       "kind": "paragraph",
@@ -711,7 +711,7 @@
         "left": 0,
         "first": 9
       },
-      "spaceAfter": 2
+      "spaceAfter": 3
     },
     {
       "kind": "paragraph",

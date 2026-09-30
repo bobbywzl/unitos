@@ -155,7 +155,7 @@
           ]
         }
       ],
-      "itemSpace": 0
+      "itemSpace": 1
     },
     {
       "kind": "heading",
@@ -217,7 +217,7 @@
           "checked": false
         }
       ],
-      "itemSpace": 0
+      "itemSpace": 1
     },
     {
       "kind": "heading",

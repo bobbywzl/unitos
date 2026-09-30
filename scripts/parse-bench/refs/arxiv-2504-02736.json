@@ -86,7 +86,11 @@
      "sup": true
     },
     {
-     "text": " Department of Physics, The Chinese University of Hong Kong, Shatin, New Territories, Hong Kong, China"
+     "text": " "
+    },
+    {
+     "text": "Department of Physics, The Chinese University of Hong Kong, Shatin, New Territories, Hong Kong, China",
+     "italic": true
     }
    ],
    "spaceAfter": 0
@@ -99,14 +103,18 @@
      "sup": true
     },
     {
-     "text": " Department of Physics, The Hong Kong University of Science and Technology, Clear Water Bay, Kowloon, Hong Kong, China"
+     "text": " "
+    },
+    {
+     "text": "Department of Physics, The Hong Kong University of Science and Technology, Clear Water Bay, Kowloon, Hong Kong, China",
+     "italic": true
     }
    ],
    "indentPt": {
     "left": 0,
     "first": 24
    },
-   "spaceAfter": 0
+   "spaceAfter": 2
   },
   {
    "kind": "paragraph",
@@ -116,7 +124,11 @@
      "sup": true
     },
     {
-     "text": " Center for Field Theory and Particle Physics, Department of Physics, Fudan University, Shanghai 200433, China"
+     "text": " "
+    },
+    {
+     "text": "Center for Field Theory and Particle Physics, Department of Physics, Fudan University, Shanghai 200433, China",
+     "italic": true
     }
    ],
    "indentPt": {
@@ -133,7 +145,11 @@
      "sup": true
     },
     {
-     "text": " State Key Laboratory of Surface Physics, Fudan University, Shanghai 200433, China"
+     "text": " "
+    },
+    {
+     "text": "State Key Laboratory of Surface Physics, Fudan University, Shanghai 200433, China",
+     "italic": true
     }
    ],
    "spaceAfter": 0
@@ -146,7 +162,14 @@
      "sup": true
     },
     {
-     "text": " Department of Physics and HK Institute of Quantum Science & Technology,"
+     "text": " "
+    },
+    {
+     "text": "Department of Physics and HK Institute of Quantum Science & Technology",
+     "italic": true
+    },
+    {
+     "text": ","
     }
    ],
    "spaceAfter": 0
@@ -155,7 +178,8 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "The University of Hong Kong, Pokfulam Road, Hong Kong, China"
+     "text": "The University of Hong Kong, Pokfulam Road, Hong Kong, China",
+     "italic": true
     }
    ]
   },
@@ -4049,8 +4073,8 @@
       },
       {
        "text": "45",
-       "href": "https://doi.org/10.1103/PhysRevLett.45.494",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevLett.45.494"
       },
       {
        "text": ", 494 (1980)",
@@ -4074,8 +4098,8 @@
       },
       {
        "text": "48",
-       "href": "https://doi.org/10.1103/PhysRevLett.48.1559",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevLett.48.1559"
       },
       {
        "text": ", 1559 (1982)",
@@ -4099,8 +4123,8 @@
       },
       {
        "text": "50",
-       "href": "https://doi.org/10.1103/PhysRevLett.50.1395",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevLett.50.1395"
       },
       {
        "text": ", 1395 (1983)",
@@ -4124,8 +4148,8 @@
       },
       {
        "text": "83",
-       "href": "https://doi.org/10.1103/PhysRevB.83.075103",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevB.83.075103"
       },
       {
        "text": ", 075103 (2011)",
@@ -4149,8 +4173,8 @@
       },
       {
        "text": "16",
-       "href": "https://doi.org/https://doi.org/10.1016/0003-4916(61)90115-4",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/https://doi.org/10.1016/0003-4916(61)90115-4"
       },
       {
        "text": ", 407 (1961)",
@@ -4174,8 +4198,8 @@
       },
       {
        "text": "12",
-       "href": "https://doi.org/10.1007/BF00400304",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1007/BF00400304"
       },
       {
        "text": ", 57 (1986)",
@@ -4207,8 +4231,8 @@
       },
       {
        "text": "37",
-       "href": "https://doi.org/10.1103/PhysRevB.37.5186",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevB.37.5186"
       },
       {
        "text": ", 5186 (1988)",
@@ -4232,8 +4256,8 @@
       },
       {
        "text": "79",
-       "href": "https://doi.org/10.1103/PhysRevLett.79.1110",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevLett.79.1110"
       },
       {
        "text": ", 1110 (1997)",
@@ -4257,8 +4281,8 @@
       },
       {
        "text": "84",
-       "href": "https://doi.org/10.1103/PhysRevLett.84.1535",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevLett.84.1535"
       },
       {
        "text": ", 1535 (2000)",
@@ -4282,8 +4306,8 @@
       },
       {
        "text": "69",
-       "href": "https://doi.org/10.1103/PhysRevB.69.104431",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevB.69.104431"
       },
       {
        "text": ", 104431 (2004)",
@@ -4307,8 +4331,8 @@
       },
       {
        "text": "6",
-       "href": "https://doi.org/10.1103/PhysRevX.6.041068",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevX.6.041068"
       },
       {
        "text": ", 041068 (2016)",
@@ -4332,8 +4356,8 @@
       },
       {
        "text": "5",
-       "href": "https://doi.org/10.1103/PhysRevResearch.5.023153",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevResearch.5.023153"
       },
       {
        "text": ", 023153 (2023)",
@@ -4357,8 +4381,8 @@
       },
       {
        "text": "12",
-       "href": "https://doi.org/10.1038/s41467-021-23309-3",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1038/s41467-021-23309-3"
       },
       {
        "text": ", 3191 (2021a)",
@@ -4389,8 +4413,8 @@
       },
       {
        "text": "02",
-       "href": "https://doi.org/10.1007/JHEP02(2015)172",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1007/JHEP02(2015)172"
       },
       {
        "text": ", 172",
@@ -4421,8 +4445,8 @@
       },
       {
        "text": "2",
-       "href": "https://doi.org/10.1103/PhysRevResearch.2.033417",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevResearch.2.033417"
       },
       {
        "text": ", 033417 (2020)",
@@ -4453,8 +4477,8 @@
       },
       {
        "text": "2",
-       "href": "https://doi.org/10.1103/PhysRevResearch.2.043086",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevResearch.2.043086"
       },
       {
        "text": ", 043086 (2020)",
@@ -4485,8 +4509,8 @@
       },
       {
        "text": "5",
-       "href": "https://doi.org/10.1038/ncomms4507",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1038/ncomms4507"
       },
       {
        "text": ", 3507 (2014)",
@@ -4517,8 +4541,8 @@
       },
       {
        "text": "8",
-       "href": "https://doi.org/10.1103/PhysRevX.8.011055",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevX.8.011055"
       },
       {
        "text": ", 011055 (2018)",
@@ -4622,8 +4646,8 @@
       },
       {
        "text": "85",
-       "href": "https://doi.org/10.1103/PhysRevB.85.245132",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevB.85.245132"
       },
       {
        "text": ", 245132 (2012)",
@@ -4655,8 +4679,8 @@
       },
       {
        "text": "15",
-       "href": "https://doi.org/10.1088/1367-2630/15/6/065002",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1088/1367-2630/15/6/065002"
       },
       {
        "text": ", 065002 (2013)",
@@ -4680,8 +4704,8 @@
       },
       {
        "text": "88",
-       "href": "https://doi.org/10.1103/PhysRevB.88.064507",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevB.88.064507"
       },
       {
        "text": ", 064507 (2013)",
@@ -4713,8 +4737,8 @@
       },
       {
        "text": "89",
-       "href": "https://doi.org/10.1103/PhysRevB.89.201113",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevB.89.201113"
       },
       {
        "text": ", 201113 (2014)",
@@ -4738,8 +4762,8 @@
       },
       {
        "text": "86",
-       "href": "https://doi.org/10.1103/PhysRevB.86.115131",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevB.86.115131"
       },
       {
        "text": ", 115131 (2012)",
@@ -4763,8 +4787,8 @@
       },
       {
        "text": "100",
-       "href": "https://doi.org/10.1103/PhysRevB.100.115147",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevB.100.115147"
       },
       {
        "text": ", 115147 (2019)",
@@ -4796,8 +4820,8 @@
       },
       {
        "text": "8",
-       "href": "https://doi.org/10.1103/PhysRevX.8.021074",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevX.8.021074"
       },
       {
        "text": ", 021074 (2018)",
@@ -4829,8 +4853,8 @@
       },
       {
        "text": "9",
-       "href": "https://doi.org/10.1103/PhysRevX.9.021005",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevX.9.021005"
       },
       {
        "text": ", 021005 (2019)",
@@ -4854,8 +4878,8 @@
       },
       {
        "text": "38",
-       "href": "https://doi.org/10.1088/0256-307X/38/12/127101",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1088/0256-307X/38/12/127101"
       },
       {
        "text": ", 127101 (2021)",
@@ -4927,8 +4951,8 @@
       },
       {
        "text": "8",
-       "href": "https://doi.org/10.1103/PhysRevX.8.011040",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/PhysRevX.8.011040"
       },
       {
        "text": ", 011040 (2018)",
@@ -4952,8 +4976,8 @@
       },
       {
        "text": "88",
-       "href": "https://doi.org/10.1103/RevModPhys.88.035001",
-       "bold": true
+       "bold": true,
+       "href": "https://doi.org/10.1103/RevModPhys.88.035001"
       },
       {
        "text": ", 035001 (2016)",
@@ -4978,5 +5002,5 @@
  ],
  "license": "open",
  "provenance": "latexml",
- "notes": "arXiv 2504.02736v2 (physics (topological order); revtex letter, two columns, run-in heads), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words."
+ "notes": "arXiv 2504.02736v2 (physics (topological order); revtex letter, two columns, run-in heads), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Bold and italic set from the page's faces where LaTeXML's HTML has none or another (front matter labels and affiliations, caption labels, run-in heads, cross-references)."
 }

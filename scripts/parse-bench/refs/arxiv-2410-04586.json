@@ -31,7 +31,14 @@
    "label": "",
    "spans": [
     {
-     "text": "2020 Mathematics Subject Classification. 13D02."
+     "text": "2020 "
+    },
+    {
+     "text": "Mathematics Subject Classification",
+     "italic": true
+    },
+    {
+     "text": ". 13D02."
     }
    ]
   },
@@ -777,7 +784,14 @@
      "mathml": "<math display=\"inline\"><mi>R</mi></math>"
     },
     {
-     "text": " of a weighted rational curve is generalized Koszul, in the sense of [HRW98]. That is, ",
+     "text": " of a weighted rational curve is generalized Koszul, in the sense of [",
+     "italic": true
+    },
+    {
+     "text": "HRW98"
+    },
+    {
+     "text": "]. That is, ",
      "italic": true
     },
     {
@@ -814,7 +828,14 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Philosophy 1.4. ",
+     "text": "Philosophy ",
+     "italic": true
+    },
+    {
+     "text": "1.4"
+    },
+    {
+     "text": ". ",
      "italic": true
     },
     {
@@ -1300,7 +1321,14 @@
      "text": "BE23"
     },
     {
-     "text": ", Remark 3.15] The coordinate ring ",
+     "text": ", ",
+     "italic": true
+    },
+    {
+     "text": "Remark 3.15"
+    },
+    {
+     "text": "] The coordinate ring ",
      "italic": true
     },
     {
@@ -2133,7 +2161,10 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "3.1. Corollaries ",
+     "text": "3.1"
+    },
+    {
+     "text": ". Corollaries ",
      "bold": true
     },
     {
@@ -2542,7 +2573,7 @@
      "text": "."
     }
    ],
-   "spaceAfter": 8
+   "spaceAfter": 10
   },
   {
    "kind": "paragraph",
@@ -2704,5 +2735,5 @@
  ],
  "license": "open",
  "provenance": "latexml",
- "notes": "arXiv 2410.04586v2 (algebra and geometry; amsart, running heads), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Macros expanded: \\Sym \\mathbbm \\reg."
+ "notes": "arXiv 2410.04586v2 (algebra and geometry; amsart, running heads), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Macros expanded: \\Sym \\mathbbm \\reg. Bold and italic set from the page's faces where LaTeXML's HTML has none or another (front matter labels and affiliations, caption labels, run-in heads, cross-references)."
 }

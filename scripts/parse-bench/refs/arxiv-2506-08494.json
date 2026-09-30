@@ -31,7 +31,14 @@
    "label": "",
    "spans": [
     {
-     "text": "2010 Mathematics Subject Classification. 42B20, 42B35, 47A30, 42A38."
+     "text": "2010 "
+    },
+    {
+     "text": "Mathematics Subject Classification",
+     "italic": true
+    },
+    {
+     "text": ". 42B20, 42B35, 47A30, 42A38."
     }
    ]
   },
@@ -704,7 +711,10 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "2.1. Case of imaginary ",
+     "text": "2.1"
+    },
+    {
+     "text": ". Case of imaginary ",
      "bold": true
     },
     {
@@ -2070,7 +2080,10 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "2.2. Case of real ",
+     "text": "2.2"
+    },
+    {
+     "text": ". Case of real ",
      "bold": true
     },
     {
@@ -2469,7 +2482,21 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Moreover, the inequality (2.20) reverses if and only if the inequality (2.21) is reversed.",
+     "text": "Moreover, the inequality (",
+     "italic": true
+    },
+    {
+     "text": "2.20"
+    },
+    {
+     "text": ") reverses if and only if the inequality (",
+     "italic": true
+    },
+    {
+     "text": "2.21"
+    },
+    {
+     "text": ") is reversed.",
      "italic": true
     }
    ],
@@ -2499,7 +2526,10 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "2.3. Case of equal ",
+     "text": "2.3"
+    },
+    {
+     "text": ". Case of equal ",
      "bold": true
     },
     {
@@ -2939,7 +2969,10 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "2.4. Multiversion ",
+     "text": "2.4"
+    },
+    {
+     "text": ". Multiversion ",
      "bold": true
     },
     {
@@ -3470,7 +3503,10 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "2.5. Multiversion ",
+     "text": "2.5"
+    },
+    {
+     "text": ". Multiversion ",
      "bold": true
     },
     {
@@ -3741,7 +3777,10 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "2.5.1. ",
+     "text": "2.5.1"
+    },
+    {
+     "text": ". ",
      "bold": true
     },
     {
@@ -3750,7 +3789,15 @@
      "mathml": "<math display=\"inline\"><mi>F</mi></math>"
     },
     {
-     "text": " and ",
+     "text": " ",
+     "bold": true
+    },
+    {
+     "text": "and",
+     "italic": true
+    },
+    {
+     "text": " ",
      "bold": true
     },
     {
@@ -3759,7 +3806,31 @@
      "mathml": "<math display=\"inline\"><mi>B</mi></math>"
     },
     {
-     "text": " are power functions ",
+     "text": " ",
+     "bold": true
+    },
+    {
+     "text": "are",
+     "italic": true
+    },
+    {
+     "text": " ",
+     "bold": true
+    },
+    {
+     "text": "power",
+     "italic": true
+    },
+    {
+     "text": " ",
+     "bold": true
+    },
+    {
+     "text": "functions",
+     "italic": true
+    },
+    {
+     "text": " ",
      "bold": true
     },
     {
@@ -3795,7 +3866,38 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "2.5.2. Noisy Gaussian–Jensen inequality ",
+     "text": "2.5.2. "
+    },
+    {
+     "text": "Noisy",
+     "italic": true
+    },
+    {
+     "text": " ",
+     "bold": true
+    },
+    {
+     "text": "Gaussian",
+     "italic": true
+    },
+    {
+     "text": "–",
+     "bold": true
+    },
+    {
+     "text": "Jensen",
+     "italic": true
+    },
+    {
+     "text": " ",
+     "bold": true
+    },
+    {
+     "text": "inequality",
+     "italic": true
+    },
+    {
+     "text": " ",
      "bold": true
     },
     {
@@ -3925,5 +4027,5 @@
  ],
  "license": "open",
  "provenance": "latexml",
- "notes": "arXiv 2506.08494v1 (analysis; amsart, running heads), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words."
+ "notes": "arXiv 2506.08494v1 (analysis; amsart, running heads), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Bold and italic set from the page's faces where LaTeXML's HTML has none or another (front matter labels and affiliations, caption labels, run-in heads, cross-references)."
 }
