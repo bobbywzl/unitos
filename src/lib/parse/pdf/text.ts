@@ -35,10 +35,6 @@ export function collectHyphenation(pages: Line[][]) {
   const ends: string[] = [];
   for (const lines of pages) {
     lines.forEach((line, i) => {
-      // A text table's row breaks its words at its cells' edges, not at the
-      // line's end: its words witness nothing ("con-" and "verted", two rows
-      // of one cell, read as two words and kept the hyphen).
-      if (line.cells.length > 1) return;
       const text = line.text.trim();
       const left = WORD_HYPHEN_END_RE.exec(text);
       const right = LOWER_WORD_START_RE.exec(lines[i + 1]?.text.trim() ?? "");

@@ -8,11 +8,12 @@
 // Insert > Chart; DRAWING is Insert > Drawing; COMPARE is Tools > Compare
 // documents; ODDEVEN is Headers & footers > Different odd & even; WATERMARK
 // is Insert > Watermark; DETAILS is File > Details; LINENUMBERS is Tools >
-// Line numbers. Each check prints PASS or FAIL with its evidence; each case
-// leaves a screenshot (light theme, 1440×900; the dark case in dark).
+// Line numbers; MASK is the image toolbar's Mask image. Each check prints
+// PASS or FAIL with its evidence; each case leaves a screenshot (light
+// theme, 1440×900; the dark case in dark).
 //
 // Usage:
-//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE ODDEVEN WATERMARK DETAILS LINENUMBERS] [--label after] [--keep]
+//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE ODDEVEN WATERMARK DETAILS LINENUMBERS MASK] [--label after] [--keep]
 // With no group named, every group runs. Env: BASE (default
 // http://localhost:3111), SHOT_DIR (default <tmp>/ui-docs-parity), CHROME
 // (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3492), DATABASE_URL
@@ -1682,6 +1683,134 @@ GROUPS.LINENUMBERS = async () => {
   await sleep(800);
   const off = await page.evaluate(() => document.querySelectorAll(".docs-line-number").length);
   check(G, printed > 0 && pageless === 0 && off === 0, "print keeps the numbers; pageless shows none; Show line numbers off takes them away", `${printed}, ${pageless}, ${off}`);
+  check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
+  await close();
+};
+
+// ── Mask image ──────────────────────────────────────────────────────────────
+
+/** A landscape as a PNG, 480 × 320: sky, sun, hills. */
+function landscapePng() {
+  const c = createCanvas(480, 320);
+  const g = c.getContext("2d");
+  g.fillStyle = "#7ab3d9";
+  g.fillRect(0, 0, 480, 320);
+  g.fillStyle = "#f6b042";
+  g.beginPath();
+  g.arc(360, 90, 44, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#5f8f4e";
+  g.fillRect(0, 220, 480, 100);
+  return c.toBuffer("image/png");
+}
+
+/** The first image's mask as the page draws it: the frame's clip path, the
+    border drawn along the shape, and the frame's own outline. */
+const maskDrawn = (page) =>
+  page.evaluate(() => {
+    const figure = document.querySelector(".docs-prose .docs-img");
+    const frame = figure?.querySelector(".docs-img-frame");
+    const edge = figure?.querySelector(".docs-img-edge path");
+    return {
+      clip: frame ? getComputedStyle(frame).clipPath : null,
+      edge: edge?.getAttribute("d") ?? null,
+      stroke: edge?.getAttribute("stroke") ?? null,
+      outline: frame ? getComputedStyle(frame).outlineStyle : null,
+      clips: document.querySelectorAll("#docs-mask-clips clipPath").length,
+    };
+  });
+
+async function selectImage(page) {
+  const b = await page.locator(".docs-prose .docs-img-box").first().boundingBox();
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+  await page.waitForSelector(".docs-img-toolbar", { timeout: 10_000 });
+  await sleep(300);
+}
+
+/** The image's toolbar, Mask image, then the shape. */
+async function chooseMask(page, mask) {
+  await selectImage(page);
+  await page.locator('[data-track="docs:image-mask"]').click();
+  await sleep(300);
+  await page.locator(`[data-track="docs:mask:${mask}"]`).click();
+  await sleep(500);
+}
+
+/** The stored first image's attributes, once `ok` says they are the ones wanted. */
+const storedImage = (id, ok) =>
+  until(async () => {
+    const img = (await api(`/api/documents/${id}/rich-text`)).body.richText?.content?.find((n) => n.type === "image");
+    return img && ok(img.attrs ?? {}) ? img.attrs : null;
+  }, 15_000);
+
+GROUPS.MASK = async () => {
+  const G = "MASK";
+  const up = await fetch(`${BASE}/api/images`, { method: "POST", headers: { "content-type": "image/png" }, body: landscapePng() }).then((r) => r.json());
+  const id = await richDocument("Mask image", [{ type: "image", attrs: { src: up.url, alt: "Landscape", width: 360, height: 240, blockId: blockId() } }, paragraph("The survey covered the north field.")]);
+  const { page, errors, close } = await newPage();
+  await openEditor(page, id, "north field");
+  const before = await maskDrawn(page);
+
+  // 1. Mask image > Oval: the image is drawn inside an oval.
+  await selectImage(page);
+  await page.locator('[data-track="docs:image-mask"]').click();
+  await sleep(300);
+  const rows = await page.evaluate(() => [...document.querySelectorAll("[data-docs-menu] [role^='menuitem']")].map((e) => e.textContent));
+  await shot(page, "mask-1-menu");
+  await page.locator('[data-track="docs:mask:oval"]').click();
+  await sleep(500);
+  const oval = await maskDrawn(page);
+  check(G, before.clip === "none" && rows.join("|") === "Rectangle|Rounded rectangle|Oval|Triangle|Diamond|Pentagon|Hexagon|Star|Heart" && oval.clip === 'url("#docs-mask-oval")' && oval.clips === 8, "Mask image lists the shapes; Oval draws the image inside an oval", `${JSON.stringify(rows)}; ${JSON.stringify(oval)}`);
+
+  // 2. A 3 pt border follows the shape, not the rectangle.
+  await selectImage(page);
+  await page.locator('[data-track="docs:image-border-width"]').click();
+  await sleep(300);
+  await page.locator("[data-docs-menu] [role^='menuitem']", { hasText: "3 pt" }).first().click();
+  await sleep(500);
+  await page.keyboard.press("Escape");
+  await sleep(400);
+  const bordered = await maskDrawn(page);
+  await shot(page, "mask-2-oval-border");
+  check(G, /^M0\.5,0 A0\.5/.test(bordered.edge ?? "") && bordered.stroke === "#000000" && bordered.outline === "none", "a border follows the oval, not the rectangle", JSON.stringify(bordered));
+
+  // 3. Saved, and the same after a reload.
+  const stored = await storedImage(id, (a) => a.mask === "oval" && a.borderWidth === 3);
+  await openEditor(page, id, "north field");
+  const reloaded = await maskDrawn(page);
+  check(G, Boolean(stored) && reloaded.clip === 'url("#docs-mask-oval")' && /^M0\.5,0 A0\.5/.test(reloaded.edge ?? ""), "saved; after a reload the image is still an oval with its border", JSON.stringify(reloaded));
+
+  // 4. The Word download clips the image's pixels to the oval: a clear corner, a solid middle.
+  const docx = await page.request.get(`${BASE}/api/documents/${id}/export?format=docx`);
+  const files = docx.ok() ? unzipSync(new Uint8Array(await docx.body())) : {};
+  // The media folder lists itself too: the image is the entry with a file name.
+  const media = Object.keys(files).find((n) => /^word\/media\/[^/]+\.\w+$/.test(n));
+  let corner = -1;
+  let middle = -1;
+  if (media) {
+    const img = await loadImage(Buffer.from(files[media]));
+    const c = createCanvas(img.width, img.height);
+    const g = c.getContext("2d");
+    g.drawImage(img, 0, 0);
+    corner = g.getImageData(4, 4, 1, 1).data[3];
+    middle = g.getImageData(Math.floor(img.width / 2), Math.floor(img.height / 2), 1, 1).data[3];
+  }
+  check(G, docx.ok() && corner === 0 && middle === 255, "the Word download clips the image to the oval", `HTTP ${docx.status()}; corner alpha ${corner}, middle ${middle}`);
+
+  // 5. Star, then Rectangle takes the mask off; Reset image does too.
+  await chooseMask(page, "star");
+  const star = await maskDrawn(page);
+  await page.keyboard.press("Escape");
+  await chooseMask(page, "none");
+  const none = await maskDrawn(page);
+  await page.keyboard.press("Escape");
+  await chooseMask(page, "heart");
+  await selectImage(page);
+  await page.locator('[aria-label="Reset image"]').click();
+  await sleep(500);
+  const reset = await maskDrawn(page);
+  const cleared = await storedImage(id, (a) => (a.mask ?? null) === null);
+  check(G, star.clip === 'url("#docs-mask-star")' && none.clip === "none" && reset.clip === "none" && Boolean(cleared), "Star draws a star; Rectangle takes the mask off; Reset image does too", `${star.clip}, ${none.clip}, ${reset.clip}`);
   check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
   await close();
 };
