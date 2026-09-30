@@ -893,10 +893,12 @@ function firstCellOnly(line: Line) {
 
 // A row set tight: a short line of one cell whose words stand an em apart or
 // more, a number among them (Grinstead–Snell's Table 6.2: "HHH 1" under "X
-// Y", its columns closer than a cell's gap). Its parts count as its cells.
+// Y", its columns closer than a cell's gap). Its parts count as its cells. A
+// list's item is no row ("-  DIAMETER 1200 MM" on a scan: NASA SP-4408
+// p. 467).
 function tightCells(line: Line): number {
   const items = line.items.filter((it) => it.str.trim().length > 0);
-  if (line.cells.length !== 1 || line.text.length > 40 || items.length < 2) return line.cells.length;
+  if (line.cells.length !== 1 || line.text.length > 40 || items.length < 2 || readMarker(line)?.family === "bullet") return line.cells.length;
   const parts = [items[0].str];
   items.slice(1).forEach((it, k) => {
     if (it.x - (items[k].x + items[k].w) >= line.size) parts.push(it.str);
