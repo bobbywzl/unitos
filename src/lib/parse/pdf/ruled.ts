@@ -1076,9 +1076,11 @@ function pieceEnds(columns: Rule[], box: Box): number[] {
 // each cell's lines joined, unless the band holds amounts on two lines or
 // more in one column (a group of rows between two rules): each line with
 // an amount there opens a row. rules: where the rows' edges are drawn;
-// null when they part fewer bands, and the rows come from the lines'
-// rhythm.
+// null when they part fewer bands, or when a line stands across one (a
+// label set across two rows: arXiv 2503.10997's "Image-only" beside its
+// two models), and the rows come from the lines' rhythm.
 function ruledRowStarts(body: Line[], cellsOf: Cell[][], rules: number[]): number[] | null {
+  if (body.some((l) => rules.some((y) => y > l.y + 1 && y < l.y + l.size * 0.7))) return null;
   const bands = body.map((l) => rules.filter((y) => y > l.y).length);
   if (new Set(bands).size < 3) return null;
   const amount = (k: number, c: number) => NUMERIC_CELL_RE.test(cellsOf[k][c]?.text.trim() ?? "");
