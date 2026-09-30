@@ -5,6 +5,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 import { separateBlocks } from "@/lib/parse/dom-text";
 import { escapeHtml } from "@/lib/parse/office";
 import { columnLetter } from "@/lib/parse/sheets";
+import { cellValue, computeFormula, formulaFormat, movedFormula, shows } from "@/lib/sheet-formulas";
 
 // A slide's, a sheet's, or a table's replica with new words (SPEC.md §27,
 // §16). The one rule holds after every edit: the replica's DOM text — every
@@ -18,8 +19,10 @@ import { columnLetter } from "@/lib/parse/sheets";
 // byte for byte (the text PATCH keeps the html of an edit that, run
 // backwards, would not).
 
-/** Why an edit does not go into the replica: a slide's line, or a tab in
-    one, added or removed (lines); a sheet that is no longer a grid — a row
+/** Why an edit does not go into the replica: a slide's line that no text
+    box or speaker notes hold (a table's row, a line a break divides, notes
+    with no line under their label), or a tab in a line, added or removed
+    (lines); a sheet that is no longer a grid — a row
     with more or fewer cells than the first, or rows and columns changed in
     one edit (grid); a sheet's frozen rows or columns added or removed
     (frozen); rows or columns of a sheet with merged cells or a drawing
@@ -29,8 +32,9 @@ import { columnLetter } from "@/lib/parse/sheets";
     hold them (empty); a replica whose text is not the block's (stale). A
     table that keeps its html keeps its rows and columns (cells) and the
     words a table keeps: a formula, the break between a cell's paragraphs,
-    a cell a merge covers (held). */
-export type ReplicaRefusal = "lines" | "grid" | "frozen" | "merged" | "fixed" | "empty" | "stale" | "cells" | "held";
+    a cell a merge covers (held). A sheet keeps a row or a column a formula
+    it computes reads alone, not in a range (reads). */
+export type ReplicaRefusal = "lines" | "grid" | "frozen" | "merged" | "fixed" | "empty" | "stale" | "cells" | "held" | "reads";
 
 /** What the reader is told for each refusal. */
 export const REPLICA_REFUSAL: Record<ReplicaRefusal, TKey> = {
@@ -43,6 +47,7 @@ export const REPLICA_REFUSAL: Record<ReplicaRefusal, TKey> = {
   stale: "api.replicaStale",
   cells: "api.replicaCells",
   held: "api.replicaHeld",
+  reads: "api.replicaReads",
 };
 
 // A node's place in the html, as jsdom gives it.
@@ -315,11 +320,16 @@ export type SheetCut = z.infer<typeof sheetCutSchema>;
 
 /** Rows (or columns) of `before` and `after` aligned, each a list of cells.
     The ones both keep as they are anchor the rest; between two anchors, old
-    and new pair up in order, each with the one most like it (the most cells
-    the same) — its words change later — the extra old ones go, and the
-    extra new ones come. `kept` has an entry per new line: the old line it
-    keeps, or null for a new one; `gone` lists the old lines that go. */
-function alignLines(before: string[][], after: string[][]): { kept: (number | null)[]; gone: number[] } {
+    and new pair up in order, each with the one most like it (`alike`: by
+    default, the most cells the same) — its words change later — the extra
+    old ones go, and the extra new ones come. `kept` has an entry per new
+    line: the old line it keeps, or null for a new one; `gone` lists the old
+    lines that go. */
+function alignLines(
+  before: string[][],
+  after: string[][],
+  alike = (x: string[], y: string[]) => x.reduce((sum, cell, c) => sum + (cell === y[c] ? 1 : 0), 0),
+): { kept: (number | null)[]; gone: number[] } {
   const a = before.map((line) => line.join("\t"));
   const b = after.map((line) => line.join("\t"));
   const n = a.length;
@@ -332,7 +342,6 @@ function alignLines(before: string[][], after: string[][]): { kept: (number | nu
     else if (lcs[i + 1][j] >= lcs[i][j + 1]) i++;
     else j++;
   }
-  const alike = (x: string[], y: string[]) => x.reduce((sum, cell, c) => sum + (cell === y[c] ? 1 : 0), 0);
   const kept: (number | null)[] = [];
   const gone: number[] = [];
   let i = 0;
@@ -394,6 +403,7 @@ const NUMBER = /^(?:[-+(]?[$€£¥]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?%?\)?|\d
 function bare(model: Element, frozen: "sheet-fr" | "sheet-fc"): Element {
   const el = model.cloneNode(false) as Element;
   el.removeAttribute("title");
+  el.removeAttribute("data-fmt");
   el.classList.remove(frozen);
   const style = el.getAttribute("style");
   if (style !== null) {
@@ -417,7 +427,10 @@ function newCell(model: Element, words: string, gap: string, frozen: "sheet-fr" 
   return withGap(cell.outerHTML, gap);
 }
 
-/** The grid of a sheet's replica, every part with its place in `html`. */
+/** The grid of a sheet's replica, every part with its place in `html`:
+    its rows, and each row's slots, a sheet's cells as it lays them out —
+    the cell drawn there, or the merged cell that covers it — and the
+    drawings over it. */
 function readGrid(html: string) {
   const dom = new JSDOM(`${PREFIX}${html}</body></html>`, { includeNodeLocations: true });
   const document = dom.window.document;
@@ -439,7 +452,32 @@ function readGrid(html: string) {
   const colgroup = table?.querySelector(":scope > colgroup");
   const headRow = table?.querySelector(":scope > thead > tr");
   if (!sheet || !inner || !table || !body || !colgroup || !headRow) return null;
-  const rows = [...body.children].filter((el) => el.localName === "tr");
+  const rows = [...body.children]
+    .filter((el) => el.localName === "tr")
+    .map((tr) => ({ tr, number: tr.querySelector(":scope > th.sheet-rn"), cells: [...tr.children].filter((el) => el.localName === "td") }));
+  const width = headRow.children.length - 1;
+  // A merge's origin spans its rows and columns; a cell that holds only
+  // the gaps of the cells a merge covers (display:none) has no slot.
+  const slots = rows.map(() => new Array<{ td: Element; origin: boolean; row: number } | undefined>(width));
+  rows.forEach((row, r) => {
+    let c = 0;
+    for (const td of row.cells) {
+      if (/display:\s*none/.test(td.getAttribute("style") ?? "")) continue;
+      while (c < width && slots[r][c]) c += 1;
+      const span = (name: string) => Math.max(1, Number(td.getAttribute(name) ?? 1) || 1);
+      for (let dr = 0; dr < span("rowspan") && r + dr < rows.length; dr++) {
+        for (let dc = 0; dc < span("colspan") && c + dc < width; dc++) slots[r + dr][c + dc] = { td, origin: dr === 0 && dc === 0, row: r };
+      }
+      c += span("colspan");
+    }
+  });
+  const gaps = (td: Element) => [...td.querySelectorAll(".cell-gap")].filter((g) => CELL_GAP.test(g.textContent ?? "")).length;
+  // A plain cell: drawn in its own slot alone, holding its own gap alone.
+  const plain = (r: number, c: number) => {
+    const slot = slots[r]?.[c];
+    return Boolean(slot?.origin && !slot.td.hasAttribute("colspan") && !slot.td.hasAttribute("rowspan") && gaps(slot.td) <= 1);
+  };
+  const px = (el: Element | undefined, name: string) => Number(new RegExp(`(?:^|;)\\s*${name}:(-?\\d+(?:\\.\\d+)?)px`).exec(el?.getAttribute("style") ?? "")?.[1] ?? 0);
   return {
     place,
     source: (node: Node) => {
@@ -454,33 +492,110 @@ function readGrid(html: string) {
     colgroup,
     heads: [...headRow.children],
     headRow,
-    rows: rows.map((tr) => ({ tr, number: tr.querySelector(":scope > th.sheet-rn"), cells: [...tr.children].filter((el) => el.localName === "td") })),
+    rows,
+    width,
+    slots,
+    plain,
+    px,
+    drawings: [...inner.querySelectorAll(":scope > .sheet-drawing")],
     frozenRows: Number(sheet.getAttribute("data-frozen-rows") ?? 0),
     frozenCols: Number(sheet.getAttribute("data-frozen-cols") ?? 0),
-    // A merge, a drawing, or a row a merge hides ties cells to their places.
-    fixed: sheet.querySelector("td[colspan], td[rowspan], .sheet-drawing, td[style*='display:none']") !== null,
   };
 }
+type Grid = NonNullable<ReturnType<typeof readGrid>>;
+
+/** The grid's words, a row per row and a cell per slot (a cell a merge
+    covers reads ""). */
+const gridWords = (grid: Grid): string[][] => grid.slots.map((row) => Array.from(row, (slot) => (slot?.origin ? wordsOf(slot.td) : "")));
+const joinRows = (rows: string[][]) => rows.map((r) => r.join("\t")).join("\n");
+
+/** The grid's rows in `text`, `width` cells a row: a tab between cells, a
+    newline between rows, and a newline before a row's last cell a line
+    break in a cell. Null when a row has not `width` cells. */
+function rowsIn(text: string, width: number): string[][] | null {
+  const rows: string[][] = [];
+  let cells = [""];
+  for (const part of text.split(/(\t|\n)/)) {
+    if (part === "\t") cells.push("");
+    else if (part === "\n" && cells.length < width) cells[cells.length - 1] += "\n";
+    else if (part === "\n") {
+      rows.push(cells);
+      cells = [""];
+    } else cells[cells.length - 1] += part;
+  }
+  rows.push(cells);
+  return rows.every((r) => r.length === width) ? rows : null;
+}
+
+/** The drawings over the grid moved with the rows (or the columns) under
+    them: each edge keeps its place in its row (its column), an edge in a
+    row that went moves to the next row that stays, and an edge past the
+    grid keeps its distance from the grid's end. `old` and `now` are the
+    rows' heights (the columns' widths) before and after, `start` where the
+    first one starts, `kept` the old row each new one keeps (null for a new
+    one). The splices, and the drawings' far edge (bottom or right). */
+function movedDrawings(grid: Grid, html: string, axis: "rows" | "cols", start: number, old: number[], now: number[], kept: (number | null)[]): { splices: Splice[]; far: number } {
+  const [near, size] = axis === "rows" ? ["top", "height"] : ["left", "width"];
+  const edges = (sizes: number[]) => {
+    const out = [start];
+    for (const s of sizes) out.push(out[out.length - 1] + s);
+    return out;
+  };
+  const was = edges(old);
+  const is = edges(now);
+  const newIndex = new Map<number, number>();
+  kept.forEach((k, j) => {
+    if (k !== null) newIndex.set(k, j);
+  });
+  const moved = (at: number): number => {
+    const i = was.findIndex((e, k) => k < old.length && at >= e && at < was[k + 1]);
+    if (i < 0) return at >= was[old.length] ? is[now.length] + (at - was[old.length]) : at;
+    if (newIndex.has(i)) return is[newIndex.get(i)!] + (at - was[i]);
+    for (let x = i + 1; x < old.length; x++) if (newIndex.has(x)) return is[newIndex.get(x)!];
+    return is[now.length];
+  };
+  const splices: Splice[] = [];
+  let far = 0;
+  for (const drawing of grid.drawings) {
+    const from = grid.px(drawing, near);
+    const length = grid.px(drawing, size);
+    const a = moved(from);
+    let b = moved(from + length);
+    if (b - a < 4) b = a + length;
+    far = Math.max(far, b);
+    const at = grid.place(drawing).attrs.style;
+    if (!at || (a === from && b - a === length)) continue;
+    const style = html
+      .slice(at.start, at.end)
+      .replace(new RegExp(`([";]\\s*${near}:)-?\\d+(?:\\.\\d+)?px`), (_, name: string) => `${name}${num(a)}px`)
+      .replace(new RegExp(`([";]\\s*${size}:)-?\\d+(?:\\.\\d+)?px`), (_, name: string) => `${name}${num(b - a)}px`);
+    splices.push({ start: at.start, end: at.end, source: style });
+  }
+  return { splices, far };
+}
+const num = (n: number) => String(Math.round(n * 100) / 100);
 
 /** A sheet's replica with rows or columns added or removed to match
-    `next`'s grid, the kept cells' words as they were, and what went; or
-    why not. A new row or column is built like the kept one before it (the
-    one after it, when the one before is frozen): its height or width, its
-    cells' style. One that `cut` holds comes back as it was. */
-function sheetShape(html: string, prev: string, next: string, cut: SheetCut | null): { html: string; cut: SheetCut } | { refused: ReplicaRefusal } {
-  const grid = readGrid(html);
-  if (!grid) return { refused: "grid" };
-  if (grid.fixed) return { refused: "merged" };
-  const before = prev.split("\n").map((r) => r.split("\t"));
-  const after = next.split("\n").map((r) => r.split("\t"));
-  const width = before[0].length;
-  const newWidth = after[0].length;
-  // A grid is a rectangle — a cell with a line break in its words reads as
-  // two rows, so rows and columns stay — and one edit changes its rows or
-  // its columns.
-  if (before.some((r) => r.length !== width) || before.length !== grid.rows.length || grid.rows.some((r) => r.cells.length !== width)) return { refused: "grid" };
-  if (after.some((r) => r.length !== newWidth) || (before.length !== after.length && width !== newWidth)) return { refused: "grid" };
-  const splices: { start: number; end: number; source: string }[] = [];
+    `after`'s grid, the kept cells' words as they were, and what went, with
+    where each old row and column now stands; or why not. A new row or
+    column is built like the kept one before it (the one after it, when the
+    one before is frozen), or the nearest plain one: its height or width,
+    its cells' style. One that `cut` holds comes back as it was. With
+    merged cells, a row or a column goes only with every merge it holds
+    whole, and a new one comes only where no merge spans, beside plain
+    cells; the drawings over the grid move with the cells under them. */
+function sheetShape(
+  html: string,
+  grid: Grid,
+  before: string[][],
+  after: string[][],
+  cut: SheetCut | null,
+): { html: string; cut: SheetCut; row: (r: number) => number | null; col: (c: number) => number | null } | { refused: ReplicaRefusal } {
+  const width = grid.width;
+  const newWidth = after[0]?.length ?? 0;
+  // One edit changes its rows or its columns.
+  if (before.length !== after.length && width !== newWidth) return { refused: "grid" };
+  const splices: Splice[] = [];
   const setAttr = (el: Element, name: string, value: string) => {
     const at = grid.place(el).attrs[name];
     if (at) splices.push({ start: at.start, end: at.end, source: `${name}="${value}"` });
@@ -489,26 +604,72 @@ function sheetShape(html: string, prev: string, next: string, cut: SheetCut | nu
     const at = grid.place(el).inner;
     splices.push({ start: at.start, end: at.end, source });
   };
+  const nearest = (kept: (number | null)[], j: number, ok: (k: number) => boolean, first: number) =>
+    ok(first) ? first : kept.filter((k): k is number => k !== null && ok(k)).sort((x, y) => Math.abs(kept.indexOf(x) - j) - Math.abs(kept.indexOf(y) - j))[0];
+  const mapOf = (kept: (number | null)[]) => {
+    const map = new Map<number, number>();
+    kept.forEach((k, j) => {
+      if (k !== null) map.set(k, j);
+    });
+    return (i: number) => map.get(i) ?? null;
+  };
   let taken: SheetCut;
+  let row = (r: number): number | null => r;
+  let col = (c: number): number | null => c;
+  let far = 0;
 
   if (before.length !== after.length) {
     const { kept, gone } = alignLines(before, after);
     if (gone.some((i) => i < grid.frozenRows) || kept.some((k, j) => k === null && j < grid.frozenRows)) return { refused: "frozen" };
+    // A merge that spans rows ties them: the row a merge reaches from above,
+    // and the row a merge starts in and reaches down from, stay; no new
+    // row goes into a merge.
+    const spanned = (r: number) => grid.slots[r].some((slot) => slot && slot.row < r);
+    const spans = (r: number) => grid.slots[r].some((slot) => slot?.origin && Number(slot.td.getAttribute("rowspan") ?? 1) > 1);
+    if (gone.some((i) => spanned(i) || spans(i))) return { refused: "merged" };
+    for (let j = 0; j < kept.length; j++) {
+      const below = kept.slice(j + 1).find((k) => k !== null);
+      if (kept[j] === null && below !== undefined && below !== null && spanned(below)) return { refused: "merged" };
+    }
+    const plainRow = (r: number) => grid.slots[r].every((_, c) => grid.plain(r, c));
     const stored = cut && "rows" in cut ? [...cut.rows] : [];
     const last = after.length - 1;
-    const rows = kept.map((k, j) => {
+    const rows: string[] = [];
+    for (const [j, k] of kept.entries()) {
       const gap = j === last ? "" : "\n";
-      if (k !== null) return rowAt(grid.source(grid.rows[k].tr), j + 1, gap);
-      const back = stored.findIndex((row) => row.words === after[j].join("\t"));
-      if (back >= 0) return rowAt(stored.splice(back, 1)[0].source, j + 1, gap);
-      const model = grid.rows[modelOf(kept, j, grid.frozenRows)];
+      if (k !== null) {
+        rows.push(rowAt(grid.source(grid.rows[k].tr), j + 1, gap));
+        continue;
+      }
+      const back = stored.findIndex((r) => r.words === after[j].join("\t"));
+      if (back >= 0) {
+        rows.push(rowAt(stored.splice(back, 1)[0].source, j + 1, gap));
+        continue;
+      }
+      const m = nearest(kept, j, plainRow, modelOf(kept, j, grid.frozenRows));
+      if (m === undefined) return { refused: "merged" };
+      const model = grid.rows[m];
       const number = model.number ? bare(model.number, "sheet-fr").outerHTML : "";
       const cells = model.cells.map((cell, c) => newCell(cell, after[j][c], "\t", "sheet-fr")).join("");
-      return rowAt(bare(model.tr, "sheet-fr").outerHTML.replace(/<\/tr>$/, () => `${number}${cells}</tr>`), j + 1, gap);
-    });
+      rows.push(rowAt(bare(model.tr, "sheet-fr").outerHTML.replace(/<\/tr>$/, () => `${number}${cells}</tr>`), j + 1, gap));
+    }
     within(grid.body, rows.join(""));
     setAttr(grid.sheet, "data-rows", String(after.length));
     taken = { rows: gone.map((i) => ({ words: before[i].join("\t"), source: grid.source(grid.rows[i].tr) })) };
+    row = mapOf(kept);
+    // The drawings move with the rows under them.
+    const heights = grid.rows.map((r) => grid.px(r.tr, "height"));
+    const newHeights = kept.map((k, j) => (k !== null ? heights[k] : heights[nearest(kept, j, plainRow, modelOf(kept, j, grid.frozenRows)) ?? 0]));
+    const drawings = movedDrawings(grid, html, "rows", grid.px(grid.headRow, "height"), heights, newHeights, kept);
+    splices.push(...drawings.splices);
+    far = drawings.far;
+    const at = grid.place(grid.inner).attrs.style;
+    if (at && grid.drawings.length > 0) {
+      const grid_ = grid.px(grid.headRow, "height") + newHeights.reduce((a, b) => a + b, 0);
+      const style = html.slice(at.start, at.end);
+      const height = Math.max(grid_, Math.ceil(far));
+      if (/min-height:/.test(style)) splices.push({ start: at.start, end: at.end, source: style.replace(/min-height:\d+(?:\.\d+)?px/, `min-height:${height}px`) });
+    }
   } else {
     const column = (rows: string[][], c: number) => rows.map((r) => r[c]);
     const { kept, gone } = alignLines(
@@ -516,32 +677,66 @@ function sheetShape(html: string, prev: string, next: string, cut: SheetCut | nu
       Array.from({ length: newWidth }, (_, c) => column(after, c)),
     );
     if (gone.some((c) => c < grid.frozenCols) || kept.some((k, j) => k === null && j < grid.frozenCols)) return { refused: "frozen" };
+    // A column goes only with plain cells, and a new one comes after a
+    // column of plain cells (at the start, before one): no merge spans it.
+    const plainCol = (c: number) => grid.rows.every((_, r) => grid.plain(r, c));
+    if (gone.some((c) => !plainCol(c))) return { refused: "merged" };
+    for (let j = 0; j < kept.length; j++) {
+      if (kept[j] !== null) continue;
+      const beside = j > 0 ? kept.slice(0, j).reverse().find((k) => k !== null) : kept.find((k) => k !== null);
+      if (beside !== undefined && beside !== null && !plainCol(beside)) return { refused: "merged" };
+    }
     const stored = cut && "cols" in cut ? cut.cols.filter((c) => c.cells.length === grid.rows.length) : [];
     // colgroup and the letters: the row numbers' column and the corner first.
-    const lines = kept.map((k, j) => {
-      if (k !== null) return { col: grid.source(grid.cols[k + 1]), head: grid.source(grid.heads[k + 1]), cells: grid.rows.map((row) => grid.source(row.cells[k])) };
+    const lines: { col: string; head: string; cells: (string | null)[] }[] = [];
+    for (const [j, k] of kept.entries()) {
+      if (k !== null) {
+        lines.push({
+          col: grid.source(grid.cols[k + 1]),
+          head: grid.source(grid.heads[k + 1]),
+          cells: grid.rows.map((_, r) => {
+            const slot = grid.slots[r][k];
+            return slot?.origin ? grid.source(slot.td) : null;
+          }),
+        });
+        continue;
+      }
       const back = stored.findIndex((c) => c.words === column(after, j).join("\n"));
-      if (back >= 0) return stored.splice(back, 1)[0];
-      const m = modelOf(kept, j, grid.frozenCols);
-      return {
+      if (back >= 0) {
+        lines.push(stored.splice(back, 1)[0]);
+        continue;
+      }
+      const m = nearest(kept, j, plainCol, modelOf(kept, j, grid.frozenCols));
+      if (m === undefined) return { refused: "merged" };
+      lines.push({
         col: grid.source(grid.cols[m + 1]),
         head: bare(grid.heads[m + 1], "sheet-fc").outerHTML.replace(/<\/th>$/, "A</th>"),
-        cells: grid.rows.map((row, r) => newCell(row.cells[m], after[r][j], "", "sheet-fc")),
-      };
-    });
+        cells: grid.rows.map((_, r) => newCell(grid.slots[r][m]!.td, after[r][j], "", "sheet-fc")),
+      });
+    }
     within(grid.colgroup, grid.source(grid.cols[0]) + lines.map((l) => l.col).join(""));
     within(grid.headRow, grid.source(grid.heads[0]) + lines.map((l, j) => l.head.replace(/>[A-Z]+<\/th>$/, () => `>${columnLetter(j)}</th>`)).join(""));
     const lastRow = grid.rows.length - 1;
-    grid.rows.forEach((row, r) => {
-      const cells = lines.map((l, j) => withGap(l.cells[r], j < newWidth - 1 ? "\t" : r === lastRow ? "" : "\n"));
-      within(row.tr, (row.number ? grid.source(row.number) : "") + cells.join(""));
+    grid.rows.forEach((r, i) => {
+      // Each plain cell but the row's last ends in a tab; the row's last
+      // cell's last gap ends the row. A merged cell keeps its gaps.
+      const cells = lines.map((l) => l.cells[i]).filter((c): c is string => c !== null);
+      const plainCell = (source: string) => !/ (?:colspan|rowspan)=/.test(source.slice(0, source.indexOf(">"))) && (source.match(/<span class="cell-gap">[\t\n]<\/span>/g) ?? []).length <= 1;
+      const own = cells.map((c, x) => (x < cells.length - 1 ? (plainCell(c) ? withGap(c, "\t") : c) : withGap(c, i === lastRow ? "" : "\n")));
+      within(r.tr, (r.number ? grid.source(r.number) : "") + own.join(""));
     });
     // The grid's width: the row numbers' column and every column.
-    const px = (col: string) => Number(/width:(\d+(?:\.\d+)?)px/.exec(col)?.[1] ?? 0);
-    const total = px(grid.source(grid.cols[0])) + lines.reduce((sum, l) => sum + px(l.col), 0);
+    const px = (source: string) => Number(/width:(\d+(?:\.\d+)?)px/.exec(source)?.[1] ?? 0);
+    const widths = grid.cols.slice(1).map((c) => px(grid.source(c)));
+    const newWidths = lines.map((l) => px(l.col));
+    const total = px(grid.source(grid.cols[0])) + newWidths.reduce((sum, w) => sum + w, 0);
+    const drawings = movedDrawings(grid, html, "cols", px(grid.source(grid.cols[0])), widths, newWidths, kept);
+    splices.push(...drawings.splices);
+    far = drawings.far;
     for (const el of [grid.table, grid.inner]) {
       const at = grid.place(el).attrs.style;
-      if (at) splices.push({ start: at.start, end: at.end, source: html.slice(at.start, at.end).replace(/width:\d+(?:\.\d+)?px/, `width:${total}px`) });
+      const w = el === grid.inner ? Math.max(total, Math.ceil(far)) : total;
+      if (at) splices.push({ start: at.start, end: at.end, source: html.slice(at.start, at.end).replace(/width:\d+(?:\.\d+)?px/, `width:${w}px`) });
     }
     setAttr(grid.sheet, "data-cols", String(newWidth));
     taken = {
@@ -549,13 +744,12 @@ function sheetShape(html: string, prev: string, next: string, cut: SheetCut | nu
         words: column(before, c).join("\n"),
         col: grid.source(grid.cols[c + 1]),
         head: grid.source(grid.heads[c + 1]),
-        cells: grid.rows.map((row) => grid.source(row.cells[c])),
+        cells: grid.rows.map((_, r) => grid.source(grid.slots[r][c]!.td)),
       })),
     };
+    col = mapOf(kept);
   }
-  let out = html;
-  for (const { start, end, source } of splices.sort((x, y) => y.start - x.start)) out = out.slice(0, start) + source + out.slice(end);
-  return { html: out, cut: taken };
+  return { html: applied(html, splices), cut: taken, row, col };
 }
 
 /** A cell's own words: its text without its gaps. */
@@ -615,22 +809,377 @@ function cellClasses(was: string, html: string): string {
   return out;
 }
 
+/** The formulas of a sheet's grid: each formula's cell, its formula, its
+    words as they show, and the format that shows its value when the sheet
+    computes it here (lib/sheet-formulas.ts), else null: it keeps its value. */
+function gridFormulas(grid: Grid, words: string[][]) {
+  const values = words.map((r) => r.map((w) => cellValue(w)));
+  const get = (r: number, c: number) => values[r]?.[c] ?? null;
+  const out: { r: number; c: number; formula: string; shown: string; format: string | null }[] = [];
+  grid.slots.forEach((row, r) =>
+    row.forEach((slot, c) => {
+      const formula = slot?.origin ? slot.td.getAttribute("title") : null;
+      if (!formula?.startsWith("=")) return;
+      const value = computeFormula(formula, get);
+      out.push({ r, c, formula, shown: words[r][c], format: value === undefined ? null : formulaFormat(words[r][c], value, slot!.td.getAttribute("data-fmt")) });
+    }),
+  );
+  return out;
+}
+
+/** `html` with each cell given (a formula's) changed in place: its title,
+    or its words in its own text. A cell whose words stand in more than one
+    run keeps them. */
+function withCells(html: string, cells: { r: number; c: number; title?: string; words?: string }[]): string {
+  const grid = cells.length > 0 ? readGrid(html) : null;
+  if (!grid) return html;
+  const splices: Splice[] = [];
+  for (const { r, c, title, words } of cells) {
+    const td = grid.slots[r]?.[c]?.td;
+    if (!td) continue;
+    const at = grid.place(td);
+    if (title !== undefined && at.attrs.title) splices.push({ start: at.attrs.title.start, end: at.attrs.title.end, source: `title="${escapeHtml(title)}"` });
+    if (words === undefined) continue;
+    const texts: Text[] = [];
+    const walker = td.ownerDocument.createTreeWalker(td, 4 /* NodeFilter.SHOW_TEXT */);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) if (!n.parentElement?.closest(".cell-gap, [data-anchor-skip]")) texts.push(n as Text);
+    if (texts.length === 1) {
+      const text = grid.place(texts[0]);
+      splices.push({ start: text.start, end: text.end, source: escapeHtml(words) });
+    } else if (texts.length === 0) {
+      const gap = td.querySelector(".cell-gap");
+      const point = gap ? grid.place(gap).start : at.inner.end;
+      splices.push({ start: point, end: point, source: escapeHtml(words) });
+    }
+  }
+  return applied(html, splices);
+}
+
+/** The words the formulas the sheet computes show over the grid in `html`,
+    computed again until nothing changes (a formula may read another), for
+    the ones whose words change. */
+function formulaWords(html: string, formulas: { r: number; c: number; formula: string; format: string }[]): { r: number; c: number; words: string }[] {
+  const grid = formulas.length > 0 ? readGrid(html) : null;
+  if (!grid) return [];
+  const words = gridWords(grid);
+  const values = words.map((r) => r.map((w) => cellValue(w)));
+  const get = (r: number, c: number) => values[r]?.[c] ?? null;
+  const shown = new Map<(typeof formulas)[number], string>();
+  for (let pass = 0; pass <= formulas.length; pass++) {
+    let changed = false;
+    for (const f of formulas) {
+      const value = computeFormula(f.formula, get);
+      if (value === undefined) continue;
+      const now = shows(f.format, value);
+      shown.set(f, now);
+      const read = cellValue(now);
+      if (JSON.stringify(read) !== JSON.stringify(values[f.r][f.c])) {
+        values[f.r][f.c] = read;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return formulas.flatMap((f) => {
+    const now = shown.get(f);
+    return now !== undefined && now !== words[f.r][f.c] ? [{ r: f.r, c: f.c, words: now }] : [];
+  });
+}
+
 /** A sheet's replica with `next` for its text — its words cell by cell, and
     rows or columns added or removed (one of the two in one edit) — with
-    what the edit took out; or why not. `cut` is what the edit this one
-    takes back took out: its rows or columns come back as they were. */
-export function sheetWithText(html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null } | { refused: ReplicaRefusal } {
-  const shape = (text: string) => text.split("\n").map((r) => r.split("\t").length).join(",");
-  if (shape(prev) === shape(next)) {
-    const edited = replicaWithText(html, prev, next);
-    return "refused" in edited ? edited : { html: cellClasses(html, edited.html), cut: null };
-  }
+    what the edit took out, and its text when the formulas the sheet
+    computes changed it; or why not. The grid reads row by row (a line
+    break in a cell's words before its row's last cell), then a chart's
+    data, which stays. The formulas follow: each formula's references move
+    with their cells, and the formulas the sheet computes show their new
+    values; `next` gives a formula's cell its value as it was, or as
+    computed. `cut` is what the edit this one takes back took out: its rows
+    or columns come back as they were. */
+export function sheetWithText(html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null; text?: string } | { refused: ReplicaRefusal } {
   if (readReplica(html).text !== prev) return { refused: "stale" };
-  const reshaped = sheetShape(html, prev, next, cut);
-  if ("refused" in reshaped) return reshaped;
-  // The kept cells' new words, then.
-  const edited = replicaWithText(reshaped.html, readReplica(reshaped.html).text, next);
-  return "refused" in edited ? edited : { html: cellClasses(reshaped.html, edited.html), cut: reshaped.cut };
+  const grid = readGrid(html);
+  const was = grid ? gridWords(grid) : [];
+  const gridText = joinRows(was);
+  const tail = prev.startsWith(gridText) && (prev.length === gridText.length || prev[gridText.length] === "\n") ? prev.slice(gridText.length) : null;
+  if (!grid || was.length === 0 || tail === null || JSON.stringify(rowsIn(gridText, grid.width)) !== JSON.stringify(was)) {
+    // A grid the text does not read row by row: its words alone change.
+    const shape = (text: string) => text.split("\n").map((r) => r.split("\t").length).join(",");
+    if (shape(prev) !== shape(next)) return { refused: "grid" };
+    const edited = replicaWithText(html, prev, next);
+    if ("refused" in edited) return edited.refused === "lines" ? { refused: "grid" } : edited;
+    return { html: cellClasses(html, edited.html), cut: null };
+  }
+  // A chart's data under its drawing stays.
+  if (!next.endsWith(tail)) return { refused: "fixed" };
+  const nextGrid = next.slice(0, next.length - tail.length);
+  // The new grid: as wide as the old (its rows may change), else another
+  // width with as many rows. A cell's words with a line break that the new
+  // text keeps stay in one cell: a reading that splits them is not the grid.
+  const breaks = was.flat().filter((cell) => cell.includes("\n") && nextGrid.includes(cell));
+  const read = (w: number) => {
+    const rows = w > 0 ? rowsIn(nextGrid, w) : null;
+    return rows && breaks.every((b) => rows.some((r) => r.some((cell) => cell.includes(b)))) ? rows : null;
+  };
+  let now = read(grid.width);
+  for (let d = 1; !now && d <= 20; d++) {
+    for (const w of [grid.width + d, grid.width - d]) {
+      const rows: string[][] | null = now ? null : read(w);
+      if (rows && rows.length === was.length) now = rows;
+    }
+  }
+  if (!now) return { refused: "grid" };
+  const formulas = gridFormulas(grid, was);
+  let shaped: { html: string; cut: SheetCut | null; row: (r: number) => number | null; col: (c: number) => number | null } = { html, cut: null, row: (r) => r, col: (c) => c };
+  if (now.length !== was.length || now[0].length !== grid.width) {
+    const reshaped = sheetShape(html, grid, was, now, cut);
+    if ("refused" in reshaped) return reshaped;
+    shaped = reshaped;
+  }
+  // Each formula stands where its cell went, its references moved with
+  // their cells.
+  const moved: { r: number; c: number; formula: string; was: string; format: string | null; shown: string }[] = [];
+  for (const f of formulas) {
+    const r = shaped.row(f.r);
+    const c = shaped.col(f.c);
+    if (r === null || c === null) continue;
+    // A formula the sheet computes cannot lose a cell it reads; any other
+    // keeps its text when its references cannot move.
+    const formula = movedFormula(f.formula, shaped.row, shaped.col);
+    if (formula === null && f.format !== null) return { refused: "reads" };
+    moved.push({ r, c, formula: formula ?? f.formula, was: f.formula, format: f.format, shown: f.shown });
+  }
+  const titled = withCells(
+    shaped.html,
+    moved.filter((m) => m.formula !== m.was).map((m) => ({ r: m.r, c: m.c, title: m.formula })),
+  );
+  // Every cell but a formula's takes next's words; a formula's keeps its own.
+  const formulaAt = (r: number, c: number) => moved.find((m) => m.r === r && m.c === c);
+  const current = gridWords(readGrid(titled)!);
+  const words = now.map((cells, r) => cells.map((w, c) => (formulaAt(r, c) ? current[r][c] : w)));
+  const edited = replicaWithText(titled, readReplica(titled).text, joinRows(words) + tail);
+  // A line break or a tab a cell's words gain or lose leaves the grid.
+  if ("refused" in edited) return edited.refused === "lines" ? { refused: "grid" } : edited;
+  const computed = formulaWords(
+    edited.html,
+    moved.flatMap((m) => (m.format === null ? [] : [{ r: m.r, c: m.c, formula: m.formula, format: m.format }])),
+  );
+  for (const m of moved) {
+    const value = computed.find((v) => v.r === m.r && v.c === m.c)?.words ?? m.shown;
+    if (now[m.r][m.c] !== m.shown && now[m.r][m.c] !== value) return { refused: "fixed" };
+  }
+  const out = cellClasses(titled, withCells(edited.html, computed));
+  const text = readReplica(out).text;
+  return { html: out, cut: shaped.cut, ...(text !== next ? { text } : {}) };
+}
+
+// ── A slide's lines ────────────────────────────────────────────────────────
+
+// The line that opens a slide's speaker notes (lib/parse/slides.ts).
+const NOTES_LABEL = "Speaker notes:";
+const LINE_GAP = '<span class="cell-gap">\n</span>';
+const linesOf = (text: string) => (text === "" ? [] : text.split("\n"));
+// A bullet that is a number: "3. ", "3) ".
+const NUMBERED = /^(\d+)([.)])(\s*)/;
+
+/** A slide's lines as its text reads them (a newline gap between two), each
+    with its paragraph when the line is one whole paragraph of a text box or
+    of the speaker notes — not a table's row, not a line of a paragraph a
+    break divides, not the notes' label. */
+function readSlideLines(html: string) {
+  const dom = new JSDOM(`${PREFIX}${html}</body></html>`, { includeNodeLocations: true });
+  const document = dom.window.document;
+  const place = (node: Node) => {
+    const loc = dom.nodeLocation(node) as Location | null;
+    if (!loc) throw new Error("a slide's node has no place");
+    return { start: loc.startOffset - PREFIX.length, end: loc.endOffset - PREFIX.length, inner: (loc.endTag?.startOffset ?? loc.endOffset) - PREFIX.length };
+  };
+  const read: { text: string; nodes: Text[]; tabbed: boolean; before: Element | null; after: Element | null }[] = [
+    { text: "", nodes: [], tabbed: false, before: null, after: null },
+  ];
+  const walker = document.createTreeWalker(document.body, 4 /* NodeFilter.SHOW_TEXT */);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const node = n as Text;
+    const parent = node.parentElement;
+    if (!parent || parent.closest("[data-anchor-skip]")) continue;
+    const gap = parent.closest(".cell-gap");
+    const line = read[read.length - 1];
+    if (gap && node.data === "\n") {
+      line.after = gap;
+      read.push({ text: "", nodes: [], tabbed: false, before: gap, after: null });
+      continue;
+    }
+    line.text += node.data;
+    if (gap) line.tabbed = true;
+    else line.nodes.push(node);
+  }
+  const whole = (p: Element | null | undefined): p is Element => Boolean(p?.matches("p.sp") && !p.closest("table") && !p.querySelector(".cell-gap"));
+  const lines = read.map((line) => {
+    let para: Element | null = null;
+    if (!line.tabbed && line.nodes.length > 0) {
+      const p = line.nodes[0].parentElement?.closest("p.sp");
+      if (whole(p) && line.nodes.every((node) => node.parentElement?.closest("p.sp") === p)) para = p;
+    } else if (!line.tabbed) {
+      const p = line.before ? line.before.nextElementSibling : line.after?.previousElementSibling;
+      if (whole(p) && !p.textContent) para = p;
+    }
+    return { text: line.text, para };
+  });
+  return {
+    text: lines.map((l) => l.text).join("\n"),
+    lines: lines.length === 1 && lines[0].text === "" ? [] : lines,
+    place,
+    frame: document.querySelector(".slide-frame"),
+    notes: document.querySelector(".slide-frame > .slide-notes"),
+  };
+}
+
+/** A new paragraph for `words`, built like the paragraph of its box whose
+    bullet the words open with, the nearest to `anchor` first (in a box
+    without bullets, the nearest): its style, its bullet (a number takes the
+    words' own), its first run's style. Null when no paragraph of the box
+    has the words' bullet. */
+function newParagraph(anchor: Element, words: string): string | null {
+  const box = [...(anchor.parentElement?.children ?? [])].filter((el) => el.matches("p.sp"));
+  const at = box.indexOf(anchor);
+  const near = box.map((p, i) => ({ p, far: Math.abs(i - at) })).sort((x, y) => x.far - y.far).map((x) => x.p);
+  const bulletOf = (p: Element) => p.querySelector(":scope > .sb")?.textContent ?? "";
+  const ownBullet = (p: Element): string | null => {
+    const bullet = bulletOf(p);
+    const number = NUMBERED.exec(bullet);
+    if (!number) return words.startsWith(bullet) ? bullet : null;
+    const own = NUMBERED.exec(words);
+    return own && own[2] === number[2] && own[3] === number[3] ? own[0] : null;
+  };
+  const model = near.find((p) => bulletOf(p) && ownBullet(p) !== null) ?? near.find((p) => !bulletOf(p));
+  if (!model) return null;
+  const p = model.cloneNode(false) as Element;
+  const bullet = model.querySelector(":scope > .sb");
+  let rest = words;
+  if (bullet && bulletOf(model)) {
+    const own = ownBullet(model) ?? "";
+    const b = bullet.cloneNode(false) as Element;
+    b.textContent = own;
+    p.append(b);
+    rest = words.slice(own.length);
+  }
+  if (rest) {
+    const run = model.querySelector(":scope > span:not(.sb), :scope > a");
+    const style = run?.getAttribute("style");
+    if (run) {
+      const r = model.ownerDocument.createElement("span");
+      if (style !== null && style !== undefined) r.setAttribute("style", style);
+      r.textContent = rest;
+      p.append(r);
+    } else p.append(rest);
+  }
+  p.classList.remove("sp-empty");
+  if (!words) p.classList.add("sp-empty");
+  return p.outerHTML;
+}
+
+/** Two lines' likeness: the words they share. */
+function sharedWords(x: string[], y: string[]): number {
+  const count = new Map<string, number>();
+  for (const w of x[0].split(/\s+/)) if (w) count.set(w, (count.get(w) ?? 0) + 1);
+  let shared = 0;
+  for (const w of y[0].split(/\s+/)) {
+    const c = count.get(w);
+    if (c) {
+      shared += 1;
+      count.set(w, c - 1);
+    }
+  }
+  return shared;
+}
+
+/** The slide's replica with lines added or removed to match `next`'s lines,
+    the kept lines' words as they were; null when no line comes or goes; or
+    why not. The slide's own lines and its speaker notes' lines align apart
+    (alignLines, lines paired by the words they share). A line that goes
+    takes its paragraph and the gap beside it; a text box whose every line
+    goes stays, empty. A new line comes after the kept line before it (at
+    the start, before the kept line after it), built like a paragraph of
+    that box (newParagraph). Notes taken away whole take their label; notes given to
+    a slide without them come after it, a paragraph per line. */
+function slideShape(html: string, prev: string, next: string): { html: string } | { refused: ReplicaRefusal } | null {
+  const slide = readSlideLines(html);
+  if (slide.text !== prev) return { refused: "stale" };
+  const was = linesOf(prev);
+  const now = linesOf(next);
+  const wasLabel = slide.notes ? was.lastIndexOf(NOTES_LABEL) : -1;
+  const nowLabel = now.lastIndexOf(NOTES_LABEL);
+  // Speaker notes hold a line at the least.
+  if (nowLabel >= 0 && nowLabel === now.length - 1) return { refused: "lines" };
+  const splices: Splice[] = [];
+  const cut = (el: Element) => {
+    const at = slide.place(el);
+    splices.push({ start: at.start, end: at.end, source: "" });
+  };
+  const used = new Set<Element>();
+  const lineGap = (el: Element | null | undefined) => (el?.matches(".cell-gap") && el.textContent === "\n" && !used.has(el) ? el : null);
+  const parts = [{ from: 0, was: wasLabel >= 0 ? was.slice(0, wasLabel) : was, now: nowLabel >= 0 ? now.slice(0, nowLabel) : now }];
+  if (wasLabel >= 0 && nowLabel >= 0) parts.push({ from: wasLabel + 1, was: was.slice(wasLabel + 1), now: now.slice(nowLabel + 1) });
+  else if (wasLabel >= 0 && slide.notes) {
+    cut(slide.notes);
+    const gap = lineGap(slide.notes.previousElementSibling);
+    if (gap) cut(gap);
+  } else if (nowLabel >= 0 && slide.frame) {
+    const end = slide.place(slide.frame).inner;
+    const body = now.slice(nowLabel + 1).map((line) => `<p class="sp">${escapeHtml(line)}</p>`).join(LINE_GAP);
+    splices.push({
+      start: end,
+      end,
+      source: `${nowLabel > 0 ? LINE_GAP : ""}<div class="slide-notes"><span class="slide-notes-label">${NOTES_LABEL}</span>${LINE_GAP}<div class="slide-notes-body">${body}</div></div>`,
+    });
+  } else if (nowLabel >= 0) return { refused: "lines" };
+  for (const part of parts) {
+    const { kept, gone } = alignLines(part.was.map((l) => [l]), part.now.map((l) => [l]), sharedWords);
+    for (const i of gone) {
+      const para = slide.lines[part.from + i]?.para;
+      if (!para) return { refused: "lines" };
+      cut(para);
+      let gap: Element | null = null;
+      for (let el: Element | null = para; el && !gap && el !== slide.frame; el = el.parentElement) gap = lineGap(el.previousElementSibling) ?? lineGap(el.nextElementSibling);
+      if (gap) {
+        used.add(gap);
+        cut(gap);
+      }
+    }
+    for (let j = 0; j < kept.length; ) {
+      if (kept[j] !== null) {
+        j += 1;
+        continue;
+      }
+      let k = j;
+      while (k < kept.length && kept[k] === null) k += 1;
+      // After the kept line before (a table's row or a broken line takes
+      // none), else, at the start, before the kept line after.
+      const before = j > 0 ? slide.lines[part.from + kept[j - 1]!]?.para : null;
+      const after = j === 0 && k < kept.length ? slide.lines[part.from + kept[k]!]?.para : null;
+      const anchor = before ?? after;
+      if (!anchor) return { refused: "lines" };
+      const made = part.now.slice(j, k).map((line) => newParagraph(anchor, line));
+      if (made.some((m) => m === null)) return { refused: "fixed" };
+      const at = slide.place(anchor);
+      splices.push(
+        before
+          ? { start: at.end, end: at.end, source: made.map((m) => `${LINE_GAP}${m}`).join("") }
+          : { start: at.start, end: at.start, source: made.map((m) => `${m}${LINE_GAP}`).join("") },
+      );
+      j = k;
+    }
+  }
+  return splices.length > 0 ? { html: applied(html, splices) } : null;
+}
+
+/** A slide's replica with `next` for its words, lines added or removed
+    first (slideShape), then the words changed within lines; or why not. */
+export function slideWithText(html: string, prev: string, next: string): { html: string } | { refused: ReplicaRefusal } {
+  const shaped = slideShape(html, prev, next);
+  if (shaped === null) return replicaWithText(html, prev, next);
+  if ("refused" in shaped) return shaped;
+  return replicaWithText(shaped.html, readReplica(shaped.html).text, next);
 }
 
 // ── A converted table ──────────────────────────────────────────────────────
@@ -786,40 +1335,43 @@ function tableEdit(html: string, prev: string, next: string): { html: string } |
 
 /** A slide's, a sheet's, or a table's replica with `next` for its words:
     what the text PATCH stores, and what the plan checks before it offers
-    the edit. */
-export function replicaEdit(type: string, html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null } | { refused: ReplicaRefusal } {
+    the edit. `text` is the text it reads when that is not `next` (a
+    sheet's formulas computed again). */
+export function replicaEdit(type: string, html: string, prev: string, next: string, cut: SheetCut | null = null): { html: string; cut: SheetCut | null; text?: string } | { refused: ReplicaRefusal } {
   if (type === "SHEET") return sheetWithText(html, prev, next, cut);
-  const edited = type === "TABLE" ? tableEdit(html, prev, next) : replicaWithText(html, prev, next);
+  const edited = type === "TABLE" ? tableEdit(html, prev, next) : slideWithText(html, prev, next);
   return "refused" in edited ? edited : { html: edited.html, cut: null };
 }
 
-/** What a sheet keeps as it is, for the assistant: its frozen rows and
-    columns, the cells a formula computes (named as the text reads them:
-    the row is the line, the column A, B, … the cell in it), and — with a
-    merge or a drawing — its rows and columns. Null when it keeps nothing. */
+/** What a sheet keeps as it is, for the assistant (the cells named as the
+    text reads them: the row is the line, the column A, B, … the cell in
+    it): its frozen rows and columns, the cells a formula computes, its
+    merged cells, and a chart's data after its rows. Null when it keeps
+    nothing. */
 function sheetKeeps(html: string): string | null {
-  const replica = readReplica(html);
+  const grid = readGrid(html);
+  if (!grid) return null;
+  const list = (cells: string[], what: string) => (cells.length > 0 ? `${cells.slice(0, 40).join(", ")}${cells.length > 40 ? `, and ${cells.length - 40} more` : ""} (${what})` : "");
   const formulas: string[] = [];
-  let row = 0;
-  let col = 0;
-  replica.pieces.forEach((piece, i) => {
-    if (piece.formula) formulas.push(`${columnLetter(col)}${row + 1}`);
-    if (replica.gaps[i] === "\n") {
-      row += 1;
-      col = 0;
-    } else col += 1;
-  });
-  const sheet = /<div class="sheet [^>]*>/.exec(html)?.[0] ?? "";
-  const frozenRows = Number(/data-frozen-rows="(\d+)"/.exec(sheet)?.[1] ?? 0);
-  const frozenCols = Number(/data-frozen-cols="(\d+)"/.exec(sheet)?.[1] ?? 0);
+  const merged: string[] = [];
+  grid.slots.forEach((row, r) =>
+    row.forEach((slot, c) => {
+      if (!slot?.origin) return;
+      if (slot.td.getAttribute("title")?.startsWith("=")) formulas.push(`${columnLetter(c)}${r + 1}`);
+      const span = (name: string) => Math.max(1, Number(slot.td.getAttribute(name) ?? 1) || 1);
+      if (span("colspan") > 1 || span("rowspan") > 1) merged.push(`${columnLetter(c)}${r + 1}:${columnLetter(c + span("colspan") - 1)}${r + span("rowspan")}`);
+    }),
+  );
   const frozen = [
-    frozenRows === 1 ? "row 1" : frozenRows > 1 ? `rows 1–${frozenRows}` : "",
-    frozenCols === 1 ? "column A" : frozenCols > 1 ? `columns A–${columnLetter(frozenCols - 1)}` : "",
+    grid.frozenRows === 1 ? "row 1" : grid.frozenRows > 1 ? `rows 1–${grid.frozenRows}` : "",
+    grid.frozenCols === 1 ? "column A" : grid.frozenCols > 1 ? `columns A–${columnLetter(grid.frozenCols - 1)}` : "",
   ].filter(Boolean);
-  const parts: string[] = [];
-  if (frozen.length > 0) parts.push(`${frozen.join(" and ")} (frozen)`);
-  if (formulas.length > 0) parts.push(`${formulas.slice(0, 40).join(", ")}${formulas.length > 40 ? `, and ${formulas.length - 40} more` : ""} (formulas)`);
-  if (/<td[^>]* (?:colspan|rowspan)=|class="sheet-drawing"|<td style="display:none">/.test(html)) parts.push("its rows and columns (merged cells or a drawing)");
+  const parts = [
+    frozen.length > 0 ? `${frozen.join(" and ")} (frozen)` : "",
+    list(formulas, "formulas"),
+    list(merged, "merged"),
+    grid.drawings.some((d) => d.querySelector(".scd-hidden")) ? `the lines after row ${grid.rows.length} (a chart's data)` : "",
+  ].filter(Boolean);
   return parts.length > 0 ? parts.join("; ") : null;
 }
 

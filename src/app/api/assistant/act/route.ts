@@ -44,6 +44,7 @@ import { actionsSchema, enrichActions, planShape, type DocumentEdits, type ReadA
 import { runRevise } from "@/lib/assistant/revise";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { transcriptContext } from "@/lib/assistant/transcript";
+import { pageLines } from "@/lib/assistant/pages";
 import { sheetKeepLines } from "@/lib/replica";
 import { SUGGEST_COMMANDS, type SuggestCommand } from "@/lib/prompts/suggest";
 import { parseBody } from "@/lib/validate";
@@ -401,6 +402,7 @@ async function handle(req: Request, t: TFunc) {
     command: data.command,
     edits,
     sheets: document.format === "sheets" ? sheetKeepLines(document.blocks) : undefined,
+    pages: pageLines(document.blocks),
     transcript: transcript?.lines ?? null,
   });
 

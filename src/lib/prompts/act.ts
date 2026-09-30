@@ -40,6 +40,9 @@ export type ActCtx = {
   edits?: DocumentEdits;
   // What each sheet of the document keeps as it is (sheetKeepLines).
   sheets?: string[];
+  // A handwritten document's pages and the blocks that hold each page's
+  // words (lib/assistant/pages.ts).
+  pages?: string[];
   // A video's or an audio's document: its voices and who speaks from which
   // line (lib/assistant/transcript.ts); null for any other document.
   transcript?: string[] | null;
@@ -68,6 +71,7 @@ export function actPrompt(ctx: ActCtx): string {
     "",
     `Other attached documents (id — title):\n${ctx.otherDocuments.length > 0 ? ctx.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
     ...(ctx.sheets?.length ? ["", `Sheets (what each keeps as it is):\n${ctx.sheets.join("\n")}`] : []),
+    ...(ctx.pages?.length ? ["", `Pages (each page's picture, then the blocks that hold its words):\n${ctx.pages.join("\n")}`] : []),
     ...(ctx.transcript?.length ? ["", ...ctx.transcript] : []),
     "",
     `The reader's notes across the corpus (section: note):\n${
@@ -84,7 +88,7 @@ export function actPrompt(ctx: ActCtx): string {
     "2. A command that only asks for analysis, an answer, or a summary: put it in reply and return no actions.",
     "3. Use the smallest set of actions that fulfils the command. Never change text the command did not ask to change.",
     "4. description: one plain sentence of what the action does, for the reader's approval list.",
-    "5. FIGURE and VIDEO blocks cannot be edited or removed. A TABLE block's words change with edit_block within its cells: the new text is the whole table, a line per row and a tab between cells, and keeps every line and every tab. In a document of handwritten pages a TABLE is the conversion's: there edit_block writes its text anew, the first line its header row, and may add or remove rows and columns, and remove_block removes it. A SLIDE block's words change with edit_block within its lines: the new text keeps every line and every bullet, and the line Speaker notes: as it is. A SHEET block changes with edit_block: the new text is the whole sheet, a line per row and a tab between cells, every row with as many cells as the first; an edit changes words in cells and adds or removes rows or columns, never rows and columns both. What a sheet keeps as it is (its frozen rows and columns, the cells formulas compute) is listed under Sheets. A SLIDE, a SHEET, or any other TABLE block is never removed, and the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
+    "5. FIGURE and VIDEO blocks cannot be edited or removed. A TABLE block's words change with edit_block within its cells: the new text is the whole table, a line per row and a tab between cells, and keeps every line and every tab. In a document of handwritten pages a TABLE is the conversion's: there edit_block writes its text anew, the first line its header row, and may add or remove rows and columns, and remove_block removes it. There a PAGE block is its page's picture and keeps its text; a page's words are the blocks listed under Pages: edit_block changes them, and a new block after one of them joins its page. A SLIDE block changes with edit_block: the new text is the whole slide, a line per line of its text; an edit changes words within lines and adds or removes lines of its text boxes and of its speaker notes. A new line opens with the bullet of the lines beside it; every bullet, a table's rows, and the line Speaker notes: stay, and speaker notes a slide lacks come at its end, under the line Speaker notes:. A SHEET block changes with edit_block: the new text is the whole sheet, a line per row and a tab between cells, every row with as many cells as the first; an edit changes words in cells and adds or removes rows or columns, never rows and columns both. A line break in a cell's words stays in its cell. A formula's cell follows the cells it reads: leave its value as it is, and the sheet computes it. What a sheet keeps as it is (its frozen rows and columns, the cells formulas compute, its merged cells, a chart's data) is listed under Sheets. A SLIDE, a SHEET, or any other TABLE block is never removed, and the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
     "6. In reply, cite blocks as [block <id>] when you point at specific parts of the document — the tags render as links the reader can click.",
     `7. Write reply, every description, and every why in ${language}.`,
     `8. reply: start with the answer, in one sentence. Then the evidence: what the document says, each claim citing its block. As few words as the answer needs, under 100 unless the command needs more. ${STYLE_RULE} Say plainly when the document does not answer, then say what the document does say about it. Never add a fact the document does not state. A sentence that could be written about any other document is deleted; a sentence that restates the selection in other words is deleted.`,
