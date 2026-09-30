@@ -7,6 +7,7 @@ import { emitInsert, insertContext, toast } from "@/components/docs/insert/conte
 import { lengthUnitFor, PT_PER_UNIT, PX_PER_PT } from "@/components/docs/page/geometry";
 import type { ImageSource } from "@/components/docs/toolbar/image-menu";
 import { caretUnderImage, insertImage, insertImageFiles } from "@/components/docs/typing/paste";
+import { writePageImageDrag } from "@/lib/image-drop";
 import { uploadImage } from "@/lib/images";
 
 // Images (SPEC.md §29), as Google Docs draws them: the blue frame with eight
@@ -640,6 +641,23 @@ function endMove() {
   document.body.classList.remove("docs-img-moving");
 }
 
+/** An image dragged out of the page also carries its address and alt text
+    (lib/image-drop.ts), so a note it is let go on takes a copy of it. Runs
+    after ProseMirror's own dragstart, which clears the drag's data and sets
+    the page's copy of the image. */
+function carryImage(view: EditorView, event: DragEvent) {
+  const slice = view.dragging?.slice;
+  // The dragged content is one image and nothing else: a block image, or an
+  // image alone in the open parents the slice keeps around it.
+  let node = slice && slice.content.childCount === 1 ? slice.content.firstChild : null;
+  for (let depth = 0; node && node.type.name !== "image" && slice && depth < slice.openStart; depth++) {
+    node = node.childCount === 1 ? node.firstChild : null;
+  }
+  if (!event.dataTransfer || !node || node.type.name !== "image") return;
+  const { src, alt } = imageAttrs(node);
+  if (src) writePageImageDrag(event.dataTransfer, { src, alt });
+}
+
 export const DocsImage = Extension.create({
   name: "docsImage",
   addGlobalAttributes() {
@@ -730,6 +748,12 @@ export const DocsImage = Extension.create({
           if (!transactions.some((tr) => tr.getMeta("uiEvent") === "paste")) return null;
           const tr = state.tr;
           return caretUnderImage(tr) ? tr : null;
+        },
+        // After ProseMirror's own listeners, which the view set up first.
+        view: (view) => {
+          const onDragStart = (event: DragEvent) => carryImage(view, event);
+          view.dom.addEventListener("dragstart", onDragStart);
+          return { destroy: () => view.dom.removeEventListener("dragstart", onDragStart) };
         },
         props: {
           nodeViews: {

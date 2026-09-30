@@ -55,6 +55,36 @@ export function droppedImageUrls(dt: DataTransfer | null): DroppedImageUrl[] {
     .map((url) => ({ url, alt: "" }));
 }
 
+// An image dragged from the page editor onto a note (SPEC.md §16): the drag
+// carries the image's address and alt text under a type of its own, so a
+// note tells it from words, a file, or a link. The page keeps its image; the
+// note takes a copy.
+
+export const PAGE_IMAGE_DRAG_TYPE = "application/x-unitos-image";
+
+export type PageImageDrag = { src: string; alt: string };
+
+export function writePageImageDrag(dt: DataTransfer, drag: PageImageDrag): void {
+  dt.setData(PAGE_IMAGE_DRAG_TYPE, JSON.stringify(drag));
+}
+
+export function hasPageImageDrag(dt: DataTransfer | null): boolean {
+  return dt?.types.includes(PAGE_IMAGE_DRAG_TYPE) ?? false;
+}
+
+export function readPageImageDrag(dt: DataTransfer | null): PageImageDrag | null {
+  const raw = dt?.getData(PAGE_IMAGE_DRAG_TYPE);
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const { src, alt } = parsed as Record<string, unknown>;
+    return typeof src === "string" && src && typeof alt === "string" ? { src, alt } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The file name an address stands for: its last part, else "image". */
 function nameOf(url: string, type: string): string {
   if (!url.startsWith("data:")) {

@@ -31,6 +31,22 @@ export function imageUrl(id: string): string {
   return `/api/images/${id}`;
 }
 
+/** The stored image an address points at (`/api/images/<id>`, on this site),
+    or null for any other address. */
+export function storedImageId(src: string): string | null {
+  let path = src;
+  if (/^https?:/i.test(src)) {
+    try {
+      const url = new URL(src);
+      if (typeof window === "undefined" || url.origin !== window.location.origin) return null;
+      path = url.pathname;
+    } catch {
+      return null;
+    }
+  }
+  return /^\/api\/images\/([a-z0-9]+)(?:[?#]|$)/i.exec(path)?.[1] ?? null;
+}
+
 /** The image markdown a note carries: the alt text is the file's name, so a
     note read without the image still says what was there. */
 export function imageMarkdown(id: string, name: string): string {

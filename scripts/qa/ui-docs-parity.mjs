@@ -1,19 +1,24 @@
 // UI walk of the page editor's Google Docs parity features (the docs-parity
 // loop, SPEC.md §29), one group per feature, driven at a person's pace in
 // headless Chromium: BORDERS is Format > Paragraph styles > Borders and
-// shading; FULLSCREEN is View > Full screen. Each check prints PASS or FAIL with its evidence; each case
-// leaves a screenshot (light theme, 1440×900; the dark case in dark).
+// shading; FULLSCREEN is View > Full screen; IMAGENOTE is an image dragged
+// from the page onto a note in the notes tray (a person's mouse drag, which
+// the browser runs as its own drag). Each check prints PASS or FAIL with its
+// evidence; each case leaves a screenshot (light theme, 1440×900; the dark
+// case in dark).
 //
 // Usage:
-//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN] [--label after] [--keep]
+//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE] [--label after] [--keep]
 // With no group named, every group runs. Env: BASE (default
 // http://localhost:3111), SHOT_DIR (default <tmp>/ui-docs-parity), CHROME
-// (default /opt/pw-browsers/chromium), DATABASE_URL (read from .env when
-// unset). Expects the dev server with sign-in off. The project the walk makes
-// is deleted at the end unless --keep.
+// (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3492), DATABASE_URL
+// (read from .env when unset). Expects the dev server with sign-in off. The
+// project the walk makes is deleted at the end unless --keep.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createCanvas } from "@napi-rs/canvas";
 import { PrismaClient } from "@prisma/client";
 import { strFromU8, unzipSync } from "fflate";
 import { chromium } from "playwright-core";
@@ -25,6 +30,8 @@ if (!process.env.DATABASE_URL && existsSync(join(ROOT, ".env"))) {
 }
 const BASE = process.env.BASE ?? "http://localhost:3111";
 const CHROME = process.env.CHROME ?? "/opt/pw-browsers/chromium";
+const FIXTURE_PORT = Number(process.env.FIXTURE_PORT ?? 3492);
+const FIXTURE = `http://localhost:${FIXTURE_PORT}`;
 const args = process.argv.slice(2);
 const LABEL = args.includes("--label") ? args[args.indexOf("--label") + 1] : "run";
 const KEEP = args.includes("--keep");
@@ -75,6 +82,18 @@ async function blankDocument(title, paragraphs) {
   ctx.documents.push(blank.body.id);
   return blank.body.id;
 }
+
+/** A blank document holding `content`, the page editor's own nodes. */
+async function richDocument(title, content) {
+  const blank = await api("/api/documents/blank", "POST", { notebookId: ctx.notebookId, title });
+  const rt = await api(`/api/documents/${blank.body.id}/rich-text`);
+  const put = await api(`/api/documents/${blank.body.id}/rich-text`, "PUT", { richText: { type: "doc", content }, rev: rt.body.rev });
+  if (put.status !== 200) throw new Error(`blank document: HTTP ${put.status}`);
+  ctx.documents.push(blank.body.id);
+  return blank.body.id;
+}
+const paragraph = (text) => ({ type: "paragraph", attrs: { blockId: blockId() }, content: [{ type: "text", text }] });
+const image = (src, alt) => ({ type: "image", attrs: { src, alt, blockId: blockId() } });
 
 // ── The browser ─────────────────────────────────────────────────────────────
 
@@ -391,6 +410,171 @@ GROUPS.FULLSCREEN = async () => {
   await shot(page, "fullscreen-2-esc");
   check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
   await close();
+};
+
+// ── An image dragged from the page onto a note ─────────────────────────────
+
+/** Three bars on a light ground, `w` × `h`: a small chart. */
+function barsPng(w = 320, h = 180) {
+  const c = createCanvas(w, h);
+  const g = c.getContext("2d");
+  g.fillStyle = "#f4ede1";
+  g.fillRect(0, 0, w, h);
+  for (const [color, x, bar] of [["#6b8f71", 0.12, 0.5], ["#c4785a", 0.41, 0.72], ["#7a8fb3", 0.69, 0.33]]) {
+    g.fillStyle = color;
+    g.fillRect(w * x, h * (0.89 - bar), w * 0.19, h * bar);
+  }
+  return c.toBuffer("image/png");
+}
+
+/** Two sites that serve the same picture: one lets the browser read it
+    (CORS), one does not. */
+function serveImages(png) {
+  const server = createServer((req, res) => {
+    const path = new URL(req.url, FIXTURE).pathname;
+    if (path === "/open.png") res.writeHead(200, { "content-type": "image/png", "access-control-allow-origin": "*" });
+    else if (path === "/closed.png") res.writeHead(200, { "content-type": "image/png" });
+    else {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    res.end(png);
+  });
+  return new Promise((resolve) => server.listen(FIXTURE_PORT, () => resolve(server)));
+}
+
+/** A person's drag of the page's image that shows `alt` onto `target`: a
+    press on the image, a short pull, the way over, a pause, the release.
+    `whileOver` runs during the pause. */
+async function dragImage(page, alt, target, whileOver) {
+  const from = await page.evaluate((alt) => {
+    const img = [...document.querySelectorAll(".docs-prose figure.docs-img img")].find((i) => i.alt === alt);
+    img.scrollIntoView({ block: "center" });
+    const r = img.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, alt);
+  await sleep(300);
+  await page.mouse.click(from.x, from.y);
+  await sleep(300);
+  const to = await target.boundingBox();
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 30, from.y + 5, { steps: 5 });
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 25 });
+  await sleep(300);
+  const seen = whileOver ? await whileOver() : undefined;
+  await page.mouse.up();
+  await sleep(300);
+  return seen;
+}
+
+GROUPS.IMAGENOTE = async () => {
+  const G = "IMAGENOTE";
+  const png = barsPng();
+  const stored = await (await fetch(`${BASE}/api/images`, { method: "POST", headers: { "content-type": "image/png" }, body: png })).json();
+  const server = await serveImages(png);
+  try {
+    const id = await richDocument("Image to note", [
+      paragraph("The counts at the three stations, spring survey."),
+      image(stored.url, "Counts by station"),
+      paragraph("The same chart, from a site that lets the browser read it."),
+      image(`${FIXTURE}/open.png`, "Open site"),
+      paragraph("The same chart, from a site that does not."),
+      image(`${FIXTURE}/closed.png`, "Closed site"),
+      paragraph("The east station counted the fewest birds."),
+    ]);
+    const section = await db.section.findFirst({ where: { notebookId: ctx.notebookId }, orderBy: { order: "asc" } });
+    const made = await api("/api/notes", "POST", { sectionId: section.id, content: "Station counts: why is the east bank low?", documentId: id });
+    const noteId = made.body.id;
+    const content = async () => (await db.note.findUnique({ where: { id: noteId }, select: { content: true } }))?.content ?? "";
+    const { page, errors, close } = await newPage();
+    const posts = [];
+    page.on("request", (r) => r.method() === "POST" && r.url().startsWith(`${BASE}/api/images`) && posts.push(r.url()));
+    await openEditor(page, id, "fewest");
+    await page.waitForFunction(() => [...document.querySelectorAll(".docs-prose figure.docs-img img")].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 20_000 }).catch(() => {});
+    if ((await page.locator('[data-track="notes"][aria-current="true"]').count()) === 0) {
+      await page.click('[data-track="notes"]');
+      await sleep(1200);
+    }
+    const card = page.locator(`aside[data-track-surface="tray"] [data-note-id="${noteId}"]`).first();
+    await card.waitFor({ state: "visible", timeout: 20_000 });
+    await shot(page, "imagenote-0-before");
+
+    // 1. A stored image: the note takes the same address, nothing uploads,
+    // and the note rings while the image is over it.
+    let ring = await dragImage(page, "Counts by station", card, () => card.evaluate((el) => getComputedStyle(el).outlineStyle));
+    let text = await until(async () => ((await content()).includes("![") ? content() : null), 10_000);
+    check(G, ring === "dashed", "while the image is over the note, the note rings", `outline ${ring}`);
+    check(G, (text ?? "").endsWith(`![Counts by station](/api/images/${stored.id})`), "a stored image dragged onto a note goes into the note, with its own address", JSON.stringify(text));
+    check(G, posts.length === 0, "the stored image is not stored again", posts.join(", ") || "no uploads");
+    const figures = await page.evaluate(() => document.querySelectorAll(".docs-prose figure.docs-img").length);
+    const kept = await saved(page);
+    check(G, figures === 3 && Boolean(kept), "the page keeps its image", `${figures} images on the page; saved ${Boolean(kept)}`);
+    if ((await card.locator(".note-body").count()) === 0) {
+      await card.locator('button[data-track="note-collapse"]').first().evaluate((el) => el.click());
+      await sleep(600);
+    }
+    const painted = await until(() => card.evaluate((el) => [...el.querySelectorAll("img")].some((i) => i.complete && i.naturalWidth > 0)), 10_000);
+    check(G, Boolean(painted), "the note shows the image");
+    await shot(page, "imagenote-1-stored");
+
+    // 2. An image from a site that lets the browser read it: stored for the note.
+    const before2 = posts.length;
+    await dragImage(page, "Open site", card);
+    text = await until(async () => ((await content()).includes("![Open site]") ? content() : null), 15_000);
+    const copied = /!\[Open site\]\(\/api\/images\/([a-z0-9]+)\)$/.exec(text ?? "")?.[1];
+    check(G, Boolean(copied) && copied !== stored.id && posts.length === before2 + 1, "an image from a site that lets the browser read it is stored for the note", `${JSON.stringify((text ?? "").split("\n").pop())}; uploads ${posts.length - before2}`);
+
+    // 3. An image the browser may not read: the note says so and stays as it was.
+    const before3 = await content();
+    await dragImage(page, "Closed site", card);
+    const said = await until(() => card.evaluate((el) => el.textContent.includes("Unitos could not read this image")), 15_000);
+    await shot(page, "imagenote-3-refused");
+    check(G, Boolean(said) && (await content()) === before3, "an image the browser may not read is refused with a plain message", `message ${Boolean(said)}; note unchanged ${(await content()) === before3}`);
+
+    // 4. In Viewing, the page cannot change, and the note still takes the image.
+    await setMode(page, "viewing");
+    const before4 = await content();
+    await dragImage(page, "Counts by station", card);
+    const viewed = await until(async () => ((await content()) !== before4 ? content() : null), 10_000);
+    const imagesAfter = await page.evaluate(() => document.querySelectorAll(".docs-prose figure.docs-img").length);
+    check(G, (viewed ?? "").endsWith(`![Counts by station](/api/images/${stored.id})`) && imagesAfter === 3, "in Viewing an image dragged onto a note goes into the note, and the page stays as it was", `${JSON.stringify((viewed ?? "").split("\n").pop())}; ${imagesAfter} images on the page`);
+    await setMode(page, "editing");
+
+    // 5. Inside the page the drag still moves the image, and no note changes:
+    // the last image goes to the end of the last paragraph, both in view.
+    const before5 = await content();
+    await page.evaluate(() => [...document.querySelectorAll(".docs-prose p")].find((e) => e.textContent.startsWith("The east")).scrollIntoView({ block: "center" }));
+    await sleep(400);
+    const last = await wordsBox(page, "The east station");
+    const from = await page.evaluate(() => {
+      const img = [...document.querySelectorAll(".docs-prose figure.docs-img img")].find((i) => i.alt === "Closed site");
+      const r = img.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+    await page.mouse.click(from.x, from.y);
+    await sleep(300);
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 20, from.y + 10, { steps: 5 });
+    await page.mouse.move(last.right - 2, last.y, { steps: 25 });
+    await sleep(300);
+    await page.mouse.up();
+    await sleep(800);
+    const order = await page.evaluate(() => {
+      const out = [];
+      window.__docsEditor.state.doc.forEach((n) => out.push(n.type.name === "image" ? `image(${n.attrs.alt})` : n.textContent.split(" ").slice(0, 2).join(" ")));
+      return out.join(" | ");
+    });
+    const moved = order.indexOf("image(Closed site)") > order.indexOf("The east");
+    check(G, moved && order.split("image(").length - 1 === 3 && (await content()) === before5, "a drag inside the page still moves the image, and no note changes", order);
+    await shot(page, "imagenote-5-moved-in-page");
+    check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
+    await close();
+  } finally {
+    server.close();
+  }
 };
 
 // ── Main ────────────────────────────────────────────────────────────────────
