@@ -198,6 +198,10 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       // word that opens no formula: an author's name with its marks
       // ("Sahu¹⋆") is no formula.
       const scripted = word.length <= 4 && cur.length > 0 && gap < 0.12 * size && after !== undefined && after.size < size * 0.85 && afterGap < 0.12 * size;
+      // A text italic's letters a page's math takes, set small and tight
+      // after the formula, are its last glyph's script (PLOS's k_{sp}:
+      // "k = k" left its "sp" out).
+      const script = cur.length > 0 && gap < 0.12 * size && glyphs.slice(k, j).every((h) => isTextMath(h) && h.size < size * 0.85);
       // On such a page a lone italic letter between upright words is a
       // formula of its own ("in any decision tree t, she"); in an italic
       // phrase ("E. coli") it is a word.
@@ -207,7 +211,7 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
         return glyphs[n] !== undefined && isItalicFont(glyphs[n].base);
       };
       const lone = word.length === 1 && isTextMath(g) && cur.length === 0 && !italicWord(k - 1, -1) && !italicWord(j, 1);
-      if (opname || letter || name || scripted) cur.push(...glyphs.slice(k, j));
+      if (opname || letter || name || scripted || script) cur.push(...glyphs.slice(k, j));
       else if (lone) {
         flush();
         cur.push(g);

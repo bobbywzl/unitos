@@ -456,6 +456,8 @@ try {
     String.raw`Plan \textit{B} is the fallback when the first plan fails, and the team keeps it ready for the whole season.`,
     // A fraction in the text font's digits, its parts off the line: they were lost.
     String.raw`Braces around the fraction give the result $-\dfrac{1}{2}$ and the whole fraction is negative.`,
+    // A script of two letters: the formula stopped before it ("A > k").
+    String.raw`Given a spike, the process reaches $A > k_{sp}$ before it reaches zero, and the rate stays low.`,
   ];
   // Each as the parse writes it: a found case picks its formula by its text.
   const italicRight = ["t", "s", String.raw`t\in A`, String.raw`u(l)>u(t_{j})`, String.raw`l\in L(t_{i})`, String.raw`\max_{l\in L(t)}u(l)`, String.raw`t_{k}`];
@@ -466,6 +468,7 @@ try {
       ...italicRight.map((r) => ({ page: 1, inline: true, found: true, pick: new RegExp(`^${r.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")}$`), right: [r] })),
       { page: 2, inline: true, right: [] },
       { page: 3, inline: true, found: true, right: [String.raw`-\dfrac{1}{2}`, String.raw`\dfrac{1}{2}`] },
+      { page: 4, inline: true, found: true, right: [String.raw`A>k_{sp}`] },
     ]),
   );
   // bbm's blackboard letters, a Metafont font pdfTeX embeds as an unnamed
