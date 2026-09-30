@@ -1108,15 +1108,17 @@ const isText = (s: Segment) => s.type === "PARAGRAPH" || s.type === "HEADING" ||
 export function measureSpacing(segments: Segment[], ctx: PageContext, lines: Line[] = []) {
   // A display equation's edge is its glyphs' box (math/display.ts), and the
   // edge of a block of text its lines' own box, their scripts left out. A
-  // line whose glyphs reach more than two sizes past its baseline, past any
-  // script or limit, holds rows of its own, and the block's box is its edge
-  // there (a matrix read as lines of text: the NPS thesis p. 53).
+  // line whose glyphs reach more than two sizes under its baseline, past any
+  // script or limit, holds rows of its own, read last: the space after its
+  // block runs from its lowest glyphs (a matrix read as lines of text: the
+  // NPS thesis p. 53). The block under it keeps its first line's place (a
+  // line with a matrix set inline: synth-math-tex p. 6).
   const edge = (s: Segment): Box | undefined => {
     if (s.type === "EQUATION") return s.glyphBox;
     if (!isText(s)) return undefined;
-    const [line, box, reach] = [s.lineBox, s.box, (s.lineSize ?? ctx.bodySize) * 2];
+    const [line, box] = [s.lineBox, s.box];
     if (!line || !box) return line ?? box;
-    return { ...line, y1: line.y1 - box.y1 > reach ? box.y1 : line.y1, y2: box.y2 - line.y2 > reach ? box.y2 : line.y2 };
+    return line.y1 - box.y1 > (s.lineSize ?? ctx.bodySize) * 2 ? { ...line, y1: box.y1 } : line;
   };
   for (let k = 0; k + 1 < segments.length; k++) {
     const [a, b] = [segments[k], segments[k + 1]];
