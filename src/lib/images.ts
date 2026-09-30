@@ -37,10 +37,12 @@ export function imageMarkdown(id: string, name: string): string {
   return `![${name.replace(IMAGE_EXTENSIONS, "").replace(/[[\]]/g, "")}](${imageUrl(id)})`;
 }
 
-/** The html a FIGURE block carries for a dropped image. */
-export function imageFigureHtml(id: string, alt: string): string {
-  const safe = alt.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-  return `<figure><img src="${imageUrl(id)}" alt="${safe}" /></figure>`;
+/** The html a FIGURE block carries for a dropped image: `src` is the stored
+    image's URL, or the address of a picture from another page that the
+    browser could not read. */
+export function imageFigureHtml(src: string, alt: string): string {
+  const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+  return `<figure><img src="${escape(src)}" alt="${escape(alt)}" /></figure>`;
 }
 
 /** Store one dropped image and get its URL back. Throws with the server's
