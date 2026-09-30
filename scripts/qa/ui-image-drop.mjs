@@ -29,7 +29,9 @@ function pngBase64(size = 120) {
 const browser = await chromium.launch({ executablePath: process.env.CHROME });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
-page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+// The add this walk refuses on purpose (the PDF step) is not an error of the app.
+const refused = (m) => m.text().startsWith("Failed to load resource") && /\/api\/documents$/.test(m.location()?.url ?? "");
+page.on("console", (m) => m.type() === "error" && !refused(m) && errors.push(m.text()));
 page.on("pageerror", (e) => errors.push(String(e)));
 await page.goto(`http://localhost:${PORT}/n/${NB}?doc=${DOC}`, { waitUntil: "networkidle" });
 await page.waitForSelector(`[data-note-id="${NOTE}"]`, { timeout: 20000 });
@@ -91,11 +93,28 @@ async function run() {
   };
   await openNote();
 
-  // ── A file that is not an image is not the note's ──
+  // ── A file that is not an image is not the note's: it travels on to the
+  // window, where the project's add box takes it (SPEC.md §15, §16) ──
   step("pdf drop");
+  // The add itself is not this walk's: its request fails, so the project keeps
+  // its documents and the reader stays on this one.
+  const refuseAdd = (route) => (route.request().method() === "POST" ? route.abort() : route.continue());
+  await page.route("**/api/documents", refuseAdd);
   await dropOn(noteCard, png, "notes.pdf", "application/pdf");
-  await page.waitForTimeout(1200);
+  const addBox = page.locator('[role="dialog"][aria-modal]').first();
+  const boxOpened = await addBox.waitFor({ state: "visible", timeout: 10000 }).then(() => true, () => false);
+  check("a pdf dropped on a note goes to the project's add box", boxOpened);
   check("a pdf dropped on a note adds no image", (await noteCard.locator("img").count()) === 0);
+  // The failed add leaves the box open with Close; Close brings the note back in reach.
+  if (boxOpened) {
+    const close = addBox.locator('[data-track="upload-close"]');
+    await close.waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+    await close.click().catch(() => {});
+    await addBox.waitFor({ state: "hidden", timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(400);
+  }
+  await page.unroute("**/api/documents", refuseAdd);
+  check("the reader stays on the document", new URL(page.url()).searchParams.get("doc") === DOC, page.url());
 
   // ── An image dropped on a note goes into the note ──
   step("image drop");

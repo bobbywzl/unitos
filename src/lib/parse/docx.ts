@@ -350,6 +350,11 @@ type ParaProps = {
   /** Each side's border (w:pBdr) as the page editor stores a paragraph's
       side (borderSide); null for none. */
   border: Record<BorderSideName, string | null>;
+  /** The line between this paragraph and the next of the same box
+      (w:pBdr w:between), as a side; null for none. */
+  between: string | null;
+  /** The paragraph's background (w:pPr w:shd); null for none. */
+  shading: HexColor | null;
   /** The left indent in twips: the style's, or the paragraph's own. */
   left: number;
   /** The first line's indent against the left indent in twips (w:ind
@@ -426,6 +431,8 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     ilvl: 0,
     align: null,
     border: { top: null, bottom: null, left: null, right: null },
+    between: null,
+    shading: null,
     left: 0,
     first: 0,
     right: 0,
@@ -460,6 +467,10 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
       const b = child(bdr, side) ?? (side === "left" ? child(bdr, "start") : side === "right" ? child(bdr, "end") : null);
       if (b) out.border[side] = borderSide(b);
     }
+    const between = child(bdr, "between");
+    if (between) out.between = borderSide(between);
+    const shd = child(layer, "shd");
+    if (shd) out.shading = shadeColor(shd);
     const ind = child(layer, "ind");
     out.left = indentOf(ind) ?? out.left;
     out.first = firstOf(ind) ?? out.first;
@@ -1572,15 +1583,22 @@ class DocxReader {
     return block;
   }
 
-  /** A paragraph's borders (w:pBdr), the style's and its own: a rule
-      under a heading, a bar beside a quote. */
+  /** A paragraph's borders (w:pBdr) and background (w:shd), the style's
+      and its own: a rule under a heading, a bar beside a quote, a box. */
   private bordered(block: ParsedBlock, props: ParaProps) {
     const borders: NonNullable<ParsedBlock["borders"]> = {};
     for (const side of BORDER_SIDES) {
       const value = props.border[side];
       if (value) borders[side] = value;
     }
+    if (props.between) borders.between = props.between;
     if (Object.keys(borders).length > 0) block.borders = borders;
+    // The background reaches the lines, as in Word: its padding is the most
+    // room a side leaves between its line and the words.
+    if (props.shading) {
+      const room = Math.max(0, ...BORDER_SIDES.map((side) => Number(props.border[side]?.split(" ")[3] ?? 0)));
+      block.shading = room > 0 ? `${props.shading} ${room}` : props.shading;
+    }
   }
 
   /** A text block (a heading, a paragraph, a list) or a paragraph that is

@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PrismaClient } from "@prisma/client";
+import { strFromU8, unzipSync } from "fflate";
 import { chromium } from "playwright-core";
 
 const ROOT = process.cwd();
@@ -243,6 +244,44 @@ GROUPS.BORDERS = async () => {
   await openEditor(page, id, "Delta");
   const [rb, rc] = await paragraphs(page, ["Bravo", "Charlie"]);
   check(G, Boolean(ok) && JSON.stringify(rb.attrs) === JSON.stringify(bb.attrs) && JSON.stringify(rc.attrs) === JSON.stringify(cc.attrs) && rb.cls.includes("docs-box-first"), "saved, and after a reload the box is the same", `${JSON.stringify(rb.attrs)}`);
+
+  // The Word download keeps the box: the sides, the line between, the background.
+  const docx = await page.request.get(`${BASE}/api/documents/${id}/export?format=docx`);
+  const xml = docx.ok() ? strFromU8(unzipSync(new Uint8Array(await docx.body()))["word/document.xml"]) : "";
+  const bravoXml = /<w:p>(?:(?!<\/w:p>).)*?Bravo(?:(?!<\/w:p>).)*?<\/w:p>/s.exec(xml)?.[0] ?? "";
+  check(G, /<w:pBdr>/.test(bravoXml) && /<w:between /.test(bravoXml) && /<w:shd [^>]*w:fill="FCE5CD"/i.test(bravoXml), "the Word download keeps the sides, the line between, and the background", `HTTP ${docx.status()}; pBdr ${/<w:pBdr>/.test(bravoXml)}, between ${/<w:between /.test(bravoXml)}, shd ${/<w:shd [^>]*w:fill="FCE5CD"/i.test(bravoXml)}`);
+
+  // That Word file, added back as an import, keeps the box. The Imports
+  // switch is on for the add alone, then as it was.
+  const was = await db.appSetting.findUnique({ where: { key: "imports" } });
+  await db.appSetting.upsert({ where: { key: "imports" }, create: { key: "imports", value: "on" }, update: { value: "on" } });
+  let back = null;
+  try {
+    const form = new FormData();
+    form.set("notebookId", ctx.notebookId);
+    form.set("file", new File([await docx.body()], "Borders and shading.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+    const res = await fetch(`${BASE}/api/documents`, { method: "POST", body: form });
+    const lines = (await res.text()).split("\n").filter(Boolean).map((l) => {
+      try {
+        return JSON.parse(l);
+      } catch {
+        return {};
+      }
+    });
+    const last = lines.findLast((l) => l.id || l.error);
+    if (last?.id) {
+      ctx.documents.push(last.id);
+      const rt = await api(`/api/documents/${last.id}/rich-text`);
+      const attrsOf = (words) => rt.body?.richText?.content?.find((n) => n.type === "paragraph" && (n.content ?? []).map((c) => c.text ?? "").join("").startsWith(words))?.attrs ?? null;
+      const pick = (a) => a && { top: a.borderTop, bottom: a.borderBottom, left: a.borderLeft, right: a.borderRight, between: a.borderBetween, shading: a.shading };
+      back = { bravo: pick(attrsOf("Bravo")), charlie: pick(attrsOf("Charlie")) };
+    } else back = { error: last?.error ?? `HTTP ${res.status}` };
+  } finally {
+    if (was) await db.appSetting.update({ where: { key: "imports" }, data: { value: was.value } });
+    else await db.appSetting.deleteMany({ where: { key: "imports" } });
+  }
+  const same = (a) => Boolean(a) && ["top", "bottom", "left", "right", "between", "shading"].every((k) => a[k] === bb.attrs[k]);
+  check(G, same(back?.bravo) && same(back?.charlie), "the Word file, added back, keeps the sides, the line between, and the background", JSON.stringify(back));
 
   // 5. Search the menus finds it.
   await clickIn(page, "Alpha");

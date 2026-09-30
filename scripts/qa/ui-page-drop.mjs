@@ -689,6 +689,32 @@ GROUPS.BLOCK = async () => {
   check("BLOCK", pasted.taken && /PARAGRAPH\(The third\) FIGURE\(stored\)/.test(r5 ?? ""), "edit mode: a WebP pasted in a block lands right after it", `${pasted.target}; ${r5 ?? (await rows())}`);
   await sleep(800);
   await shot(page, "block-5-paste-in-edit-mode");
+
+  // 6. Edit mode: a PNG dropped on the block being edited lands right after it,
+  // and the block keeps its words. A document of its own, so the rows are this case's.
+  const editId = await blockDocument("edit");
+  const editRows = async () => (await db.block.findMany({ where: { documentId: editId }, orderBy: { order: "asc" }, select: { type: true, text: true, html: true } })).map((r) => (r.type === "FIGURE" ? `FIGURE(${/src="\/api\/images\//.test(r.html ?? "") ? "stored" : "?"})` : `${r.type}(${r.text.split(" ").slice(0, 2).join(" ")})`)).join(" ");
+  await openReader(page, editId);
+  await editBlock(page, "The second");
+  p = await blockPoint("The second");
+  let editLine = null;
+  for (let i = 0; i < 4 && editLine === null; i++) {
+    await drag(cdp, p.x, p.y, fileDrag(path("png")), { drop: false });
+    editLine = await until(() => page.evaluate(() => document.querySelector("[data-reader-root] [data-drop-line]")?.getBoundingClientRect().top ?? null), 400, 50);
+    if (editLine === null) await cancel(cdp, p.x, p.y, fileDrag(path("png")));
+  }
+  const editLineShot = await shot(page, "block-6-drop-line-in-edit-mode");
+  check("BLOCK", editLine !== null && Math.abs(editLine - p.bottom) < 8, "edit mode: the drop line shows under the edited block while a PNG is over it", `line at ${editLine === null ? "none" : Math.round(editLine)}, block ends at ${Math.round(p.bottom)}; ${editLineShot}`);
+  const b6 = posts.length;
+  await drag(cdp, p.x, p.y, fileDrag(path("png")));
+  const r6 = await until(async () => ((await editRows()).includes("FIGURE") ? editRows() : null), 15_000);
+  check("BLOCK", r6 === "PARAGRAPH(The first) PARAGRAPH(The second) FIGURE(stored) PARAGRAPH(The third)", "edit mode: a PNG dropped on the edited block lands right after it as a figure", r6 ?? (await editRows()));
+  const kept = await db.block.findFirst({ where: { documentId: editId, text: { startsWith: "The second" } }, select: { text: true } });
+  check("BLOCK", kept?.text === "The second block, where an image is dropped.", "edit mode: the edited block keeps its words", JSON.stringify(kept?.text ?? null));
+  check("BLOCK", !posts.slice(b6).includes("POST /api/documents") && (await page.locator('[role="dialog"]').count()) === 0, "edit mode: the PNG is not added as a document", posts.slice(b6).join(", "));
+  await page.waitForFunction(() => [...document.querySelectorAll("article.reader-prose img")].some((i) => i.src.includes("/api/images/") && i.complete && i.naturalWidth > 0), null, { timeout: 15_000 }).catch(() => {});
+  await sleep(600);
+  await shot(page, "block-6-drop-in-edit-mode");
   check("BLOCK", errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
   await close();
 };
