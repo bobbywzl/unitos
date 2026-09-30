@@ -240,4 +240,14 @@ registerDocsCommands([
     run: (editor) => store(editor)?.set({ dialog: "compare" }),
     enabled: (editor) => insertContext(editor)?.projectEditor === true,
   },
+  {
+    // Tools > Line numbers: each line numbered in the left margin
+    // (page/line-numbers.tsx); pages format only, as in Google Docs.
+    id: "page:line-numbers",
+    label: "docsPage.lineNumbers",
+    menu: "tools",
+    keywords: ["line numbers", "line numbering", "number lines", "suppress line numbers", "行号"],
+    run: (editor) => store(editor)?.set({ dialog: "lineNumbers" }),
+    enabled: paged,
+  },
 ]);

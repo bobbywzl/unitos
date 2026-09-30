@@ -7,12 +7,12 @@
 // all, and Tools > Spelling and grammar > Personal dictionary; CHART is
 // Insert > Chart; DRAWING is Insert > Drawing; COMPARE is Tools > Compare
 // documents; ODDEVEN is Headers & footers > Different odd & even; WATERMARK
-// is Insert > Watermark; DETAILS is File > Details. Each check prints PASS
-// or FAIL with its evidence; each case leaves a screenshot (light theme,
-// 1440×900; the dark case in dark).
+// is Insert > Watermark; DETAILS is File > Details; LINENUMBERS is Tools >
+// Line numbers. Each check prints PASS or FAIL with its evidence; each case
+// leaves a screenshot (light theme, 1440×900; the dark case in dark).
 //
 // Usage:
-//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE ODDEVEN WATERMARK DETAILS] [--label after] [--keep]
+//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE ODDEVEN WATERMARK DETAILS LINENUMBERS] [--label after] [--keep]
 // With no group named, every group runs. Env: BASE (default
 // http://localhost:3111), SHOT_DIR (default <tmp>/ui-docs-parity), CHROME
 // (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3492), DATABASE_URL
@@ -1544,6 +1544,144 @@ GROUPS.DETAILS = async () => {
   const missing = await api(`/api/documents/${id}/details`);
   const elsewhere = await api(`/api/documents/${id}/details?notebookId=cnotaproject${STAMP}`);
   check(G, missing.status === 400 && elsewhere.status === 404, "the route answers 400 without a project and 404 for a project the document is not in", `${missing.status}, ${elsewhere.status}`);
+  check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
+  await close();
+};
+
+// ── Tools > Line numbers ────────────────────────────────────────────────────
+
+/** The drawn line numbers by page, and where each stands: its number, its
+    middle, its right edge, the page's text left edge. */
+const lineNumbers = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll("[data-docs-page-sheet]")].map((sheet) =>
+      [...sheet.querySelectorAll(".docs-line-number")].map((el) => {
+        const r = el.getBoundingClientRect();
+        return { n: Number(el.textContent), mid: (r.top + r.bottom) / 2, right: r.right };
+      }),
+    ),
+  );
+
+/** Every line number stands level with a line of a numbered paragraph, in the margin; none beside a table or a suppressed paragraph. */
+const numbersPlaced = (page, numbers) =>
+  page.evaluate((numbers) => {
+    const prose = document.querySelector(".docs-prose");
+    const textLeft = prose.getBoundingClientRect().left;
+    const blocks = [...prose.querySelectorAll("p, h1, h2, h3")].filter((el) => !el.closest("table"));
+    const tables = [...prose.querySelectorAll("table")].map((t) => t.getBoundingClientRect());
+    const suppressed = [...prose.querySelectorAll('[data-suppress-line-numbers="true"]')].map((p) => p.getBoundingClientRect());
+    const off = [];
+    for (const n of numbers.flat()) {
+      const block = blocks.find((b) => {
+        const r = b.getBoundingClientRect();
+        return n.mid >= r.top && n.mid <= r.bottom;
+      });
+      const inTable = tables.some((r) => n.mid >= r.top && n.mid <= r.bottom);
+      const inSuppressed = suppressed.some((r) => n.mid >= r.top && n.mid <= r.bottom);
+      if (!block || inTable || inSuppressed || n.right > textLeft - 4) off.push(n.n);
+    }
+    return off;
+  }, numbers);
+
+async function lineNumbersDialog(page) {
+  await clickIn(page, "Page 1 opens");
+  const rows = await searchMenus(page, "line numbers");
+  await page.waitForSelector(".docs-line-numbers-dialog", { timeout: 10_000 });
+  await sleep(200);
+  return rows;
+}
+
+GROUPS.LINENUMBERS = async () => {
+  const G = "LINENUMBERS";
+  const LONG = "The survey covered the north field, the river bank, and the ridge. We counted birds at each station at dawn and again at noon, and noted the nests we could see from the path.";
+  const cell = (text) => ({ type: "tableCell", content: [paragraph(text)] });
+  const content = [
+    { type: "heading", attrs: { level: 1, blockId: blockId() }, content: [{ type: "text", text: "Survey" }] },
+    paragraph(`Page 1 opens here. ${LONG}`),
+    paragraph(`Second paragraph. ${LONG}`),
+    { type: "paragraph", attrs: { blockId: blockId() } },
+    { type: "table", content: [{ type: "tableRow", content: [cell("Station"), cell("Birds")] }, { type: "tableRow", content: [cell("North"), cell("35")] }] },
+    paragraph(`After the table. ${LONG}`),
+    { type: "pageBreak" },
+    paragraph(`Page 2 opens here. ${LONG}`),
+    paragraph("The last line."),
+  ];
+  const id = await richDocument("Line numbers", content);
+  const { page, errors, close } = await newPage();
+  await openEditor(page, id, "Page 2 opens");
+  const none = (await lineNumbers(page)).flat().length;
+
+  // 1. Tools > Line numbers, Show: every line numbered on through the document, in the margin.
+  const rows = await lineNumbersDialog(page);
+  await page.locator('[data-track="docs:line-numbers:show"]').check();
+  await shot(page, "linenumbers-1-dialog");
+  await page.locator('[data-track="docs:line-numbers:apply"]').click();
+  await sleep(1200);
+  const continuous = await lineNumbers(page);
+  const flat = continuous.flat().map((x) => x.n);
+  const onThrough = flat.length > 8 && flat.every((n, i) => n === i + 1);
+  const offContinuous = await numbersPlaced(page, continuous);
+  await shot(page, "linenumbers-2-continuous");
+  check(G, none === 0 && rows.some((r) => r.startsWith("Line numbers")) && onThrough && continuous[1]?.[0]?.n === continuous[0].length + 1 && offContinuous.length === 0, "Show line numbers: every line numbered on through the document, level with its line, in the margin; none beside the table", `${JSON.stringify(rows)}; page 1 ${continuous[0].length}, page 2 from ${continuous[1]?.[0]?.n}; off ${JSON.stringify(offContinuous)}`);
+
+  // 2. Restart each page: page 2 counts from 1 again.
+  await lineNumbersDialog(page);
+  await page.locator('[data-track="docs:line-numbers:page"]').check();
+  await page.locator('[data-track="docs:line-numbers:apply"]').click();
+  await sleep(1200);
+  const restarted = await lineNumbers(page);
+  check(G, restarted[0].every((x, i) => x.n === i + 1) && restarted[1]?.every((x, i) => x.n === i + 1) && restarted[1].length === continuous[1].length, "Restart each page: each page counts from 1", `${restarted.map((p) => p.map((x) => x.n).join(",")).join(" | ")}`);
+
+  // 3. Suppress line numbers in the selected paragraph: its lines take none; the count closes up.
+  // The caret in the paragraph, then Tools > Line numbers.
+  await clickIn(page, "Second paragraph");
+  await searchMenus(page, "line numbers");
+  await page.waitForSelector(".docs-line-numbers-dialog", { timeout: 10_000 });
+  await page.locator('[data-track="docs:line-numbers:suppress"]').check();
+  await page.locator('[data-track="docs:line-numbers:apply"]').click();
+  await sleep(1200);
+  const suppressed = await lineNumbers(page);
+  const offSuppressed = await numbersPlaced(page, suppressed);
+  const secondLines = await page.evaluate(() => {
+    const p = [...document.querySelectorAll(".docs-prose p")].find((e) => e.textContent.startsWith("Second paragraph"));
+    return Math.round(p.getBoundingClientRect().height / parseFloat(getComputedStyle(p).lineHeight));
+  });
+  check(G, suppressed[0].length === restarted[0].length - secondLines && suppressed[0].every((x, i) => x.n === i + 1) && offSuppressed.length === 0, "Suppress line numbers: the paragraph's lines take none, and the count closes up", `page 1: ${restarted[0].length} → ${suppressed[0].length} (the paragraph has ${secondLines} lines); off ${JSON.stringify(offSuppressed)}`);
+
+  // 4. Saved, and the same after a reload.
+  const stored = await until(async () => {
+    const body = (await api(`/api/documents/${id}/rich-text`)).body;
+    const para = body.richText?.content?.find((n) => n.content?.[0]?.text?.startsWith("Second paragraph"));
+    return body.pageSetup?.lineNumbers === "page" && para?.attrs?.suppressLineNumbers === true ? body : null;
+  }, 15_000);
+  await openEditor(page, id, "Page 2 opens");
+  await sleep(800);
+  const reloaded = await lineNumbers(page);
+  check(G, Boolean(stored) && JSON.stringify(reloaded.map((p) => p.map((x) => x.n))) === JSON.stringify(suppressed.map((p) => p.map((x) => x.n))), "saved; after a reload the pages draw the same numbers", reloaded.map((p) => p.length).join(" | "));
+
+  // 5. The Word download numbers the lines too: restart each page, the paragraph suppressed.
+  const docx = await page.request.get(`${BASE}/api/documents/${id}/export?format=docx`);
+  const files = docx.ok() ? unzipSync(new Uint8Array(await docx.body())) : {};
+  const body = files["word/document.xml"] ? strFromU8(files["word/document.xml"]) : "";
+  check(G, /<w:lnNumType w:countBy="1" w:restart="newPage"\/>/.test(body) && /<w:suppressLineNumbers\/>/.test(body), "the Word download numbers the lines, restarting each page, and suppresses the paragraph", `HTTP ${docx.status()}; ${/<w:lnNumType[^>]*>/.exec(body)?.[0]}`);
+
+  // 6. Print keeps them; pageless shows none; off takes them away.
+  await page.emulateMedia({ media: "print" });
+  const printed = await page.evaluate(() => [...document.querySelectorAll(".docs-line-number")].filter((e) => getComputedStyle(e).display !== "none" && e.getBoundingClientRect().height > 0).length);
+  await page.emulateMedia({ media: "screen" });
+  await clickIn(page, "Page 1 opens");
+  await searchMenus(page, "switch to pageless");
+  await sleep(1000);
+  const pageless = await page.evaluate(() => document.querySelectorAll(".docs-line-number").length);
+  await clickIn(page, "Page 1 opens");
+  await searchMenus(page, "switch to pages");
+  await sleep(1200);
+  await lineNumbersDialog(page);
+  await page.locator('[data-track="docs:line-numbers:show"]').uncheck();
+  await page.locator('[data-track="docs:line-numbers:apply"]').click();
+  await sleep(800);
+  const off = await page.evaluate(() => document.querySelectorAll(".docs-line-number").length);
+  check(G, printed > 0 && pageless === 0 && off === 0, "print keeps the numbers; pageless shows none; Show line numbers off takes them away", `${printed}, ${pageless}, ${off}`);
   check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
   await close();
 };

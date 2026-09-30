@@ -2,6 +2,7 @@ import { Extension, type AnyExtension } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { firstFamily, loadFontInUse } from "@/components/docs/fonts";
+import { LineNumbers } from "@/components/docs/ext/line-numbers";
 import { namedStyleSheet, readChanges, STYLE_ATTR, STYLE_ORDER } from "@/components/docs/toolbar/styles";
 import { SUGGESTION_MARK_TYPES } from "@/lib/docs/schema";
 
@@ -207,4 +208,4 @@ const DocsToolbar = Extension.create({
   },
 });
 
-export const toolbarExtensions: AnyExtension[] = [DocsToolbar];
+export const toolbarExtensions: AnyExtension[] = [DocsToolbar, LineNumbers];
