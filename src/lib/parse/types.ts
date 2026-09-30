@@ -136,10 +136,11 @@ export type ParsedBlock = {
   // import reads it for the named styles, and for a block set in another
   // face, size, or color than its named style.
   font?: TextFont;
-  // PDF text blocks: the space between the block and the next text block in
-  // its column on the same page, beyond the text's line pitch, in points (a
-  // blank line, a Word paragraph's space after); absent where a figure, a
-  // table, or the page's end follows. The import's space after.
+  // PDF text blocks and tables: the space between the block and the next
+  // text block in its column on the same page, beyond the text's line pitch,
+  // in points (a blank line, a Word paragraph's space after; under a table,
+  // from its bottom edge); absent where a figure, a table, or the page's end
+  // follows. The import's space after.
   spaceAfter?: number;
   // PDF and Word paragraphs, headings, and lists: the tab stops of the
   // tabs in the text, in order (a form's fields, a pair set flush right, a
@@ -147,7 +148,9 @@ export type ParsedBlock = {
   // and an underlined tab is a fill-in rule.
   tabStops?: TabStop[];
   // Word paragraphs: the line spacing Word sets (w:spacing w:line under
-  // the auto rule), as a multiple of single spacing, as Docs sets one.
+  // the auto rule); PDF paragraphs of two lines or more: the page's line
+  // pitch over 1.15 of their size. A multiple of single spacing, as Docs
+  // sets one.
   lineSpacing?: number;
   // PDF paragraphs: the indent the page sets; absent where every line starts
   // at the column's edge. The html's indent token names its kind.
