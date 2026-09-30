@@ -373,6 +373,20 @@ async function dedupeByHash(fileHash: string, pdfPages: PdfPages | null = null) 
   return same ? db.document.findUnique({ where: { id: same.id } }) : null;
 }
 
+/** True when a project of an account other than `userId` holds the
+    document, quotes it, or has notes written in it. Sign-in off (null):
+    one reader, never another account. */
+async function heldByOtherAccount(documentId: string, userId: string | null): Promise<boolean> {
+  if (userId === null) return false;
+  const other = { userId: { not: userId } };
+  const [held, quoted, written] = await Promise.all([
+    db.notebookDocument.count({ where: { documentId, notebook: other } }),
+    db.source.count({ where: { documentId, note: { section: { notebook: other } } } }),
+    db.note.count({ where: { documentId, section: { notebook: other } } }),
+  ]);
+  return held + quoted + written > 0;
+}
+
 /** The chosen pages' column (Document.pdfPages), written only when pages
     were chosen: null is every page. */
 function pdfPagesColumn(pdfPages: PdfPages | null | undefined): { pdfPages?: Prisma.InputJsonValue } {
@@ -869,9 +883,13 @@ function filenameOfUrl(url: string): string {
 // stored parse upgrades in place: adding the URL again must never hand back
 // blocks from an older parser — and never replaces an import's edits: an
 // import edited while the upgrade ran is left as it is, and the add imports
-// anew. With split, one long page saves as multiple documents: `document` is
-// the first part, `extra` the rest. Re-adding the same URL with split dedupes
-// to the existing first part; without split it saves a fresh whole document.
+// anew. A stale document another account's project holds or quotes is never
+// upgraded in place either: a re-parse gives it new blocks, and that
+// account's quotes in it would move or orphan at no request of theirs; the
+// add imports anew. With split, one long page saves as multiple documents:
+// `document` is the first part, `extra` the rest. Re-adding the same URL with
+// split dedupes to the existing first part; without split it saves a fresh
+// whole document.
 export async function ingestUrl(
   url: string,
   onProgress?: OnIngestProgress,
@@ -883,7 +901,7 @@ export async function ingestUrl(
     orderBy: { createdAt: "asc" },
   });
   if (existing && existing.parserVersion >= PARSER_VERSION) return { document: existing, deduped: true };
-  if (existing) {
+  if (existing && !(await heldByOtherAccount(existing.id, userId))) {
     try {
       const document = await reparseDocument(existing.id, onProgress, { deadline: opts.deadline, userId });
       if (document) return { document, deduped: false };
