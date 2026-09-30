@@ -515,16 +515,17 @@ function mathAtoms(block: ParsedBlock): Atom[] {
 // format ("(a)" one level in is Google Docs' "(%1)"; components/docs/
 // toolbar/lists.ts), and the list keeps a preset when one draws every level
 // so, else its own levels. Round 1 drew the presets' markers ("a)." as
-// "a)", "15" as "15.", "[12]" as "12.").
-const LIST_BULLET = /^[-*•▪◦‣●·∙○■□◆❖➢➤►✓✔–—](?: +|$)/;
-const LIST_BOX = /^([☐☑☒])(?: +|$)/;
-const LIST_LEGAL = /^((?:\d{1,3}\.)+)(\d{1,3})(\.?)(?: +|$)/;
-const LIST_PAREN = /^\(([a-zA-Z]{1,5}|\d{1,3})\)(?: +|$)/;
-const LIST_CITE = /^\[(\d{1,3})\](?: +|$)/;
-const LIST_CLOSED = /^((?:[A-Z]{1,2}-)?)([a-zA-Z]{1,5}|\d{1,3})(\)\.?|\.\)?)(?: +|$)/;
-const LIST_NUMBER = /^(\*?)(\d{1,3})(?: +|$)/;
+// "a)", "15" as "15.", "[12]" as "12."). A space or a tab (a PDF's gap to
+// the words) ends a marker.
+const LIST_BULLET = /^[-*•▪◦‣●·∙○■□◆❖➢➤►✓✔–—](?:[ \t]+|$)/;
+const LIST_BOX = /^([☐☑☒])(?:[ \t]+|$)/;
+const LIST_LEGAL = /^((?:\d{1,3}\.)+)(\d{1,3})(\.?)(?:[ \t]+|$)/;
+const LIST_PAREN = /^\(([a-zA-Z]{1,5}|\d{1,3})\)(?:[ \t]+|$)/;
+const LIST_CITE = /^\[(\d{1,3})\](?:[ \t]+|$)/;
+const LIST_CLOSED = /^((?:[A-Z]{1,2}-)?)([a-zA-Z]{1,5}|\d{1,3})(\)\.?|\.\)?)(?:[ \t]+|$)/;
+const LIST_NUMBER = /^(\*?)(\d{1,3})(?:[ \t]+|$)/;
 // A task line's box after its bullet (lib/parse/markdown-document.ts).
-const TASK_BOX = /^([☐☑☒]) /;
+const TASK_BOX = /^([☐☑☒])[ \t]/;
 const ROMAN_NUMERAL = /^(x{0,3})(ix|iv|v?i{0,3})$/;
 
 type ListType = "bulletList" | "orderedList" | "taskList";
@@ -1117,6 +1118,23 @@ class Converter {
     else delete last.attrs.spaceAfter;
   }
 
+  /** A block's tab stops (ParsedBlock.tabStops) as the page editor keeps
+      a paragraph's ("36:left 468:right", components/docs/page/tabs.ts),
+      null for none. A PDF's right stop stands at its column's right edge,
+      so at the page editor's (less the paragraph's right indent), and no
+      stop of a PDF past it. */
+  private tabStops(block: ParsedBlock, indentRight: unknown = 0): string | null {
+    const pdf = this.input.kind === "pdf";
+    const edge = (this.room * 72) / 96 - (typeof indentRight === "number" ? indentRight : 0);
+    const stops = new Map<number, string>();
+    for (const stop of block.tabStops ?? []) {
+      if (!Number.isFinite(stop.at) || stop.at < 0) continue;
+      const at = Math.round((pdf ? (stop.align === "right" ? edge : Math.min(stop.at, edge)) : stop.at) * 2) / 2;
+      stops.set(at, `${at}:${stop.align}`);
+    }
+    return stops.size > 0 ? [...stops].sort((a, b) => a[0] - b[0]).map(([, stop]) => stop).join(" ") : null;
+  }
+
   private sourceOf(block: ParsedBlock, starts: PageStart[], style: DocStyle = this.styleOf(block)): Source {
     // The block's look where it differs from its style, then its runs'
     // marks over it (a run's face or size over its block's). A code run
@@ -1222,7 +1240,8 @@ class Converter {
   }
 
   private paragraph(block: ParsedBlock, index: number, starts: PageStart[]) {
-    if (!block.text.trim()) return this.carry(starts);
+    // A paragraph of tabs alone is a line of fill-in rules: it stays.
+    if (!block.text.trim() && !block.text.includes("\t")) return this.carry(starts);
     const tokens = tokensOf(block.html);
     const role: Role | undefined = ROLES.find((r) => tokens.includes(r));
     const attrs: Record<string, unknown> = {};
@@ -1247,6 +1266,8 @@ class Converter {
     const [left, right] = [inset(block.borders?.left), inset(block.borders?.right)];
     const within = indent && (left || right) ? { ...indent, left: Math.max(0, indent.left - left), right: Math.max(0, (indent.right ?? 0) - right) } : indent;
     Object.assign(attrs, indentAttrs(within), borderAttrs(block));
+    const tabStops = this.tabStops(block, attrs.indentRight);
+    if (tabStops) attrs.tabStops = tabStops;
     // A footnote no number cites stays a paragraph at the size a PDF or a
     // Word file sets it in, as a footnote does (footnote()); a kicker, a
     // label, and a caption are small.
@@ -1267,11 +1288,13 @@ class Converter {
     if (!block.text.trim()) return this.carry(starts);
     const align = alignOf(tokensOf(block.html));
     const content = inline(this.sourceOf(block, starts, isTitle ? "title" : undefined));
+    const tabStops = this.tabStops(block);
+    const tabs = tabStops ? { tabStops } : {};
     if (isTitle) {
-      this.place(index, [paragraphNode(this.titleContent(content), { docStyle: "title", ...(align ? { textAlign: align } : {}), ...borderAttrs(block) })]);
+      this.place(index, [paragraphNode(this.titleContent(content), { docStyle: "title", ...(align ? { textAlign: align } : {}), ...borderAttrs(block), ...tabs })]);
       return;
     }
-    const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId(), ...borderAttrs(block) };
+    const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId(), ...borderAttrs(block), ...tabs };
     if (align) attrs.textAlign = align;
     // A run-in lead ("1.2.3. Two examples." and its paragraph's words on
     // its line) is drawn as its paragraph's opening words (css/import.css),
@@ -1343,15 +1366,18 @@ class Converter {
   }
 
   /** A list's lines as the page sets them: the list's alignment (items
-      set justified, as their paragraphs are), and the space between two
-      items; the last line takes the block's space after (spaceLast). */
+      set justified, as their paragraphs are), the space between two items,
+      and its tab stops; the last line takes the block's space after
+      (spaceLast). */
   private lineLook(paragraphs: RichNode[], block: ParsedBlock) {
     const align = alignOf(tokensOf(block.html));
     const space = this.itemSpace(block);
+    const tabStops = this.tabStops(block);
     for (const node of paragraphs) {
       node.attrs ??= {};
       if (align) node.attrs.textAlign = align;
       if (space) node.attrs.spaceAfter = space;
+      if (tabStops) node.attrs.tabStops = tabStops;
     }
   }
 
@@ -1375,7 +1401,8 @@ class Converter {
   }
 
   /** A list that resumes a level in after a line or two between its items
-      (a centered label under an item's fill-in line): its lines go on the
+      (a centered label under an item's fill-in line; a line to write on, a
+      paragraph of tabs alone, is no line of words): its lines go on the
       list before it, and the last item of that list holds the blocks
       between, as they stand (the label stays centered), so every item keeps
       its level. The page editor's lists nest: an item a level in needs an
@@ -1387,7 +1414,11 @@ class Converter {
     if (!last || lines[0].indent < 1 || this.quote) return false;
     const between = this.out.slice(last.at + last.nodes.length);
     const placed = last.nodes.every((node, k) => this.out[last.at + k] === node);
-    if (!placed || between.length > 2 || between.some((n) => n.type !== "paragraph" && n.type !== "blockMath")) return false;
+    const words = between.filter((n) => {
+      const parts = n.content ?? [];
+      return parts.length === 0 || !parts.every((c) => c.type === "text" && /^\t+$/.test(c.text ?? ""));
+    });
+    if (!placed || words.length > 2 || between.some((n) => n.type !== "paragraph" && n.type !== "blockMath")) return false;
     const tail = last.lines[last.lines.length - 1];
     const all = [...last.lines, ...lines];
     nestLines(all);
