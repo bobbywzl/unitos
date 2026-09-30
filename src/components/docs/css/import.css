@@ -264,6 +264,19 @@
 .docs-prose [data-cell-size] :is(td, th) {
   font-size: var(--docs-cell-size);
 }
+/* A PDF's table sets its lines about 1.2 of its words' size apart, as TeX
+   and Word set a table (9 pt words on 11 pt): the page editor's 1.3225
+   drew each row a tenth and more taller than the page's. A cell's own line
+   spacing still wins. */
+.docs-shell[data-import="pdf"] .docs-prose :is(td, th) p {
+  line-height: calc(var(--docs-ls, 1.04) * 1.15);
+}
+/* A formula in an import's cell takes the room of its ink (KaTeX's struts),
+   not KaTeX's own line of 1.2 em, which stood over a line that tight: a
+   cell of "G₁₃" or "g⁴" keeps its words' line. */
+.docs-shell[data-import] .docs-prose :is(td, th) .docs-math .katex {
+  line-height: 0;
+}
 /* A pageless table fills the text column: column widths (an import's,
    lib/docs/import-table.ts) are shares of the width, as a fixed layout
    spreads a table wider than its columns. */
