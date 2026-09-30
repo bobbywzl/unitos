@@ -186,9 +186,41 @@ function gridOf(cells: Box[]): Grid {
   return { box, xs, ys, cells: gridCells };
 }
 
+// A table drawn open at one side: a column rule that most of the row rules
+// it meets start at (or end at), three at least, and the row rules run on
+// to one end where no rule closes them. The ends close the rows: an edge
+// there, from the lowest of those rows to the highest (the W-9 draws no
+// right border around its fields 1 to 7, and they read as pieces). Rules
+// only: a filled box's sides are a frame or a shaded cell, never open.
+function openSides(edges: Edge[]): Edge[] {
+  const hs = edges.filter((e) => e.dir === "h");
+  const vs = edges.filter((e) => e.dir === "v");
+  const out: Edge[] = [];
+  for (const v of vs) {
+    const met = hs.filter((h) => v.pos >= h.a - INTERSECT && v.pos <= h.b + INTERSECT && h.pos >= v.a - INTERSECT && h.pos <= v.b + INTERSECT);
+    if (met.length < 3) continue;
+    for (const [from, to] of [["a", "b"], ["b", "a"]] as const) {
+      if (met.filter((h) => Math.abs(h[from] - v.pos) <= SNAP).length * 2 <= met.length) continue;
+      const far = met.filter((h) => Math.abs(h[to] - v.pos) > SNAP).sort((p, q) => p[to] - q[to]);
+      // The far ends that meet at one x, the most of them.
+      let best: Edge[] = [];
+      for (const h of far) {
+        const at = far.filter((g) => Math.abs(g[to] - h[to]) <= SNAP);
+        if (at.length > best.length) best = at;
+      }
+      if (best.length < 3) continue;
+      const x = best.reduce((sum, h) => sum + h[to], 0) / best.length;
+      const [lo, hi] = [Math.min(...best.map((h) => h.pos)), Math.max(...best.map((h) => h.pos))];
+      if (vs.some((w) => Math.abs(w.pos - x) <= SNAP && w.a < hi && w.b > lo)) continue;
+      out.push({ dir: "v", pos: x, a: lo, b: hi });
+    }
+  }
+  return out;
+}
+
 // The ruled grids of a page: two cells or more that share corners.
 export function latticeGrids(rules: Rule[], fills: Fill[]): Grid[] {
-  const cells = cellsOf(mergeEdges(edgesOf(rules, fills)));
+  const cells = cellsOf([...mergeEdges(edgesOf(rules, fills)), ...openSides(mergeEdges(edgesOf(rules, [])))]);
   return groupCells(cells)
     .filter((group) => group.length >= 2)
     .map(gridOf);

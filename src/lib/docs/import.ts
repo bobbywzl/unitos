@@ -111,6 +111,9 @@ export type ImportInput = {
   /** The title's lines where the writer broke it (a PDF's): the Title
       keeps the break. */
   titleLines?: string[];
+  /** The PDF's page the title stands on, when words of an earlier page
+      come before it: the Title opens that page. */
+  titlePage?: number;
 };
 
 export type ImportResult = {
@@ -137,6 +140,14 @@ type Atom = { start: number; end: number; node: RichNode };
     reads as one wall of words. A PDF's paragraphs take the page's own
     (ParsedBlock.spaceAfter). */
 const PARAGRAPH_SPACE_PT = 10;
+/** The space over and under a PDF's display equation where the parse
+    measured none, in points: with the room the page editor's lines leave,
+    a display stands as far from its text as amsbook and amsart's 6 pt skip
+    sets it (article's 10 pt skip draws about 4 pt closer). A PDF's and a
+    Word file's displays draw no space of their own (css/import.css): the
+    page editor's margin and KaTeX's 1 em stacked on the page's space after
+    a paragraph set each display far from the words it belongs to. */
+const DISPLAY_SPACE_PT = 4;
 /** A small line (the kicker, a label, a caption) and a display line, as
     text sizes. */
 const SMALL_SIZE = "9pt";
@@ -158,6 +169,9 @@ const TITLE_REACH = 12;
 /** The pageless text column at its narrowest, in px (components/docs/page/
     geometry.ts pagelessWidth): a table fitted to it fits every column. */
 const PAGELESS_COLUMN_PX = 600;
+/** A table's cell padding as its page sets it, "top right bottom left" in
+    points (a Word file's cell margins: the html's data-cell-padding). */
+const CELL_PADDING = /^<table\b[^>]*\bdata-cell-padding="((?:\d{1,2}(?:\.\d)? ){3}\d{1,2}(?:\.\d)?)"/;
 
 const ROLES = ["kicker", "meta", "label", "display", "quote", "caption", "footnote"] as const;
 type Role = (typeof ROLES)[number];
@@ -207,13 +221,15 @@ function borderAttrs(block: ParsedBlock): Record<string, string> {
   return out;
 }
 
-/** An indent as the page editor's paragraph attributes: the left indent
-    within the text column, the first line never left of the column's edge. */
+/** An indent as the page editor's paragraph attributes: the left and right
+    indents within the text column, the first line never left of the
+    column's edge. */
 function indentAttrs(indent: Indent | undefined): Record<string, number> {
   if (!indent || !Number.isFinite(indent.left) || !Number.isFinite(indent.first)) return {};
   const left = Math.min(MAX_INDENT_PT, Math.max(0, Math.round(indent.left * 2) / 2));
   const first = Math.min(MAX_INDENT_PT - left, Math.max(-left, Math.round(indent.first * 2) / 2));
-  return { ...(left ? { indentLeft: left } : {}), ...(first ? { indentFirstLine: first } : {}) };
+  const right = Number.isFinite(indent.right) ? Math.min(MAX_INDENT_PT - left, Math.max(0, Math.round((indent.right ?? 0) * 2) / 2)) : 0;
+  return { ...(left ? { indentLeft: left } : {}), ...(first ? { indentFirstLine: first } : {}), ...(right ? { indentRight: right } : {}) };
 }
 
 function tokensOf(html: string | undefined): string[] {
@@ -424,8 +440,14 @@ function styleLooks(input: ImportInput): Partial<Record<DocStyle, NamedStyle>> {
   // space after the block above it (ParsedBlock.spaceAfter), no more.
   const spaced = input.blocks.some((b) => b.spaceAfter !== undefined);
   for (const [style, counts] of tally) {
-    const top = [...counts.values()].sort((a, b) => b.n - a.n)[0];
-    looks[style] = { ...lookOf(style, top.font), ...(spaced ? { spaceBefore: 0 } : {}) };
+    const looksOf = [...counts.values()].sort((a, b) => b.n - a.n);
+    // Bold and italic only where every heading of the level is: no mark
+    // takes either off (a heading set upright or in regular weight drew as
+    // most of its level). A bold heading takes the bold mark (lookMarks);
+    // an italic one keeps its italic runs (ParsedBlock.styles).
+    const bold = looksOf.every((l) => l.font.bold === true);
+    const italic = looksOf.every((l) => l.font.italic === true);
+    looks[style] = { ...lookOf(style, looksOf[0].font), bold, italic, ...(spaced ? { spaceBefore: 0 } : {}) };
   }
   return looks;
 }
@@ -776,6 +798,9 @@ class Converter {
       own it did not measure (a page's last); null where it measured none
       (a web page, a text file). */
   private readonly spacing: number | null;
+  /** The blocks right over a display equation: their space after is the
+      space over the display. */
+  private readonly overDisplay = new Set<ParsedBlock>();
 
   constructor(private readonly input: ImportInput) {
     this.looks = styleLooks(input);
@@ -787,6 +812,14 @@ class Converter {
     const { pageless, width, margins } = this.pageSetup;
     this.room = pageless ? PAGELESS_COLUMN_PX : ((width - margins.left - margins.right) * 96) / 72;
     this.linkFootnotes();
+    // The footnotes the page editor keeps at the document's end stand
+    // between no block and its display.
+    let above: ParsedBlock | null = null;
+    input.blocks.forEach((block, index) => {
+      if (this.footnoteIds.has(index)) return;
+      if (block.type === "EQUATION" && above) this.overDisplay.add(above);
+      above = block;
+    });
   }
 
   /** Each reference (ParsedBlock.footnoteRefs) becomes the page editor's
@@ -862,14 +895,16 @@ class Converter {
     const { blocks } = this.input;
     const title = this.input.titleFromOriginal ? (this.input.title ?? "").replace(/\s+/g, " ").trim() : "";
     // A heading among the first blocks that repeats the title is the Title,
-    // where it stands; else the Title comes first, after the kicker.
-    const first = this.input.firstPage ?? 1;
+    // where it stands; else the Title opens its page (titleOn), after the
+    // kicker: a scan's archive notice or a deck's first slide stands before it.
+    const first = this.titleOn;
     const repeat = title
       ? blocks
           .slice(0, TITLE_REACH)
           .findIndex((b) => b.type === "HEADING" && sameWords(b.text, title) && (!this.paged || (b.page ?? first) <= first))
       : -1;
-    let lead = 0;
+    const on = this.paged ? blocks.findIndex((b) => (b.page ?? first) >= first) : 0;
+    let lead = on < 0 ? blocks.length : on;
     while (lead < blocks.length && blocks[lead].type === "PARAGRAPH" && tokensOf(blocks[lead].html).includes("kicker")) lead++;
     blocks.forEach((block, i) => {
       if (i === lead && title && repeat < 0) this.title(title, blocks);
@@ -878,6 +913,12 @@ class Converter {
     if (blocks.length <= lead && title && repeat < 0) this.title(title, blocks);
     this.closeQuote();
     return this.finish();
+  }
+
+  /** The PDF's page the Title stands on: the import's first, or the later
+      page its title stands on (titlePage). */
+  private get titleOn(): number {
+    return Math.max(this.input.firstPage ?? 1, this.input.titlePage ?? 1);
   }
 
   // ── Page starts ──
@@ -979,10 +1020,19 @@ class Converter {
   }
 
   /** The space after a block in points: the page's (ParsedBlock.spaceAfter),
-      the page's most common for a block it measured none for, or Docs'
-      "Add space after paragraph" where the parse measures no spacing. */
+      over a PDF's or a Word file's display TeX's skip, the page's most
+      common for a block it measured none for, or Docs' "Add space after
+      paragraph" where the parse measures no spacing. */
   private spaceAfter(block: ParsedBlock): number {
-    return block.spaceAfter ?? this.spacing ?? PARAGRAPH_SPACE_PT;
+    if (block.spaceAfter !== undefined) return block.spaceAfter;
+    if (this.overDisplay.has(block) && this.pageDisplays) return DISPLAY_SPACE_PT;
+    return this.spacing ?? PARAGRAPH_SPACE_PT;
+  }
+
+  /** A PDF's and a Word file's displays: the page editor draws them with
+      the space the page leaves, none of its own (css/import.css). */
+  private get pageDisplays(): boolean {
+    return this.input.kind === "pdf" || this.input.kind === "docx";
   }
 
   /** A list's last line takes the space after its block. */
@@ -1034,8 +1084,8 @@ class Converter {
   // ── Blocks ──
 
   private title(title: string, blocks: ParsedBlock[]) {
-    // A PDF's title stands on the import's first page.
-    const first = this.input.firstPage ?? 1;
+    // A PDF's Title stands on its page (titleOn).
+    const first = this.titleOn;
     const starts: PageStart[] = this.paged && this.page < first ? [{ offset: 0, page: first }] : [];
     if (starts.length > 0) this.page = first;
     const meta = blocks.slice(0, TITLE_REACH).find((b) => b.type === "PARAGRAPH" && tokensOf(b.html).includes("meta"));
@@ -1045,10 +1095,10 @@ class Converter {
       (meta !== undefined && alignOf(tokensOf(meta.html)) === "center") ||
       (heading !== undefined && alignOf(tokensOf(heading.html)) === "center");
     const attrs: Record<string, unknown> = { docStyle: "title" };
-    // The parse's alignment when it read the title's look on the page (a
-    // title it read and set flush left stays so); else the page's centered
-    // masthead, byline, or first heading centers it.
-    const align = this.input.titleAlign ?? (this.input.titleFont ? null : centered ? "center" : null);
+    // The parse's alignment when it read the title on the page (a PDF's
+    // title, a title whose look it read: set flush left, it stays so); else
+    // the page's centered masthead, byline, or first heading centers it.
+    const align = this.input.titleAlign ?? (this.input.titleFont || this.paged ? null : centered ? "center" : null);
     if (align) attrs.textAlign = align;
     // The writer's line breaks stay in the Title (two centered lines), when
     // its lines are the title's words.
@@ -1106,11 +1156,15 @@ class Converter {
     else if (role !== "kicker" && this.spaceAfter(block) > 0) attrs.spaceAfter = this.spaceAfter(block);
     const kind = INDENT_TOKENS.find((k) => tokens.includes(k));
     const indent = block.indent ?? (kind ? INDENTS[kind] : undefined);
-    // A bar at the left stands in the indent, its padding from the words:
-    // the words start where the page starts them.
-    const bar = BORDER_VALUE.exec(block.borders?.left ?? "");
-    const inset = bar ? Number(bar[1]) + Number(bar[2] ?? 0) : 0;
-    Object.assign(attrs, indentAttrs(indent && inset ? { left: Math.max(0, indent.left - inset), first: indent.first } : indent), borderAttrs(block));
+    // A bar at a side stands in its indent, its padding from the words:
+    // the words start and end where the page sets them.
+    const inset = (side: string | undefined) => {
+      const bar = BORDER_VALUE.exec(side ?? "");
+      return bar ? Number(bar[1]) + Number(bar[2] ?? 0) : 0;
+    };
+    const [left, right] = [inset(block.borders?.left), inset(block.borders?.right)];
+    const within = indent && (left || right) ? { ...indent, left: Math.max(0, indent.left - left), right: Math.max(0, (indent.right ?? 0) - right) } : indent;
+    Object.assign(attrs, indentAttrs(within), borderAttrs(block));
     const size =
       role === "kicker" || role === "label" || role === "caption" || role === "footnote" ? SMALL_SIZE : role === "display" ? DISPLAY_SIZE : null;
     const extra: RichMark[] = size ? [{ type: "textStyle", attrs: { fontSize: size } }] : [];
@@ -1128,8 +1182,11 @@ class Converter {
     }
     const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId(), ...borderAttrs(block) };
     if (align) attrs.textAlign = align;
+    // A run-in lead ("1.2.3. Two examples." and its paragraph's words on
+    // its line) is drawn as its paragraph's opening words (css/import.css).
+    if (tokensOf(block.html).includes("run-in")) attrs.runIn = true;
     // The page's own space after the heading, where it measured one.
-    if (block.spaceAfter !== undefined) attrs.spaceAfter = block.spaceAfter;
+    else if (block.spaceAfter !== undefined) attrs.spaceAfter = block.spaceAfter;
     this.place(index, [content.length > 0 ? { type: "heading", attrs, content } : { type: "heading", attrs }]);
   }
 
@@ -1150,6 +1207,14 @@ class Converter {
     }
     this.carry(waiting);
     if (lines.length === 0) return;
+    // A capital's initial under a line with no marker at its depth is an
+    // entry's words, no marker (a bibliography's "H. rept. 106-371.", "J.
+    // Smith"): a lettered list opens at its first letter.
+    lines.forEach((l, k) => {
+      const above = lines.slice(0, k).reverse().find((p) => p.indent <= l.indent);
+      const initial = l.count?.after === "." && !l.count.before && (l.count.counter === "upper-alpha" || l.letter?.counter === "upper-alpha") && l.count.value > 1;
+      if (initial && above?.indent === l.indent && above.unmarked) lines[k] = { ...l, type: null, unmarked: true, count: undefined, letter: undefined, words: l.whole };
+    });
     // A contents list: its class, or lines that link to headings, whatever
     // their markers ("1 Introduction", "2.1 Background").
     const contents =
@@ -1268,6 +1333,11 @@ class Converter {
     const notes = this.cellNotes(block, index);
     const built = (block.html ? tableFromHtml(block.html, this.room, notes) : null) ?? tableFromText(block.text, this.room);
     if (!built) return this.carry(starts);
+    // The cells' padding as the page sets it, and the table's text size
+    // (css/import.css draws them).
+    const padding = CELL_PADDING.exec(block.html ?? "")?.[1];
+    const size = cellSize(built.table);
+    if (padding || size) built.table.attrs = { ...built.table.attrs, ...(padding ? { cellPadding: padding } : {}), ...(size ? { cellSize: size } : {}) };
     // A footnote whose number the cell holds is the page editor's; one whose
     // label stayed words stays a paragraph after the table.
     walk(built.table, (node) => {
@@ -1332,6 +1402,10 @@ class Converter {
     if (pageStart !== undefined) attrs.pageStart = pageStart;
     // The page numbers the equation at the left margin (the parse's leqno).
     if (tokensOf(block.html).includes("leqno")) attrs.leqno = true;
+    // The space under a PDF's or a Word file's display: the page's, else
+    // TeX's skip.
+    const after = this.pageDisplays ? (block.spaceAfter ?? DISPLAY_SPACE_PT) : 0;
+    if (after > 0) attrs.spaceAfter = after;
     this.place(index, [{ type: "blockMath", attrs }]);
   }
 
@@ -1420,6 +1494,24 @@ class Converter {
       size: { nodes, json: new TextEncoder().encode(JSON.stringify(richText)).length, rows },
     };
   }
+}
+
+/** A table's text size in points, when every word of it carries one (the
+    size lib/docs/import-table.ts sets its runs in): the size most of its
+    letters take. Its cells' paragraphs take it, so a line is as tall as
+    its words: at Normal text's size, a table set smaller than the body
+    drew each line taller than the page's. */
+function cellSize(table: RichNode): number | null {
+  const letters = new Map<number, number>();
+  let bare = false;
+  walk(table, (node) => {
+    if (node.type !== "text" || !node.text?.trim()) return;
+    const size = parseFloat(String(node.marks?.find((m) => m.type === "textStyle")?.attrs?.fontSize ?? ""));
+    if (!(size > 0)) bare = true;
+    else letters.set(size, (letters.get(size) ?? 0) + node.text.length);
+  });
+  const top = [...letters].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return !bare && top !== undefined && top >= 4 && top <= 72 ? top : null;
 }
 
 function walk(node: RichNode, visit: (node: RichNode) => void) {

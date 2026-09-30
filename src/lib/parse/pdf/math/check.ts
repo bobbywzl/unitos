@@ -89,8 +89,15 @@ function checkLatex(latex: string, atoms: Atom[], unknown: Glyph[], display: boo
       want.push(`${x.slice(0, at)}@${Math.min(2, level + Number(x.slice(at + 1)))}`);
     }
   }
-  const g = counts(got);
-  const w = counts(want);
+  // MathJax sets no script under its minimum size, 0.8 of the text's
+  // (OpenStax's e^{…(…)^2}): where no glyph is under three quarters of the
+  // text's size, a script's own script stands at the script's size, and the
+  // check takes the two levels as one.
+  const counted = atoms.filter((a) => a.tex && a.cls !== "piece" && a.cls !== "radical" && !(a.fam === "omx" && (a.cls === "open" || a.cls === "close")));
+  const clamped = counted.length > 0 && counted.every((a) => a.size / size >= 0.75);
+  const merge = (list: string[]) => (clamped ? list.map((x) => x.replace(/@2$/, "@1")) : list);
+  const g = counts(merge(got));
+  const w = counts(merge(want));
   const extra: string[] = [];
   for (const k of new Set([...g.keys(), ...w.keys()])) {
     const d = (g.get(k) ?? 0) - (w.get(k) ?? 0);

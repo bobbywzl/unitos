@@ -9,7 +9,7 @@
 // page's rules are known (resolveZones).
 
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
-import { isBoldFont, isTextMath, isUnicodeMathFont, isUnreadMath } from "@/lib/parse/pdf/glyphs";
+import { isBoldFont, isItalicFont, isTextMath, isUnicodeMathFont, isUnreadMath } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { braceLabelBoxes, hangingGlyph, type Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
@@ -65,6 +65,19 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
   const flush = () => {
     let z = cur;
     cur = [];
+    // A citation a word space after a formula's operand ("γ > 1 [57]",
+    // arXiv 2502.02648) is the sentence's, and so is what follows it; an
+    // interval stands after a relation ("x ∈ [0, 1]").
+    const citation = z.findIndex(
+      (g, n) =>
+        n > 0 &&
+        (g.family === "ot1" || g.family === null) &&
+        g.unicode === "[" &&
+        gapOf(z[n - 1], g) > 0.2 * size &&
+        /[\p{L}\p{N})\]}′']/u.test(z[n - 1].unicode) &&
+        /^\[\d+(?:\s*[,–-]\s*\d+)*\]/.test(z.slice(n, n + 24).map((h) => h.unicode).join("")),
+    );
+    if (citation > 0) z = z.slice(0, citation);
     const count = (ch: string) => z.filter((g) => g.unicode === ch).length;
     // A sentence's colon or semicolon after a formula, and a bracket it
     // does not close, are the sentence's; a half-open interval's ")" closes
@@ -124,7 +137,10 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
     const stacked = z.some((a) => z.some((b) => a !== b && a.size < size * 0.85 && b.size < size * 0.85 && Math.abs(a.y - b.y) > size * 0.4 && a.x < b.x + b.w && b.x < a.x + a.w));
     const math = z.filter((g) => kind(g, size) === "math");
     const url = math.every((g) => g.unicode === "/") && !/^[0-9]+\/[0-9]+$/.test(z.map((g) => g.unicode).join(""));
-    if (!stacked && (math.length === 0 || url)) return;
+    // A lone text italic letter a page's math takes is a formula (lone,
+    // below), and so is one with its scripts (t_i, t_1).
+    const single = isTextMath(z[0]) && isLetter(z[0]) && z.slice(1).every((g) => g.size < size * 0.85 && (isTextMath(g) || kind(g, size) === "attach"));
+    if (!stacked && !single && (math.length === 0 || url)) return;
     // A lone raised symbol after a word (a footnote's dagger) is a mark,
     // not a formula: every glyph small, none on the line.
     if (!stacked && z.every((g) => g.size < size * 0.85)) return;
@@ -140,7 +156,15 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       // math (\mathbf{x}, \mathrm{d}x), or a short name set tight before it
       // (\mathrm{Var}(X)).
       let j = k;
-      while (j < glyphs.length && kinds[j] === "text" && isLetter(glyphs[j]) && (j === k || gapOf(glyphs[j - 1], glyphs[j]) < 0.12 * size)) j++;
+      // A word's letters are one size: a script set on it ends it ("max"
+      // and its limit's l, arXiv 2506.06352's \max_{l\in\mathcal{L}(t)}).
+      while (
+        j < glyphs.length &&
+        kinds[j] === "text" &&
+        isLetter(glyphs[j]) &&
+        (j === k || (gapOf(glyphs[j - 1], glyphs[j]) < 0.12 * size && (glyphs[j].size >= g.size * 0.85 || !isTextMath(glyphs[j]))))
+      )
+        j++;
       if (j === k) {
         flush();
         continue;
@@ -148,7 +172,9 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       const word = glyphs.slice(k, j).map((x) => x.unicode).join("");
       const after = glyphs[j];
       const afterGap = after ? gapOf(glyphs[j - 1], after) : Infinity;
-      const nextMath = after !== undefined && kinds[j] !== "text";
+      // A text italic's letter a page's math takes, set small and tight
+      // after the word, is its script: math.
+      const nextMath = after !== undefined && (kinds[j] !== "text" || (isTextMath(after) && after.size < g.size * 0.85 && gapOf(glyphs[j - 1], after) < 0.12 * size));
       // \liminf and \limsup set "inf" and "sup" a thin space after "lim".
       const limit = word === "lim" && afterGap < 0.3 * size && /^(inf|sup)/.test(glyphs.slice(j, j + 3).map((x) => x.unicode).join(""));
       const opname = (OPNAMES.has(word) && (cur.length > 0 || nextMath)) || limit;
@@ -160,10 +186,37 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
       // touches them (\mathrm{d}x), where a word space, however tight, is a
       // fifth of an em.
       const near = (/^CMBX/i.test(g.base) || isTextMath(g) ? 0.3 : 0.12) * size;
-      const letter = word.length === 1 && ((cur.length > 0 && gap < near) || (nextMath && afterGap < near));
+      // Such a letter stands up to 0.6 em from a relation or an operator
+      // beside it (MathDesign sets "t ∈" 0.44 em apart).
+      const op = (h: Glyph | undefined) => h !== undefined && h.family !== null && /^(rel|bin)$/.test(mathGlyph(h.family, h.code)?.cls ?? "");
+      const reach = (h: Glyph | undefined) => (isTextMath(g) && op(h) ? 0.6 * size : near);
+      const letter = word.length === 1 && ((cur.length > 0 && gap < reach(prev)) || (nextMath && afterGap < reach(after)));
       const name = word.length <= 4 && opens && afterGap < 0.12 * size;
-      if (opname || letter || name) cur.push(...glyphs.slice(k, j));
-      else flush();
+      // A short upright name with a script set on it, inside a formula
+      // (\mathrm{sw}^{1}_{p,p'} after ¬, arXiv 2506.06752 (15)): set tight
+      // on both sides, where a word stands a word space from the math. A
+      // word that opens no formula: an author's name with its marks
+      // ("Sahu¹⋆") is no formula.
+      const scripted = word.length <= 4 && cur.length > 0 && gap < 0.12 * size && after !== undefined && after.size < size * 0.85 && afterGap < 0.12 * size;
+      // A text italic's letters a page's math takes, set small and tight
+      // after the formula, are its last glyph's script (PLOS's k_{sp}:
+      // "k = k" left its "sp" out).
+      const script = cur.length > 0 && gap < 0.12 * size && glyphs.slice(k, j).every((h) => isTextMath(h) && h.size < size * 0.85);
+      // On such a page a lone italic letter between upright words is a
+      // formula of its own ("in any decision tree t, she"); in an italic
+      // phrase ("E. coli") it is a word.
+      const italicWord = (from: number, step: 1 | -1) => {
+        let n = from;
+        while (glyphs[n] !== undefined && !isLetter(glyphs[n])) n += step;
+        return glyphs[n] !== undefined && isItalicFont(glyphs[n].base);
+      };
+      const lone = word.length === 1 && isTextMath(g) && cur.length === 0 && !italicWord(k - 1, -1) && !italicWord(j, 1);
+      if (opname || letter || name || scripted || script) cur.push(...glyphs.slice(k, j));
+      else if (lone) {
+        flush();
+        cur.push(g);
+        flush();
+      } else flush();
       k = j - 1;
       continue;
     }
@@ -248,14 +301,15 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
   for (let c = 0; c + 1 < bounds.length; c++) {
     const cellItems = items.slice(bounds[c], bounds[c + 1]);
     const size = textSize(cellItems);
-    // zonesOf keeps a run only with a math glyph in it or two small glyphs
-    // stacked: a cell with no math glyph and fewer than two small ones, as
-    // most are, has no formula and keeps its items as they are.
+    // zonesOf keeps a run only with a math glyph in it, a text italic's
+    // letter a page's math takes, or two small glyphs stacked: a cell with
+    // none of them, as most are, has no formula and keeps its items as they
+    // are.
     let math = false;
     let small = 0;
     for (const it of cellItems) {
       for (const g of it.glyphs ?? []) {
-        if (isMathGlyph(g)) math = true;
+        if (isMathGlyph(g) || (isTextMath(g) && isLetter(g))) math = true;
         if (g.size < size * 0.85) small++;
       }
     }
@@ -384,22 +438,26 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
   // reads it with the array's rows, and an \hline that runs past the
   // cells by their padding. Without one, a rule past the glyphs is none
   // of theirs (a fraction bar over the next formula read as an overline,
-  // arXiv 2502.02648 p. 11).
+  // arXiv 2502.02648 p. 11), unless the formula's glyphs stand over it
+  // and under it and it runs past them by under a sixth of an em:
+  // LibreOffice draws a fraction's bar a tenth of an em past its parts
+  // (the Math Guide's x over −x + 1 read without its bar).
   const columns = drawing.rules.filter((r) => r.dir === "v" && r.x1 > x1 && r.x1 < x2 && r.y1 > low - em && r.y2 < high + em * 1.2);
   const pad = columns.length > 0 ? em * 0.6 : 1;
   // A radical's vinculum starts at its sign and may run past the last
   // glyph under it (synth-math-tex's √ over a fraction, by a third of a point).
   const vinculum = (r: Rule) =>
     zone.glyphs.some((g) => g.family !== null && mathGlyph(g.family, g.code)?.cls === "radical" && Math.abs(g.x + g.w - r.x1) < em * 0.2);
+  const holds = (r: Rule, over: boolean) => glyphs.some((g) => (over ? g.y > r.y1 : g.y < r.y1) && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2);
+  const inside = (r: Rule, pad: number) => r.x1 >= x1 - pad && r.x2 <= x2 + (vinculum(r) ? em : pad);
   const near = [
     ...drawing.rules.filter(
       (r) =>
         r.dir === "h" &&
-        r.x1 >= x1 - pad &&
-        r.x2 <= x2 + (vinculum(r) ? em : pad) &&
+        (inside(r, pad) || (columns.length === 0 && inside(r, em * 0.15) && holds(r, true))) &&
         r.y1 > low - em &&
         r.y1 < high + em &&
-        glyphs.some((g) => g.y < r.y1 && g.x + g.w / 2 > r.x1 && g.x + g.w / 2 < r.x2),
+        holds(r, false),
     ),
     ...columns,
   ];

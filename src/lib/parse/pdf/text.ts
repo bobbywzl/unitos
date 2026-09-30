@@ -40,9 +40,12 @@ export function collectHyphenation(pages: Line[][]) {
       const right = LOWER_WORD_START_RE.exec(lines[i + 1]?.text.trim() ?? "");
       if (left && right) ends.push((left[1] + right[1]).toLowerCase());
       // A line's words, less the parts of a word it breaks: "dissent-" and
-      // "ing" twice in a document made "ing" a word.
+      // "ing" twice in a document made "ing" a word. A line that opens
+      // lowercase may finish a word cut on another line: the line before it
+      // in reading order is not always the one above it (a column's first
+      // line after a float: "ac-" | "cessible").
       const found = [...text.matchAll(WORDS_RE)];
-      const cut = i > 0 && LETTER_HYPHEN_END_RE.test(lines[i - 1].text.trim());
+      const cut = LOWER_WORD_START_RE.test(text) || (i > 0 && LETTER_HYPHEN_END_RE.test(lines[i - 1].text.trim()));
       found.forEach((m, k) => {
         if (!(k === 0 && cut) && !(k === found.length - 1 && left)) words.add(m[0].toLowerCase());
       });
@@ -210,7 +213,10 @@ export function endsBold(line: Line): boolean {
 // Join a group of lines into one text: spaces where the text wrapped, line
 // breaks where the break was intentional. In prose (proseJoin), a break that
 // lands mid-sentence — no terminal punctuation before it, lowercase or a
-// number after it — is a wrap whatever the margin says.
+// number after it — is a wrap whatever the margin says, and so is one
+// before a capital when the line's room would not have taken the next word
+// with an em to spare (the Federal Register's justified columns, whose word
+// gaps the text layer leaves out: "in which the" | "Hearing Clerk").
 export function joinGroup(lines: Line[], proseJoin = false): { text: string; runs: Run[] } {
   const builder = new TextBuilder();
   if (lines.length === 0) return builder;
@@ -224,10 +230,11 @@ export function joinGroup(lines: Line[], proseJoin = false): { text: string; run
     const prevText = lines[i - 1].text.trim();
     const nextText = lines[i].text;
     const wrapped = fillsMargin(lines[i - 1], lines[i], rightEdge);
+    const roomy = lines[i - 1].xEnd + lines[i - 1].size * 1.28 + lines[i].firstWordWidth < rightEdge;
     const midSentence =
       proseJoin &&
       !/[.!?:…。！？：]["'”]?$/.test(prevText) &&
-      (/^[a-z0-9($€£"'“]/.test(nextText) || CJK_CHAR_RE.test(nextText[0] ?? ""));
+      (/^[a-z0-9($€£"'“]/.test(nextText) || CJK_CHAR_RE.test(nextText[0] ?? "") || !roomy);
     let sep: " " | "\n" | "" = fieldList ? "\n" : wrapped || midSentence ? " " : "\n";
     if (sep === " ") {
       const lastChar = prevText[prevText.length - 1] ?? "";

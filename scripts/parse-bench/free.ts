@@ -4,8 +4,11 @@ import { join } from "node:path";
 import { figureCropSize } from "@/lib/figure-crop";
 import { attr, child, descendants, parseXmlPart, unzipOffice } from "@/lib/parse/office";
 import { regionBounds } from "@/lib/video/types";
-import type { DocBlock, Side } from "./adapt";
+import type { RichNode } from "@/lib/docs/schema";
+import type { Doc, DocBlock, Side } from "./adapt";
+import { displayGaps, markerPlaces, rowHeights } from "./drawn";
 import type { GlyphScores } from "./glyphs";
+import type { LayoutScores } from "./layout";
 import { ROOT } from "./load";
 import { mathLeaves } from "./math";
 import { FREE_WEIGHTS, furnitureMatches, type Flat } from "./metrics";
@@ -16,10 +19,22 @@ import { garblesOf, normText, PAGE_NUMBER_RE, pageNumberOf, wordsOf } from "./te
 
 type Line = { page: number; top: number; bottom: number; left: number; right: number; text: string };
 
+/** A word pdftotext reads with a symbol font's characters in it, as it
+    reads it and as the page draws it, on its line (layoutOf, symbolChars). */
+type SymbolWord = { page: number; word: string; reads: string; line: Line };
+
 /** The PDF's text by pdftotext: each page's lines in content order (-raw:
-    the words to cover), and each line with its place (-tsv) with the
-    furniture lines among them (layoutOf). */
-export type PdfText = { first: number; pages: number; raw: string[][]; lines: Line[]; furniture: Line[]; sizes: Map<number, { width: number; height: number }> };
+    the words to cover), each line with its place (-tsv) with the furniture
+    lines among them (layoutOf), and the words it reads out of symbol fonts. */
+export type PdfText = {
+  first: number;
+  pages: number;
+  raw: string[][];
+  lines: Line[];
+  furniture: Line[];
+  sizes: Map<number, { width: number; height: number }>;
+  symbols: SymbolWord[];
+};
 
 function run(args: string[]): string {
   return execFileSync("pdftotext", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
@@ -57,15 +72,90 @@ const DOUBLED_RE = /([\u{1D400}-\u{1D7FF}\p{Script=Greek}])\1/gu;
 /** A long table's foot on each page it breaks at (LaTeX's longtable, Word). */
 const CONTINUED_RE = /^\(?continued (?:on (?:the )?next page|overleaf)\)?\.?$/i;
 
-type Layout = { lines: Line[]; furniture: Line[]; sizes: Map<number, { width: number; height: number }> };
+type Layout = { lines: Line[]; furniture: Line[]; sizes: Map<number, { width: number; height: number }>; symbols: SymbolWord[] };
 type Sizes = Layout["sizes"];
 
+/** Fonts that draw symbols at the codes of letters: pdftotext reads a code
+    as its letter where the font maps none (Wingdings' "u" for ◆, ZapfDingbats'
+    "4" for ✔, MarVoSym's "B" for ✉, Advent's math symbols' "ð" and "Þ" for
+    the parentheses and "0" for the prime) or as a private-use character
+    U+F000 past it (Symbol's U+F061 for α). */
+const SYMBOL_FONT_RE = /^(?:Symbol(?:MT)?|StandardSym(?:L|bolsPS)|Wingdings(?:-Regular)?|(?:ITC)?(?:Zapf)?Dingbats|MarVoSym|AdvMacMthSy\w*)$/i;
+/** Adobe Symbol's letters: its codes of A–Z and a–z draw Greek. */
+const SYMBOL_GREEK: Record<string, string> = Object.fromEntries(
+  [..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"].map((ch, i) => [ch, [..."ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖαβχδεφγηιϕκλμνοπθρστυϖωξψζ"][i]]),
+);
+
+/** A character pdftotext reads in a symbol font, as the page draws it where
+    that is a letter (Symbol's Greek), else nothing: the other fonts draw no
+    letters or digits, and a symbol is no word. */
+function symbolDrawn(ch: string, symbol: boolean): string {
+  const cp = ch.codePointAt(0) ?? 0;
+  const code = cp >= 0xf020 && cp <= 0xf0ff ? String.fromCharCode(cp - 0xf000) : ch;
+  if (symbol) return SYMBOL_GREEK[code] ?? (cp >= 0xf020 && cp <= 0xf0ff ? "" : ch);
+  return /[\p{L}\p{N}\uE000-\uF8FF]/u.test(ch) ? "" : ch;
+}
+
+/** The characters pdftotext reads in symbol fonts, with their place
+    (pdftohtml's runs, each split evenly among its characters), by page;
+    none where pdffonts finds no symbol font. */
+function symbolChars(pdf: string): Map<number, { x: number; top: number; bottom: number; ch: string; symbol: boolean }[]> {
+  const out = new Map<number, { x: number; top: number; bottom: number; ch: string; symbol: boolean }[]>();
+  const tool = (name: string, args: string[]) => {
+    try {
+      return execFileSync(name, args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
+    } catch {
+      return "";
+    }
+  };
+  const named = tool("pdffonts", [pdf])
+    .split("\n")
+    .slice(2)
+    .some((line) => SYMBOL_FONT_RE.test((line.split(/\s+/)[0] ?? "").replace(/^[A-Z]{6}\+/, "")));
+  if (!named) return out;
+  const xml = tool("pdftohtml", ["-xml", "-i", "-stdout", "-q", "-zoom", "1", "-fontfullname", pdf]);
+  const fonts = new Map<string, boolean>();
+  for (const m of xml.matchAll(/<fontspec id="(\d+)"[^>]*family="([^"]*)"/g)) {
+    const family = m[2].replace(/^[A-Z]{6}\+/, "");
+    if (SYMBOL_FONT_RE.test(family)) fonts.set(m[1], /^(?:Symbol|StandardSym)/i.test(family));
+  }
+  if (fonts.size === 0) return out;
+  const unescape = (t: string) =>
+    t
+      .replace(/<[^>]+>/g, "")
+      .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, "&");
+  for (const part of xml.split(/<page number="/).slice(1)) {
+    const page = Number(/^(\d+)/.exec(part)?.[1]);
+    for (const m of part.matchAll(/<text top="([\d.-]+)" left="([\d.-]+)" width="([\d.-]+)" height="([\d.-]+)" font="(\d+)"[^>]*>([\s\S]*?)<\/text>/g)) {
+      const symbol = fonts.get(m[5]);
+      if (symbol === undefined) continue;
+      const [top, left, width, height] = [1, 2, 3, 4].map((i) => Number(m[i]));
+      const chars = [...unescape(m[6])];
+      const list = out.get(page) ?? [];
+      chars.forEach((ch, k) => {
+        if (ch.trim()) list.push({ x: left + ((k + 0.5) * width) / chars.length, top, bottom: top + height, ch, symbol });
+      });
+      out.set(page, list);
+    }
+  }
+  return out;
+}
+
 /** Every page's lines with their place (pdftotext -tsv), and the furniture
-    lines among them (furnitureOf). */
+    lines among them (furnitureOf). Diagonal text (a "Sample" watermark
+    across the page) is no line of the page: -nodiag leaves it out, here and
+    in the words to cover. */
 function layoutOf(pdf: string): Layout {
   const sizes: Sizes = new Map();
   const byKey = new Map<string, Line>();
-  for (const row of run(["-tsv", pdf, "-"]).split("\n").slice(1)) {
+  const chars = symbolChars(pdf);
+  const symbols: SymbolWord[] = [];
+  for (const row of run(["-tsv", "-nodiag", pdf, "-"]).split("\n").slice(1)) {
     const f = row.split("\t");
     if (f.length < 12) continue;
     const [level, page, par, block, line] = f.slice(0, 5).map(Number);
@@ -75,10 +165,28 @@ function layoutOf(pdf: string): Layout {
     if (level === 4) byKey.set(key, { page, top, bottom: top + height, left, right: left + width, text: "" });
     const entry = byKey.get(key);
     if (level === 5 && entry) entry.text = entry.text ? `${entry.text} ${f[11]}` : f[11];
+    // A word with a symbol font's characters in it: each, in its place, becomes what the page draws.
+    const own = level === 5 ? (chars.get(page) ?? []).filter((c) => c.x >= left - 1 && c.x <= left + width + 1 && c.top < top + height && c.bottom > top) : [];
+    if (own.length === 0) continue;
+    let reads = f[11];
+    let at = 0;
+    for (const c of own.sort((a, b) => a.x - b.x)) {
+      const k = reads.indexOf(c.ch, at);
+      if (k < 0) continue;
+      const drawn = symbolDrawn(c.ch, c.symbol);
+      reads = reads.slice(0, k) + drawn + reads.slice(k + c.ch.length);
+      at = k + drawn.length;
+      chars.set(page, (chars.get(page) ?? []).filter((x) => x !== c));
+    }
+    const said = (t: string) => wordsOf(t).map((w) => w.w).join(" ");
+    if (entry && said(reads) !== said(f[11])) symbols.push({ page, word: f[11], reads, line: entry });
   }
   const lines = [...byKey.values()].filter((l) => l.text.trim());
-  return { lines, furniture: furnitureOf(lines, sizes), sizes };
+  return { lines, furniture: furnitureOf(lines, sizes), sizes, symbols };
 }
+
+/** A line set sideways: over 30 pt tall and three times as tall as wide. */
+const sideways = (l: Line) => l.bottom - l.top > 30 && l.bottom - l.top > 3 * (l.right - l.left);
 
 /** Each page's rows: lines whose tops lie within 3 pt, left to right, the
     pages in their order. */
@@ -126,8 +234,9 @@ function rowsOf(lines: Line[]): Line[][] {
     - a short line on a row half made of those: the head that names each
       page's section beside its page number, the Supreme Court's "(Slip
       Opinion)" beside its first page's head;
-    - text set sideways in the page's margin (arXiv's identifier), which the
-      parse never reads as text.
+    - text set sideways in the page's margin (arXiv's identifier, a
+      newsletter's section tab at the page's edge), which the parse never
+      reads as text.
     The parse's finder (lib/parse/pdf/furniture.ts) reads the same kinds of
     evidence from pdf.js's lines; this one reads pdftotext's boxes. */
 export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
@@ -135,8 +244,8 @@ export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
   const size = (l: Line) => sizes.get(l.page) ?? { width: 612, height: 792 };
   const needed = sizes.size <= 8 ? 2 : 3;
   for (const l of lines) {
-    const tall = l.bottom - l.top;
-    if (tall > 30 && tall > 3 * (l.right - l.left) && (l.right < 0.1 * size(l).width || l.left > 0.9 * size(l).width)) furniture.add(l);
+    const middle = (l.left + l.right) / 2;
+    if (sideways(l) && (middle < 0.1 * size(l).width || middle > 0.9 * size(l).width)) furniture.add(l);
   }
   // Each page's rows (lines whose tops lie within 3 pt, left to right), its
   // first and last two, and its first and last.
@@ -291,7 +400,7 @@ export function forgetText(pdf: string) {
 
 export function pdfText(pdf: string, pages?: [number, number]): PdfText {
   const range = pages ? ["-f", String(pages[0]), "-l", String(pages[1])] : [];
-  const raw = run(["-raw", "-enc", "UTF-8", ...range, pdf, "-"])
+  const raw = run(["-raw", "-nodiag", "-enc", "UTF-8", ...range, pdf, "-"])
     .split("\f")
     .map((page) => page.split("\n"));
   if (raw.length > 1 && raw.at(-1)?.join("").trim() === "") raw.pop();
@@ -299,7 +408,15 @@ export function pdfText(pdf: string, pages?: [number, number]): PdfText {
   if (!layout) layouts.set(pdf, (layout = layoutOf(pdf)));
   const inRange = (l: Line) => !pages || (l.page >= pages[0] && l.page <= pages[1]);
   const lines = layout.lines.filter(inRange);
-  return { first: pages?.[0] ?? 1, pages: new Set(lines.map((l) => l.page)).size, raw, lines, furniture: layout.furniture.filter(inRange), sizes: layout.sizes };
+  return {
+    first: pages?.[0] ?? 1,
+    pages: new Set(lines.map((l) => l.page)).size,
+    raw,
+    lines,
+    furniture: layout.furniture.filter(inRange),
+    sizes: layout.sizes,
+    symbols: layout.symbols.filter((s) => !pages || (s.page >= pages[0] && s.page <= pages[1])),
+  };
 }
 
 type Leaks = {
@@ -348,10 +465,12 @@ function picturedBy(pdf: PdfText, cand: Flat): (line: Line) => Extract<DocBlock,
     the PDF's other lines: a heading's number ("2 VHE OBSERVATIONS"), a
     caption's ("Table 3"), a paragraph that opens with a company's name.
     The candidate's title is the page's own line where the running head
-    repeats it, and a footnote's label or mark is no page number. A
-    furniture line at the page's edge inside a figure's region leaks too:
-    the crop draws it (a figure's region that reaches up to the running
-    head). */
+    repeats it, and a footnote's label or mark is no page number. Text set
+    sideways (a newsletter's tab) leaks nothing: the parse never reads it,
+    so its words in the candidate are the page's own (the contents entry
+    for the section the tab names). A furniture line at the page's edge
+    inside a figure's region leaks too: the crop draws it (a figure's
+    region that reaches up to the running head). */
 function leaksOf(pdf: PdfText, furniture: Line[], cand: Flat): Leaks {
   const furnitureSet = new Set(furniture);
   const alone = aloneOnRow(pdf.lines);
@@ -372,7 +491,24 @@ function leaksOf(pdf: PdfText, furniture: Line[], cand: Flat): Leaks {
     const after = m.tok + k < unit.end ? cand.toks[m.tok + k].w : null;
     return (before !== null && inLine([before, ...words[x]])) || (after !== null && inLine([...words[x], after]));
   };
-  const matches = furnitureMatches(cand, words, false, false).map((list, x) => list.filter((m) => cand.blocks[cand.units[m.unit].block].kind !== "title" && !beside(m, x)));
+  const atEdges = furnitureMatches(cand, words, false, false);
+  // A heading made of running heads alone is the section's own title, which
+  // the running head repeats over the section's pages (a report's "第 1 節
+  // …" on every page, its heading once): its first such heading is the
+  // page's own words, where the text layer cannot read the title (a
+  // heading drawn as outlines).
+  const covered = new Map<number, Set<number>>();
+  atEdges.forEach((list, x) => {
+    for (const m of list) for (let t = m.tok; t < m.tok + words[x].length; t++) covered.set(m.unit, (covered.get(m.unit) ?? new Set<number>()).add(t));
+  });
+  const titled = (unit: number) => {
+    const u = cand.units[unit];
+    return cand.blocks[u.block].kind === "heading" && u.end > u.first && (covered.get(unit)?.size ?? 0) === u.end - u.first;
+  };
+  const matches = atEdges.map((list, x) => {
+    const own = list.find((m) => titled(m.unit));
+    return list.filter((m) => m !== own && cand.blocks[cand.units[m.unit].block].kind !== "title" && !beside(m, x));
+  });
   // A crop shows a running head, a running foot, or a page number: a
   // furniture line at its page's edge (no other line above a head, none
   // below a foot) inside a figure's region. A chart's label a run of pages
@@ -392,7 +528,9 @@ function leaksOf(pdf: PdfText, furniture: Line[], cand: Flat): Leaks {
   let leaked = 0;
   let leaks = 0;
   const found: Leaks["found"] = [];
+  const flat = new Set(furniture.filter((f) => !sideways(f)).map((f) => f.text.trim()));
   strings.forEach((text, x) => {
+    if (!flat.has(text)) return;
     const inPictures = pictured.get(text) ?? 0;
     const excess = Math.max(0, matches[x].length - (others.get(normText(text)) ?? 0)) + inPictures;
     if (excess <= 0) return;
@@ -519,18 +657,37 @@ export function borderScore(word: { words: string; sides: Side[] }[], cand: Flat
 
 /** The import's look, where each check applies: its inline formulas drawn
     at their words' size (within 5%), its crops at their printed width, a
-    Word file's borders. */
-export type LookScores = { formulas: number | null; figures: number | null; borders: number | null; score: number | null; misses: string[] };
+    Word file's borders, and against the page (a PDF's, a Word file's
+    rendering; drawn.ts) the space around its displays, its tables' row
+    heights, and its list markers' places. */
+export type LookScores = {
+  formulas: number | null;
+  figures: number | null;
+  borders: number | null;
+  displays: number | null;
+  rows: number | null;
+  markers: number | null;
+  score: number | null;
+  misses: string[];
+};
 
-export function lookScores(cand: Flat, input: { page?: Box; setup?: PageSetup; word?: { words: string; sides: Side[] }[] }): LookScores {
+export function lookScores(
+  cand: Flat,
+  input: { page?: Box; setup?: PageSetup; word?: { words: string; sides: Side[] }[]; rich?: RichNode; parse?: Doc; pdf?: PdfText; placed?: number[][] },
+): LookScores {
   const inline = cand.math.some((m) => !m.display);
   const formulas = inline ? (Math.abs(formulaScale() - 1) <= 0.05 ? 1 : 0) : null;
   const widths = input.page && input.setup ? figureWidths(cand, input.page, input.setup) : null;
   const figures = widths && widths.total > 0 ? widths.right / widths.total : null;
   const borders = input.word ? borderScore(input.word, cand) : null;
-  const parts = [formulas, figures, borders].filter((x): x is number => x !== null);
-  const misses = [...(formulas === 0 ? [`inline formulas drawn at ${formulaScale()} times their words' size`] : []), ...(widths?.misses ?? [])];
-  return { formulas, figures, borders, score: parts.length > 0 ? parts.reduce((a, b) => a + b, 0) / parts.length : null, misses };
+  // Against the page (a PDF's, a Word file's rendering): the page editor's own drawing of what the page sets.
+  const gaps = input.rich && input.parse && input.pdf ? displayGaps(input.rich, input.parse, input.pdf) : null;
+  const rows = input.placed && input.pdf ? rowHeights(cand, input.placed, input.pdf) : null;
+  const markers = input.rich ? markerPlaces(input.rich) : null;
+  const all = { formulas, figures, borders, displays: gaps?.score ?? null, rows: rows?.score ?? null, markers: markers?.score ?? null };
+  const parts = Object.values(all).filter((x): x is number => x !== null);
+  const misses = [...(formulas === 0 ? [`inline formulas drawn at ${formulaScale()} times their words' size`] : []), ...(widths?.misses ?? []), ...(gaps?.misses ?? []), ...(rows?.misses ?? []), ...(markers?.misses ?? [])];
+  return { ...all, score: parts.length > 0 ? parts.reduce((a, b) => a + b, 0) / parts.length : null, misses };
 }
 
 export type FreeScores = {
@@ -552,9 +709,51 @@ export type FreeScores = {
   garbles: { count: number; score: number; found: { kind: string; match: string; unit: number; text: string }[] };
   /** Display equations as LaTeX the glyph check passes, a crop at half, over the displays checked and cropped (mathPart). */
   math: number | null;
+  /** The checks against the page's lines and fonts (layout.ts). */
+  layout: LayoutScores | null;
   /** The import's look (lookScores); none for a parse. */
   look: LookScores | null;
 };
+
+/** Whether some of these runs of words hold a text's words in their order:
+    half of its runs of three words (of two, for a shorter text) stand in
+    one of them. */
+function heldBy(sequences: string[][]): (text: string) => boolean {
+  const runs = new Set<string>();
+  for (const words of sequences) {
+    for (let i = 0; i < words.length; i++) {
+      runs.add(words.slice(i, i + 2).join(" "));
+      runs.add(words.slice(i, i + 3).join(" "));
+    }
+  }
+  return (text) => {
+    const words = wordsOf(text).map((w) => w.w);
+    const k = words.length >= 3 ? 3 : Math.min(2, words.length);
+    if (k === 0) return true;
+    const keys = words.length <= k ? [words.join(" ")] : Array.from({ length: words.length - k + 1 }, (_, i) => words.slice(i, i + k).join(" "));
+    return keys.filter((key) => runs.has(key)).length * 2 >= keys.length;
+  };
+}
+
+/** Whether the candidate's words hold a line's words in their order (heldBy its units). */
+function heldLines(cand: Flat): (text: string) => boolean {
+  return heldBy(cand.units.map((unit) => cand.toks.slice(unit.first, unit.end).map((t) => t.w)));
+}
+
+/** Whether a text's words stand on the pages the text layer reads, running
+    heads and feet aside (heldBy its lines). */
+function onThePages(pdf: PdfText): (text: string) => boolean {
+  const furniture = new Set(pdf.furniture);
+  return heldBy(pdf.lines.filter((l) => !furniture.has(l)).map((l) => wordsOf(l.text).map((w) => w.w)));
+}
+
+/** A title the parse takes from a later page than the first (past an
+    archive's notice on the first): its words stand on the scored pages
+    (`scored`) and not on the first page (`first`), so it is theirs. */
+export function laterTitle(scored: PdfText, first: PdfText): (title: string) => boolean {
+  const [here, there] = [onThePages(scored), onThePages(first)];
+  return (title) => here(title) && !there(title);
+}
 
 function countWords(texts: string[]): Map<string, number> {
   const out = new Map<string, number>();
@@ -621,7 +820,7 @@ export function mathPart(glyphs: Pick<GlyphScores, "checked" | "passed" | "mathI
   return glyphs.checked > 0 ? (glyphs.passed + glyphs.mathImages / 2) / (glyphs.checked + glyphs.mathImages) : null;
 }
 
-export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word = false, look: LookScores | null = null): FreeScores {
+export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word = false, look: LookScores | null = null, layout: LayoutScores | null = null): FreeScores {
   const { words: printed, glyphs: formulaGlyphs, raised } = printedWords(cand, !word);
   const candBag = countWords([]);
   for (const w of printed) candBag.set(w, (candBag.get(w) ?? 0) + 1);
@@ -638,12 +837,16 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
       items.set(key, (items.get(key) ?? 0) + 1);
     }
   }
-  // A diagram's labels are the figure's, not words to cover: short lines
-  // (three words at most, a CJK character a quarter word) inside a region
-  // the candidate shows as a figure. A paragraph shown as a picture still is
-  // (its lines are long); a display's crop shows every line in it.
+  // A figure's words are its picture's, not words to cover: the lines inside
+  // a region the candidate shows as a figure (a chart's labels, a diagram's
+  // boxes, a slide's picture), unless the candidate's words hold the line
+  // (a caption inside its figure's region, a paragraph the region takes in);
+  // a short line (three words at most, a CJK character a quarter word) or a
+  // display's crop's line whatever it holds (a label that leaks into the
+  // text is extra). Prose a display's crop shows is its own check (layout.ts).
   const shown = picturedBy(pdf, cand);
-  const labels = pdf.lines.filter((l) => shown(l).some((f) => f.mathImage !== undefined || labelWords(l.text) <= 3));
+  const held = heldLines(cand);
+  const labels = pdf.lines.filter((l) => shown(l).some((f) => f.mathImage !== undefined || labelWords(l.text) <= 3 || !held(l.text)));
   pdf.raw.forEach((rawLines, p) => {
     const lines = rawLines.map((line) => {
       // A raised footnote label runs into its note's first word ("1All amounts…"),
@@ -655,7 +858,13 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
       items.set(opening(hollow[1]), left - 1);
       return hollow[1];
     });
-    const drop = countWords([...pdf.furniture, ...labels].filter((f) => f.page === pdf.first + p).map((f) => f.text));
+    const dropped = [...pdf.furniture, ...labels].filter((f) => f.page === pdf.first + p);
+    const drop = countWords(dropped.map((f) => f.text));
+    // A word read out of a symbol font counts as the page draws it (◆ read "u" is no word; Symbol's "a" is α),
+    // on a line that is a word to cover.
+    const symbols = pdf.symbols.filter((s) => s.page === pdf.first + p && !dropped.includes(s.line));
+    for (const s of symbols) for (const w of wordsOf(s.word)) drop.set(w.w, (drop.get(w.w) ?? 0) + 1);
+    for (const s of symbols) for (const w of wordsOf(s.reads)) expected.set(w.w, (expected.get(w.w) ?? 0) + 1);
     for (let i = 0; i + 1 < lines.length; i++) {
       const m = /(\p{L}+)-\s*$/u.exec(lines[i]);
       // A title in capitals breaks its words in capitals: "COM-", "PARED".
@@ -742,6 +951,9 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
     numbers: Math.max(0, 1 - numberCount / Math.max(1, pdf.pages)),
     garbles: Math.max(0, 1 - garbleExcess / (5 + cand.toks.length / 100)),
     math: glyphs ? mathPart(glyphs) : null,
+    order: layout?.order ?? null,
+    structure: layout?.structure ?? null,
+    layout: layout?.layout ?? null,
     look: look?.score ?? null,
   };
   let sum = 0;
@@ -768,6 +980,7 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
     numberLines: { count: numberCount, score: parts.numbers ?? 0, found: numbers },
     garbles: { count: garbleExcess, score: parts.garbles ?? 0, found: garbled },
     math: parts.math,
+    layout,
     look,
   };
 }

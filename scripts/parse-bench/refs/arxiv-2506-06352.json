@@ -744,9 +744,9 @@
      "text": "We will assume a set "
     },
     {
-     "text": "O",
+     "text": "𝕆",
      "latex": "\\mathbb{O}",
-     "mathml": "<math display=\"inline\"><mi>O</mi></math>"
+     "mathml": "<math display=\"inline\"><mi>𝕆</mi></math>"
     },
     {
      "text": " of possible outcomes that is finite but has cardinality "
@@ -760,17 +760,17 @@
      "text": ". This defines a set "
     },
     {
-     "text": "𝒯O",
-     "latex": "\\mathcal{T}{O}",
-     "mathml": "<math display=\"inline\"><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>O</mi></mrow></math>"
+     "text": "𝒯𝕆",
+     "latex": "\\mathcal{T}_{\\mathbb{O}}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒯</mi><mi>𝕆</mi></msub></math>"
     },
     {
      "text": " of all finite decision trees (that is, decision trees with a finite number of nodes) terminating in outcomes from "
     },
     {
-     "text": "O",
+     "text": "𝕆",
      "latex": "\\mathbb{O}",
-     "mathml": "<math display=\"inline\"><mi>O</mi></math>"
+     "mathml": "<math display=\"inline\"><mi>𝕆</mi></math>"
     },
     {
      "text": ". A "
@@ -907,17 +907,17 @@
      "text": ". This means that there is some utility function "
     },
     {
-     "text": "u:O→R",
+     "text": "u:𝕆→ℝ",
      "latex": "u:\\mathbb{O}\\to\\mathbb{R}",
-     "mathml": "<math display=\"inline\"><mrow><mi>u</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mi>O</mi><mo stretchy=\"false\">→</mo><mi>R</mi></mrow></mrow></math>"
+     "mathml": "<math display=\"inline\"><mrow><mi>u</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mi>𝕆</mi><mo stretchy=\"false\">→</mo><mi>ℝ</mi></mrow></mrow></math>"
     },
     {
      "text": " such that, in any decision tree "
     },
     {
-     "text": "t∈𝒯O",
-     "latex": "t\\in\\mathcal{T}{O}",
-     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>∈</mo><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>O</mi></mrow></mrow></math>"
+     "text": "t∈𝒯𝕆",
+     "latex": "t\\in\\mathcal{T}_{\\mathbb{O}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>∈</mo><msub><mi>𝒯</mi><mi>𝕆</mi></msub></mrow></math>"
     },
     {
      "text": ", she will follow a strategy "
@@ -976,9 +976,9 @@
      "text": " Since we are assuming that the set of possible outcomes "
     },
     {
-     "text": "O",
+     "text": "𝕆",
      "latex": "\\mathbb{O}",
-     "mathml": "<math display=\"inline\"><mi>O</mi></math>"
+     "mathml": "<math display=\"inline\"><mi>𝕆</mi></math>"
     },
     {
      "text": " is finite, utilities are necessarily bounded, and without loss of generality we can think of them as confined to the unit interval "

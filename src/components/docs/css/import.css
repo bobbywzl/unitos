@@ -122,6 +122,11 @@
 .docs-prose [data-page-joined]::before {
   content: none;
 }
+/* A page the PDF leaves unnumbered draws no label. */
+.docs-prose [data-page-label=""]:not([data-page-labels])::before,
+.docs-prose [data-page-labels=""]::before {
+  content: none;
+}
 /* A table holding a page start lets its label out into the margin. */
 .docs-shell .docs-prose .tableWrapper:has([data-page-cell]) {
   overflow-x: visible;
@@ -198,6 +203,45 @@
 .docs-prose [data-border-left]:not([data-border-top], [data-border-bottom]) + [data-border-left]:not([data-border-top], [data-border-bottom]) {
   margin-top: 0 !important;
   padding-top: var(--docs-bar-top, 0pt) !important;
+}
+/* A run-in heading (an import's bold lead, "1.2.3. Two examples."; its
+   runIn) stands at the start of the paragraph under it, on that
+   paragraph's first line, a word space before its words. It stays a
+   heading: the outline and the paragraph index list it. */
+.docs-prose :is(h1, h2, h3, h4, h5, h6)[data-run-in] {
+  float: left;
+  margin: 0 0.3em 0 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+/* A PDF's and a Word file's display equation takes the space its page
+   leaves around it (lib/docs/import.ts: the space after the block over it,
+   and its own space after, insert/math.ts), none of its own: the page
+   editor's margin and padding and KaTeX's 1 em margin stacked on it set
+   each display far from the words it belongs to. */
+.docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose .docs-math-block {
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose .docs-math-block > .katex-display {
+  margin: 0;
+}
+/* A table's cells padded as its page pads them (a Word file's cell margins:
+   the table's cellPadding, insert/table.ts). A PDF's and a Word file's
+   cells otherwise leave no room over and under their words, as Word and TeX
+   set a cell: the page editor's 5 pt all round drew their rows far taller
+   than the page's. A cell's own padding wins. */
+.docs-shell .docs-prose :is(td, th) {
+  padding: var(--docs-cell-padding, 5pt);
+}
+.docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose :is(td, th) {
+  padding: var(--docs-cell-padding, 0 5pt);
+}
+/* A table set in a size of its own (an import's cellSize): its cells'
+   paragraphs take it, so each line is as tall as its words. */
+.docs-prose [data-cell-size] :is(td, th) {
+  font-size: var(--docs-cell-size);
 }
 /* A pageless table fills the text column: column widths (an import's,
    lib/docs/import-table.ts) are shares of the width, as a fixed layout

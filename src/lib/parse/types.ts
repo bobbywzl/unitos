@@ -59,12 +59,14 @@ export type StyleSpan = {
 export type TextFont = { family: string; size: number; bold?: true; italic?: true; color?: string };
 
 // An indent as the page sets it, in points, the way the page editor stores a
-// paragraph's (indentLeft, indentFirstLine): left, how far in from the
-// column's left edge the lines start; first, where the first line starts
-// against them (a first-line indent; negative, a hanging indent). A list
-// depth whose words follow its marker on the first line (first ≥ 0) also
-// says where they start, from the marker's start (hang).
-export type Indent = { left: number; first: number; hang?: number };
+// paragraph's (indentLeft, indentFirstLine, indentRight): left, how far in
+// from the column's left edge the lines start; first, where the first line
+// starts against them (a first-line indent; negative, a hanging indent);
+// right, how far in from the column's right edge the lines end (a Word
+// paragraph's w:ind right). A list depth whose words follow its marker on
+// the first line (first ≥ 0) also says where they start, from the marker's
+// start (hang).
+export type Indent = { left: number; first: number; hang?: number; right?: number };
 
 // One inline formula over block plain text: the text keeps the formula's
 // readable characters (σ(𝒜α)), latex is the formula (\sigma(\mathcal{A}_\alpha)).
@@ -199,7 +201,8 @@ export type ParsedDocument = {
   pageSize?: { width: number; height: number };
   // PDF parses: the PDF's own page labels, one per page ("xii", "1043"),
   // only when the PDF names its pages otherwise than 1..n. A page the PDF
-  // leaves unnamed reads as its number. Stored on Document.pageLabels.
+  // leaves unnamed among named ones has the number its neighbors imply, or
+  // none (""). Stored on Document.pageLabels.
   pageLabels?: string[];
   // PDF parses: the body's look (the import's Normal text), and the title's
   // look and alignment when the title came from the page (the import's
@@ -211,6 +214,10 @@ export type ParsedDocument = {
   // two centered lines), when it has more than one. `title` stays one line:
   // it is the document's name.
   titleLines?: string[];
+  // PDF parses: the PDF's page the title stands on, when words of an
+  // earlier page come before it (an archive's notice page, a deck's first
+  // slide). The import's Title opens that page.
+  titlePage?: number;
 };
 
 /** Document.references as stored Json → typed entries. Defensive: bad rows drop. */
@@ -370,7 +377,28 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     takes in a running head, a running foot, a page number, or a footnote.
 //     Word: paragraph borders, indents, the space between list items, and
 //     cell borders.
+// 23: the parse loop's round 4 (SPEC.md §30, §31) — PDF: a page no single
+//     cut reads may still hold one band of columns, and a side column reads
+//     beside the paragraph it stands by; a paragraph cut by a page or column
+//     break joins its other half past the floats and short lines between
+//     them, and "et al." ends no sentence; a double-spaced page reads at its
+//     own leading. A symbol font with no Unicode map reads by its codes, a
+//     face by the shape its name says, and capitals drawn at 0.8 of their
+//     size are small caps. A banner is a graphic, a caption in a side column
+//     is its graphic's, and a chart's tick labels are in its crop. A title
+//     wraps onto lines of its size and look and stands on the title page,
+//     the lines before it paragraphs; heading levels follow the numbered
+//     headings' sizes; a run-in lead is a run-in heading. A box to tick
+//     reads ☐; a grid open at one side closes; a grid the page does not show
+//     is no table; a merged cell whose words stand in columns is those
+//     columns' cells; a ruled row keeps its height; a scan's printer's mark
+//     drops. STIX's size fonts read; a lone italic letter is a formula where
+//     the page sets math, and small tight letters after a formula are its
+//     script; rows aligned at a relation join one display, and a label on a
+//     row of its own is the display's. Word: the right indent, a display's
+//     spacing, the cells' margins, and a paragraph's shading and the line
+//     between the paragraphs of a box.
 // Slides and sheets (SPEC.md §27) parse with their own parsers
 // (lib/parse/slides.ts, lib/parse/sheets.ts) and re-parse only on request:
 // they carry no version of their own.
-export const PARSER_VERSION = 22;
+export const PARSER_VERSION = 23;

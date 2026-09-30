@@ -4,7 +4,7 @@
 // math, the TeX math family).
 
 import type { Glyph } from "@/lib/parse/pdf/drawing";
-import { katexSizeGlyph, mathGlyph, openTypeGlyphs } from "@/lib/parse/pdf/math-fonts";
+import { isBbm, mathGlyph, openTypeGlyphs, sizeFontGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Flags } from "@/lib/parse/pdf/types";
 
 export const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
@@ -88,6 +88,111 @@ export function fontFlags(name: string | null): FontFlags {
   };
 }
 
+// ── Symbol fonts ────────────────────────────────────────────────────────────
+// A symbol font with no Unicode map: pdf.js reads each code as the letter
+// of its number (a slide's Wingdings bullets ➢ and ✓ read "Ø" and "ü", and
+// their lists were lost; a paper's ✉ in MarVoSym read "B"; Nature's
+// "(v′ = 0)" in Advent's math symbols read "ðv0 = 0Þ") or as a private-use
+// character U+F000 past it (a newsletter's end mark ■ in Wingdings, a
+// report's α in Symbol). The code names the symbol each font draws.
+
+type SymbolFont = "symbol" | "wingdings" | "dingbats" | "marvosym" | "advent";
+const SYMBOL_FONTS: [RegExp, SymbolFont][] = [
+  [/^(?:Symbol(?:MT)?|StandardSym(?:L|bolsPS))$/i, "symbol"],
+  [/^Wingdings(?:-Regular)?$/i, "wingdings"],
+  [/^(?:ITC)?(?:Zapf)?Dingbats$/i, "dingbats"],
+  [/^MarVoSym$/i, "marvosym"],
+  [/^AdvMacMthSy/i, "advent"],
+];
+
+/** The symbol font a font's name (its subset prefix removed) names. */
+export function symbolFont(base: string): SymbolFont | null {
+  return SYMBOL_FONTS.find(([re]) => re.test(base))?.[1] ?? null;
+}
+
+// Adobe's Symbol, codes 0x20–0x7E and 0xA0–0xFE; "\0" is no character.
+const SYMBOL_CHARS = Array.from(
+  " !∀#∃%&∋()∗+,−./0123456789:;<=>?≅ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ[∴]⊥_‾αβχδεφγηιϕκλμνοπθρστυϖωξψζ{|}∼" +
+    "€ϒ′≤⁄∞ƒ♣♦♥♠↔←↑→↓°±″≥×∝∂•÷≠≡≈…⏐⎯↵ℵℑℜ℘⊗⊕∅∩∪⊃⊇⊄⊂⊆∈∉∠∇®©™∏√⋅¬∧∨⇔⇐⇑⇒⇓◊⟨®©™∑⎛⎜⎝⎡⎢⎣⎧⎨⎩⎪\0⟩∫⌠⎮⌡⎞⎟⎠⎤⎥⎦⎫⎬⎭",
+);
+// Wingdings, codes 0x20–0xFF. Where a common character draws the same
+// shape, it stands for the later Unicode twin: ➢ for the arrowhead bullet,
+// ✓ for the check, ☐ for the empty box, → for the arrows.
+const WINGDINGS_CHARS = Array.from(
+  " ✏✂✁👓🔔📖🕯☎✆✉🖃📪📫📬📭📁📂📄🗏🗐🗄⌛🖮🖰🖲🖳🖴🖫🖬✇✍" +
+  "🖎✌👌👍👎☜☞☝☟🖐☺😐☹💣☠🏳🏱✈☼💧❄🕆✞🕈✠✡☪☯ॐ☸♈♉" +
+  "♊♋♌♍♎♏♐♑♒♓🙰🙵●❍■□◻❑❒⬧⧫◆❖⬥⌧⮹⌘🏵🏶🙶🙷\0" +
+  "⓪①②③④⑤⑥⑦⑧⑨⑩⓿❶❷❸❹❺❻❼❽❾❿🙢🙠🙡🙣🙞🙜🙝🙟·•" +
+  "▪○◯◯◉◎◯▪☐\0✦★✶✴✹✵⯐⌖⟡⌑⯑✪✰🕐🕑🕒🕓🕔🕕🕖🕗🕘" +
+  "🕙🕚🕛⮰⮱⮲⮳⮴⮵⮶⮷🙪🙫🙕🙔🙗🙖🙐🙑🙒🙓⌫⌦⮘➢⮙⮛⮈⮊⮉⮋←" +
+  "→↑↓↖↗↙↘⬅➔⬆⬇⬉⬈⬋⬊⇦⇨⇧⇩⬄⇳⬀⬁⬃⬂🢬🢭✗✓☒☑\0",
+);
+// MarVoSym: \Letter.
+const MARVOSYM_CHARS: Record<number, string> = { 0x42: "✉" };
+// Advent 3B2's math symbols, the codes seen drawn: the prime, the angle
+// brackets, the bar, and the parentheses.
+const ADVENT_CHARS: Record<number, string> = { 0x30: "′", 0x68: "⟨", 0x69: "⟩", 0x6a: "|", 0xde: ")", 0xf0: "(" };
+// ZapfDingbats: runs of the Dingbats block, and the symbols Unicode had
+// coded before it.
+const DINGBATS_CHARS: Record<number, string> = {
+  0x25: "☎", 0x2a: "☛", 0x2b: "☞", 0x48: "★", 0x6c: "●", 0x6e: "■", 0x73: "▲", 0x74: "▼", 0x75: "◆", 0x77: "◗",
+  0xa8: "♣", 0xa9: "♦", 0xaa: "♥", 0xab: "♠", 0xd5: "→", 0xd6: "↔", 0xd7: "↕",
+};
+function dingbat(code: number): string | undefined {
+  const at = (first: number, start: number) => String.fromCodePoint(start + code - first);
+  if (DINGBATS_CHARS[code]) return DINGBATS_CHARS[code];
+  if (code >= 0x21 && code <= 0x7e) return at(0x20, 0x2700);
+  if (code >= 0xa1 && code <= 0xa7) return at(0xa0, 0x2760);
+  if (code >= 0xac && code <= 0xb5) return at(0xac, 0x2460);
+  if (code >= 0xb6 && code <= 0xd4) return at(0xb6, 0x2776);
+  if (code >= 0xd8 && code <= 0xef) return at(0xd8, 0x2798);
+  if (code >= 0xf1 && code <= 0xfe) return at(0xf1, 0x27b1);
+  return undefined;
+}
+
+function symbolChar(font: SymbolFont, code: number): string | undefined {
+  let ch: string | undefined;
+  if (font === "symbol") ch = code >= 0x20 && code <= 0x7e ? SYMBOL_CHARS[code - 0x20] : code >= 0xa0 ? SYMBOL_CHARS[code - 0xa0 + 95] : undefined;
+  else if (font === "wingdings") ch = code >= 0x20 ? WINGDINGS_CHARS[code - 0x20] : undefined;
+  else if (font === "dingbats") ch = dingbat(code);
+  else if (font === "advent") ch = ADVENT_CHARS[code];
+  else ch = MARVOSYM_CHARS[code];
+  return ch && ch !== "\0" ? ch : undefined;
+}
+
+// Windows' letters at codes 0x80–0x9F, as pdf.js reads them.
+const WIN_ANSI_HIGH = Array.from("€\0‚ƒ„…†‡ˆ‰Š‹Œ\0Ž\0\0‘’“”•–—˜™š›œ\0žŸ");
+// A glyph pdf.js read as its code's letter or a private-use character.
+const readAsCode = (g: Glyph) =>
+  g.unicode === String.fromCharCode(g.code) ||
+  g.unicode === String.fromCharCode(0xf000 + g.code) ||
+  (g.code >= 0x80 && g.code < 0xa0 && g.unicode === WIN_ANSI_HIGH[g.code - 0x80]);
+
+// The code a character stands for where it reads the code, not the
+// symbol: a private-use character U+F000 past it; a Latin-1 letter in a
+// font that draws no letters (a subset's own map wrote a Wingdings
+// arrowhead, code 0x21 in the subset, as "Ø", its code in the whole font)
+// and a Latin letter in Symbol, which draws Greek ones; any other where a
+// glyph shows pdf.js read its code so (read).
+function codeOf(ch: string, font: SymbolFont, read: Set<string>): number | null {
+  const cp = ch.codePointAt(0) ?? 0;
+  if (cp >= 0xf020 && cp <= 0xf0ff) return cp - 0xf000;
+  if (cp > 0x20 && cp <= 0xff) return font !== "symbol" || /[A-Za-z]/.test(ch) || read.has(ch) ? cp : null;
+  const high = WIN_ANSI_HIGH.indexOf(ch);
+  return high >= 0 && read.has(ch) ? 0x80 + high : null;
+}
+
+/** A symbol font's text as the page draws it: each character that reads
+    the font's code becomes the symbol the font draws at that code. A
+    character a Unicode map read stays. glyphs: the item's glyphs. */
+export function symbolText(font: SymbolFont, str: string, glyphs: Glyph[] | undefined): string {
+  const read = new Set((glyphs ?? []).filter(readAsCode).map((g) => g.unicode));
+  return Array.from(str, (ch) => {
+    const code = codeOf(ch, font, read);
+    return (code !== null ? symbolChar(font, code) : undefined) ?? ch;
+  }).join("");
+}
+
 // ── Math families ───────────────────────────────────────────────────────────
 // TeX's math fonts keep one layout of character codes per family, whatever
 // the size or the producer: the code names the symbol (math-fonts.ts). The
@@ -138,7 +243,8 @@ export type MathVariant = "bold" | "bf" | "sf" | "tt";
 type UnicodeFont =
   | { kind: "katex"; face: string; style: string }
   | { kind: "opentype"; name: string }
-  | { kind: "tex"; italic: boolean; bullets: boolean; sized: boolean }
+  | { kind: "size"; name: string }
+  | { kind: "tex"; italic: boolean; bullets: boolean; unread: boolean; blackboard: boolean }
   | null;
 
 // Math fonts whose text layer reads right but whose codes follow no TeX
@@ -151,9 +257,18 @@ type UnicodeFont =
 // OpenSymbol also draws a list's bullets and dashes: those are no math.
 // MathTime's extension font (MTEX) numbers its glyphs anew in each PDF
 // (Springer's ∑ at 0x08): each is a big operator, a sized delimiter, or a
-// piece, and stays unread.
-const UNICODE_TEX_RE = /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MTEX|MnSymbol|EURM|OpenSymbol)/;
+// piece, and stays unread. So does each glyph of MathDesign's symbol fonts
+// A and B, whose layouts the tables lack, but for font A's capitals at
+// their own codes, which are \mathbb's: the text layer reads them as "O"
+// and "R" (arXiv 2506.06352's u: 𝕆 → ℝ).
+const UNICODE_TEX_RE =
+  /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MTEX|MnSymbol|EURM|OpenSymbol|MathDesign-.+-MathDesignSymbol[AB]-)/;
 const ITALIC_MATH_RE = /Italic|MI(B|\d)*$|txmia|MathMI|^EURM/;
+// STIX's first fonts set a formula's sized delimiters, big operators, and
+// the pieces of tall delimiters in five size fonts: each glyph reads by the
+// size font tables, its box its own (OpenStax's f(x) with its tall
+// parentheses read as a picture).
+const STIX_SIZE_RE = /^STIXSize(One|Two|Three|Four|Five)Sym-Regular$/;
 
 // OpenType math fonts by name (Latin Modern's Type 1 math fonts are TeX's
 // own families; MathDesign's are 8-bit TeX encodings).
@@ -168,9 +283,17 @@ function unicodeFont(base: string): UnicodeFont {
       ? { kind: "katex", face: katex[1], style: katex[2] }
       : OPENTYPE_MATH_RE.test(base)
         ? { kind: "opentype", name: base }
-        : UNICODE_TEX_RE.test(base)
-          ? { kind: "tex", italic: ITALIC_MATH_RE.test(base), bullets: /^OpenSymbol/.test(base), sized: /^MTEX/.test(base) }
-          : null;
+        : STIX_SIZE_RE.test(base)
+          ? { kind: "size", name: base }
+          : UNICODE_TEX_RE.test(base)
+            ? {
+                kind: "tex",
+                italic: ITALIC_MATH_RE.test(base),
+                bullets: /^OpenSymbol/.test(base),
+                unread: /^MTEX|MathDesignSymbol/.test(base),
+                blackboard: /MathDesignSymbolA/.test(base),
+              }
+            : null;
     fontKinds.set(base, kind);
   }
   return kind;
@@ -327,7 +450,7 @@ function katexChar(char: string, face: string, style: string): Tex | null {
     case "Typewriter":
       return ascii !== null ? { family: "ot1", code: ascii, variant: face === "Typewriter" ? "tt" : "sf" } : texOf(char, ["ot1"]);
     default: {
-      const sized = /^Size\d$/.test(face) ? katexSizeGlyph(`${face}-${style}`, char) : null;
+      const sized = /^Size\d$/.test(face) ? sizeFontGlyph(`${face}-${style}`, char) : null;
       return sized ? { family: sized.family, code: sized.code, box: sized.box } : null;
     }
   }
@@ -367,6 +490,34 @@ function texTextFonts(glyphs: Glyph[]) {
   }
 }
 
+/** A Type 3 font with no name: pdfTeX embeds a Metafont font so, as a
+    bitmap. */
+export const isUnnamedFont = (base: string) => /^Type3/i.test(base);
+
+// bbm (\mathbbm) is a Metafont font of blackboard letters, and the text
+// layer reads its letters as plain ones: arXiv 2410.04586's 𝕜 and ℕ read
+// \mathrm{k} and \mathrm{N} in 24 formulas, a wrong formula the glyph check
+// cannot see. A font with no name whose capitals and k have bbm's advances
+// at one of its design sizes sets \mathbb (msbm's codes; its k is \Bbbk).
+// Any other glyph of a font with no name is no text atom (layout.ts), so a
+// formula that holds one fails.
+function bbmLetters(glyphs: Glyph[]) {
+  const fonts = new Map<string, Glyph[]>();
+  for (const g of glyphs) {
+    if (g.family !== null || !isUnnamedFont(g.base) || g.size <= 0 || !((g.code >= 0x41 && g.code <= 0x5a) || g.code === 0x6b)) continue;
+    const list = fonts.get(g.font);
+    if (list) list.push(g);
+    else fonts.set(g.font, [g]);
+  }
+  for (const letters of fonts.values()) {
+    if (!isBbm(letters.map((g) => ({ char: String.fromCharCode(g.code), advance: g.w / g.size })))) continue;
+    for (const g of letters) {
+      g.family = "msb";
+      if (g.code === 0x6b) g.code = 0x7c;
+    }
+  }
+}
+
 /** A font's lean and weight by its name (fontFlags), read once a font: a
     formula's letter in an italic one is a math letter, not \mathrm, and in
     a bold one \mathbf (layout.ts). */
@@ -389,6 +540,7 @@ export const isBoldFont = (base: string) => fontLook(base).bold;
     knows keeps no family: a formula it is in fails the check. */
 export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   texTextFonts(glyphs);
+  bbmLetters(glyphs);
   for (const g of glyphs) {
     if (g.family !== null) continue;
     const font = unicodeFont(g.base);
@@ -400,7 +552,10 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
     if (first === second && more.length === 0 && /\p{L}/u.test(first)) g.unicode = first;
     let tex: Tex | null | undefined;
     if (font.kind === "katex") tex = katexChar(g.unicode, font.face, font.style);
-    else if (font.kind === "tex") tex = font.sized ? null : texWorldChar(g.unicode, font.italic, font.bullets);
+    else if (font.kind === "size") tex = sizeFontGlyph(font.name, g.unicode);
+    else if (font.kind === "tex") {
+      tex = font.blackboard && g.code >= 0x41 && g.code <= 0x5a ? { family: "msb", code: g.code } : font.unread ? null : texWorldChar(g.unicode, font.italic, font.bullets);
+    }
     else {
       tex = openTypeSized(g, font.name);
       if (tex === undefined) tex = openTypeChar(g.unicode);
@@ -418,7 +573,10 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   // fonts set no digit, its digits from the text's font. Such a glyph may
   // join the math beside it (math/zones.ts). Where a math font sets them,
   // the text's are prose: a theorem's italic words, and a table's "53.4"
-  // before its gain set in math (arXiv 2411.19946).
+  // before its gain set in math (arXiv 2411.19946). A page with no glyph of
+  // a math font has no formula to take them: its italic letters and its
+  // digits are prose.
+  if (!glyphs.some((g) => (g.family !== null && g.family !== "ot1") || isUnreadMath(g))) return glyphs;
   const latin = glyphs.some((g) => g.family === "oml" && /^[A-Za-z]$/.test(mathGlyph("oml", g.code)?.unicode ?? ""));
   const digits = glyphs.some((g) => g.family !== null && /^[0-9]$/.test(g.unicode));
   for (const g of glyphs) {
@@ -429,12 +587,14 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
 }
 
 /** A glyph of a math font read by its character that no table reads (a
-    big operator, a sized delimiter, a piece of one: texWorldChar): it is
-    math, and the formula it stands in fails the check. Read as text, it
+    big operator, a sized delimiter, a piece of one: texWorldChar), or a
+    glyph of a size font the tables lack: it is math, and the formula it
+    stands in fails the check. Read as text, it
     cut its formula in two, and each half passed (Springer's matrices read
     "−1 1 0" as −11 0). OpenSymbol's bullets are no math. */
 export function isUnreadMath(g: Glyph): boolean {
   const font = unicodeFont(g.base);
+  if (font?.kind === "size") return g.unicode.trim() !== "";
   return font?.kind === "tex" && g.unicode.trim() !== "" && !(font.bullets && /^[•–—…‰·]$/.test(g.unicode));
 }
 
@@ -512,6 +672,12 @@ function arrowOf(pieces: ArrowPiece[]): string | null {
   return null;
 }
 
+// Where a composite (↦, ⟹, ≠) a glyph reads as ends: its last part's end.
+// ↦'s bar is 0 wide, and a line ending in ↦ ended 10 pt short of its
+// column's edge. The glyphs keep their own boxes: the layout reads the
+// parts by their overlap.
+const compositeEnd = new WeakMap<Glyph, number>();
+
 // The text of the page's glyphs where it is not the text layer's: every glyph
 // of a math family, and the glyphs of a composite or an accented letter. A
 // glyph that reads as nothing (a composite's second glyph, a placed accent)
@@ -523,7 +689,9 @@ export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
     const entry = mathGlyph(g.family, g.code);
     // A font read by its character reads as its text layer does: the
     // Math Guide's ∖ is no backslash, though TeX's code for both is one.
-    if (!entry || unicodeFont(g.base)?.kind === "tex") texts.set(g, g.unicode.replace(CONTROL_CHARS_RE, ""));
+    // A blackboard capital the text layer reads as a plain one is \mathbb's.
+    const font = unicodeFont(g.base);
+    if (!entry || (font?.kind === "tex" && !font.blackboard)) texts.set(g, g.unicode.replace(CONTROL_CHARS_RE, ""));
     else texts.set(g, entry.cls === "piece" ? (PIECE_TEXT[entry.piece ?? ""] ?? "") : entry.unicode);
   }
   const textOf = (g: Glyph) => texts.get(g) ?? g.unicode;
@@ -552,6 +720,7 @@ export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
   const inArrow = new Set<Glyph>();
   const fuse = (first: Glyph, text: string, rest: Glyph[]) => {
     texts.set(first, text);
+    compositeEnd.set(first, Math.max(first.x + first.w, ...rest.map((g) => g.x + g.w)));
     for (const g of rest) {
       texts.set(g, "");
       consumed.add(g);
@@ -671,8 +840,9 @@ export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
 // An item's text from its glyphs: each glyph's text, and a space where a
 // glyph starts a tenth of an em or more after the one before it ends —
 // pdf.js's own rule for a space inside an item. Glyphs that read as nothing
-// leave the item's box. Null when every glyph reads as nothing. Each glyph
-// keeps what it adds (Glyph.text), so a formula can end inside the item.
+// leave the item's box, but for a composite's parts. Null when every glyph
+// reads as nothing. Each glyph keeps what it adds (Glyph.text), so a
+// formula can end inside the item.
 export function itemText(glyphs: Glyph[], texts: Map<Glyph, string>): { str: string; x: number; w: number } | null {
   let str = "";
   let x = 0;
@@ -689,7 +859,7 @@ export function itemText(glyphs: Glyph[], texts: Map<Glyph, string>): { str: str
       if (str === "") x = g.x;
       else if (prevEnd !== null && g.x - prevEnd >= g.size * 0.102) str += " ";
       str += text;
-      end = Math.max(end, g.x + g.w);
+      end = Math.max(end, compositeEnd.get(g) ?? g.x + g.w);
     }
     prevEnd = g.x + g.w;
   }

@@ -14,9 +14,35 @@ import type { PageBreak, Segment } from "@/lib/parse/pdf/types";
 const isFloat = (s: Segment) =>
   s.type === "TABLE" || ((s.type === "FIGURE" || s.type === "PARAGRAPH") && CAPTION_RE.test(s.text));
 
+// A figure's labels the figure did not take, read as lines or as a
+// display's crop, are set smaller than the paragraph around them: next to a
+// float, they are the float's ("ac-" | labels, a figure | "cessible": arXiv
+// 2411.19946).
+const isLabel = (s: Segment, paragraph: Segment) =>
+  s.type !== "HEADING" && paragraph.lineSize !== undefined && s.lineSize !== undefined && s.lineSize < paragraph.lineSize * 0.9;
+
+// A part that ends in an abbreviation ends no sentence when the next opens
+// with a number or a lowercase word ("(Zhuravlev et al. 2010; Erban et
+// al." | "2014) and …": Springer p. 1).
+const ABBREVIATION_END_RE = /(?:\bet al|\be\.g|\bi\.e|\bcf|\bvs|\bFigs?|\bEqs?|\bRefs?|\bSecs?|\bNo|\bpp?)\.$/;
+
+// The next part goes on the first's sentence: it opens lowercase or with a
+// parenthesis, or with a number that closes a parenthesis the first left
+// open ("(Federico," | "2016). This leads…") or follows a word that takes
+// one ("40 CFR part" | "178. To ensure…"). A number after any other word
+// opens something of its own: an algorithm's line ("8: end for"), a
+// section's heading ("3.2.3 Interim Conclusion.").
+function goesOn(prev: string, next: string): boolean {
+  if (/^[a-z(]/.test(next)) return true;
+  if (!/^\d/.test(next)) return false;
+  const open = (prev.match(/\(/g) ?? []).length - (prev.match(/\)/g) ?? []).length;
+  if (open > 0 && /^\d[\d.,–-]*[a-z]?\)/.test(next)) return true;
+  return /\b(?:parts?|sections?|chapters?|pages?|pp?|figures?|figs?|tables?|eqs?|equations?|nos?|vol|volumes?|articles?|rules?|items?|steps?|lines?|appendix|§)\.?$/i.test(prev.trimEnd());
+}
+
 // The second part goes on with the first on their page: the first ends
-// mid-sentence and the second opens lowercase or with a parenthesis ("…3D
-// fermionic TO" | "(fTO) characterized…", arxiv-2504-02736), or a column
+// mid-sentence and the second goes on its sentence (goesOn: "…3D fermionic
+// TO" | "(fTO) characterized…", arxiv-2504-02736), or a column
 // break cuts a sentence before a capitalized word (the first ends in a
 // word, the second starts higher on the page and right of it). A second
 // part that opens with no lowercase word, set at half the first's size or
@@ -31,7 +57,7 @@ function continuesOnPage(prev: Segment, next: Segment): boolean {
   // export's list of links read as one. "…available at" and a link still
   // join.
   if (/(?:https?:\/\/|www\.)\S*$/.test(prev.text) && /^(?:https?:\/\/|www\.)/.test(next.text)) return false;
-  if (/[a-z,;\-–—]$/.test(prev.text) && /^[a-z(]/.test(next.text)) return true;
+  if ((/[a-z,;\-–—]$/.test(prev.text) || ABBREVIATION_END_RE.test(prev.text)) && goesOn(prev.text, next.text)) return true;
   if (prev.text.length <= 60 || !/\s[\p{L}\p{M}]+$/u.test(prev.text)) return false;
   if (/^[a-z(]/.test(next.text)) return true;
   const size = prev.lineSize ?? 10;
@@ -40,15 +66,18 @@ function continuesOnPage(prev: Segment, next: Segment): boolean {
 }
 
 // A paragraph's halves on one page join, and a float set between them (a
-// table atop the next column: arxiv-2504-02736 p3 and p4) follows the
-// paragraph.
+// table atop the next column: arxiv-2504-02736 p3 and p4), with the labels
+// its figure left, follows the paragraph.
 export function joinOnPage(input: Segment[]): Segment[] {
   const segments = [...input];
   for (let b = 1; b < segments.length; b++) {
-    if (!isFloat(segments[b]) || segments[b].page !== segments[b - 1].page) continue;
+    const paragraph = segments[b - 1];
+    const inRun = (s: Segment) => isFloat(s) || isLabel(s, paragraph);
+    if (isFloat(paragraph) || !inRun(segments[b]) || segments[b].page !== paragraph.page) continue;
     let k = b;
-    while (k < segments.length && segments[k].page === segments[b].page && isFloat(segments[k])) k++;
-    if (k < segments.length && continuesOnPage(segments[b - 1], segments[k])) segments.splice(b, 0, ...segments.splice(k, 1));
+    while (k < segments.length && segments[k].page === segments[b].page && inRun(segments[k])) k++;
+    if (!segments.slice(b, k).some(isFloat)) continue;
+    if (k < segments.length && continuesOnPage(paragraph, segments[k])) segments.splice(b, 0, ...segments.splice(k, 1));
   }
   const out: Segment[] = [];
   for (const segment of segments) {
@@ -59,9 +88,25 @@ export function joinOnPage(input: Segment[]): Segment[] {
       joinLayout(prev, segment);
       continue;
     }
+    if (prev && itemGoesOn(prev, segment)) {
+      shiftSpansInto(prev, segment, joinWrapped(prev, segment.text));
+      joinLayout(prev, segment);
+      continue;
+    }
     out.push(segment);
   }
   return out;
+}
+
+// A list's last item that a column break cuts goes on in the next column:
+// the item stops mid-sentence and the part opens lowercase, higher on the
+// page and right of it ("• We propose RONA, a novel prompting strategy" |
+// "that leverages Coherence Relations …": arXiv 2503.10997 p. 2).
+function itemGoesOn(list: Segment, next: Segment): boolean {
+  if (list.type !== "LIST" || list.tocEntries || next.type !== "PARAGRAPH" || next.listItem || list.page !== next.page) return false;
+  if (/[.!?:…"”)]$/.test(list.text.trim()) || !/^\p{Ll}/u.test(next.text) || !list.box || !next.box) return false;
+  const size = list.lineSize ?? 10;
+  return next.box.y2 > list.box.y1 && next.box.x1 > list.box.x2 - size;
 }
 
 const INDENT_TOKEN_RE = /\s*\bindent-(?:first|hanging|block)\b/g;
@@ -158,28 +203,55 @@ function joinBreaks(target: Segment, source: Segment, offset: number, shift = 0)
   return breaks;
 }
 
-// A page-top float (figure, table, its caption) between the two halves of a
-// paragraph: the halves join and the float follows the paragraph.
+// A float (figure, table, its caption, and the labels its figure left)
+// between the two halves of a paragraph cut by the page break: the halves
+// join, and a float atop the next page follows the paragraph, one at the
+// foot of the first page comes before it (each block after the page it
+// stands on has begun). Pages of floats between the halves keep them
+// apart: after the paragraph, those floats would stand past the next
+// page's start, and an import's page starts only rise (lib/docs/import.ts).
 function liftFloatsOffParagraphBreaks(segments: Segment[]): Segment[] {
   const out = [...segments];
-  const isFloat = (s: Segment) =>
-    s.type === "FIGURE" || s.type === "TABLE" || (s.type === "PARAGRAPH" && CAPTION_RE.test(s.text));
+  // A display's crop stands where the sentence puts it.
+  const isPageFloat = (s: Segment) =>
+    (s.type === "FIGURE" && !s.mathCrop) || s.type === "TABLE" || (s.type === "PARAGRAPH" && CAPTION_RE.test(s.text));
+  // Floats a lift set after a paragraph's joined part: a join past them
+  // would set them past the next page's start, so the halves stay apart.
+  const following = new Set<Segment>();
   for (let b = 1; b < out.length; b++) {
-    const prev = out[b - 1];
-    if (out[b].page === prev.page) continue;
+    if (out[b].page === out[b - 1].page) continue;
+    // The page's last paragraph, past the figures, tables, and whole
+    // captions set after it on its page (a caption that ends mid-sentence
+    // goes on over the page), and past a short line under it set smaller (a
+    // license line at the page's foot: IEEE Access p. 1).
+    let a = b - 1;
+    let footLine = false;
+    for (; a > 0 && out[a - 1].page === out[a].page; a--) {
+      if (isPageFloat(out[a]) && (out[a].type !== "PARAGRAPH" || /[.!?:)]$/.test(out[a].text.trim()))) continue;
+      if (out[a].type !== "PARAGRAPH" || out[a - 1].type !== "PARAGRAPH" || out[a].text.length >= 200 || !isLabel(out[a], out[a - 1])) break;
+      footLine = true;
+    }
+    const prev = out[a];
     // A list cut by the page break continues under the floats too (import
-    // compare loop finding: a rubric list split in two by a figure).
+    // compare loop finding: a rubric list split in two by a figure). A
+    // caption the break cuts goes on by itself.
     const listBreak = prev.type === "LIST" && !prev.tocEntries;
-    if (!listBreak && (prev.type !== "PARAGRAPH" || /[.!?:…"”)]$/.test(prev.text.trim()))) continue;
+    const ended = /[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim());
+    if (!listBreak && (prev.type !== "PARAGRAPH" || isPageFloat(prev) || ended)) continue;
     let k = b;
-    while (k < out.length && out[k].page === out[b].page && isFloat(out[k])) k++;
-    if (k === b || k >= out.length) continue;
+    while (k < out.length && out[k].page === out[b].page && (isPageFloat(out[k]) || isLabel(out[k], prev))) k++;
+    if (k >= out.length || (k === b && a === b - 1) || !(footLine || out.slice(a + 1, k).some(isPageFloat))) continue;
     const tail = out[k];
     if (tail.page !== out[b].page) continue;
     // A references entry's end at the page's top goes with the list after it.
     const lift = listBreak && hangingTail(tail, out[k + 1]) ? 2 : 1;
     if (lift === 1 && (listBreak ? tail.type !== "LIST" || Boolean(tail.tocEntries) : tail.type !== "PARAGRAPH" || !/^[a-z($€£0-9"'“]/.test(tail.text))) continue;
-    out.splice(b, 0, ...out.splice(k, lift));
+    if (out.slice(a + 1, b).some((s) => following.has(s))) continue;
+    for (const s of out.slice(b, k)) following.add(s);
+    const joined = out.splice(k, lift);
+    const floats = out.splice(a + 1, b - a - 1);
+    out.splice(a, 0, ...floats);
+    out.splice(a + floats.length + 1, 0, ...joined);
   }
   return out;
 }
@@ -210,13 +282,16 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       continue;
     }
 
-    // Paragraph that continues across the page break.
+    // Paragraph that continues across the page break. A lone line set in
+    // at a page's foot may be a paragraph's first line: it goes on into a
+    // part that opens lowercase ("…the difficulty of reliably elim-" |
+    // "inating default tendencies…", arXiv 2506.06352).
     if (
       segment.type === "PARAGRAPH" &&
       prev.type === "PARAGRAPH" &&
-      !prev.listItem &&
+      (!prev.listItem || /^\p{Ll}/u.test(segment.text)) &&
       // A letter may end in a mark: a hat over 𝒮 has no precomposed form.
-      /[\p{L}\p{M}\d,;\-–—]$/u.test(prev.text) &&
+      (/[\p{L}\p{M}\d,;\-–—]$/u.test(prev.text) || (ABBREVIATION_END_RE.test(prev.text) && goesOn(prev.text, segment.text))) &&
       // A numbered heading read as a paragraph starts its own block: with
       // the running head gone from between them, "6. Relations and arrows"
       // joined the display above it (the synthetic formula sheet).

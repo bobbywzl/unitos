@@ -360,6 +360,8 @@ type ParaProps = {
   /** The first line's indent against the left indent in twips (w:ind
       firstLine; a hanging indent negative). */
   first: number;
+  /** The right indent in twips: the style's, or the paragraph's own. */
+  right: number;
   /** The paragraph's own left and first-line indents, which win over its
       list level's. */
   ownLeft: number | null;
@@ -433,6 +435,7 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     shading: null,
     left: 0,
     first: 0,
+    right: 0,
     ownLeft: indentOf(child(pPr, "ind")),
     ownFirst: firstOf(child(pPr, "ind")),
     base,
@@ -471,6 +474,7 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     const ind = child(layer, "ind");
     out.left = indentOf(ind) ?? out.left;
     out.first = firstOf(ind) ?? out.first;
+    out.right = rightOf(ind) ?? out.right;
     const spacing = child(layer, "spacing");
     out.before = spaceOf(spacing, "before") ?? out.before;
     out.after = spaceOf(spacing, "after") ?? out.after;
@@ -492,6 +496,11 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
 /** A left indent (w:ind left, or start), in twips. */
 function indentOf(ind: Element | null): number | null {
   return intAttr(ind, "left") ?? intAttr(ind, "start");
+}
+
+/** A right indent (w:ind right, or end), in twips. */
+function rightOf(ind: Element | null): number | null {
+  return intAttr(ind, "right") ?? intAttr(ind, "end");
 }
 
 /** A first line's indent against the left indent (w:ind firstLine; a
@@ -1114,6 +1123,8 @@ type TableCell = {
   fill?: HexColor | null;
   /** The cell's own borders (w:tcBorders): a side it sets, null for none. */
   borders?: Partial<Record<BorderSideName, string | null>>;
+  /** The cell's margins in points, "top right bottom left" (cellMargins). */
+  margins?: string;
 };
 
 /** A table's borders: its style's, then its own (w:tblBorders), each edge
@@ -1525,7 +1536,10 @@ class DocxReader {
         // equation: Word draws it so, in or out of an m:oMathPara.
         const [formula] = words.math;
         if (props.heading === null && props.role !== "title" && words.math.length === 1 && formula.start === 0 && formula.end === words.text.length) {
-          this.push({ type: "EQUATION", text: formula.latex });
+          // Its paragraph's space before and after are the display's.
+          const display: ParsedBlock = { type: "EQUATION", text: formula.latex };
+          this.spaced(display, props, { props, blank: 0 });
+          this.push(display);
           continue;
         }
         const block = this.wordsBlock(words, props);
@@ -1558,10 +1572,13 @@ class DocxReader {
     const block = this.textBlock("PARAGRAPH", words, tokens.length > 0 ? `<p class="${tokens.join(" ")}">${escapeHtml(words.text)}</p>` : undefined);
     this.bordered(block, props);
     // The paragraph's indent as Word sets it. A quotation's inset is the
-    // page editor's quote, unless the quotation draws its own bar.
-    const left = props.left > 0 && props.left < 100_000 ? points(props.left) : 0;
-    const first = Math.abs(props.first) < 100_000 ? points(props.first) : 0;
-    if ((left || first) && (!tokens.includes("quote") || props.border.left)) block.indent = { left, first };
+    // page editor's quote, unless the quotation draws its own bar; its
+    // right indent is its own either way.
+    const inset = !tokens.includes("quote") || props.border.left;
+    const left = inset && props.left > 0 && props.left < 100_000 ? points(props.left) : 0;
+    const first = inset && Math.abs(props.first) < 100_000 ? points(props.first) : 0;
+    const right = props.right > 0 && props.right < 100_000 ? points(props.right) : 0;
+    if (left || first || right) block.indent = { left, first, ...(right ? { right } : {}) };
     this.spaced(block, props, { props, blank: 0 });
     return block;
   }
@@ -1584,13 +1601,14 @@ class DocxReader {
     }
   }
 
-  /** A text block (a heading, a paragraph, a list) into the document's
-      spacing, before it is pushed: the text block right above it (no
-      table, figure, equation, or rule between; its notes aside) takes its
-      space after (ParsedBlock.spaceAfter) in points — the space between
-      their paragraphs and the blank paragraphs between them. A heading's
-      space before is so the space after of the block above it. The block
-      starts the next gap; a block with no text block under it has none. */
+  /** A text block (a heading, a paragraph, a list) or a paragraph that is
+      one display equation into the document's spacing, before it is
+      pushed: the block right above it (no table, figure, other equation, or
+      rule between; its notes aside) takes its space after
+      (ParsedBlock.spaceAfter) in points — the space between their
+      paragraphs and the blank paragraphs between them. A heading's space
+      before is so the space after of the block above it. The block starts
+      the next gap; a block with no text block under it has none. */
   private spaced(block: ParsedBlock, first: ParaProps, trail: Spacing) {
     const above = this.lastSpaced;
     if (above && !above.pageEnd && this.blocks.findLast((b) => !b.footnote) === above.block) {
@@ -2001,6 +2019,7 @@ class DocxReader {
     const sizes = new Map<number, number>();
     const header: boolean[] = [];
     const firstRow = style.some((s) => s.firstRow) && tableLooksFirstRow(tblPr);
+    const outer = [...style.map((s) => child(s.tblPr, "tblCellMar")), child(tblPr, "tblCellMar")];
     rows.forEach((tr, r) => {
       const trPr = child(tr, "trPr");
       header.push(flag(child(trPr, "tblHeader")) === true || (r === 0 && firstRow));
@@ -2019,6 +2038,7 @@ class DocxReader {
         } else {
           cell = this.cell(tc, style, notes, sizes);
           cell.colspan = span;
+          cell.margins = cellMargins([...outer, child(child(tc, "tcPr"), "tcMar")]).map(points).join(" ");
           row.push({ cell, origin: true });
         }
         for (let k = 1; k < span; k++) row.push({ cell, origin: false });
@@ -2083,7 +2103,16 @@ class DocxReader {
       widths.length === cols && widths.every((w) => w > 0 && w < 100_000)
         ? `<colgroup>${widths.map((w) => `<col style="width:${points(w)}pt">`).join("")}</colgroup>`
         : "";
-    const open = size !== undefined && size > 0 && size < 1000 ? `<table style="font-size:${size}pt">` : "<table>";
+    // The cells' margins (the ones most cells take), in points, as the
+    // page editor pads an import's cells (css/import.css).
+    const margins = new Map<string, number>();
+    for (const row of grid) {
+      for (const slot of row) {
+        if (slot.origin && slot.cell.margins) margins.set(slot.cell.margins, (margins.get(slot.cell.margins) ?? 0) + 1);
+      }
+    }
+    const padding = [...margins].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const open = `<table${size !== undefined && size > 0 && size < 1000 ? ` style="font-size:${size}pt"` : ""}${padding ? ` data-cell-padding="${padding}"` : ""}>`;
     const block: ParsedBlock = { type: "TABLE", text: texts.join("\n"), html: `${open}${colgroup}${head}${body}</table>` };
     // The note marks in the cells, at their places in the table's text: the
     // references a table's footnotes are cited from.
@@ -2181,6 +2210,22 @@ function cellsOf(tr: Element): Element[] {
     if (c.localName === "tc") out.push(c);
     else if (c.localName === "sdt") out.push(...cellsOf(child(c, "sdtContent") ?? c));
     else if (c.localName === "customXml") out.push(...cellsOf(c));
+  }
+  return out;
+}
+
+/** A cell's margins in twips, top, right, bottom, left: its own (w:tcMar)
+    over its table's and its table style's (w:tblCellMar) over Word's, none
+    over and under the words and 108 twips at the sides. */
+function cellMargins(layers: (Element | null)[]): number[] {
+  const out = [0, 108, 0, 108];
+  for (const margins of layers) {
+    (["top", "right", "bottom", "left"] as const).forEach((side, k) => {
+      const el = child(margins, side) ?? (side === "left" ? child(margins, "start") : side === "right" ? child(margins, "end") : null);
+      const w = intAttr(el, "w");
+      const type = attr(el, "type");
+      if (w !== null && w >= 0 && w <= 2880 && (type === null || type === "dxa")) out[k] = w;
+    });
   }
   return out;
 }

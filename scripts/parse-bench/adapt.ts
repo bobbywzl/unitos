@@ -38,6 +38,11 @@ export type DocBlock = RefBlock & {
   at?: { page: number; region: Region };
   /** A Word paragraph's borders as the candidate draws them: the sides that have one. */
   borders?: Side[];
+  /** An import's table: the size in points and the line spacing its cells' words take (the table's
+      cellSize, else its first cell's words), its cells' padding when it carries one ("top right
+      bottom left" in points), and each kept row's least height in points (0 for none), which a
+      row's height follows (drawn.ts rowHeight, rowHeights). */
+  cells?: { size: number; lineSpacing: number; padding?: string; minHeights?: number[] };
 };
 export type Side = "top" | "right" | "bottom" | "left";
 /** A document as the model holds it. `fonts`: a reference's fonts by role;
@@ -479,15 +484,21 @@ function parseBlock(block: ParsedBlock, index: number, inRange: (p: number) => b
   }
 }
 
+/** Whether a title is a later page's (free.ts laterTitle): a title the parse
+    takes from a later page than the first is scored with that page. */
+export type TitleShown = (title: string) => boolean;
+
 /** A parse as the reference model, cut to the scored pages. The title the
-    parse found (it drops the heading it came from) is the first block. */
+    parse found (it drops the heading it came from) is the first block,
+    where the first page is scored or the title is a later page's (TitleShown). */
 export function fromParse(
   parsed: { title: string | null; blocks: ParsedBlock[]; bodyFont?: TextFont; titleFont?: TextFont; titleAlign?: "center" | "right" },
   pages?: Pages,
+  shown?: TitleShown,
 ): Doc {
   const inRange = inRangeOf(pages);
   const blocks: DocBlock[] = [];
-  if (parsed.title?.trim() && inRange(1)) {
+  if (parsed.title?.trim() && (inRange(1) || shown?.(parsed.title))) {
     const font = fontOf(parsed.titleFont);
     blocks.push({ kind: "title", spans: [{ text: parsed.title }], ...(parsed.titleAlign ? { align: parsed.titleAlign } : {}), ...(font ? { font } : {}) });
   }
@@ -503,6 +514,9 @@ export function fromParse(
 
 const LISTS = new Set(["bulletList", "orderedList", "taskList"]);
 const CHIPS = new Set(["dateChip", "personChip", "fileChip", "dropdownChip"]);
+
+/** A node's words, its text nodes' in order. */
+const textOf = (node: RichNode): string => (node.type === "text" ? (node.text ?? "") : (node.content ?? []).map(textOf).join(""));
 
 function lookOf(marks: RichMark[] | undefined): Look {
   const look: Look = {};
@@ -640,6 +654,8 @@ function captionSpans(caption: string, stored: unknown): Span[] {
 class ImportReader {
   readonly blocks: DocBlock[] = [];
   private page = 1;
+  /** The Title is read whatever its page start says, where it is a later page's (TitleShown). */
+  private anyPage = false;
   /** The body has begun: a paragraph of BODY_CHARS or more is placed (past the title, the authors, and their affiliations). */
   private begun = false;
   private readonly inRange: (p: number) => boolean;
@@ -662,6 +678,7 @@ class ImportReader {
     private readonly styles: Record<DocStyle, NamedStyle>,
     private readonly labels = new Map<string, string>(),
     private readonly headings = new Set<string>(),
+    private readonly shown?: TitleShown,
   ) {
     this.inRange = inRangeOf(pages);
   }
@@ -706,7 +723,7 @@ class ImportReader {
   }
 
   private here(): boolean {
-    return this.inRange(this.page);
+    return this.anyPage || this.inRange(this.page);
   }
 
   /** A node's inline content into spans, following its page starts. */
@@ -797,7 +814,10 @@ class ImportReader {
           return;
         }
         const into = new Spans();
+        const title = node.attrs?.docStyle === "title" && this.shown !== undefined && this.shown(textOf(node));
+        this.anyPage = title;
         this.inline(node, into);
+        this.anyPage = false;
         if (!into.hasText) return;
         const heading = node.type === "heading" ? level(Number(node.attrs?.level)) : null;
         const style: DocStyle = heading ? `h${heading}` : node.attrs?.docStyle === "title" ? "title" : node.attrs?.docStyle === "subtitle" ? "subtitle" : "normal";
@@ -943,6 +963,7 @@ class ImportReader {
 
   private table(node: RichNode) {
     const rows: Row[] = [];
+    const minHeights: number[] = [];
     // Footnote marks by the cell's place among the table's cells.
     const marks: NoteMark[] = [];
     let index = 0;
@@ -964,6 +985,7 @@ class ImportReader {
       // A row whose words are all on pages out of range is not scored.
       if (cells.some((c) => c.spans.some((s) => s.text.trim() || s.latex !== undefined)) || this.here()) {
         rows.push({ cells });
+        minHeights.push(typeof tr.attrs?.minHeight === "number" && tr.attrs.minHeight > 0 ? tr.attrs.minHeight : 0);
         for (const list of rowMarks) {
           for (const m of list) marks.push({ unit: index, ...m });
           index++;
@@ -986,15 +1008,22 @@ class ImportReader {
       this.blocks.pop();
       for (const m of caption.marks ?? []) marks.push({ ...m, unit: -1 });
     }
-    this.blocks.push({ kind: "table", ...(caption ? { caption: caption.spans, ...(caption.font ? { font: caption.font } : {}) } : {}), rows, ...(marks.length > 0 ? { marks } : {}) });
+    const first = node.content?.[0]?.content?.[0]?.content?.[0];
+    const run = first?.content?.find((c) => c.type === "text");
+    const cells = {
+      size: typeof node.attrs?.cellSize === "number" ? node.attrs.cellSize : (sizeInPt(run?.marks?.find((m) => m.type === "textStyle")?.attrs?.fontSize) ?? this.styles.normal.size),
+      lineSpacing: typeof first?.attrs?.lineSpacing === "number" ? first.attrs.lineSpacing : this.styles.normal.lineSpacing,
+      ...(typeof node.attrs?.cellPadding === "string" ? { padding: node.attrs.cellPadding } : {}),
+      ...(minHeights.some((h) => h > 0) ? { minHeights } : {}),
+    };
+    this.blocks.push({ kind: "table", ...(caption ? { caption: caption.spans, ...(caption.font ? { font: caption.font } : {}) } : {}), rows, ...(marks.length > 0 ? { marks } : {}), cells });
   }
 }
 
 /** An import's rich text as the reference model, cut to the scored pages.
     `printed`: the reference's footnotes, whose marks the import's take. */
-export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[]): Doc {
+export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[], shown?: TitleShown): Doc {
   const headings = new Set<string>();
-  const textOf = (node: RichNode): string => (node.type === "text" ? (node.text ?? "") : (node.content ?? []).map(textOf).join(""));
   const visit = (node: RichNode) => {
     if (node.type === "heading") headings.add(wordsOf(textOf(node)).map((w) => w.w).join(" "));
     else for (const child of node.content ?? []) visit(child);
@@ -1002,7 +1031,7 @@ export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[]
   visit(doc);
   headings.delete("");
   const styles = readStyles({ attrs: doc.attrs ?? {} });
-  const reader = new ImportReader(pages, styles, printed ? printedLabels(doc, printed) : undefined, headings);
+  const reader = new ImportReader(pages, styles, printed ? printedLabels(doc, printed) : undefined, headings, shown);
   for (const node of doc.content ?? []) reader.node(node, false);
   reader.settle();
   const blocks = reader.blocks;
@@ -1054,7 +1083,7 @@ function contentsLists(blocks: DocBlock[], indents: Map<DocBlock, number>): DocB
 }
 
 /** Spans without their first `n` characters. */
-function dropChars(spans: Span[], n: number): Span[] {
+export function dropChars(spans: Span[], n: number): Span[] {
   const out: Span[] = [];
   let rest = n;
   for (const span of spans) {

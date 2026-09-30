@@ -79,6 +79,7 @@ type Fixture = {
   bodyFont?: TextFont;
   titleFont?: TextFont;
   titleAlign?: "center" | "right";
+  titlePage?: number;
   parseMs: number;
 };
 type Converted = Awaited<ReturnType<typeof richTextFromImport>>;
@@ -782,6 +783,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
         bodyFont: f.bodyFont,
         titleFont: f.titleFont,
         titleAlign: f.titleAlign,
+        titlePage: f.titlePage,
       }),
     );
   } catch (err) {
@@ -1133,7 +1135,10 @@ async function checkFixture(f: Fixture): Promise<Report> {
     let example = "";
     for (const r of rows) {
       const place = r.cell ? `, table ${r.cell.table}, row ${r.cell.row}, column ${r.cell.column}` : "";
-      const page = typeof r.page === "number" ? `, p. ${f.pageLabels?.[r.page - 1] || r.page}` : "";
+      // A page the PDF leaves unnumbered among numbered ones (an empty
+      // label) is named by no number, in the margin and in the prefix.
+      const label = typeof r.page === "number" ? f.pageLabels?.[r.page - 1] : undefined;
+      const page = typeof r.page === "number" && label !== "" ? `, p. ${label ?? r.page}` : "";
       const tag = renderBlockLines([r], pageName).split("\n")[0];
       if (tag !== `[block ${r.id}] (${r.type}${place}${page})`) tagOff.push(tag);
       else if (r.cell && page && !example) example = tag;
@@ -1620,6 +1625,7 @@ async function pdfFixture(name: string, bytes: Uint8Array): Promise<Fixture> {
     bodyFont?: TextFont;
     titleFont?: TextFont;
     titleAlign?: "center" | "right";
+    titlePage?: number;
   } = await parsePdf(new Uint8Array(bytes), { pages: chosenPages });
   const parseMs = performance.now() - t0;
   return {
@@ -1635,6 +1641,7 @@ async function pdfFixture(name: string, bytes: Uint8Array): Promise<Fixture> {
     bodyFont: parsed.bodyFont,
     titleFont: parsed.titleFont,
     titleAlign: parsed.titleAlign,
+    titlePage: parsed.titlePage,
     parseMs,
   };
 }

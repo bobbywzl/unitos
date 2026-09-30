@@ -650,7 +650,7 @@ export function sizedAtMost(node: RichNode, size: number): RichNode {
 type TableLook = { pt: number | null; columns: number[] | null };
 
 function tableNode(
-  rows: { cells: { node: RichNode; colspan: number; rowspan: number }[]; pinned: boolean }[],
+  rows: { cells: { node: RichNode; colspan: number; rowspan: number }[]; pinned: boolean; minHeight?: number | null }[],
   room: number,
   look: TableLook = { pt: null, columns: null },
 ): {
@@ -678,7 +678,8 @@ function tableNode(
   const content = grid.map((cells, r): RichNode => {
     // A row the rows above fill whole has no cell of its own.
     const row: RichNode = cells.length > 0 ? { type: "tableRow", content: cells.map((c) => c.node) } : { type: "tableRow" };
-    if (rows[r].pinned && !pinAll) row.attrs = { pinned: true };
+    const attrs = { ...(rows[r].pinned && !pinAll ? { pinned: true } : {}), ...(rows[r].minHeight ? { minHeight: rows[r].minHeight } : {}) };
+    if (Object.keys(attrs).length > 0) row.attrs = attrs;
     return row;
   });
   return { table: { type: "table", content }, rowStarts };
@@ -737,9 +738,16 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
   const trs = [...table.querySelectorAll("tr")].filter((tr) => tr.closest("table") === table);
   if (trs.length === 0) return null;
   const cellsOf = (tr: Element) => [...tr.children].filter((c) => /^(td|th)$/i.test(c.tagName));
-  // A colspan past the most cells a row holds ("99" for a row the width of
-  // the table) spans the table, never columns no row fills.
-  const widest = Math.max(1, ...trs.map((tr) => cellsOf(tr).length));
+  // The table's text size and its columns' widths on the page.
+  const cols = [...table.querySelectorAll(":scope > colgroup > col")].map((col) => pointsOf(styleOf(col, "width"), 2000));
+  // A colspan past the table's columns ("99" for a row the width of the
+  // table) spans the table, never columns no row fills. The columns are the
+  // colgroup's, or the most a row fills, each of its merged cells over the
+  // most cells a row holds at most: a form's rows of merged cells fill six
+  // columns where no row holds six cells (the SF 298), and a full row drew
+  // four columns wide and two empty cells.
+  const most = Math.max(1, ...trs.map((tr) => cellsOf(tr).length));
+  const widest = Math.max(cols.length, ...trs.map((tr) => cellsOf(tr).reduce((sum, cell) => sum + spanOf(cell, "colspan", most), 0)));
   // Header rows (<thead>) that open the table repeat on every page the
   // table runs on, as Google Docs' pinned header rows do.
   let pinning = true;
@@ -761,10 +769,11 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
         rowspan: spanOf(cell, "rowspan", trs.length),
       };
     });
-    return { cells, pinned: pinning };
+    // A row the page sets taller than its words keeps its height as its
+    // least height: a cell of one row carries it (a form's field row).
+    const minHeight = Math.max(0, ...cellsOf(tr).map((cell) => (spanOf(cell, "rowspan", trs.length) === 1 ? (pointsOf(styleOf(cell, "height"), 2000) ?? 0) : 0)));
+    return { cells, pinned: pinning, minHeight: minHeight > 0 ? minHeight : null };
   });
-  // The table's text size and its columns' widths on the page.
-  const cols = [...table.querySelectorAll(":scope > colgroup > col")].map((col) => pointsOf(styleOf(col, "width"), 2000));
   const look: TableLook = {
     pt: pointsOf(styleOf(table, "font-size"), 72),
     columns: cols.length > 0 && cols.every((w) => w !== null) ? (cols as number[]) : null,

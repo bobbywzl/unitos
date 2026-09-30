@@ -8,7 +8,7 @@
 
 import type { Glyph, PageDrawing } from "@/lib/parse/pdf/drawing";
 import { faceOf } from "@/lib/parse/pdf/faces";
-import { CONTROL_CHARS_RE, itemText, normalizeGlyphs } from "@/lib/parse/pdf/glyphs";
+import { CONTROL_CHARS_RE, itemText, normalizeGlyphs, symbolFont, symbolText } from "@/lib/parse/pdf/glyphs";
 import type { Item, Look } from "@/lib/parse/pdf/types";
 import type { ParsedBlock, TextFont } from "@/lib/parse/types";
 
@@ -197,30 +197,64 @@ const sameMarks = (a: Marks, b: Marks) =>
     and the words after it as one run of one font). hrefAt: the link at a
     place (index.ts). */
 export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject, hrefAt: HrefAt) {
+  const fontOf = (id: string): ReturnType<FontObject> => {
+    try {
+      return fonts(id);
+    } catch {
+      return null;
+    }
+  };
+  // Each font's name without its subset prefix.
+  const bases = new Map<string, string>();
+  const baseOf = (id: string): string => {
+    let base = bases.get(id);
+    if (base === undefined) bases.set(id, (base = (fontOf(id)?.name ?? "").replace(/^[A-Z]{6}\+/, "")));
+    return base;
+  };
+  // A symbol font's codes read as the symbols it draws (glyphs.ts), and
+  // small capitals drawn inside one run come apart into runs of one size.
+  const drawnCaps = new Map<Item, number>();
+  const read: Item[] = [];
+  for (const item of items) {
+    const symbols = item.font ? symbolFont(baseOf(item.font)) : null;
+    if (symbols) item.str = symbolText(symbols, item.str, item.glyphs);
+    read.push(...((!symbols && sizeRuns(item, drawnCaps)) || [item]));
+  }
+  items.splice(0, items.length, ...read);
   // The fonts that set CJK characters on the page (faces.ts: their one
   // width is no monospace).
   const cjk = new Set(items.flatMap((i) => (i.font && CJK_RE.test(i.str) ? [i.font] : [])));
+  // The page's fonts by name.
+  const byName = new Map<string, string>();
+  for (const item of items) if (item.font && !byName.has(baseOf(item.font))) byName.set(baseOf(item.font), item.font);
   const faces = new Map<string, string>();
-  const faceFor = (item: Item) => {
-    if (!item.font || (item.glyphs?.length && item.glyphs.every((g) => g.mode === 3))) return "";
-    let face = faces.get(item.font);
+  const fontFace = (id: string): string => {
+    let face = faces.get(id);
     if (face === undefined) {
-      let font: ReturnType<FontObject> = null;
-      try {
-        font = fonts(item.font);
-      } catch {
-        font = null;
-      }
-      face = font?.name ? faceOf(font.name.replace(/^[A-Z]{6}\+/, ""), font.fallbackName, cjk.has(item.font)) : "";
-      faces.set(item.font, face);
+      const base = baseOf(id);
+      // A subfont cut from a face for one block of Unicode is that face:
+      // Advent 3B2's "AdvOTdd63dae3+fb" sets the ligatures fi and fl of
+      // "AdvOTdd63dae3", "+03" its Greek, "+22" its minus. Its own flags
+      // say monospace for a few glyphs of one width, and Nature's "fi" read
+      // as Courier New. With no parent on the page, and for a symbol font,
+      // no face of its own: it takes the face of the words around it.
+      const cut = /^(.+)\+[0-9a-f]{2}$/i.exec(base)?.[1];
+      const parent = cut !== undefined ? byName.get(cut) : undefined;
+      if (parent && parent !== id) face = fontFace(parent);
+      else if (!base || cut !== undefined || symbolFont(base)) face = "";
+      else face = faceOf(base, fontOf(id)?.fallbackName, cjk.has(id));
+      faces.set(id, face);
     }
     return face;
   };
+  const faceFor = (item: Item) =>
+    !item.font || (item.glyphs?.length && item.glyphs.every((g) => g.mode === 3)) ? "" : fontFace(item.font);
   const drawn = drawnMarks(
     items.flatMap((i) => (i.math ? [] : (i.glyphs ?? []))),
     drawing,
   );
   const smallCaps = drawnSmallCaps(items, faceFor);
+  for (const [item, size] of drawnCaps) smallCaps.set(item, size);
   const out: Item[] = [];
   for (const item of items) {
     const face = faceFor(item);
@@ -265,6 +299,34 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
     if (capitals !== undefined) for (const part of out.slice(from)) part.smallCaps = true;
   }
   items.splice(0, items.length, ...out);
+}
+
+// Small capitals drawn inside one run: capitals at the run's size and
+// capitals at about 0.8 of it, all on one baseline (a court's opinion sets
+// "PER CURIAM." and "ET AL." so, each one text item in two sizes). The run
+// is cut where the size changes, each part at its glyphs' size, and each
+// smaller part is small caps (caps: the part and its capitals' size).
+function sizeRuns(item: Item, caps: Map<Item, number>): Item[] | null {
+  const glyphs = item.glyphs;
+  if (!glyphs || glyphs.length < 2 || item.math) return null;
+  const big = Math.max(...glyphs.map((g) => g.size));
+  const small = (g: Glyph) => g.size < big * 0.9;
+  if (!glyphs.some((g) => small(g) && /\p{Lu}/u.test(g.unicode))) return null;
+  const capitals = glyphs.every(
+    (g) =>
+      Math.abs(g.y - glyphs[0].y) <= big * 0.05 &&
+      (!small(g) || (g.size >= big * 0.6 && g.size <= big * 0.85 && !/\p{Ll}/u.test(g.unicode))),
+  );
+  if (!capitals) return null;
+  const bounds = [0];
+  for (let k = 1; k < glyphs.length; k++) if (small(glyphs[k]) !== small(glyphs[k - 1])) bounds.push(k);
+  bounds.push(glyphs.length);
+  const parts = split(item, glyphs, bounds);
+  for (const part of parts ?? []) {
+    part.size = Math.max(...part.glyphs!.map((g) => g.size));
+    if (part.size < big * 0.9) caps.set(part, big);
+  }
+  return parts;
 }
 
 // Small capitals a browser or Word draws for a face with none: each

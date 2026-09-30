@@ -38,7 +38,7 @@ export type ImportedEditor = {
   documentId: string;
   figures: Record<string, FigureMediaView>;
   /** The PDF's own page names (xii, 1043); a page start draws
-      pageLabels[page - 1], else the number. */
+      pageLabels[page - 1] (nothing for ""), else the number. */
   pageLabels: string[] | null;
   /** The PDF's page count, for the scroll tip ("p. 7 of 30"). */
   pages?: number | null;

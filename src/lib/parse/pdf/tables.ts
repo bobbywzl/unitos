@@ -9,7 +9,7 @@ import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
 import { isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
 import { mathSpans } from "@/lib/parse/pdf/math/zones";
-import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup, spansFromRuns } from "@/lib/parse/pdf/text";
+import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup, lineEndHyphen, spansFromRuns } from "@/lib/parse/pdf/text";
 import type { Cell, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
 // ── Tables ──────────────────────────────────────────────────────────────────
@@ -25,7 +25,9 @@ const FACE_RE = /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/;
 export type CellParagraph = { start: number; end: number; align?: "center" | "right"; indent?: number };
 // fill: the cell's shading (#rrggbb).
 export type TableCell = { text: string; runs: Run[]; colspan?: number; rowspan?: number; paragraphs?: CellParagraph[]; fill?: string };
-export type TableRow = { cells: TableCell[] };
+// height: a ruled row's height on the page, in points, where the page
+// sets it taller than its words (a form's field row, a signature row).
+export type TableRow = { cells: TableCell[]; height?: number };
 // What a table keeps of the page's look: its words' size and each column's
 // width on the page, in points (the import sets the table at that size and
 // its columns in those proportions: an empty form column keeps its width).
@@ -231,12 +233,16 @@ function cellHtml(cell: TableCell): string {
     .join("");
 }
 
-// Text appended to a cell: a space between its lines.
+// Text appended to a cell: a space between its lines, and a line-end
+// hyphen decided as in a paragraph: the typesetter's goes ("predic-" over
+// "tion"), a compound's stays.
 function appendToCell(target: TableCell, part: { text: string; runs: Run[] }) {
   if (part.text.length === 0) return;
   const builder = new TextBuilder();
   builder.append({ text: target.text, runs: target.runs }, "");
-  builder.append(part, target.text.length > 0 ? " " : "");
+  const drop = lineEndHyphen(target.text, part.text) === "drop";
+  if (drop) builder.dropTrailingChar();
+  builder.append(part, target.text.length > 0 && !drop ? " " : "");
   target.text = builder.text;
   target.runs = builder.runs;
 }
@@ -262,8 +268,13 @@ export function tableSegment(
   where: Pick<Segment, "box" | "lineSize" | "mathShare">,
   look?: TableLook,
 ): Segment {
-  const rowHtml = (row: TableRow, tag: "td" | "th", rowIdx: number) =>
-    `<tr>${row.cells
+  const points = (n: number) => Math.round(n * 10) / 10;
+  // A row's height rides on its first cell of one row, as that cell's
+  // height (a cell's height is its row's least height). A <tr> carries no
+  // attribute: merge.ts joins a table's rows across a page break by "<tr>".
+  const rowHtml = (row: TableRow, tag: "td" | "th", rowIdx: number) => {
+    const tall = row.height !== undefined && row.height > 0 && row.height < 2000 ? row.cells.findIndex((c) => (c.rowspan ?? 1) === 1) : -1;
+    return `<tr>${row.cells
       .map((c, cellIdx) => {
         const last = cellIdx === row.cells.length - 1;
         const gap = last
@@ -272,11 +283,14 @@ export function tableSegment(
             : '<span class="cell-gap">\n</span>'
           : '<span class="cell-gap">\t</span>';
         const spans = `${(c.colspan ?? 1) > 1 ? ` colspan="${c.colspan}"` : ""}${(c.rowspan ?? 1) > 1 ? ` rowspan="${c.rowspan}"` : ""}`;
-        const fill = c.fill && HEX_RE.test(c.fill) ? ` style="background-color:${c.fill}"` : "";
-        return `<${tag}${spans}${fill}>${cellHtml(c)}${gap}</${tag}>`;
+        const style = [
+          ...(c.fill && HEX_RE.test(c.fill) ? [`background-color:${c.fill}`] : []),
+          ...(cellIdx === tall ? [`height:${points(row.height ?? 0)}pt`] : []),
+        ];
+        return `<${tag}${spans}${style.length > 0 ? ` style="${style.join(";")}"` : ""}>${cellHtml(c)}${gap}</${tag}>`;
       })
       .join("")}</tr>`;
-  const points = (n: number) => Math.round(n * 10) / 10;
+  };
   const html =
     (look ? `<table style="font-size:${points(look.size)}pt">` : "<table>") +
     (look ? `<colgroup>${look.columns.map((w) => `<col style="width:${points(w)}pt">`).join("")}</colgroup>` : "") +
@@ -406,8 +420,8 @@ export function boldHeaderRows(rows: TableRow[]): number {
 }
 
 // A cell of a value: an amount, a share, or a count ("$ 2,174", "(357)",
-// "21.0 %").
-const NUMERIC_CELL_RE = /^[$€£¥]?\s*\(?[-−–]?[\d.,]+\)?\s*%?$/;
+// "21.0 %", "-£2,000").
+export const NUMERIC_CELL_RE = /^[-−–]?[$€£¥]?\s*\(?[-−–]?[\d.,]+\)?\s*%?$/;
 
 // Row starts in a run of lines split into cells. Rows come from the run's
 // vertical rhythm: with two gap sizes present, the small gap is a wrapped
@@ -681,6 +695,21 @@ function isFormLines(lines: Line[]): boolean {
   return cells.length > 0 && cells.every((t) => /:$/.test(t) || /_{3,}$/.test(t) || /[☐☑☒]/.test(t));
 }
 
+// A line whose cells after the first hold no letter or digit, whose first
+// cell is prose, and that goes on the sentence of the line of one cell
+// above it, at its left edge.
+function besideMarks(line: Line, above: Line | undefined): boolean {
+  return (
+    line.cells.length >= 2 &&
+    line.cells.slice(1).every((c) => !/[\p{L}\p{N}]/u.test(c.text)) &&
+    line.cells[0].text.trim().length >= 30 &&
+    above !== undefined &&
+    above.cells.length === 1 &&
+    Math.abs(above.x - line.x) <= above.size &&
+    /[\p{Ll},]$/u.test(above.text.trim())
+  );
+}
+
 // Table runs, computed before segmentation. A run grows forward over
 // multi-cell lines and the single-cell lines that continue a wrapped cell
 // (aligned with a column, or indented past the first column, or a first-column
@@ -689,6 +718,11 @@ function isFormLines(lines: Line[]): boolean {
 // line ends a run.
 export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
   const runOf = new Array<number>(lines.length).fill(-1);
+  // Prose beside a form's boxes is a line of one cell: its first cell goes
+  // on the sentence of the line above it, and its other cells are marks
+  // alone (the W-9's Part I beside its SSN boxes: "… However, for a" |
+  // "resident alien, … For other  –  –").
+  const cells = lines.map((line, k) => (besideMarks(line, lines[k - 1]) ? 1 : line.cells.length));
   let runId = 0;
   let i = 0;
   while (i < lines.length) {
@@ -696,7 +730,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     // whatever its gaps (import compare loop finding: an equation's wide gaps
     // read as cells, and the run swept the sentences around it into a table).
     if (
-      lines[i].cells.length < 2 ||
+      cells[i] < 2 ||
       runOf[i] !== -1 ||
       isLabelLine(lines[i], ctx) ||
       isMonoLine(lines[i]) ||
@@ -726,7 +760,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       ) {
         break;
       }
-      if (next.cells.length >= 2) {
+      if (cells[j] >= 2) {
         members.push(j);
         multi++;
         j++;
