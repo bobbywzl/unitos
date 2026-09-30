@@ -237,3 +237,42 @@ export function cjkShare(text: string): number {
 export function blockTags(text: string): string[] {
   return [...text.matchAll(/\[block ([a-zA-Z0-9-]+)\]/g)].map((m) => m[1]);
 }
+
+// The numbers a source may write as words: "three" and "三" hold 3.
+const NUMBER_WORDS: Record<string, number> = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19,
+  twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100,
+  once: 1, twice: 2, first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+  一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10,
+};
+
+/** The numbers a text states, each as one canonical form: "4,096" and
+    "4096" are 4096, "3.0" is 3, "256k" is 256000. A number glued to a
+    Latin letter before it ("Q2", "b5") is a name, not a number. With
+    words, a number written as a word counts too — for the source a number
+    is checked against, never for the text checked. */
+export function numbersIn(text: string, words = false): Set<string> {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/(?<![A-Za-z0-9_.])(\d+(?:,\d{3})*(?:\.\d+)?)([kK](?![A-Za-z]))?/g)) {
+    const value = Number(m[1].replace(/,/g, "")) * (m[2] ? 1000 : 1);
+    if (Number.isFinite(value)) out.add(String(value));
+  }
+  if (words) {
+    for (const m of text.toLowerCase().matchAll(/[a-z]+|[一二两三四五六七八九十]/g)) {
+      const value = NUMBER_WORDS[m[0]];
+      if (value !== undefined) out.add(String(value));
+    }
+  }
+  return out;
+}
+
+/** The spans a text puts in quotation marks — “…”, "…", 「…」, 『…』 —
+    each trimmed of the punctuation that closes the sentence around it. */
+export function quotedSpans(text: string): string[] {
+  const spans: string[] = [];
+  for (const pattern of [/“([^”]+)”/g, /"([^"]+)"/g, /「([^」]+)」/g, /『([^』]+)』/g]) {
+    for (const m of text.matchAll(pattern)) spans.push(m[1]);
+  }
+  return spans.map((s) => s.trim().replace(/[\s.,;:!?。，；：！？、]+$/u, "")).filter((s) => s.length > 0);
+}
