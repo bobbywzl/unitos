@@ -57,7 +57,7 @@ import { isImeKey, useImeGuard } from "@/lib/ime";
 import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
-import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
+import { isOffline, offlinePremium, queueWrite, refreshWhenOnline } from "@/lib/offline/queue";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import {
@@ -4281,7 +4281,7 @@ export function ReaderInteractions({
       markFreshAnchor(popover.anchor);
       setPopover(null);
       window.getSelection()?.removeAllRanges();
-      router.refresh();
+      refreshWhenOnline(router);
       // A blank document opens with the tray folded (SPEC.md §29): the tray
       // opens on the new note, so the reader sees where it went.
       if (richTextRef.current) window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
@@ -6623,7 +6623,7 @@ export function ReaderInteractions({
           redo: () => formatBlock(blockId, kind, text),
         });
       }
-      router.refresh();
+      refreshWhenOnline(router);
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.formatFailed"));
     }
@@ -6795,11 +6795,9 @@ export function ReaderInteractions({
 
   async function deleteBlock(blockId: string) {
     try {
-      const res = await fetch(`/api/blocks/${blockId}`, { method: "DELETE" });
-      const json = (await res.json().catch(() => null)) as { editId?: string; error?: string } | null;
-      if (!res.ok) {
-        throw new Error(json?.error ?? t("reader.removeFailedStatus", { status: res.status }));
-      }
+      // Through api(), so offline the removal queues (SPEC.md §17); a queued
+      // removal has no edit yet, so it leaves no undo step.
+      const json = await api<{ editId?: string }>(`/api/blocks/${blockId}`, "DELETE");
       // The removal's own edit puts the block back with its id, so anchors on
       // it heal rather than orphan.
       const editId = json?.editId;
@@ -6812,7 +6810,7 @@ export function ReaderInteractions({
           redo: () => deleteBlock(blockId),
         });
       }
-      router.refresh();
+      refreshWhenOnline(router);
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.removeFailed"));
     }
@@ -6828,7 +6826,7 @@ export function ReaderInteractions({
           redo: () => saveBlockEdit(blockId, text),
         });
       }
-      router.refresh();
+      refreshWhenOnline(router);
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.editFailed"));
     }

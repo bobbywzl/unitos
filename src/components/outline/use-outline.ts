@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api } from "@/lib/api";
+import { refreshWhenOnline } from "@/lib/offline/queue";
 import type { MergeMode } from "@/lib/card-drag";
 import { clearNoteDraft, confirmNoteDraft, readNoteDraft, sweepStaleDrafts } from "@/lib/note-drafts";
 import { joinNoteContents } from "@/lib/notes/join";
@@ -200,7 +201,8 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     setTree(notebook.sections);
   }
 
-  const refresh = useCallback(() => router.refresh(), [router]);
+  // Offline, the refresh waits for the network (SPEC.md §17, lib/offline/queue.ts).
+  const refresh = useCallback(() => refreshWhenOnline(router), [router]);
 
   // Local drafts (SPEC.md §6, lib/note-drafts.ts): a note's editor writes every
   // keystroke to localStorage, and the server save may not have landed before

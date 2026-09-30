@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { EditItem } from "@/lib/types";
 import { api } from "@/lib/api";
+import { refreshWhenOnline } from "@/lib/offline/queue";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
@@ -123,7 +124,7 @@ function EditCard({
     setErrorText(null);
     try {
       await api(`/api/blocks/${edit.blockId}`, "PATCH", { text: edit.before });
-      router.refresh();
+      refreshWhenOnline(router);
     } catch (err) {
       setErrorText(err instanceof Error ? err.message : t("panels.revertFailed"));
     } finally {

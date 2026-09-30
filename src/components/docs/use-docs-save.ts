@@ -5,8 +5,10 @@ import type { Node as PMNode, Schema } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OWN_SAVE_EVENT, REFRESH_EVENT } from "@/components/collab/use-sync";
+import { clearDocDraft, readDocDraft, writeDocDraft } from "@/lib/docs/drafts";
 import { mergeRichText } from "@/lib/docs/merge";
 import { compactRichText, newBlockId, type NullDefaults, type RichNode } from "@/lib/docs/schema";
+import { tabAccount } from "@/lib/tab-account";
 
 // Saving a blank document (SPEC.md §29), the way Google Docs saves: no Save
 // button. Typing marks the document unsaved; a pause of SAVE_DELAY_MS, or
@@ -18,11 +20,19 @@ import { compactRichText, newBlockId, type NullDefaults, type RichNode } from "@
 // goes on screen as one change outside the undo history, so Ctrl+Z takes
 // back only this person's own steps. Leaving the page with unsaved changes
 // tries one last save and asks the browser to warn.
+//
+// Unsaved text also goes to a draft in the browser (lib/docs/drafts.ts)
+// DRAFT_DELAY_MS after each change, and the draft clears when the server
+// confirms a save of the text on screen. Offline, or when the tab closes,
+// reloads, or opens another document before a save lands, the draft holds
+// the words: the next open puts it on screen and saves it, through the same
+// merge a save that meets a newer revision takes.
 
 export type SaveState = "saved" | "saving" | "unsaved" | "offline" | "error";
 
 export const SAVE_DELAY_MS = 700;
 export const MAX_WAIT_MS = 3_000;
+const DRAFT_DELAY_MS = 300;
 /** The largest body a keepalive request may carry on unload. */
 const KEEPALIVE_LIMIT = 60_000;
 /** Meta of the change that puts a stored or merged copy on screen: someone
@@ -243,7 +253,34 @@ export function useDocsSave({
   const loadingRef = useRef(false);
   // The editor went away: no more tries.
   const closedRef = useRef(false);
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const url = `/api/documents/${documentId}/rich-text`;
+
+  // The draft of the text on screen, now: written while it differs from the
+  // stored copy, cleared once it does not.
+  const writeDraft = useCallback(() => {
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = null;
+    if (!editor || editor.isDestroyed || !live || !dirtyRef.current) return;
+    const doc = savedCopy(editor);
+    if (JSON.stringify(doc) === JSON.stringify(baseRef.current)) {
+      void clearDocDraft(documentId);
+      return;
+    }
+    void writeDocDraft({
+      id: documentId,
+      account: tabAccount(),
+      richText: doc,
+      rev: revRef.current,
+      base: baseRef.current,
+      savedAt: Date.now(),
+    });
+  }, [editor, live, documentId]);
+  const dropDraft = useCallback(() => {
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = null;
+    void clearDocDraft(documentId);
+  }, [documentId]);
 
   // The latest save, for the timers a save sets for the next one.
   const saveRef = useRef<() => Promise<void>>(async () => {});
@@ -267,6 +304,7 @@ export function useDocsSave({
       dirtyRef.current = false;
       firstDirtyAtRef.current = null;
       setState("saved");
+      dropDraft();
       return;
     }
     setState("saving");
@@ -332,6 +370,7 @@ export function useDocsSave({
           dirtyRef.current = false;
           firstDirtyAtRef.current = null;
           setState("saved");
+          dropDraft();
         }
       } catch {
         setState("offline");
@@ -349,7 +388,7 @@ export function useDocsSave({
       clearTimer();
       timerRef.current = setTimeout(() => void saveRef.current(), wait);
     }
-  }, [editor, live, url]);
+  }, [editor, live, url, dropDraft]);
   useEffect(() => {
     saveRef.current = save;
   }, [save]);
@@ -363,6 +402,8 @@ export function useDocsSave({
       versionRef.current += 1;
       firstDirtyAtRef.current ??= Date.now();
       setState((s) => (s === "saving" || s === "offline" ? s : "unsaved"));
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = setTimeout(writeDraft, DRAFT_DELAY_MS);
       // After a failure the retry's wait stands: typing does not fire more saves.
       if (retryRef.current > 0 && timerRef.current) return;
       clearTimer();
@@ -379,7 +420,43 @@ export function useDocsSave({
       editor.off("transaction", onUpdate);
       window.removeEventListener("online", onOnline);
     };
-  }, [editor, live, save]);
+  }, [editor, live, save, writeDraft]);
+
+  // A draft left from an earlier visit (lib/docs/drafts.ts): words typed
+  // here that no save confirmed. It goes on screen over the revision it was
+  // typed on and saves; a newer stored revision merges in through the save's
+  // 409. A draft the stored copy already holds, or one from another account,
+  // is not put back.
+  useEffect(() => {
+    if (!editor || !live) return;
+    let cancelled = false;
+    void readDocDraft(documentId).then((draft) => {
+      if (cancelled || !draft || editor.isDestroyed || dirtyRef.current) return;
+      if (draft.account !== tabAccount()) return;
+      if (unknownTypes(draft.richText, editor.schema).length > 0 || unknownTypes(draft.base, editor.schema).length > 0) return;
+      const text = JSON.stringify(draft.richText);
+      if (text === JSON.stringify(draft.base) || text === JSON.stringify(baseRef.current)) {
+        void clearDocDraft(documentId);
+        return;
+      }
+      loadingRef.current = true;
+      try {
+        applyStored(editor, draft.richText);
+      } finally {
+        loadingRef.current = false;
+      }
+      baseRef.current = draft.base;
+      revRef.current = draft.rev;
+      dirtyRef.current = true;
+      versionRef.current += 1;
+      setState("unsaved");
+      clearTimer();
+      timerRef.current = setTimeout(() => void saveRef.current(), 0);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [editor, live, documentId]);
 
   // A newer stored copy arrived with the page (someone else's save, or a
   // server-side edit such as the assistant's): take it when nothing is
@@ -401,20 +478,34 @@ export function useDocsSave({
   useEffect(() => {
     if (!editor || !live) return;
     const onLeave = (e: BeforeUnloadEvent) => {
-      if (dirtyRef.current) saveOnLeave(e, url, "PUT", { richText: savedCopy(editor), rev: revRef.current });
+      if (!dirtyRef.current) return;
+      writeDraft();
+      saveOnLeave(e, url, "PUT", { richText: savedCopy(editor), rev: revRef.current });
     };
     window.addEventListener("beforeunload", onLeave);
     return () => window.removeEventListener("beforeunload", onLeave);
-  }, [editor, live, url]);
+  }, [editor, live, url, writeDraft]);
 
-  // The editor goes away (another document opens): one last save of what
-  // waits, and no try after it.
+  // The editor goes away (another document opens): the draft of what waits,
+  // one last save of it, and no try after it — the draft carries the words
+  // to the next open when that save fails.
+  const writeDraftRef = useRef(writeDraft);
+  useEffect(() => {
+    writeDraftRef.current = writeDraft;
+  }, [writeDraft]);
   useEffect(() => {
     closedRef.current = false;
     return () => {
       closedRef.current = true;
       if (timerRef.current) clearTimeout(timerRef.current);
-      if (dirtyRef.current) void saveRef.current();
+      if (dirtyRef.current) {
+        try {
+          writeDraftRef.current();
+        } catch {
+          // The editor is gone already: the draft written after the last change stands.
+        }
+        void saveRef.current();
+      }
     };
   }, []);
 

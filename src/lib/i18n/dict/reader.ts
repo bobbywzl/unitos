@@ -297,7 +297,6 @@ const en = {
   insertFailed: "Insert failed",
   insertFailedStatus: "Insert failed ({status})",
   removeFailed: "Remove failed",
-  removeFailedStatus: "Remove failed ({status})",
   editFailed: "Edit failed",
   defaultSectionTitle: "Notes",
   // The link card: opens when a link closes
@@ -581,7 +580,6 @@ const zh: Record<keyof typeof en, string> = {
   insertFailed: "插入失败",
   insertFailedStatus: "插入失败（{status}）",
   removeFailed: "移除失败",
-  removeFailedStatus: "移除失败（{status}）",
   editFailed: "编辑失败",
   defaultSectionTitle: "笔记",
   // The link card: opens when a link closes
