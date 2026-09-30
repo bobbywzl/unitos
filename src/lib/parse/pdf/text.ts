@@ -464,7 +464,7 @@ function blankOf(line: Line, place: TabPlace, x1: number, x2: number, y: number,
 }
 
 /** A label set right under a rule from x1 to x2 at y (a signature line's
-    "Print name"): one phrase of a line under it within a line and a half,
+    "Name of witness"): one phrase of a line under it within a line and a half,
     no larger than the page's words (`body`), from the rule's start to short
     of its end, and room over the rule to sign in. A table's row under its
     rule spreads its cells to the rule's end, or has the row before it
