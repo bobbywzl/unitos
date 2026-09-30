@@ -1,0 +1,115 @@
+/* Insert > Watermark (page/watermark.tsx, page/watermark-dialog.tsx): the
+   watermark in each page's sheet, behind the text and centered on the page,
+   and the dialog's small page beside its fields. */
+.docs-watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.docs-watermark > span {
+  flex: none;
+  white-space: pre;
+}
+.docs-watermark > img {
+  flex: none;
+  max-width: none;
+}
+
+/* The dialog: the small page at the left of the fields; on a narrow
+   screen, above them. */
+.docs-wm-dialog {
+  width: min(580px, calc(100vw - 32px));
+}
+.docs-wm-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+.docs-wm-preview {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  outline: 1px solid var(--docs-page-border);
+  box-shadow: var(--elev-sm);
+}
+.docs-wm-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+.docs-wm-lines {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.docs-wm-lines span {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--docs-sep);
+}
+.docs-wm-fields {
+  flex: 1;
+  min-width: 0;
+  gap: 14px;
+}
+.docs-wm-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.docs-wm-size {
+  width: 72px;
+}
+.docs-wm-toggle {
+  display: inline-flex;
+  width: 36px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: var(--docs-ink);
+  cursor: pointer;
+}
+.docs-wm-toggle:hover {
+  background: var(--docs-hover);
+}
+.docs-wm-toggle[aria-pressed="true"] {
+  background: var(--clay-200);
+}
+.docs-wm-range {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.docs-wm-range input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--docs-blue);
+}
+.docs-wm-range output {
+  min-width: 40px;
+  color: var(--docs-ink);
+  font-variant-numeric: tabular-nums;
+}
+.docs-wm-upload {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+}
+@media (max-width: 520px) {
+  .docs-wm-body {
+    flex-direction: column;
+    align-items: center;
+  }
+  .docs-wm-fields {
+    width: 100%;
+  }
+}

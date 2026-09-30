@@ -211,7 +211,7 @@ export function PageSetupDialog({ store, onClose }: { store: PageStore; onClose:
               <span />
             </div>
             <p>{t("docsPage.pagelessAbout")}</p>
-            {(setup.header || setup.footer) && <p className="docs-setup-note">{t("docsPage.pagelessHides")}</p>}
+            {(setup.header || setup.footer || setup.watermark) && <p className="docs-setup-note">{t("docsPage.pagelessHides")}</p>}
             {colorButton(t("docsPage.backgroundColor"))}
           </>
         )}
