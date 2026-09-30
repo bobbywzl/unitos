@@ -92,20 +92,23 @@ export function coreCeiling(words: number): number {
 }
 
 // A core past its ceiling is cut at the last sentence end under it, else at
-// the ceiling with an ellipsis: a core is never longer than the block.
+// the ceiling with an ellipsis: a core is never longer than the block. The
+// cut steps a word at a time, and a CJK character at a time: a Chinese core
+// has no spaces to cut at.
 function fitCore(text: string, ceiling: number): string {
   const core = text.replace(/\s+/g, " ").trim();
   if (wordCount(core) <= ceiling) return core;
-  const words = core.split(" ");
+  const steps = core.match(/[぀-ヿ㐀-鿿豈-﫿]|[^\s぀-ヿ㐀-鿿豈-﫿]+\s?|\s/g) ?? [];
   let cut = "";
-  for (let i = 0; i < words.length; i++) {
-    const next = cut ? `${cut} ${words[i]}` : words[i];
-    if (wordCount(next) > ceiling) break;
-    cut = next;
+  for (const step of steps) {
+    if (wordCount(cut + step) > ceiling) break;
+    cut += step;
   }
-  const sentence = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("。"), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  cut = cut.trim();
+  if (/[.!?。！？]$/.test(cut)) return cut;
+  const sentence = Math.max(...[". ", "! ", "? ", "。", "！", "？"].map((end) => cut.lastIndexOf(end)));
   if (sentence > cut.length / 2) return cut.slice(0, sentence + 1).trim();
-  return `${cut.replace(/[\s,;:—–-]+$/, "")}…`;
+  return `${cut.replace(/[\s,;:—–\-，、；：]+$/, "")}…`;
 }
 
 /** The cores the reader shows now: one per collapsible block (a unit of the
