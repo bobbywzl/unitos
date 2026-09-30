@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { parseChart } from "@/lib/docs/chart";
 import { parseDrawing } from "@/lib/docs/drawing";
+import { isMask } from "@/lib/docs/mask";
 import { watermarkSchema, type Watermark } from "@/lib/docs/watermark";
 import { regionSchema } from "@/lib/video/types";
 
@@ -434,6 +435,9 @@ function cleanAttr(name: string, value: unknown): unknown {
       const chart = parseChart(value);
       return chart ? JSON.stringify(chart) : null;
     }
+    // Mask image: one of the shapes (lib/docs/mask.ts).
+    case "mask":
+      return isMask(value) ? value : null;
     // A drawing's shapes (Insert > Drawing): kept only when they keep every rule.
     case "drawing": {
       const drawing = parseDrawing(value);

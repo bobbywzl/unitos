@@ -7,6 +7,7 @@ import { emitInsert, insertContext, toast } from "@/components/docs/insert/conte
 import { lengthUnitFor, PT_PER_UNIT, PX_PER_PT } from "@/components/docs/page/geometry";
 import type { ImageSource } from "@/components/docs/toolbar/image-menu";
 import { caretUnderImage, insertImage, insertImageFiles } from "@/components/docs/typing/paste";
+import { MASKS, isMask, maskPath, type Mask } from "@/lib/docs/mask";
 import { writePageImageDrag } from "@/lib/image-drop";
 import { uploadImage } from "@/lib/images";
 
@@ -70,6 +71,7 @@ export function imageAttrs(node: PMNode) {
     transparency: Math.min(100, Math.max(0, num(a.transparency, 0))),
     brightness: Math.min(100, Math.max(-100, num(a.brightness, 0))),
     contrast: Math.min(100, Math.max(-100, num(a.contrast, 0))),
+    mask: isMask(a.mask) ? a.mask : null,
   };
 }
 
@@ -91,6 +93,7 @@ const RESET_ATTRS = {
   transparency: 0,
   brightness: 0,
   contrast: 0,
+  mask: null,
 } as const;
 
 /** The text column's width in CSS pixels at 100%. */
@@ -128,11 +131,44 @@ export function imageViewAt(view: EditorView, pos: number): ImageView | null {
   return dom instanceof HTMLElement ? imageViews.get(dom) ?? null : null;
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** The id of a mask's clip path (ensureMaskClips). */
+export function maskClipId(mask: Mask): string {
+  return `docs-mask-${mask}`;
+}
+
+/** The masks' clip paths, once in the page: each shape in the box of the
+    element it clips (objectBoundingBox), so one path fits every image. */
+export function ensureMaskClips(): void {
+  if (typeof document === "undefined" || document.getElementById("docs-mask-clips")) return;
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.id = "docs-mask-clips";
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("width", "0");
+  svg.setAttribute("height", "0");
+  svg.style.position = "absolute";
+  const defs = document.createElementNS(SVG_NS, "defs");
+  for (const mask of MASKS) {
+    const clip = document.createElementNS(SVG_NS, "clipPath");
+    clip.id = maskClipId(mask);
+    clip.setAttribute("clipPathUnits", "objectBoundingBox");
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", maskPath(mask));
+    clip.append(path);
+    defs.append(clip);
+  }
+  svg.append(defs);
+  document.body.append(svg);
+}
+
 class ImageView implements NodeView {
   dom: HTMLElement;
   private box: HTMLElement;
   private frame: HTMLElement;
   private img: HTMLImageElement;
+  /** A masked image's border (drawEdge). */
+  private edge: SVGSVGElement | null = null;
   private chrome: HTMLElement | null = null;
   private ghost: HTMLImageElement | null = null;
   private angleTip: HTMLElement | null = null;
@@ -232,9 +268,43 @@ class ImageView implements NodeView {
     }
     img.filter = filterOf(a);
     img.opacity = a.transparency ? String(1 - a.transparency / 100) : "";
+    // Mask image: the image inside its shape, and the border along the shape.
+    if (a.mask) ensureMaskClips();
+    this.frame.style.clipPath = a.mask ? `url(#${maskClipId(a.mask)})` : "";
     this.frame.style.outline =
-      a.borderColor && a.borderWidth > 0 ? `${a.borderWidth}pt ${a.borderDash} ${a.borderColor}` : "";
+      !a.mask && a.borderColor && a.borderWidth > 0 ? `${a.borderWidth}pt ${a.borderDash} ${a.borderColor}` : "";
+    this.drawEdge(a);
     if (this.selected) this.placeChrome();
+  }
+
+  /** A masked image's border: its shape's outline over the image. */
+  private drawEdge(a: ImageAttrs) {
+    if (!a.mask || !a.borderColor || a.borderWidth <= 0) {
+      this.edge?.remove();
+      this.edge = null;
+      return;
+    }
+    if (!this.edge) {
+      this.edge = document.createElementNS(SVG_NS, "svg");
+      this.edge.setAttribute("class", "docs-img-edge");
+      this.edge.setAttribute("viewBox", "0 0 1 1");
+      this.edge.setAttribute("preserveAspectRatio", "none");
+      this.edge.setAttribute("aria-hidden", "true");
+      // Over the frame, its size, the stroke free to spill past the shape.
+      this.edge.setAttribute("style", "position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none");
+      this.edge.append(document.createElementNS(SVG_NS, "path"));
+      this.frame.after(this.edge);
+    }
+    const width = a.borderWidth * PX_PER_PT;
+    const path = this.edge.firstElementChild;
+    if (!path) return;
+    path.setAttribute("d", maskPath(a.mask));
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", a.borderColor);
+    path.setAttribute("stroke-width", String(width));
+    path.setAttribute("stroke-linecap", a.borderDash === "dotted" ? "round" : "butt");
+    path.setAttribute("stroke-dasharray", a.borderDash === "dotted" ? `0 ${width * 2}` : a.borderDash === "dashed" ? `${width * 4} ${width * 2}` : "none");
+    path.setAttribute("vector-effect", "non-scaling-stroke");
   }
 
   update(node: PMNode): boolean {
@@ -717,6 +787,8 @@ export const DocsImage = Extension.create({
           chart: data("chart", s, null),
           // A drawing's shapes (lib/docs/drawing.ts), a JSON string; null for an image.
           drawing: data("drawing", s, null),
+          // Mask image: the shape the image is drawn inside (lib/docs/mask.ts); null for its rectangle.
+          mask: data("mask", s, null),
         },
       },
     ];
