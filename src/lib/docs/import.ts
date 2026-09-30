@@ -8,6 +8,7 @@ import {
   INDEXED_NODE_TYPES,
   MAX_CAPTION_CHARS,
   newBlockId,
+  NOTE_SYMBOL,
   sanitizeRichText,
   ZWSP,
   type CaptionStyle,
@@ -114,6 +115,9 @@ export type ImportInput = {
   /** The PDF's page the title stands on, when words of an earlier page
       come before it: the Title opens that page. */
   titlePage?: number;
+  /** The title's own styles over its characters (a PDF's italic words,
+      subscripts, superscripts): the Title keeps them. */
+  titleStyles?: StyleSpan[];
 };
 
 export type ImportResult = {
@@ -159,6 +163,9 @@ const DISPLAY_SPACE_PT = 4;
     less 0.07 em, so each baseline stands from the formula as on the page. */
 const DISPLAY_OVER_EM = 0.1;
 const DISPLAY_UNDER_EM = 0.07;
+/** How far a PDF paragraph's line spacing stands from Normal text's before
+    it keeps its own: 3%, the measure's noise and the spacing it keeps. */
+const PDF_LINES_APART = 0.03;
 /** A small line (the kicker, a label, a caption) and a display line, as
     text sizes. */
 const SMALL_SIZE = "9pt";
@@ -450,10 +457,11 @@ function styleLooks(input: ImportInput): Partial<Record<DocStyle, NamedStyle>> {
     bold: font.bold === true,
     italic: font.italic === true,
   });
-  // A Word file's lines at the spacing most of its paragraphs' letters
-  // take: Docs' 1.15 drew a single-spaced file's lines, and its table
-  // rows, a tenth taller than Word draws them.
-  const lines = input.kind === "docx" ? bodyLineSpacing(input.blocks) : null;
+  // A Word file's and a PDF's lines at the spacing most of their
+  // paragraphs' letters take: Docs' 1.15 drew a single-spaced file's lines,
+  // and its table rows, a tenth taller than Word draws them, and a PDF's
+  // 15% farther apart than its page sets them.
+  const lines = input.kind === "docx" || input.kind === "pdf" ? bodyLineSpacing(input.blocks, input.kind) : null;
   if (lines !== null) looks.normal = { ...(looks.normal ?? DEFAULT_STYLES.normal), lineSpacing: lines };
   if (input.titleFont) looks.title = lookOf("title", input.titleFont);
   const tally = new Map<DocStyle, Map<string, { font: TextFont; n: number }>>();
@@ -481,11 +489,25 @@ function styleLooks(input: ImportInput): Partial<Record<DocStyle, NamedStyle>> {
   return looks;
 }
 
-/** The line spacing most of a Word file's paragraph letters take
-    (ParsedBlock.lineSpacing), or null when none says. */
-function bodyLineSpacing(blocks: ParsedBlock[]): number | null {
+/** A paragraph's line spacing (ParsedBlock.lineSpacing, a multiple of
+    single spacing: a Word file's w:line, a PDF's line pitch over 1.15 of its
+    size), to a hundredth; null for none, and for a PDF's measure outside
+    what a page sets (0.8 to 3 times single spacing). */
+function lineSpacingOf(block: ParsedBlock, kind: ImportKind): number | null {
+  const value = block.lineSpacing;
+  if (value === undefined || !Number.isFinite(value) || value <= 0) return null;
+  if (kind === "pdf" && (value < 0.8 || value > 3)) return null;
+  return Math.round(value * 100) / 100;
+}
+
+/** The line spacing most of the paragraphs' letters take, or null when none
+    says. */
+function bodyLineSpacing(blocks: ParsedBlock[], kind: ImportKind): number | null {
   const counts = new Map<number, number>();
-  for (const b of blocks) if (b.type === "PARAGRAPH" && b.lineSpacing !== undefined) counts.set(b.lineSpacing, (counts.get(b.lineSpacing) ?? 0) + b.text.length);
+  for (const b of blocks) {
+    const lines = b.type === "PARAGRAPH" ? lineSpacingOf(b, kind) : null;
+    if (lines !== null) counts.set(lines, (counts.get(lines) ?? 0) + b.text.length);
+  }
   return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 
@@ -501,6 +523,49 @@ function mathAtoms(block: ParsedBlock): Atom[] {
     atoms.push({ start: m.start, end: m.end, node: { type: "inlineMath", attrs: { latex } } });
   }
   return atoms;
+}
+
+/** A note's label the page editor draws in place of a number (a
+    footnote's symbol): one to three of the note symbols ("*", "†", "‡",
+    "§", "¶", "‖"; "**", "¶¶"); null for a number or a letter, which the
+    page editor numbers. A table's cells cite their notes so too
+    (lib/docs/import-table.ts). */
+export function noteSymbol(label: string | undefined): string | null {
+  const symbol = (label ?? "").trim();
+  return NOTE_SYMBOL.test(symbol) ? symbol : null;
+}
+
+/** Small capitals the page draws as capitals at a smaller size (a browser's
+    or a word processor's own: "SCRIPTS" with "CRIPTS" at 0.7 of the size):
+    the parse's size runs inside a smallCaps run, under the block's size.
+    The page editor draws small capitals from lowercase letters at the
+    words' size, so these runs become lowercase (importWords) and lose
+    their size (a heading's small capitals drew 7.5 pt where its style sets
+    11). */
+export function drawnSmallCaps(block: ParsedBlock): StyleSpan[] {
+  const size = block.font?.size;
+  const caps = (block.styles ?? []).filter((s) => s.style === "smallCaps");
+  if (!size || caps.length === 0) return [];
+  return (block.styles ?? []).filter((s) => {
+    const ratio = s.style.startsWith("size:") ? Number(s.style.slice(5)) / size : 0;
+    return ratio >= 0.5 && ratio <= 0.9 && caps.some((c) => c.start <= s.start && s.end <= c.end);
+  });
+}
+
+/** A block's words as the import writes them: its drawn small capitals
+    (drawnSmallCaps) in lowercase, each character one of the same length,
+    so every offset over the words stays. */
+export function importWords(block: ParsedBlock): string {
+  const runs = drawnSmallCaps(block);
+  if (runs.length === 0) return block.text;
+  const chars = block.text.split("");
+  for (const r of runs) {
+    for (let k = Math.max(0, r.start); k < Math.min(chars.length, r.end); k++) {
+      const low = chars[k].toLowerCase();
+      if (low.length === 1) chars[k] = low;
+    }
+  }
+  return chars.join("");
 }
 
 // ── Lists ───────────────────────────────────────────────────────────────────
@@ -891,7 +956,8 @@ class Converter {
         if (!blocks[ref.targetOrder]?.footnote || this.footnoteIds.has(ref.targetOrder) || !inWords || inMath) continue;
         const footnoteId = newBlockId();
         this.footnoteIds.set(ref.targetOrder, footnoteId);
-        atoms.push({ start: ref.start, end: ref.end, node: { type: "footnoteReference", attrs: { footnoteId } } });
+        const symbol = noteSymbol(blocks[ref.targetOrder].footnote?.label);
+        atoms.push({ start: ref.start, end: ref.end, node: { type: "footnoteReference", attrs: { footnoteId, ...(symbol ? { symbol } : {}) } } });
       }
       if (atoms.length > 0) this.numbers.set(block, atoms);
     });
@@ -920,7 +986,8 @@ class Converter {
     this.titleMark = marked.label;
     const footnoteId = newBlockId();
     this.footnoteIds.set(marked.index, footnoteId);
-    this.titleNotes.push({ type: "footnoteReference", attrs: { footnoteId } });
+    const symbol = noteSymbol(marked.label);
+    this.titleNotes.push({ type: "footnoteReference", attrs: { footnoteId, ...(symbol ? { symbol } : {}) } });
   }
 
   /** The Title's words and then the numbers of the footnotes it cites, the
@@ -1097,10 +1164,15 @@ class Converter {
 
   /** A PDF's display space measured to its glyphs, as the page editor
       draws it: less `em` of the words' size beside it (DISPLAY_OVER_EM,
-      DISPLAY_UNDER_EM), to a half point. */
+      DISPLAY_UNDER_EM, at Docs' 1.15 line spacing), their line set closer
+      reaching past its baseline half its difference less, to a half point. */
   private displayGap(space: number, words: ParsedBlock | undefined, em: number): number {
     const size = words?.font?.size ?? this.input.bodyFont?.size ?? DEFAULT_STYLES.normal.size;
-    return Math.max(0, Math.round((space - em * size) * 2) / 2);
+    const docs = DEFAULT_STYLES.normal.lineSpacing;
+    const own = words?.type === "PARAGRAPH" ? lineSpacingOf(words, this.input.kind) : null;
+    const lines = words?.type === "HEADING" ? docs : (own ?? this.looks.normal?.lineSpacing ?? docs);
+    const reach = em + ((lines - docs) * 1.15) / 2;
+    return Math.max(0, Math.round((space - reach * size) * 2) / 2);
   }
 
   /** A PDF's and a Word file's displays: the page editor draws them with
@@ -1152,8 +1224,9 @@ class Converter {
       if (at < block.text.length) spans.push({ start: at, end: block.text.length, mark });
     }
     const named = this.named(style);
+    const caps = drawnSmallCaps(block);
     for (const s of block.styles ?? []) {
-      const mark = styleMark(s.style, named);
+      const mark = caps.includes(s) ? null : styleMark(s.style, named);
       if (mark) spans.push({ start: s.start, end: s.end, mark });
     }
     for (const l of block.links ?? []) {
@@ -1164,7 +1237,7 @@ class Converter {
       if (/^[\w-]{1,64}$/.test(c.refId)) spans.push({ start: c.start, end: c.end, mark: { type: "citation", attrs: { refId: c.refId } } });
     }
     const atoms = [...mathAtoms(block), ...(this.numbers.get(block) ?? [])].sort((a, b) => a.start - b.start);
-    return { text: block.text, spans, starts, atoms };
+    return { text: importWords(block), spans, starts, atoms };
   }
 
   private headingHref(order: number): string | null {
@@ -1195,7 +1268,14 @@ class Converter {
     // its lines are the title's words.
     const lines = this.input.titleLines;
     const text = lines && lines.join(" ").replace(/\s+/g, " ").trim() === title ? lines.join("\n") : title;
-    this.push(paragraphNode(this.titleContent(inline({ text, spans: [], starts })), attrs));
+    // The title's own styles (IP₃'s subscript, Ca²⁺'s superscript), over
+    // its characters as the parse gave them.
+    const own = this.input.title === title && text.length === title.length ? (this.input.titleStyles ?? []) : [];
+    const spans = own.flatMap((s) => {
+      const type = STYLE_MARKS[s.style];
+      return type && s.start >= 0 && s.end > s.start && s.end <= text.length ? [{ start: s.start, end: s.end, mark: { type } }] : [];
+    });
+    this.push(paragraphNode(this.titleContent(inline({ text, spans, starts })), attrs));
   }
 
   private block(block: ParsedBlock, index: number, isTitle: boolean) {
@@ -1250,11 +1330,13 @@ class Converter {
     if (align) attrs.textAlign = align;
     if (role === "meta") attrs.docStyle = "subtitle";
     else if (role !== "kicker" && this.spaceAfter(block) > 0) attrs.spaceAfter = this.spaceAfter(block);
-    // A Word paragraph set at another spacing than Normal text keeps its own.
+    // A paragraph set at another spacing than Normal text keeps its own: a
+    // Word file's exact to a hundredth, a PDF's measure past its noise
+    // (baselines a quarter point off read 2.00 to 2.04 on one page).
+    const lines = this.input.kind === "docx" || this.input.kind === "pdf" ? lineSpacingOf(block, this.input.kind) : null;
     const normalLines = this.looks.normal?.lineSpacing;
-    if (this.input.kind === "docx" && block.lineSpacing !== undefined && normalLines !== undefined && Math.abs(block.lineSpacing - normalLines) >= 0.01) {
-      attrs.lineSpacing = block.lineSpacing;
-    }
+    const apart = this.input.kind === "pdf" ? PDF_LINES_APART : 0.01;
+    if (lines !== null && normalLines !== undefined && Math.abs(lines - normalLines) >= apart - 1e-9) attrs.lineSpacing = lines;
     const kind = INDENT_TOKENS.find((k) => tokens.includes(k));
     const indent = block.indent ?? (kind ? INDENTS[kind] : undefined);
     // A bar at a side stands in its indent, its padding from the words:
@@ -1507,6 +1589,11 @@ class Converter {
     this.figures.push({ mediaId, html: this.input.kind === "pdf" ? null : block.html ?? null, caption, page, region });
     const captionStyles = this.input.kind === "pdf" ? captionStylesFor(block, caption) : null;
     const captionMath = this.input.kind === "pdf" ? captionMathFor(block, caption) : null;
+    // A PDF's caption at the size the page sets it in (the look of its
+    // words), where Normal text's is another: a newsletter's 8 pt captions
+    // drew at the body's 11.
+    const own = this.input.kind === "pdf" && caption ? block.font?.size : undefined;
+    const captionSize = own && Number.isFinite(own) && Math.abs(own - this.named("normal").size) >= 0.5 ? Math.round(own * 2) / 2 : null;
     this.place(index, [
       {
         type: "figure",
@@ -1516,6 +1603,7 @@ class Converter {
           caption,
           ...(captionStyles ? { captionStyles } : {}),
           ...(captionMath ? { captionMath } : {}),
+          ...(captionSize ? { captionSize } : {}),
           page,
           region: region ? JSON.stringify(region) : null,
           pageStart,

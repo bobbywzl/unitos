@@ -944,7 +944,8 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
   const segment: Segment = { type: "PARAGRAPH", text, ...(html ? { html } : {}), ...(indent ? { indent } : {}), page: line.page, runs, ...geom(group) };
   const last = group[group.length - 1];
   if (justifiedPage(lines, ctx) && (atEdge(last, columnEdges(lines, j - 1, ctx).right) || atEdge(last, fullEnd(lines, j - 1)))) fullLast.add(segment);
-  if (group.length >= 2) pitches.set(segment, pitchOf(group));
+  const pitch = group.length >= 2 ? pitchOf(group, ctx) : undefined;
+  if (pitch !== undefined) pitches.set(segment, pitch);
   return { segments: [segment], next: j };
 }
 
@@ -958,37 +959,55 @@ const pitches = new WeakMap<Segment, number>();
 // an item's space apart, and a heading's lines may be paragraphs of their
 // own a paragraph's space apart (a title over a subtitle): their pitch is
 // the page's.
-function ownPitch(s: Segment, lines: Line[]): number | undefined {
+function ownPitch(s: Segment, lines: Line[], ctx: PageContext): number | undefined {
   const known = pitches.get(s);
   const box = s.lineBox;
   if (known !== undefined || !box || s.type !== "PARAGRAPH") return known;
   const own = lines
     .filter((l) => l.cells.length > 0 && l.y - l.size * 0.3 >= box.y1 - 0.5 && l.y + l.size * 0.85 <= box.y2 + 0.5 && l.x >= box.x1 - 0.5 && l.xEnd <= box.x2 + 0.5)
     .sort((m, n) => n.y - m.y);
-  return own.length >= 2 ? pitchOf(own) : undefined;
+  return own.length >= 2 ? pitchOf(own, ctx) : undefined;
 }
 
 // The line pitch of the upper block, or of the lower, and the size its
 // lines are set in.
-function pitchOfEither(a: Segment, b: Segment, lines: Line[]): [number, number] | undefined {
+function pitchOfEither(a: Segment, b: Segment, lines: Line[], ctx: PageContext): [number, number] | undefined {
   for (const s of [a, b]) {
-    const pitch = ownPitch(s, lines);
+    const pitch = ownPitch(s, lines, ctx);
     if (pitch !== undefined && s.lineSize) return [pitch, s.lineSize];
   }
   return undefined;
 }
 
-// The median of lines' baseline steps, of an even count the mean of the
-// middle two: of a paragraph's two steps, one pushed apart by a label
-// stacked over an arrow (TeX's lineskip), the larger read as its pitch, and
-// the space under it 3 pt short.
-function pitchOf(group: Line[]): number {
+// Lines' pitch: their smallest baseline step that another step matches
+// (within a tenth of a point, or a hundredth of the step) or that stands
+// within 3% of the page's leading. A page pushes lines apart (TeX's
+// lineskip under a tall formula, a label stacked over an arrow, a word
+// processor's line under a taller run), never closer: of a paragraph's two
+// or three steps the median was a pushed one, its lines drew a tenth too
+// far apart, and the space under it read 3 pt short. With no such step,
+// a lone step under the page's leading is the pitch (an abstract set
+// tighter than the text), and one over it was pushed: none. A step between
+// two lines that tall glyphs push apart (pushedApart) is no pitch, and
+// neither is a step under half the lines' size (two lines read on one
+// baseline). An OCR layer's baselines jitter both ways: its median, of an
+// even count the mean of the middle two.
+function pitchOf(group: Line[], ctx: PageContext): number | undefined {
+  const size = median(group.map((l) => l.size));
   const steps = group
     .slice(1)
-    .map((l, k) => group[k].y - l.y)
+    .flatMap((l, k) => (pushedApart(group[k], l) ? [] : [group[k].y - l.y]))
+    .filter((step) => step >= size * 0.5)
     .sort((a, b) => a - b);
-  const half = Math.floor(steps.length / 2);
-  return steps.length % 2 === 1 ? steps[half] : (steps[half - 1] + steps[half]) / 2;
+  if (steps.length === 0) return undefined;
+  if (ctx.ocr) {
+    const half = Math.floor(steps.length / 2);
+    return steps.length % 2 === 1 ? steps[half] : (steps[half - 1] + steps[half]) / 2;
+  }
+  const leading = ctx.leading * size;
+  const matched = (k: number) => [steps[k - 1], steps[k + 1]].some((other) => other !== undefined && Math.abs(other - steps[k]) <= Math.max(0.1, steps[k] * 0.01));
+  const pitch = steps.find((step, k) => matched(k) || Math.abs(step - leading) <= leading * 0.03);
+  return pitch ?? (steps[0] < leading ? steps[0] : undefined);
 }
 
 // The paragraphs whose last line runs to the column's right edge on a page
@@ -1097,15 +1116,31 @@ export function layout(lines: Line[], from: number, to: number, ctx: PageContext
 // A block of text: a paragraph, a heading, or a list.
 const isText = (s: Segment) => s.type === "PARAGRAPH" || s.type === "HEADING" || s.type === "LIST";
 
-/** The space after each text block of a page (ParsedBlock.spaceAfter): the
-    gap from its lines to the next text block's under it in its column,
-    beyond the text's line pitch, in points; none where a figure, a table,
-    or the page's end follows, or where a gap wider than three lines of the
-    page's text is no blank the page leaves (farBlank). A Google Docs export
-    marks a gap with a blank line and sets none between a label and its
-    lines: the import's fixed 10 pt after every paragraph set each line of
-    such a page apart. */
+/** A single line's height over its size, as Word and Docs set single
+    spacing (docx.ts reads a Word file's line spacing against it). */
+const SINGLE_LINE = 1.15;
+
+/** The space after each text block and each table of a page
+    (ParsedBlock.spaceAfter): the gap from its lines, or from a table's
+    bottom edge, to the next text block's under it in its column, beyond
+    the text's line pitch, in points; none where a figure, a table, or the
+    page's end follows, or where a gap wider than three lines of the page's
+    text is no blank the page leaves (farBlank). A Google Docs export marks
+    a gap with a blank line and sets none between a label and its lines:
+    the import's fixed 10 pt after every paragraph set each line of such a
+    page apart. And each paragraph's line pitch (ParsedBlock.lineSpacing). */
 export function measureSpacing(segments: Segment[], ctx: PageContext, lines: Line[] = []) {
+  // A paragraph's lines stand as far apart as the page sets them: its
+  // pitch over single spacing at its size (to a half point, as the import
+  // draws it), to a hundredth, as a Word file's line spacing reads. At
+  // Docs' 1.15 every line stood 1.32 of its size apart: a TeX paper's
+  // lines, set 1.2 apart, ran a tenth taller than the page's (arXiv
+  // 2411.19946).
+  for (const s of segments) {
+    const pitch = s.type === "PARAGRAPH" ? ownPitch(s, lines, ctx) : undefined;
+    const size = Math.round((s.lineSize ?? 0) * 2) / 2;
+    if (pitch !== undefined && size > 0 && pitch >= size && pitch <= size * 3) s.lineSpacing = Math.round((pitch / size / SINGLE_LINE) * 100) / 100;
+  }
   // A display equation's edge is its glyphs' box (math/display.ts), and the
   // edge of a block of text its lines' own box, their scripts left out. A
   // line whose glyphs reach more than two sizes under its baseline, past any
@@ -1123,7 +1158,12 @@ export function measureSpacing(segments: Segment[], ctx: PageContext, lines: Lin
   for (let k = 0; k + 1 < segments.length; k++) {
     const [a, b] = [segments[k], segments[k + 1]];
     const display = a.type === "EQUATION" || b.type === "EQUATION";
-    const [top, bottom] = [edge(a), edge(b)];
+    // A table's room under it runs from its bottom edge (a ruled table's
+    // bottom rule, a text table's last row) to the top of the next text
+    // block's first line, as the page editor draws that line, or to the
+    // next table's top edge.
+    const table = a.type === "TABLE" && (isText(b) || b.type === "TABLE");
+    const [top, bottom] = [table ? a.box : edge(a), table && b.type === "TABLE" ? b.box : edge(b)];
     if (!top || !bottom || !a.box || !b.box || a.page !== b.page) continue;
     const size = b.lineSize ?? ctx.bodySize;
     // b stands under a, and their columns meet.
@@ -1137,10 +1177,14 @@ export function measureSpacing(segments: Segment[], ctx: PageContext, lines: Lin
     // line over a 15 pt one steps more than the body's pitch). Over and
     // under a display the gap runs to its glyphs.
     const [aSize, bSize] = [a.lineSize ?? size, b.lineSize ?? size];
-    const [pitch, pitchSize] = pitchOfEither(a, b, lines) ?? [ctx.leading * size, size];
+    const [pitch, pitchSize] = pitchOfEither(a, b, lines, ctx) ?? [ctx.leading * size, size];
     const natural = (pitch / pitchSize) * (aSize * 0.2 + bSize * 0.8);
     const step = () => top.y1 + aSize * 0.3 - (bottom.y2 - bSize * 0.85);
-    const gap = display ? top.y1 - bottom.y2 : a.lineBox && b.lineBox ? step() - natural : top.y1 - bottom.y2 - (ctx.leading - 1.15) * size;
+    const gap =
+      table && b.type !== "TABLE" ? top.y1 - (bottom.y2 - bSize * 0.85) - (pitch / pitchSize) * bSize * 0.8
+      : display || table ? top.y1 - bottom.y2
+      : a.lineBox && b.lineBox ? step() - natural
+      : top.y1 - bottom.y2 - (ctx.leading - 1.15) * size;
     if (gap <= -size || (gap > ctx.bodySize * ctx.leading * 3 && !farBlank(a, b, segments, ctx))) continue;
     a.spaceAfter = Math.max(0, Math.round(gap));
   }

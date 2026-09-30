@@ -130,6 +130,14 @@
 .docs-prose h6 { font-size: 11pt; padding-top: 12pt; padding-bottom: 4pt; color: var(--docs-gray-2); font-style: italic; }
 .docs-prose p[data-doc-style="title"] { font-size: 26pt; padding-bottom: 3pt; }
 .docs-prose p[data-doc-style="subtitle"] { font-size: 15pt; padding-bottom: 16pt; color: var(--docs-gray-2); }
+/* An import's H1, H2, and Title keep their own color, as in Docs: Normal
+   text's (the named style's, on the page's root) is not theirs. A blank
+   document's take Normal text's color, as they always have. :where keeps
+   a named style's own color the winner. */
+:where(.docs-shell[data-import]) .docs-prose :is(h1, h2),
+:where(.docs-shell[data-import]) .docs-prose p[data-doc-style="title"] {
+  color: var(--docs-ink);
+}
 /* The first heading of the document starts at the page's top margin. */
 .docs-prose > :first-child {
   padding-top: 0;

@@ -213,6 +213,7 @@ export function shiftSpansInto(target: Segment, source: Segment, offset: number)
 // justified item).
 function joinLayout(prev: Segment, next: Segment) {
   prev.spaceAfter = next.spaceAfter;
+  prev.lineSpacing ??= next.lineSpacing;
   if (prev.type === "LIST") {
     if (!prev.text.includes("\n")) prev.itemSpace ??= next.itemSpace;
     if (next.listIndents && next.listIndents.length > (prev.listIndents?.length ?? 0)) prev.listIndents = [...(prev.listIndents ?? []), ...next.listIndents.slice(prev.listIndents?.length ?? 0)];
@@ -572,6 +573,7 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
         if (rows.length > 0) {
           prev.breaks = joinBreaks(prev, segment, prev.text.length + 1);
           prev.text = prev.text + "\n" + rows.join("\n");
+          prev.spaceAfter = segment.spaceAfter;
           // The first page's last row ended the table: it takes the row gap
           // now, so the table's DOM text stays its text (SPEC.md §5).
           prev.html = prev.html.replace(

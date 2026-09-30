@@ -207,6 +207,8 @@ function tableDecorations(doc: PMNode): DecorationSet {
       attrs["data-cell-size"] = "";
       style.push(`--docs-cell-size: ${size}pt`);
     }
+    const after = node.attrs.spaceAfter;
+    if (typeof after === "number" && after >= 0 && after <= 1584) style.push(`margin-bottom: ${after}pt`);
     if (style.length > 0) attrs.style = style.join("; ");
     decorations.push(Decoration.node(pos, pos + node.nodeSize, attrs));
     return false;
@@ -297,6 +299,9 @@ export const DocsTable = Extension.create({
           // The table's text size in points (an import's): its cells'
           // paragraphs take it, so a line is as tall as its words.
           cellSize: { default: null, rendered: false },
+          // The room the page leaves under the table in points (an
+          // import's): the wrapper's margin under it, in place of 6 pt.
+          spaceAfter: { default: null, rendered: false },
         },
       },
     ];

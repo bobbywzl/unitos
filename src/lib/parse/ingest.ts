@@ -243,8 +243,8 @@ const IMPORT_TX_MS = 120_000;
 
 /** The page's look an import's named styles take (a PDF's, a Word file's),
     and the page a PDF's title stands on. */
-type PageLook = Pick<ParsedDocument, "bodyFont" | "titleFont" | "titleAlign" | "titleLines" | "titlePage">;
-const pageLook = (parsed: PageLook): PageLook => ({ bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign, titleLines: parsed.titleLines, titlePage: parsed.titlePage });
+type PageLook = Pick<ParsedDocument, "bodyFont" | "titleFont" | "titleAlign" | "titleStyles" | "titleLines" | "titlePage">;
+const pageLook = (parsed: PageLook): PageLook => ({ bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign, titleStyles: parsed.titleStyles, titleLines: parsed.titleLines, titlePage: parsed.titlePage });
 
 /** A parse as an import: the rich text, the figure media, the page setup. */
 type Converted = { richText: RichNode; figures: ImportFigure[]; pageSetup: PageSetup };

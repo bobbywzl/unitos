@@ -2605,7 +2605,9 @@ RISKS.AUDIT = async (theme) => {
     };
   });
   const chromeShot = await shot(page, `AUDIT-pdf-chrome-${theme}`);
-  check("AUDIT", chrome.titleRow && chrome.toolbar && chrome.ruler && chrome.vruler && chrome.sheets >= 15 && Math.abs(chrome.width - 816) <= 2 && Math.abs(chrome.height - 1056) <= 2, `(${theme}) the PDF reads as a Doc: title row, toolbar, rulers, pages at the paper's size`, `${JSON.stringify(chrome)} ${chromeShot}`);
+  // The 15-page PDF fills about as many pages: its lines draw at the page's
+  // own pitch in the page editor's wider column, so four fifths at least.
+  check("AUDIT", chrome.titleRow && chrome.toolbar && chrome.ruler && chrome.vruler && chrome.sheets >= 12 && Math.abs(chrome.width - 816) <= 2 && Math.abs(chrome.height - 1056) <= 2, `(${theme}) the PDF reads as a Doc: title row, toolbar, rulers, pages at the paper's size`, `${JSON.stringify(chrome)} ${chromeShot}`);
   check("AUDIT", /PDF · 15 pages/.test(chrome.line), `(${theme}) the import line says "PDF · 15 pages"`, chrome.line);
   // A formula's closing mark stays on its line (insert/math.ts): at ten text
   // widths, no line opens with the "." or ")" that follows an inline equation.

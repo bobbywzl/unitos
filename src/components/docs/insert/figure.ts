@@ -82,9 +82,16 @@ function figureOf(node: PMNode, imported: ImportedEditor | null, editor: Editor 
     caption: media ? media.caption : typeof node.attrs.caption === "string" ? node.attrs.caption : "",
     styles: captionStylesOf(node.attrs.captionStyles) ?? [],
     math: captionMathOf(node.attrs.captionMath) ?? [],
+    captionSize: captionSizeOf(node.attrs.captionSize),
     src: media ? (media.html ? null : media.src) : ownPage ? figureImageUrl(documentId, mediaId) : null,
     size: media?.size ?? null,
   };
+}
+
+/** A PDF caption's size in points, as its page sets it (lib/docs/import.ts),
+    or null: the caption takes the words' size. */
+function captionSizeOf(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 4 && value <= 72 ? value : null;
 }
 
 /** A caption style's element (the page editor's own for each mark). */
@@ -191,6 +198,7 @@ function CropFigure({
   caption,
   styles,
   math,
+  captionSize,
 }: {
   blockId: string;
   src: string | null;
@@ -198,6 +206,7 @@ function CropFigure({
   caption: string;
   styles: CaptionStyle[];
   math: CaptionMath[];
+  captionSize: number | null;
 }) {
   const t = useT();
   const [failed, setFailed] = useState<string | null>(null);
@@ -223,7 +232,7 @@ function CropFigure({
           onError: () => setFailed(shown),
         })
       : null,
-    caption ? h("p", { className: "docs-figure-caption" }, ...captionContent(caption, styles, math)) : null,
+    caption ? h("p", { className: "docs-figure-caption", style: captionSize ? { fontSize: `${captionSize}pt` } : undefined }, ...captionContent(caption, styles, math)) : null,
     // Nothing to draw: the object still shows where it stands.
     !shown && !caption ? h("p", { className: "docs-figure-empty" }, t("docsInsert.figure")) : null,
   );
@@ -238,7 +247,7 @@ function FigureView({ node, editor }: NodeViewProps) {
     { ref: setEl, className: "docs-figure-body" },
     figure.html
       ? h(MediaHtml, { blockId: figure.blockId, className: "reader-figure", html: figure.html })
-      : h(CropFigure, { blockId: figure.blockId, src: figure.src, size: figure.size, caption: figure.caption, styles: figure.styles, math: figure.math }),
+      : h(CropFigure, { blockId: figure.blockId, src: figure.src, size: figure.size, caption: figure.caption, styles: figure.styles, math: figure.math, captionSize: figure.captionSize }),
   );
 }
 
@@ -318,6 +327,8 @@ export const Figure = Node.create<FigureOptions>({
       // itself stays words, not rich text.
       captionStyles: { default: null, rendered: false },
       captionMath: { default: null, rendered: false },
+      // A PDF caption's size as its page sets it, in points.
+      captionSize: { default: null, rendered: false },
       page: { default: null, rendered: false },
       region: { default: null, rendered: false },
       // A PDF page that begins at the figure (insert/page-start.ts).
@@ -348,7 +359,10 @@ export const Figure = Node.create<FigureOptions>({
     }
     const parts: DOMOutputSpec[] = [];
     if (figure.src) parts.push(["img", { src: figure.src, alt: "" }]);
-    if (figure.caption) parts.push(["p", { class: "docs-figure-caption" }, ...captionSpec(figure.caption, figure.styles, figure.math)]);
+    if (figure.caption) {
+      const sized = figure.captionSize ? { style: `font-size: ${figure.captionSize}pt` } : {};
+      parts.push(["p", { class: "docs-figure-caption", ...sized }, ...captionSpec(figure.caption, figure.styles, figure.math)]);
+    }
     return ["div", attrs, ["div", { class: "reader-figure docs-figure-crop" }, ...parts]];
   },
 
