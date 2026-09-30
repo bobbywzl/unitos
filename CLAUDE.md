@@ -1,5 +1,20 @@
 # CLAUDE.md
 
+## Rule zero: existing users never lose their data
+
+This rule outranks every other rule in this file, SPEC.md, a skill, or a task. Read it before every change, every diff, and every push.
+
+The number one goal of every update, fix, revamp, or refactor: no existing user loses data, and every user's current workflow keeps working after the update. A feature that ships while one user loses one note is a failed update.
+
+1. **Never delete, overwrite, hide, or orphan a user's data** as a side effect of a change: projects, sections, notes, annotations, quotes (Source), replies, edits, documents, blocks, versions, folders, drafts, offline queues, and settings. A hard delete runs only when the owner asked for that exact thing and confirmed it.
+2. **One account's action never reaches another account's data.** A document can be one row shared by several accounts (dedupe by file hash or URL). A delete, re-parse, or edit on a shared row must stay inside the projects the caller can edit.
+3. **Migrations are additive.** No `DROP COLUMN`, `DROP TABLE`, destructive `UPDATE` or `DELETE`, no new `ON DELETE CASCADE` onto user content, and no `NOT NULL` without a backfill. Copy data to the new shape first, and keep the old column until the new one is proven. Anything else needs a written plan that keeps every row, and the owner's explicit approval before it merges.
+4. **A new filter or view must still show old data.** Rows written before a field existed (null in the new column) must still show where they showed before. Check what existing rows look like, not only new ones.
+5. **Existing workflows keep working.** A document opens as it did, a note stays where the user put it, a quote stays anchored, and a button the user relies on stays or gets a clear replacement. No automatic re-parse, conversion, or migration may move a user's anchors or rewrite their text without their request.
+6. **Unsaved work survives.** Text the user typed is kept (a draft in the browser, the offline queue) until the server confirms it. A network error, a reload, a sign-out, or a deploy never throws typed words away. A queued write is dropped only when the server says it is stale.
+7. **Before every push, say what existing data the change touches and how it is kept**, in the commit message. If a change touches user data and you cannot show it is kept, stop and ask the owner.
+8. **When data is lost anyway, stop other work.** Keep the evidence (do not rebuild digests, re-parse, or run cleanup), run `scripts/recover/diagnose-account.mjs`, and restore from a backup with `scripts/recover/restore-account.mjs`.
+
 ## Text Production Style (applies to ALL text you write: UI copy, prompts, docs, comments, commit messages, and AI prompt templates in /lib/prompts/)
 
 Do not use different phrases and sentence structures for the sake of using different phrases and sentence structures. The goal is to be simple, concise, and straight to the point — most easily interpretable and suitable for the target audience.
