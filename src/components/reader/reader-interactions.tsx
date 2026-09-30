@@ -6718,7 +6718,7 @@ export function ReaderInteractions({
   }
 
   // Images drop into the article, in reading and in edit mode alike: a file,
-  // or a picture dragged from another page, dropped on a block of the text
+  // or an image dragged from another page, dropped on a block of the text
   // lands right after that block, and the drop line under the block says so
   // while the drag is over it. A drop anywhere else, and a file that is not
   // an image, keeps travelling to the window, which adds dropped files as

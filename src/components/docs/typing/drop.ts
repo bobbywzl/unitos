@@ -9,7 +9,7 @@ import { droppedImageUrls, mayCarryPageImage, type DroppedImageUrl } from "@/lib
 import type { TFunc } from "@/lib/i18n/dictionaries";
 
 // Images dropped on the page editor (SPEC.md §29), as Google Docs takes them:
-// a file from the computer, or a picture dragged from another page, dropped
+// a file from the computer, or an image dragged from another page, dropped
 // anywhere on the page — on the words, in a margin, under the last line, or
 // on the gray around the page — goes in where a caret at the drop point
 // stands: on its own line after that paragraph, before it when the caret is
@@ -31,7 +31,7 @@ export type DropState = {
   t: TFunc;
 };
 
-/** What a drag from outside the page carries: files; an address (a picture
+/** What a drag from outside the page carries: files; an address (an image
     or a link from another page); or words. */
 type DragKind = "files" | "address" | "words";
 
@@ -168,7 +168,7 @@ export function listenImageDrop(editor: Editor, state: () => DropState): () => v
 
   /** Whether this path takes the drag. Over the words, while the page takes
       changes, words and addresses are ProseMirror's (its caret shows where
-      they go); a picture among them is taken at the drop. */
+      they go); an image among them is taken at the drop. */
   const takes = (e: DragEvent, kind: DragKind, editing: boolean): boolean => {
     if (kind === "files") return true;
     const onWords = e.target instanceof Node && view.dom.contains(e.target);
@@ -207,7 +207,7 @@ export function listenImageDrop(editor: Editor, state: () => DropState): () => v
     drop.hide();
     const now = state();
     const files = kind === "files" ? [...(e.dataTransfer?.files ?? [])] : [];
-    // A picture from another page: its address (a browser may give the
+    // An image from another page: its address (a browser may give the
     // file's type and none of its bytes).
     const images: DroppedImageUrl[] = kind !== "words" && files.length === 0 ? droppedImageUrls(e.dataTransfer) : [];
     if (!takes(e, kind, now.editing) && images.length === 0) return;

@@ -5,12 +5,12 @@
 // from the page onto a note in the notes tray (a person's mouse drag, which
 // the browser runs as its own drag); SPELLING is Add to dictionary, Ignore
 // all, and Tools > Spelling and grammar > Personal dictionary; CHART is
-// Insert > Chart; DRAWING is Insert > Drawing. Each check prints PASS or
-// FAIL with its evidence; each case leaves a screenshot (light theme,
-// 1440×900; the dark case in dark).
+// Insert > Chart; DRAWING is Insert > Drawing; COMPARE is Tools > Compare
+// documents. Each check prints PASS or FAIL with its evidence; each case
+// leaves a screenshot (light theme, 1440×900; the dark case in dark).
 //
 // Usage:
-//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING] [--label after] [--keep]
+//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE] [--label after] [--keep]
 // With no group named, every group runs. Env: BASE (default
 // http://localhost:3111), SHOT_DIR (default <tmp>/ui-docs-parity), CHROME
 // (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3492), DATABASE_URL
@@ -1063,6 +1063,129 @@ GROUPS.DRAWING = async () => {
   await page.mouse.dblclick(shown.x + shown.width / 2, shown.y + shown.height / 2);
   await sleep(600);
   check(G, (await drawingDialog(page).count()) === 0, "in Viewing a double-click on a drawing opens nothing");
+  check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
+  await close();
+};
+
+// ── Tools > Compare documents ───────────────────────────────────────────────
+
+const compareDialog = (page) => page.locator(".docs-compare-dialog");
+/** A document's paragraph index as stored: each row's words. */
+const indexOf = async (documentId) => (await db.block.findMany({ where: { documentId }, orderBy: { order: "asc" }, select: { text: true } })).map((b) => b.text);
+/** The page's words, one line per textblock. */
+const pageLines = (page) => page.evaluate(() => {
+  const out = [];
+  window.__docsEditor.state.doc.descendants((n) => {
+    if (!n.isTextblock) return true;
+    out.push(n.textContent);
+    return false;
+  });
+  return out;
+});
+/** Open Compare documents from Search the menus, pick `title`, press Compare. */
+async function compareWith(page, title) {
+  await searchMenus(page, "compare documents");
+  await compareDialog(page).waitFor({ state: "visible", timeout: 10_000 });
+  const options = await compareDialog(page).locator("select option").allTextContents();
+  await compareDialog(page).locator("select").selectOption({ label: title });
+  await compareDialog(page).locator('[data-track="docs:compare:run"]').click();
+  return options;
+}
+
+GROUPS.COMPARE = async () => {
+  const G = "COMPARE";
+  const bullets = (items) => ({ type: "bulletList", content: items.map((t) => ({ type: "listItem", content: [paragraph(t)] })) });
+  const grid = (rows) => ({ type: "table", content: rows.map((r) => ({ type: "tableRow", content: r.map((t) => ({ type: "tableCell", attrs: {}, content: [paragraph(t)] })) })) });
+  // Each document its own blocks: a block's id is the paragraph index's row.
+  const first = () => [
+    paragraph("The survey covered the north field and the river bank."),
+    paragraph("We counted 30 birds at the north station."),
+    paragraph("The east bank is unstable after the flood."),
+    bullets(["Walk the fence line.", "Count the birds at dawn.", "Photograph the nests."]),
+    grid([["Station", "Birds"], ["North", "30"]]),
+    paragraph("Next visit: the first week of the month."),
+  ];
+  const second = [
+    paragraph("The survey covered the north field, the river bank, and the ridge."),
+    paragraph("We counted 35 birds at the north station."),
+    paragraph("Keep off the bank until the ground is checked."),
+    bullets(["Walk the fence line.", "Count the birds at noon.", "Photograph the nests."]),
+    grid([["Station", "Birds"], ["North", "35"]]),
+    paragraph("Next visit: the first week of the month."),
+  ];
+  const a = await richDocument("First draft", first());
+  await richDocument("Second draft", second);
+  await richDocument("First draft again", first());
+  const blockDoc = await db.document.create({ data: { title: "Block notes", blocks: { create: [{ order: 0, type: "PARAGRAPH", text: "A block document." }] } } });
+  await db.notebookDocument.create({ data: { notebookId: ctx.notebookId, documentId: blockDoc.id } });
+  ctx.documents.push(blockDoc.id);
+  const aBefore = JSON.stringify((await api(`/api/documents/${a}/rich-text`)).body.richText);
+  const { page, errors, close } = await newPage();
+  await openEditor(page, a, "Next visit");
+  const count = async () => db.notebookDocument.count({ where: { notebookId: ctx.notebookId } });
+
+  // 1. The same words: the dialog says so and makes nothing.
+  await clickIn(page, "The survey");
+  const before = await count();
+  const options = await compareWith(page, "First draft again");
+  const sameNote = await until(() => compareDialog(page).locator('[role="status"]').textContent().catch(() => ""), 10_000);
+  check(G, !options.includes("First draft") && options.includes("Second draft") && /same words/.test(sameNote ?? "") && (await count()) === before, "the dialog lists the project's other documents; the same words make nothing", `${JSON.stringify(options)}; ${sameNote}`);
+
+  // 2. A block document: no text to compare.
+  await compareDialog(page).locator("select").selectOption({ label: "Block notes" });
+  await compareDialog(page).locator('[data-track="docs:compare:run"]').click();
+  const noText = await until(async () => {
+    const text = await compareDialog(page).locator('[role="status"]').textContent().catch(() => "");
+    return /no text to compare/.test(text) ? text : null;
+  }, 10_000);
+  check(G, Boolean(noText) && (await count()) === before, "a document without text says it has no text to compare", noText ?? "");
+  await shot(page, "compare-2-no-text");
+
+  // 3. The second draft: a comparison opens with the differences as suggestions.
+  await compareDialog(page).locator("select").selectOption({ label: "Second draft" });
+  await compareDialog(page).locator('[data-track="docs:compare:run"]').click();
+  await page.waitForFunction((a) => !location.search.includes(a), a, { timeout: 60_000 }).catch(() => {});
+  const compId = new URL(page.url()).searchParams.get("doc");
+  await page.waitForFunction(() => window.__docsEditor && document.querySelector(".docs-prose")?.textContent.includes("Next visit"), null, { timeout: 120_000 });
+  await sleep(2000);
+  await shot(page, "compare-3-comparison");
+  const title = (await db.document.findUnique({ where: { id: compId }, select: { title: true } }))?.title;
+  const marks = await page.evaluate(() => {
+    const ids = new Set();
+    let inserted = "";
+    let deleted = "";
+    window.__docsEditor.state.doc.descendants((n) => {
+      for (const m of n.marks) {
+        if (m.type.name === "insertion" || m.type.name === "deletion") ids.add(m.attrs.id);
+        if (n.isText && m.type.name === "insertion") inserted += `${n.text}|`;
+        if (n.isText && m.type.name === "deletion") deleted += `${n.text}|`;
+      }
+    });
+    return { suggestions: ids.size, inserted, deleted };
+  });
+  check(G, compId && compId !== a && title === "Comparison of First draft and Second draft" && marks.suggestions >= 6 && /35/.test(marks.inserted) && /30/.test(marks.deleted) && /noon/.test(marks.inserted) && /dawn/.test(marks.deleted), "Compare opens a copy with the second draft's differences as suggestions, word by word in the list and the table too", `${title}; ${JSON.stringify(marks)}`);
+  const index = await until(async () => {
+    const rows = await indexOf(compId);
+    return rows.includes("Keep off the bank until the ground is checked.") ? rows : null;
+  }, 15_000);
+  const secondLines = ["The survey covered the north field, the river bank, and the ridge.", "We counted 35 birds at the north station.", "Keep off the bank until the ground is checked.", "Walk the fence line.", "Count the birds at noon.", "Photograph the nests.", "Station", "Birds", "North", "35", "Next visit: the first week of the month."];
+  check(G, JSON.stringify(index) === JSON.stringify(secondLines), "the comparison's paragraph index reads the suggestions as accepted: the second draft's words", JSON.stringify(index));
+  const aAfter = JSON.stringify((await api(`/api/documents/${a}/rich-text`)).body.richText);
+  check(G, aAfter === aBefore, "the first draft stays as it was");
+
+  // 4. Reject all gives the first draft's words; Accept all the second's.
+  await clickIn(page, "Next visit");
+  await searchMenus(page, "reject all suggestions");
+  await sleep(600);
+  const rejected = await pageLines(page);
+  await page.keyboard.press("Control+z");
+  await sleep(600);
+  await searchMenus(page, "accept all suggestions");
+  await sleep(600);
+  const accepted = await pageLines(page);
+  const firstLines = ["The survey covered the north field and the river bank.", "We counted 30 birds at the north station.", "The east bank is unstable after the flood.", "Walk the fence line.", "Count the birds at dawn.", "Photograph the nests.", "Station", "Birds", "North", "30", "Next visit: the first week of the month."];
+  check(G, JSON.stringify(rejected) === JSON.stringify(firstLines) && JSON.stringify(accepted) === JSON.stringify(secondLines), "Reject all gives the first draft's words, Accept all the second draft's", `${JSON.stringify(rejected)} | ${JSON.stringify(accepted)}`);
+  ctx.documents.push(compId);
   check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
   await close();
 };

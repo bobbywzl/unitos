@@ -29,9 +29,9 @@ import "./drawing.css";
 
 // Insert > Drawing (SPEC.md §29): Google Docs' drawing dialog, in Unitos's
 // colors. Select, Line, Arrow, Rectangle, Oval, Text box, and Scribble draw
-// on a white canvas; a shape picked with Select moves, a rectangle or an
+// on a white canvas; a shape selected with Select moves, a rectangle or an
 // oval resizes by its corners and a line by its ends, and the line color,
-// the fill, the line weight, and the text size set the picked shape and the
+// the fill, the line weight, and the text size set the selected shape and the
 // next ones. Save and close stores the drawing, cut to what is drawn, as an
 // image that keeps the shapes (lib/docs/drawing.ts); a double-click on it
 // opens them again.
@@ -206,7 +206,7 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
   const [past, setPast] = useState<Shape[][]>([]);
   const [future, setFuture] = useState<Shape[][]>([]);
   const [tool, setTool] = useState<Tool>(open.shapes.length > 0 ? "select" : "line");
-  const [picked, setPicked] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
   const [stroke, setStroke] = useState(INK);
   const [fill, setFill] = useState<string | null>(null);
   const [weight, setWeight] = useState(2);
@@ -242,7 +242,7 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
     setFuture([current, ...future]);
     setPast(past.slice(0, -1));
     show(past[past.length - 1]);
-    setPicked(null);
+    setSelected(null);
   };
   const redo = () => {
     if (future.length === 0) return;
@@ -250,12 +250,12 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
     setPast([...past, current]);
     setFuture(future.slice(1));
     show(future[0]);
-    setPicked(null);
+    setSelected(null);
   };
   const remove = () => {
-    if (picked === null) return;
-    commit(live.current.filter((_, i) => i !== picked));
-    setPicked(null);
+    if (selected === null) return;
+    commit(live.current.filter((_, i) => i !== selected));
+    setSelected(null);
   };
 
   /** The text box being typed in is done: kept with words, gone without.
@@ -269,12 +269,12 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
     const next = kept ? live.current : live.current.filter((_, i) => i !== index);
     commit(next, before.current ?? live.current);
     before.current = null;
-    setPicked(kept ? index : null);
+    setSelected(kept ? index : null);
     startEditing(null);
   };
 
   // The keys, before the dialog's Escape: Escape ends the text box or drops
-  // the pick first; Delete removes the picked shape; Undo and Redo.
+  // the selection first; Delete removes the selected shape; Undo and Redo.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
@@ -287,11 +287,11 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
         return;
       }
       const inField = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
-      if (e.key === "Escape" && picked !== null) {
+      if (e.key === "Escape" && selected !== null) {
         e.preventDefault();
         e.stopPropagation();
-        setPicked(null);
-      } else if ((e.key === "Delete" || e.key === "Backspace") && picked !== null && !inField) {
+        setSelected(null);
+      } else if ((e.key === "Delete" || e.key === "Backspace") && selected !== null && !inField) {
         e.preventDefault();
         remove();
       } else if (mod && !e.altKey && e.key.toLowerCase() === "z" && !inField) {
@@ -326,11 +326,11 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
     const all = live.current;
     before.current = all;
     if (tool === "select") {
-      const handle = picked !== null ? handlesOf(all[picked]).find((h) => Math.hypot(h.x - p.x, h.y - p.y) <= 8) : undefined;
-      if (handle && picked !== null) drag.current = { type: "handle", index: picked, handle: handle.handle, orig: all[picked] };
+      const handle = selected !== null ? handlesOf(all[selected]).find((h) => Math.hypot(h.x - p.x, h.y - p.y) <= 8) : undefined;
+      if (handle && selected !== null) drag.current = { type: "handle", index: selected, handle: handle.handle, orig: all[selected] };
       else {
         const hit = shapeAt(all, p);
-        setPicked(hit);
+        setSelected(hit);
         drag.current = hit === null ? null : { type: "move", index: hit, from: p, orig: all[hit] };
       }
     } else if (all.length >= MAX_DRAWING_SHAPES) {
@@ -339,7 +339,7 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
       const s: Shape = { kind: "text", x: p.x, y: p.y - textSize * 0.6, text: "", color: stroke, size: textSize };
       show([...all, s]);
       startEditing(all.length);
-      setPicked(null);
+      setSelected(null);
       return;
     } else if (tool === "scribble") {
       if (pointsIn(all) >= MAX_DRAWING_POINTS) return;
@@ -404,36 +404,36 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
         return;
       }
       commit(all, from);
-      // As in Docs, a shape just drawn is picked, ready to move.
+      // As in Docs, a shape just drawn is selected, ready to move.
       if (d.type === "create") {
         setTool("select");
-        setPicked(d.index);
+        setSelected(d.index);
       }
       return;
     }
     if (all !== from && JSON.stringify(all[d.index]) !== JSON.stringify(from[d.index])) commit(all, from);
   };
 
-  /** A style control: it sets the picked shape, and the next ones. */
+  /** A style control: it sets the selected shape, and the next ones. */
   const restyle = (patch: (s: Shape) => Shape | null) => {
-    if (picked === null) return;
-    const s = live.current[picked];
+    if (selected === null) return;
+    const s = live.current[selected];
     const next = s ? patch(s) : null;
-    if (next) commit(live.current.map((x, i) => (i === picked ? next : x)));
+    if (next) commit(live.current.map((x, i) => (i === selected ? next : x)));
   };
-  const pickStroke = (c: string) => {
+  const chooseStroke = (c: string) => {
     setStroke(c);
     restyle((s) => (s.kind === "text" ? { ...s, color: c } : { ...s, stroke: c }));
   };
-  const pickFill = (c: string | null) => {
+  const chooseFill = (c: string | null) => {
     setFill(c);
     restyle((s) => (s.kind === "rect" || s.kind === "ellipse" ? { ...s, fill: c } : null));
   };
-  const pickWeight = (w: number) => {
+  const chooseWeight = (w: number) => {
     setWeight(w);
     restyle((s) => (s.kind === "text" ? null : { ...s, width: w }));
   };
-  const pickSize = (size: number) => {
+  const chooseSize = (size: number) => {
     setTextSize(size);
     restyle((s) => (s.kind === "text" ? { ...s, size } : null));
   };
@@ -441,7 +441,7 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
   // Each shape in a group that names its kind (the canvas's; the stored SVG has none).
   const shown = useMemo(() => shapes.map((s, i) => (i === editing ? "" : `<g data-shape="${s.kind}">${shapeSvg(s)}</g>`)).join(""), [shapes, editing]);
   const typing = editing !== null ? shapes[editing] : null;
-  const pickedShape = picked !== null ? shapes[picked] : null;
+  const selectedShape = selected !== null ? shapes[selected] : null;
   const drawn = shapes.some((s) => s.kind !== "text" || s.text.trim());
 
   async function save() {
@@ -488,7 +488,7 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
       onClick={() => {
         if (editing !== null) endText();
         setTool(id);
-        if (id !== "select") setPicked(null);
+        if (id !== "select") setSelected(null);
       }}
     >
       <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
@@ -533,7 +533,7 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
           aria-label={t("common.delete")}
           data-tip={t("common.delete")}
           data-track="docs:drawing:delete"
-          disabled={picked === null}
+          disabled={selected === null}
           onClick={remove}
         >
           <DeleteIcon />
@@ -550,7 +550,7 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
             aria-pressed={stroke === c}
             aria-label={c}
             data-track="docs:drawing:stroke"
-            onClick={() => pickStroke(c)}
+            onClick={() => chooseStroke(c)}
           />
         ))}
         <span className="docs-drawing-label">{t("docsInsert.drawingFill")}</span>
@@ -564,7 +564,7 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
             aria-label={c ?? t("docsInsert.drawingNoFill")}
             data-tip={c === null ? t("docsInsert.drawingNoFill") : undefined}
             data-track="docs:drawing:fill"
-            onClick={() => pickFill(c)}
+            onClick={() => chooseFill(c)}
           />
         ))}
         <span className="docs-drawing-label">{t("docsInsert.drawingWeight")}</span>
@@ -576,7 +576,7 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
             aria-pressed={weight === w}
             aria-label={`${w} px`}
             data-track="docs:drawing:weight"
-            onClick={() => pickWeight(w)}
+            onClick={() => chooseWeight(w)}
           >
             <span style={{ height: w }} />
           </button>
@@ -589,7 +589,7 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
             className="docs-drawing-size"
             aria-pressed={textSize === size}
             data-track="docs:drawing:size"
-            onClick={() => pickSize(size)}
+            onClick={() => chooseSize(size)}
           >
             {size}
           </button>
@@ -613,18 +613,18 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
             if (hit !== null && live.current[hit].kind === "text") {
               before.current = live.current;
               startEditing(hit);
-              setPicked(null);
+              setSelected(null);
             }
           }}
         >
           <g dangerouslySetInnerHTML={{ __html: shown }} />
-          {pickedShape && editing === null && (
-            <g className="docs-drawing-pick">
+          {selectedShape && editing === null && (
+            <g className="docs-drawing-selection">
               {(() => {
-                const [x0, y0, x1, y1] = shapeBounds(pickedShape);
+                const [x0, y0, x1, y1] = shapeBounds(selectedShape);
                 return <rect x={x0 - 3} y={y0 - 3} width={x1 - x0 + 6} height={y1 - y0 + 6} fill="none" />;
               })()}
-              {handlesOf(pickedShape).map((h) => (
+              {handlesOf(selectedShape).map((h) => (
                 <circle key={h.handle} cx={h.x} cy={h.y} r={5} data-handle={h.handle} />
               ))}
             </g>

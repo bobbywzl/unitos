@@ -17,7 +17,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 // dropped (typing/drop.ts) is uploaded and goes in as an image on its own
 // line, faint with a turning ring until it is stored. Pasted HTML keeps only
 // the formatting a save keeps, Word's lists and Google Docs' checklists
-// included, and its pictures are copied into Unitos. With Enable Markdown
+// included, and its images are copied into Unitos. With Enable Markdown
 // on, Paste from Markdown and Copy as Markdown work too.
 
 /** Points per CSS unit. A font size's em, rem, and % count against Normal
@@ -111,7 +111,7 @@ function wordLists(root: DocumentFragment): void {
 }
 
 /** A Google Docs checklist line (li role="checkbox") becomes a checklist
-    line, ticked or not, without its checkbox picture; a ticked line's
+    line, ticked or not, without its checkbox image; a ticked line's
     strikethrough is the checklist's, not the words'. */
 function docsChecklists(root: DocumentFragment): void {
   root.querySelectorAll<HTMLElement>("li[role='checkbox']").forEach((li) => {
@@ -152,7 +152,7 @@ function docsListFormats(root: DocumentFragment): void {
 
 /** Pasted HTML as the page editor keeps it: Word's lists, Google Docs'
     lists and checklists, its paragraph and text formats (above), and its
-    pictures copied into Unitos (copyImages). */
+    images copied into Unitos (copyImages). */
 export function pastedHtml(editor: Editor, html: string): string {
   const box = document.createElement("template");
   box.innerHTML = html;
@@ -194,12 +194,12 @@ function imagesAt(doc: PMNode, src: string): number[] {
   return found;
 }
 
-/** Pictures in pasted HTML are copied into Unitos. A data: picture shows at
+/** Images in pasted HTML are copied into Unitos. A data: image shows at
     once from a blob: address; one no save keeps (file:, cid:) goes. Once
-    the paste has landed, each picture it put in the document is uploaded
+    the paste has landed, each image it put in the document is uploaded
     (the path insertImageFiles takes) and its images take the stored
-    address. A remote picture the browser may not read keeps its address; a
-    data: picture that cannot be stored goes, with the reason. */
+    address. A remote image the browser may not read keeps its address; a
+    data: image that cannot be stored goes, with the reason. */
 function copyImages(editor: Editor, root: DocumentFragment): void {
   const sources = new Map<string, Blob | null>();
   root.querySelectorAll("img").forEach((img) => {
@@ -420,11 +420,11 @@ export async function insertImageFiles(editor: Editor, files: File[], pos?: numb
   );
 }
 
-/** Insert pictures dragged from another page at `pos`, each on its own line,
-    as insertImageFiles does. A data: picture goes in as a file. Any other
+/** Insert images dragged from another page at `pos`, each on its own line,
+    as insertImageFiles does. A data: image goes in as a file. Any other
     shows at once from its own address and uploads when the browser may read
     it, then takes the stored address; one the browser may not read keeps its
-    address, as a pasted picture does (copyImages). */
+    address, as a pasted image does (copyImages). */
 export async function insertImageUrls(editor: Editor, images: DroppedImageUrl[], pos: number): Promise<void> {
   const data = images.filter((image) => image.url.startsWith("data:"));
   if (data.length === images.length) {
@@ -447,7 +447,7 @@ export async function insertImageUrls(editor: Editor, images: DroppedImageUrl[],
         try {
           url = (await uploadImage(file)).url;
         } catch {
-          // Refused by the server: the picture keeps its own address.
+          // Refused by the server: the image keeps its own address.
         }
       }
       markUpload(editor, image.url, false);

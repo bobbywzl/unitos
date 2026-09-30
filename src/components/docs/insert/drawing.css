@@ -114,12 +114,12 @@
 .docs-drawing-canvas[data-tool="text"] {
   cursor: text;
 }
-.docs-drawing-pick rect {
+.docs-drawing-selection rect {
   stroke: var(--docs-blue);
   stroke-width: 1;
   stroke-dasharray: 4 3;
 }
-.docs-drawing-pick circle {
+.docs-drawing-selection circle {
   fill: #ffffff;
   stroke: var(--docs-blue);
   stroke-width: 1.5;

@@ -1,6 +1,6 @@
-// A picture dragged from another web page (SPEC.md §16, §29). The drag
-// carries the picture's address (text/uri-list) and a copy of its <img>
-// (text/html); Chrome often adds the picture itself as a file, which then
+// An image dragged from another web page (SPEC.md §16, §29). The drag
+// carries the image's address (text/uri-list) and a copy of its <img>
+// (text/html); Chrome often adds the image itself as a file, which then
 // drops like any file. One reader of that data for the page editor and the
 // block reader.
 
@@ -11,7 +11,7 @@ export type DroppedImageUrl = { url: string; alt: string };
 // An address that names an image file by its extension.
 const IMAGE_ADDRESS = /\.(png|jpe?g|gif|webp|bmp|avif)([?#]|$)/i;
 
-/** True when a drag without files may be a picture from another page: it
+/** True when a drag without files may be an image from another page: it
     carries an address. A selection of words dragged in the page carries
     none. */
 export function mayCarryPageImage(dt: DataTransfer | null): boolean {
@@ -30,10 +30,10 @@ function usable(url: string): boolean {
   }
 }
 
-/** The pictures a drop from another page carries, when it carries nothing
+/** The images a drop from another page carries, when it carries nothing
     else: the <img> addresses of its html when the html holds no words, else
     the addresses of its uri-list that name an image file. Empty for words, a
-    link to a page, or a mix of words and pictures (those paste as words). */
+    link to a page, or a mix of words and images (those paste as words). */
 export function droppedImageUrls(dt: DataTransfer | null): DroppedImageUrl[] {
   if (!dt) return [];
   const html = dt.getData("text/html");
@@ -98,7 +98,7 @@ function nameOf(url: string, type: string): string {
   return `image.${type.split("/")[1]?.replace("jpeg", "jpg") ?? "png"}`;
 }
 
-/** The picture at `url` as a file, when the browser may read it: a data:
+/** The image at `url` as a file, when the browser may read it: a data:
     address, an address of this site, or a site that allows it. Null when it
     may not, or when what comes back is not an image. */
 export async function imageFileFrom(url: string): Promise<File | null> {

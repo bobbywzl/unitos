@@ -211,4 +211,14 @@ registerDocsCommands([
     // reader's own document (SPEC.md §29).
     enabled: (editor) => insertContext(editor)?.projectEditor === true,
   },
+  {
+    // Tools > Compare documents: a copy with another document's differences
+    // as suggestions (page/compare-dialog.tsx), made as Make a copy is.
+    id: "page:compare",
+    label: "docsPage.compareDocuments",
+    menu: "tools",
+    keywords: ["compare", "comparison", "difference", "diff", "versions", "比较", "对比"],
+    run: (editor) => store(editor)?.set({ dialog: "compare" }),
+    enabled: (editor) => insertContext(editor)?.projectEditor === true,
+  },
 ]);
