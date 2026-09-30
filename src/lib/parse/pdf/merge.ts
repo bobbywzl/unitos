@@ -3,6 +3,7 @@
 
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { BULLET_RE, follows, readMarker } from "@/lib/parse/pdf/markers";
+import { endAs, endsFull } from "@/lib/parse/pdf/paragraphs";
 import { joinWrapped } from "@/lib/parse/pdf/text";
 import type { PageBreak, Segment } from "@/lib/parse/pdf/types";
 
@@ -14,12 +15,42 @@ import type { PageBreak, Segment } from "@/lib/parse/pdf/types";
 const isFloat = (s: Segment) =>
   s.type === "TABLE" || ((s.type === "FIGURE" || s.type === "PARAGRAPH") && CAPTION_RE.test(s.text));
 
+// A caption: its label opens it ("Figure 2:", "Table 1."), or its lines read
+// as one (layout's "caption" token). A caption never goes on over a page,
+// and no paragraph goes on into it.
+const isCaptionText = (s: Segment) => CAPTION_RE.test(s.text) || /\bcaption\b/.test(s.html ?? "");
+
+// Pull quotes (segment.ts markPullQuotes): quotes whose words a longer
+// paragraph of their page holds, the text's own words set apart. Set where
+// the page has room, one may stand between a paragraph's halves as a float
+// does (the Earth Observer p. 10).
+function pullQuotes(segments: Segment[]): Set<Segment> {
+  const wordsOf = (text: string) => text.toLowerCase().match(/\p{L}{3,}/gu) ?? [];
+  const quotes = new Set<Segment>();
+  for (const s of segments) {
+    if (s.type !== "PARAGRAPH" || !/\bquote\b/.test(s.html ?? "")) continue;
+    const words = wordsOf(s.text);
+    const quoted = segments.some((t) => {
+      if (t === s || t.type !== "PARAGRAPH" || t.page !== s.page || t.text.length <= s.text.length) return false;
+      const theirs = new Set(wordsOf(t.text));
+      return words.filter((w) => theirs.has(w)).length >= words.length * 0.8;
+    });
+    if (words.length >= 8 && quoted) quotes.add(s);
+  }
+  return quotes;
+}
+
 // A figure's labels the figure did not take, read as lines or as a
 // display's crop, are set smaller than the paragraph around them: next to a
 // float, they are the float's ("ac-" | labels, a figure | "cessible": arXiv
 // 2411.19946).
 const isLabel = (s: Segment, paragraph: Segment) =>
   s.type !== "HEADING" && paragraph.lineSize !== undefined && s.lineSize !== undefined && s.lineSize < paragraph.lineSize * 0.9;
+
+// A Chinese or Japanese character that ends a text or opens one (a stop, a
+// closing bracket, and the full-width punctuation aside).
+const CJK_END_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー、]$/u;
+const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
 
 // A part that ends in an abbreviation ends no sentence when the next opens
 // with a number or a lowercase word ("(Zhuravlev et al. 2010; Erban et
@@ -44,25 +75,57 @@ function goesOn(prev: string, next: string): boolean {
 // mid-sentence and the second goes on its sentence (goesOn: "…3D fermionic
 // TO" | "(fTO) characterized…", arxiv-2504-02736), or a column
 // break cuts a sentence before a capitalized word (the first ends in a
-// word, the second starts higher on the page and right of it). A second
-// part that opens with no lowercase word, set at half the first's size or
-// less, is no part of it: a page's keywords line and the licence line at
-// its foot (real-jnlp-31-47-p1).
-function continuesOnPage(prev: Segment, next: Segment): boolean {
+// word, the second starts higher on the page and right of it, set alike). A
+// second part that opens with no lowercase word, set at half the first's
+// size or less, is no part of it: a page's keywords line and the licence
+// line at its foot (real-jnlp-31-47-p1). A caption is no part of a
+// paragraph: a side caption set higher in the margin read as the column
+// the paragraph goes on in (the Earth Observer p. 17).
+function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): boolean {
   if (prev.type !== "PARAGRAPH" || next.type !== "PARAGRAPH" || prev.page !== next.page) return false;
-  if (prev.listItem || next.listItem || prev.text.includes("\n")) return false;
+  if (prev.listItem || next.listItem || prev.text.includes("\n") || isCaptionText(next)) return false;
+  // A caption goes on only into its own next line, right under it where its
+  // lines change size (a table's caption set larger on its first line, over
+  // a line of its own: MMWR p. 4), never into a paragraph.
+  const lead = (prev.lineSize ?? 10) * 1.5;
+  if (isCaptionText(prev) && !(prev.box && next.box && prev.box.y1 - next.box.y2 <= lead && Math.abs(prev.box.x1 - next.box.x1) <= lead)) return false;
+  // A part that opens with a sub-table's or a sub-figure's label is a
+  // caption of its own ("(d) Ablation on init." under its table, after "(b)
+  // Selection criteria. … probability" over the table: arXiv 2411.19946 p.
+  // 7), and a pull quote is no part of the text it quotes (the Earth
+  // Observer p. 10).
+  if (/^\([a-h]\)\s+\p{Lu}/u.test(next.text) || /\bquote\b/.test(next.html ?? "")) return false;
   const sizes = prev.lineSize !== undefined && next.lineSize !== undefined ? [prev.lineSize, next.lineSize] : undefined;
   if (sizes && !/^[a-z]/.test(next.text) && Math.abs(sizes[0] - sizes[1]) > Math.min(...sizes) * 0.5) return false;
+  // A part set smaller under the first, a line's size or more below it, is
+  // a note at the page's foot: the correspondence line's "e-mail: …" went
+  // on the right column's last paragraph (Nature p. 1).
+  if (sizes && sizes[1] < sizes[0] - 0.5 && prev.box && next.box && next.box.y2 < prev.box.y1 - sizes[0]) return false;
   // Two links, each on its own line, are two paragraphs: a Google Docs
   // export's list of links read as one. "…available at" and a link still
   // join.
   if (/(?:https?:\/\/|www\.)\S*$/.test(prev.text) && /^(?:https?:\/\/|www\.)/.test(next.text)) return false;
   if ((/[a-z,;\-–—]$/.test(prev.text) || ABBREVIATION_END_RE.test(prev.text)) && goesOn(prev.text, next.text)) return true;
-  if (prev.text.length <= 60 || !/\s[\p{L}\p{M}]+$/u.test(prev.text)) return false;
-  if (/^[a-z(]/.test(next.text)) return true;
   const size = prev.lineSize ?? 10;
   const columnBreak = prev.box !== undefined && next.box !== undefined && next.box.y2 > prev.box.y1 && next.box.x1 > prev.box.x2 - size;
-  return columnBreak && /^\p{Lu}/u.test(next.text);
+  const alike = !sizes || Math.max(...sizes) <= Math.min(...sizes) * 1.2;
+  // A column's last line that ran to its edge goes on as a page's does
+  // (wrapsOver).
+  if (columnBreak && alike && wrapsOver(prev, next, setting)) return true;
+  // Chinese and Japanese break a sentence at any character: a part whose
+  // full last line ends with no stop goes on into a part that opens with a
+  // character where its lines start, or in the next column. A line alone
+  // that ends where the next part's lines end is full (a paragraph's first
+  // line read beside a caption's bar: the MIC white paper p. 13). A quoted
+  // example set in over the text is no part of it (real-jnlp-31-47 p. 24).
+  const aligned = prev.box !== undefined && next.box !== undefined && Math.abs(next.box.x1 - prev.box.x1) <= size * 1.2;
+  const fullLine =
+    endsAtEdge(prev, setting) ||
+    (prev.box !== undefined && next.box !== undefined && prev.box.y2 - prev.box.y1 <= size * 1.6 && next.box.y2 - next.box.y1 > size * 1.6 && Math.abs(prev.box.x2 - next.box.x2) <= size * 0.5);
+  if (CJK_END_RE.test(prev.text) && CJK_START_RE.test(next.text) && alike && (aligned || columnBreak) && fullLine) return true;
+  if (prev.text.length <= 60 || !/\s[\p{L}\p{M}]+$/u.test(prev.text)) return false;
+  if (/^[a-z(]/.test(next.text)) return true;
+  return columnBreak && alike && /^\p{Lu}/u.test(next.text);
 }
 
 // A paragraph's halves on one page join, and a float set between them (a
@@ -70,6 +133,7 @@ function continuesOnPage(prev: Segment, next: Segment): boolean {
 // its figure left, follows the paragraph.
 export function joinOnPage(input: Segment[]): Segment[] {
   const segments = [...input];
+  const setting = pageSetting(segments);
   for (let b = 1; b < segments.length; b++) {
     const paragraph = segments[b - 1];
     const inRun = (s: Segment) => isFloat(s) || isLabel(s, paragraph);
@@ -77,15 +141,16 @@ export function joinOnPage(input: Segment[]): Segment[] {
     let k = b;
     while (k < segments.length && segments[k].page === segments[b].page && inRun(segments[k])) k++;
     if (!segments.slice(b, k).some(isFloat)) continue;
-    if (k < segments.length && continuesOnPage(paragraph, segments[k])) segments.splice(b, 0, ...segments.splice(k, 1));
+    if (k < segments.length && continuesOnPage(paragraph, segments[k], setting)) segments.splice(b, 0, ...segments.splice(k, 1));
   }
   const out: Segment[] = [];
   for (const segment of segments) {
     const prev = out[out.length - 1];
-    if (prev && continuesOnPage(prev, segment)) {
+    if (prev && continuesOnPage(prev, segment, setting)) {
       firstLineLayout(prev, segment);
       shiftSpansInto(prev, segment, joinWrapped(prev, segment.text));
       joinLayout(prev, segment);
+      endAs(prev, segment);
       continue;
     }
     if (prev && itemGoesOn(prev, segment)) {
@@ -210,33 +275,37 @@ function joinBreaks(target: Segment, source: Segment, offset: number, shift = 0)
 // stands on has begun). Pages of floats between the halves keep them
 // apart: after the paragraph, those floats would stand past the next
 // page's start, and an import's page starts only rise (lib/docs/import.ts).
-function liftFloatsOffParagraphBreaks(segments: Segment[]): Segment[] {
+function liftFloatsOffParagraphBreaks(segments: Segment[], setting: PageSetting, body: Map<number, number>): Segment[] {
   const out = [...segments];
+  const smaller = (s: Segment) => s.type === "PARAGRAPH" && s.lineSize !== undefined && s.lineSize < (body.get(s.page) ?? 0) * 0.95;
+  const quotes = pullQuotes(segments);
   // A display's crop stands where the sentence puts it.
   const isPageFloat = (s: Segment) =>
-    (s.type === "FIGURE" && !s.mathCrop) || s.type === "TABLE" || (s.type === "PARAGRAPH" && CAPTION_RE.test(s.text));
+    (s.type === "FIGURE" && !s.mathCrop) || s.type === "TABLE" || (s.type === "PARAGRAPH" && CAPTION_RE.test(s.text)) || quotes.has(s);
   // Floats a lift set after a paragraph's joined part: a join past them
   // would set them past the next page's start, so the halves stay apart.
   const following = new Set<Segment>();
   for (let b = 1; b < out.length; b++) {
     if (out[b].page === out[b - 1].page) continue;
-    // The page's last paragraph, past the figures, tables, and whole
-    // captions set after it on its page (a caption that ends mid-sentence
-    // goes on over the page), and past a short line under it set smaller (a
-    // license line at the page's foot: IEEE Access p. 1).
+    // The page's last paragraph, past the figures, tables, and captions set
+    // after it on its page (a caption never goes on over a page: "Photo
+    // credit: NASA" ends one), and past the paragraphs under it set smaller
+    // than the page's text (a license line at the page's foot: IEEE Access
+    // p. 1; a side caption with no label: the Earth Observer p. 17; a
+    // scan's notes the notes reader missed, in one paragraph or several:
+    // nasa-sp-4408 p. 12).
     let a = b - 1;
     let footLine = false;
     for (; a > 0 && out[a - 1].page === out[a].page; a--) {
-      if (isPageFloat(out[a]) && (out[a].type !== "PARAGRAPH" || /[.!?:)]$/.test(out[a].text.trim()))) continue;
-      if (out[a].type !== "PARAGRAPH" || out[a - 1].type !== "PARAGRAPH" || out[a].text.length >= 200 || !isLabel(out[a], out[a - 1])) break;
+      if (isPageFloat(out[a])) continue;
+      if (!smaller(out[a])) break;
       footLine = true;
     }
     const prev = out[a];
     // A list cut by the page break continues under the floats too (import
-    // compare loop finding: a rubric list split in two by a figure). A
-    // caption the break cuts goes on by itself.
+    // compare loop finding: a rubric list split in two by a figure).
     const listBreak = prev.type === "LIST" && !prev.tocEntries;
-    const ended = /[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim());
+    const ended = /[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim()) && !endsAtEdge(prev, setting);
     if (!listBreak && (prev.type !== "PARAGRAPH" || isPageFloat(prev) || ended)) continue;
     let k = b;
     while (k < out.length && out[k].page === out[b].page && (isPageFloat(out[k]) || isLabel(out[k], prev))) k++;
@@ -245,7 +314,8 @@ function liftFloatsOffParagraphBreaks(segments: Segment[]): Segment[] {
     if (tail.page !== out[b].page) continue;
     // A references entry's end at the page's top goes with the list after it.
     const lift = listBreak && hangingTail(tail, out[k + 1]) ? 2 : 1;
-    if (lift === 1 && (listBreak ? tail.type !== "LIST" || Boolean(tail.tocEntries) : tail.type !== "PARAGRAPH" || !/^[a-z($€£0-9"'“]/.test(tail.text))) continue;
+    const opens = /^[a-z($€£0-9"'“]/.test(tail.text) && !(/[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim()));
+    if (lift === 1 && (listBreak ? tail.type !== "LIST" || Boolean(tail.tocEntries) : tail.type !== "PARAGRAPH" || !(opens || wrapsOver(prev, tail, setting)))) continue;
     if (out.slice(a + 1, b).some((s) => following.has(s))) continue;
     for (const s of out.slice(b, k)) following.add(s);
     const joined = out.splice(k, lift);
@@ -272,8 +342,81 @@ function hangingTail(tail: Segment, after: Segment | undefined): boolean {
   );
 }
 
+// The size each page's text is set in: the size most of the document's
+// paragraphs and lists are set in, where the page sets a tenth of its own
+// in it (a page of captions and notes, or one with a box of larger type,
+// holds its text too); else the page's own. An OCR layer sizes each page
+// from its scan: a scanned book's body reads 7 pt on one page and 8 pt on
+// the next.
+function bodySizes(segments: Segment[]): Map<number, number> {
+  const counts = new Map<number, Map<number, number>>();
+  const all = new Map<number, number>();
+  for (const s of segments) {
+    if ((s.type !== "PARAGRAPH" && s.type !== "LIST") || s.lineSize === undefined) continue;
+    const sizes = counts.get(s.page) ?? new Map<number, number>();
+    const size = Math.round(s.lineSize * 2) / 2;
+    sizes.set(size, (sizes.get(size) ?? 0) + s.text.length);
+    all.set(size, (all.get(size) ?? 0) + s.text.length);
+    counts.set(s.page, sizes);
+  }
+  const most = (sizes: Map<number, number>) => [...sizes].sort((a, b) => b[1] - a[1])[0][0];
+  const document = all.size > 0 ? most(all) : 0;
+  const body = new Map<number, number>();
+  for (const [page, sizes] of counts) {
+    const chars = [...sizes.values()].reduce((n, c) => n + c, 0);
+    body.set(page, (sizes.get(document) ?? 0) * 10 >= chars ? document : most(sizes));
+  }
+  return body;
+}
+
+// Two parts set alike against their pages' text, within a fifth: a
+// caption's last line or a note set smaller is no part of the next page's
+// paragraph (a caption's "Photo credit: NASA" went on into the next page's
+// first paragraph: the Earth Observer p. 12).
+function setAlike(a: Segment, b: Segment, body: Map<number, number>): boolean {
+  const [pa, pb] = [body.get(a.page), body.get(b.page)];
+  if (a.lineSize === undefined || b.lineSize === undefined || !pa || !pb) return true;
+  const [ra, rb] = [a.lineSize / pa, b.lineSize / pb];
+  return Math.max(ra, rb) <= Math.min(ra, rb) * 1.2;
+}
+
+// How the pages set their paragraphs: the pages whose paragraphs open set
+// in (a first-line indent), and each page's justified paragraphs.
+type PageSetting = { indenting: Set<number>; justified: Segment[] };
+function pageSetting(segments: Segment[]): PageSetting {
+  const indenting = new Set(segments.filter((s) => s.type === "PARAGRAPH" && /\bindent-first\b/.test(s.html ?? "")).map((s) => s.page));
+  return { indenting, justified: segments.filter((s) => s.type === "PARAGRAPH" && s.box && /\bjustify\b/.test(s.html ?? "")) };
+}
+
+// A paragraph's last line runs to its column's right edge: as paragraphs.ts
+// read it (endsFull), or a line alone that reaches as far right as most of
+// the justified paragraphs of its column (a lone line a list reader took).
+function endsAtEdge(s: Segment, setting: PageSetting): boolean {
+  if (endsFull(s)) return true;
+  const box = s.box;
+  const size = s.lineSize ?? 10;
+  if (!box || box.y2 - box.y1 > size * 1.6) return false;
+  const ends = setting.justified.filter((j) => j.page === s.page && j.box && j.box.x1 < box.x2 && j.box.x2 > box.x1).map((j) => j.box?.x2 ?? 0);
+  return ends.length >= 2 && box.x2 >= [...ends].sort((a, b) => a - b)[Math.floor(ends.length / 2)] - size * 0.5;
+}
+
+// A paragraph's last line ran to the column's edge, and the part after the
+// break opens at the column's edge on a page whose paragraphs open set in:
+// the paragraph goes on, its sentence ended at the line's end ("…in the
+// context of SMT solving." | "Their tool OLSQ2 …", arXiv 2506.06752 p. 2).
+function wrapsOver(prev: Segment, next: Segment, setting: PageSetting): boolean {
+  return (
+    next.type === "PARAGRAPH" &&
+    setting.indenting.has(next.page) &&
+    !/\b(?:indent-first|indent-hanging|indent-block|center|right|caption|quote|footnote)\b/.test(next.html ?? "") &&
+    endsAtEdge(prev, setting)
+  );
+}
+
 export function mergeAcrossPages(input: Segment[]): Segment[] {
-  const segments = liftFloatsOffParagraphBreaks(input);
+  const setting = pageSetting(input);
+  const body = bodySizes(input);
+  const segments = liftFloatsOffParagraphBreaks(input, setting, body);
   const out: Segment[] = [];
   for (const [index, segment] of segments.entries()) {
     const prev = out[out.length - 1];
@@ -286,25 +429,34 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
     // at a page's foot may be a paragraph's first line: it goes on into a
     // part that opens lowercase ("…the difficulty of reliably elim-" |
     // "inating default tendencies…", arXiv 2506.06352).
+    // A paragraph a join carried over the break ends on the next page: a
+    // paragraph after it on that page goes on it only as the joins on one
+    // page said (a paragraph that ended with a Latin word before a head took
+    // the next paragraph: real-jnlp-31-47 p. 18).
     if (
       segment.type === "PARAGRAPH" &&
       prev.type === "PARAGRAPH" &&
-      (!prev.listItem || /^\p{Ll}/u.test(segment.text)) &&
-      // A letter may end in a mark: a hat over 𝒮 has no precomposed form.
-      (/[\p{L}\p{M}\d,;\-–—]$/u.test(prev.text) || (ABBREVIATION_END_RE.test(prev.text) && goesOn(prev.text, segment.text))) &&
+      segment.page > lastPageOf(prev) &&
+      (!prev.listItem || /^\p{Ll}/u.test(segment.text) || wrapsOver(prev, segment, setting)) &&
+      !isCaptionText(prev) &&
+      setAlike(prev, segment, body) &&
       // A numbered heading read as a paragraph starts its own block: with
       // the running head gone from between them, "6. Relations and arrows"
       // joined the display above it (the synthetic formula sheet).
       !/^\d+(?:\.\d+)*\.\s+\p{Lu}/u.test(segment.text) &&
-      (/^[a-z($€£0-9"'“]/.test(segment.text) ||
-        // "… the" | "AAR only stages": a paragraph that ends without a stop
-        // is unfinished, whatever the case of the next page's first word.
-        (/\s[\p{L}\p{M}]+$/u.test(prev.text) && prev.text.length > 60))
+      // A letter may end in a mark: a hat over 𝒮 has no precomposed form.
+      (((/[\p{L}\p{M}\d,;\-–—]$/u.test(prev.text) || (ABBREVIATION_END_RE.test(prev.text) && goesOn(prev.text, segment.text))) &&
+        (/^[a-z($€£0-9"'“]/.test(segment.text) ||
+          // "… the" | "AAR only stages": a paragraph that ends without a stop
+          // is unfinished, whatever the case of the next page's first word.
+          (/\s[\p{L}\p{M}]+$/u.test(prev.text) && prev.text.length > 60))) ||
+        wrapsOver(prev, segment, setting))
     ) {
       const offset = joinWrapped(prev, segment.text);
       prev.breaks = joinBreaks(prev, segment, offset);
       shiftSpansInto(prev, segment, offset);
       joinLayout(prev, segment);
+      endAs(prev, segment);
       continue;
     }
 

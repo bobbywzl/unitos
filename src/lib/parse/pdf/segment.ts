@@ -10,10 +10,10 @@ import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { readHeading } from "@/lib/parse/pdf/headings";
 import { closeLists, joinMarkerCells, readAlgorithm, readList, readReferences } from "@/lib/parse/pdf/lists";
-import { markEdges, readParagraph } from "@/lib/parse/pdf/paragraphs";
+import { leftEdge, markEdges, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { tableFromRegion } from "@/lib/parse/pdf/ruled";
 import { findTableRuns, isLabelLine, tableFromRun } from "@/lib/parse/pdf/tables";
-import { TextBuilder, boldShare, isMonoLine, lineAsPart } from "@/lib/parse/pdf/text";
+import { TextBuilder, appendProofBox, boldShare, fillLines, isFillRule, isMonoLine, lineAsPart, markTabs } from "@/lib/parse/pdf/text";
 import type { Cell, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 
 // ── Page segmentation ───────────────────────────────────────────────────────
@@ -30,6 +30,8 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
   // A document's first page opens no list the last document left open.
   if (lines[0]?.page === 0) closeLists();
   const runOf = findTableRuns(lines, ctx);
+  // Tabs and fill-in rules in the lines outside tables (text.ts).
+  const fills = markTabs(lines, (k) => runOf[k] === -1, (l) => leftEdge(l, ctx), ctx.drawing, !ctx.tex);
   let tocMode = tocCarry && lines.length > 0 && TOC_ENTRY_RE.test(lines[0].text) && TOC_TAIL_RE.test(lines[0].text);
   tocCarry = false;
   // Where each reader's segments begin: its first line and its first segment.
@@ -89,7 +91,7 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     // ends the block before it, as the page shows it.
     const last = segments[segments.length - 1];
     if (PROOF_END_RE.test(line.text.trim()) && last !== undefined && (last.type === "PARAGRAPH" || last.type === "LIST")) {
-      last.text = `${last.text} ${line.text.trim()}`;
+      appendProofBox(last, line);
       i++;
       continue;
     }
@@ -126,7 +128,7 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     i = step.next;
   }
   markPullQuotes(segments);
-  return withDrawnSeparators(segments, starts, lines, ctx, runOf);
+  return fillLines(withDrawnSeparators(segments, starts, lines, ctx, runOf), fills, lines[0]?.page ?? 0);
 }
 
 // ── Raised marks ────────────────────────────────────────────────────────────
@@ -292,7 +294,7 @@ function withDrawnSeparators(
 ): Segment[] {
   const at = new Set<number>();
   for (const rule of ctx.drawing.rules) {
-    if (rule.dir !== "h") continue;
+    if (rule.dir !== "h" || isFillRule(rule)) continue;
     const y = (rule.y1 + rule.y2) / 2;
     const start = starts.find((s) => s.line > 0 && lines[s.line - 1].y > y && lines[s.line].y < y);
     if (!start || runOf[start.line - 1] !== -1 || runOf[start.line] !== -1) continue;
@@ -433,5 +435,5 @@ function readSplitLine(lines: Line[], i: number): Step | null {
 function readLabelLine(lines: Line[], i: number, ctx: PageContext): Step | null {
   const line = lines[i];
   if (!isLabelLine(line, ctx)) return null;
-  return { segments: [{ type: "PARAGRAPH", text: lineAsPart(line).text, page: line.page, runs: line.runs, ...geom([line]) }], next: i + 1 };
+  return { segments: [{ type: "PARAGRAPH", ...lineAsPart(line), page: line.page, ...geom([line]) }], next: i + 1 };
 }

@@ -7,9 +7,9 @@ import { TOC_LABEL_RE } from "@/lib/parse/pdf/contents";
 import type { Glyph } from "@/lib/parse/pdf/drawing";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
-import { BULLET_RE, GLYPH_BULLET_RE, isGlyphMarker, opensSequence, readMarker } from "@/lib/parse/pdf/markers";
+import { BULLET_RE, GLYPH_BULLET_RE, follows, isGlyphMarker, opensSequence, readMarker, type Marker } from "@/lib/parse/pdf/markers";
 import { boldShare, endsBold, fillsMargin, joinGroup, startsWithBoldLead } from "@/lib/parse/pdf/text";
-import type { Line, PageContext, Segment, Step } from "@/lib/parse/pdf/types";
+import type { Box, Line, PageContext, Segment, Step } from "@/lib/parse/pdf/types";
 import type { Indent } from "@/lib/parse/types";
 
 // The column's right edge near a band of lines [from, to): the widest prose
@@ -50,6 +50,23 @@ function sharedEdge(lines: Line[], from: number, to: number): number {
   return own.filter((l) => near(l, page)).length >= 3 ? page : 0;
 }
 
+// The right edge the lines of a block [from, to) and the lines near it
+// reach, among those that start where its lines do or right of them: a
+// box's paragraph, set in from the column, ends its lines at the box's
+// edge, short of the column's (OpenStax p. 2). A line run past the edge
+// (TeX's overfull line) is no edge (rightEdge).
+function blockEdge(lines: Line[], from: number, to: number): number {
+  const left = Math.min(...lines.slice(from, to).map((l) => l.x));
+  const size = lines[from].size;
+  const ends: number[] = [];
+  for (let k = Math.max(0, from - 4); k < Math.min(lines.length, to + 4); k++) {
+    const l = lines[k];
+    if (l.cells.length !== 1 || [...l.text].length <= 30 || l.x < left - size * 0.5 || l.x > left + size * 6 || otherColumn(l, lines[from])) continue;
+    ends.push(l.xEnd);
+  }
+  return rightEdge(ends, size);
+}
+
 // Line l was read in another column than line `of`: a two-column page's title
 // or author line, kept whole across the gutter, is no edge of either column
 // (arxiv-2503-10997 p1: the abstract's lines all read as short against the
@@ -76,6 +93,13 @@ const edges = new WeakMap<Line, number>();
     (PLOS pp. 2 and 6, Nature p. 1: 165 to 178 pt). A line with no such
     place (a box on a form) starts its own column: nothing sets it in. */
 export function markEdges(lines: Line[], ctx: PageContext) {
+  // A document's pages come in order: a page no later than the last one
+  // marked opens another document, and tells nothing of the last one's
+  // setting.
+  if (lines.length > 0) {
+    if (lines[0].page <= markedPage) justifiedDocument = false;
+    markedPage = lines[0].page;
+  }
   const near = (a: number, b: number, tolerance: number) => Math.abs(a - b) <= tolerance;
   for (const line of lines) {
     const size = line.size;
@@ -266,6 +290,24 @@ export function isCentered(lines: Line[], k: number, ctx: PageContext): boolean 
   return centeredTo(right) || (column !== undefined && column[1] > right && centeredTo(column[1])) || sharesMiddle(lines, k, ctx);
 }
 
+// Line k is set in from both edges of its column by two ems or more, and
+// its middle stands within 0.75 em of the column's middle.
+function aroundMiddle(lines: Line[], k: number, ctx: PageContext): boolean {
+  const line = lines[k];
+  const { left, right } = columnEdges(lines, k, ctx);
+  if (right <= 0 || line.x - left < line.size * 2 || right - line.xEnd < line.size * 2) return false;
+  return Math.abs((line.x + line.xEnd) / 2 - (left + right) / 2) <= line.size * 0.75;
+}
+
+// A line the column split cut into cells at a gap of an em or two (a
+// full-width space between two names) is one run of words for its
+// alignment.
+function oneRun(line: Line): boolean {
+  if (line.cells.length === 1) return true;
+  const items = line.items.filter((i) => i.str.trim().length > 0).sort((a, b) => a.x - b.x);
+  return items.every((item, k) => k === 0 || item.x - (items[k - 1].x + items[k - 1].w) <= line.size * 2.5);
+}
+
 // A stack of short lines, each read in a column of its own, that share
 // their middle: an author's block in a paper's grid of authors (name,
 // affiliation, city, address). Three lines or more, their middles within
@@ -399,8 +441,18 @@ function fillsColumn(lines: Line[], k: number, ctx: PageContext): boolean {
     a period hang into the margin. */
 export function lineAlign(lines: Line[], from: number, to: number, ctx: PageContext): "center" | "right" | "justify" | null {
   const group = lines.slice(from, to);
-  if (group.length === 0 || group.some((l) => l.cells.length !== 1)) return null;
-  if (group.every((_, k) => isCentered(lines, from + k, ctx) || centeredStack(lines, from + k)) || centeredTitle(group, ctx)) return "center";
+  if (group.length === 0 || group.some((l) => !oneRun(l))) return null;
+  const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
+  const [starts, ends] = [spread(group.map((l) => l.x)), spread(group.map((l) => l.xEnd))];
+  // Lines that start together and end apart are not centered: a box's
+  // paragraph, set in by as much on each side, read as centered line by
+  // line (OpenStax p. 3, Example 6.2). Lines that start apart around the
+  // column's middle are: an author list's lines, their raised marks
+  // setting one line 0.6 em off (real-jnlp-31-47 p1).
+  const together = group.length >= 2 && starts <= group[0].size * 0.15 && ends > group[0].size * 0.5;
+  const around = group.length >= 2 && starts > group[0].size * 0.5 && group.every((_, k) => aroundMiddle(lines, from + k, ctx));
+  if (!together && (around || group.every((_, k) => isCentered(lines, from + k, ctx) || centeredStack(lines, from + k)) || centeredTitle(group, ctx))) return "center";
+  if (group.some((l) => l.cells.length !== 1)) return null;
   const edges = group.map((_, k) => columnEdges(lines, from + k, ctx));
   const atRight = (l: Line, k: number) => atEdge(l, edges[k].right);
   // Flush right starts its lines anywhere but at the column's left edge: a
@@ -412,8 +464,6 @@ export function lineAlign(lines: Line[], from: number, to: number, ctx: PageCont
   // "Prescribed by ANSI Std. 239-18" start 3.1 pt apart and end 0.1 pt
   // apart (lines half the column wide or less: a justified quote's lines
   // end together and fill it).
-  const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
-  const [starts, ends] = [spread(group.map((l) => l.x)), spread(group.map((l) => l.xEnd))];
   const short = group.every((l, k) => l.xEnd - l.x <= (edges[k].right - edges[k].left) / 2);
   const ragged =
     group.length === 1
@@ -429,6 +479,12 @@ export function lineAlign(lines: Line[], from: number, to: number, ctx: PageCont
   const wrapped = group.slice(0, last);
   const fills = (l: Line, k: number) => atRight(l, k) || atEdge(l, fullEnd(lines, from + k));
   if (wrapped.some(fills) && wrapped.every((l, k) => fills(l, k) || formula(k) || formula(k + 1)) && justifiedPage(lines, ctx)) return "justify";
+  // A block set in from its column (an abstract, a quotation) has its own
+  // right edge: its wrapped lines end together there, three of them, or two
+  // on a page set justified (amsart's abstract ends its lines 36 pt inside
+  // the column's edge, and read flush left).
+  const setIn = group.slice(1).every((l, k) => inset(l, k + 1) > l.size * 0.5);
+  if (setIn && wrapped.length >= (justifiedPage(lines, ctx) ? 2 : 3) && spread(wrapped.map((l) => l.xEnd)) <= size * 0.33) return "justify";
   return null;
 }
 
@@ -466,7 +522,8 @@ function atEdge(l: Line, right: number): boolean {
 // Where the full lines of line k's column end, over its whole page: the
 // lines near a paragraph at a page's foot may all stop short (a list, lines
 // before displays), and its justified first line read as stopping short of
-// them.
+// them. A column of one line shows no edge: a foot line read alone ended
+// at its own end, and read as a wrapped paragraph's (Nature p. 1).
 const fullEnds = new WeakMap<Line[], Map<unknown, number>>();
 function fullEnd(lines: Line[], k: number): number {
   let byColumn = fullEnds.get(lines);
@@ -477,7 +534,7 @@ function fullEnd(lines: Line[], k: number): number {
       const key = lineColumn(l);
       ends.set(key, [...(ends.get(key) ?? []), l.xEnd]);
     }
-    byColumn = new Map([...ends].map(([key, list]) => [key, rightEdge(list, median(lines.map((l) => l.size)))]));
+    byColumn = new Map([...ends].map(([key, list]) => [key, list.length >= 2 ? rightEdge(list, median(lines.map((l) => l.size))) : 0]));
     fullEnds.set(lines, byColumn);
   }
   return byColumn.get(lineColumn(lines[k])) ?? 0;
@@ -497,11 +554,15 @@ function centeredTitle(group: Line[], ctx: PageContext): boolean {
 }
 
 // A page set justified: of its lines of prose that end within three ems of
-// their column's right edge, most end at it. A ragged page's lines end
-// anywhere near the edge, a justified page's at it, its paragraphs' last
-// lines aside. Without it a ragged page's two-line paragraph read as
-// justified wherever its first line happened to fill the column.
+// their column's right edge, most end at it, or every one of three. A
+// ragged page's lines end anywhere near the edge, a justified page's at it,
+// its paragraphs' last lines aside. Without it a ragged page's two-line
+// paragraph read as justified wherever its first line happened to fill the
+// column. A page with fewer such lines is set as the last page that told
+// (a report's pages of tables with a paragraph or two: synth-tables-tex).
 const justifiedPages = new WeakMap<Line[], boolean>();
+let justifiedDocument = false;
+let markedPage = -1;
 function justifiedPage(lines: Line[], ctx: PageContext): boolean {
   let justified = justifiedPages.get(lines);
   if (justified === undefined) {
@@ -514,7 +575,8 @@ function justifiedPage(lines: Line[], ctx: PageContext): boolean {
       near++;
       if (Math.abs(short) <= l.size * 0.33) flush++;
     });
-    justified = near >= 4 && flush >= near * 0.6;
+    if (near >= 3) justifiedDocument = (near >= 4 && flush >= near * 0.6) || flush === near;
+    justified = justifiedDocument;
     justifiedPages.set(lines, justified);
   }
   return justified;
@@ -524,12 +586,14 @@ function justifiedPage(lines: Line[], ctx: PageContext): boolean {
 // the upper line and a sum sign on the lower leave the baselines farther
 // apart than the text leading while the glyphs nearly touch (TeX's lineskip).
 // That gap is no paragraph or item gap (import compare loop finding: an
-// exercise's item split at such a line).
+// exercise's item split at such a line). A label stacked over an arrow
+// stands 0.9 of a size over its line, 0.62 of one under the line above's
+// scripts.
 export function pushedApart(prev: Line, next: Line): boolean {
   const size = Math.max(prev.size, next.size);
   const deep = prev.yMin < prev.y - size * 0.3;
   const tall = next.yMax > next.y + size * 0.6;
-  return (deep || tall) && prev.yMin - next.yMax <= size * 0.45;
+  return (deep || tall) && prev.yMin - next.yMax <= size * 0.65;
 }
 
 const THEOREM_LABEL_RE =
@@ -615,7 +679,18 @@ export function isFirstLineIndent(lines: Line[], i: number, ctx: PageContext, ru
   // Set in from the next line's column's edge (markEdges): in the page's
   // right column every paragraph split after its first line (Elsevier,
   // Nature: 17 pt read as a block indent).
-  const edge = after ? leftEdge(after, ctx) : ctx.columnLeft;
+  let edge = after ? leftEdge(after, ctx) : ctx.columnLeft;
+  let right = columnEdges(lines, i, ctx).right;
+  // A block set in on both sides (an abstract, a quotation) has its own
+  // edges: the next line's start, and the column's right edge less as
+  // much. Its first line, set in further, runs to that right edge: an
+  // abstract's paragraphs split after their first line (arXiv 2506.06352).
+  const inset = after ? after.x - edge : 0;
+  const block = inset > 3 && right > 0 && inset <= (right - edge) / 4;
+  if (block) {
+    edge += inset;
+    right -= inset;
+  }
   return (
     line.cells.length === 1 &&
     !(BULLET_RE.test(line.text) && line.size <= ctx.bodySize * 1.15) &&
@@ -625,12 +700,14 @@ export function isFirstLineIndent(lines: Line[], i: number, ctx: PageContext, ru
     runOf[i + 1] === -1 &&
     after.cells.length === 1 &&
     Math.abs(after.x - edge) <= 3 &&
+    (!block || line.xEnd >= right - line.size * 1.5) &&
     // The indent against the paragraph's next line: up to 3.2 em, or up to
-    // 5 em when the line runs to the column's edge as a wrapped first line
-    // does (Word's half-inch indent is 3.3 em at 11 pt, and its first lines
-    // read as one-line items).
+    // 5 em when the line wrapped: it runs to the column's edge, or the next
+    // line's first word would not have fit after it (Word's half-inch
+    // indent is 3.3 em at 11 pt and 3.6 em at 10 pt, and its first lines
+    // read as one-line items: nasa-tm-20220005496 p. 13, set ragged).
     (line.x - after.x <= line.size * 3.2 ||
-      (line.x - after.x <= line.size * 5 && line.xEnd >= columnEdges(lines, i, ctx).right - line.size * 1.5)) &&
+      (line.x - after.x <= line.size * 5 && (line.xEnd >= right - line.size * 1.5 || line.xEnd + line.size * 0.28 + firstWord(after) > right))) &&
     line.y - after.y > 0 &&
     line.y - after.y <= after.size * ctx.leading * 1.3 &&
     !sizesDiffer(after, line, ctx) &&
@@ -665,6 +742,18 @@ function wordsText(line: Line): string {
   return (n === line.cells.length ? line.text : line.cells.slice(0, n).map((c) => c.text).join(" ")).trim();
 }
 
+// A line a few under line k, at its place, whose marker goes on the
+// sequence line k's marker opens ("(b)" under "(a)").
+function sequelOf(lines: Line[], k: number, marker: Marker): boolean {
+  if (!opensSequence(marker) || isGlyphMarker(marker)) return false;
+  const line = lines[k];
+  return lines.slice(k + 1, k + 9).some((l) => {
+    if (Math.abs(l.x - line.x) > line.size * 0.5) return false;
+    const next = readMarker(l);
+    return next !== null && follows(marker, next);
+  });
+}
+
 // A float's label alone on its line: "TABLE I", "Figure 3.".
 const FLOAT_LABEL_RE = /^(?:fig\.?|figure|table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+)[.:]?$/i;
 
@@ -690,7 +779,9 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
     // Centered lines of one paragraph start at different x (a caption's two
     // lines, a court's centered caption): their shifts are no indent, and
     // their ends say nothing of the paragraph's end.
-    const centered = isCentered(lines, j - 1, ctx) && isCentered(lines, j, ctx);
+    const centered =
+      (isCentered(lines, j - 1, ctx) && isCentered(lines, j, ctx)) ||
+      (aroundMiddle(lines, j - 1, ctx) && aroundMiddle(lines, j, ctx) && Math.abs(next.x - prev.x) > next.size * 0.5);
     // A line set in by the page's own first-line indent under a paragraph's
     // line at the column's edge opens the next paragraph, under a full line
     // too: amsbook's half-em indent is under isIndented's reach, and
@@ -718,6 +809,20 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       (prevTerminal || roomy) &&
       prev.xEnd + prev.size * 0.28 + word <= sentenceEdge - 1 &&
       OPENS_SENTENCE_RE.test(next.text);
+    // On a page set justified only a paragraph's last line stops short of
+    // the edge its block's lines reach: after a sentence, a line that stops
+    // short ends its paragraph when the next line opens a sentence, though
+    // the next line's first word would not have fit ("…is the
+    // transformation matrix." over "The blade-fixed rotating components…",
+    // nasa-tm-20220005496 p. 16). An OCR layer's line ends are too rough
+    // to tell.
+    const lastLine =
+      !centered &&
+      !ctx.ocr &&
+      prevTerminal &&
+      OPENS_SENTENCE_RE.test(next.text) &&
+      justifiedPage(lines, ctx) &&
+      blockEdge(lines, i, j + 1) - prev.xEnd > prev.size * 0.33;
     // A line that opens with a raised label (an affiliation's "1Department
     // of Physics…", a note's "²") starts a paragraph of its own: the
     // affiliations of arxiv-2504-02736 ran into one.
@@ -763,6 +868,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       // (real-jnlp-31-47-p1).
       (next.size > body * (ctx.ocr ? 1.3 : 1.14) && !(centered && !ctx.ocr && Math.abs(next.size - prev.size) <= 0.5)) ||
       endsShort ||
+      lastLine ||
       stepsIn ||
       labelled ||
       // A centered line under a shorter one whose room would have taken its
@@ -795,11 +901,19 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       // of the column edge or with a sentence: "(7) Weight-space…" at a line
       // start inside a justified paragraph is text (import compare loop
       // finding), and so is a number that opens no list under a line that
-      // stops mid-sentence ("40 CFR part" | "178. To ensure…").
+      // stops mid-sentence ("40 CFR part" | "178. To ensure…"). A marker
+      // that opens its sequence starts an item under a full line too when
+      // a line a few under it goes on the sequence at its place ("(b)"
+      // under "(a)": a theorem's items read inside its paragraph); where no
+      // full line tells the column's edge, an exercise's number alone on
+      // its line keeps its items ("57" over "a." and "b.": OpenStax p. 31).
       (nextMarker !== null &&
         readMarker(prev) === null &&
         !(!opensSequence(nextMarker) && /[\p{Ll},]$/u.test(prev.text.trim())) &&
-        (isGlyphMarker(nextMarker) || GLYPH_BULLET_RE.test(next.text) || prev.xEnd < colEdge - prev.size * 1.5)) ||
+        (isGlyphMarker(nextMarker) ||
+          GLYPH_BULLET_RE.test(next.text) ||
+          prev.xEnd < colEdge - prev.size * 1.5 ||
+          (colEdge > 0 && sequelOf(lines, j, nextMarker)))) ||
       // "Setup." after a sentence end opens the next paragraph, and so does a
       // bold label under a line that stopped short of the column edge
       // ("Category. mechanism" over "Summary. …" in a boxed entry).
@@ -819,14 +933,80 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
     group.push(next);
     j++;
   }
-  const { text, runs } = joinGroup(group, true);
+  const align = lineAlign(lines, i, j, ctx);
+  const { text, runs } = joinGroup(group, true, align === "center" || align === "right" ? 0 : sentenceEdge);
   const monoChars = runs.filter((r) => r.mono).reduce((n, r) => n + (r.end - r.start), 0);
   if (text.length > 0 && monoChars / text.length > 0.85) {
     return { segments: [{ type: "CODE", text, page: line.page, runs, ...geom(group) }], next: j };
   }
   const { tokens, indent } = layout(lines, i, j, ctx, text);
   const html = tokens.length > 0 ? `<p class="${tokens.join(" ")}"></p>` : undefined;
-  return { segments: [{ type: "PARAGRAPH", text, ...(html ? { html } : {}), ...(indent ? { indent } : {}), page: line.page, runs, ...geom(group) }], next: j };
+  const segment: Segment = { type: "PARAGRAPH", text, ...(html ? { html } : {}), ...(indent ? { indent } : {}), page: line.page, runs, ...geom(group) };
+  const last = group[group.length - 1];
+  if (justifiedPage(lines, ctx) && (atEdge(last, columnEdges(lines, j - 1, ctx).right) || atEdge(last, fullEnd(lines, j - 1)))) fullLast.add(segment);
+  if (group.length >= 2) pitches.set(segment, pitchOf(group));
+  return { segments: [segment], next: j };
+}
+
+// A paragraph's own line pitch, its baselines' step (measureSpacing): an
+// abstract set small and tight under an author's line, 11 pt where the
+// page's text steps 16.
+const pitches = new WeakMap<Segment, number>();
+
+// A paragraph's own line pitch: as its reader measured it, or from the
+// page's lines inside its box (two of them at least). A list's lines stand
+// an item's space apart, and a heading's lines may be paragraphs of their
+// own a paragraph's space apart (a title over a subtitle): their pitch is
+// the page's.
+function ownPitch(s: Segment, lines: Line[]): number | undefined {
+  const known = pitches.get(s);
+  const box = s.lineBox;
+  if (known !== undefined || !box || s.type !== "PARAGRAPH") return known;
+  const own = lines
+    .filter((l) => l.cells.length > 0 && l.y - l.size * 0.3 >= box.y1 - 0.5 && l.y + l.size * 0.85 <= box.y2 + 0.5 && l.x >= box.x1 - 0.5 && l.xEnd <= box.x2 + 0.5)
+    .sort((m, n) => n.y - m.y);
+  return own.length >= 2 ? pitchOf(own) : undefined;
+}
+
+// The line pitch of the upper block, or of the lower, and the size its
+// lines are set in.
+function pitchOfEither(a: Segment, b: Segment, lines: Line[]): [number, number] | undefined {
+  for (const s of [a, b]) {
+    const pitch = ownPitch(s, lines);
+    if (pitch !== undefined && s.lineSize) return [pitch, s.lineSize];
+  }
+  return undefined;
+}
+
+// The median of lines' baseline steps, of an even count the mean of the
+// middle two: of a paragraph's two steps, one pushed apart by a label
+// stacked over an arrow (TeX's lineskip), the larger read as its pitch, and
+// the space under it 3 pt short.
+function pitchOf(group: Line[]): number {
+  const steps = group
+    .slice(1)
+    .map((l, k) => group[k].y - l.y)
+    .sort((a, b) => a - b);
+  const half = Math.floor(steps.length / 2);
+  return steps.length % 2 === 1 ? steps[half] : (steps[half - 1] + steps[half]) / 2;
+}
+
+// The paragraphs whose last line runs to the column's right edge on a page
+// set justified: a page break after that line may cut the paragraph where
+// a sentence ended on it (merge.ts: "…in the context of SMT solving." |
+// "Their tool OLSQ2 …", arXiv 2506.06752 p. 2).
+const fullLast = new WeakSet<Segment>();
+
+/** The paragraph's last line runs to its column's right edge, on a page
+    set justified. */
+export function endsFull(s: Segment): boolean {
+  return fullLast.has(s);
+}
+
+/** A paragraph that took another's lines ends as that one does. */
+export function endAs(target: Segment, source: Segment) {
+  if (fullLast.has(source)) fullLast.add(target);
+  else fullLast.delete(target);
 }
 
 // What a paragraph's lines show of its layout: the class tokens the reader
@@ -882,8 +1062,14 @@ export function layout(lines: Line[], from: number, to: number, ctx: PageContext
     // line over them lost its first-line indent.
     const column = lineColumn(first);
     const stepped = (x: number) => step !== null && Math.abs(first.x - x - step) <= size * 0.15;
+    // A line set in that runs to the column's right edge, its column's last,
+    // is a paragraph's first line cut by a page or a column break (arXiv
+    // 2506.06352 p. 7's last line read as a block indent, and its
+    // paragraph with it).
+    const last = next === undefined || next.y >= first.y || first.y - next.y > first.size * ctx.leading * 1.6 || lineColumn(next) !== lineColumn(first);
+    const cut = last && inset <= size * 3.2 && (atEdge(first, columnEdges(lines, from, ctx).right) || atEdge(first, fullEnd(lines, from)));
     if (step !== null && (stepped(left) || (column !== undefined && column[0] < left && left - column[0] <= size && stepped(column[0])))) indent = { left: 0, first: step };
-    else if (inset >= size && wraps && inset <= size * 5) indent = { left: 0, first: inset };
+    else if (inset >= size && (wraps || cut) && inset <= size * 5) indent = { left: 0, first: inset };
     else if (inset >= size && fits(inset)) indent = { left: inset, first: 0 };
   } else {
     const xs = group.slice(1).map((l) => l.x).sort((a, b) => a - b);
@@ -908,23 +1094,85 @@ export function layout(lines: Line[], from: number, to: number, ctx: PageContext
   return { tokens, indent: { left: Math.round(indent.left), first: Math.round(indent.first) } };
 }
 
+// A block of text: a paragraph, a heading, or a list.
+const isText = (s: Segment) => s.type === "PARAGRAPH" || s.type === "HEADING" || s.type === "LIST";
+
 /** The space after each text block of a page (ParsedBlock.spaceAfter): the
     gap from its lines to the next text block's under it in its column,
     beyond the text's line pitch, in points; none where a figure, a table,
-    or the page's end follows. A Google Docs export marks a gap with a blank
-    line and sets none between a label and its lines: the import's fixed
-    10 pt after every paragraph set each line of such a page apart. */
-export function measureSpacing(segments: Segment[], ctx: PageContext) {
-  const text = (s: Segment) => s.type === "PARAGRAPH" || s.type === "HEADING" || s.type === "LIST";
+    or the page's end follows, or where a gap wider than three lines of the
+    page's text is no blank the page leaves (farBlank). A Google Docs export
+    marks a gap with a blank line and sets none between a label and its
+    lines: the import's fixed 10 pt after every paragraph set each line of
+    such a page apart. */
+export function measureSpacing(segments: Segment[], ctx: PageContext, lines: Line[] = []) {
+  // A display equation's edge is its glyphs' box (math/display.ts), and the
+  // edge of a block of text its lines' own box, their scripts left out. A
+  // line whose glyphs reach more than two sizes past its baseline, past any
+  // script or limit, holds rows of its own, and the block's box is its edge
+  // there (a matrix read as lines of text: the NPS thesis p. 53).
+  const edge = (s: Segment): Box | undefined => {
+    if (s.type === "EQUATION") return s.glyphBox;
+    if (!isText(s)) return undefined;
+    const [line, box, reach] = [s.lineBox, s.box, (s.lineSize ?? ctx.bodySize) * 2];
+    if (!line || !box) return line ?? box;
+    return { ...line, y1: line.y1 - box.y1 > reach ? box.y1 : line.y1, y2: box.y2 - line.y2 > reach ? box.y2 : line.y2 };
+  };
   for (let k = 0; k + 1 < segments.length; k++) {
     const [a, b] = [segments[k], segments[k + 1]];
-    if (!text(a) || !text(b) || !a.box || !b.box || a.page !== b.page) continue;
+    const display = a.type === "EQUATION" || b.type === "EQUATION";
+    const [top, bottom] = [edge(a), edge(b)];
+    if (!top || !bottom || !a.box || !b.box || a.page !== b.page) continue;
     const size = b.lineSize ?? ctx.bodySize;
     // b stands under a, and their columns meet.
     if (b.box.y2 > a.box.y1 + size || b.box.x1 > a.box.x2 || b.box.x2 < a.box.x1) continue;
     // A line's box reaches 0.3 of its size under its baseline and 0.85
-    // over it (geometry.ts): lines at the text's pitch leave the rest.
-    const gap = a.box.y1 - b.box.y2 - (ctx.leading - 1.15) * size;
-    if (gap > -size) a.spaceAfter = Math.max(0, Math.round(gap));
+    // over it (geometry.ts): between two blocks of text the space is their
+    // baselines' step beyond the step the two lines take with none between
+    // them: the upper line's part under its baseline (a fifth of its line)
+    // and the lower line's part over it, each at its own size, at the pitch
+    // per point of the upper block, or the lower's, or the page's (a 12 pt
+    // line over a 15 pt one steps more than the body's pitch). Over and
+    // under a display the gap runs to its glyphs.
+    const [aSize, bSize] = [a.lineSize ?? size, b.lineSize ?? size];
+    const [pitch, pitchSize] = pitchOfEither(a, b, lines) ?? [ctx.leading * size, size];
+    const natural = (pitch / pitchSize) * (aSize * 0.2 + bSize * 0.8);
+    const step = () => top.y1 + aSize * 0.3 - (bottom.y2 - bSize * 0.85);
+    const gap = display ? top.y1 - bottom.y2 : a.lineBox && b.lineBox ? step() - natural : top.y1 - bottom.y2 - (ctx.leading - 1.15) * size;
+    if (gap <= -size || (gap > ctx.bodySize * ctx.leading * 3 && !farBlank(a, b, segments, ctx))) continue;
+    a.spaceAfter = Math.max(0, Math.round(gap));
   }
+}
+
+/** A gap wider than three lines is the page's blank only where the page
+    shows nothing in it (a title page's lines, a form's empty lines before
+    its signature lines): no other block of the page and nothing it draws
+    (a picture, a shape, a rule, a box around b) reaches into the band,
+    anywhere across the page, a background or a frame around a aside; b
+    opens no notes at the page's foot (set smaller than the body, with no
+    block at the body's size under it: a page's notes stand under its end);
+    a is no small print right after a table or a figure (its notes: the
+    notes reader took the rest of a table's notes from the band, MMWR p. 4);
+    and the page is no scan (its pictures are the scan's own). Two
+    paragraphs a wide gap apart stood around a lost figure, a note beside
+    the column, or a sidebar the reading order put elsewhere (PLOS's
+    masthead read 292 pt over its sidebar, a pull quote 342 pt over the
+    caption under it: the Earth Observer p. 10). A paper's author line and
+    abstract, set smaller than its text, stand the page's blank apart (arXiv
+    2410.04586 p. 1). */
+function farBlank(a: Segment, b: Segment, segments: Segment[], ctx: PageContext): boolean {
+  const [over, under] = [a.box, b.box];
+  if (!over || !under || ctx.ocr) return false;
+  const small = (s: Segment) => (s.lineSize ?? ctx.bodySize) < ctx.bodySize * 0.9;
+  if (small(b) && !segments.some((s) => isText(s) && !small(s) && s.box !== undefined && s.box.y2 < under.y1)) return false;
+  const before = segments[segments.indexOf(a) - 1];
+  if (small(a) && (before?.type === "TABLE" || before?.type === "FIGURE")) return false;
+  const holds = (outer: Box, inner: Box) => outer.x1 <= inner.x1 && outer.x2 >= inner.x2 && outer.y1 <= inner.y1 && outer.y2 >= inner.y2;
+  const into = (box: Box) => box.y2 > under.y2 + 1 && box.y1 < over.y1 - 1 && !holds(box, over);
+  if (segments.some((s) => s !== a && s !== b && s.box && into(s.box))) return false;
+  const { images, paths, fills, rules } = ctx.drawing;
+  const drawn = [...images, ...paths.filter((p) => !p.clip), ...fills.filter((f) => f.color !== "#ffffff")];
+  // A rule is thin: one longer than two points counts (a table's foot
+  // rule under its notes: MMWR p. 4).
+  return !drawn.some((d) => d.x2 - d.x1 > 2 && d.y2 - d.y1 > 2 && into(d)) && !rules.some((r) => Math.max(r.x2 - r.x1, r.y2 - r.y1) > 2 && into(r));
 }

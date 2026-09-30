@@ -27,7 +27,7 @@ import { isOcrLayer, measureSpacing, pageLeading } from "@/lib/parse/pdf/paragra
 import { placeTables, ruledTables, takeTables } from "@/lib/parse/pdf/ruled";
 import { segmentPage } from "@/lib/parse/pdf/segment";
 import { attachTableCaptions, isWrappedRowLine } from "@/lib/parse/pdf/tables";
-import { collectHyphenation, spansFromRuns } from "@/lib/parse/pdf/text";
+import { collectHyphenation, holdsFill, spansFromRuns, tabStopsOf } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, Segment, UriRegion } from "@/lib/parse/pdf/types";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 
@@ -327,7 +327,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     const inGraphics = new Set(found.flatMap((graphic) => [...graphic.labels, ...graphic.caption]));
     // A kept page's lines count their page among the kept pages; a page read
     // for the furniture's evidence alone counts none.
-    const lines = placeTables(pageLines(takeTables(text.filter((i) => !inGraphics.has(i)), tables), viewport.width, keep ? pages.length : -1, found));
+    const lines = placeTables(pageLines(takeTables(text.filter((i) => !inGraphics.has(i)), tables), viewport.width, keep ? pages.length : -1, found, drawing.rules.filter((r) => r.dir === "h" && !inTable(r))));
     // Each inline formula's LaTeX, from its glyphs and the page's rules.
     resolveZones(lines, drawing);
     // From here on only a TeX page's display equations read the page's
@@ -365,12 +365,14 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
 
   // Running heads, feet, and page numbers drop before anything is segmented,
   // on the evidence of every page read; then the kept pages go on alone.
-  // The lines that dropped name the publication a masthead names (titleOf).
+  // The lines that dropped, and the first cell of a line of cells, name the
+  // publication a masthead names (titleOf, mastheadOf: PLOS's running head
+  // sets its name and the paper's title as one line of two cells).
   const furnished = dropFurniture(readLines, readHeights, readPages, readScans);
   const running = new Set(
     readLines.flatMap((lines, k) => {
       const stays = new Set(furnished[k]);
-      return lines.filter((l) => !stays.has(l)).map((l) => squash(l.text));
+      return lines.filter((l) => !stays.has(l)).flatMap((l) => (l.cells.length > 1 ? [l.text, l.cells[0].text] : [l.text]).map(squash));
     }),
   );
   const cleaned = furnished.filter((_, k) => kept.has(readPages[k] + 1));
@@ -471,12 +473,12 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     const missed = { graphics: graphics[p].map((g) => g.box) };
     const done = ctx.tex ? displayEquations(withFigures, shown, ctx, pageWidths[p], pageHeights[p], missed) : withFigures;
     // The space after each text block, from the page's own gaps.
-    measureSpacing(done, ctx);
+    measureSpacing(done, ctx, shown);
     segments.push(...done);
   }
   // A FIGURE with a region and no caption is an embedded image; every other
   // empty segment drops.
-  segments = segments.filter((s) => s.text.trim().length > 0 || (s.type === "FIGURE" && s.region));
+  segments = segments.filter((s) => s.text.trim().length > 0 || holdsFill(s) || (s.type === "FIGURE" && s.region));
   // Vector-figure debris: chart axis ticks read as tiny numeric-only lines.
   // Inline-math debris: a sum limit or exponent too far from its base line
   // to join it reads as a paragraph of one or two math glyphs.
@@ -484,6 +486,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     (s) =>
       !(
         s.type === "PARAGRAPH" &&
+        !holdsFill(s) &&
         s.text.length <= 14 &&
         /^[\d\s.,%−–-]+$/.test(s.text) &&
         !/\d\.$/.test(s.text.trim())
@@ -588,7 +591,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   // line's size).
   // One line: the title is the document's name in every add path. A line
   // break the writer set stays in the heading's own text.
-  const title = titleSegment?.text.replace(/\s*\n\s*/g, " ") ?? null;
+  const title = titleSegment?.text.replace(/\s*[\n\t]\s*/g, " ") ?? null;
   const titleRuns = titleSegment?.runs?.filter((r) => (r.look?.size ?? 0) >= (titleSegment.rawSize ?? 0) - 0.5);
   const titleFont = titleSegment ? spansFromRuns(titleSegment.text, titleRuns?.length ? titleRuns : titleSegment.runs).font : undefined;
 
@@ -606,7 +609,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   // The segments are the blocks now, in their order: a contents entry links
   // to its heading by that order. Resolved before the title merge and the
   // title's removal, every link pointed past its heading.
-  segments = segments.filter((s) => s.text.trim().length > 0 || (s.type === "FIGURE" && s.region));
+  segments = segments.filter((s) => s.text.trim().length > 0 || holdsFill(s) || (s.type === "FIGURE" && s.region));
   // The masthead's side column and the title's notes with no mark stand at
   // the front matter's end, else after the title page's last words.
   const front = titleSegment ? { page: titleSegment.page, before: bodyStart } : undefined;
@@ -648,6 +651,10 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     if (s.indent) block.indent = s.indent;
     if (s.listIndents) block.listIndents = s.listIndents;
     if (s.itemSpace !== undefined) block.itemSpace = s.itemSpace;
+    // Tabs: the stops their runs carry, a fill-in rule's underline.
+    const tabs = s.type === "PARAGRAPH" || s.type === "HEADING" || s.type === "LIST" ? tabStopsOf(s.text, s.runs) : null;
+    if (tabs && tabs.stops.length > 0) block.tabStops = tabs.stops;
+    if (tabs && tabs.fills.length > 0) block.styles = [...(block.styles ?? []), ...tabs.fills];
     return block;
   });
 
