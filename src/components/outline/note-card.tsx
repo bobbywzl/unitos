@@ -141,6 +141,7 @@ export function NoteCard({
       selected={actions.selected.has(note.id)}
       merging={actions.merging.has(note.id)}
       collapsedInView={actions.isCollapsed(note.id)}
+      viewExpanded={actions.notesView === "expanded"}
       editRequest={actions.editRequest?.id === note.id ? actions.editRequest : null}
       draggableHandle={Boolean(handle)}
       listeners={handle?.listeners}
@@ -195,6 +196,53 @@ function useCommands(actions: OutlineActions): NoteCommands {
   );
 }
 
+// Expand all on a notes full page of 135 notes drew every body in one frame:
+// 260 ms before the press showed anything. Under Expand all, a card in view
+// or near it opens at once and a card out of view opens a few frames later,
+// the nearest first, CARDS_A_FRAME a frame. A card opened alone, and every
+// card while the view folds them, opens at once wherever it is.
+const NEAR_PX = 300;
+const CARDS_A_FRAME = 10;
+type StagedCard = { distance: number; open: () => void };
+let stagedCards: StagedCard[] = [];
+let stagedFrame = 0;
+
+function openStagedCards() {
+  stagedFrame = 0;
+  for (const card of stagedCards.splice(0, CARDS_A_FRAME)) card.open();
+  if (stagedCards.length > 0) stagedFrame = requestAnimationFrame(openStagedCards);
+}
+
+function stageCard(distance: number, open: () => void): () => void {
+  const card = { distance, open };
+  stagedCards.push(card);
+  stagedCards.sort((a, b) => a.distance - b.distance);
+  if (!stagedFrame) stagedFrame = requestAnimationFrame(openStagedCards);
+  return () => {
+    stagedCards = stagedCards.filter((c) => c !== card);
+  };
+}
+
+/** Whether the card shows whole: it folds at once; it opens at once when
+    it is in view or the view does not expand every card, and else when its
+    turn comes. */
+function useStagedOpen(open: boolean, staged: boolean, ref: React.RefObject<HTMLElement | null>): boolean {
+  const [shown, setShown] = useState(open);
+  if (!open && shown) setShown(false);
+  const waiting = open && !shown;
+  useLayoutEffect(() => {
+    if (!waiting) return;
+    const r = staged ? ref.current?.getBoundingClientRect() : undefined;
+    const distance = r ? Math.max(0, r.top - window.innerHeight, -r.bottom) : 0;
+    if (distance <= NEAR_PX) {
+      setShown(true);
+      return;
+    }
+    return stageCard(distance, () => setShown(true));
+  }, [waiting, staged, ref]);
+  return open && shown;
+}
+
 const NoteCardBody = memo(function NoteCardBody({
   note,
   commands,
@@ -204,6 +252,7 @@ const NoteCardBody = memo(function NoteCardBody({
   selected: isSelected,
   merging,
   collapsedInView,
+  viewExpanded,
   editRequest,
   draggableHandle,
   listeners,
@@ -227,6 +276,8 @@ const NoteCardBody = memo(function NoteCardBody({
   merging: boolean;
   /** The notes view folds this note to one line. */
   collapsedInView: boolean;
+  /** The notes view shows every note whole (Expand all). */
+  viewExpanded: boolean;
   /** Open the editor: the keyboard queue's `e`, or the floating card docking. */
   editRequest: { id: string; draft?: string } | null;
   draggableHandle: boolean;
@@ -326,7 +377,7 @@ const NoteCardBody = memo(function NoteCardBody({
   // accepted, a compare pane exists to show the note whole, and a search shows
   // every note it found whole.
   const foldable = note.status === "ACCEPTED" && !pane;
-  const collapsed = foldable && !searching && collapsedInView;
+  const collapsed = !useStagedOpen(!(foldable && !searching && collapsedInView), viewExpanded, cardRef);
   // The collapsed row's line (SPEC.md §6): the note's title; without one,
   // the gist, its first words until the gist arrives. The floating
   // placeholder shows the same line.

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NoteView, SectionView } from "@/lib/types";
 import { ChevronLeftIcon } from "@/components/icons";
@@ -21,6 +21,12 @@ import { filterSections, type OutlineActions } from "@/components/outline/use-ou
 // closes the view.
 
 type Row = { section: SectionView; label: string; nested: boolean };
+
+// The grid draws its first rows with the press and the rest in order, a few
+// rows a frame: the 135 cards of a large project drawn at once took 170 ms
+// before the grid showed. The rows come in under the ones in view.
+const FIRST_CARDS = 24;
+const CARDS_A_FRAME = 24;
 
 /** Every section as a row, in outline order: a child section under its
     parent, labelled "Parent / Child". */
@@ -63,6 +69,22 @@ export function DocumentColumns({
     ...documents.filter((d) => used.has(d.id)),
     ...(used.has(null) ? [{ id: null, title: t("outline.projectColumn") }] : []),
   ];
+  // The rows drawn so far: each row whose first card is among the first
+  // `drawn` cards.
+  const [drawn, setDrawn] = useState(FIRST_CARDS);
+  const cards = rows.reduce((n, row) => n + row.section.notes.length, 0);
+  useEffect(() => {
+    if (drawn >= cards) return;
+    const frame = requestAnimationFrame(() => setDrawn((n) => n + CARDS_A_FRAME));
+    return () => cancelAnimationFrame(frame);
+  }, [drawn, cards]);
+  const drawnRows: Row[] = [];
+  let first = 0;
+  for (const row of rows) {
+    if (first >= drawn) break;
+    drawnRows.push(row);
+    first += row.section.notes.length;
+  }
 
   // Esc closes the view, like every overlay. Esc inside a field stays the
   // field's: the editor's Esc cancels the edit.
@@ -114,7 +136,7 @@ export function DocumentColumns({
             ))}
             {/* One row per section: its label at the left, then its notes
                 under each document. */}
-            {rows.map((row) => (
+            {drawnRows.map((row) => (
               <Fragment key={row.section.id}>
                 <div
                   className={`sticky left-0 z-10 border-b border-line bg-paper px-3 py-3 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase ${
