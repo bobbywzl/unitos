@@ -553,7 +553,12 @@ function readPath(args: unknown[] | null, state: State, rules: Rule[], fills: Fi
     if (fill && pts.length >= 4 && pts.length <= 5) {
       const box = boxOf(pts);
       const onEdge = (v: number, a: number, b: number) => Math.abs(v - a) < 0.1 || Math.abs(v - b) < 0.1;
-      if (!pts.every(([x, y]) => onEdge(x, box.x1, box.x2) && onEdge(y, box.y1, box.y2))) continue;
+      // A sliver 2 pt thin or less that fills its box is a rule, whatever its
+      // corners: OpenStax draws a grid's lines as pieces with one corner cut
+      // 0.75 pt in (its Tables 6.3 and 6.4 read as one cell, or as paragraphs).
+      const area = Math.abs(pts.reduce((sum, [x, y], k) => sum + x * pts[(k + 1) % pts.length][1] - pts[(k + 1) % pts.length][0] * y, 0)) / 2;
+      const sliver = Math.min(box.x2 - box.x1, box.y2 - box.y1) <= 2 && area >= (box.x2 - box.x1) * (box.y2 - box.y1) * 0.8;
+      if (!sliver && !pts.every(([x, y]) => onEdge(x, box.x1, box.x2) && onEdge(y, box.y1, box.y2))) continue;
       addFilledBox(box, state.clip, rules, fills, paint(state));
     }
   }

@@ -150,13 +150,14 @@ const DISPLAY_SPACE_PT = 4;
     the display to its glyphs, and from its glyphs to the line box under it
     (lib/parse/pdf/paragraphs.ts measureSpacing; a line box reaches 0.3 of
     its size under its baseline and 0.85 over it). The page editor draws a
-    PDF's display as tall as its formula (css/import.css), and a line of
-    Normal text 1.3225 em tall, its baseline 0.98 em under its top in
-    Computer Modern, within 0.03 em in Times and Arial: the space over a
-    display is the page's less 0.04 em of the words' size, and the space
-    under it less 0.13 em, so ink stands from ink as on the page. */
-const DISPLAY_OVER_EM = 0.04;
-const DISPLAY_UNDER_EM = 0.13;
+    PDF's display as tall as its formula (css/import.css), and its line of
+    Normal text reaches 0.37 to 0.42 em under its baseline and 0.90 to 0.95
+    em over it (the browser rounds the face's ascent and descent to pixels
+    and sets most of the leading under the words): the space over a display
+    is the page's less 0.1 em of the words' size, and the space under it
+    less 0.07 em, so each baseline stands from the formula as on the page. */
+const DISPLAY_OVER_EM = 0.1;
+const DISPLAY_UNDER_EM = 0.07;
 /** A small line (the kicker, a label, a caption) and a display line, as
     text sizes. */
 const SMALL_SIZE = "9pt";

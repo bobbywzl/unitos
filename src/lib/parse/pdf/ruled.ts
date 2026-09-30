@@ -163,9 +163,14 @@ function isTableGrid(grid: Grid, items: Item[], drawing: TableDrawing, pageWidth
   if (inside.length === 0 || inside.filter((it) => it.mono).length * 2 > inside.length) return false;
   const lines = buildLines(inside, 0);
   if (lines.filter((l) => isProseLine(l, b.x2 - b.x1)).length * 2 >= lines.length) return false;
-  const filled = grid.cells.filter((c) => inside.some((it) => inBox(it, c)));
+  // The words cut at the column lines, as the rows read them (gridRows): a
+  // row's cells may come as one text item (OpenStax's Table 6.4: "40,000
+  // 40,000 45,050 …" filled one cell of six).
+  const inner = grid.xs.slice(1, -1);
+  const pieces = inside.flatMap((it) => splitAt(it, inner.filter((x) => x > it.x + it.w * 0.05 && x < it.x + it.w * 0.95)));
+  const filled = grid.cells.filter((c) => pieces.some((it) => inBox(it, c)));
   if (filled.length < 2 || filled.length * 3 < grid.cells.length) return false;
-  return !mostlyTiny(filled.map((c) => inside.filter((it) => inBox(it, c)).map((it) => it.str.trim()).join("")));
+  return !mostlyTiny(filled.map((c) => pieces.filter((it) => inBox(it, c)).map((it) => it.str.trim()).join("")));
 }
 
 // A grid drawn around groups of cells, not around each: LaTeX's |l|ccc|
