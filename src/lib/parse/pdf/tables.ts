@@ -677,6 +677,8 @@ export function tableFromRun(run: Line[], leading: number): Segment {
     const { text, runs } = joinGroup(run);
     return { type: "PARAGRAPH", text, page, runs, ...geom(run) };
   }
+  const start = sideBySide.get(run[0]);
+  if (start !== undefined) return columnsProse(run, separators, columnAt(start + 1, separators));
   const cellsOf = run.map((line) => cellsBySeparators(line, separators));
   const rows = rowsOf(cellsOf, rowStartsOf(run, cellsOf, leading), columnCount);
   if (isFragmented(rows)) {
@@ -777,6 +779,57 @@ const proseCell = (text: string) => text.split(/\s+/).filter((w) => /\p{L}{2}/u.
 export function isProseColumns(lines: Line[], ocr: boolean): boolean {
   const prose = lines.filter((l) => l.cells.filter((c) => proseCell(c.text)).length >= (ocr ? 1 : 2)).length;
   return lines.length > 0 && prose * 2 >= lines.length;
+}
+
+// Words that run on into the next line's: the first ends mid-sentence and
+// the next opens in lower case.
+const runsOn = (upper: string, lower: string) => !/[.!?:;]["'”’)\]]*$/.test(upper.trim()) && /^\p{Ll}/u.test(lower.trim());
+
+// A paragraph down the first column: its cells run on from line to line, a
+// sentence among them. A table's first column holds its rows' labels (two
+// paragraphs side by side under a slide's pictures: NASA AGU 2023 p. 61).
+function isWrappedParagraph(lines: Line[]): boolean {
+  return (
+    lines.length >= 2 &&
+    lines.every((l) => l.cells.length >= 2) &&
+    lines.slice(1).every((l, n) => runsOn(lines[n].cells[0].text, l.cells[0].text)) &&
+    lines.some((l) => proseCell(l.cells[0].text))
+  );
+}
+
+// Where a later column carries on the paragraph right over the run: a
+// bullet or a sentence of one cell whose words start where the column does,
+// and run on into it. The run is that paragraph's lines beside a picture's
+// labels (a slide's bullet wrapped beside the labels of the pictures left of
+// it: NASA pptx 20250000071 p. 11). null: no column does.
+function carriedAt(above: Line | undefined, head: Line, left: number, leading: number): number | null {
+  if (!above || above.cells.length !== 1 || !(bulleted(above) || proseCell(above.text))) return null;
+  if (above.y - head.y > above.size * leading * 1.35) return null;
+  const words = above.items.find((it) => /[\p{L}\p{N}]/u.test(it.str))?.x ?? above.x;
+  return head.cells.find((c) => c.x > left + 12 && Math.abs(c.x - words) <= 4 && runsOn(above.text, c.text))?.x ?? null;
+}
+
+// Runs of prose side by side (isWrappedParagraph, carriedAt): each run's
+// first line, and the place its reading starts at (the column that carries
+// on the paragraph over it, else the first).
+const sideBySide = new WeakMap<Line, number>();
+
+// Prose side by side is no table: one paragraph, column by column, the
+// column its reading starts at first, a line break between two columns (as
+// a contents list in two columns reads, contents.ts).
+function columnsProse(run: Line[], separators: number[], lead: number): Segment {
+  const columns = Array.from({ length: separators.length + 1 }, (_, c) => c);
+  const builder = new TextBuilder();
+  for (const c of [lead, ...columns.filter((c) => c !== lead)]) {
+    const parts = run.flatMap((line) => {
+      const items = line.items.filter((it) => columnAt(it.x + it.w / 2, separators) === c);
+      if (!items.some((it) => it.str.trim().length > 0)) return [];
+      const cell = cellOfItems(items, line.size);
+      return [{ ...line, cells: [cell], text: cell.text, runs: cell.runs, items, x: cell.x, xEnd: Math.max(...items.map((it) => it.x + it.w)) }];
+    });
+    if (parts.length > 0) builder.append(joinGroup(parts, true), "\n");
+  }
+  return { type: "PARAGRAPH", text: builder.text, page: run[0].page, runs: builder.runs, ...geom(run) };
 }
 
 // A lead-in: a sentence of eight words or more that ends in a colon over the
@@ -1004,6 +1057,13 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       i++;
       continue;
     }
+    if (isWrappedParagraph(members.map((k) => lines[k]))) {
+      sideBySide.set(lines[i], -Infinity);
+      for (const k of members) runOf[k] = runId;
+      runId++;
+      i = j;
+      continue;
+    }
     // Two lines, one of them set far larger than the body, are display
     // type: a chapter's title in spaced capitals ("CHAPTER THREE" over its
     // name, NASA SP-4408 p. 87) read as two columns of one word each.
@@ -1074,6 +1134,8 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       members.unshift(first);
       absorbed++;
     }
+    const carried = runOf[first - 1] === -1 ? carriedAt(lines[first - 1], lines[first], left, ctx.leading) : null;
+    if (carried !== null) sideBySide.set(lines[first], carried);
     for (const k of members) runOf[k] = runId;
     runId++;
     i = j;
