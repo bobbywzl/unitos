@@ -22,11 +22,32 @@ import { filterSections, type OutlineActions } from "@/components/outline/use-ou
 
 type Row = { section: SectionView; label: string; nested: boolean };
 
-// The grid draws its first rows with the press and the rest in order, a few
-// rows a frame: the 135 cards of a large project drawn at once took 170 ms
-// before the grid showed. The rows come in under the ones in view.
+// The grid draws its first cards with the press and the rest a few a frame:
+// the 135 cards of a large project drawn at once took 170 ms before the grid
+// showed. The cards come in reading order: row by row, and in a row the
+// first card of each column, then the second of each, so the top of the
+// grid fills first and the rest comes in under it.
 const FIRST_CARDS = 24;
 const CARDS_A_FRAME = 24;
+
+/** How many cards each cell draws when the grid draws its first `budget`
+    cards in reading order. `cells` holds each row's cells' card counts. */
+function cardsDrawn(cells: number[][], budget: number): number[][] {
+  const drawn = cells.map((row) => row.map(() => 0));
+  let left = budget;
+  for (let r = 0; r < cells.length && left > 0; r++) {
+    const deepest = Math.max(0, ...cells[r]);
+    for (let level = 0; level < deepest && left > 0; level++) {
+      for (let c = 0; c < cells[r].length && left > 0; c++) {
+        if (cells[r][c] > level) {
+          drawn[r][c] = level + 1;
+          left--;
+        }
+      }
+    }
+  }
+  return drawn;
+}
 
 /** Every section as a row, in outline order: a child section under its
     parent, labelled "Parent / Child". */
@@ -69,22 +90,19 @@ export function DocumentColumns({
     ...documents.filter((d) => used.has(d.id)),
     ...(used.has(null) ? [{ id: null, title: t("outline.projectColumn") }] : []),
   ];
-  // The rows drawn so far: each row whose first card is among the first
-  // `drawn` cards.
-  const [drawn, setDrawn] = useState(FIRST_CARDS);
+  // Each cell's notes, and how many of them are drawn so far.
+  const cellNotes = rows.map((row) => columns.map((column) => row.section.notes.filter((note) => columnOf(note) === column.id)));
+  const [budget, setBudget] = useState(FIRST_CARDS);
   const cards = rows.reduce((n, row) => n + row.section.notes.length, 0);
   useEffect(() => {
-    if (drawn >= cards) return;
-    const frame = requestAnimationFrame(() => setDrawn((n) => n + CARDS_A_FRAME));
+    if (budget >= cards) return;
+    const frame = requestAnimationFrame(() => setBudget((n) => n + CARDS_A_FRAME));
     return () => cancelAnimationFrame(frame);
-  }, [drawn, cards]);
-  const drawnRows: Row[] = [];
-  let first = 0;
-  for (const row of rows) {
-    if (first >= drawn) break;
-    drawnRows.push(row);
-    first += row.section.notes.length;
-  }
+  }, [budget, cards]);
+  const drawn = cardsDrawn(
+    cellNotes.map((row) => row.map((notes) => notes.length)),
+    budget,
+  );
 
   // Esc closes the view, like every overlay. Esc inside a field stays the
   // field's: the editor's Esc cancels the edit.
@@ -136,7 +154,7 @@ export function DocumentColumns({
             ))}
             {/* One row per section: its label at the left, then its notes
                 under each document. */}
-            {drawnRows.map((row) => (
+            {rows.map((row, r) => drawn[r].some((n) => n > 0) && (
               <Fragment key={row.section.id}>
                 <div
                   className={`sticky left-0 z-10 border-b border-line bg-paper px-3 py-3 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase ${
@@ -145,8 +163,8 @@ export function DocumentColumns({
                 >
                   {row.label}
                 </div>
-                {columns.map((column) => {
-                  const notes = row.section.notes.filter((note) => columnOf(note) === column.id);
+                {columns.map((column, c) => {
+                  const notes = cellNotes[r][c].slice(0, drawn[r][c]);
                   return (
                     <div
                       key={column.id ?? "project"}

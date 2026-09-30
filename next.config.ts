@@ -16,6 +16,11 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/**": ["./node_modules/playwright-core/**/*", "./src/lib/parse/pdf/cmaps/**/*"],
   },
+  // In development every saved server file refreshes the router from the HMR
+  // socket; a refresh that lands while the reader hydrates meets the hidden
+  // div Next streams its metadata into and throws a hydration mismatch. In
+  // development the metadata blocks instead; production keeps streaming it.
+  ...(process.env.NODE_ENV === "development" ? { htmlLimitedBots: /.*/ } : {}),
 };
 
 export default nextConfig;

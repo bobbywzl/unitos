@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NoteView, SourceChip } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
@@ -228,7 +228,12 @@ function stageCard(distance: number, open: () => void): () => void {
     turn comes. */
 function useStagedOpen(open: boolean, staged: boolean, ref: React.RefObject<HTMLElement | null>): boolean {
   const [shown, setShown] = useState(open);
-  if (!open && shown) setShown(false);
+  // A folded card forgets that it was open after the fold has shown, so the
+  // next Expand all opens it in its turn again.
+  useEffect(() => {
+    if (open || !shown) return;
+    startTransition(() => setShown(false));
+  }, [open, shown]);
   const waiting = open && !shown;
   useLayoutEffect(() => {
     if (!waiting) return;
