@@ -1,21 +1,24 @@
 import type { Editor } from "@tiptap/core";
 import { Fragment, Slice, type Mark, type Node as PMNode, type ResolvedPos, type Schema } from "@tiptap/pm/model";
-import { NodeSelection, TextSelection, type Transaction } from "@tiptap/pm/state";
+import { NodeSelection, Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { insertPoint } from "@tiptap/pm/transform";
-import type { EditorView } from "@tiptap/pm/view";
+import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { insertT, toast } from "@/components/docs/insert/context";
 import { listFormat } from "@/components/docs/toolbar/lists";
 import { fragmentToMarkdown, markdownToHtml } from "@/components/docs/typing/markdown";
 import { LIST_COUNTERS, type ListCounter, type ListLevel } from "@/lib/docs/schema";
-import { uploadImage } from "@/lib/images";
+import { imageFileFrom, type DroppedImageUrl } from "@/lib/image-drop";
+import { isImageFile, refuseImage, uploadImage, type ImageRefusal } from "@/lib/images";
+import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Paste in the page editor (SPEC.md §29, typing), as Google Docs pastes:
 // plain text becomes one paragraph per line (blank lines too) in the style at
 // the caret; Ctrl+Shift+V pastes the plain text alone; an image pasted or
-// dropped from the computer is uploaded and goes in as an image on its own
-// line. Pasted HTML keeps only the formatting a save keeps, Word's lists and
-// Google Docs' checklists included, and its pictures are copied into Unitos.
-// With Enable Markdown on, Paste from Markdown and Copy as Markdown work too.
+// dropped (typing/drop.ts) is uploaded and goes in as an image on its own
+// line, faint with a turning ring until it is stored. Pasted HTML keeps only
+// the formatting a save keeps, Word's lists and Google Docs' checklists
+// included, and its pictures are copied into Unitos. With Enable Markdown
+// on, Paste from Markdown and Copy as Markdown work too.
 
 /** Points per CSS unit. A font size's em, rem, and % count against Normal
     text's 11 pt. */
@@ -220,12 +223,14 @@ function copyImages(editor: Editor, root: DocumentFragment): void {
     sources.forEach(async (blob, src) => {
       let url: string | null = null;
       if (imagesAt(editor.state.doc, src).length > 0) {
+        markUpload(editor, src, true);
         try {
           const bytes = blob ?? (await (await fetch(src)).blob());
           url = (await uploadImage(new File([bytes], "image", { type: bytes.type }))).url;
         } catch (err) {
           if (blob) uploadFailed(editor, err);
         }
+        markUpload(editor, src, false);
       }
       if (blob) URL.revokeObjectURL(src);
       if (url || blob) setImageSrc(editor, src, url);
@@ -289,9 +294,89 @@ export function armPlainPaste(view: EditorView): void {
   }, 150);
 }
 
-/** The image files among `files`. */
-export function imageFiles(files: FileList | null | undefined): File[] {
-  return Array.from(files ?? []).filter((f) => f.type.startsWith("image/"));
+/** The image files among `files`: png, jpg, gif, webp, or bmp, by type or
+    by name (lib/handwritten/image.ts). */
+export function imageFiles(files: FileList | File[] | null | undefined): File[] {
+  return Array.from(files ?? []).filter(isImageFile);
+}
+
+// ── The images' rules: the type, the size, the tier ─────────────────────
+
+/** Whether the page's reader has Unitos Premium (lib/tiers.ts), set by the
+    typing area; unknown counts as yes, and the server checks again. */
+const premiumOf = new WeakMap<Editor, boolean>();
+
+export function setImagePremium(editor: Editor, premium: boolean): void {
+  premiumOf.set(editor, premium);
+}
+
+const REFUSAL: Record<Exclude<ImageRefusal, "not-image">, TKey> = {
+  "too-large": "api.imageTooLarge",
+  premium: "api.imageNeedsPremium",
+};
+
+/** The files the page takes as images, in order. The first file it refuses
+    says why, before anything uploads: not an image (a PDF goes on the
+    document list, not in the text), larger than 25 MB, or larger than
+    5 MB without Unitos Premium (lib/images.ts refuseImage). */
+export function acceptedImages(editor: Editor, files: File[]): File[] {
+  const t = insertT(editor);
+  const premium = premiumOf.get(editor) ?? true;
+  let said = false;
+  return files.filter((file) => {
+    const refusal = refuseImage(file, premium);
+    if (refusal && !said) {
+      said = true;
+      toast(refusal === "not-image" ? t("docsTyping.notAnImage", { name: file.name || t("docsTyping.thisFile") }) : t(REFUSAL[refusal]), editor);
+    }
+    return refusal === null;
+  });
+}
+
+// ── Images on their way: faint, with a turning ring ─────────────────────
+
+type Uploads = { srcs: ReadonlySet<string>; decorations: DecorationSet };
+const uploadsKey = new PluginKey<Uploads>("docsImageUploads");
+
+function uploadDecorations(doc: PMNode, srcs: ReadonlySet<string>): DecorationSet {
+  if (srcs.size === 0) return DecorationSet.empty;
+  const found: Decoration[] = [];
+  doc.descendants((node, pos) => {
+    if (node.type.name === "image" && srcs.has(String(node.attrs.src))) {
+      found.push(Decoration.node(pos, pos + node.nodeSize, { class: "docs-img-uploading" }));
+    }
+    return node.isBlock && !node.isTextblock;
+  });
+  return DecorationSet.create(doc, found);
+}
+
+/** The images whose address is uploading draw faint with a turning ring
+    (docs.css) until the stored address takes its place. */
+export function uploadsPlugin(): Plugin<Uploads> {
+  return new Plugin<Uploads>({
+    key: uploadsKey,
+    state: {
+      init: () => ({ srcs: new Set(), decorations: DecorationSet.empty }),
+      apply(tr, value, _old, state: EditorState) {
+        const change = tr.getMeta(uploadsKey) as { src: string; on: boolean } | undefined;
+        if (!change && (!tr.docChanged || value.srcs.size === 0)) return value;
+        const srcs = new Set(value.srcs);
+        if (change?.on) srcs.add(change.src);
+        else if (change) srcs.delete(change.src);
+        return { srcs, decorations: uploadDecorations(state.doc, srcs) };
+      },
+    },
+    props: {
+      decorations(state) {
+        return uploadsKey.getState(state)?.decorations ?? null;
+      },
+    },
+  });
+}
+
+function markUpload(editor: Editor, src: string, on: boolean): void {
+  if (editor.isDestroyed || !uploadsKey.get(editor.state)) return;
+  editor.view.dispatch(editor.state.tr.setMeta(uploadsKey, { src, on }).setMeta("addToHistory", false));
 }
 
 /** Where an image goes for a caret at `pos`, as in Google Docs: on its own
@@ -305,27 +390,68 @@ function imageSpot(doc: PMNode, pos: number): number {
 }
 
 /** Insert images at `pos` (the selection when absent, which the first image
-    replaces), each on its own line (imageSpot). Each shows at once from a
-    blob: address, uploads, and takes the stored address, as copyImages
-    does; one the server refuses goes, with the reason. */
+    replaces), each on its own line (imageSpot), in the order given. The
+    files the rules refuse stay out, with the reason (acceptedImages). Each
+    shows at once from a blob: address, uploads, and takes the stored
+    address, as copyImages does; one the server refuses goes, with the
+    reason. */
 export async function insertImageFiles(editor: Editor, files: File[], pos?: number): Promise<void> {
+  const taken = acceptedImages(editor, files);
   let at = pos;
-  const shown = files.map((file) => {
+  const shown = taken.map((file) => {
     const src = URL.createObjectURL(file);
+    markUpload(editor, src, true);
     insertImage(editor, { src }, at);
     at = editor.state.selection.to;
     return src;
   });
   await Promise.all(
-    files.map(async (file, i) => {
+    taken.map(async (file, i) => {
       let url: string | null = null;
       try {
         url = (await uploadImage(file)).url;
       } catch (err) {
         uploadFailed(editor, err);
       }
+      markUpload(editor, shown[i], false);
       setImageSrc(editor, shown[i], url);
       URL.revokeObjectURL(shown[i]);
+    }),
+  );
+}
+
+/** Insert pictures dragged from another page at `pos`, each on its own line,
+    as insertImageFiles does. A data: picture goes in as a file. Any other
+    shows at once from its own address and uploads when the browser may read
+    it, then takes the stored address; one the browser may not read keeps its
+    address, as a pasted picture does (copyImages). */
+export async function insertImageUrls(editor: Editor, images: DroppedImageUrl[], pos: number): Promise<void> {
+  const data = images.filter((image) => image.url.startsWith("data:"));
+  if (data.length === images.length) {
+    const files = (await Promise.all(data.map((image) => imageFileFrom(image.url)))).filter((f): f is File => f !== null);
+    await insertImageFiles(editor, files, pos);
+    return;
+  }
+  let at = pos;
+  const shown = images.filter((image) => !image.url.startsWith("data:"));
+  for (const image of shown) {
+    markUpload(editor, image.url, true);
+    insertImage(editor, { src: image.url, alt: image.alt }, at);
+    at = editor.state.selection.to;
+  }
+  await Promise.all(
+    shown.map(async (image) => {
+      let url: string | null = null;
+      const file = await imageFileFrom(image.url);
+      if (file && refuseImage(file, premiumOf.get(editor) ?? true) === null) {
+        try {
+          url = (await uploadImage(file)).url;
+        } catch {
+          // Refused by the server: the picture keeps its own address.
+        }
+      }
+      markUpload(editor, image.url, false);
+      if (url) setImageSrc(editor, image.url, url);
     }),
   );
 }
@@ -344,7 +470,7 @@ export function caretUnderImage(tr: Transaction): boolean {
 
 /** An image on its own line after the paragraph at `pos` (else the
     selection, which it replaces), or in place of an empty line. */
-export function insertImage(editor: Editor, attrs: { src: string }, pos?: number): void {
+export function insertImage(editor: Editor, attrs: { src: string; alt?: string }, pos?: number): void {
   editor
     .chain()
     .focus()
