@@ -794,11 +794,18 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   // both (arXiv 1706.03762's Table 2).
   const ruledAt = [...new Set(drawn.map((r) => r.x1))];
   const open = (a: number, b: number) => !body.some((l) => l.items.some((it) => it.x < Math.max(a, b) && it.x + it.w > Math.min(a, b)));
+  // A group's label over its rows, a phrase from the table's left edge (and
+  // a value at its end), crosses the gutters the rows leave open: the scan
+  // reads the rows of three phrases or more where two or more hold them
+  // (2609.29669's "§3.1 Policy / manipulation suites" over "CALVIN [101] |
+  // 2021 | RA-L …" joined its Benchmark and Year columns).
+  const rowsOnly = body.filter((l) => phrasesOf(l).length >= 3 || l.x > region.box.x1 + l.size * 2);
+  const scan = rowsOnly.filter((l) => phrasesOf(l).length >= 3).length >= 2 ? rowsOnly : body.length >= 2 ? body : phrased;
   const scanned = withoutSignColumns(
-    body.length >= 2 ? body : phrased,
+    scan,
     [
       ...ruledAt,
-      ...columnSeparators(body.length >= 2 ? body : phrased, headGroups.at(-1) ?? []).filter((x) => !ruledAt.some((d) => open(x, d))),
+      ...columnSeparators(scan, headGroups.at(-1) ?? []).filter((x) => !ruledAt.some((d) => open(x, d))),
     ].sort((a, b) => a - b),
   );
   const separators = [...scanned, ...headSeparators(headGroups.at(-1) ?? [], body, scanned, region.box)].sort((a, b) => a - b);
