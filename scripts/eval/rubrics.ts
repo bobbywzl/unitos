@@ -1,7 +1,8 @@
 // The rubrics of the tool quality loop (SPEC.md §25): what a valuable output
-// of each tool is, as criteria the judge scores 1 to 5. The criteria are the
-// prompt's own promises (lib/prompts/*), written as questions a reader would
-// ask of the output. A criterion the output fails names the change to make.
+// of each tool is, as criteria the judge scores 1 to 5, written as questions
+// a reader would ask of the output. The prompts (lib/prompts/*) make the same
+// promises; where a prompt falls short of its rubric, the loop changes the
+// prompt. A criterion the output fails names the change to make.
 export type Rubric = { tool: string; what: string; criteria: { key: string; ask: string }[] };
 
 export const RUBRICS: Record<string, Rubric> = {
@@ -39,13 +40,30 @@ export const RUBRICS: Record<string, Rubric> = {
   },
   distill: {
     tool: "Extract (DISTILL)",
-    what: "The quotes across the document that answer the reader's question, each captioned with the answer it gives.",
+    what: "The quotes across the document that answer what the reader asks and the intention behind the question, each with a caption that states the answer its quote gives. The reader has the answer without reading the document, and often something they would have missed reading it themselves.",
     criteria: [
+      { key: "intent", ask: "Does the extraction read the question right: what the reader asks, and the worry or decision behind it? Does it answer that, not only the literal words?" },
+      { key: "on_point", ask: "Does every quote match what is asked? Is there no quote that only mentions the topic, sets the background, or answers another question?" },
       { key: "answers", ask: "Do the quotes together answer the question as far as the document can, with nothing stretched into an answer it does not give?" },
+      { key: "accurate", ask: "Is every caption true to its quote and to the document: the same numbers, the same conditions, the same strength of claim?" },
+      { key: "captions", ask: "Does each caption state the answer its quote gives, with its number or named mechanism, so the reader has the answer before reading the quote? Does it stand on its own, never 'the question' or 'this quote'?" },
       { key: "distinct", ask: "Does each quote add something the others do not: a different facet, mechanism, piece of evidence, or side?" },
-      { key: "captions", ask: "Does each caption state the answer the quote gives, with its number or named mechanism, and stand on its own without 'the question' or 'this quote'?" },
-      { key: "cut", ask: "Is each quote cut to what answers: a phrase, a sentence, or a paragraph that argues as one, never padded or truncated mid-argument?" },
-      { key: "honest", ask: "When the document does not answer, or answers only a facet, does the output say so instead of pretending?" },
+      { key: "cut", ask: "Is each quote cut to what answers: a phrase, a sentence, or a paragraph that argues as one, never padded or cut mid-argument?" },
+      { key: "honest", ask: "When the document does not answer the question, or answers only part of it, does a caption say what it does not answer instead of pretending?" },
+      { key: "insight", ask: "Does the extraction give the reader something a careful reader would miss: a link between two passages, an implication, a quiet caveat or condition, or what a number really means? Is it grounded in the quotes, with nothing added from outside the document?" },
+    ],
+  },
+  collapse: {
+    tool: "Collapse",
+    what: "Every block of the article collapsed to its core: what the block really says, in plain words, at a tenth to a third of its length, written in the light of the whole article. The reader reads the cores in place of the blocks, in order, as the article: they get every block's point, and never a meaning the block does not have.",
+    criteria: [
+      { key: "key_words", ask: "Does each core carry its block's key words: the terms, names, and numbers the block's point rests on, as printed?" },
+      { key: "content", ask: "Does each core keep what the block's important sentences say — the claim, the evidence, the step — rephrased in plain words, and drop only what the block mentions on the way?" },
+      { key: "faithful", ask: "Does every core say only what its block says: no added claim, no changed strength or modality (may to will, some to all, suggests to shows), no claim moved from the person who makes it to the article, and no dropped condition, negation, or number the point needs?" },
+      { key: "quotes", ask: "Where a block has an extremely important line — the thesis, a definition, the key finding, a line a speaker said — does its core quote that line word for word, in quotation marks, instead of paraphrasing it? Is quoting kept to those lines?" },
+      { key: "context", ask: "Is each core written in the light of the whole article: does it say what the block does there (a claim, the evidence for one, a caveat, an example, the ground for what comes next), so the cores read in order as the article?" },
+      { key: "insight", ask: "Where a block's meaning depends on the rest of the article, does its core say so: the caveat it puts on an earlier claim, what its number means, the link to another part? Does the reader get something they would miss reading the block alone?" },
+      { key: "length", ask: "Is each core short — a tenth to a third of a long block, one shorter sentence for a sentence, never longer than the block — and still a complete thought?" },
     ],
   },
   summarize: {
@@ -106,5 +124,5 @@ export const RUBRICS: Record<string, Rubric> = {
 // The criteria every assistant-voice tool shares, appended to its rubric.
 export const SHARED_CRITERIA: { key: string; ask: string }[] = [
   { key: "style", ask: "Is the answer direct and first, in short sentences and plain words, one point per sentence, with no idioms, no complex phrases, no preamble, no filler, and no closing summary?" },
-  { key: "language", ask: "Is the output in the language the prompt asked for (the reader's UI language for assistant-voice tools, the passage's language for Simplify)?" },
+  { key: "language", ask: "Is the output in the language the prompt asked for (the reader's UI language for assistant-voice tools, the passage's language for Simplify, the document's language for Collapse)?" },
 ];
