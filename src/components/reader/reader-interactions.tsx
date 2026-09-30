@@ -964,6 +964,9 @@ export function ReaderInteractions({
       content: string;
       noteId: string;
       conversation: ChatTurn[];
+      // Another block of a passage across blocks: the same card, and no
+      // symbol of its own (the passage's first block carries it).
+      chipless?: boolean;
     }
   >;
   // A split view (SPEC.md §6): the pane header row replaces the floating
@@ -1490,15 +1493,20 @@ export function ReaderInteractions({
   const [prevAnchorsProp, setPrevAnchorsProp] = useState(anchorHighlights);
   if (prevAnchorsProp !== anchorHighlights) {
     setPrevAnchorsProp(anchorHighlights);
-    // Clear an optimistic mark only once the server's copy of its span is in
+    // Clear an optimistic mark only once a server mark covers its span in
     // the props: a refresh from an older action would otherwise blank the mark
-    // until the next refresh lands.
+    // until the next refresh lands. Covering, not equal: the stored offsets
+    // of a segment can differ from the painted ones by a space, and an
+    // optimistic mark left behind paints clay over the tool's own color.
     setLocalAnchors((prev) => {
       const next: typeof prev = {};
       for (const [blockId, list] of Object.entries(prev)) {
         const confirmed = anchorHighlights[blockId] ?? [];
         const keep = list.filter(
-          (h) => !confirmed.some((c) => c.sourceId === h.sourceId || (c.start === h.start && c.end === h.end)),
+          (h) =>
+            !confirmed.some(
+              (c) => c.sourceId === h.sourceId || (c.start < h.end && c.end > h.start && c.start <= h.start + 2 && c.end >= h.end - 2),
+            ),
         );
         if (keep.length > 0) next[blockId] = keep;
       }
@@ -6875,6 +6883,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           ...h,
           kind: "anchor" as const,
           tool,
+          chipless: stored?.chipless ?? false,
           plus,
           open,
           leaving: removedNotes[h.noteId] === "leaving",

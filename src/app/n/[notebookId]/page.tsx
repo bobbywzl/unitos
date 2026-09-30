@@ -499,6 +499,21 @@ export default async function NotebookPage(props: {
       })
       .filter((a): a is AnnotationItem => a !== null);
 
+    // A passage across blocks is one note with one source per block. The
+    // tab lists the note once, by its first source here; every other source
+    // here carries the same card, so each block of the passage paints in
+    // the kind's color and a click on any of them opens the card. Only the
+    // first carries the tool's symbol (chipless).
+    const otherSourcesByNote = new Map<string, string[]>();
+    for (const n of notebook!.sections.filter((s) => s.hidden).flatMap((s) => s.notes)) {
+      const here = n.sources.filter((src) => src.documentId === document.id).map((src) => src.id);
+      if (here.length > 1) otherSourcesByNote.set(n.id, here.slice(1));
+    }
+    const everySource = <T,>(a: AnnotationItem, value: T): [string, T][] => [
+      [a.sourceId as string, value],
+      ...(otherSourcesByNote.get(a.id) ?? []).map((id): [string, T] => [id, { ...value, chipless: true }]),
+    ];
+
     // Stored EXPLAIN, SIMPLIFY, ANALYZE, VISUALIZE, comment, and assistant
     // conversation content by source id: clicking the mark reopens the card
     // with this content.
@@ -514,15 +529,15 @@ export default async function NotebookPage(props: {
               a.kind === "assistant") &&
             a.sourceId,
         )
-        .map((a) => [
-          a.sourceId as string,
-          {
+        .flatMap((a) =>
+          everySource(a, {
             kind: a.kind as "explain" | "simplify" | "analyze" | "visualize" | "comment" | "assistant",
             content: a.content,
             noteId: a.id,
             conversation: a.conversation,
-          },
-        ]),
+            chipless: false,
+          }),
+        ),
     );
 
     // Highlights and comments by source id, for the on-mark edit controls.
@@ -539,7 +554,7 @@ export default async function NotebookPage(props: {
     > = {};
     for (const a of annotations) {
       if ((a.kind === "highlight" || a.kind === "comment") && a.sourceId) {
-        annotationsBySource[a.sourceId] = {
+        const value = {
           noteId: a.id,
           kind: a.kind,
           color: a.color,
@@ -547,6 +562,7 @@ export default async function NotebookPage(props: {
           quotedText: a.quotedText,
           createdById: a.createdById,
         };
+        for (const [id] of everySource(a, value)) annotationsBySource[id] = value;
       }
     }
 

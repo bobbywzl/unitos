@@ -83,6 +83,9 @@ export type Highlight = {
   // The stored AI annotation's tool symbol renders at the end of the span, in
   // every view; the symbol opens the card. Kind "anchor" only.
   tool?: "explain" | "simplify" | "analyze" | "visualize" | "assistant";
+  // Another block of a passage across blocks: it paints as the tool's mark
+  // and opens its card, and the symbol stays on the passage's first block.
+  chipless?: boolean;
   // The stored AI annotation's card is open: the mark keeps the clay fill.
   // Closed, a stored AI annotation is its underline and its symbol alone,
   // so it never reads as the live selection (globals.css .tool-mark).
@@ -530,7 +533,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
       // A stored AI annotation's tool symbol sits at the end of its span —
       // explain, simplify, or assistant — and opens the card.
       const toolEnding = covering.find(
-        (h) => h.kind === "anchor" && h.tool && h.sourceId && h.end === to,
+        (h) => h.kind === "anchor" && h.tool && !h.chipless && h.sourceId && h.end === to,
       );
       if (toolEnding?.tool) {
         const tip = t((toolEnding.plus ? TOOL_PLUS_KEY : TOOL_KEY)[toolEnding.tool]);

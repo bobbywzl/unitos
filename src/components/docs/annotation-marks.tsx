@@ -156,7 +156,7 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<
 function chipsOf(h: Highlight): Chip[] {
   const chips: Chip[] = [];
   const live = h.kind === "anchor" && h.sourceId && !h.leaving;
-  if (live && h.tool) chips.push({ kind: "tool", highlight: h });
+  if (live && h.tool && !h.chipless) chips.push({ kind: "tool", highlight: h });
   if (live && h.comment) chips.push({ kind: "comment", highlight: h });
   if (live && h.color) chips.push({ kind: "link-start", highlight: h });
   if (h.kind === "extract" && h.extractLabel) chips.push({ kind: "extract", highlight: h });
