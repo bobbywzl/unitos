@@ -71,7 +71,9 @@ export function tabSizes(view: EditorView): Map<number, number> {
     if (!(el instanceof HTMLElement)) return false;
     // CSS measures tab stops from the paragraph's content box.
     const cs = getComputedStyle(el);
-    const origin = x(el.getBoundingClientRect().left) + (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.borderLeftWidth) || 0);
+    const box = el.getBoundingClientRect();
+    const origin = x(box.left) + (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.borderLeftWidth) || 0);
+    const right = x(box.right) - (parseFloat(cs.paddingRight) || 0) - (parseFloat(cs.borderRightWidth) || 0);
     // A tab narrower than half a character jumps to the stop after.
     const least = (parseFloat(cs.fontSize) || 15) * 0.4;
     const tabs: { pos: number; start: Rect }[] = [];
@@ -103,7 +105,13 @@ export function tabSizes(view: EditorView): Map<number, number> {
       for (const stop of stops) {
         const at = stop.pt * PX_PER_PT;
         if (at <= cursor) continue;
-        stopAt = Math.max(cursor + least, stop.align === "left" ? at : stop.align === "center" ? at - words / 2 : at - words);
+        const lead = stop.align === "left" ? 0 : stop.align === "center" ? words / 2 : words;
+        stopAt = Math.max(cursor + least, at - lead);
+        // Words to a right stop at the line's end that find no room before
+        // it go to the next line with their tab (docs.css .docs-tab breaks a
+        // line before a tab) and end at the stop there, as TeX sets a
+        // proof's box. The tab's size is the same on either line.
+        if (stop.align === "right" && at >= right - 1 && at - words - origin >= least) stopAt = at - words;
         break;
       }
       // Rounded down: words to a right stop at the column's edge end on it,
@@ -116,22 +124,27 @@ export function tabSizes(view: EditorView): Map<number, number> {
   return sizes;
 }
 
-// An underlined tab draws its line, as Word draws one: a form's blank to
-// fill in ("Name:" and the line after it to its stop). Chromium draws no
-// underline under a tab, so the tab's span carries a class that draws it
-// (docs.css .docs-tab-line). The set is kept as the text changes: each
-// transaction reads again only the paragraphs its steps touched.
+// Each tab's span carries a class (docs.css). .docs-tab lets a line break
+// before the tab, as Word takes a tab that finds no room to the next line:
+// the page keeps its spaces (white-space: break-spaces), so a tab at a
+// line's end takes room, and without the break the word before it went to
+// the next line with it. .docs-tab-line draws an underlined tab's line, as
+// Word draws one: a form's blank to fill in ("Name:" and the line after it
+// to its stop); Chromium draws no underline under a tab. The set is kept as
+// the text changes: each transaction reads again only the paragraphs its
+// steps touched.
 
 const tabLinesKey = new PluginKey<DecorationSet>("docsTabLines");
 
-/** The underlined tabs in the paragraphs from `from` to `to`. */
+/** The tabs in the paragraphs from `from` to `to`; code keeps its tabs. */
 function tabLines(doc: PMNode, from: number, to: number): Decoration[] {
   const out: Decoration[] = [];
   doc.nodesBetween(from, to, (node, pos) => {
-    if (!node.isText) return true;
+    if (!node.isText) return !node.type.spec.code;
     const text = node.text ?? "";
-    if (!text.includes("\t") || !node.marks.some((m) => m.type.name === "underline")) return false;
-    for (let i = text.indexOf("\t"); i >= 0; i = text.indexOf("\t", i + 1)) out.push(Decoration.inline(pos + i, pos + i + 1, { class: "docs-tab-line" }));
+    if (!text.includes("\t")) return false;
+    const underlined = node.marks.some((m) => m.type.name === "underline");
+    for (let i = text.indexOf("\t"); i >= 0; i = text.indexOf("\t", i + 1)) out.push(Decoration.inline(pos + i, pos + i + 1, { class: underlined ? "docs-tab docs-tab-line" : "docs-tab" }));
     return false;
   });
   return out;

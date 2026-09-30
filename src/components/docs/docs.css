@@ -82,6 +82,15 @@
 .docs-prose ::selection {
   background: var(--docs-selection);
 }
+/* A line may break before a tab (page/tabs.ts): a tab that finds no room
+   goes to the next line, and the word before it stays. The page keeps its
+   spaces, and a line may break after each: a space of no width before the
+   tab is that break. (A zero-width space is not one: the tab after it counts
+   as its space, and the break came after the tab.) */
+.docs-prose .docs-tab::before {
+  content: " ";
+  font-size: 0;
+}
 /* An underlined tab's line (page/tabs.ts): Chromium draws no underline under
    a tab. It stands where the words' underline does, in their color, and
    prints. */

@@ -19,7 +19,7 @@ import { regionOf, unionBox } from "@/lib/parse/pdf/geometry";
 import { ATTACH_PUNCT_RE, spaceGap } from "@/lib/parse/pdf/lines";
 import { BULLET_RE } from "@/lib/parse/pdf/markers";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
-import { braceLabelBoxes, hangingFamily, hangingGlyph, LIMIT_OPS } from "@/lib/parse/pdf/math/layout";
+import { braceLabelBoxes, drawnBraces, hangingFamily, hangingGlyph, LIMIT_OPS } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import { balanced, orphanGlyphs, paintsRule, resolveZone } from "@/lib/parse/pdf/math/zones";
 import type { Box, Cell, Item, Line, MathZone, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
@@ -104,8 +104,10 @@ function wordsOutside(text: string, runs: Run[]): string {
   return out;
 }
 
-function kindOf(line: Line, ctx: PageContext, column: { left: number; right: number }, fenced: boolean): LineKind {
-  if (LABEL_RE.test(line.text.trim()) || QED_RE.test(line.text.trim())) return "label";
+// A line's words outside its formulas: its words of prose (not a math
+// word of a set-in line or of one that opens with its formula, not a name
+// of two or three capitals), and their letters against its formulas'.
+function wordsOf(line: Line, column: { left: number; right: number }) {
   const { x, xEnd, runs, text, label } = unlabeled(line);
   const inZone = new Uint8Array(text.length);
   for (const r of runs) if (r.zone) inZone.fill(1, r.start, r.end);
@@ -117,20 +119,47 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
       outside += " ";
     } else outside += text[i];
   }
-  // A list item is an item, whatever its math (census class 1: items (b)–(d)
-  // of an exercise became one page picture), its bullet a math glyph too
-  // ("•x₀xᵢ where …", arXiv 2410.04586 p. 12).
-  if (BULLET_RE.test(text) || /^\s*[•▪◦‣●]/.test(text)) return "text";
   // A word of two or three capitals is a formula's name for a thing set in
   // roman (the outcome "HH" in m(HH)), not a word of prose.
   // Words a display sets in text ("otherwise") are its own when the line is
-  // set in; at the column's edge they open a sentence ("If sec_M ≥ −K, then").
-  const exempt = (w: string) => x > column.left + line.size * 1.5 && MATH_WORDS.has(w.toLowerCase());
+  // set in, or opens with its formula (a row of an aligned display at the
+  // column's edge: "G = 2(b − 1)(…) for b ≤ N/2,", arXiv 2502.02648 (A1));
+  // opening the line at the column's edge they open a sentence ("If sec_M
+  // ≥ −K, then").
+  const first = text.match(/\S/)?.index;
+  const opens = first !== undefined && inZone[first] === 1;
+  // A citation or a sentence's start ("… for b ≪ N [65]. For b = cN,") is
+  // prose's: its words are no display's.
+  // So is a line that opens with a word ("and if n = 2m + 1, then"), an
+  // operator's name aside ("inf … := …"); one that opens with its formula
+  // keeps its words ("−∞, otherwise," a cases row).
+  const opening = opens ? "" : (/^\s*(\p{L}+)/u.exec(outside)?.[1] ?? "");
+  const prose = /\[\d+(?:\s*[,–-]\s*\d+)*\]|[.?!]\s+\p{Lu}\p{Ll}/u.test(outside) || (opening.length >= 2 && !OPERATOR_NAMES.has(opening.toLowerCase()));
+  const exempt = (w: string) => !prose && (x > column.left + line.size * 1.5 || opens) && MATH_WORDS.has(w.toLowerCase());
   const all = outside.match(/\p{L}+/gu) ?? [];
   const words = all.filter((w) => w.length >= 2 && !exempt(w) && !/^\p{Lu}{2,3}$/u.test(w));
   // A formula's name set in capitals (\mathrm{GOE} over a 𝒦) is no prose.
   const letters = all.filter((w) => !exempt(w) && !/^\p{Lu}{2,3}$/u.test(w)).join("").length;
+  return { x, xEnd, text, label, outside, zoneChars, words, letters, opens };
+}
+
+function kindOf(line: Line, ctx: PageContext, column: { left: number; right: number }, fenced: boolean): LineKind {
+  if (LABEL_RE.test(line.text.trim()) || QED_RE.test(line.text.trim())) return "label";
+  const { x, xEnd, text, label, outside, zoneChars, words, letters, opens } = wordsOf(line, column);
+  // A list item is an item, whatever its math (census class 1: items (b)–(d)
+  // of an exercise became one page picture), its bullet a math glyph too
+  // ("•x₀xᵢ where …", arXiv 2410.04586 p. 12). A marker a formula took is
+  // the formula's: "(Mu)" opening a display is no item "(a)".
+  if ((BULLET_RE.test(text) && !opens) || /^\s*[•▪◦‣●]/.test(text)) return "text";
   const glyphs = line.items.flatMap((i) => i.glyphs ?? []);
+  // A big operator of a display's size, taller than a line and a half (an
+  // integral with limits of two levels, IEEE Access p. 9), stands in a
+  // display's row: its words are the row's ("p(x) dx").
+  const tall = glyphs.some((g) => {
+    const box = hangingGlyph(g);
+    return box?.display === true && box.top - box.bottom > ctx.bodySize * 1.5;
+  });
+  if (tall && !label && words.length <= 2) return "math";
   // A fraction's part, a sum's limit, a delimiter: a few glyphs, all math,
   // digits, or small.
   const small = (g: Glyph) => g.size < line.size * 0.85 || g.size < ctx.bodySize * 0.85;
@@ -230,15 +259,20 @@ function limitNames(glyphs: Glyph[]): { x1: number; x2: number; y: number; size:
 // display it sits close under or over, inside the display's width (an
 // array's row). A page's first or last line is held by the first three
 // only: a page number under a formula is no part of it.
-function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces: Glyph[], display: Line[]): boolean {
+// A brace piece: where it stands (a glyph of TeX's, or the end of a brace
+// KaTeX draws).
+type Tip = { x: number; y: number; w: number };
+
+function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces: Tip[], display: Line[]): boolean {
   const x1 = frag.x;
   const x2 = frag.xEnd;
   const em = frag.size;
   // A brace's label: the brace's pieces lie between it and a line of the
   // display, across its middle (the text layer may hold no item for them:
-  // synth-math-tex (65) lost its "n times").
+  // synth-math-tex (65) lost its "n times"). Nested braces set their labels
+  // a brace apart, farther than a fraction's parts.
   const middle = (x1 + x2) / 2;
-  const braced = near.some((l) => {
+  const braced = [...near, ...display].some((l) => {
     const tips = braces.filter((g) => g.y > Math.min(l.y, frag.y) && g.y < Math.max(l.y, frag.y));
     return tips.length >= 2 && middle > Math.min(...tips.map((g) => g.x)) && middle < Math.max(...tips.map((g) => g.x + g.w));
   });
@@ -295,7 +329,7 @@ function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces
 // table's caption over its rules joined the table's place,
 // synth-paper-html), and the text line has words (a table's or a
 // figure's place in the text is none).
-function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[], pitch: number, join: boolean, braces: Glyph[], rules: Rule[]): Line | null {
+function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[], pitch: number, join: boolean, braces: Tip[], rules: Rule[]): Line | null {
   // A label under an underbrace or over an overbrace of a text line's
   // formula ("n times"), words and all: the formula read without it was
   // wrong. The brace's pieces lie between the two lines, across the
@@ -617,6 +651,30 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   const columns0 = input.map((_, n) => columnOf(input, n, ctx));
   const kinds0 = input.map((l, n) => kindOf(l, ctx, columns0[n], fenced(l)));
   for (let n = 0; n < input.length; n++) if (kinds0[n] === "math" && !fenced(input[n]) && isProseLine(input, n, kinds0, columns0, ctx)) kinds0[n] = "text";
+  // A label with no math line near it is a display's whose rows read as
+  // text: each has a word or two before its formula, the last at the
+  // column's edge ("Round M−1: arg min …" over "(7)", arXiv 2411.19946).
+  // The lines over the label, a row's space apart, all math but for a
+  // word or two, are the display's rows (its limits' lines between them).
+  for (let n = 0; n < input.length; n++) {
+    if (kinds0[n] !== "label") continue;
+    const size = Math.max(input[n].size, ctx.bodySize);
+    const near = (m: number) => Math.abs(input[m].y - input[n].y) < size * 2.6;
+    if (input.some((_, m) => m !== n && kinds0[m] === "math" && near(m))) continue;
+    const rows: number[] = [];
+    let edge = input[n];
+    for (let m = n - 1; m >= 0; m--) {
+      const l = input[m];
+      if (l.y - edge.y > size * 1.7 || l.y < edge.y || l.xEnd < input[n].x - size * 40) break;
+      if (kinds0[m] === "text") {
+        const { zoneChars, words, letters } = wordsOf(l, columns0[m]);
+        if (zoneChars === 0 || words.length > 2 || letters > zoneChars) break;
+        rows.push(m);
+      } else if (kinds0[m] !== "fragment" && kinds0[m] !== "math") break;
+      edge = l;
+    }
+    for (const m of rows) kinds0[m] = "math";
+  }
   // A table's rows are no display: three cells or more, two of them
   // measured values or marks, with no tall delimiters around them (a
   // matrix's rows have them). Simulation tables with a formula in each row
@@ -640,7 +698,12 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   // The rows of an inline structure are the text line's, not a display:
   // they join its formula, or stay lines of text.
   const pitch0 = ctx.bodySize * ctx.leading;
-  const braces = ctx.drawing.glyphs.filter((g) => g.family === "omx" && /^hbrace-/.test(mathGlyph("omx", g.code)?.piece ?? ""));
+  // The brace pieces: TeX's glyphs, and the ends of the braces KaTeX draws.
+  const katex = ctx.drawing.glyphs.some((g) => g.base.startsWith("KaTeX_"));
+  const braces: Tip[] = [
+    ...ctx.drawing.glyphs.filter((g) => g.family === "omx" && /^hbrace-/.test(mathGlyph("omx", g.code)?.piece ?? "")),
+    ...(katex ? drawnBraces(ctx.drawing.paths.filter((p) => !p.clip), ctx.bodySize).flatMap(({ left, right }) => [left, right].map((b) => ({ x: b.x1, y: b.y1, w: b.x2 - b.x1 }))) : []),
+  ];
   const bars = ctx.drawing.rules.filter((r) => r.dir === "h");
   // A fraction's parts set in the text font (the Math Guide's −½, its 1
   // and 2 lost): short lines with no words, one over a bar and one under
@@ -671,6 +734,27 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   const lines = joined.filter((l): l is Line => l !== null);
   const kinds = kinds0.filter((_, n) => joined[n] !== null);
   const columns = lines.map((l, n) => columnOf(lines, n, ctx));
+  // The page's big operators set in a display's size: a tall integral sets
+  // its limits over and under it farther apart than a line's pitch (IEEE
+  // Access, "∫" with limits of two levels), and its lines are one display.
+  const operators = ctx.drawing.glyphs.flatMap((g) => {
+    const box = hangingGlyph(g);
+    return box?.display && box.top - box.bottom > ctx.bodySize * 1.5 ? [{ x1: g.x, x2: g.x + g.w, ...box }] : [];
+  });
+  // A line centered under or over such an operator of a math line, a word
+  // or two in it, is its limit, words and all ("k odd" under a ∑).
+  for (let n = 0; n < lines.length; n++) {
+    const l = lines[n];
+    if (kinds[n] !== "text" || wordsOf(l, columns[n]).words.length > 2) continue;
+    const mid = (l.x + l.xEnd) / 2;
+    const limit = operators.some(
+      (o) =>
+        Math.abs(mid - (o.x1 + o.x2) / 2) < l.size * 0.5 &&
+        ((l.y < o.bottom && o.bottom - l.y < l.size * 1.5) || (l.y > o.top && l.y - o.top < l.size)) &&
+        lines.some((m, k) => kinds[k] === "math" && m.y < o.top && m.y > o.bottom),
+    );
+    if (limit) kinds[n] = "fragment";
+  }
   // A fraction's part set in words ("TeV" under "E_γ"): a short text line a
   // bar holds to a line of math beside it.
   const rules0 = ctx.drawing.rules;
@@ -686,6 +770,17 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   const rules = ctx.drawing.rules;
   const pitch = ctx.bodySize * ctx.leading;
   const edge = (l: Line) => l === lines[0] || l === lines[lines.length - 1];
+  const about = (l: Line, o: { x1: number; x2: number; top: number; bottom: number }) =>
+    l.y > o.bottom - l.size * 2 && l.y < o.top + l.size * 1.8 && l.x < o.x2 + l.size * 6 && l.xEnd > o.x1 - l.size * 6;
+  // Of two lines one stands in the operator's row, the other is its limit,
+  // in a script's size: a sentence's last line over a display is none.
+  const byOperator = (a: Line, b: Line) =>
+    operators.some((o) => {
+      const row = (l: Line) => l.y > o.bottom && l.y < o.top;
+      return about(a, o) && about(b, o) && [a, b].some(row) && [a, b].every((l) => row(l) || l.size < ctx.bodySize * 0.9);
+    });
+  // A line over or under such an operator, clear of it: one of its limits.
+  const limitOf = (l: Line) => operators.some((o) => about(l, o) && (l.y > o.top || l.y < o.bottom));
   // The display's lines around a fragment, over and under it: the lines
   // within an em and a half that are no text, and of the fragments only
   // the band's own (a sentence's inline fraction under a display holds its
@@ -729,9 +824,13 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       // row above (a display of several rows, each with its sums).
       const limit = kinds[j] === "fragment" && prev.y - next.y <= size * 2.2 && attached(next, around(next, band), rules, edge(next), braces, band);
       // Rows a tall delimiter holds are one display, however far apart.
-      const held = fences.some((f) => [prev, next].every((l) => l.y >= f.y1 && l.y <= f.y2 && l.x >= f.x2 - 1 && l.x - f.x2 < l.size * 3));
-      const x1 = Math.min(...band.map((l) => l.x));
-      const x2 = Math.max(...band.map((l) => l.xEnd));
+      const held = fences.some((f) => [prev, next].every((l) => l.y >= f.y1 && l.y <= f.y2 && l.x >= f.x2 - 1 && l.x - f.x2 < l.size * 3)) || byOperator(prev, next);
+      // A fragment stands over the next row's far end too (IEEE Access
+      // (31): the square of its tall parentheses).
+      const ahead = lines.find((l, m) => m > j && kinds[m] === "math" && l.y <= next.y && next.y - l.y <= size * 1.6);
+      const span = kinds[j] === "fragment" && ahead ? [...band, ahead] : band;
+      const x1 = Math.min(...span.map((l) => l.x));
+      const x2 = Math.max(...span.map((l) => l.xEnd));
       if ((prev.y - next.y > size * reach && !limit && !held) || prev.y < next.y) {
         if (kinds[j] === "math" && CONTINUES_RE.test(unlabeled(next).text.trim()) && prev.y - next.y <= size * 3.5 && next.x >= x1 - size) continues.add(next);
         break;
@@ -746,9 +845,20 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       // aligned row's lone "=" over its fraction's denominator).
       const after = lines[j + 1];
       const between = after !== undefined && kinds[j + 1] === "math" && next.y - after.y <= size * 1.6 && next.y < prev.y;
-      if (kinds[j] === "fragment" && !between && !attached(next, around(next, band), rules, edge(next), braces, band)) break;
+      if (kinds[j] === "fragment" && !between && !limitOf(next) && !attached(next, around(next, band), rules, edge(next), braces, band)) break;
       labels += label;
       band.push(next);
+    }
+    // A limit of an operator whose row the band did not take is that row's
+    // (IEEE Access (31): the next row's "+∞" read as a sum's second limit).
+    // One that is also a limit of an operator of the band's is the band's
+    // (a display's limit over the next display's operator).
+    const rowIn = (o: (typeof operators)[number]) => band.some((l) => about(l, o) && l.y < o.top && l.y > o.bottom);
+    while (band.length > 1 && kinds[lines.indexOf(band[band.length - 1])] === "fragment") {
+      const l = band[band.length - 1];
+      const ops = operators.filter((o) => about(l, o) && (l.y > o.top || l.y < o.bottom));
+      if (ops.length === 0 || ops.some(rowIn)) break;
+      band.pop();
     }
     // A fragment that opened the band holds only if the band holds it.
     while (band.length > 1 && kinds[lines.indexOf(band[0])] === "fragment" && !attached(band[0], around(band[0], band), rules, edge(band[0]), braces, band)) {
@@ -781,7 +891,20 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       const same = lines.filter((o) => o !== l && o.x < l.xEnd && o.xEnd > l.x);
       return same.every((o) => Math.abs(o.y - l.y) >= pitch * 0.85);
     };
-    const alone = (l: Line) => spaced(l) && (centered(l) || (set(l) && detached(l)));
+    // A display too wide to center starts at the column's edge, all math,
+    // with the display's space over and under it (a proof's chain of
+    // equalities read as a paragraph's line of inline formulas).
+    const wide = (l: Line) => {
+      const c = columns[lines.indexOf(l)];
+      if (!Number.isFinite(c.right) || l.xEnd - l.x < (c.right - c.left) * 0.6) return false;
+      const same = lines.filter((o) => o !== l && o.x < l.xEnd && o.xEnd > l.x);
+      const above = same.filter((o) => o.y > l.y).sort((a, b) => a.y - b.y)[0];
+      const below = same.filter((o) => o.y < l.y).sort((a, b) => b.y - a.y)[0];
+      const { text, runs } = unlabeled(l);
+      const words = (wordsOutside(text, runs).match(/\p{L}{2,}/gu) ?? []).filter((w) => !MATH_WORDS.has(w.toLowerCase()));
+      return words.length === 0 && above !== undefined && below !== undefined && above.y - l.y > pitch * 1.25 && l.y - below.y > pitch * 1.25;
+    };
+    const alone = (l: Line) => spaced(l) && (centered(l) || (set(l) && detached(l)) || wide(l));
     const math = band.some((l) => kindIn(l) === "math" && (labels > 0 || band.length > 1 || alone(l)));
     // A band of small lines alone is no display (a figure's labels over
     // the rules of its drawing, arXiv 2411.19946 pp. 1, 3): a display has
@@ -929,18 +1052,30 @@ function isEquationShaped(s: Segment, ctx: PageContext, columnLeft: number): boo
 // (its \tag, or \tag* for a proof's end mark; left: the page sets it at the
 // left margin, as amsbook does). null when an item holds text the drawing
 // has no glyph for (the check could not see it).
-function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; label: string | null; labelGlyphs: Glyph[]; left: boolean } | null {
+function formulaGlyphs(line: Line, pageOrphans: Glyph[], page: Glyph[]): { glyphs: Glyph[]; label: string | null; labelGlyphs: Glyph[]; left: boolean } | null {
   if (line.items.some((i) => !i.glyphs?.length)) return null;
   const top = line.yMax + line.size * 1.2;
   const bottom = line.yMin - line.size * 0.6;
-  const orphans = pageOrphans.filter((g) => g.x + g.w / 2 > line.x && g.x + g.w / 2 < line.xEnd && g.y >= bottom && g.y <= top);
-  const glyphs = [...line.items.flatMap((i) => i.glyphs!), ...orphans].sort((a, b) => a.x - b.x);
+  const own = new Set(line.items.flatMap((i) => i.glyphs ?? []));
+  // A composite's second half drawn from the origin of a glyph another line
+  // reads is that line's: the arrowhead of a ↦ in the sentence over a
+  // display (arXiv 2506.08494 (2.23) took it as a row).
+  const elsewhere = (g: Glyph) =>
+    page.some((h) => h !== g && !own.has(h) && !pageOrphans.includes(h) && Math.abs(h.x - g.x) < g.size * 0.12 && Math.abs(h.y - g.y) < g.size * 0.05);
+  const orphans = pageOrphans.filter((g) => g.x + g.w / 2 > line.x && g.x + g.w / 2 < line.xEnd && g.y >= bottom && g.y <= top && !elsewhere(g));
+  // A blank glyph is no symbol (KaTeX sets struts as spaces a point high).
+  const glyphs = [...line.items.flatMap((i) => i.glyphs!), ...orphans].filter((g) => g.family !== null || g.unicode.trim() !== "").sort((a, b) => a.x - b.x);
+  if (glyphs.length === 0) return null;
   const size = Math.max(...glyphs.map((g) => g.size));
-  // A label: the glyphs at an end that read "(…)", a quad or more from the rest.
+  // A label: the glyphs at an end that read "(…)", a quad or more from the
+  // rest of its row. A display's other rows may reach past its start (IEEE
+  // Access (28): "(28)" on the last of seven rows).
   const labelAt = (from: number, dir: 1 | -1): { glyphs: Glyph[]; text: string } | null => {
     const run: Glyph[] = [];
+    const onRow = (g: Glyph) => glyphs[from] !== undefined && Math.abs(g.y - glyphs[from].y) < size * 0.3;
     for (let k = from; k >= 0 && k < glyphs.length; k += dir) {
       const g = glyphs[k];
+      if (!onRow(g)) continue;
       const prev = run[run.length - 1];
       if (prev && (dir > 0 ? g.x - (prev.x + prev.w) : prev.x - (g.x + g.w)) > size * 0.5) break;
       run.push(g);
@@ -954,10 +1089,12 @@ function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; lab
     // under it (over it when the label is on the left).
     const own = dir < 0 ? Math.max(...run.map((g) => g.y)) < Math.min(...rest.map((g) => g.y)) - size * 0.5 : Math.min(...run.map((g) => g.y)) > Math.max(...rest.map((g) => g.y)) + size * 0.5;
     if (own) return { glyphs: run, text };
+    const row = rest.filter(onRow);
+    if (row.length === 0) return { glyphs: run, text };
     const gap =
       dir > 0
-        ? Math.min(...rest.map((g) => g.x)) - Math.max(...run.map((g) => g.x + g.w))
-        : Math.min(...run.map((g) => g.x)) - Math.max(...rest.map((g) => g.x + g.w));
+        ? Math.min(...row.map((g) => g.x)) - Math.max(...run.map((g) => g.x + g.w))
+        : Math.min(...run.map((g) => g.x)) - Math.max(...row.map((g) => g.x + g.w));
     // amsmath sets a label half a quad at least from a wide formula
     // (\mintagsep): a label set 0.79 em left of a display with cases read
     // into the formula as its first words.
@@ -991,7 +1128,7 @@ function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; lab
 // drawn (glyphBox: the display's space above and below is measured to it);
 // null when the check fails.
 function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: string; box: Box; glyphBox: Box; left: boolean } | null {
-  const found = formulaGlyphs(line, orphans);
+  const found = formulaGlyphs(line, orphans, ctx.drawing.glyphs);
   if (!found || found.glyphs.length === 0) return null;
   const glyphs = found.glyphs;
   const size = Math.max(...glyphs.filter((g) => !hangingFamily(g.family)).map((g) => g.size), 1);
@@ -1019,8 +1156,10 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
     const { latex, check, atoms } = layoutLatex(glyphs, rules, { display: true, size }, paths);
     // A display cut in two (its operators and an opening bracket on one line,
     // the rest on the next) passes the check on what it has: its brackets
-    // do not close.
-    if (!check.ok || !balanced(latex)) return null;
+    // do not close. One that ends its sentence is whole: a bracket it leaves
+    // open is the page's (arXiv 2411.19946 (5) opens "(sup {|" and closes
+    // neither).
+    if (!check.ok || !balanced(latex, /\.(\s*\\end\{\w+\})*$/.test(latex))) return null;
     // Each glyph's drawn box: a TeX glyph's by its font's metrics, any
     // other's by its size.
     const all = [...glyphs, ...found.labelGlyphs];

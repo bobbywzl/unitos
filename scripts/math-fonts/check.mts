@@ -11,7 +11,8 @@
 //      pages reads as one of the page's formulas (a crop or words pass);
 //      so does each formula of invented pages of the same shape;
 //   5. what round 4 fixed, on invented pages of each shape: each read
-//      wrong, or as a crop or words, before its fix.
+//      wrong, or as a crop or words, before its fix;
+//   6. what round 5 fixed, the same way.
 // Needs pdflatex, and mf for bbm's fonts (.bench/fonts/bbm/). The exit code
 // is 1 when a check fails.
 //
@@ -540,6 +541,111 @@ try {
   for (const w of fixed) console.log(`NOT FIXED ${w}`);
   console.log(`round 4's fixes: ${fixed.length === 0 ? "each reads right" : `${fixed.length} read wrong`}`);
   if (fixed.length > 0) failed = true;
+
+  // 6: what round 5 fixed.
+  const fifth: string[] = [];
+  const fifthPages: { tex: string; cases: Omit<DisplayCase, "page">[] }[] = [
+    // A limit's letter with a script of a script (𝒞 with IPC and its own
+    // subscript), under "arg min": the script's script left the limit, and
+    // the display was a crop.
+    {
+      tex: String.raw`${fill}\[ \operatorname*{arg\,min}_{\mathcal{C}_{\mathrm{IPC}_{0:k-1}},|\mathcal{C}|}\ell(\phi(x),y) \]${fill}`,
+      cases: [{ found: true, right: [String.raw`\argmin_{\mathcal{C}_{\mathrm{IPC}_{0:k-1}},|\mathcal{C}|}\ell(\phi(x),y)`] }],
+    },
+    // Two rows, each with its binomials: the first row's "(" paired with
+    // the second row's ")", and the display was a crop.
+    {
+      tex: String.raw`${fill}\begin{align*} p(z) &= \sum_{k=1}^{n}\sum_{i=0}^{k+1}(-1)^{k}\binom{d-1}{k+1-i}z^{k+1-i}\binom{e}{i} \\ &= ez^{e}\sum_{k=1}^{n}\sum_{i=0}^{k}(-z)^{k-i}\binom{d-1}{k-i}\binom{e-1}{i} \end{align*}${fill}`,
+      cases: [
+        {
+          found: true,
+          right: [String.raw`\begin{aligned} p(z) &=\sum_{k=1}^{n}\sum_{i=0}^{k+1}(-1)^{k}\binom{d-1}{k+1-i}z^{k+1-i}\binom{e}{i} \\ &=ez^{e}\sum_{k=1}^{n}\sum_{i=0}^{k}(-z)^{k-i}\binom{d-1}{k-i}\binom{e-1}{i} \end{aligned}`],
+        },
+      ],
+    },
+    // A display that opens with "(Mu": read as a list item's marker, it
+    // fell into the paragraph as words. (An exponent's fraction beside a
+    // subscript leaves the subscript out of its denominator.)
+    {
+      tex: String.raw`${fill}\[ (\mathbf{M}u_k)^{\frac{1}{p}} + v_k^{\frac{2}{p}} \le 1. \]${fill}`,
+      cases: [{ found: true, right: [String.raw`(\mathbf{M}u_{k})^{\frac{1}{p}}+v_{k}^{\frac{2}{p}}\leq1.`] }],
+    },
+    // A limit with a word in the text's size: it read as words after the
+    // display, and the display lost its limit.
+    { tex: String.raw`${fill}\[ Z = \sum_{k\ \mbox{odd}} w_{k} \]${fill}`, cases: [{ found: true, right: [String.raw`Z=\sum_{k\text{ odd}}w_{k}`] }] },
+    // A radical over a fraction: placed on the denominator's baseline, it
+    // read as a subscript of the "2" before it, and the display was a crop.
+    { tex: String.raw`${fill}\[ y = 2\sqrt{\frac{2}{\pi}}\frac{\sigma^{5}}{3} \]${fill}`, cases: [{ found: true, right: [String.raw`y=2\sqrt{\frac{2}{\pi}}\frac{\sigma^{5}}{3}`] }] },
+    // Integrals with limits over and under them: read as limits beside
+    // them (\int_{a}^{b} in a display).
+    {
+      tex: String.raw`${fill}\begin{align*} P_0 &= \int\limits_{-a_{1}}^{b_{1}} p(x)\,dx \\ P_1 &= \int\limits_{b_{1}}^{b_{2}} p(x)\,dx + \int\limits_{-b_{2}}^{-b_{1}} p(x)\,dx \end{align*}${fill}`,
+      cases: [
+        {
+          found: true,
+          right: [String.raw`\begin{aligned} P_{0} &=\int\limits_{-a_{1}}^{b_{1}}p(x)dx \\ P_{1} &=\int\limits_{b_{1}}^{b_{2}}p(x)dx+\int\limits_{-b_{2}}^{-b_{1}}p(x)dx \end{aligned}`],
+        },
+      ],
+    },
+    // A set of names in the text's font: the braces read as two formulas
+    // with a bracket each, and both stayed words.
+    {
+      tex: String.raw`${fill} The events are listed below.\begin{enumerate}\item[(a)] $E = \{\text{HHH,HHT,HTH,HTT}\}$.\item[(b)] $E = \{\text{HHH,TTT}\}$.\end{enumerate}${fill}`,
+      cases: [{ inline: true, found: true, pick: /HHH/, right: [String.raw`E=\{\text{HHH,HHT,HTH,HTT}\}`, String.raw`E=\{\text{HHH,TTT}\}`] }],
+    },
+    // An evaluation's tall bar: read at the text's size, its subscript
+    // stood a row off the page's.
+    {
+      tex: String.raw`${fill}\[ \int_0^{+\infty} e^{-\rho s}\ln(s)^2\,ds = \frac{d^2}{da^2}\bigg|_{a=0}\frac{\Gamma(a+1)}{\rho^{a+1}}. \]${fill}`,
+      cases: [{ found: true, right: [String.raw`\int_{0}^{+\infty}e^{-\rho s}\ln(s)^{2}ds=\frac{d^{2}}{da^{2}}\bigg|_{a=0}\frac{\Gamma(a+1)}{\rho^{a+1}}.`] }],
+    },
+    // A sentence that opens with a formula and holds a citation is prose,
+    // its "for" no display's word.
+    {
+      tex: String.raw`The ratio of the two terms stays near one only when the band grows with the size of the matrix, which we assume\\ $\left(\frac{1}{2b}+\frac{1}{3N}\right)$ for $b \ll N$ [65]. For $b = cN$, the ratio is fixed. ${fill}`,
+      cases: [{ right: [] }],
+    },
+    // A table's cells of one bold or sans letter and its scripts: read as
+    // words (checked below).
+    {
+      tex: String.raw`${fill} The groups and their generators are listed below.\par\medskip\begin{tabular}{lll} Group & Order & Generator \\ $\mathsf{G}_{13}$ & 16 & $\mathbf{g}^{4}$ \\ $\mathsf{G}_{2}$ & 8 & $\mathbf{h}^{2}$ \\ $\mathsf{G}_{5}$ & 32 & $\mathbf{g}^{2}$ \end{tabular}\par\medskip ${fill}`,
+      cases: [],
+    },
+  ];
+  const fifthParse = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "fifth", packages, fifthPages.map((p) => p.tex)))));
+  fifth.push(...wrongDisplays(fifthParse.blocks, fifthPages.flatMap((p, i) => p.cases.map((c) => ({ ...c, page: i + 1 })))));
+  const cellPage = fifthPages.length;
+  const cells = fifthParse.blocks.filter((b) => b.type === "TABLE" && b.page === cellPage).flatMap((b) => [...(b.html ?? "").matchAll(/data-latex="([^"]*)"/g)].map((m) => m[1]));
+  for (const want of [String.raw`\mathsf{G}_{13}`, String.raw`\mathbf{g}^{4}`, String.raw`\mathsf{G}_{2}`, String.raw`\mathbf{h}^{2}`]) {
+    if (!cells.some((l) => canon(l) === canon(want))) fifth.push(`p. ${cellPage}: no cell reads ${want}`);
+  }
+  // A theorem's italic "for" a word space (Times' quarter em) before the
+  // formula's letter: read as the math letters "fori".
+  const theorem = String.raw`${fill}\begin{corollary} The numbers are \[ \beta_{k} = k\left(\binom{d-1}{k+1-i}\binom{e}{i}\right) \quad\text{for } i = 0,\ldots,k+1 \] and zero otherwise.\end{corollary}${fill}`;
+  // Bold and sans letters in text set in Times: TeX's roman fonts set only
+  // the formulas there, and "g4" and "G1" read as words. A word in TeX's
+  // sans stays a word.
+  const letters = String.raw`${fill} The group is generated by $\mathbf{g}$ and $\mathbf{h}$, with $\mathbf{g}^{4} = 1$, and its quotients are $\mathsf{G}_{1}$ and $\mathsf{G}_{2}$, listed in the {\fontfamily{cmss}\selectfont Adam} order. ${fill}`;
+  const timesParse = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "times", `${packages}\n\\usepackage{times}\n\\newtheorem{corollary}{Corollary}`, [theorem, letters]))));
+  fifth.push(
+    ...wrongDisplays(timesParse.blocks, [
+      { page: 1, found: true, right: [String.raw`\beta_{k}=k\left(\binom{d-1}{k+1-i}\binom{e}{i}\right)\quad\textit{for }i=0,\ldots,k+1`] },
+      { page: 2, inline: true, found: true, pick: /\^/, right: [String.raw`\mathbf{g}^{4}=1`] },
+      { page: 2, inline: true, found: true, pick: /mathsf\{G/, right: [String.raw`\mathsf{G}_{1}`, String.raw`\mathsf{G}_{2}`] },
+      { page: 2, inline: true, pick: /mathsf\{[Adam]/, right: [] },
+    ]),
+  );
+  // A composite's second half another line reads: the arrowhead of the ↦
+  // in the sentence over arXiv 2506.08494's (2.23) read as the display's
+  // first row, and the display was a crop.
+  const analysis = join(import.meta.dirname, "..", "..", ".bench", "arxiv", "2506.08494v1.pdf");
+  if (existsSync(analysis)) {
+    const parsed = await parsePdf(new Uint8Array(readFileSync(analysis)), { pages: [6] });
+    fifth.push(...wrongDisplays(parsed.blocks, [{ page: 6, found: true, pick: /^\|r\|/, right: [String.raw`|r|\leq\sqrt{\frac{p\lambda_{\min}-1}{q\lambda_{\min}-1}}.`] }]));
+  } else console.log("round 5: .bench/arxiv/2506.08494v1.pdf not there, skipped");
+  for (const w of fifth) console.log(`NOT FIXED ${w}`);
+  console.log(`round 5's fixes: ${fifth.length === 0 ? "each reads right" : `${fifth.length} read wrong`}`);
+  if (fifth.length > 0) failed = true;
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

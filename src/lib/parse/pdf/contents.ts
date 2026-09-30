@@ -17,8 +17,8 @@ function tocEntryPart(line: Line): { text: string; runs: Run[] } {
   return { text, runs: part.runs.map((r) => ({ ...r, end: Math.min(r.end, text.length) })).filter((r) => r.end > r.start) };
 }
 
-// An entry: a numbered title ("2.1 Weak laws …"), or a title with its page
-// number in a cell of its own ("Preface  5").
+// An entry: a numbered title ("4.2 Soil samples …"), or a title with its
+// page number in a cell of its own ("Glossary  88").
 export function isContentsEntry(line: Line): boolean {
   return (line.cells.length <= 2 || TOC_TAIL_RE.test(line.text)) && (TOC_ENTRY_RE.test(line.text) || (line.cells.length === 2 && /^\d{1,4}$/.test(line.cells[1].text.trim())));
 }
