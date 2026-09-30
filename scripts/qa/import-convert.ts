@@ -200,7 +200,8 @@ function keptMath(b: ParsedBlock): { start: number; end: number; words: string }
     linkFootnotes, cellNotes): each citing block's references, whose labels
     become footnote numbers — a paragraph's, a heading's, and a list's
     first, then the Title's (a PDF's first-page footnote whose label ends
-    the title, or one with no label), then a table cell's — and the
+    the title; a note the page marks nowhere stays a paragraph), then a
+    table cell's — and the
     footnotes they number, in the numbers' order, with the labels the page
     prints for them and the mark the Title leaves out. Set for each fixture. */
 let footnoteRefs = new Map<ParsedBlock, { start: number; end: number }[]>();
@@ -236,7 +237,7 @@ function linkFootnotes(f: Fixture) {
       .filter(({ label, i }) => label !== undefined && (blocks[i].page ?? 1) <= 1 && !taken.has(i) && blocks[i].text.trim());
     const marked = loose.find(({ label }) => label && title.endsWith(label) && /[\p{L})\].,:;!?]$/u.test(title.slice(0, -label.length)));
     if (marked) titleMark = marked.label ?? "";
-    for (const { i } of [...(marked ? [marked] : []), ...loose.filter(({ label }) => label === "")]) taken.set(i, { at: -1, start: 0, label: blocks[i].footnote?.label ?? "" });
+    if (marked) taken.set(marked.i, { at: -1, start: 0, label: blocks[marked.i].footnote?.label ?? "" });
   }
   // A cell's label, never its caption's: the footnote stands after the table.
   blocks.forEach((b, i) => {
@@ -1801,15 +1802,13 @@ function syntheticPdf(): Fixture {
     { type: "PARAGRAPH", text: "2 The list line's note.", html: '<p class="footnote">', page: 17, footnote: { label: "2" } },
     { type: "PARAGRAPH", text: "* A table's note, with no reference.", html: '<p class="footnote">', page: 17, footnote: { label: "*" } },
   );
-  // A footnote cited in a table's cell (its number in the cell), and one the
-  // first page prints with no mark (its number at the Title's end).
+  // A footnote cited in a table's cell: its number in the cell.
   const cells = pdfTable([["Model", "Score"], ["Base", "27.3 on the best run3"]], true);
   const label = cells.text.indexOf("run3") + 3;
   const tableAt = blocks.length;
   blocks.push(
     { type: "TABLE", ...cells, page: 17, footnoteRefs: [{ start: label, end: label + 1, targetOrder: tableAt + 1 }] },
     { type: "PARAGRAPH", text: "3 The best of five runs.", html: '<p class="footnote">', page: 17, footnote: { label: "3" } },
-    { type: "PARAGRAPH", text: "The authors thank the reviewers.", html: '<p class="footnote">', page: 1, footnote: { label: "" } },
   );
   return {
     name: "synthetic:pdf",

@@ -1229,8 +1229,17 @@ class Converter {
     const [left, right] = [inset(block.borders?.left), inset(block.borders?.right)];
     const within = indent && (left || right) ? { ...indent, left: Math.max(0, indent.left - left), right: Math.max(0, (indent.right ?? 0) - right) } : indent;
     Object.assign(attrs, indentAttrs(within), borderAttrs(block));
-    const size =
-      role === "kicker" || role === "label" || role === "caption" || role === "footnote" ? SMALL_SIZE : role === "display" ? DISPLAY_SIZE : null;
+    // A footnote no number cites stays a paragraph at the size a PDF or a
+    // Word file sets it in, as a footnote does (footnote()); a kicker, a
+    // label, and a caption are small.
+    const own = role === "footnote" && (this.input.kind === "pdf" || this.input.kind === "docx") ? block.font?.size : undefined;
+    const size = own
+      ? `${Math.round(own * 2) / 2}pt`
+      : role === "kicker" || role === "label" || role === "caption" || role === "footnote"
+        ? SMALL_SIZE
+        : role === "display"
+          ? DISPLAY_SIZE
+          : null;
     const extra: RichMark[] = size ? [{ type: "textStyle", attrs: { fontSize: size } }] : [];
     const nodes = splitLong(this.sourceOf(block, starts)).map((part) => paragraphNode(inline(part, extra), attrs));
     this.place(index, nodes, role === "quote");
