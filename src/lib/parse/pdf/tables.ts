@@ -647,7 +647,20 @@ function runSeparators(run: Line[]): number[] {
   const left = Math.min(...run.map((l) => l.x));
   const gutter = columnSeparators(run)[0];
   const first = Math.max(0, run.findIndex((l) => l.x <= left + 3 || (gutter !== undefined && l.x < gutter)));
-  return withoutSignColumns(run, columnSeparators(run.slice(first), run.slice(0, first)));
+  // A group's label among rows of three cells or more, from the table's left
+  // edge (and a value at its end), crosses the gutters the rows leave open:
+  // the rows alone part the columns (arXiv 2609.29669's "§3.1 Policy /
+  // manipulation suites" joined Table 3's Benchmark and Year columns).
+  const body = run.slice(first);
+  const rows = body.filter((l) => !isGroupLabel(l, left));
+  const scan = rows.filter((l) => l.cells.length >= 3).length >= 2 ? rows : body;
+  return withoutSignColumns(run, columnSeparators(scan, run.slice(0, first)));
+}
+
+// A group's label: one phrase from the table's left edge, and at most a
+// short value in a cell after it.
+function isGroupLabel(line: Line, left: number): boolean {
+  return line.x <= left + 3 && line.cells.length <= 2 && (line.cells.length === 1 || line.cells[1].text.trim().length <= 12);
 }
 
 // One table out of a run of gap-aligned lines. Columns come from the coverage
