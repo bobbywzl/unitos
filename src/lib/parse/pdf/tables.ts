@@ -470,8 +470,13 @@ const IEEE_CAPTION_RE = /^TABLE\s+(?:\d+|[IVXL]+)\s+\p{Lu}/u;
 
 function isCaption(s: Segment): boolean {
   const text = s.text.trim();
-  return s.type === "PARAGRAPH" && !s.footnote && s.text.length <= 1200 && (TABLE_CAPTION_RE.test(text) || IEEE_CAPTION_RE.test(text));
+  return s.type === "PARAGRAPH" && !s.footnote && s.text.length <= 1200 && (TABLE_CAPTION_RE.test(text) || IEEE_CAPTION_RE.test(text) || CJK_CAPTION_RE.test(text));
 }
+
+// A CJK table's label and its title: "表 1 提供した学習・開発用データ".
+// A particle after the number makes it a sentence that names the table
+// ("表 2 に評価用クイズ問題の例を示す": JNLP 31-47 p. 7).
+const CJK_CAPTION_RE = /^表\s*\d{1,3}\s+(?![にのでをはがとも内中へやより、，。：:])\S/u;
 
 // A caption the paragraph above a table kept as its last line, on the
 // table's page, taken off the paragraph (LibreOffice's Math Guide p. 59:
