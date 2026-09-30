@@ -1252,8 +1252,19 @@ export function attachFigureRegions(
   const inside = (inner: Box, outer: Box) => shareInside(inner, outer) >= 0.7;
   let placed = out;
   const own = new Set<Segment>();
+  // Every image and path the page paints, small ones too (a diagram's arrow).
+  const painted: Drawn = { images: ctx.drawing.images, paths: ctx.drawing.paths };
   for (const graphic of [...graphics].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
-    const box = clearOfDropped(graphic.box);
+    let box = clearOfDropped(graphic.box);
+    // A display's crop a quarter or more inside a graphic, on its drawing, is
+    // one of the graphic's labels: the graphic's crop takes it in (NASA pptx
+    // p7: a diagram's "ṁ" by its arrow drew as an equation's crop over the
+    // diagram's crop).
+    const labels = placed.filter((s) => s.type === "FIGURE" && s.mathCrop === true && s.box !== undefined && shareInside(s.box, box) >= 0.25 && inDiagram(s.box, painted, ctx.bodySize));
+    if (labels.length > 0) {
+      box = labels.reduce((b, s) => (s.box ? unionBox(b, s.box) : b), box);
+      placed = placed.filter((s) => !labels.includes(s));
+    }
     const caption = captions.get(graphic) ?? null;
     // A graphic inside a captioned figure is one of its panels: its caption
     // joins the figure's when it is a panel's or a note (Panel captions
