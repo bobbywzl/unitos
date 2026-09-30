@@ -22,6 +22,7 @@ export const TYPING_EVENT = {
   shortcuts: "docs:shortcuts",
   voice: "docs:voice",
   spelling: "docs:spelling",
+  personalDictionary: "docs:personal-dictionary",
   wordCount: "docs:word-count",
 } as const;
 

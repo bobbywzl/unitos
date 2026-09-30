@@ -1,0 +1,43 @@
+/* Tools > Spelling and grammar > Personal dictionary (dictionary-dialog.tsx):
+   a line that says what the list does, the field that adds a word, and the
+   words, each a row with its remove button. */
+.docs-dictionary {
+  width: 420px;
+}
+.docs-dictionary-hint {
+  margin: 0 0 12px;
+  color: var(--docs-muted);
+  font: 400 13px/18px var(--docs-ui-font);
+}
+.docs-dictionary-entry {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.docs-dictionary-entry .docs-tb-field {
+  flex: 1;
+  min-width: 0;
+}
+.docs-dictionary-list {
+  height: 240px;
+  margin: 12px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--docs-sep);
+  list-style: none;
+}
+.docs-dictionary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding-left: 4px;
+  border-bottom: 1px solid var(--docs-sep);
+  color: var(--docs-ink);
+  font: 400 14px/20px var(--docs-ui-font);
+}
+.docs-dictionary-empty {
+  padding: 16px 4px;
+  color: var(--docs-muted);
+  font: 400 13px/18px var(--docs-ui-font);
+}

@@ -1,7 +1,9 @@
 import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { TextSelection } from "@tiptap/pm/state";
+import { Plugin, PluginKey, TextSelection, type EditorState } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type NSpell from "nspell";
+import { setTypingPrefs, typingPrefs } from "@/components/docs/typing/prefs";
 
 // "Automatically correct spelling" (SPEC.md §29, typing). Google Docs asks its
 // spelling service; Unitos keeps the everyday English typos it fixes on its
@@ -183,18 +185,19 @@ function ranked(word: string, suggestions: string[]): string[] {
   return [...suggestions].sort((a, b) => rank(a) - rank(b)).slice(0, 5);
 }
 
-/** The misspelled English word at a position and its spelling suggestions,
-    for the right-click menu; null at once where there is none to check, or
-    while the page is not editable or its spelling check is off. */
+/** The misspelled English word at a position and its spelling suggestions
+    (none, for a name the dictionary does not know), for the right-click
+    menu; null at once where there is none to check, where the word is one
+    of the reader's own, or while the page is not editable or its spelling
+    check is off. */
 export function misspellingAt(editor: Editor, pos: number): Promise<Misspelling | null> | null {
   const $pos = editor.state.doc.resolve(pos);
   if (!editor.isEditable || !editor.view.dom.spellcheck || !$pos.parent.isTextblock) return null;
   const word = wordsOf($pos.parent, $pos.before()).find((w) => w.from <= pos && pos <= w.to);
-  if (!word) return null;
+  if (!word || acceptedIn(editor.state).has(word.word.toLowerCase())) return null;
   return loadChecker().then((spell) => {
     if (!spell || spell.correct(word.word)) return null;
-    const suggestions = ranked(word.word, spell.suggest(word.word));
-    return suggestions.length > 0 ? { ...word, suggestions } : null;
+    return { ...word, suggestions: ranked(word.word, spell.suggest(word.word)) };
   });
 }
 
@@ -209,13 +212,119 @@ export function replaceWord(editor: Editor, misspelling: Misspelling, suggestion
   editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, from + suggestion.length)));
 }
 
-/** Every misspelled English word of the document, in order. */
-export function misspelledWords(doc: PMNode, spell: NSpell): Word[] {
+/** Every misspelled English word of the document, in order, the reader's
+    own words (`accepted`, lower-cased) left out. */
+export function misspelledWords(doc: PMNode, spell: NSpell, accepted: ReadonlySet<string> = new Set()): Word[] {
   const found: Word[] = [];
   doc.descendants((node, pos) => {
     if (!node.isTextblock) return true;
-    found.push(...wordsOf(node, pos).filter((w) => !spell.correct(w.word)));
+    found.push(...wordsOf(node, pos).filter((w) => !accepted.has(w.word.toLowerCase()) && !spell.correct(w.word)));
     return false;
   });
   return found;
+}
+
+// The reader's own words (SPEC.md §29, typing). Add to dictionary puts a word
+// in the personal dictionary, which holds for every document in this browser;
+// Ignore all puts it with the words ignored in this document. The check never
+// flags them: the right-click menu offers nothing for them, the next and
+// previous misspelling pass them, and the page turns the browser's own check
+// off where each of them stands (spellcheck="false"), so no underline draws.
+
+/** The most documents whose ignored words are kept: the newest. */
+const MAX_IGNORED_DOCUMENTS = 200;
+
+const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** The words the check takes as spelled right in a document, lower-cased. */
+export function acceptedWords(documentId: string | null): Set<string> {
+  const prefs = typingPrefs();
+  const ignored = documentId ? (prefs.ignoredWords[documentId] ?? []) : [];
+  return new Set([...prefs.dictionary, ...ignored].map((w) => w.toLowerCase()));
+}
+
+export function addToDictionary(word: string): void {
+  const { dictionary } = typingPrefs();
+  if (dictionary.some((w) => same(w, word))) return;
+  setTypingPrefs({ dictionary: [...dictionary, word].slice(-2000) });
+}
+
+export function removeFromDictionary(word: string): void {
+  setTypingPrefs({ dictionary: typingPrefs().dictionary.filter((w) => !same(w, word)) });
+}
+
+export function ignoreAll(documentId: string, word: string): void {
+  const { ignoredWords } = typingPrefs();
+  const words = ignoredWords[documentId] ?? [];
+  if (words.some((w) => same(w, word))) return;
+  // The document goes last, so the oldest go first past the cap.
+  const others = Object.entries(ignoredWords).filter(([id]) => id !== documentId).slice(-(MAX_IGNORED_DOCUMENTS - 1));
+  setTypingPrefs({ ignoredWords: { ...Object.fromEntries(others), [documentId]: [...words, word].slice(-500) } });
+}
+
+type Exceptions = { words: ReadonlySet<string>; decos: DecorationSet };
+const exceptionsKey = new PluginKey<Exceptions>("docsSpellingExceptions");
+const NONE: ReadonlySet<string> = new Set();
+
+/** The reader's own words in this page, lower-cased. */
+export function acceptedIn(state: EditorState): ReadonlySet<string> {
+  return exceptionsKey.getState(state)?.words ?? NONE;
+}
+
+/** The page's words set anew (the typing area sends them). */
+export function setAcceptedWords(editor: Editor, words: ReadonlySet<string>): void {
+  if (editor.isDestroyed) return;
+  const now = acceptedIn(editor.state);
+  if (now.size === words.size && [...words].every((w) => now.has(w))) return;
+  editor.view.dispatch(editor.state.tr.setMeta(exceptionsKey, words).setMeta("addToHistory", false));
+}
+
+/** Where the reader's own words stand in a paragraph: the browser's check off there. */
+function exceptionsIn(block: PMNode, blockPos: number, words: ReadonlySet<string>): Decoration[] {
+  return wordsOf(block, blockPos)
+    .filter((w) => words.has(w.word.toLowerCase()))
+    .map((w) => Decoration.inline(w.from, w.to, { spellcheck: "false" }));
+}
+
+function exceptionsOf(doc: PMNode, words: ReadonlySet<string>): DecorationSet {
+  if (words.size === 0) return DecorationSet.empty;
+  const decos: Decoration[] = [];
+  doc.descendants((node, pos) => {
+    if (!node.isTextblock) return true;
+    decos.push(...exceptionsIn(node, pos, words));
+    return false;
+  });
+  return DecorationSet.create(doc, decos);
+}
+
+/** The reader's own words, marked where they stand. A change draws again
+    only the paragraphs it touched. */
+export function spellingExceptions(): Plugin<Exceptions> {
+  return new Plugin<Exceptions>({
+    key: exceptionsKey,
+    state: {
+      init: () => ({ words: NONE, decos: DecorationSet.empty }),
+      apply(tr, value, _old, state) {
+        const words = tr.getMeta(exceptionsKey) as ReadonlySet<string> | undefined;
+        if (words) return { words, decos: exceptionsOf(state.doc, words) };
+        if (!tr.docChanged || value.words.size === 0) return value;
+        let decos = value.decos.map(tr.mapping, state.doc);
+        const size = state.doc.content.size;
+        tr.mapping.maps.forEach((map, i) => {
+          const after = tr.mapping.slice(i + 1);
+          map.forEach((_oldFrom, _oldTo, from, to) => {
+            state.doc.nodesBetween(Math.max(0, after.map(from, -1)), Math.min(size, after.map(to, 1)), (node, pos) => {
+              if (!node.isTextblock) return true;
+              decos = decos.remove(decos.find(pos, pos + node.nodeSize)).add(state.doc, exceptionsIn(node, pos, value.words));
+              return false;
+            });
+          });
+        });
+        return { words: value.words, decos };
+      },
+    },
+    props: {
+      decorations: (state) => exceptionsKey.getState(state)?.decos,
+    },
+  });
 }

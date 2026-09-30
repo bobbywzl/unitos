@@ -3,12 +3,13 @@
 // headless Chromium: BORDERS is Format > Paragraph styles > Borders and
 // shading; FULLSCREEN is View > Full screen; IMAGENOTE is an image dragged
 // from the page onto a note in the notes tray (a person's mouse drag, which
-// the browser runs as its own drag). Each check prints PASS or FAIL with its
-// evidence; each case leaves a screenshot (light theme, 1440×900; the dark
-// case in dark).
+// the browser runs as its own drag); SPELLING is Add to dictionary, Ignore
+// all, and Tools > Spelling and grammar > Personal dictionary. Each check
+// prints PASS or FAIL with its evidence; each case leaves a screenshot
+// (light theme, 1440×900; the dark case in dark).
 //
 // Usage:
-//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE] [--label after] [--keep]
+//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING] [--label after] [--keep]
 // With no group named, every group runs. Env: BASE (default
 // http://localhost:3111), SHOT_DIR (default <tmp>/ui-docs-parity), CHROME
 // (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3492), DATABASE_URL
@@ -575,6 +576,138 @@ GROUPS.IMAGENOTE = async () => {
   } finally {
     server.close();
   }
+};
+
+// ── Add to dictionary, Ignore all, Personal dictionary ─────────────────────
+
+/** The middle of the first place `word` stands in the page. */
+async function wordPoint(page, word) {
+  return page.evaluate((word) => {
+    const walker = document.createTreeWalker(document.querySelector(".docs-prose"), NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const i = n.textContent.indexOf(word);
+      if (i < 0) continue;
+      const r = document.createRange();
+      r.setStart(n, i);
+      r.setEnd(n, i + word.length);
+      const b = r.getBoundingClientRect();
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+    }
+    return null;
+  }, word);
+}
+/** The right-click menu's rows on `word`, once its spelling rows had the time to join. */
+async function menuRows(page, word) {
+  const at = await wordPoint(page, word);
+  await page.mouse.click(at.x, at.y, { button: "right" });
+  await until(() => page.evaluate(() => [...document.querySelectorAll(".docs-context-menu [role='menuitem']")].some((e) => /Add to dictionary/.test(e.textContent))), 2500, 150);
+  return page.evaluate(() => [...document.querySelectorAll(".docs-context-menu [role='menuitem']")].map((e) => e.textContent.trim()));
+}
+async function pickRow(page, word, label) {
+  await menuRows(page, word);
+  await page.locator(".docs-context-menu [role='menuitem']", { hasText: label }).first().click();
+  await sleep(400);
+}
+/** The words the page tells the browser not to check. */
+const unchecked = (page) => page.evaluate(() => [...document.querySelectorAll('.docs-prose [spellcheck="false"]')].map((e) => e.textContent));
+/** Ctrl+' from the start of the page: the words it selects, in order. */
+async function misspellingsFromStart(page, n) {
+  await page.keyboard.press("Control+Home");
+  await sleep(200);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    await page.keyboard.press("Control+'");
+    await sleep(400);
+    out.push(await page.evaluate(() => {
+      const { from, to } = window.__docsEditor.state.selection;
+      return window.__docsEditor.state.doc.textBetween(from, to);
+    }));
+  }
+  return out;
+}
+
+GROUPS.SPELLING = async () => {
+  const G = "SPELLING";
+  const first = await blankDocument("Spelling one", ["Unitos keeps every note beside its source.", "The crew counted birds at Wexcombe before noon.", "Teh count from Unitos is due on Friday.", "The code name is Qqqqzzz."]);
+  const second = await blankDocument("Spelling two", ["Wexcombe again, and Unitos again."]);
+  const { page, errors, close } = await newPage();
+  await openEditor(page, first, "Qqqqzzz");
+  await sleep(600);
+
+  // 1. The menu on a misspelled word: its suggestions, then Add to dictionary and Ignore all.
+  let rows = await menuRows(page, "Wexcombe");
+  await shot(page, "spelling-1-menu");
+  await page.keyboard.press("Escape");
+  const at = (label) => rows.findIndex((r) => r === label);
+  check(G, at("Add to dictionary") > 0 && at("Ignore all") === at("Add to dictionary") + 1 && rows.indexOf("Welcome") >= 0 && rows.indexOf("Welcome") < at("Add to dictionary"), "a misspelled word offers its suggestions, then Add to dictionary and Ignore all", JSON.stringify(rows.slice(0, 4)));
+  rows = await menuRows(page, "Qqqqzzz");
+  await page.keyboard.press("Escape");
+  check(G, rows[0] === "Add to dictionary" && rows[1] === "Ignore all", "a word the dictionary has no suggestion for still offers Add to dictionary and Ignore all", JSON.stringify(rows.slice(0, 3)));
+  const before = await misspellingsFromStart(page, 3);
+  check(G, before.includes("Unitos") && before.includes("Wexcombe"), "before: the next misspelling stops at both unknown words", JSON.stringify(before));
+
+  // 2. Add to dictionary: every place the word stands, now and typed later.
+  await pickRow(page, "Unitos", "Add to dictionary");
+  let spans = await unchecked(page);
+  rows = await menuRows(page, "Unitos");
+  await page.keyboard.press("Escape");
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("unitos-docs-typing") ?? "{}").dictionary ?? []);
+  check(G, spans.filter((w) => w === "Unitos").length === 2 && !rows.includes("Add to dictionary") && stored.includes("Unitos"), "Add to dictionary: the page stops checking the word everywhere, and the menu offers nothing for it", `unchecked ${JSON.stringify(spans)}; rows ${JSON.stringify(rows.slice(0, 2))}; stored ${JSON.stringify(stored)}`);
+  const end = await wordPoint(page, "noon.");
+  await page.mouse.click(end.x + 30, end.y);
+  await page.keyboard.press("End");
+  await page.keyboard.type(" Unitos counted too.");
+  await sleep(400);
+  spans = await unchecked(page);
+  check(G, spans.filter((w) => w === "Unitos").length === 3, "a word typed after it was added is not checked either", JSON.stringify(spans));
+
+  // 3. Ignore all: this document only.
+  await pickRow(page, "Wexcombe", "Ignore all");
+  spans = await unchecked(page);
+  const next = await misspellingsFromStart(page, 2);
+  await shot(page, "spelling-3-after-add-and-ignore");
+  check(G, spans.includes("Wexcombe") && next[0] === "Teh", "Ignore all: the page stops checking the word, and the next misspelling passes both words", `unchecked ${JSON.stringify(spans)}; next ${JSON.stringify(next)}`);
+  await openEditor(page, second, "again.");
+  await sleep(600);
+  spans = await unchecked(page);
+  rows = await menuRows(page, "Wexcombe");
+  await page.keyboard.press("Escape");
+  check(G, spans.includes("Unitos") && !spans.includes("Wexcombe") && rows.includes("Ignore all"), "in another document the dictionary holds and the ignored word does not", `unchecked ${JSON.stringify(spans)}; rows ${JSON.stringify(rows.slice(0, 3))}`);
+
+  // 4. The Personal dictionary dialog: add a word, remove one.
+  await openEditor(page, first, "Qqqqzzz");
+  await sleep(600);
+  await clickIn(page, "The code");
+  await page.keyboard.press("Alt+/");
+  await sleep(300);
+  await page.keyboard.type("personal dictionary", { delay: 30 });
+  await sleep(500);
+  await page.keyboard.press("Enter");
+  const dialog = page.locator(".docs-dictionary");
+  await dialog.waitFor({ state: "visible", timeout: 10_000 });
+  const listed = await dialog.locator(".docs-dictionary-row").allTextContents();
+  await dialog.locator('[data-track="docs:dictionary:word"]').fill("Qqqqzzz");
+  await page.keyboard.press("Enter");
+  await sleep(300);
+  await dialog.locator(".docs-dictionary-row", { hasText: "Unitos" }).locator('[data-track="docs:dictionary:remove"]').click();
+  await sleep(300);
+  const after = await dialog.locator(".docs-dictionary-row").allTextContents();
+  await shot(page, "spelling-4-dialog");
+  check(G, listed.join() === "Unitos" && after.join() === "Qqqqzzz", "the dialog lists the words, adds one, and removes one", `${JSON.stringify(listed)} → ${JSON.stringify(after)}`);
+  await dialog.getByRole("button", { name: "OK" }).click();
+  await sleep(400);
+  spans = await unchecked(page);
+  rows = await menuRows(page, "Unitos");
+  await page.keyboard.press("Escape");
+  check(G, spans.includes("Qqqqzzz") && !spans.includes("Unitos") && rows.includes("Add to dictionary"), "the page follows the dialog: the added word is not checked, the removed one is again", `unchecked ${JSON.stringify(spans)}; rows ${JSON.stringify(rows.slice(0, 2))}`);
+
+  // 5. After a reload: the dictionary and the document's ignored words hold.
+  await openEditor(page, first, "Qqqqzzz");
+  await sleep(600);
+  spans = await unchecked(page);
+  check(G, spans.includes("Qqqqzzz") && spans.includes("Wexcombe") && !spans.includes("Unitos"), "after a reload the dictionary and the ignored words hold", JSON.stringify(spans));
+  check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
+  await close();
 };
 
 // ── Main ────────────────────────────────────────────────────────────────────

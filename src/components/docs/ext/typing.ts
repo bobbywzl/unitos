@@ -31,6 +31,7 @@ import {
 } from "@/components/docs/typing/keys";
 import { markStylePlugin, TYPING_RESTORE_META, validMarkStyle } from "@/components/docs/typing/mark-style";
 import { armPlainPaste, imageFiles, insertImageFiles, notePaste, pastedHtml, plainTextSlice, uploadsPlugin } from "@/components/docs/typing/paste";
+import { spellingExceptions } from "@/components/docs/typing/spelling";
 import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
 import { tracePlugin } from "@/components/docs/typing/trace";
 import { replaceWithChip, urlChipPlugin } from "@/components/docs/typing/url-chip";
@@ -289,7 +290,7 @@ const DocsTyping = Extension.create({
           .setMeta(TYPING_RESTORE_META, true);
       },
     });
-    return [plugin, findPlugin(), tracePlugin(), repeatPlugin(), markStylePlugin(), urlChipPlugin(editor), uploadsPlugin()];
+    return [plugin, findPlugin(), tracePlugin(), repeatPlugin(), markStylePlugin(), urlChipPlugin(editor), uploadsPlugin(), spellingExceptions()];
   },
 });
 
