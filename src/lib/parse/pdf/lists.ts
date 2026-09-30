@@ -627,9 +627,10 @@ export function readAlgorithm(lines: Line[], i: number, ctx: PageContext, runOf:
 
 // ── References ──────────────────────────────────────────────────────────────
 
-// A references section's heading: its entries follow, on its page and the
-// pages after, up to the next heading.
-const REFERENCES_RE = /^(?:\d{1,2}\.?\s+)?(?:references(?: and notes)?|bibliography|literature cited|works cited)$/i;
+// A references section's heading (a Chinese or Japanese paper's "参考文献"
+// too): its entries follow, on its page and the pages after, up to the next
+// heading.
+const REFERENCES_RE = /^(?:\d{1,2}\.?\s+)?(?:references(?: and notes)?|bibliography|literature cited|works cited|参考文献|참고문헌)$/i;
 let references = false;
 
 /** A references section whose entries carry no marker, each set with a
@@ -663,7 +664,8 @@ export function readReferences(lines: Line[], i: number, ctx: PageContext, runOf
     columns.set(key, { left: Math.min(c.left, l.x), right: Math.max(c.right, l.xEnd), lines: [...c.lines, l] });
   }
   const columnOf = (l: Line) => columns.get(lineColumn(l))!;
-  const steps = run.map((l) => l.x - columnOf(l).left).filter((d) => d >= size * 0.3 && d <= size * 3);
+  // A word processor hangs its entries half an inch: 3.6 ems at 10 pt.
+  const steps = run.map((l) => l.x - columnOf(l).left).filter((d) => d >= size * 0.3 && d <= size * 4);
   if (steps.length === 0) return null;
   const step = median(steps);
   // A column whose lines all start at one place shows no hanging indent:

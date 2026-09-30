@@ -1,7 +1,8 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands, type DocsCommand } from "@/components/docs/commands";
@@ -14,7 +15,8 @@ import { findState, searchFrom, setFind, stepResult } from "@/components/docs/ty
 import { FindBar, FindReplaceDialog, type FindMode } from "@/components/docs/typing/find-ui";
 import { setCase, toggleSmallCaps, type TextCase } from "@/components/docs/typing/format";
 import { listenNavigation, lookUpWord } from "@/components/docs/typing/navigate";
-import { copyMarkdown, pasteMarkdown } from "@/components/docs/typing/paste";
+import { listenImageDrop, type DropState } from "@/components/docs/typing/drop";
+import { copyMarkdown, pasteMarkdown, setImagePremium } from "@/components/docs/typing/paste";
 import { typingPrefs } from "@/components/docs/typing/prefs";
 import { PreferencesDialog } from "@/components/docs/typing/preferences-dialog";
 import { ShortcutsDialog } from "@/components/docs/typing/shortcuts-dialog";
@@ -22,9 +24,10 @@ import { VoiceTyping } from "@/components/docs/typing/voice-typing";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The typing area (SPEC.md §29): find and find and replace, Tools >
-// Preferences, the keyboard shortcuts, voice typing, and the spelling
-// switch; in Search the menus also Format > Text, View > Show non-printing
-// characters, and Edit's clipboard items. Their keys answer when the page
+// Preferences, the keyboard shortcuts, voice typing, the spelling switch,
+// and images dropped anywhere on the page (typing/drop.ts); in Search the
+// menus also Format > Text, View > Show non-printing characters, and Edit's
+// clipboard items. Their keys answer when the page
 // editor has the focus, or when nothing else does — never in the notes
 // tray or any other text box. The word count (word-count.tsx) mounts
 // beside this layer.
@@ -164,9 +167,18 @@ function docsActive(editor: Editor): boolean {
   return false;
 }
 
-export function TypingLayer({ editor }: DocsAreaProps) {
+export function TypingLayer({ editor, canEdit, projectEditor, editing }: DocsAreaProps) {
   const t = useT();
+  const { premium } = useCollab();
   const [findMode, setFindMode] = useState<FindMode>(null);
+
+  // Images dropped on the page, and the images' tier rule (typing/paste.ts).
+  const dropState = useRef<DropState>({ canEdit, projectEditor, editing, t });
+  useEffect(() => {
+    dropState.current = { canEdit, projectEditor, editing, t };
+    setImagePremium(editor, premium);
+  });
+  useEffect(() => listenImageDrop(editor, () => dropState.current), [editor]);
   const [focusToken, setFocusToken] = useState(0);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);

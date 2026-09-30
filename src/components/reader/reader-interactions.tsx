@@ -54,7 +54,7 @@ import { TranslationBar } from "@/components/reader/translation-bar";
 import type { TextStyle, ToggleStyle } from "@/lib/text-style";
 import { findWeblinks } from "@/lib/weblinks";
 import { isImeKey, useImeGuard } from "@/lib/ime";
-import { imageFigureHtml } from "@/lib/images";
+import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
 import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
@@ -318,6 +318,11 @@ const TOOLBARS: Record<ContentKind, readonly Tool[]> = {
 // The blocks the hold-and-circle gesture opens a toolbar on, whole. A table
 // is text (SPEC.md §6): its cells are rendered text, selected like any.
 const CIRCLED_TYPES = new Set(["FIGURE", "EQUATION"]);
+
+// A document with one of these blocks takes no new block, a dropped image's
+// figure included (lib/block-takes.ts): slides, sheets, a video's or an
+// audio's document.
+const NO_NEW_BLOCKS = new Set(["SLIDE", "SHEET", "VIDEO", "TRANSCRIPT"]);
 
 function contentKindOf(type: string | undefined): ContentKind {
   if (type === "FIGURE") return "figure";
@@ -2557,9 +2562,10 @@ export function ReaderInteractions({
       if (captured) openBarRef.current(captured);
     };
     // A toast raised on no page editor shows in every pane.
+    // The page editor's messages, some with an action (Switch to Editing).
     const onToast = (e: Event) => {
-      const text = (e as CustomEvent<{ text: string }>).detail?.text;
-      if (text) showToast(text);
+      const detail = (e as CustomEvent<{ text: string; action?: { label: string; run: () => void } }>).detail;
+      if (detail?.text) showToast(detail.text, detail.action ?? null);
     };
     // A click on a figure object opens the figure's tools, as the circle
     // does. The figure fires at its own mouseup, before the document's, so
@@ -6680,8 +6686,9 @@ export function ReaderInteractions({
     }
   }
 
-  // A dropped image lands as a figure right after the block it was dropped on
-  // (SPEC.md §16), the same insert path a new paragraph takes.
+  // A dropped or pasted image lands as a figure right after the block it was
+  // dropped on (SPEC.md §16), the same insert path a new paragraph takes, and
+  // Undo takes it out again.
   async function insertImageBlock(afterBlockId: string, image: DroppedImage): Promise<string> {
     const res = await fetch("/api/blocks", {
       method: "POST",
@@ -6691,34 +6698,59 @@ export function ReaderInteractions({
         afterBlockId,
         type: "FIGURE",
         text: image.name,
-        html: imageFigureHtml(image.id, image.name),
+        html: imageFigureHtml(image.url, image.name),
       }),
     });
     const json = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
     if (!res.ok || !json?.id) {
       throw new Error(json?.error ?? t("reader.insertFailedStatus", { status: res.status }));
     }
+    let id = json.id;
+    record({
+      undo: () => deleteBlock(id),
+      redo: () =>
+        insertImageBlock(afterBlockId, image).then((next) => {
+          id = next;
+          router.refresh();
+        }),
+    });
     return json.id;
   }
 
-  // Images drop into the article while editing: the block under the pointer
-  // says where they land. Everything else keeps travelling to the window,
-  // which adds dropped files as documents (document-bar.tsx).
-  const dropPointRef = useRef<{ x: number; y: number } | null>(null);
+  // Images drop into the article, in reading and in edit mode alike: a file,
+  // or a picture dragged from another page, dropped on a block of the text
+  // lands right after that block, and the drop line under the block says so
+  // while the drag is over it. A drop anywhere else, and a file that is not
+  // an image, keeps travelling to the window, which adds dropped files as
+  // documents (document-bar.tsx). A transcript, slides, sheets, and a
+  // handwritten document's pages take no figure.
+  const figureDrop = canEdit && !richText && !transcript;
+  const dropAfterRef = useRef<string | null>(null);
+  const [dropLine, setDropLine] = useState<{ top: number; left: number; width: number } | null>(null);
+  const dropLineTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideDropLine = () => {
+    if (dropLineTimer.current) clearTimeout(dropLineTimer.current);
+    dropLineTimer.current = null;
+    setDropLine(null);
+  };
+  /** The block of the text that a figure dropped at `target` follows. */
+  const figureTarget = (target: EventTarget | null): HTMLElement | null => {
+    if (!figureDrop || !(target instanceof Element) || !target.closest("article.reader-prose")) return null;
+    const el = target.closest<HTMLElement>("[data-edit-block], [data-block-id]");
+    const id = el?.dataset.editBlock ?? el?.dataset.blockId;
+    const blocks = blocksRef.current;
+    if (!el || !id || blocks.some((b) => NO_NEW_BLOCKS.has(b.type))) return null;
+    const block = blocks.find((b) => b.id === id);
+    return block && block.type !== "PAGE" ? el : null;
+  };
   const imageDrop = useNoteDrop({
     premium,
-    enabled: editMode && canEdit,
+    enabled: figureDrop,
+    pageImages: true,
     t,
     onError: showToast,
     onImages: async (images) => {
-      const point = dropPointRef.current;
-      const blocks = blocksRef.current;
-      const el = point ? document.elementFromPoint(point.x, point.y) : null;
-      const dropped = el?.closest<HTMLElement>("[data-edit-block], [data-block-id]");
-      const afterId =
-        dropped?.dataset.editBlock ??
-        dropped?.dataset.blockId ??
-        blocks[blocks.length - 1]?.id;
+      const afterId = dropAfterRef.current;
       if (!afterId) return;
       // Each figure lands after the one before it, so several images keep the
       // order they were dropped in.
@@ -6727,6 +6759,39 @@ export function ReaderInteractions({
       router.refresh();
     },
   });
+  const onArticleDragOver = (e: React.DragEvent) => {
+    const el = figureTarget(e.target);
+    if (!el) {
+      hideDropLine();
+      return;
+    }
+    imageDrop.handlers.onDragOver(e);
+    const container = containerRef.current;
+    if (!e.defaultPrevented || !container) return;
+    const box = container.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    setDropLine({ top: r.bottom - box.top + container.scrollTop + 2, left: r.left - box.left, width: r.width });
+    // dragover comes every 350 ms or so while the pointer holds still.
+    if (dropLineTimer.current) clearTimeout(dropLineTimer.current);
+    dropLineTimer.current = setTimeout(() => setDropLine(null), 600);
+  };
+  const onArticleDrop = (e: React.DragEvent) => {
+    hideDropLine();
+    const el = figureTarget(e.target);
+    if (!el) return;
+    dropAfterRef.current = el.dataset.editBlock ?? el.dataset.blockId ?? null;
+    void imageDrop.handlers.onDrop(e);
+  };
+  // An image pasted while a block is being edited lands after that block.
+  const onArticlePaste = (e: React.ClipboardEvent) => {
+    const el = editMode ? figureTarget(e.target) : null;
+    const files = Array.from(e.clipboardData?.files ?? []).filter(isImageFile);
+    const html = e.clipboardData?.getData("text/html") ?? "";
+    if (!el || files.length === 0 || html.replace(/<[^>]*>|&nbsp;/g, "").trim()) return;
+    e.preventDefault();
+    dropAfterRef.current = el.dataset.editBlock ?? el.dataset.blockId ?? null;
+    void imageDrop.takeFiles(files);
+  };
 
   async function deleteBlock(blockId: string) {
     try {
@@ -7594,15 +7659,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     <div
       ref={containerRef}
       data-reader-root
-      onDragOver={(e) => {
-        dropPointRef.current = { x: e.clientX, y: e.clientY };
-        imageDrop.handlers.onDragOver(e);
+      onDragOver={onArticleDragOver}
+      onDragLeave={(e) => {
+        if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) hideDropLine();
+        imageDrop.handlers.onDragLeave(e);
       }}
-      onDragLeave={imageDrop.handlers.onDragLeave}
-      onDrop={(e) => {
-        dropPointRef.current = { x: e.clientX, y: e.clientY };
-        void imageDrop.handlers.onDrop(e);
-      }}
+      onDrop={onArticleDrop}
+      onPaste={onArticlePaste}
       // The inline restore script finds this pane's stored reading position by
       // its document (lib/reading-position.ts), and the account's copy here.
       // An embedded layer has none.
@@ -7632,37 +7695,33 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     >
       {!split && !transcript && !embedded && !richText && articleMenu}
 
+      {/* The drop line: where an image dropped on the text lands. */}
+      {dropLine && (
+        <div
+          aria-hidden
+          data-drop-line
+          className="pointer-events-none absolute z-20 h-0.5 rounded-full bg-clay"
+          style={{ top: dropLine.top, left: dropLine.left, width: dropLine.width }}
+        />
+      )}
+
       {/* The controls float over the article at the top right of the pane
           and stay there as it scrolls: a sticky block with no height, so the
-          text runs under them and never wraps around them. The article's
-          errors sit under the controls. */}
+          text runs under them and never wraps around them. The toast sits
+          under the controls, on the right, and wraps before it reaches the
+          pane's left side, so the Contents button at the top left never
+          covers its words; the article's errors sit under the toast. */}
       <div
         className={`pointer-events-none sticky z-10 h-0 print:hidden ${
           // A blank document's toolbar holds the top; the toasts sit under it.
           richText ? "top-[112px]" : "top-4"
         }`}
       >
-      <div className="absolute top-0 right-4 flex flex-col items-end gap-2">
+      <div className="absolute top-0 right-4 left-4 flex flex-col items-end gap-2">
       <div
         className="pointer-events-auto flex items-center gap-2 rounded-full"
         data-nudge={!split && !transcript ? "tools" : undefined}
       >
-      <Presence show={toast !== null} exit="fade">
-        {toast && (
-          <span className="flex items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">
-            {toast}
-            {toastAction && (
-              <button
-                onClick={toastAction.run}
-                data-track="toast-action"
-                className="rounded-full bg-paper/20 px-2.5 py-0.5 font-semibold hover:bg-paper/30"
-              >
-                {toastAction.label}
-              </button>
-            )}
-          </span>
-        )}
-      </Presence>
         {editMode && (
           <select
             data-edit-control
@@ -7691,6 +7750,25 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         {!split && !transcript && !embedded && !richText && collapseButton}
         {!split && !transcript && !embedded && !richText && distillButton}
       </div>
+      <Presence show={toast !== null} exit="fade">
+        {toast && (
+          <span
+            data-reader-toast
+            className="pointer-events-auto flex max-w-[min(34rem,100%)] items-center gap-2 rounded-[18px] bg-ink/90 px-3 py-1.5 text-xs leading-snug text-paper"
+          >
+            <span className="min-w-0">{toast}</span>
+            {toastAction && (
+              <button
+                onClick={toastAction.run}
+                data-track="toast-action"
+                className="shrink-0 rounded-full bg-paper/20 px-2.5 py-0.5 font-semibold hover:bg-paper/30"
+              >
+                {toastAction.label}
+              </button>
+            )}
+          </span>
+        )}
+      </Presence>
       {!split && !transcript && !embedded && <ArticleErrors documentId={documentId} />}
       </div>
       </div>

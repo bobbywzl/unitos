@@ -30,7 +30,7 @@ import {
   tab,
 } from "@/components/docs/typing/keys";
 import { markStylePlugin, TYPING_RESTORE_META, validMarkStyle } from "@/components/docs/typing/mark-style";
-import { armPlainPaste, imageFiles, insertImageFiles, notePaste, pastedHtml, plainTextSlice } from "@/components/docs/typing/paste";
+import { armPlainPaste, imageFiles, insertImageFiles, notePaste, pastedHtml, plainTextSlice, uploadsPlugin } from "@/components/docs/typing/paste";
 import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
 import { tracePlugin } from "@/components/docs/typing/trace";
 import { replaceWithChip, urlChipPlugin } from "@/components/docs/typing/url-chip";
@@ -237,13 +237,9 @@ const DocsTyping = Extension.create({
           void insertImageFiles(editor, images);
           return true;
         },
-        handleDrop(view, event, _slice, moved) {
-          const images = imageFiles(event.dataTransfer?.files);
-          if (moved || !images.length || !view.editable) return false;
-          event.preventDefault();
-          void insertImageFiles(editor, images, view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos);
-          return true;
-        },
+        // A file or a picture from another page dropped on the page is
+        // typing/drop.ts's, anywhere on the page; ProseMirror drops words
+        // and moves what is dragged inside the page.
         handleDOMEvents: {
           // A paste, a cut, or a drop is its own undo step.
           paste(view) {
@@ -293,7 +289,7 @@ const DocsTyping = Extension.create({
           .setMeta(TYPING_RESTORE_META, true);
       },
     });
-    return [plugin, findPlugin(), tracePlugin(), repeatPlugin(), markStylePlugin(), urlChipPlugin(editor)];
+    return [plugin, findPlugin(), tracePlugin(), repeatPlugin(), markStylePlugin(), urlChipPlugin(editor), uploadsPlugin()];
   },
 });
 

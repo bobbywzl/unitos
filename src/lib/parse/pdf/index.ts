@@ -23,7 +23,7 @@ import { lookItems, takeBodyFont } from "@/lib/parse/pdf/look";
 import { displayEquations, displayLines, isTexPage } from "@/lib/parse/pdf/math/display";
 import { mathSpans, resolveZones } from "@/lib/parse/pdf/math/zones";
 import { firstPageOf, joinOnPage, mergeAcrossPages, shiftSpansInto } from "@/lib/parse/pdf/merge";
-import { isOcrLayer, measureSpacing } from "@/lib/parse/pdf/paragraphs";
+import { isOcrLayer, measureSpacing, pageLeading } from "@/lib/parse/pdf/paragraphs";
 import { placeTables, ruledTables, takeTables } from "@/lib/parse/pdf/ruled";
 import { segmentPage } from "@/lib/parse/pdf/segment";
 import { attachTableCaptions, isWrappedRowLine } from "@/lib/parse/pdf/tables";
@@ -454,7 +454,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     const prose = lines.filter((l) => !l.table && l.cells.length === 1 && l.text.length > 40).map((l) => l.size);
     const pageBody = prose.length >= 5 ? median(prose) : bodySize;
     const ocr = pageFlags[p].ocr;
-    const ctx = { bodySize: ocr ? pageBody : Math.max(bodySize, pageBody), leading, columnLeft, hasBold, pageMinX, labelColumn, frames, drawing: pageDrawings[p], ...pageFlags[p] };
+    const ctx = { bodySize: ocr ? pageBody : Math.max(bodySize, pageBody), leading: pageLeading(lines, leading), columnLeft, hasBold, pageMinX, labelColumn, frames, drawing: pageDrawings[p], ...pageFlags[p] };
     // A TeX page's display equations join into one line each (math/display.ts).
     const shown = displayLines(lines, ctx);
     const pageSegments = segmentPage(shown, ctx);
