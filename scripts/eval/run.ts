@@ -17,8 +17,18 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { join } from "node:path";
 import type { ModelMessage } from "ai";
 import { z } from "zod";
-import { matchInText } from "@/lib/anchors/match";
-import { DERIVATION_EFFORT, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { matchInText, matchInTextLoose } from "@/lib/anchors/match";
+import {
+  collapseRequests,
+  collapseWindowSchema,
+  coreCeiling,
+  currentCores,
+  fittedCores,
+  wordCount as collapseWords,
+  type CollapseAnswer,
+} from "@/lib/collapse";
+import { COLLAPSE_EFFORT, COLLAPSE_MAX_OUTPUT_TOKENS, DERIVATION_EFFORT, MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { featureCall, featureConfigured } from "@/lib/feature-models";
 import {
   distillOutputSchema,
   extractJson,
@@ -47,7 +57,9 @@ import {
   defaultJudge,
   fixturePrefix,
   loadFixtures,
+  numbersIn,
   promptCtx,
+  quotedSpans,
   selectionOf,
   wordCount,
   type Fixture,
@@ -71,6 +83,8 @@ type CaseResult = {
   error: string | null;
   ms: number;
   tokens: { input: number; output: number };
+  // The model id the tool ran on (absent in runs before it was recorded).
+  model?: string;
 };
 
 type Run = {
@@ -104,7 +118,7 @@ function loadCases(): EvalCase[] {
 }
 
 // ── Adapters: one per tool, the route's own messages and post-processing ──
-type Adapter = (c: EvalCase, f: Fixture) => Promise<{ input: string; prompt: string; raw: string; output: string; checks: Check[]; ms: number; tokens: { input: number; output: number } }>;
+type Adapter = (c: EvalCase, f: Fixture) => Promise<{ input: string; prompt: string; raw: string; output: string; checks: Check[]; ms: number; tokens: { input: number; output: number }; model?: string }>;
 
 function system(f: Fixture): ModelMessage {
   return { role: "system", content: fixturePrefix(f) };

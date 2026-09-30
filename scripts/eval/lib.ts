@@ -12,6 +12,7 @@ import { extractJson } from "@/lib/derive/json";
 import type { Lang } from "@/lib/i18n/config";
 import { kimi, kimiConfigured, kimiOptions } from "@/lib/kimi";
 import { KIMI_K3, CLAUDE_FABLE_5_1, type KimiEffort } from "@/lib/derive/config";
+import type { ModelCall } from "@/lib/model-call";
 import type { PromptCtx, ReaderProfileCtx } from "@/lib/prompts/types";
 
 export const FIXTURES_DIR = join(process.cwd(), "scripts", "eval", "fixtures");
@@ -157,21 +158,22 @@ export function promptCtx(
 
 // ── Model calls ────────────────────────────────────────────────────────────
 
-export type CallResult = { text: string; finishReason: string; inputTokens: number; outputTokens: number; ms: number };
+export type CallResult = { text: string; finishReason: string; inputTokens: number; outputTokens: number; ms: number; model: string };
 
-/** One call on the tool's model (Kimi K3) with the same effort and budget the
-    route uses. The text comes back whole: the eval reads finished outputs. */
+/** One call on the tool's model with the same effort and budget the route
+    uses: Kimi K3 at the route's effort, or the call a feature's model gives
+    (featureCall in lib/feature-models.ts: Collapse runs on Claude Opus
+    5.5). The text comes back whole: the eval reads finished outputs. */
 export async function callTool(params: {
   messages: ModelMessage[];
-  effort: KimiEffort;
   maxOutputTokens: number;
-}): Promise<CallResult> {
-  if (!kimiConfigured()) throw new Error("MOONSHOT_API_KEY is not set (MOONSHOT_API_KEY=mock with the mock server for a dry run)");
+} & ({ effort: KimiEffort; call?: undefined } | { call: ModelCall; effort?: undefined })): Promise<CallResult> {
+  if (!params.call && !kimiConfigured()) throw new Error("MOONSHOT_API_KEY is not set (MOONSHOT_API_KEY=mock with the mock server for a dry run)");
   const started = Date.now();
   const result = await generateText({
-    model: await kimi(KIMI_K3),
+    model: params.call ? params.call.model : await kimi(KIMI_K3),
     maxOutputTokens: params.maxOutputTokens,
-    providerOptions: kimiOptions(params.effort),
+    providerOptions: params.call ? params.call.providerOptions : kimiOptions(params.effort),
     allowSystemInMessages: true,
     messages: params.messages,
   });
@@ -181,6 +183,7 @@ export async function callTool(params: {
     inputTokens: result.usage.inputTokens ?? 0,
     outputTokens: result.usage.outputTokens ?? 0,
     ms: Date.now() - started,
+    model: params.call ? params.call.modelId : KIMI_K3,
   };
 }
 
@@ -201,7 +204,9 @@ export async function callJudge(judge: JudgeModel, prompt: string): Promise<unkn
     judge === "claude"
       ? await generateText({
           model: await claude(CLAUDE_FABLE_5_1),
-          maxOutputTokens: 4096,
+          // The judge reasons before it scores, and the reasoning counts
+          // against the budget: a whole collapsed document has many cores.
+          maxOutputTokens: 16384,
           providerOptions: claudeOptions("high"),
           messages: [{ role: "user", content: prompt }],
         })
