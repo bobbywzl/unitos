@@ -94,6 +94,8 @@ export type Segment = ParsedBlock & {
   captionBox?: Box; // a captioned FIGURE: where its caption sits (outside box)
   lineSize?: number; // the lines' median font size
   mathShare?: number; // share of glyphs from math fonts
+  lineBox?: Box; // the lines' extent at their own baselines, their scripts left out: a display's space is measured to it
+  glyphBox?: Box; // an EQUATION: its glyphs' drawn box (math/display.ts), which its space above and below is measured to
   align?: "center" | "right"; // a heading's alignment (a paragraph's is a token of its html)
 };
 

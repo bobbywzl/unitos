@@ -420,6 +420,16 @@ function captionStylesFor(block: ParsedBlock, caption: string): string | null {
   return styles.length > 0 ? JSON.stringify(styles.slice(0, 100)) : null;
 }
 
+/** A PDF figure's caption formulas (the figure object's captionMath): the
+    parse's inline formulas over the caption (ParsedBlock.math), as the JSON
+    the object keeps; null when it has none. A formula a save would not keep
+    as an equation (no TeX, TeX past MAX_LATEX), one that overlaps the one
+    before it, and one the caption's clip cuts stay words. */
+function captionMathFor(block: ParsedBlock, caption: string): string | null {
+  const formulas = mathAtoms({ ...block, text: caption }).map((a) => ({ start: a.start, end: a.end, latex: String(a.node.attrs?.latex) }));
+  return formulas.length > 0 ? JSON.stringify(formulas.slice(0, 100)) : null;
+}
+
 /** The named styles an import's look sets, as "Update 'Heading 1' to match"
     sets them (SPEC.md §29 Named styles): Normal text takes the body's face,
     size, and color; the Title the title's look; each heading level the look
@@ -1426,6 +1436,7 @@ class Converter {
     const pageStart = starts.at(-1)?.page ?? null;
     this.figures.push({ mediaId, html: this.input.kind === "pdf" ? null : block.html ?? null, caption, page, region });
     const captionStyles = this.input.kind === "pdf" ? captionStylesFor(block, caption) : null;
+    const captionMath = this.input.kind === "pdf" ? captionMathFor(block, caption) : null;
     this.place(index, [
       {
         type: "figure",
@@ -1434,6 +1445,7 @@ class Converter {
           mediaId,
           caption,
           ...(captionStyles ? { captionStyles } : {}),
+          ...(captionMath ? { captionMath } : {}),
           page,
           region: region ? JSON.stringify(region) : null,
           pageStart,

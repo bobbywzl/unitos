@@ -214,7 +214,7 @@ const ATOM_TYPES: ReadonlySet<string> = new Set(["figure", "pageStart"]);
 /** The only attributes an import's node or mark keeps: a figure object's
     media is its FigureMedia row, never markup in the rich text. */
 const ONLY_ATTRS: Record<string, ReadonlySet<string>> = {
-  figure: new Set(["blockId", "mediaId", "caption", "captionStyles", "page", "region", "pageStart"]),
+  figure: new Set(["blockId", "mediaId", "caption", "captionStyles", "captionMath", "page", "region", "pageStart"]),
   pageStart: new Set(["page"]),
   citation: new Set(["refId"]),
 };
@@ -248,14 +248,51 @@ export function captionStylesOf(value: unknown): CaptionStyle[] | null {
   return styles;
 }
 
-/** A caption cut where its styles begin and end: each part's words and the
-    styles over them. Styles past the caption's end are left out. */
-export function captionParts(caption: string, styles: CaptionStyle[]): { text: string; styles: CaptionStyle["style"][] }[] {
-  const cuts = [...new Set([0, caption.length, ...styles.flatMap((s) => [s.start, s.end]).filter((at) => at < caption.length)])].sort((a, b) => a - b);
-  return cuts.slice(0, -1).map((from, k) => ({
-    text: caption.slice(from, cuts[k + 1]),
-    styles: [...new Set(styles.filter((s) => s.start <= from && s.end >= cuts[k + 1]).map((s) => s.style))],
-  }));
+/** The formulas a figure object's caption holds (a PDF caption's inline
+    math): its captionMath, a JSON list of {start, end, latex} over the
+    caption's characters, in order and none overlapping. Each draws as an
+    equation in place of its characters; the caption stays a plain string. */
+export type CaptionMath = { start: number; end: number; latex: string };
+
+/** A caption's formulas from its captionMath, or null when the value is not
+    such a list. */
+export function captionMathOf(value: unknown): CaptionMath[] | null {
+  if (typeof value !== "string" || value.length > 40_000) return null;
+  let list: unknown;
+  try {
+    list = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(list) || list.length === 0 || list.length > 100) return null;
+  const formulas: CaptionMath[] = [];
+  for (const item of list) {
+    const { start, end, latex } = (item ?? {}) as { start?: unknown; end?: unknown; latex?: unknown };
+    if (!Number.isInteger(start) || !Number.isInteger(end) || typeof latex !== "string") return null;
+    const [from, to] = [start as number, end as number];
+    if (from < (formulas.at(-1)?.end ?? 0) || to <= from || to > MAX_CAPTION_CHARS || !latex.trim() || latex.length > 2000) return null;
+    formulas.push({ start: from, end: to, latex });
+  }
+  return formulas;
+}
+
+/** A caption cut where its styles and its formulas begin and end: each
+    part's words, the styles over them, and a formula's TeX when the part is
+    one (its words are its readable characters). Styles and formulas past
+    the caption's end are left out. */
+export function captionParts(caption: string, styles: CaptionStyle[], math: CaptionMath[] = []): { text: string; styles: CaptionStyle["style"][]; latex?: string }[] {
+  const formulas = math.filter((m) => m.end <= caption.length);
+  const inside = (at: number) => formulas.some((m) => at > m.start && at < m.end);
+  const edges = [...styles.flatMap((s) => [s.start, s.end]).filter((at) => !inside(at)), ...formulas.flatMap((m) => [m.start, m.end])];
+  const cuts = [...new Set([0, caption.length, ...edges.filter((at) => at < caption.length)])].sort((a, b) => a - b);
+  return cuts.slice(0, -1).map((from, k) => {
+    const formula = formulas.find((m) => m.start === from);
+    return {
+      text: caption.slice(from, cuts[k + 1]),
+      styles: [...new Set(styles.filter((s) => s.start <= from && s.end >= cuts[k + 1]).map((s) => s.style))],
+      ...(formula ? { latex: formula.latex } : {}),
+    };
+  });
 }
 
 /** A dropdown chip's options, a JSON list of {label, color}: kept only as
@@ -427,6 +464,10 @@ function cleanAttr(name: string, value: unknown): unknown {
     case "captionStyles": {
       const styles = captionStylesOf(value);
       return styles ? JSON.stringify(styles) : null;
+    }
+    case "captionMath": {
+      const math = captionMathOf(value);
+      return math ? JSON.stringify(math) : null;
     }
     case "region":
       return safeRegion(value);

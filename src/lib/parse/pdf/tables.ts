@@ -816,6 +816,18 @@ function tightCells(line: Line): number {
   return parts.length >= 2 && words <= 4 && parts.some((p) => NUMERIC_CELL_RE.test(p.trim())) ? parts.length : 1;
 }
 
+// A line of prose is one cell, whatever its gaps: a cell that opens with a
+// mark the words before it take (", where μ is the mean": a tall formula's
+// gap in a sentence, OpenStax's ch. 6 p. 20), or words spaced an em apart
+// or more (a justified line beside a long link: arXiv 2506.06352 p. 29).
+function proseLine(line: Line): boolean {
+  if (line.cells.slice(1).some((c) => /^[,;:.)\]!?](?!\d)/.test(c.text.trim()))) return true;
+  const items = line.items.filter((it) => it.str.trim().length > 0);
+  const gaps = items.slice(1).map((it, k) => it.x - (items[k].x + items[k].w)).sort((a, b) => b - a);
+  const spaces = gaps.slice(line.cells.length - 1).filter((g) => g > line.size * 0.15);
+  return spaces.length >= 2 && median(spaces) >= line.size * 0.6;
+}
+
 // Table runs, computed before segmentation. A run grows forward over
 // multi-cell lines and the single-cell lines that continue a wrapped cell
 // (aligned with a column, or indented past the first column, or a first-column
@@ -828,7 +840,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
   // on the sentence of the line above it, and its other cells are marks
   // alone (the W-9's Part I beside its SSN boxes: "… However, for a" |
   // "resident alien, … For other  –  –").
-  const cells = lines.map((line, k) => (besideMarks(line, lines[k - 1]) ? 1 : Math.max(line.cells.length, tightCells(line))));
+  const cells = lines.map((line, k) => (besideMarks(line, lines[k - 1]) || proseLine(line) ? 1 : Math.max(line.cells.length, tightCells(line))));
   let runId = 0;
   let i = 0;
   while (i < lines.length) {
@@ -932,6 +944,13 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     const multiCell = members.filter((k) => lines[k].cells.length >= 2);
     const mathMulti = multiCell.filter((k) => lineMathShare(lines[k]) >= 0.3).length;
     if (mathMulti * 2 >= multiCell.length) {
+      i++;
+      continue;
+    }
+    // Lines closer than a row's height are a formula's stacked parts: a
+    // fraction's numerator and denominator over and under the gap it leaves
+    // in its sentence (arXiv 2502.02648 p. 10: "2N" over "at b =" over "5").
+    if (members.some((k, n) => n > 0 && lines[members[n - 1]].y - lines[k].y < lines[k].size * 0.7)) {
       i++;
       continue;
     }

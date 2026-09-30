@@ -987,8 +987,10 @@ function formulaGlyphs(line: Line, pageOrphans: Glyph[]): { glyphs: Glyph[]; lab
 }
 
 // The equation's LaTeX with its label as \tag, and the box of its glyphs
-// (their drawn extent, the label's included); null when the check fails.
-function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: string; box: Box; left: boolean } | null {
+// (their drawn extent, the label's included): padded for the crop, and as
+// drawn (glyphBox: the display's space above and below is measured to it);
+// null when the check fails.
+function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: string; box: Box; glyphBox: Box; left: boolean } | null {
   const found = formulaGlyphs(line, orphans);
   if (!found || found.glyphs.length === 0) return null;
   const glyphs = found.glyphs;
@@ -1088,9 +1090,10 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: st
       return g.y >= box.y1 - size * 0.05 && g.y < box.y2 + (hangs ? g.size : 0);
     });
     if (stray) return null;
+    const glyphBox = box;
     const pad = size * 0.15;
     box = { x1: box.x1 - pad, y1: box.y1 - pad, x2: box.x2 + pad, y2: box.y2 + pad };
-    return { latex: found.label ? `${latex} ${found.label}` : latex, box, left: found.left };
+    return { latex: found.label ? `${latex} ${found.label}` : latex, box, glyphBox, left: found.left };
   } catch {
     return null;
   }
@@ -1189,7 +1192,7 @@ export function displayEquations(
     let start = k;
     // The EQUATION keeps its glyphs' box as a region: a check of the parse,
     // or a later repair, reads the glyphs under it.
-    let equation: { latex: string; box: Box; left: boolean } | null = null;
+    let equation: { latex: string; box: Box; glyphBox: Box; left: boolean } | null = null;
     const line = tex && !missed ? displayOf(segments[k]) : undefined;
     if (line) {
       used.add(line);
@@ -1262,6 +1265,7 @@ export function displayEquations(
         page: group[0].page,
         box,
         region: regionOf(equation.box, pageWidth, pageHeight),
+        glyphBox: equation.glyphBox,
         lineSize: size,
         mathShare: 1,
         // A label the page sets at the left margin (amsbook's leqno): the
