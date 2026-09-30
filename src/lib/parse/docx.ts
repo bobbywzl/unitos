@@ -571,13 +571,16 @@ function spaceOf(spacing: Element | null, side: "before" | "after" | "line"): nu
   return value !== null && value >= 0 && value <= MAX_SPACE_TWIPS ? Math.round(value) : null;
 }
 
-/** The space between two paragraphs in twips: the upper one's space after
-    and the lower one's space before (Word adds the two), each left out
-    beside a paragraph of its own style when it says so
+/** The space between two paragraphs in twips, as Word sets it: the larger
+    of the upper one's space after and the lower one's space before (HTML's
+    rule, Word's own since Word 2000), their sum where the file turns Word's
+    HTML spacing off (w:doNotUseHTMLParagraphAutoSpacing: `add`). Each is
+    left out beside a paragraph of its own style when it says so
     (w:contextualSpacing). */
-function spaceBetween(above: ParaProps, below: ParaProps): number {
+function spaceBetween(above: ParaProps, below: ParaProps, add: boolean): number {
   const same = above.styleId === below.styleId;
-  return (same && above.contextual ? 0 : above.after) + (same && below.contextual ? 0 : below.before);
+  const [after, before] = [same && above.contextual ? 0 : above.after, same && below.contextual ? 0 : below.before];
+  return add ? after + before : Math.max(after, before);
 }
 
 /** A paragraph's line spacing as a multiple of single spacing (w:line in
@@ -1254,6 +1257,9 @@ class DocxReader {
   private readonly textWidthEmu: number;
   /** The body (the default paragraph style) is set in a monospace face. */
   private readonly bodyMono: boolean;
+  /** Paragraph spacing adds up: the file turns Word's HTML spacing off
+      (spaceBetween). */
+  private readonly addSpacing: boolean;
 
   constructor(
     zip: OfficeZip,
@@ -1285,6 +1291,7 @@ class DocxReader {
     const width = (intAttr(child(sectPr, "pgSz"), "w") ?? 12240) - (intAttr(child(sectPr, "pgMar"), "left") ?? 1440) - (intAttr(child(sectPr, "pgMar"), "right") ?? 1440);
     this.textWidthEmu = (width > 1000 ? width : DEFAULT_TEXT_TWIPS) * EMU_PER_TWIP;
     this.bodyMono = MONO_FONT.test(paraProps(null, styles, []).base.font);
+    this.addSpacing = flag(child(settings?.documentElement, "compat", "doNotUseHTMLParagraphAutoSpacing")) === true;
   }
 
   // ── Blocks out ──
@@ -1373,7 +1380,7 @@ class DocxReader {
       twips; undefined for a list's first line or across a page's end. */
   private listGap(props: ParaProps): number | undefined {
     const trail = this.list?.trail;
-    return trail && !trail.pageEnd ? trail.blank + spaceBetween(trail.props, props) : undefined;
+    return trail && !trail.pageEnd ? trail.blank + spaceBetween(trail.props, props, this.addSpacing) : undefined;
   }
 
   private closeCode() {
@@ -1560,7 +1567,7 @@ class DocxReader {
       // Else it is space in the gap it stands in: one line at its mark's size.
       const gap = this.list?.trail ?? this.lastSpaced;
       if (gap) {
-        gap.blank += spaceBetween(gap.props, props) + blankTwips(props, applyRPr(props.base, child(child(p, "pPr"), "rPr"), this.styles).size);
+        gap.blank += spaceBetween(gap.props, props, this.addSpacing) + blankTwips(props, applyRPr(props.base, child(child(p, "pPr"), "rPr"), this.styles).size);
         gap.props = props;
       }
       return;
@@ -1662,7 +1669,7 @@ class DocxReader {
   private spaced(block: ParsedBlock, first: ParaProps, trail: Spacing) {
     const above = this.lastSpaced;
     if (above && !above.pageEnd && this.blocks.findLast((b) => !b.footnote) === above.block) {
-      above.block.spaceAfter = points(Math.min(MAX_SPACE_TWIPS, above.blank + spaceBetween(above.props, first)));
+      above.block.spaceAfter = points(Math.min(MAX_SPACE_TWIPS, above.blank + spaceBetween(above.props, first, this.addSpacing)));
     }
     this.lastSpaced = { ...trail, block };
   }
@@ -2176,6 +2183,10 @@ class DocxReader {
     }
     if (refs.length > 0) this.noteRefs.set(block, refs);
     this.push(block, notes);
+    // The gap under the table opens: a table has no space of its own, so
+    // the text block under it keeps its space before whole, and a blank
+    // paragraph between adds its line (the room under the table).
+    this.lastSpaced = { props: { ...paraProps(null, this.styles, []), before: 0, after: 0, contextual: false, styleId: null }, blank: 0, block };
   }
 
   /** A cell's words and html: one paragraph each (a list item keeps its
@@ -2335,6 +2346,11 @@ function attachCaptions(blocks: ParsedBlock[], noteRefs: DocxReader["noteRefs"])
       const caption = [blocks[i - 1], blocks[i + 1]].find((b) => b && !taken.has(b) && isCaption(b, "table"));
       if (!caption) return;
       taken.add(caption);
+      // A caption under the table gives the table the room under it.
+      if (caption === blocks[i + 1]) {
+        if (caption.spaceAfter !== undefined) block.spaceAfter = caption.spaceAfter;
+        else delete block.spaceAfter;
+      }
       const words = { text: caption.text, marks: (caption.styles ?? []).map((s) => ({ start: s.start, end: s.end, style: s.style })), links: [], math: caption.math ?? [] };
       // The caption's words keep the face and the size the page sets them
       // in, on a span, as a PDF's table caption does (pdf/tables.ts): the

@@ -30,7 +30,9 @@ import {
   PageNumber,
   PageOrientation,
   Paragraph,
+  Run,
   ShadingType,
+  StringContainer,
   Tab,
   TabStopType,
   Table,
@@ -42,6 +44,8 @@ import {
   VerticalPositionAlign,
   VerticalPositionRelativeFrom,
   WidthType,
+  XmlAttributeComponent,
+  XmlComponent,
   type IBorderOptions,
   type ILevelsOptions,
   type IParagraphOptions,
@@ -64,6 +68,7 @@ import {
   captionParts,
   captionStylesOf,
   listIndentsOf,
+  NOTE_SYMBOL,
   suggestionAuthor,
   suggestionTime,
   ZWSP,
@@ -255,7 +260,8 @@ function runOf(node: RichNode, ctx: Ctx, extra: IRunOptions): ParagraphChild | n
       return run({ ...props, break: 1 });
     case "footnoteReference": {
       const n = ctx.footnotes.get(String(node.attrs?.footnoteId));
-      return n ? new FootnoteReferenceRun(n) : null;
+      const symbol = noteSymbolOf(node);
+      return n ? (symbol ? new SymbolReferenceRun(n, symbol) : new FootnoteReferenceRun(n)) : null;
     }
     case "bookmark":
       return bookmark(ctx, bookmarkName("b", String(node.attrs?.bookmarkId ?? "")), []);
@@ -325,6 +331,41 @@ function para(ctx: Ctx, options: IParagraphOptions): Paragraph {
   const paragraph = new Paragraph({ ...options, pageBreakBefore: options.pageBreakBefore || ctx.breakBefore || undefined });
   ctx.breakBefore = false;
   return paragraph;
+}
+
+/** A footnote's symbol (an import's "*", "†": lib/docs/schema.ts
+    NOTE_SYMBOL), or null for a numbered footnote. */
+function noteSymbolOf(node: RichNode): string | null {
+  const symbol = node.attrs?.symbol;
+  return typeof symbol === "string" && NOTE_SYMBOL.test(symbol) ? symbol : null;
+}
+
+/** Word's footnote reference with a custom mark: the symbol after it
+    (w:customMarkFollows) stands in place of a number, and the footnote
+    takes none. */
+class SymbolReferenceAttributes extends XmlAttributeComponent<{ customMarkFollows: boolean; id: number }> {
+  protected readonly xmlKeys = { customMarkFollows: "w:customMarkFollows", id: "w:id" };
+}
+class SymbolReference extends XmlComponent {
+  constructor(id: number) {
+    super("w:footnoteReference");
+    this.root.push(new SymbolReferenceAttributes({ customMarkFollows: true, id }));
+  }
+}
+class SymbolReferenceRun extends Run {
+  constructor(id: number, symbol: string) {
+    super({ style: "FootnoteReference" });
+    this.root.push(new SymbolReference(id), new StringContainer("w:t", symbol));
+  }
+}
+
+/** A footnote's first paragraph opens with its symbol, as Word writes a
+    custom mark's footnote, in place of Word's number (w:footnoteRef). */
+function withSymbol(para: Paragraph, symbol: string | undefined): Paragraph {
+  if (!symbol) return para;
+  const front = para.addRunToFront.bind(para);
+  para.addRunToFront = () => front(new TextRun({ text: symbol, style: "FootnoteReference" }));
+  return para;
 }
 
 function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run: IRunOptions = {}): Paragraph {
@@ -608,9 +649,10 @@ const FIGURE_MAX_HEIGHT = 448;
 const FIGURE_GAP = 12;
 
 /** A figure object (SPEC.md §30), as the page draws it: its pictures
-    centered on one line, kept with its caption under them (9 pt, gray, in
-    the marks a PDF figure's caption keeps). A figure with no picture (a
-    video, an embed, a crop that did not render) is its caption. */
+    centered on one line, kept with its caption under them (9 pt, or the
+    size a PDF's page sets it in; gray, in the marks a PDF figure's caption
+    keeps). A figure with no picture (a video, an embed, a crop that did not
+    render) is its caption. */
 function figure(node: RichNode, ctx: Ctx): Paragraph[] {
   const { pictures, crop, printed } = ctx.figures.get(node) ?? { pictures: [], crop: false };
   const caption = typeof node.attrs?.caption === "string" ? node.attrs.caption.trim() : "";
@@ -648,10 +690,11 @@ function figure(node: RichNode, ctx: Ctx): Paragraph[] {
     // and a formula its TeX, as an inline equation writes it.
     const styles = captionStylesOf(node.attrs?.captionStyles) ?? [];
     const math = captionMathOf(node.attrs?.captionMath) ?? [];
+    const size = num(node.attrs?.captionSize);
     const runs = captionParts(caption, styles, math).flatMap((part) => {
       const marks = [...(node.marks ?? []), ...part.styles.map((style) => ({ type: CAPTION_MARKS[style] }))];
       const words: RichNode = part.latex ? { type: "inlineMath", attrs: { latex: part.latex }, marks } : { type: "text", text: part.text, marks };
-      return runOf(words, ctx, { size: 18, color: "666666" }) ?? [];
+      return runOf(words, ctx, { size: size ? Math.round(size * 2) : 18, color: "666666" }) ?? [];
     });
     out.push(para(ctx, { spacing: { before: pictures.length > 0 ? 0 : tw(9), after: tw(9) }, children: runs }));
   }
@@ -1061,11 +1104,21 @@ export async function richTextDocx(
   if (ctx.breakBefore) body.push(new Paragraph({ children: [new PageBreak()] }));
   ctx.breakBefore = false;
   const notes = (doc.content ?? []).filter((n) => n.type === "footnotes").flatMap((n) => n.content ?? []);
+  const symbols = new Map<string, string>();
+  const symbolsOf = (node: RichNode) => {
+    const symbol = node.type === "footnoteReference" ? noteSymbolOf(node) : null;
+    if (symbol && !symbols.has(String(node.attrs?.footnoteId))) symbols.set(String(node.attrs?.footnoteId), symbol);
+    node.content?.forEach(symbolsOf);
+  };
+  symbolsOf(doc);
   const footnotes = Object.fromEntries(
     [...ctx.footnotes].map(([id, n]) => [
       n,
       {
-        children: (notes.find((f) => f.attrs?.footnoteId === id)?.content ?? []).map((p) => paragraph(p, ctx, { style: "FootnoteText" })),
+        children: (notes.find((f) => f.attrs?.footnoteId === id)?.content ?? []).map((p, k) => {
+          const para = paragraph(p, ctx, { style: "FootnoteText" });
+          return k === 0 ? withSymbol(para, symbols.get(id)) : para;
+        }),
       },
     ]),
   );

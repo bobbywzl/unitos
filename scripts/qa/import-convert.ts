@@ -38,7 +38,7 @@ import { getDocumentProxy } from "unpdf";
 import { PDF_CMAPS } from "@/lib/pdf-runtime";
 import { pageNames, renderBlockLines } from "@/lib/derive/context";
 import { deriveBlocks, inlineText, mathWords, type DerivedBlock } from "@/lib/docs/blocks";
-import { richTextFromImport } from "@/lib/docs/import";
+import { drawnSmallCaps, importWords, richTextFromImport } from "@/lib/docs/import";
 import { levelMarker, lineLevel, listMarker } from "@/components/docs/toolbar/lists";
 import {
   INDEXED_NODE_TYPES,
@@ -807,6 +807,16 @@ async function checkFixture(f: Fixture): Promise<Report> {
     return report;
   }
   report.ms.convert = Math.round(performance.now() - t0);
+  // The converter writes a block's drawn small capitals in lowercase, their
+  // size dropped (lib/docs/import.ts importWords): the checks read the
+  // parse's words as it writes them.
+  for (const b of f.blocks) {
+    const dropped = drawnSmallCaps(b);
+    if (dropped.length === 0) continue;
+    const text = importWords(b);
+    b.text = text;
+    b.styles = b.styles?.filter((s) => !dropped.includes(s)).map((s) => ({ ...s, quotedText: text.slice(s.start, s.end) }));
+  }
   const doc = out.richText;
   const json = JSON.stringify(doc);
   report.jsonBytes = Buffer.byteLength(json);

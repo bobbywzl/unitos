@@ -214,10 +214,15 @@ const ATOM_TYPES: ReadonlySet<string> = new Set(["figure", "pageStart"]);
 /** The only attributes an import's node or mark keeps: a figure object's
     media is its FigureMedia row, never markup in the rich text. */
 const ONLY_ATTRS: Record<string, ReadonlySet<string>> = {
-  figure: new Set(["blockId", "mediaId", "caption", "captionStyles", "captionMath", "page", "region", "pageStart"]),
+  figure: new Set(["blockId", "mediaId", "caption", "captionStyles", "captionMath", "captionSize", "page", "region", "pageStart"]),
   pageStart: new Set(["page"]),
   citation: new Set(["refId"]),
 };
+
+/** A footnote's symbol (footnoteReference's symbol): one to three of the
+    note symbols a page prints in place of a number ("*", "†", "‡", "§",
+    "¶", "‖"; "**", "¶¶"). */
+export const NOTE_SYMBOL = /^[*∗⋆†‡§¶‖∥]{1,3}$/u;
 
 /** The styles a figure object's caption keeps from its page (a PDF's bold
     label, italic words, raised and lowered characters): its captionStyles,
@@ -469,6 +474,9 @@ function cleanAttr(name: string, value: unknown): unknown {
       const math = captionMathOf(value);
       return math ? JSON.stringify(math) : null;
     }
+    // A figure's caption at the size its page sets it in, in points.
+    case "captionSize":
+      return typeof value === "number" && Number.isFinite(value) && value >= 4 && value <= 72 ? value : null;
     case "region":
       return safeRegion(value);
     // A chart's data (Insert > Chart): kept only when it keeps every rule.
@@ -511,7 +519,9 @@ function cleanAttrs(attrs: Record<string, unknown> | undefined, type: string): R
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(attrs)) {
     if (!ATTR_NAME.test(key) || (only && !only.has(key))) continue;
-    const clean = cleanAttr(key, value);
+    // A footnote's symbol, drawn in place of its number (a person chip's
+    // symbol is its badge's).
+    const clean = type === "footnoteReference" && key === "symbol" ? (typeof value === "string" && NOTE_SYMBOL.test(value) ? value : null) : cleanAttr(key, value);
     out[key] = typeof clean === "string" ? wellFormed(clean) : clean;
   }
   return out;

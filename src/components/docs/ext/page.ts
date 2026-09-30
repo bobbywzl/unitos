@@ -88,7 +88,8 @@ function spacerDOM(kind: SpacerKind, id: string, height: number, columns: number
 
 /** A table's pinned header rows, drawn again at the foot of a row spacer:
     rows written from the document (no decorations), in a copy of the
-    table's columns. */
+    table's columns. A page start in them stays with the rows it begins:
+    the copy draws no "p. 6" of its own. */
 function headerRows(view: EditorView, tablePos: number): HTMLElement | null {
   const node = view.state.doc.nodeAt(tablePos);
   const wrapper = view.nodeDOM(tablePos);
@@ -103,6 +104,7 @@ function headerRows(view: EditorView, tablePos: number): HTMLElement | null {
     body.append(serializer.serializeNode(node.child(i)));
   }
   copy.querySelectorAll("[data-block-id]").forEach((el) => el.removeAttribute("data-block-id"));
+  copy.querySelectorAll("[data-page-start]").forEach((el) => el.remove());
   const head = document.createElement("div");
   head.className = "docs-spacer-head";
   head.append(copy);

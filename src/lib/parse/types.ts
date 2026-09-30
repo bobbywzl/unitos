@@ -136,11 +136,11 @@ export type ParsedBlock = {
   // import reads it for the named styles, and for a block set in another
   // face, size, or color than its named style.
   font?: TextFont;
-  // PDF text blocks and tables: the space between the block and the next
-  // text block in its column on the same page, beyond the text's line pitch,
-  // in points (a blank line, a Word paragraph's space after; under a table,
-  // from its bottom edge); absent where a figure, a table, or the page's end
-  // follows. The import's space after.
+  // PDF and Word text blocks and tables: the space between the block and
+  // the next text block in its column on the same page, beyond the text's
+  // line pitch, in points (a blank line, a Word paragraph's space after;
+  // under a table, from its bottom edge); absent where a figure, a table,
+  // or the page's end follows. The import's space after.
   spaceAfter?: number;
   // PDF and Word paragraphs, headings, and lists: the tab stops of the
   // tabs in the text, in order (a form's fields, a pair set flush right, a

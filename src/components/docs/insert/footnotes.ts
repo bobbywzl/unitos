@@ -2,13 +2,15 @@ import { Extension, Node, type Editor } from "@tiptap/core";
 import { Fragment, Slice, type Node as PMNode } from "@tiptap/pm/model";
 import { AllSelection, Plugin, Selection, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { isMac } from "@/components/docs/keys";
-import { newBlockId } from "@/lib/docs/schema";
+import { newBlockId, NOTE_SYMBOL } from "@/lib/docs/schema";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
 // Footnotes (SPEC.md §29), as Google Docs numbers them: the number is an
 // inline atom (footnoteReference), the words are paragraphs in the footnotes
 // block at the document's end, in the numbers' order. The numbers are
-// drawn, not stored; deleting a number deletes its footnote.
+// drawn, not stored; deleting a number deletes its footnote. An import's
+// footnote the page marks with a symbol ("*", "†") draws its symbol in
+// place of a number, as Word draws a custom mark, and takes no number.
 
 const FootnoteReference = Node.create({
   name: "footnoteReference",
@@ -21,6 +23,7 @@ const FootnoteReference = Node.create({
   addAttributes() {
     return {
       footnoteId: { default: null, parseHTML: (el) => el.getAttribute("data-footnote-ref"), rendered: false },
+      symbol: { default: null, parseHTML: (el) => symbolOf(el.getAttribute("data-symbol")), rendered: false },
     };
   },
   parseHTML() {
@@ -28,12 +31,23 @@ const FootnoteReference = Node.create({
     return [{ tag: "sup[data-footnote-ref]", priority: 60 }];
   },
   renderHTML({ node }) {
+    const symbol = symbolOf(node.attrs.symbol);
     return [
       "sup",
-      { "data-footnote-ref": String(node.attrs.footnoteId ?? ""), class: "docs-footnote-ref", "data-anchor-skip": "" },
+      {
+        "data-footnote-ref": String(node.attrs.footnoteId ?? ""),
+        ...(symbol ? { "data-symbol": symbol } : {}),
+        class: "docs-footnote-ref",
+        "data-anchor-skip": "",
+      },
     ];
   },
 });
+
+/** A footnote's symbol (lib/docs/schema.ts NOTE_SYMBOL), or null. */
+function symbolOf(value: unknown): string | null {
+  return typeof value === "string" && NOTE_SYMBOL.test(value) ? value : null;
+}
 
 const Footnotes = Node.create({
   name: "footnotes",
@@ -141,8 +155,9 @@ function normalizeFootnotes(tr: Transaction): boolean {
       const id = newBlockId();
       const original = current.get(dup.id);
       if (original) copies.set(id, noteType.create({ footnoteId: id }, original.content));
-      // A new attribute moves no position: dup.pos stays good.
-      tr.setNodeMarkup(dup.pos, undefined, { footnoteId: id });
+      // A new attribute moves no position: dup.pos stays good. A symbol
+      // goes with the copy.
+      tr.setNodeMarkup(dup.pos, undefined, { ...tr.doc.nodeAt(dup.pos)?.attrs, footnoteId: id });
     }
     refs = referencesOf(tr.doc);
     changed = true;
@@ -268,26 +283,40 @@ export function insertFootnote(editor: Editor): boolean {
 
 const numbered = new WeakMap<PMNode, DecorationSet>();
 
+/** Each footnote's number as drawn, by id, in the numbers' order: its
+    symbol, or the next number (a footnote with a symbol takes none). */
+export function footnoteNumbers(doc: PMNode): Map<string, string> {
+  const drawn = new Map<string, string>();
+  let count = 0;
+  doc.descendants((node) => {
+    if (node.type.name === "footnotes") return false;
+    if (node.type.name !== "footnoteReference") return true;
+    const id = String(node.attrs.footnoteId);
+    if (!drawn.has(id)) drawn.set(id, symbolOf(node.attrs.symbol) ?? String(++count));
+    return false;
+  });
+  return drawn;
+}
+
 function numberDecorations(doc: PMNode): DecorationSet {
   const cached = numbered.get(doc);
   if (cached) return cached;
   const decorations: Decoration[] = [];
-  const order = new Map<string, number>();
+  const order = footnoteNumbers(doc);
   doc.descendants((node, pos) => {
     if (node.type.name === "footnotes") {
       node.forEach((footnote, offset) => {
         const n = order.get(String(footnote.attrs.footnoteId));
         if (n) {
           const at = pos + 1 + offset;
-          decorations.push(Decoration.node(at, at + footnote.nodeSize, { "data-n": String(n) }));
+          decorations.push(Decoration.node(at, at + footnote.nodeSize, { "data-n": n }));
         }
       });
       return false;
     }
     if (node.type.name === "footnoteReference") {
-      const id = String(node.attrs.footnoteId);
-      if (!order.has(id)) order.set(id, order.size + 1);
-      decorations.push(Decoration.node(pos, pos + node.nodeSize, { "data-n": String(order.get(id)) }));
+      const n = order.get(String(node.attrs.footnoteId));
+      if (n) decorations.push(Decoration.node(pos, pos + node.nodeSize, { "data-n": n }));
       return false;
     }
     return true;
