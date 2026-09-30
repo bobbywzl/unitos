@@ -848,25 +848,32 @@ class Converter {
       }
       if (atoms.length > 0) this.numbers.set(block, atoms);
     });
-    // The title's own footnotes on a PDF's first page: one whose label ends
-    // the title ("…as SAT∗", LaTeX's \thanks; arxiv-2506-06752), and one the
-    // page prints no mark for (an acknowledgment; arxiv-2506-08209's read as
-    // a paragraph of the body). The title is no block the parse finds a
-    // reference in, and the page editor has no footnote without a number:
-    // their numbers stand at the Title's end, the mark's in place of it.
+    // The title's own footnote on a PDF's first page: one whose label ends
+    // the title ("…as SAT∗", LaTeX's \thanks; arxiv-2506-06752). The title
+    // is no block the parse finds a reference in: its number stands at the
+    // Title's end, in place of the mark. A note the page prints no mark for
+    // stays a small paragraph where the parse sets it: a number on the
+    // Title is a mark the page lacks, and it renumbered the page's own
+    // marks (a Springer paper's ¹ and ² read ² and ³).
     const title = this.input.titleFromOriginal ? (this.input.title ?? "").replace(/\s+/g, " ").trim() : "";
     if (this.input.kind !== "pdf" || !title) return;
     const first = this.input.firstPage ?? 1;
-    const loose = blocks
-      .map((block, index) => ({ label: block.footnote?.label.trim(), index }))
-      .filter(({ label, index }) => label !== undefined && (blocks[index].page ?? first) <= first && !this.footnoteIds.has(index) && blocks[index].text.trim());
-    const marked = loose.find(({ label }) => label && title.endsWith(label) && /[\p{L})\].,:;!?]$/u.test(title.slice(0, -label.length)));
-    if (marked) this.titleMark = marked.label ?? "";
-    for (const { index } of [...(marked ? [marked] : []), ...loose.filter(({ label }) => label === "")]) {
-      const footnoteId = newBlockId();
-      this.footnoteIds.set(index, footnoteId);
-      this.titleNotes.push({ type: "footnoteReference", attrs: { footnoteId } });
-    }
+    const marked = blocks
+      .map((block, index) => ({ label: block.footnote?.label.trim() ?? "", index }))
+      .find(
+        ({ label, index }) =>
+          label &&
+          (blocks[index].page ?? first) <= first &&
+          !this.footnoteIds.has(index) &&
+          blocks[index].text.trim() &&
+          title.endsWith(label) &&
+          /[\p{L})\].,:;!?]$/u.test(title.slice(0, -label.length)),
+      );
+    if (!marked) return;
+    this.titleMark = marked.label;
+    const footnoteId = newBlockId();
+    this.footnoteIds.set(marked.index, footnoteId);
+    this.titleNotes.push({ type: "footnoteReference", attrs: { footnoteId } });
   }
 
   /** The Title's words and then the numbers of the footnotes it cites, the
@@ -1355,24 +1362,28 @@ class Converter {
     });
     // A page start goes into the first cell of the row the page begins at.
     // A table with a caption opens its text with the caption's line (the
-    // PDF and Word parses): a page start there opens the caption.
+    // PDF and Word parses): a page start there opens the caption, or the
+    // table's first row when the caption stands under the table.
     const captionLines = built.caption ? 1 : 0;
+    const below = built.caption !== null && built.captionBelow;
     const captionStarts: RichNode[] = [];
     for (const p of starts) {
       const line = block.text.slice(0, p.offset).split("\n").length - 1;
-      if (line < captionLines) {
+      if (line < captionLines && !below) {
         captionStarts.push({ type: "pageStart", attrs: { page: p.page } });
         continue;
       }
-      const row = line - captionLines;
+      const row = Math.max(0, line - captionLines);
       const cell = built.rowStarts.slice(row).find((c) => c !== null) ?? built.rowStarts.find((c) => c !== null);
       if (cell) cell.content = [{ type: "pageStart", attrs: { page: p.page } }, ...(cell.content ?? [])];
     }
-    const nodes: RichNode[] = [];
-    // The caption small: 9 pt, or the size the page sets it in when smaller.
-    if (built.caption) nodes.push(paragraphNode([...captionStarts, ...built.caption.map((n) => sizedAtMost(n, parseFloat(SMALL_SIZE)))], { textAlign: "center" }));
-    nodes.push(built.table);
-    this.place(index, nodes);
+    // A PDF's caption small: 9 pt, or the size the page sets it in when
+    // smaller. A Word file's keeps its own size, the body's where its words
+    // carry none.
+    const most = this.input.kind === "pdf" ? parseFloat(SMALL_SIZE) : (this.input.bodyFont?.size ?? parseFloat(SMALL_SIZE));
+    const caption = built.caption ? paragraphNode([...captionStarts, ...built.caption.map((n) => sizedAtMost(n, most))], { textAlign: "center" }) : null;
+    // The caption over the table, or under it where the page sets it there.
+    this.place(index, caption ? (below ? [built.table, caption] : [caption, built.table]) : [built.table]);
   }
 
   private figure(block: ParsedBlock, index: number, starts: PageStart[]) {
