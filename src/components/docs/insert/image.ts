@@ -33,6 +33,11 @@ function oneOf<T extends string>(value: unknown, list: readonly T[], fallback: T
   return list.includes(value as T) ? (value as T) : fallback;
 }
 
+/** A chart (Insert > Chart): an image that keeps its data. */
+export function isChartImage(node: PMNode): boolean {
+  return node.type.name === "image" && typeof node.attrs.chart === "string" && node.attrs.chart.length > 0;
+}
+
 /** An image's attributes, every value checked. */
 export function imageAttrs(node: PMNode) {
   const a = node.attrs;
@@ -163,7 +168,10 @@ class ImageView implements NodeView {
     this.frame.addEventListener("dblclick", (e) => {
       if (!this.editor.isEditable) return;
       e.preventDefault();
-      this.startCrop();
+      // A chart opens its data (insert/chart-dialog.tsx); any other image crops.
+      const pos = this.getPos();
+      if (isChartImage(this.node) && pos !== undefined) emitInsert(this.editor, { type: "chart", pos });
+      else this.startCrop();
     });
     this.box.addEventListener("mousedown", (e) => this.onBoxDown(e));
     this.render();
@@ -697,6 +705,8 @@ export const DocsImage = Extension.create({
           transparency: data("transparency", n, 0),
           brightness: data("brightness", n, 0),
           contrast: data("contrast", n, 0),
+          // A chart's data (lib/docs/chart.ts), a JSON string; null for an image.
+          chart: data("chart", s, null),
         },
       },
     ];
