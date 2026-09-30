@@ -22,6 +22,8 @@ export const PAGE_EVENT = {
   editHeader: "docs:page-edit-header",
   /** Put the page count at the caret of the header or footer being edited. */
   pageCount: "docs:page-count",
+  /** View > Full screen: the page alone, the header hidden (docs-editor.tsx). */
+  fullScreen: "docs:full-screen",
 } as const;
 
 export type EditHeaderDetail = { area: HeaderArea };

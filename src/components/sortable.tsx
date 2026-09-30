@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -80,8 +80,32 @@ export function useMergeTarget() {
   return useContext(MergeTargetContext);
 }
 
-/** The card a hold is on, before it lifts: it presses down a little. */
-const HeldContext = createContext<string | null>(null);
+/** The card a hold is on, before it lifts: it presses down a little. Each
+    card asks whether it is the one, so a press draws that card again and
+    leaves the board's other cards alone. */
+type HeldStore = {
+  get: () => string | null;
+  set: (id: string | null) => void;
+  subscribe: (listener: () => void) => () => void;
+};
+function heldStore(): HeldStore {
+  let held: string | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => held,
+    set(id) {
+      if (id === held) return;
+      held = id;
+      for (const listener of listeners) listener();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
+  };
+}
+const HeldContext = createContext<HeldStore | null>(null);
+const noSubscribe = () => () => {};
 
 /** Where the dragged card would land: before this card, or at the end of this
     list. Items and groups read it to draw the line. */
@@ -265,7 +289,7 @@ export function SortableBoard({
   // its own size, and the merge reads where it is drawn.
   const [active, setActive] = useState<{ id: string; width: number } | null>(null);
   // The card a hold is on, before it lifts.
-  const [held, setHeld] = useState<string | null>(null);
+  const [held] = useState(heldStore);
   const [line, setLine] = useState<DropLine | null>(null);
   // The card the dragged card covers: the ring draws around it, and at the
   // full ring the merge runs. rect is the card's box, for the ring.
@@ -306,7 +330,7 @@ export function SortableBoard({
     setCovered(null);
     setDropLine(null);
     setActive(null);
-    setHeld(null);
+    held.set(null);
     grabbed.current = null;
   }
 
@@ -335,18 +359,18 @@ export function SortableBoard({
   }
 
   function handleDragPending({ id: pendingId }: DragPendingEvent) {
-    setHeld((prev) => (prev === String(pendingId) ? prev : String(pendingId)));
+    held.set(String(pendingId));
   }
 
   function handleDragAbort() {
-    setHeld(null);
+    held.set(null);
   }
 
   function handleDragStart({ active: dragged, activatorEvent }: DragStartEvent) {
     const id = String(dragged.id);
     const rect = rectOf(root(), id);
     const start = getEventCoordinates(activatorEvent);
-    setHeld(null);
+    held.set(null);
     setActive({ id, width: Math.round(rect?.width ?? 0) });
     grabbed.current =
       rect && start
@@ -617,7 +641,12 @@ export function SortableItem({
   const { attributes, listeners, setNodeRef, isDragging } = useSortable({ id });
   const line = useContext(DropLineContext);
   const group = useContext(GroupContext);
-  const held = useContext(HeldContext) === id;
+  const heldCards = useContext(HeldContext);
+  const held = useSyncExternalStore(
+    heldCards?.subscribe ?? noSubscribe,
+    () => heldCards?.get() === id,
+    () => false,
+  );
   const grid = group?.layout === "grid";
   const before = line?.beforeId === id;
   // In a grid the last tile also draws the line for a drop at the end.

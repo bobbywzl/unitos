@@ -81,6 +81,15 @@ registerDocsCommands([
     enabled: (editor) => !pageless(editor),
   },
   {
+    // Google Docs' View > Full screen: the title row, the toolbar, and the
+    // rulers hide; Esc brings them back.
+    id: "page:full-screen",
+    label: "docsPage.fullScreen",
+    menu: "view",
+    keywords: ["full screen", "fullscreen", "distraction free", "focus", "hide toolbar", "全屏"],
+    run: (editor) => fireDocs(editor, PAGE_EVENT.fullScreen),
+  },
+  {
     id: "page:outline",
     label: "docsPage.showOutline",
     menu: "view",

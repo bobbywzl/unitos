@@ -49,6 +49,7 @@ import { CustomColorDialog } from "@/components/docs/toolbar/custom-color";
 import { FontSelect } from "@/components/docs/toolbar/font-menu";
 import { FontSizeBox, formatSize, parseSize } from "@/components/docs/toolbar/font-size";
 import { ImageMenu, type ImageSource } from "@/components/docs/toolbar/image-menu";
+import { BordersDialog } from "@/components/docs/toolbar/borders-dialog";
 import { IndentDialog } from "@/components/docs/toolbar/indent-dialog";
 import { ChecklistPalette, PresetGrid, RestartNumberingDialog } from "@/components/docs/toolbar/list-menus";
 import { BULLET_PRESETS, continueNumbering, currentListStyle, NUMBER_PRESETS, numberedLine } from "@/components/docs/toolbar/lists";
@@ -225,7 +226,7 @@ export function DocsToolbar({
   const s = useEditorState({ editor: target, selector: () => readToolbar(target) });
   const paint = usePaintFormat(editor);
   const [customFor, setCustomFor] = useState<"text" | "highlight" | null>(null);
-  const [dialog, setDialog] = useState<"indent" | "numbering" | "spacing" | null>(null);
+  const [dialog, setDialog] = useState<"indent" | "numbering" | "spacing" | "borders" | null>(null);
   const off = mode === "viewing" || !canEdit;
   // Why the text cannot be edited here at all (a shared import), or null.
   const lock = useContext(ModeLock);
@@ -441,6 +442,9 @@ export function DocsToolbar({
     add("space-after", t(after ? "docs.removeSpaceAfter" : "docs.addSpaceAfter"), "format", () => setSpace(editor, s.para, "after", after ? 0 : 10));
     if (!pageless) for (const { flag, key, words } of PARAGRAPH_FLAGS) add(flag, t(key), "format", () => toggleFlag(editor, s.para, flag), { words });
     add("indentation-options", t("docs.indentationOptions"), "format", () => setDialog("indent"), { words: ["hanging indent", "first line indent"] });
+    add("borders-shading", t("docs.bordersAndShading"), "format", () => setDialog("borders"), {
+      words: ["borders", "border", "shading", "background color", "paragraph border", "box", "paragraph styles", "边框", "底纹"],
+    });
     add("custom-spacing", t("docs.customSpacing"), "format", () => setDialog("spacing"), { words: ["custom space"] });
     // List options: Restart numbering asks for the number; the right-click
     // menu's restarts at 1.
@@ -587,7 +591,7 @@ export function DocsToolbar({
           key: "styles",
           sep: true,
           menus: ["styles"],
-          content: bodyOnly(<StylesSelect editor={editor} style={s.style} styles={s.styles} />),
+          content: bodyOnly(<StylesSelect editor={editor} style={s.style} styles={s.styles} onBorders={() => setDialog("borders")} />),
         },
         { key: "font", sep: true, menus: ["font"], content: <FontSelect editor={target} font={s.font} /> },
         {
@@ -743,6 +747,7 @@ export function DocsToolbar({
       {dialog === "indent" && <IndentDialog editor={editor} onClose={closeDialog} />}
       {dialog === "numbering" && <RestartNumberingDialog editor={editor} onClose={closeDialog} />}
       {dialog === "spacing" && <CustomSpacingDialog editor={editor} para={s.para} onClose={closeDialog} />}
+      {dialog === "borders" && <BordersDialog editor={editor} onClose={closeDialog} />}
       {customFor && (
         <CustomColorDialog
           initial={(customFor === "text" ? s.color : s.highlight) ?? "#000000"}

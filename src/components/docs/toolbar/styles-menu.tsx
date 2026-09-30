@@ -104,11 +104,15 @@ export function StylesSelect({
   editor,
   style,
   styles,
+  onBorders,
 }: {
   editor: Editor;
   /** The selection's style; null when it spans styles. */
   style: DocStyle | null;
   styles: Record<DocStyle, NamedStyle>;
+  /** Borders and shading: Google Docs keeps it under Format > Paragraph
+      styles, which the page reaches from this menu. */
+  onBorders: () => void;
 }) {
   const t = useT();
   const apply = (s: DocStyle) => editor.chain().focus().setDocStyle(s).run();
@@ -186,6 +190,16 @@ export function StylesSelect({
             ))}
           >
             {t("docs.styleOptions")}
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem
+            track="docs:borders-shading"
+            onSelect={() => {
+              close();
+              onBorders();
+            }}
+          >
+            {t("docs.bordersAndShading")}
           </MenuItem>
         </>
       )}
