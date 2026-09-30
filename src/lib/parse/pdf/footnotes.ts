@@ -11,13 +11,18 @@
 import type { Rule } from "@/lib/parse/pdf/drawing";
 import { median } from "@/lib/parse/pdf/geometry";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
-import { joinGroup } from "@/lib/parse/pdf/text";
+import { fillsMargin, joinGroup } from "@/lib/parse/pdf/text";
 import type { Line, Run, Segment } from "@/lib/parse/pdf/types";
 import type { FootnoteRef } from "@/lib/parse/types";
 
 /** A footnote line is set at most this share of the body's size: 0.77–0.83
-    in the corpus (SCOTUS 9 on 11, arXiv 8.5 on 10.3, Word 9 on 11). */
+    in the corpus (SCOTUS 9 on 11, arXiv 8.5 on 10.3, Word 9 on 11), 0.9 in
+    Elsevier's (7.17 on 7.97). */
 const SMALL = 0.9;
+/** The largest size of a footnote line under a body of `bodySize`: a
+    hundredth of a point over nine tenths reads as nine tenths (Elsevier's
+    7.1731 pt notes under its 7.9701 pt body stood in the text). */
+const smallSize = (bodySize: number) => bodySize * SMALL + 0.01;
 /** The most a footnote area's lines stand apart, in their size: footnotes
     are set tight, a gap this wide means the lines above are not theirs. */
 const GAP = 2.5;
@@ -99,12 +104,24 @@ function smallRun(column: Line[], start: number, size: number): number {
   let end = start;
   while (end < column.length) {
     const line = column[end];
-    if (!line.text.trim() || line.size > size || NUMBER_LINE_RE.test(line.text.trim())) break;
+    if (!line.text.trim() || textSize(line) > size || NUMBER_LINE_RE.test(line.text.trim())) break;
     if (end > start && column[end - 1].y - line.y > line.size * GAP) break;
     if (line.cells.length > 1 && !CELL_LABEL_RE.test(line.cells[0].text.trim())) break;
     end++;
   }
   return end;
+}
+
+/** The size most of a line's letters are set in: a symbol set larger than
+    the words (Springer's ✉ at 11.6 pt before an 8 pt contact line) leaves
+    the line at its words' size. */
+function textSize(line: Line): number {
+  const letters = new Map<number, number>();
+  for (const item of line.items) {
+    const n = item.str.match(/[\p{L}\p{N}]/gu)?.length ?? 0;
+    if (n > 0) letters.set(item.size, (letters.get(item.size) ?? 0) + n);
+  }
+  return letters.size > 0 ? [...letters].reduce((a, b) => (b[1] > a[1] ? b : a))[0] : line.size;
 }
 
 /** A page's horizontal rules with the segments that meet end to end joined:
@@ -126,18 +143,46 @@ function isShortRule(x1: number, x2: number, left: number, right: number, size: 
   return Math.abs(x1 - left) <= size * 2 && x2 - x1 >= size * 2 && x2 - x1 <= (right - left) * 0.6;
 }
 
-/** Lines as footnotes: a line with a label opens one; the first line without
-    a label opens one with no label. */
+/** Lines as footnotes: a line with a label opens one, and so does a line a
+    blank line under the one above (Elsevier sets its DOI and dates a line
+    under its notes). The lines of a note with no label end where a note
+    with no label ends (unmarkedEnd). */
 function group(lines: Line[], ruled: boolean): Cut[] {
+  const left = Math.min(...lines.map((l) => l.x));
+  const right = Math.max(...lines.map((l) => l.xEnd));
   const cuts: Cut[] = [];
-  for (const line of lines) {
+  lines.forEach((line, k) => {
     const label = labelOf(line, ruled);
     const last = cuts.at(-1);
-    if (label !== null || !last) cuts.push({ label: label ?? "", lines: [line] });
+    const prev = lines[k - 1];
+    const ends = prev !== undefined && last !== undefined && (apart(prev, line) || (last.label === "" && unmarkedEnd(prev, line, left, right, last.lines[0])));
+    if (label !== null || !last || ends) cuts.push({ label: label ?? "", lines: [line] });
     else last.lines.push(line);
-  }
+  });
   return cuts;
 }
+
+/** A blank line's gap between two lines of a foot. */
+function apart(prev: Line, line: Line): boolean {
+  return prev.y - line.y > line.size * 1.8;
+}
+
+/** A note with no label ends where the next line is set in (IEEE's title
+    notes: "Manuscript received …", then each author's place, each set in
+    as a paragraph), or where its line stops short of the notes' right edge
+    after a sentence's end or by six ems (a web page's notes, printed flush;
+    Elsevier's DOI and dates). A line of e-mail addresses that wraps before
+    "(S. Abimannan)," stops a little short. A line that opens with ✉ opens a
+    corresponding author's contact, and the lines set in under it are its
+    own (Springer's "✉ Radek Erban" over "erban@maths.ox.ac.uk"). `first`:
+    the note's first line. */
+function unmarkedEnd(prev: Line, line: Line, left: number, right: number, first: Line): boolean {
+  if (MAIL_RE.test(line.text)) return true;
+  if (MAIL_RE.test(first.text)) return false;
+  const short = !fillsMargin(prev, line, right) && (/[.;]$/.test(prev.text.trim()) || prev.xEnd < right - line.size * 6);
+  return line.x > left + line.size * 0.5 || short;
+}
+const MAIL_RE = /^\s*✉/;
 
 /** The number a scan's note label reads ("I I." is 11), or null. */
 function scanNumber(label: string): number | null {
@@ -185,16 +230,18 @@ function cutScanNotes(column: Line[], end: number, continuing: boolean, counted:
   return counts ? { kept: [...column.slice(0, start), ...column.slice(stop)], cuts } : null;
 }
 
-/** Lines with no label as notes, one opening at each first-line indent
-    (IEEE's title notes: "Manuscript received …", then each affiliation). */
-function indentedNotes(lines: Line[]): Cut[] {
+/** Lines with no label as notes, one opening where the one before ends
+    (unmarkedEnd, apart). */
+function unmarkedNotes(lines: Line[]): Cut[] {
   const left = Math.min(...lines.map((l) => l.x));
+  const right = Math.max(...lines.map((l) => l.xEnd));
   const cuts: Cut[] = [];
-  for (const line of lines) {
+  lines.forEach((line, k) => {
     const last = cuts.at(-1);
-    if (!last || line.x > left + line.size * 0.5) cuts.push({ label: "", lines: [line] });
+    const prev = lines[k - 1];
+    if (!last || !prev || apart(prev, line) || unmarkedEnd(prev, line, left, right, last.lines[0])) cuts.push({ label: "", lines: [line] });
     else last.lines.push(line);
-  }
+  });
   return cuts;
 }
 
@@ -202,7 +249,8 @@ function indentedNotes(lines: Line[]): Cut[] {
     `continuing`: the page before ended in an unfinished footnote. `scan`:
     the page is a scan's text layer, `counted` the last number of its
     notes so far. `lead`: small lines above the foot's first labeled note
-    are notes too (the first page, or a page after an unfinished note). */
+    are notes too (the first page, or a page after an unfinished note).
+    `others`: the lines of the page's other columns. */
 function cutColumn(
   column: Line[],
   rules: Rule[],
@@ -213,6 +261,7 @@ function cutColumn(
   counted: number,
   lead: boolean,
   titlePage: boolean,
+  others: Line[],
 ): { kept: Line[]; cuts: Cut[] } {
   const left = Math.min(...column.map((l) => l.x));
   const right = Math.max(...column.map((l) => l.xEnd));
@@ -237,7 +286,7 @@ function cutColumn(
     // Under a rule, a line that opens with a label is a footnote at any
     // size: a Chinese paper set its footnote larger than its body.
     const first = column[start];
-    const size = first && labelOf(first, true) !== null ? Math.max(bodySize * SMALL, first.size * 1.02) : bodySize * SMALL;
+    const size = first && labelOf(first, true) !== null ? Math.max(smallSize(bodySize), first.size * 1.02) : smallSize(bodySize);
     const end = smallRun(column, start, size);
     if (end === start || column.length - end > UNDER) continue;
     const cuts = group(column.slice(start, end), true);
@@ -249,25 +298,33 @@ function cutColumn(
   let end = column.length;
   while (end > 0 && NUMBER_LINE_RE.test(column[end - 1].text.trim())) end--;
   let from = end;
-  while (from > 0 && smallRun(column, from - 1, bodySize * SMALL) >= end) from--;
+  while (from > 0 && smallRun(column, from - 1, smallSize(bodySize)) >= end) from--;
   let start = from;
   while (start < end && !raised.has(labelOf(column[start], false) ?? "")) start++;
   if (start < end) {
     // The small lines above the first labeled note: on the first page the
     // title's own notes, which IEEE sets with no mark (all three of a
-    // paper's read as body text); on a later page the end of the page
-    // before's note.
-    const top = lead ? from : start;
-    const cuts = [...(top < start ? indentedNotes(column.slice(top, start)) : []), ...group(column.slice(start, end), false)];
+    // paper's read as body text), and so on a later page where the first
+    // reads as a title's note (a web page printed with its notes at its
+    // end); else on a later page the end of the page before's note.
+    const top = lead || (from < start && TITLE_NOTE_RE.test(column[from].text)) ? from : start;
+    const cuts = [...(top < start ? unmarkedNotes(column.slice(top, start)) : []), ...group(column.slice(start, end), false)];
     return { kept: [...column.slice(0, top), ...column.slice(end)], cuts };
   }
-  return (titlePage && titleNotes(column, end, bodySize, raised)) || (scan && cutScanNotes(column, end, continuing, counted)) || { kept: column, cuts: [] };
+  return (titlePage && titleNotes(column, end, bodySize, raised, others)) || (scan && cutScanNotes(column, end, continuing, counted)) || { kept: column, cuts: [] };
 }
 
 /** The first words of a note on a paper's title: its subject
-    classification, keywords, date, and support. */
+    classification, keywords, date, support, and IEEE's editor ("The
+    associate editor coordinating the review of this manuscript and
+    approving it for publication was …", unmarked at the first column's
+    foot). */
 const TITLE_NOTE_RE =
-  /^(?:(?:19|20)\d\d )?Mathematics Subject Classification|^Key ?words(?: and phrases)?\b|^Date:|^Received\b|^(?:This (?:work|research) (?:was|is) )?(?:partially |partly )?(?:supported|funded) by\b/i;
+  /^(?:(?:19|20)\d\d )?Mathematics Subject Classification|^Key ?words(?: and phrases)?\b|^Date:|^(?:Manuscript )?Received\b|^(?:This (?:work|research) (?:was|is) )?(?:partially |partly )?(?:supported|funded) by\b|^The associate editor coordinating the review\b/i;
+
+/** An abstract's heading, or the paragraph it runs into ("Abstract—…",
+    "Abstract. …", a Chinese paper's "摘要 本文…", a Japanese one's "要旨"). */
+export const ABSTRACT_RE = /^\s*(?:abstract\b|摘\s*要|要\s*旨)/i;
 
 /** The notes a first page sets at a column's foot about the title and its
     authors, with no mark in the text: amsart's subject classification,
@@ -275,25 +332,58 @@ const TITLE_NOTE_RE =
     and acmart's note on the authors over their contact block, a gap
     between them (arXiv 2609.29669). The column's last small lines, notes
     apart by a gap as wide as three of their lines at most, when one opens
-    with a label the page raises or the first reads as such a note. Each
-    labeled line opens a note, and so does a line after a gap. */
-function titleNotes(column: Line[], end: number, bodySize: number, raised: Set<string>): { kept: Line[]; cuts: Cut[] } | null {
+    with a label the page raises or the first reads as such a note; else
+    the page's foot (pageFoot). An abstract is never a note: a Chinese
+    paper's English abstract and affiliations under its English title read
+    as notes. Each labeled line opens a note, and so does a line after a
+    gap; a note with no label ends where unmarkedEnd says. */
+function titleNotes(column: Line[], end: number, bodySize: number, raised: Set<string>, others: Line[]): { kept: Line[]; cuts: Cut[] } | null {
   // Against the page's own body where it is set larger than the document's:
   // a survey's 7 pt tables and references outnumber its 9 pt text.
   const prose = column.filter((l) => l.cells.length === 1 && l.text.length > 40).map((l) => l.size);
   const body = Math.max(bodySize, prose.length >= 5 ? median(prose) : 0);
   let top = end;
-  while (top > 0 && column[top - 1].text.trim() && column[top - 1].size <= body * SMALL && (top === end || column[top - 1].y - column[top].y <= column[top].size * 4)) top--;
-  const area = column.slice(top, end);
-  if (area.length === 0 || (!area.some((l) => raised.has(labelOf(l, false) ?? "")) && !TITLE_NOTE_RE.test(area[0].text))) return null;
+  while (top > 0 && column[top - 1].text.trim() && column[top - 1].size <= smallSize(body) && (top === end || column[top - 1].y - column[top].y <= column[top].size * 4)) top--;
+  if (top === end || (!column.slice(top, end).some((l) => raised.has(labelOf(l, false) ?? "")) && !TITLE_NOTE_RE.test(column[top].text))) {
+    top = pageFoot(column, end, prose.length >= 5 ? median(prose) : bodySize, others) ?? end;
+  }
+  // Lines side by side on one baseline read left to right.
+  const area = column.slice(top, end).sort((a, b) => (Math.abs(a.y - b.y) < 1 ? a.x - b.x : b.y - a.y));
+  if (area.length === 0 || area.some((l) => ABSTRACT_RE.test(l.text))) return null;
+  const left = Math.min(...area.map((l) => l.x));
+  const right = Math.max(...area.map((l) => l.xEnd));
   const cuts: Cut[] = [];
   area.forEach((line, k) => {
     const label = labelOf(line, false);
-    const apart = k > 0 && area[k - 1].y - line.y > line.size * 2;
-    if (k === 0 || (label !== null && raised.has(label)) || apart) cuts.push({ label: label !== null && raised.has(label) ? label : "", lines: [line] });
+    const prev = area[k - 1];
+    const labeled = label !== null && raised.has(label);
+    const open = cuts[cuts.length - 1];
+    const ends = prev !== undefined && (prev.y - line.y > line.size * 2 || (open.label === "" && unmarkedEnd(prev, line, left, right, open.lines[0])));
+    if (k === 0 || labeled || ends) cuts.push({ label: labeled ? label : "", lines: [line] });
     else cuts[cuts.length - 1].lines.push(line);
   });
   return { kept: [...column.slice(0, top), ...column.slice(end)], cuts };
+}
+
+/** Where the page's foot starts in a column: its last lines, set smaller
+    than the body and a line and a half apart at most, under every line of
+    the page's other columns (`others`), a gap under their own column's
+    words, and wider than that column: Nature's "A full list of affiliations
+    …" and IEEE's license line under both columns read as words inside a
+    paragraph the page break cut. Null where the page has no such foot. */
+function pageFoot(column: Line[], end: number, body: number, others: Line[]): number | null {
+  let top = end;
+  while (top > 0 && column[top - 1].text.trim() && column[top - 1].size < body * 0.95 && (top === end || column[top - 1].y - column[top].y <= column[top].size * 1.5)) top--;
+  if (top === end || top === 0 || others.length === 0) return null;
+  const foot = column.slice(top, end);
+  const words = column.slice(0, top);
+  const size = Math.max(...foot.map((l) => l.size));
+  const under = Math.max(...foot.map((l) => l.y)) + size < Math.min(...others.map((l) => l.y));
+  const apart = words[words.length - 1].y - Math.max(...foot.map((l) => l.y)) > body * 1.6;
+  const wide =
+    Math.min(...foot.map((l) => l.x)) < Math.min(...words.map((l) => l.x)) - size * 2 ||
+    Math.max(...foot.map((l) => l.xEnd)) > Math.max(...words.map((l) => l.xEnd)) + size * 2;
+  return under && apart && wide ? top : null;
 }
 
 /** Runs cut to [from, to) and moved by `shift`. */
@@ -371,7 +461,7 @@ function cutTableNotes(column: Line[], rules: Rule[], bodySize: number): { kept:
   for (let k = 0; k < column.length; k++) {
     kept.push(column[k]);
     if (column[k].text.trim()) continue;
-    const end = smallRun(column, k + 1, bodySize * SMALL);
+    const end = smallRun(column, k + 1, smallSize(bodySize));
     let first = k + 1;
     while (first < end && labelOf(column[first], false) === null) first++;
     if (first >= end) continue;
@@ -449,7 +539,7 @@ export function cutFootnotes(pages: Line[][], rules: Rule[][], bodySize: number,
     raisedLabels(
       columns.flatMap((column) => {
         let from = column.length;
-        while (from > 0 && column[from - 1].size <= bodySize * SMALL) from--;
+        while (from > 0 && column[from - 1].size <= smallSize(bodySize)) from--;
         return column.slice(0, from);
       }),
     ),
@@ -482,7 +572,8 @@ export function cutFootnotes(pages: Line[][], rules: Rule[][], bodySize: number,
         endnotes.add(note);
         footnotes.push(note);
       }
-      const cut = cutColumn(head.kept, pageRules, bodySize, raised, continuing, scans[p] === true, counted, continuing || p === 0, p === 0);
+      const others = columns.filter((c) => c !== column).flat();
+      const cut = cutColumn(head.kept, pageRules, bodySize, raised, continuing, scans[p] === true, counted, continuing || p === 0, p === 0, others);
       kept.push(...cut.kept);
       if (scans[p]) counted = cut.cuts.reduce((n, one) => scanNumber(one.label) ?? n, counted);
       for (const one of cut.cuts) {
@@ -574,11 +665,14 @@ function referencesTo(hosts: Segment[], label: string, free: (host: Segment, sta
     the document may read its label (a web page's formulas raise digits
     too). A footnote cited in a table's cell follows the table, which holds
     its reference; a table's own notes follow it with no reference; a
-    footnote whose reference is not found stays after the last block that
-    ends on its page, else where its page's words end. Runs after every pass
-    that drops or moves blocks: a reference names its footnote's place in
-    the blocks. */
-export function placeFootnotes(segments: Segment[], footnotes: Segment[]): Segment[] {
+    note the title's page prints with no mark stands at the front matter's
+    end, before `front.before` (a manuscript's dates, a subject
+    classification, an editor's note: the import keeps it a small paragraph
+    there); any other footnote whose reference is not found stays after the
+    last block that ends on its page, else where its page's words end. Runs
+    after every pass that drops or moves blocks: a reference names its
+    footnote's place in the blocks. */
+export function placeFootnotes(segments: Segment[], footnotes: Segment[], front?: { page: number; before?: Segment }): Segment[] {
   if (footnotes.length === 0) return segments;
   // The blocks that can hold a reference on each page, its tables, the
   // last block that begins on each page or before it, and the last block
@@ -641,7 +735,9 @@ export function placeFootnotes(segments: Segment[], footnotes: Segment[]): Segme
       // the next page: after it, the import read the note on that next page
       // (a scanned book's notes, whose marks its text layer cannot read).
       const ending = endsOn.get(page);
+      const frontEnd = !label && front?.before && page === front.page ? segments.indexOf(front.before) : -1;
       if (table) index = segments.indexOf(table);
+      else if (frontEnd >= 0) index = frontEnd - 1;
       else if (ending !== undefined) index = ending;
       else for (let p = 0; p <= page; p++) if (lastBy[p] !== undefined) index = Math.max(index, lastBy[p]);
     }

@@ -111,6 +111,9 @@ export type ImportInput = {
   /** The title's lines where the writer broke it (a PDF's): the Title
       keeps the break. */
   titleLines?: string[];
+  /** The PDF's page the title stands on, when words of an earlier page
+      come before it: the Title opens that page. */
+  titlePage?: number;
 };
 
 export type ImportResult = {
@@ -137,10 +140,32 @@ type Atom = { start: number; end: number; node: RichNode };
     reads as one wall of words. A PDF's paragraphs take the page's own
     (ParsedBlock.spaceAfter). */
 const PARAGRAPH_SPACE_PT = 10;
+/** The space over and under a display equation where the page gives
+    none, in points (a Word file's display that sets none, a PDF whose
+    displays the parse measured none of). A PDF's and a Word file's displays
+    draw no space of their own (css/import.css): the page editor's margin
+    and KaTeX's 1 em stacked on the page's space after a paragraph set each
+    display far from the words it belongs to. */
+const DISPLAY_SPACE_PT = 4;
+/** A PDF's display space as the parse measures it: from the line box over
+    the display to its glyphs, and from its glyphs to the line box under it
+    (lib/parse/pdf/paragraphs.ts measureSpacing; a line box reaches 0.3 of
+    its size under its baseline and 0.85 over it). The page editor draws a
+    PDF's display as tall as its formula (css/import.css), and its line of
+    Normal text reaches 0.37 to 0.42 em under its baseline and 0.90 to 0.95
+    em over it (the browser rounds the face's ascent and descent to pixels
+    and sets most of the leading under the words): the space over a display
+    is the page's less 0.1 em of the words' size, and the space under it
+    less 0.07 em, so each baseline stands from the formula as on the page. */
+const DISPLAY_OVER_EM = 0.1;
+const DISPLAY_UNDER_EM = 0.07;
 /** A small line (the kicker, a label, a caption) and a display line, as
     text sizes. */
 const SMALL_SIZE = "9pt";
 const DISPLAY_SIZE = "21pt";
+/** The size the page editor draws its footnotes in, in points
+    (css/insert.css .docs-footnotes). */
+const FOOTNOTE_PT = 10;
 /** One indent step, as the page editor's (components/docs/extensions.ts):
     an indent a parse names but does not measure, and a contents entry's
     level. */
@@ -158,6 +183,9 @@ const TITLE_REACH = 12;
 /** The pageless text column at its narrowest, in px (components/docs/page/
     geometry.ts pagelessWidth): a table fitted to it fits every column. */
 const PAGELESS_COLUMN_PX = 600;
+/** A table's cell padding as its page sets it, "top right bottom left" in
+    points (a Word file's cell margins: the html's data-cell-padding). */
+const CELL_PADDING = /^<table\b[^>]*\bdata-cell-padding="((?:\d{1,2}(?:\.\d)? ){3}\d{1,2}(?:\.\d)?)"/;
 
 const ROLES = ["kicker", "meta", "label", "display", "quote", "caption", "footnote"] as const;
 type Role = (typeof ROLES)[number];
@@ -207,13 +235,15 @@ function borderAttrs(block: ParsedBlock): Record<string, string> {
   return out;
 }
 
-/** An indent as the page editor's paragraph attributes: the left indent
-    within the text column, the first line never left of the column's edge. */
+/** An indent as the page editor's paragraph attributes: the left and right
+    indents within the text column, the first line never left of the
+    column's edge. */
 function indentAttrs(indent: Indent | undefined): Record<string, number> {
   if (!indent || !Number.isFinite(indent.left) || !Number.isFinite(indent.first)) return {};
   const left = Math.min(MAX_INDENT_PT, Math.max(0, Math.round(indent.left * 2) / 2));
   const first = Math.min(MAX_INDENT_PT - left, Math.max(-left, Math.round(indent.first * 2) / 2));
-  return { ...(left ? { indentLeft: left } : {}), ...(first ? { indentFirstLine: first } : {}) };
+  const right = Number.isFinite(indent.right) ? Math.min(MAX_INDENT_PT - left, Math.max(0, Math.round((indent.right ?? 0) * 2) / 2)) : 0;
+  return { ...(left ? { indentLeft: left } : {}), ...(first ? { indentFirstLine: first } : {}), ...(right ? { indentRight: right } : {}) };
 }
 
 function tokensOf(html: string | undefined): string[] {
@@ -391,6 +421,16 @@ function captionStylesFor(block: ParsedBlock, caption: string): string | null {
   return styles.length > 0 ? JSON.stringify(styles.slice(0, 100)) : null;
 }
 
+/** A PDF figure's caption formulas (the figure object's captionMath): the
+    parse's inline formulas over the caption (ParsedBlock.math), as the JSON
+    the object keeps; null when it has none. A formula a save would not keep
+    as an equation (no TeX, TeX past MAX_LATEX), one that overlaps the one
+    before it, and one the caption's clip cuts stay words. */
+function captionMathFor(block: ParsedBlock, caption: string): string | null {
+  const formulas = mathAtoms({ ...block, text: caption }).map((a) => ({ start: a.start, end: a.end, latex: String(a.node.attrs?.latex) }));
+  return formulas.length > 0 ? JSON.stringify(formulas.slice(0, 100)) : null;
+}
+
 /** The named styles an import's look sets, as "Update 'Heading 1' to match"
     sets them (SPEC.md §29 Named styles): Normal text takes the body's face,
     size, and color; the Title the title's look; each heading level the look
@@ -410,6 +450,11 @@ function styleLooks(input: ImportInput): Partial<Record<DocStyle, NamedStyle>> {
     bold: font.bold === true,
     italic: font.italic === true,
   });
+  // A Word file's lines at the spacing most of its paragraphs' letters
+  // take: Docs' 1.15 drew a single-spaced file's lines, and its table
+  // rows, a tenth taller than Word draws them.
+  const lines = input.kind === "docx" ? bodyLineSpacing(input.blocks) : null;
+  if (lines !== null) looks.normal = { ...(looks.normal ?? DEFAULT_STYLES.normal), lineSpacing: lines };
   if (input.titleFont) looks.title = lookOf("title", input.titleFont);
   const tally = new Map<DocStyle, Map<string, { font: TextFont; n: number }>>();
   for (const b of input.blocks) {
@@ -424,10 +469,24 @@ function styleLooks(input: ImportInput): Partial<Record<DocStyle, NamedStyle>> {
   // space after the block above it (ParsedBlock.spaceAfter), no more.
   const spaced = input.blocks.some((b) => b.spaceAfter !== undefined);
   for (const [style, counts] of tally) {
-    const top = [...counts.values()].sort((a, b) => b.n - a.n)[0];
-    looks[style] = { ...lookOf(style, top.font), ...(spaced ? { spaceBefore: 0 } : {}) };
+    const looksOf = [...counts.values()].sort((a, b) => b.n - a.n);
+    // Bold and italic only where every heading of the level is: no mark
+    // takes either off (a heading set upright or in regular weight drew as
+    // most of its level). A bold heading takes the bold mark (lookMarks);
+    // an italic one keeps its italic runs (ParsedBlock.styles).
+    const bold = looksOf.every((l) => l.font.bold === true);
+    const italic = looksOf.every((l) => l.font.italic === true);
+    looks[style] = { ...lookOf(style, looksOf[0].font), bold, italic, ...(spaced ? { spaceBefore: 0 } : {}) };
   }
   return looks;
+}
+
+/** The line spacing most of a Word file's paragraph letters take
+    (ParsedBlock.lineSpacing), or null when none says. */
+function bodyLineSpacing(blocks: ParsedBlock[]): number | null {
+  const counts = new Map<number, number>();
+  for (const b of blocks) if (b.type === "PARAGRAPH" && b.lineSpacing !== undefined) counts.set(b.lineSpacing, (counts.get(b.lineSpacing) ?? 0) + b.text.length);
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 
 /** A block's inline formulas (ParsedBlock.math) as inline equations, each in
@@ -456,19 +515,23 @@ function mathAtoms(block: ParsedBlock): Atom[] {
 // format ("(a)" one level in is Google Docs' "(%1)"; components/docs/
 // toolbar/lists.ts), and the list keeps a preset when one draws every level
 // so, else its own levels. Round 1 drew the presets' markers ("a)." as
-// "a)", "15" as "15.", "[12]" as "12.").
-const LIST_BULLET = /^[-*•▪◦‣●·∙○■□◆❖➢➤►✓✔–—](?: +|$)/;
-const LIST_BOX = /^([☐☑☒])(?: +|$)/;
-const LIST_LEGAL = /^((?:\d{1,3}\.)+)(\d{1,3})(\.?)(?: +|$)/;
-const LIST_PAREN = /^\(([a-zA-Z]{1,5}|\d{1,3})\)(?: +|$)/;
-const LIST_CITE = /^\[(\d{1,3})\](?: +|$)/;
-const LIST_CLOSED = /^((?:[A-Z]{1,2}-)?)([a-zA-Z]{1,5}|\d{1,3})(\)\.?|\.\)?)(?: +|$)/;
-const LIST_NUMBER = /^(\*?)(\d{1,3})(?: +|$)/;
+// "a)", "15" as "15.", "[12]" as "12."). A space or a tab (a PDF's gap to
+// the words) ends a marker.
+const LIST_BULLET = /^[-*•▪◦‣●·∙○■□◆❖➢➤►✓✔–—](?:[ \t]+|$)/;
+const LIST_BOX = /^([☐☑☒])(?:[ \t]+|$)/;
+const LIST_LEGAL = /^((?:\d{1,3}\.)+)(\d{1,3})(\.?)(?:[ \t]+|$)/;
+const LIST_PAREN = /^\(([a-zA-Z]{1,5}|\d{1,3})\)(?:[ \t]+|$)/;
+const LIST_CITE = /^\[(\d{1,3})\](?:[ \t]+|$)/;
+const LIST_CLOSED = /^((?:[A-Z]{1,2}-)?)([a-zA-Z]{1,5}|\d{1,3})(\)\.?|\.\)?)(?:[ \t]+|$)/;
+const LIST_NUMBER = /^(\*?)(\d{1,3})(?:[ \t]+|$)/;
 // A task line's box after its bullet (lib/parse/markdown-document.ts).
-const TASK_BOX = /^([☐☑☒]) /;
+const TASK_BOX = /^([☐☑☒])[ \t]/;
 const ROMAN_NUMERAL = /^(x{0,3})(ix|iv|v?i{0,3})$/;
 
 type ListType = "bulletList" | "orderedList" | "taskList";
+/** Whose bullets a list's lines print: a PDF's, a Word file's, or none (a
+    web page's and a text file's "-" is any bullet). */
+type Bullets = "pdf" | "word" | null;
 /** A counter's style and number. */
 type Count = { counter: ListCounter; value: number };
 
@@ -577,9 +640,10 @@ function listLine(line: Source): ListLine {
 }
 
 /** A printed bullet as the page editor draws it: a small hollow or square
-    one is Google Docs' own (○ ■), any other as printed but "•", which is
-    any bullet (the parse writes it where the page draws one the text does
-    not hold, and for a Word file's round one): the level's own. */
+    one is Google Docs' own (○ ■), any other as printed. A PDF's "•" is any
+    bullet (the parse writes it where the page draws one the text does not
+    hold): the level's own. A Word file's "•" is Word's round bullet, as
+    printed: Docs' own disc (●) drew larger and heavier than Word's. */
 const BULLET_GLYPHS: Record<string, string> = { "◦": "○", "▪": "■" };
 
 /** Each marker's level at its line's depth, in reading order. A bullet the
@@ -590,13 +654,15 @@ const BULLET_GLYPHS: Record<string, string> = { "◦": "○", "▪": "■" };
     under "1.": "%0.%1"), else prints them ("1.2" at the top: "1.%0"). A
     counter whose words the page cannot draw (lib/docs/schema.ts
     formatParts) is no marker. */
-function levelsOfLines(lines: ListLine[], printed: boolean): void {
+function levelsOfLines(lines: ListLine[], printed: Bullets): void {
   const open: ListLine[] = [];
   for (const line of lines) {
     const prev = open[line.depth];
     open[line.depth] = line;
     open.length = line.depth + 1;
-    if (printed && line.type === "bulletList" && line.bullet && line.bullet !== "•") line.level = { bullet: BULLET_GLYPHS[line.bullet] ?? line.bullet };
+    if (printed && line.type === "bulletList" && line.bullet && (line.bullet !== "•" || printed === "word")) {
+      line.level = { bullet: BULLET_GLYPHS[line.bullet] ?? line.bullet };
+    }
     let count = line.count;
     if (!count) continue;
     const k = Math.min(line.depth, 8);
@@ -766,8 +832,8 @@ class Converter {
   private readonly footnoteIds = new Map<number, string>();
   private readonly numbers = new Map<ParsedBlock, Atom[]>();
   private readonly footnotes = new Map<string, RichNode>();
-  /** The numbers at the Title's end, and the mark the first of them stands
-      for when the title prints one (linkFootnotes). */
+  /** The number at the Title's end, of the title's own footnote, and the
+      mark it stands for (linkFootnotes). */
   private readonly titleNotes: RichNode[] = [];
   private titleMark = "";
   /** The named styles the page's look sets (styleLooks). */
@@ -776,17 +842,37 @@ class Converter {
       own it did not measure (a page's last); null where it measured none
       (a web page, a text file). */
   private readonly spacing: number | null;
+  /** The blocks right over a display equation: their space after is the
+      space over the display. And the block right under each display. */
+  private readonly overDisplay = new Set<ParsedBlock>();
+  private readonly underDisplay = new Map<ParsedBlock, ParsedBlock>();
+  /** A PDF's most common space over and under its displays, for a display
+      whose own the parse did not measure (at a page's top or foot); null
+      where it measured none. */
+  private readonly displaySpacing: { over: number | null; under: number | null };
 
   constructor(private readonly input: ImportInput) {
     this.looks = styleLooks(input);
-    const counts = new Map<number, number>();
-    for (const b of input.blocks) if (b.type === "PARAGRAPH" && b.spaceAfter !== undefined) counts.set(b.spaceAfter, (counts.get(b.spaceAfter) ?? 0) + 1);
-    this.spacing = [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null;
     this.paged = input.kind === "pdf" && input.blocks.some((b) => typeof b.page === "number");
     this.pageSetup = pageSetupFor(input);
     const { pageless, width, margins } = this.pageSetup;
     this.room = pageless ? PAGELESS_COLUMN_PX : ((width - margins.left - margins.right) * 96) / 72;
     this.linkFootnotes();
+    // The footnotes the page editor keeps at the document's end stand
+    // between no block and its display.
+    let above: ParsedBlock | null = null;
+    input.blocks.forEach((block, index) => {
+      if (this.footnoteIds.has(index)) return;
+      if (block.type === "EQUATION" && above) this.overDisplay.add(above);
+      if (above?.type === "EQUATION") this.underDisplay.set(above, block);
+      above = block;
+    });
+    // A space over a display is to its glyphs: no paragraph's space.
+    this.spacing = mostCommon(input.blocks.filter((b) => b.type === "PARAGRAPH" && !this.overDisplay.has(b)).map((b) => b.spaceAfter));
+    this.displaySpacing = {
+      over: mostCommon([...this.overDisplay].map((b) => b.spaceAfter)),
+      under: mostCommon(input.blocks.filter((b) => b.type === "EQUATION").map((b) => b.spaceAfter)),
+    };
   }
 
   /** Each reference (ParsedBlock.footnoteRefs) becomes the page editor's
@@ -809,25 +895,32 @@ class Converter {
       }
       if (atoms.length > 0) this.numbers.set(block, atoms);
     });
-    // The title's own footnotes on a PDF's first page: one whose label ends
-    // the title ("…as SAT∗", LaTeX's \thanks; arxiv-2506-06752), and one the
-    // page prints no mark for (an acknowledgment; arxiv-2506-08209's read as
-    // a paragraph of the body). The title is no block the parse finds a
-    // reference in, and the page editor has no footnote without a number:
-    // their numbers stand at the Title's end, the mark's in place of it.
+    // The title's own footnote on a PDF's first page: one whose label ends
+    // the title ("…as SAT∗", LaTeX's \thanks; arxiv-2506-06752). The title
+    // is no block the parse finds a reference in: its number stands at the
+    // Title's end, in place of the mark. A note the page prints no mark for
+    // stays a small paragraph where the parse sets it: a number on the
+    // Title is a mark the page lacks, and it renumbered the page's own
+    // marks (a Springer paper's ¹ and ² read ² and ³).
     const title = this.input.titleFromOriginal ? (this.input.title ?? "").replace(/\s+/g, " ").trim() : "";
     if (this.input.kind !== "pdf" || !title) return;
     const first = this.input.firstPage ?? 1;
-    const loose = blocks
-      .map((block, index) => ({ label: block.footnote?.label.trim(), index }))
-      .filter(({ label, index }) => label !== undefined && (blocks[index].page ?? first) <= first && !this.footnoteIds.has(index) && blocks[index].text.trim());
-    const marked = loose.find(({ label }) => label && title.endsWith(label) && /[\p{L})\].,:;!?]$/u.test(title.slice(0, -label.length)));
-    if (marked) this.titleMark = marked.label ?? "";
-    for (const { index } of [...(marked ? [marked] : []), ...loose.filter(({ label }) => label === "")]) {
-      const footnoteId = newBlockId();
-      this.footnoteIds.set(index, footnoteId);
-      this.titleNotes.push({ type: "footnoteReference", attrs: { footnoteId } });
-    }
+    const marked = blocks
+      .map((block, index) => ({ label: block.footnote?.label.trim() ?? "", index }))
+      .find(
+        ({ label, index }) =>
+          label &&
+          (blocks[index].page ?? first) <= first &&
+          !this.footnoteIds.has(index) &&
+          blocks[index].text.trim() &&
+          title.endsWith(label) &&
+          /[\p{L})\].,:;!?]$/u.test(title.slice(0, -label.length)),
+      );
+    if (!marked) return;
+    this.titleMark = marked.label;
+    const footnoteId = newBlockId();
+    this.footnoteIds.set(marked.index, footnoteId);
+    this.titleNotes.push({ type: "footnoteReference", attrs: { footnoteId } });
   }
 
   /** The Title's words and then the numbers of the footnotes it cites, the
@@ -862,14 +955,16 @@ class Converter {
     const { blocks } = this.input;
     const title = this.input.titleFromOriginal ? (this.input.title ?? "").replace(/\s+/g, " ").trim() : "";
     // A heading among the first blocks that repeats the title is the Title,
-    // where it stands; else the Title comes first, after the kicker.
-    const first = this.input.firstPage ?? 1;
+    // where it stands; else the Title opens its page (titleOn), after the
+    // kicker: a scan's archive notice or a deck's first slide stands before it.
+    const first = this.titleOn;
     const repeat = title
       ? blocks
           .slice(0, TITLE_REACH)
           .findIndex((b) => b.type === "HEADING" && sameWords(b.text, title) && (!this.paged || (b.page ?? first) <= first))
       : -1;
-    let lead = 0;
+    const on = this.paged ? blocks.findIndex((b) => (b.page ?? first) >= first) : 0;
+    let lead = on < 0 ? blocks.length : on;
     while (lead < blocks.length && blocks[lead].type === "PARAGRAPH" && tokensOf(blocks[lead].html).includes("kicker")) lead++;
     blocks.forEach((block, i) => {
       if (i === lead && title && repeat < 0) this.title(title, blocks);
@@ -878,6 +973,12 @@ class Converter {
     if (blocks.length <= lead && title && repeat < 0) this.title(title, blocks);
     this.closeQuote();
     return this.finish();
+  }
+
+  /** The PDF's page the Title stands on: the import's first, or the later
+      page its title stands on (titlePage). */
+  private get titleOn(): number {
+    return Math.max(this.input.firstPage ?? 1, this.input.titlePage ?? 1);
   }
 
   // ── Page starts ──
@@ -978,11 +1079,34 @@ class Converter {
     return marks;
   }
 
-  /** The space after a block in points: the page's (ParsedBlock.spaceAfter),
-      the page's most common for a block it measured none for, or Docs'
-      "Add space after paragraph" where the parse measures no spacing. */
+  /** The space after a block in points: the page's (ParsedBlock.spaceAfter;
+      over a PDF's display, to its glyphs: displayGap, else the page's most
+      common over its displays), over a Word file's display TeX's skip, the
+      page's most common for a block it measured none for, or Docs' "Add
+      space after paragraph" where the parse measures no spacing. */
   private spaceAfter(block: ParsedBlock): number {
-    return block.spaceAfter ?? this.spacing ?? PARAGRAPH_SPACE_PT;
+    const over = this.overDisplay.has(block);
+    if (over && this.input.kind === "pdf") {
+      const space = block.spaceAfter ?? this.displaySpacing.over;
+      return space === null ? DISPLAY_SPACE_PT : this.displayGap(space, block, DISPLAY_OVER_EM);
+    }
+    if (block.spaceAfter !== undefined) return block.spaceAfter;
+    if (over && this.pageDisplays) return DISPLAY_SPACE_PT;
+    return this.spacing ?? PARAGRAPH_SPACE_PT;
+  }
+
+  /** A PDF's display space measured to its glyphs, as the page editor
+      draws it: less `em` of the words' size beside it (DISPLAY_OVER_EM,
+      DISPLAY_UNDER_EM), to a half point. */
+  private displayGap(space: number, words: ParsedBlock | undefined, em: number): number {
+    const size = words?.font?.size ?? this.input.bodyFont?.size ?? DEFAULT_STYLES.normal.size;
+    return Math.max(0, Math.round((space - em * size) * 2) / 2);
+  }
+
+  /** A PDF's and a Word file's displays: the page editor draws them with
+      the space the page leaves, none of its own (css/import.css). */
+  private get pageDisplays(): boolean {
+    return this.input.kind === "pdf" || this.input.kind === "docx";
   }
 
   /** A list's last line takes the space after its block. */
@@ -992,6 +1116,23 @@ class Converter {
     const after = this.spaceAfter(block);
     if (after > 0) last.attrs.spaceAfter = after;
     else delete last.attrs.spaceAfter;
+  }
+
+  /** A block's tab stops (ParsedBlock.tabStops) as the page editor keeps
+      a paragraph's ("36:left 468:right", components/docs/page/tabs.ts),
+      null for none. A PDF's right stop stands at its column's right edge,
+      so at the page editor's (less the paragraph's right indent), and no
+      stop of a PDF past it. */
+  private tabStops(block: ParsedBlock, indentRight: unknown = 0): string | null {
+    const pdf = this.input.kind === "pdf";
+    const edge = (this.room * 72) / 96 - (typeof indentRight === "number" ? indentRight : 0);
+    const stops = new Map<number, string>();
+    for (const stop of block.tabStops ?? []) {
+      if (!Number.isFinite(stop.at) || stop.at < 0) continue;
+      const at = Math.round((pdf ? (stop.align === "right" ? edge : Math.min(stop.at, edge)) : stop.at) * 2) / 2;
+      stops.set(at, `${at}:${stop.align}`);
+    }
+    return stops.size > 0 ? [...stops].sort((a, b) => a[0] - b[0]).map(([, stop]) => stop).join(" ") : null;
   }
 
   private sourceOf(block: ParsedBlock, starts: PageStart[], style: DocStyle = this.styleOf(block)): Source {
@@ -1034,8 +1175,8 @@ class Converter {
   // ── Blocks ──
 
   private title(title: string, blocks: ParsedBlock[]) {
-    // A PDF's title stands on the import's first page.
-    const first = this.input.firstPage ?? 1;
+    // A PDF's Title stands on its page (titleOn).
+    const first = this.titleOn;
     const starts: PageStart[] = this.paged && this.page < first ? [{ offset: 0, page: first }] : [];
     if (starts.length > 0) this.page = first;
     const meta = blocks.slice(0, TITLE_REACH).find((b) => b.type === "PARAGRAPH" && tokensOf(b.html).includes("meta"));
@@ -1045,10 +1186,10 @@ class Converter {
       (meta !== undefined && alignOf(tokensOf(meta.html)) === "center") ||
       (heading !== undefined && alignOf(tokensOf(heading.html)) === "center");
     const attrs: Record<string, unknown> = { docStyle: "title" };
-    // The parse's alignment when it read the title's look on the page (a
-    // title it read and set flush left stays so); else the page's centered
-    // masthead, byline, or first heading centers it.
-    const align = this.input.titleAlign ?? (this.input.titleFont ? null : centered ? "center" : null);
+    // The parse's alignment when it read the title on the page (a PDF's
+    // title, a title whose look it read: set flush left, it stays so); else
+    // the page's centered masthead, byline, or first heading centers it.
+    const align = this.input.titleAlign ?? (this.input.titleFont || this.paged ? null : centered ? "center" : null);
     if (align) attrs.textAlign = align;
     // The writer's line breaks stay in the Title (two centered lines), when
     // its lines are the title's words.
@@ -1085,17 +1226,22 @@ class Converter {
   }
 
   /** A footnote's words without its label (the page editor draws the
-      number), for the footnotes at the document's end. */
+      number), for the footnotes at the document's end, at the size a PDF
+      or a Word file sets them in: the page editor draws notes at 10 pt, and
+      a Word file's 8 pt notes drew larger than the page's. */
   private footnote(block: ParsedBlock, footnoteId: string) {
     const label = block.footnote?.label ?? "";
     const rest = block.text.startsWith(label) ? block.text.slice(label.length) : block.text;
     const from = block.text.length - rest.trimStart().length;
     const words = sliceSource(this.sourceOf(block, []), from, block.text.length);
-    this.footnotes.set(footnoteId, { type: "footnote", attrs: { footnoteId }, content: [paragraphNode(inline(words))] });
+    const size = this.input.kind === "pdf" || this.input.kind === "docx" ? block.font?.size : undefined;
+    const extra: RichMark[] = size && size !== FOOTNOTE_PT ? [{ type: "textStyle", attrs: { fontSize: `${Math.round(size * 2) / 2}pt` } }] : [];
+    this.footnotes.set(footnoteId, { type: "footnote", attrs: { footnoteId }, content: [paragraphNode(inline(words, extra))] });
   }
 
   private paragraph(block: ParsedBlock, index: number, starts: PageStart[]) {
-    if (!block.text.trim()) return this.carry(starts);
+    // A paragraph of tabs alone is a line of fill-in rules: it stays.
+    if (!block.text.trim() && !block.text.includes("\t")) return this.carry(starts);
     const tokens = tokensOf(block.html);
     const role: Role | undefined = ROLES.find((r) => tokens.includes(r));
     const attrs: Record<string, unknown> = {};
@@ -1104,15 +1250,35 @@ class Converter {
     if (align) attrs.textAlign = align;
     if (role === "meta") attrs.docStyle = "subtitle";
     else if (role !== "kicker" && this.spaceAfter(block) > 0) attrs.spaceAfter = this.spaceAfter(block);
+    // A Word paragraph set at another spacing than Normal text keeps its own.
+    const normalLines = this.looks.normal?.lineSpacing;
+    if (this.input.kind === "docx" && block.lineSpacing !== undefined && normalLines !== undefined && Math.abs(block.lineSpacing - normalLines) >= 0.01) {
+      attrs.lineSpacing = block.lineSpacing;
+    }
     const kind = INDENT_TOKENS.find((k) => tokens.includes(k));
     const indent = block.indent ?? (kind ? INDENTS[kind] : undefined);
-    // A bar at the left stands in the indent, its padding from the words:
-    // the words start where the page starts them.
-    const bar = BORDER_VALUE.exec(block.borders?.left ?? "");
-    const inset = bar ? Number(bar[1]) + Number(bar[2] ?? 0) : 0;
-    Object.assign(attrs, indentAttrs(indent && inset ? { left: Math.max(0, indent.left - inset), first: indent.first } : indent), borderAttrs(block));
-    const size =
-      role === "kicker" || role === "label" || role === "caption" || role === "footnote" ? SMALL_SIZE : role === "display" ? DISPLAY_SIZE : null;
+    // A bar at a side stands in its indent, its padding from the words:
+    // the words start and end where the page sets them.
+    const inset = (side: string | undefined) => {
+      const bar = BORDER_VALUE.exec(side ?? "");
+      return bar ? Number(bar[1]) + Number(bar[2] ?? 0) : 0;
+    };
+    const [left, right] = [inset(block.borders?.left), inset(block.borders?.right)];
+    const within = indent && (left || right) ? { ...indent, left: Math.max(0, indent.left - left), right: Math.max(0, (indent.right ?? 0) - right) } : indent;
+    Object.assign(attrs, indentAttrs(within), borderAttrs(block));
+    const tabStops = this.tabStops(block, attrs.indentRight);
+    if (tabStops) attrs.tabStops = tabStops;
+    // A footnote no number cites stays a paragraph at the size a PDF or a
+    // Word file sets it in, as a footnote does (footnote()); a kicker, a
+    // label, and a caption are small.
+    const own = role === "footnote" && (this.input.kind === "pdf" || this.input.kind === "docx") ? block.font?.size : undefined;
+    const size = own
+      ? `${Math.round(own * 2) / 2}pt`
+      : role === "kicker" || role === "label" || role === "caption" || role === "footnote"
+        ? SMALL_SIZE
+        : role === "display"
+          ? DISPLAY_SIZE
+          : null;
     const extra: RichMark[] = size ? [{ type: "textStyle", attrs: { fontSize: size } }] : [];
     const nodes = splitLong(this.sourceOf(block, starts)).map((part) => paragraphNode(inline(part, extra), attrs));
     this.place(index, nodes, role === "quote");
@@ -1122,14 +1288,20 @@ class Converter {
     if (!block.text.trim()) return this.carry(starts);
     const align = alignOf(tokensOf(block.html));
     const content = inline(this.sourceOf(block, starts, isTitle ? "title" : undefined));
+    const tabStops = this.tabStops(block);
+    const tabs = tabStops ? { tabStops } : {};
     if (isTitle) {
-      this.place(index, [paragraphNode(this.titleContent(content), { docStyle: "title", ...(align ? { textAlign: align } : {}), ...borderAttrs(block) })]);
+      this.place(index, [paragraphNode(this.titleContent(content), { docStyle: "title", ...(align ? { textAlign: align } : {}), ...borderAttrs(block), ...tabs })]);
       return;
     }
-    const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId(), ...borderAttrs(block) };
+    const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId(), ...borderAttrs(block), ...tabs };
     if (align) attrs.textAlign = align;
+    // A run-in lead ("1.2.3. Two examples." and its paragraph's words on
+    // its line) is drawn as its paragraph's opening words (css/import.css),
+    // at the page's indent: the first line's indent is the lead's.
+    if (tokensOf(block.html).includes("run-in")) Object.assign(attrs, { runIn: true }, indentAttrs(block.indent));
     // The page's own space after the heading, where it measured one.
-    if (block.spaceAfter !== undefined) attrs.spaceAfter = block.spaceAfter;
+    else if (block.spaceAfter !== undefined) attrs.spaceAfter = block.spaceAfter;
     this.place(index, [content.length > 0 ? { type: "heading", attrs, content } : { type: "heading", attrs }]);
   }
 
@@ -1150,6 +1322,14 @@ class Converter {
     }
     this.carry(waiting);
     if (lines.length === 0) return;
+    // A capital's initial under a line with no marker at its depth is an
+    // entry's words, no marker (a bibliography's "H. rept. 106-371.", "J.
+    // Smith"): a lettered list opens at its first letter.
+    lines.forEach((l, k) => {
+      const above = lines.slice(0, k).reverse().find((p) => p.indent <= l.indent);
+      const initial = l.count?.after === "." && !l.count.before && (l.count.counter === "upper-alpha" || l.letter?.counter === "upper-alpha") && l.count.value > 1;
+      if (initial && above?.indent === l.indent && above.unmarked) lines[k] = { ...l, type: null, unmarked: true, count: undefined, letter: undefined, words: l.whole };
+    });
     // A contents list: its class, or lines that link to headings, whatever
     // their markers ("1 Introduction", "2.1 Background").
     const contents =
@@ -1186,22 +1366,27 @@ class Converter {
   }
 
   /** A list's lines as the page sets them: the list's alignment (items
-      set justified, as their paragraphs are), and the space between two
-      items; the last line takes the block's space after (spaceLast). */
+      set justified, as their paragraphs are), the space between two items,
+      and its tab stops; the last line takes the block's space after
+      (spaceLast). */
   private lineLook(paragraphs: RichNode[], block: ParsedBlock) {
     const align = alignOf(tokensOf(block.html));
     const space = this.itemSpace(block);
+    const tabStops = this.tabStops(block);
     for (const node of paragraphs) {
       node.attrs ??= {};
       if (align) node.attrs.textAlign = align;
       if (space) node.attrs.spaceAfter = space;
+      if (tabStops) node.attrs.tabStops = tabStops;
     }
   }
 
-  /** The lines as lists, each outermost list in its format and, but a
-      checklist, at its page's depths (depthIndents). A list with no marker
-      on any line draws none at every level, so a line moved a level in or
-      out stays unmarked. */
+  /** The lines as lists, each outermost list in its format and at its
+      page's depths (depthIndents), a checklist too: its box where the page
+      sets it and its wraps back at the depth's left (a checklist drew every
+      line's box 18 pt in and its words hanging 36 pt in). A list with no
+      marker on any line draws none at every level, so a line moved a level
+      in or out stays unmarked. */
   private lists(lines: ListLine[]): RichNode[] {
     const tops: Top[] = [];
     const nodes = listsAt(lines, 0, 0, tops).nodes;
@@ -1209,14 +1394,15 @@ class Converter {
     const unmarked = lines.every((l) => l.unmarked);
     for (const top of tops) {
       const seen = unmarked ? Array.from({ length: 9 }, () => ({ bullet: "" })) : top.seen;
-      const attrs = { ...listFormat(top.node.type, seen), ...(listIndents && top.node.type !== "taskList" ? { listIndents } : {}) };
+      const attrs = { ...listFormat(top.node.type, seen), ...(listIndents ? { listIndents } : {}) };
       if (Object.keys(attrs).length > 0) top.node.attrs = { ...top.node.attrs, ...attrs };
     }
     return nodes;
   }
 
   /** A list that resumes a level in after a line or two between its items
-      (a centered label under an item's fill-in line): its lines go on the
+      (a centered label under an item's fill-in line; a line to write on, a
+      paragraph of tabs alone, is no line of words): its lines go on the
       list before it, and the last item of that list holds the blocks
       between, as they stand (the label stays centered), so every item keeps
       its level. The page editor's lists nest: an item a level in needs an
@@ -1228,7 +1414,11 @@ class Converter {
     if (!last || lines[0].indent < 1 || this.quote) return false;
     const between = this.out.slice(last.at + last.nodes.length);
     const placed = last.nodes.every((node, k) => this.out[last.at + k] === node);
-    if (!placed || between.length > 2 || between.some((n) => n.type !== "paragraph" && n.type !== "blockMath")) return false;
+    const words = between.filter((n) => {
+      const parts = n.content ?? [];
+      return parts.length === 0 || !parts.every((c) => c.type === "text" && /^\t+$/.test(c.text ?? ""));
+    });
+    if (!placed || words.length > 2 || between.some((n) => n.type !== "paragraph" && n.type !== "blockMath")) return false;
     const tail = last.lines[last.lines.length - 1];
     const all = [...last.lines, ...lines];
     nestLines(all);
@@ -1260,14 +1450,19 @@ class Converter {
 
   /** A PDF's and a Word file's bullets are as printed; a web page's and a
       text file's "-" is any bullet. */
-  private get printed(): boolean {
-    return this.input.kind === "docx" || this.input.kind === "pdf";
+  private get printed(): Bullets {
+    return this.input.kind === "docx" ? "word" : this.input.kind === "pdf" ? "pdf" : null;
   }
 
   private table(block: ParsedBlock, index: number, starts: PageStart[]) {
     const notes = this.cellNotes(block, index);
     const built = (block.html ? tableFromHtml(block.html, this.room, notes) : null) ?? tableFromText(block.text, this.room);
     if (!built) return this.carry(starts);
+    // The cells' padding as the page sets it, and the table's text size
+    // (css/import.css draws them).
+    const padding = CELL_PADDING.exec(block.html ?? "")?.[1];
+    const size = cellSize(built.table);
+    if (padding || size) built.table.attrs = { ...built.table.attrs, ...(padding ? { cellPadding: padding } : {}), ...(size ? { cellSize: size } : {}) };
     // A footnote whose number the cell holds is the page editor's; one whose
     // label stayed words stays a paragraph after the table.
     walk(built.table, (node) => {
@@ -1276,24 +1471,28 @@ class Converter {
     });
     // A page start goes into the first cell of the row the page begins at.
     // A table with a caption opens its text with the caption's line (the
-    // PDF and Word parses): a page start there opens the caption.
+    // PDF and Word parses): a page start there opens the caption, or the
+    // table's first row when the caption stands under the table.
     const captionLines = built.caption ? 1 : 0;
+    const below = built.caption !== null && built.captionBelow;
     const captionStarts: RichNode[] = [];
     for (const p of starts) {
       const line = block.text.slice(0, p.offset).split("\n").length - 1;
-      if (line < captionLines) {
+      if (line < captionLines && !below) {
         captionStarts.push({ type: "pageStart", attrs: { page: p.page } });
         continue;
       }
-      const row = line - captionLines;
+      const row = Math.max(0, line - captionLines);
       const cell = built.rowStarts.slice(row).find((c) => c !== null) ?? built.rowStarts.find((c) => c !== null);
       if (cell) cell.content = [{ type: "pageStart", attrs: { page: p.page } }, ...(cell.content ?? [])];
     }
-    const nodes: RichNode[] = [];
-    // The caption small: 9 pt, or the size the page sets it in when smaller.
-    if (built.caption) nodes.push(paragraphNode([...captionStarts, ...built.caption.map((n) => sizedAtMost(n, parseFloat(SMALL_SIZE)))], { textAlign: "center" }));
-    nodes.push(built.table);
-    this.place(index, nodes);
+    // A PDF's caption small: 9 pt, or the size the page sets it in when
+    // smaller. A Word file's keeps its own size, the body's where its words
+    // carry none.
+    const most = this.input.kind === "pdf" ? parseFloat(SMALL_SIZE) : (this.input.bodyFont?.size ?? parseFloat(SMALL_SIZE));
+    const caption = built.caption ? paragraphNode([...captionStarts, ...built.caption.map((n) => sizedAtMost(n, most))], { textAlign: "center" }) : null;
+    // The caption over the table, or under it where the page sets it there.
+    this.place(index, caption ? (below ? [built.table, caption] : [caption, built.table]) : [built.table]);
   }
 
   private figure(block: ParsedBlock, index: number, starts: PageStart[]) {
@@ -1307,6 +1506,7 @@ class Converter {
     const pageStart = starts.at(-1)?.page ?? null;
     this.figures.push({ mediaId, html: this.input.kind === "pdf" ? null : block.html ?? null, caption, page, region });
     const captionStyles = this.input.kind === "pdf" ? captionStylesFor(block, caption) : null;
+    const captionMath = this.input.kind === "pdf" ? captionMathFor(block, caption) : null;
     this.place(index, [
       {
         type: "figure",
@@ -1315,6 +1515,7 @@ class Converter {
           mediaId,
           caption,
           ...(captionStyles ? { captionStyles } : {}),
+          ...(captionMath ? { captionMath } : {}),
           page,
           region: region ? JSON.stringify(region) : null,
           pageStart,
@@ -1332,6 +1533,12 @@ class Converter {
     if (pageStart !== undefined) attrs.pageStart = pageStart;
     // The page numbers the equation at the left margin (the parse's leqno).
     if (tokensOf(block.html).includes("leqno")) attrs.leqno = true;
+    // The space under a PDF's or a Word file's display: the page's (a
+    // PDF's to its glyphs), else TeX's skip.
+    const space = this.input.kind === "pdf" ? (block.spaceAfter ?? this.displaySpacing.under) : null;
+    const measured = space !== null ? this.displayGap(space, this.underDisplay.get(block), DISPLAY_UNDER_EM) : block.spaceAfter;
+    const after = this.pageDisplays ? (measured ?? DISPLAY_SPACE_PT) : 0;
+    if (after > 0) attrs.spaceAfter = after;
     this.place(index, [{ type: "blockMath", attrs }]);
   }
 
@@ -1420,6 +1627,32 @@ class Converter {
       size: { nodes, json: new TextEncoder().encode(JSON.stringify(richText)).length, rows },
     };
   }
+}
+
+/** The value most blocks take (the smaller of two as common), or null when
+    none has one. */
+function mostCommon(values: (number | undefined)[]): number | null {
+  const counts = new Map<number, number>();
+  for (const v of values) if (v !== undefined) counts.set(v, (counts.get(v) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null;
+}
+
+/** A table's text size in points, when every word of it carries one (the
+    size lib/docs/import-table.ts sets its runs in): the size most of its
+    letters take. Its cells' paragraphs take it, so a line is as tall as
+    its words: at Normal text's size, a table set smaller than the body
+    drew each line taller than the page's. */
+function cellSize(table: RichNode): number | null {
+  const letters = new Map<number, number>();
+  let bare = false;
+  walk(table, (node) => {
+    if (node.type !== "text" || !node.text?.trim()) return;
+    const size = parseFloat(String(node.marks?.find((m) => m.type === "textStyle")?.attrs?.fontSize ?? ""));
+    if (!(size > 0)) bare = true;
+    else letters.set(size, (letters.get(size) ?? 0) + node.text.length);
+  });
+  const top = [...letters].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return !bare && top !== undefined && top >= 4 && top <= 72 ? top : null;
 }
 
 function walk(node: RichNode, visit: (node: RichNode) => void) {

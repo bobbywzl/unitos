@@ -241,9 +241,10 @@ function blockDocumentDetail(reason: BlockDocumentReason | null): string | undef
 // transaction, as long as a bulk save may take (lib/docs/sync.ts).
 const IMPORT_TX_MS = 120_000;
 
-/** The page's look an import's named styles take (a PDF's, a Word file's). */
-type PageLook = Pick<ParsedDocument, "bodyFont" | "titleFont" | "titleAlign" | "titleLines">;
-const pageLook = (parsed: PageLook): PageLook => ({ bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign, titleLines: parsed.titleLines });
+/** The page's look an import's named styles take (a PDF's, a Word file's),
+    and the page a PDF's title stands on. */
+type PageLook = Pick<ParsedDocument, "bodyFont" | "titleFont" | "titleAlign" | "titleLines" | "titlePage">;
+const pageLook = (parsed: PageLook): PageLook => ({ bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign, titleLines: parsed.titleLines, titlePage: parsed.titlePage });
 
 /** A parse as an import: the rich text, the figure media, the page setup. */
 type Converted = { richText: RichNode; figures: ImportFigure[]; pageSetup: PageSetup };

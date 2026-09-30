@@ -219,9 +219,39 @@ function freeDetail(f: FreeScores, candidate: Doc) {
   for (const l of f.numberLines.found.slice(0, 20)) console.log(`  "${l.text}" in … ${clip(c.units[l.unit].text, 100)}`);
   console.log(`Garbled glyphs: ${f.garbles.count}.`);
   for (const g of f.garbles.found.slice(0, 40)) console.log(`  ${g.kind}: "${g.match}" in … ${clip(g.text, 100)}`);
+  const r2 = (x: number | null) => (x === null ? "—" : x.toFixed(2));
+  const l = f.layout;
+  if (l) {
+    console.log(`Against the page's lines: ${l.columns.across} of ${l.columns.lines} lines read across a column's gutter${l.columns.pages.length > 0 ? ` (pages ${l.columns.pages.join(", ")})` : ""}.`);
+    for (const x of l.columns.found) console.log(`  p${x.page}: ${clip(x.text, 100)}`);
+    console.log(`  Set-in paragraphs the page sets flush: ${l.indents.wrong} of ${l.indents.judged} judged (${l.indents.indented} set in).`);
+    for (const x of l.indents.found.slice(0, 12)) console.log(`    p${x.page}: ${x.left} pt in, the page ${x.shown} pt: ${clip(x.text, 70)}`);
+    console.log(`  Prose in a table's cells: ${l.tables.prose} of ${l.tables.words} table words.`);
+    for (const x of l.tables.found.slice(0, 6)) console.log(`    ${x.rows} rows, ${x.runs} running on: ${clip(x.text, 100)}`);
+    console.log(`  Figures in two pieces: ${l.figures.split} of ${l.figures.figures}. Crops holding prose: ${l.crops.prose} of ${l.crops.crops}.`);
+    for (const x of [...l.figures.found, ...l.crops.found].slice(0, 10)) console.log(`    p${x.page}: ${clip(x.text, 100)}`);
+    console.log(`  The body's face: the page's ${l.face.family ?? "—"} (${l.face.want ?? "not told"}), drawn ${l.face.drawn ?? "—"}. Page labels backward: ${l.labels.wrong} of ${l.labels.pairs} pairs.`);
+    for (const x of l.labels.found.slice(0, 6)) console.log(`    p${x.page}: ${x.labels}`);
+    console.log(`  Pictures no figure shows: ${l.pictures.missed} of ${l.pictures.pictures}.`);
+    for (const x of l.pictures.found.slice(0, 12)) console.log(`    p${x.page}: at ${x.box} pt`);
+    console.log(`  Captions apart from their figure or table: ${l.captions.alone} of ${l.captions.captions}.`);
+    for (const x of l.captions.found.slice(0, 12)) console.log(`    ${clip(x.text, 100)}`);
+    console.log(`  Crops over each other: ${l.overlaps.overlapping} of ${l.overlaps.figures}. Table captions on the other side: ${l.sides.wrong} of ${l.sides.tables}.`);
+    for (const x of l.overlaps.found.slice(0, 6)) console.log(`    p${x.page}: ${clip(x.text, 80)}`);
+    for (const x of l.sides.found.slice(0, 6)) console.log(`    p${x.page}: the page sets it ${x.set}, drawn ${x.drawn}: ${clip(x.text, 80)}`);
+    console.log(`  Marks on the Title the page lacks: ${l.marks.wrong} of ${l.marks.marks}. Grids of numbers read as prose: ${l.grids.prose} of ${l.grids.grids}.`);
+    for (const x of l.marks.found) console.log(`    ${clip(x.text, 80)}`);
+    for (const x of l.grids.found.slice(0, 6)) console.log(`    p${x.page}: ${clip(x.text, 100)}`);
+    console.log(`  Run-in heads at another indent than the page's: ${l.runIns.wrong} of ${l.runIns.heads}. End-of-proof boxes the page sets at the right edge, set after the words: ${l.proofs.wrong} of ${l.proofs.boxes}.`);
+    for (const x of l.runIns.found.slice(0, 8)) console.log(`    p${x.page}: the page ${x.set} pt in, set ${x.drawn} pt: ${clip(x.text, 60)}`);
+    for (const x of l.proofs.found.slice(0, 8)) console.log(`    p${x.page}: … ${clip(x.text, 60)}`);
+    console.log(`  Space after of 48 pt or more with no block right under it: ${l.spaces.wrong} of ${l.spaces.blocks}.`);
+    for (const x of l.spaces.found.slice(0, 12)) console.log(`    p${x.page}: ${x.space} pt, ${x.shown === null ? "no ink under it on the page" : `the page's next ink ${x.shown} pt under it`}: ${clip(x.text, 70)}`);
+  }
   if (f.look) {
-    const r2 = (x: number | null) => (x === null ? "—" : x.toFixed(2));
-    console.log(`The import's look: inline formulas at their words' size ${r2(f.look.formulas)}, crops at their printed width ${r2(f.look.figures)}, Word borders ${r2(f.look.borders)}.`);
+    console.log(
+      `The import's look: inline formulas at their words' size ${r2(f.look.formulas)}, crops at their printed width ${r2(f.look.figures)}, Word borders ${r2(f.look.borders)}, a display's space ${r2(f.look.displays)}, a row's height ${r2(f.look.rows)}, a marker's place ${r2(f.look.markers)}, numbers whole in their cells ${r2(f.look.numbers)}, a checklist's wraps ${r2(f.look.checklists)}.`,
+    );
     for (const m of f.look.misses.slice(0, 20)) console.log(`  ${m}`);
   }
 }
@@ -230,10 +260,10 @@ function glyphDetail(g: GlyphScores) {
   console.log(`\nThe PDF's math glyphs: ${g.hazards} whose text layer string is not their symbol; symbols the candidate prints fewer times than the pages draw them: ${g.garbles}.`);
   if (g.missing.length > 0) console.log(`  ${g.missing.map(([s, n]) => `${s}×${n}`).join("  ")}`);
   console.log(`Equations shown as pictures (a region of TeX fonts with a math glyph): ${g.mathImages}.`);
-  console.log(`Display equations checked against the region's glyphs: ${g.passed} of ${g.checked} draw exactly its symbols at their script levels.`);
+  console.log(`Display equations checked against the region's glyphs: ${g.passed} of ${g.checked} draw exactly its symbols at their script levels, on the page's rows (${g.rowsWrong} on other rows).`);
   for (const f of g.fails.slice(0, 30)) {
     console.log(`  ${clip(f.latex, 110)}`);
-    console.log(`    the glyphs have, the LaTeX not: ${f.missing.slice(0, 12).join(" ") || "—"}; the LaTeX has, the glyphs not: ${f.extra.slice(0, 12).join(" ") || "—"}`);
+    console.log(`    the glyphs have, the LaTeX not: ${f.missing.slice(0, 12).join(" ") || "—"}; the LaTeX has, the glyphs not: ${f.extra.slice(0, 12).join(" ") || "—"}${f.rows ? `; ${f.rows}` : ""}`);
   }
 }
 

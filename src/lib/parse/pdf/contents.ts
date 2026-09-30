@@ -17,8 +17,10 @@ function tocEntryPart(line: Line): { text: string; runs: Run[] } {
   return { text, runs: part.runs.map((r) => ({ ...r, end: Math.min(r.end, text.length) })).filter((r) => r.end > r.start) };
 }
 
+// An entry: a numbered title ("4.2 Soil samples …"), or a title with its
+// page number in a cell of its own ("Glossary  88").
 export function isContentsEntry(line: Line): boolean {
-  return (line.cells.length <= 2 || TOC_TAIL_RE.test(line.text)) && TOC_ENTRY_RE.test(line.text);
+  return (line.cells.length <= 2 || TOC_TAIL_RE.test(line.text)) && (TOC_ENTRY_RE.test(line.text) || (line.cells.length === 2 && /^\d{1,4}$/.test(line.cells[1].text.trim())));
 }
 
 // A contents list reads as one in the reader and the import (the converter
@@ -33,8 +35,11 @@ function entryDepth(text: string): number {
 // The entries after a contents label, one LIST with an entry per line, two
 // spaces per depth; each numbered entry links to its heading once the blocks
 // exist. A title too long for its line wraps onto the next, which carries
-// the page number: the wrap finishes its entry.
-export function readContentsEntries(lines: Line[], i: number): Step {
+// the page number: the wrap finishes its entry, a line's pitch under it
+// (`leading`, the page's: a double-spaced paper's contents set its wrap two
+// lines' height under the entry, and the entries after it read as
+// paragraphs).
+export function readContentsEntries(lines: Line[], i: number, leading: number): Step {
   const builder = new TextBuilder();
   const entries: { start: number; end: number; num: number }[] = [];
   let j = i;
@@ -42,15 +47,17 @@ export function readContentsEntries(lines: Line[], i: number): Step {
     const entry = lines[j];
     const last = entries[entries.length - 1];
     // A line with no cells is a ruled table taken out of the flow, never
-    // an entry's wrap.
+    // an entry's wrap; an unnumbered line under an entry with no page
+    // number is its wrap, its own page number or not ("…Subdivi-" over
+    // "sions  49").
     const wrap =
       j > i &&
       entry.cells.length > 0 &&
-      !isContentsEntry(entry) &&
+      !TOC_ENTRY_RE.test(entry.text) &&
       !TOC_TAIL_RE.test(lines[j - 1].text) &&
       entry.x > lines[j - 1].x &&
       entry.y < lines[j - 1].y &&
-      lines[j - 1].y - entry.y <= entry.size * 1.6;
+      lines[j - 1].y - entry.y <= entry.size * Math.max(1.6, leading * 1.2);
     if (wrap) {
       const part = tocEntryPart(entry);
       builder.append(part, " ");

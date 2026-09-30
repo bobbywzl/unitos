@@ -43,7 +43,7 @@
      "text": "KAPIL WANASKAR, San Jose State University, USA"
     }
    ],
-   "spaceAfter": 2
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -52,11 +52,10 @@
      "text": "VINIJA JAIN, "
     },
     {
-     "text": "Meta, USA",
-     "sup": true
+     "text": "Meta, USA"
     }
    ],
-   "spaceAfter": 2
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -65,8 +64,7 @@
      "text": "AMAN CHADHA, "
     },
     {
-     "text": "Apple, USA",
-     "sup": true
+     "text": "Apple, USA"
     }
    ],
    "spaceAfter": 2
@@ -78,8 +76,7 @@
      "text": "VASU SHARMA, "
     },
     {
-     "text": "PocketFM, USA",
-     "sup": true
+     "text": "PocketFM, USA"
     }
    ],
    "spaceAfter": 2
@@ -143,10 +140,24 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "CCS Concepts: • Computing methodologies → Robotic planning; Computer vision; Machine learning."
+     "text": "CCS Concepts: • "
+    },
+    {
+     "text": "Computing methodologies → Robotic planning",
+     "bold": true
+    },
+    {
+     "text": "; "
+    },
+    {
+     "text": "Computer vision; Machine learning",
+     "italic": true
+    },
+    {
+     "text": "."
     }
    ],
-   "spaceAfter": 5
+   "spaceAfter": 6
   },
   {
    "kind": "paragraph",
@@ -279,7 +290,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Contributions. ",
+     "text": "Contributions",
+     "italic": true
+    },
+    {
+     "text": ". ",
      "bold": true
     },
     {
@@ -4194,5 +4209,5 @@
  ],
  "license": "open",
  "provenance": "latexml",
- "notes": "arXiv 2609.29669v1 (robotics survey; ACM journal, one column, many tables), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words."
+ "notes": "arXiv 2609.29669v1 (robotics survey; ACM journal, one column, many tables), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Bold and italic set from the page's faces where LaTeXML's HTML has none or another (front matter labels and affiliations, caption labels, run-in heads, cross-references)."
 }

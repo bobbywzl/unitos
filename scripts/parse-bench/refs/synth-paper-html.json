@@ -26,7 +26,7 @@
         "shape": "serif",
         "size": 11
       },
-      "spaceAfter": 14
+      "spaceAfter": 15
     },
     {
       "kind": "paragraph",
@@ -711,7 +711,7 @@
         "left": 0,
         "first": 9
       },
-      "spaceAfter": 2
+      "spaceAfter": 0
     },
     {
       "kind": "paragraph",
@@ -1127,5 +1127,5 @@
   },
   "license": "open",
   "provenance": "generated",
-  "notes": "In LaTeX, IEEEtran's small caps are Times capitals scaled down, so the text layer and the reference hold capitals; in HTML they keep their letters' case. The affiliations are footnotes with no mark (label \"\"). The paragraph after I. INTRODUCTION opens with a drop cap. Table I spans both columns."
+  "notes": "In LaTeX, IEEEtran's small caps in Times are capitals at the body's size, so the text layer and the reference hold capitals and no small caps; in HTML they keep their letters' case and their small caps. The affiliations are footnotes with no mark (label \"\"). The paragraph after I. INTRODUCTION opens with a drop cap. Table I spans both columns."
 }

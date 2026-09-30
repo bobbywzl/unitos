@@ -1,7 +1,8 @@
 # The look a reference's page shows beyond its words, measured on its PDF (PyMuPDF) and written into the
 # reference (scripts/parse-bench/model.ts):
 #   a paragraph's first-line indent in points (indentPt; the kind, `indent`, stays the reference's own);
-#   the space under a paragraph or a list, beyond the line pitch, to the next one below it (spaceAfter);
+#   the space under a paragraph or a list to the next one below it, beyond the step their two lines take with
+#   none between (spaceAfter);
 #   a list's items justified (align) and the space between two items (itemSpace);
 #   equations numbered at the left (labelSide), where most of a document's labels stand there.
 # Each only where the page shows it plainly: a block whose lines are not found, a space with something set
@@ -31,6 +32,16 @@ def letters(t):
     return re.sub(r"[^a-z0-9]", "", t.lower())
 
 
+def most(spans, key):
+    """The value most of the spans' characters take (a line's baseline and size, not a sub- or superscript's)."""
+    pairs = sorted((key(s), len(s["text"].strip())) for s in spans)
+    total, seen = sum(w for _, w in pairs), 0
+    for value, w in pairs:
+        seen += w
+        if 2 * seen >= total:
+            return value
+
+
 def page_lines(pno):
     """Visual lines: PyMuPDF lines joined when they share a baseline and nearly touch."""
     raw = []
@@ -43,8 +54,8 @@ def page_lines(pno):
                 "page": pno,
                 "x0": min(s["bbox"][0] for s in spans),
                 "x1": max(s["bbox"][2] for s in spans),
-                "y": statistics.median(s["origin"][1] for s in spans),
-                "size": statistics.median(s["size"] for s in spans),
+                "y": most(spans, lambda s: s["origin"][1]),
+                "size": most(spans, lambda s: s["size"]),
                 "text": "".join(s["text"] for s in l["spans"]),
             })
     raw.sort(key=lambda r: (round(r["y"]), r["x0"]))
@@ -140,6 +151,7 @@ def text_of(spans):
 
 # The document's line pitch: the median baseline step between the lines of one block.
 steps = []
+step_sizes = []
 located = []
 cursor = 0
 for i, b in enumerate(ref["blocks"]):
@@ -163,28 +175,39 @@ for i, b in enumerate(ref["blocks"]):
         for a, c in zip(full, full[1:]):
             if a["page"] == c["page"] and a["col"] == c["col"] and 0 < c["y"] - a["y"] < 3 * a["size"]:
                 steps.append(round(c["y"] - a["y"], 1))
+                step_sizes.append(a["size"])
 pitch = statistics.median(steps) if steps else None
+body = statistics.median(step_sizes) if step_sizes else None
+# A line's part under its baseline, of its pitch (a text face's descent is about a fifth of its line); the
+# rest stands above the baseline.
+DESCENT = 0.2
 
 
 def own_pitch(lines):
-    """A block's own line pitch, from its lines of words (a formula's piece on a line of its own, a limit
-    under a sum, would shorten it)."""
+    """A block's own line pitch and the size its lines are set in, from its lines of words (a formula's
+    piece on a line of its own, a limit under a sum, would shorten it); else the document's."""
     full = [l for l in lines if len(l["key"]) >= 3]
     s = [c["y"] - a["y"] for a, c in zip(full, full[1:]) if a["page"] == c["page"] and a["col"] == c["col"] and 0 < c["y"] - a["y"] < 3 * a["size"]]
-    return statistics.median(s) if s else pitch
+    return (statistics.median(s), statistics.median(l["size"] for l in full)) if s else (pitch, body)
 
 
 def gap(a_lines, b_lines):
-    """The space between a block's last line and the next block's first, beyond the line pitch, in whole
-    points; None when they are not one above the other in one column of one page."""
+    """The space between a block's last line and the next block's first, beyond the step the two lines
+    take with none between them, in whole points; None when they are not one above the other in one
+    column of one page. The step: the upper line's part under its baseline and the lower line's part
+    above it, each at its own size, at the pitch per point the block's lines show (a 12 pt line over a
+    15 pt one steps more than the body's pitch)."""
     a, c = a_lines[-1], b_lines[0]
     if a["page"] != c["page"] or a["col"] != c["col"] or c["y"] <= a["y"]:
         return None
-    step = own_pitch(a_lines) or own_pitch(b_lines)
+    step, size = own_pitch(a_lines)
     if not step:
+        step, size = own_pitch(b_lines)
+    if not step or not size:
         return None
+    natural = step / size * (DESCENT * a["size"] + (1 - DESCENT) * c["size"])
     # More than two lines' space: something the reference sets apart stands between (a float, a display).
-    space = c["y"] - a["y"] - step
+    space = c["y"] - a["y"] - natural
     return max(0, round(space)) if space <= 2 * step else None
 
 

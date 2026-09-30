@@ -37,9 +37,12 @@ function isBoxedLine(line: Line, ctx: PageContext): boolean {
 export function readList(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
   const line = lines[i];
   const marker = line.cells.length === 1 ? readMarker(line) : null;
+  if (marker && runInLead(line, marker)) return null;
   // A bullet glyph opens an item at any size (a slide sets its bullets
-  // larger than the deck's body); a number opens one near the body's size.
-  if (marker && (line.size <= ctx.bodySize * 1.15 || (isGlyphMarker(marker) && line.size <= ctx.bodySize * 1.6))) {
+  // larger than the deck's body); a number opens one where its words stand
+  // near the body's size (OpenStax sets an exercise's number "6.1" at 12 pt
+  // before its 9.5 pt question).
+  if (marker && (wordsSize(line) <= ctx.bodySize * 1.15 || (isGlyphMarker(marker) && line.size <= ctx.bodySize * 1.6))) {
     return markedList(lines, i, ctx, runOf, marker);
   }
   // A bullet the page draws opens an item as a printed one does: Beamer's
@@ -48,6 +51,39 @@ export function readList(lines: Line[], i: number, ctx: PageContext, runOf: numb
   const drawn = marker ? null : drawnMarkerAt(line, ctx);
   const list = drawn !== null && line.size <= ctx.bodySize * 1.6 ? markedList(lines, i, ctx, runOf, DRAWN, drawn) : null;
   return list ?? indentedBand(lines, i, ctx, runOf);
+}
+
+// The size most of a line's letters take.
+function wordsSize(line: Line): number {
+  const letters = new Map<number, number>();
+  for (const item of line.items) {
+    const n = item.str.match(/\p{L}/gu)?.length ?? 0;
+    if (n > 0) letters.set(item.size, (letters.get(item.size) ?? 0) + n);
+  }
+  return letters.size > 0 ? [...letters].reduce((a, b) => (b[1] > a[1] ? b : a))[0] : line.size;
+}
+
+// A section's number closed by a period, then a title set in italics or
+// bold and closed by a period, then the paragraph's words on its line: a
+// run-in head, which opens a paragraph and no item (amsart's "2.5.1. F and
+// B are power functions. The choice …", read as a list with "2.5.2."). A
+// contract's clause sets its words plain ("1.1 “Accredited Investor” has
+// the meaning …"). A formula in the title passes.
+function runInLead(line: Line, marker: Marker): boolean {
+  if (marker.family !== "legal" || !marker.text.endsWith(".")) return false;
+  const stop = /\.\s+(?=\S)/g;
+  stop.lastIndex = marker.length;
+  const end = stop.exec(line.text)?.index;
+  if (end === undefined) return false;
+  let styled = 0;
+  let all = 0;
+  for (const r of line.runs) {
+    if (r.zone !== undefined || r.end <= marker.length || r.start > end) continue;
+    const n = line.text.slice(Math.max(r.start, marker.length), Math.min(r.end, end)).replace(/\s/g, "").length;
+    all += n;
+    if (r.italic || r.bold) styled += n;
+  }
+  return all > 0 && styled >= all * 0.8;
 }
 
 // A marker set off by a tab reads as a cell of its own ("(i)⇥the investment
@@ -157,6 +193,10 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
   // line never reaches it.
   const prose = proseEdge(lines, i, i + 1);
   const edge = prose > 0 ? Math.max(line.xEnd, prose) : (lineColumn(line)?.[1] ?? Infinity);
+  // The gaps between the items read so far: a list spaced wider than its
+  // lines' pitch goes on while its items stand as far apart as before (a
+  // slide's bullets 55 pt apart over 18 pt lines read as four lists).
+  const spacing: number[] = [];
   let j = i + 1;
   while (j < lines.length) {
     const next = lines[j];
@@ -189,7 +229,9 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
           fillsMargin(prev, next, edge) &&
           !items.some((it) => sameLevel(it, here, next.size))));
     // Marked items sit farther apart than wrapped lines (itemsep).
-    if (mark && !wrap && gap <= next.size * ctx.leading * 2.2 && joinsList(items, next, mark, drawn ?? next.x)) {
+    const spaced = gap <= next.size * ctx.leading * 2.2 || (spacing.length > 0 && gap <= Math.max(...spacing) * 1.2);
+    if (mark && !wrap && spaced && joinsList(items, next, mark, drawn ?? next.x)) {
+      spacing.push(gap);
       items.push(itemOf(next, mark, drawn ?? next.x));
       j++;
       continue;
@@ -627,9 +669,10 @@ export function readAlgorithm(lines: Line[], i: number, ctx: PageContext, runOf:
 
 // ── References ──────────────────────────────────────────────────────────────
 
-// A references section's heading: its entries follow, on its page and the
-// pages after, up to the next heading.
-const REFERENCES_RE = /^(?:\d{1,2}\.?\s+)?(?:references(?: and notes)?|bibliography|literature cited|works cited)$/i;
+// A references section's heading (a Chinese or Japanese paper's "参考文献"
+// too): its entries follow, on its page and the pages after, up to the next
+// heading.
+const REFERENCES_RE = /^(?:\d{1,2}\.?\s+)?(?:references(?: and notes)?|bibliography|literature cited|works cited|参考文献|참고문헌)$/i;
 let references = false;
 
 /** A references section whose entries carry no marker, each set with a
@@ -663,7 +706,8 @@ export function readReferences(lines: Line[], i: number, ctx: PageContext, runOf
     columns.set(key, { left: Math.min(c.left, l.x), right: Math.max(c.right, l.xEnd), lines: [...c.lines, l] });
   }
   const columnOf = (l: Line) => columns.get(lineColumn(l))!;
-  const steps = run.map((l) => l.x - columnOf(l).left).filter((d) => d >= size * 0.3 && d <= size * 3);
+  // A word processor hangs its entries half an inch: 3.6 ems at 10 pt.
+  const steps = run.map((l) => l.x - columnOf(l).left).filter((d) => d >= size * 0.3 && d <= size * 4);
   if (steps.length === 0) return null;
   const step = median(steps);
   // A column whose lines all start at one place shows no hanging indent:

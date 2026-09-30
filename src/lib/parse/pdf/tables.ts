@@ -9,7 +9,7 @@ import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
 import { isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
 import { mathSpans } from "@/lib/parse/pdf/math/zones";
-import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup, spansFromRuns } from "@/lib/parse/pdf/text";
+import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup, lineEndHyphen, spansFromRuns } from "@/lib/parse/pdf/text";
 import type { Cell, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
 // ── Tables ──────────────────────────────────────────────────────────────────
@@ -23,13 +23,18 @@ const FACE_RE = /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/;
 // (which joins them with a space), and how its lines sit in the cell:
 // centered, flush right, or set in from the cell's left edge (points).
 export type CellParagraph = { start: number; end: number; align?: "center" | "right"; indent?: number };
-// fill: the cell's shading (#rrggbb).
-export type TableCell = { text: string; runs: Run[]; colspan?: number; rowspan?: number; paragraphs?: CellParagraph[]; fill?: string };
-export type TableRow = { cells: TableCell[] };
+// fill: the cell's shading (#rrggbb); valign: where its words sit in a row
+// taller than they are (at the top when unset).
+export type TableCell = { text: string; runs: Run[]; colspan?: number; rowspan?: number; paragraphs?: CellParagraph[]; fill?: string; valign?: "middle" | "bottom" };
+// height: a ruled row's height on the page, in points, where the page
+// sets it taller than its words (a form's field row, a signature row).
+export type TableRow = { cells: TableCell[]; height?: number };
 // What a table keeps of the page's look: its words' size and each column's
 // width on the page, in points (the import sets the table at that size and
-// its columns in those proportions: an empty form column keeps its width).
-export type TableLook = { size: number; columns: number[] };
+// its columns in those proportions: an empty form column keeps its width),
+// and a ruled table's cell padding, top, right, bottom, and left, in points
+// (the html's data-cell-padding, as a Word table's cell margins).
+export type TableLook = { size: number; columns: number[]; padding?: [number, number, number, number] };
 
 function clusterColumns(lines: Line[]): number[] {
   const xs = lines.flatMap((l) => l.cells.map((c) => c.x)).sort((a, b) => a - b);
@@ -231,21 +236,28 @@ function cellHtml(cell: TableCell): string {
     .join("");
 }
 
-// Text appended to a cell: a space between its lines.
+// Text appended to a cell: a space between its lines, and a line-end
+// hyphen decided as in a paragraph: the typesetter's goes ("predic-" over
+// "tion"), a compound's stays.
 function appendToCell(target: TableCell, part: { text: string; runs: Run[] }) {
   if (part.text.length === 0) return;
   const builder = new TextBuilder();
   builder.append({ text: target.text, runs: target.runs }, "");
-  builder.append(part, target.text.length > 0 ? " " : "");
+  const drop = lineEndHyphen(target.text, part.text) === "drop";
+  if (drop) builder.dropTrailingChar();
+  builder.append(part, target.text.length > 0 && !drop ? " " : "");
   target.text = builder.text;
   target.runs = builder.runs;
 }
 
-// Fragmented figure text, not a real table: mostly tiny cells.
+// Fragmented figure text, not a real table: mostly tiny cells. Rows that
+// fill every column, three or more, are a table's, however short their
+// cells (Grinstead–Snell's Table 3.3: "0 1", "1 1", "2 2").
 function isFragmented(rows: TableRow[]): boolean {
   const flat = rows.flatMap((r) => r.cells.map((c) => c.text.trim()).filter((t) => t.length > 0));
   const shortCells = flat.filter((c) => c.length <= 2).length;
-  return flat.length > 0 && shortCells / flat.length > 0.6;
+  const full = rows.filter((r) => r.cells.every((c) => c.text.trim().length > 0)).length;
+  return flat.length > 0 && shortCells / flat.length > 0.6 && !(full >= 3 && full * 5 >= rows.length * 4);
 }
 
 // The TABLE segment for rows of cells, the first headerRows of them header
@@ -262,8 +274,13 @@ export function tableSegment(
   where: Pick<Segment, "box" | "lineSize" | "mathShare">,
   look?: TableLook,
 ): Segment {
-  const rowHtml = (row: TableRow, tag: "td" | "th", rowIdx: number) =>
-    `<tr>${row.cells
+  const points = (n: number) => Math.round(n * 10) / 10;
+  // A row's height rides on its first cell of one row, as that cell's
+  // height (a cell's height is its row's least height). A <tr> carries no
+  // attribute: merge.ts joins a table's rows across a page break by "<tr>".
+  const rowHtml = (row: TableRow, tag: "td" | "th", rowIdx: number) => {
+    const tall = row.height !== undefined && row.height > 0 && row.height < 2000 ? row.cells.findIndex((c) => (c.rowspan ?? 1) === 1) : -1;
+    return `<tr>${row.cells
       .map((c, cellIdx) => {
         const last = cellIdx === row.cells.length - 1;
         const gap = last
@@ -272,13 +289,18 @@ export function tableSegment(
             : '<span class="cell-gap">\n</span>'
           : '<span class="cell-gap">\t</span>';
         const spans = `${(c.colspan ?? 1) > 1 ? ` colspan="${c.colspan}"` : ""}${(c.rowspan ?? 1) > 1 ? ` rowspan="${c.rowspan}"` : ""}`;
-        const fill = c.fill && HEX_RE.test(c.fill) ? ` style="background-color:${c.fill}"` : "";
-        return `<${tag}${spans}${fill}>${cellHtml(c)}${gap}</${tag}>`;
+        const style = [
+          ...(c.fill && HEX_RE.test(c.fill) ? [`background-color:${c.fill}`] : []),
+          ...(cellIdx === tall ? [`height:${points(row.height ?? 0)}pt`] : []),
+          ...(c.valign ? [`vertical-align:${c.valign}`] : []),
+        ];
+        return `<${tag}${spans}${style.length > 0 ? ` style="${style.join(";")}"` : ""}>${cellHtml(c)}${gap}</${tag}>`;
       })
       .join("")}</tr>`;
-  const points = (n: number) => Math.round(n * 10) / 10;
+  };
+  const padding = look?.padding?.every((v) => v >= 0 && v < 100) ? ` data-cell-padding="${look.padding.map(points).join(" ")}"` : "";
   const html =
-    (look ? `<table style="font-size:${points(look.size)}pt">` : "<table>") +
+    (look ? `<table style="font-size:${points(look.size)}pt"${padding}>` : "<table>") +
     (look ? `<colgroup>${look.columns.map((w) => `<col style="width:${points(w)}pt">`).join("")}</colgroup>` : "") +
     (headerRows > 0 ? `<thead>${rows.slice(0, headerRows).map((r, i) => rowHtml(r, "th", i)).join("")}</thead>` : "") +
     `<tbody>${rows.slice(headerRows).map((r, i) => rowHtml(r, "td", headerRows + i)).join("")}</tbody>` +
@@ -292,63 +314,138 @@ export function tableSegment(
 // a sentence).
 const TABLE_CAPTION_RE = /^(?:table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+)\s*[.:|–—-]/i;
 
-/** A table's caption joins its table: the paragraph right before it on its
-    page that opens with a table's label, or with none there the one right
-    after it, is the table's <caption>, and the table's text opens with the
-    caption's line, as a Word table's does (lib/parse/docx.ts). The import
-    draws it as the table's caption above the table, and the benchmark reads
-    it as the table's (the captions stood apart as paragraphs: real-mmwr-7301
-    p. 3's import read no caption). Runs after the joins across pages: a
-    table continued on the next page joins its rows first. */
+/** A table's caption joins its table: a paragraph that opens with a
+    table's label, right over the table on its first page or right under it
+    on its last, is the table's <caption>, and the table's text opens with
+    the caption's line, as a Word table's does (lib/parse/docx.ts). A
+    caption under its table keeps its side (BELOW_CAPTION): the import draws
+    it under the table. A caption between two tables is the table's on the
+    side the document sets its captions, the side its captions take where a
+    table stands on one side of them only: CVPR sets a caption under its
+    table, IEEE over it (arXiv 2411.19946 p. 6 read each caption over the
+    table after it). A sub-table's caption ("(a) Number of patches.") joins
+    its grid the same way, on a page whose table caption joined its table.
+    The benchmark reads a caption as its table's (the captions stood apart
+    as paragraphs: real-mmwr-7301 p. 3's import read no caption). Runs
+    after the joins across pages: a table continued on the next page joins
+    its rows first. */
 export function attachTableCaptions(segments: Segment[]): Segment[] {
   const taken = new Set<Segment>();
+  // The table right under (below) or right over a caption at k, on the
+  // caption's page: the one a caption under a table or over it would join.
+  // through: past sub-table captions, as the side's count reads a caption
+  // under a group of sub-tables (arXiv 2411.19946's "Table 4." under "(e)
+  // Comparison …" and its grid).
+  const tableBy = (k: number, below: boolean, through = false): Segment | undefined => {
+    let j = k;
+    do j += below ? -1 : 1;
+    while (segments[j] && (taken.has(segments[j]) || (through && isSubCaption(segments[j]))));
+    const table = segments[j];
+    if (table?.type !== "TABLE" || !table.html) return undefined;
+    const page = below ? (table.breaks?.at(-1)?.page ?? firstPageOf(table)) : firstPageOf(table);
+    return page === segments[k].page ? table : undefined;
+  };
+  // A table's caption so far, when it is its link alone (ruled.ts): the
+  // caption's words join it.
+  const linkOnly = (table: Segment) => /^<table[^>]*><caption[^>]*>/.test(table.html ?? "") && LINK_LINE_RE.test(table.text.slice(0, table.text.indexOf("\n")));
+  const open = (table: Segment | undefined): table is Segment => table !== undefined && (!table.html?.includes("<caption") || linkOnly(table));
+  const labeled = segments.flatMap((s, k) => (isCaption(s) ? [k] : []));
+  let over = 0;
+  let under = 0;
+  for (const k of labeled) {
+    const [below, above] = [tableBy(k, true, true), tableBy(k, false, true)];
+    if (below && !above) under++;
+    if (above && !below) over++;
+  }
+  const side = under > over ? "below" : over > under ? "above" : null;
+  // Captions on the document's side first, then the other side's captions
+  // of the tables none took; with no side, the table a caption stands
+  // nearer to.
+  const join = (captions: number[]) => {
+    for (const k of captions) {
+      if (taken.has(segments[k])) continue;
+      const [below, above] = [tableBy(k, true), tableBy(k, false)];
+      const table = side === "below" ? below : side === "above" ? above : below && above ? nearer(segments[k], below, above) : (below ?? above);
+      if (open(table)) captionOf(table, segments[k], table === below, taken);
+    }
+    if (!side) return;
+    for (const k of captions) {
+      const table = taken.has(segments[k]) ? undefined : tableBy(k, side === "above");
+      if (open(table)) captionOf(table, segments[k], side === "above", taken);
+    }
+  };
+  join(labeled);
+  const pages = new Set([...taken].map((s) => s.page));
+  join(segments.flatMap((s, k) => (pages.has(s.page) && isSubCaption(s) ? [k] : [])));
+  // A table with no caption takes one the paragraph over it kept as its
+  // last line.
   segments.forEach((table, i) => {
-    // A caption that is the table's link alone (ruled.ts) takes the
-    // caption's words before it.
-    const linkOnly = /^<table[^>]*><caption>/.test(table.html ?? "") && LINK_LINE_RE.test(table.text.slice(0, table.text.indexOf("\n")));
-    if (table.type !== "TABLE" || !table.html || (table.html.includes("<caption>") && !linkOnly)) return;
-    const first = firstPageOf(table);
-    const last = table.breaks?.at(-1)?.page ?? first;
     const before = segments[i - 1];
-    const after = segments[i + 1];
-    const caption =
-      before && !taken.has(before) && isCaption(before) && before.page === first ? before
-      : after && !taken.has(after) && isCaption(after) && after.page === last ? after
-      : null;
-    const kept = !caption && before && !taken.has(before) ? captionLine(before, first) : null;
-    if (!caption && !kept) return;
-    if (caption) taken.add(caption);
-    // The caption is one line of the table's text: its breaks are spaces.
-    const own = caption ? { text: caption.text, runs: caption.runs ?? [] } : kept;
-    if (!own) return;
-    const text = own.text.replace(/[\t\n]/g, " ");
-    const words = wordsHtml(text, own.runs, mathSpans(text, own.runs), 0, text.length);
-    // The caption's words keep the face and the size the page sets them in:
-    // the import draws the caption at that size when it is under 9 pt
-    // (arXiv 2503.22874 sets its captions in 8 pt under a 9 pt body).
-    const size = sizeOf(own.runs) ?? caption?.lineSize;
-    const face = spansFromRuns(text, own.runs).font?.family;
-    const look = [
-      size && Number.isFinite(size) && size > 0 && size <= 72 ? `font-size:${Math.round(size * 2) / 2}pt` : "",
-      face && FACE_RE.test(face) ? `font-family:${face}` : "",
-    ].filter(Boolean);
-    const sized = look.length > 0 ? `<span style="${look.join(";")}">${words}</span>` : words;
-    if (linkOnly) {
-      table.html = table.html.replace(/^(<table[^>]*><caption>)/, `$1${sized} `);
-      table.text = `${text} ${table.text}`;
-      table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
-    } else captionTable(table, text, sized);
+    if (table.type !== "TABLE" || !table.html || !open(table) || !before || taken.has(before)) return;
+    const kept = captionLine(before, firstPageOf(table));
+    if (kept) captionOf(table, kept, false, taken);
   });
   return segments.filter((s) => !taken.has(s));
+}
+
+/** A caption set under its table: the table's <caption> opens with this. */
+export const BELOW_CAPTION = '<caption style="caption-side: bottom">';
+
+// Of two tables, the one a caption between them stands nearer to on the
+// page: the one under it, where their places are not known.
+function nearer(caption: Segment, below: Segment, above: Segment): Segment {
+  const [a, b, c] = [below.box, above.box, caption.box];
+  if (!a || !b || !c || firstPageOf(below) !== caption.page) return above;
+  const [up, down] = [a.y1 - c.y2, c.y1 - b.y2];
+  return up >= -2 && down >= -2 && up < down ? below : above;
+}
+
+// A sub-table's caption: a letter in parentheses, then its words ("(a)
+// Number of patches. Ablation on …").
+const SUB_CAPTION_RE = /^\([a-h]\)\s+\S/;
+function isSubCaption(s: Segment): boolean {
+  return s.type === "PARAGRAPH" && !s.footnote && s.text.length <= 600 && SUB_CAPTION_RE.test(s.text.trim());
+}
+
+// A caption's words join its table: a paragraph (taken off the segments)
+// or a line a paragraph kept. below: the caption stands under the table.
+function captionOf(table: Segment, caption: Segment | { text: string; runs: Run[] }, below: boolean, taken: Set<Segment>) {
+  if ("type" in caption) taken.add(caption);
+  // The caption is one line of the table's text: its breaks are spaces.
+  const runs = caption.runs ?? [];
+  const text = caption.text.replace(/[\t\n]/g, " ");
+  const math = mathSpans(text, runs);
+  const words = wordsHtml(text, runs, math, 0, text.length);
+  // The caption's words keep the face and the size the page sets them in:
+  // the import draws the caption at that size when it is under 9 pt
+  // (arXiv 2503.22874 sets its captions in 8 pt under a 9 pt body).
+  const size = sizeOf(runs) ?? ("type" in caption ? caption.lineSize : undefined);
+  const face = spansFromRuns(text, runs).font?.family;
+  const look = [
+    size && Number.isFinite(size) && size > 0 && size <= 72 ? `font-size:${Math.round(size * 2) / 2}pt` : "",
+    face && FACE_RE.test(face) ? `font-family:${face}` : "",
+  ].filter(Boolean);
+  const sized = look.length > 0 ? `<span style="${look.join(";")}">${words}</span>` : words;
+  const html = table.html ?? "";
+  if (/^<table[^>]*><caption/.test(html)) {
+    // The link a table's caption held alone (ruled.ts): the words go before
+    // it, on the words' side.
+    table.html = html.replace(/^(<table[^>]*>)<caption[^>]*>/, `$1${below ? BELOW_CAPTION : "<caption>"}${sized} `);
+    table.text = `${text} ${table.text}`;
+    table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
+  } else captionTable(table, text, sized, below);
+  // The caption's formulas, where the table's text opens with them.
+  if (math.length > 0) table.math = math;
 }
 
 // A link alone on its line: a URL or a DOI.
 export const LINK_LINE_RE = /^(?:https?:\/\/|doi:\s*|www\.)\S+$/i;
 
 /** The table's caption: its text opens with the caption's line, its html
-    with the caption (the words' html, then the line's gap). */
-export function captionTable(table: Segment, text: string, html: string) {
-  table.html = table.html?.replace(/^<table[^>]*>/, (open) => `${open}<caption>${html}<span class="cell-gap">\n</span></caption>`);
+    with the caption (the words' html, then the line's gap). below: the
+    caption stands under the table (BELOW_CAPTION). */
+export function captionTable(table: Segment, text: string, html: string, below = false) {
+  table.html = table.html?.replace(/^<table[^>]*>/, (open) => `${open}${below ? BELOW_CAPTION : "<caption>"}${html}<span class="cell-gap">\n</span></caption>`);
   table.text = `${text}\n${table.text}`;
   table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
 }
@@ -373,8 +470,13 @@ const IEEE_CAPTION_RE = /^TABLE\s+(?:\d+|[IVXL]+)\s+\p{Lu}/u;
 
 function isCaption(s: Segment): boolean {
   const text = s.text.trim();
-  return s.type === "PARAGRAPH" && !s.footnote && s.text.length <= 1200 && (TABLE_CAPTION_RE.test(text) || IEEE_CAPTION_RE.test(text));
+  return s.type === "PARAGRAPH" && !s.footnote && s.text.length <= 1200 && (TABLE_CAPTION_RE.test(text) || IEEE_CAPTION_RE.test(text) || CJK_CAPTION_RE.test(text));
 }
+
+// A CJK table's label and its title: "表 1 提供した学習・開発用データ".
+// A particle after the number makes it a sentence that names the table
+// ("表 2 に評価用クイズ問題の例を示す": JNLP 31-47 p. 7).
+const CJK_CAPTION_RE = /^表\s*\d{1,3}\s+(?![にのでをはがとも内中へやより、，。：:])\S/u;
 
 // A caption the paragraph above a table kept as its last line, on the
 // table's page, taken off the paragraph (LibreOffice's Math Guide p. 59:
@@ -393,21 +495,29 @@ function captionLine(s: Segment, page: number): { text: string; runs: Run[] } | 
   return { text: tail, runs: runs.filter((r) => r.end > at + 1).map((r) => ({ ...r, start: Math.max(0, r.start - at - 1), end: r.end - at - 1 })) };
 }
 
-// Leading rows whose words are bold: the header rows (never every row).
+// Leading rows whose words are bold: the header rows (never every row). A
+// bold row in a color under a head in the page's ink is the body's (a
+// slide's green "Yes" rows under its black heads: gslides-oer-5rs p. 17).
 export function boldHeaderRows(rows: TableRow[]): number {
+  const colored = (row: TableRow) => {
+    const runs = row.cells.flatMap((c) => c.runs);
+    const length = runs.reduce((sum, r) => sum + r.end - r.start, 0);
+    return length > 0 && runs.reduce((sum, r) => sum + (r.look?.color ? r.end - r.start : 0), 0) * 2 > length;
+  };
   let n = 0;
   while (n < rows.length - 1) {
     const cells = rows[n].cells;
     const length = cells.reduce((sum, c) => sum + c.text.length, 0);
     if (length === 0 || boldShare(cells.flatMap((c) => c.runs), length) <= 0.5) break;
+    if (n > 0 && colored(rows[n]) && !colored(rows[0])) break;
     n++;
   }
   return n;
 }
 
 // A cell of a value: an amount, a share, or a count ("$ 2,174", "(357)",
-// "21.0 %").
-const NUMERIC_CELL_RE = /^[$€£¥]?\s*\(?[-−–]?[\d.,]+\)?\s*%?$/;
+// "21.0 %", "-£2,000").
+export const NUMERIC_CELL_RE = /^[-−–]?[$€£¥]?\s*\(?[-−–]?[\d.,]+\)?\s*%?$/;
 
 // Row starts in a run of lines split into cells. Rows come from the run's
 // vertical rhythm: with two gap sizes present, the small gap is a wrapped
@@ -529,20 +639,55 @@ export function rowsOf(cellsOf: Cell[][], rowStarts: number[], columnCount: numb
 }
 
 // A run's columns: the gutters its lines leave open. The lines over its
-// first line that starts at the table's left edge are heads, a head over
+// first line with words in its first column are heads, a head over
 // several columns among them ("Year Ended December 31," over a
 // statement's years, "As of December 31, 2023" over its assets and
 // liabilities): they part no gutter (the 10-K's OI&E statement read two
-// years as one column, p. 78).
+// years as one column, p. 78). A line in the first column starts at the
+// table's left edge, or is a row of numbers, as many cells as a row at the
+// edge, that starts left of the first gutter every line leaves open: a
+// column of numbers set flush right starts its short ones further in
+// (Grinstead–Snell's Table 3.3 read its rows over "10" as heads, and the
+// table as a paragraph). A head of years is no such row ("2023  2024 …"
+// over "Risk category - interest rate  $ 296 …": the 10-K, p. 47).
 function runSeparators(run: Line[]): number[] {
   const left = Math.min(...run.map((l) => l.x));
-  const first = Math.max(0, run.findIndex((l) => l.x <= left + 3));
-  return withoutSignColumns(run, columnSeparators(run.slice(first), run.slice(0, first)));
+  const gutter = columnSeparators(run)[0];
+  const edge = run.find((l) => l.x <= left + 3);
+  const numbered = (l: Line) =>
+    gutter !== undefined && l.x < gutter && l.cells.length === edge?.cells.length && l.cells.every((c) => NUMERIC_CELL_RE.test(c.text.trim()));
+  const first = Math.max(0, run.findIndex((l) => l.x <= left + 3 || numbered(l)));
+  // A group's label among rows of three cells or more, from the table's left
+  // edge (and a value at its end), crosses the gutters the rows leave open:
+  // the rows alone part the columns (arXiv 2609.29669's "§3.1 Policy /
+  // manipulation suites" joined Table 3's Benchmark and Year columns), when
+  // they part more columns than all the lines do (a first column's wrapped
+  // words at the edge are no labels: arXiv 2303.01056's Table 1). A row of
+  // marks alone is no row ("*  *  *  *  *" between the Federal Register's
+  // paragraphs, p. 4).
+  const body = run.slice(first);
+  const heads = run.slice(0, first);
+  const all = columnSeparators(body, heads);
+  const rows = body.filter((l) => !isGroupLabel(l, left));
+  const rowed = rows.filter((l) => l.cells.length >= 3 && /[\p{L}\p{N}]/u.test(l.text)).length >= 2 ? columnSeparators(rows, heads) : [];
+  return withoutSignColumns(run, rowed.length > all.length ? rowed : all);
+}
+
+// A group's label: one phrase from the table's left edge, short of a
+// sentence, and at most a short value in a cell after it. A note under the
+// table is none.
+function isGroupLabel(line: Line, left: number): boolean {
+  return line.x <= left + 3 && line.cells.length <= 2 && !proseCell(line.cells[0].text) && (line.cells.length === 1 || line.cells[1].text.trim().length <= 12);
 }
 
 // One table out of a run of gap-aligned lines. Columns come from the coverage
 // scan; rows from the run's rhythm (rowStartsOf).
 export function tableFromRun(run: Line[], leading: number): Segment {
+  // Prose side by side parts at the gutters every line leaves open, heads
+  // or not.
+  const start = sideBySide.get(run[0]);
+  const gutters = start === undefined ? [] : columnSeparators(run);
+  if (start !== undefined && gutters.length > 0) return columnsProse(run, gutters, columnAt(start + 1, gutters), Number.isFinite(start));
   const separators = runSeparators(run);
   const columnCount = separators.length + 1;
   const page = run[0].page;
@@ -656,6 +801,59 @@ export function isProseColumns(lines: Line[], ocr: boolean): boolean {
   return lines.length > 0 && prose * 2 >= lines.length;
 }
 
+// Words that run on into the next line's: the first ends mid-sentence and
+// the next opens in lower case.
+const runsOn = (upper: string, lower: string) => !/[.!?:;]["'”’)\]]*$/.test(upper.trim()) && /^\p{Ll}/u.test(lower.trim());
+
+// A paragraph down the first column: its cells run on from line to line, a
+// sentence among them. A table's first column holds its rows' labels (two
+// paragraphs side by side under a slide's pictures: NASA AGU 2023 p. 61).
+function isWrappedParagraph(lines: Line[]): boolean {
+  return (
+    lines.length >= 2 &&
+    lines.every((l) => l.cells.length >= 2) &&
+    lines.slice(1).every((l, n) => runsOn(lines[n].cells[0].text, l.cells[0].text)) &&
+    lines.some((l) => proseCell(l.cells[0].text))
+  );
+}
+
+// Where a later column carries on the paragraph right over the run: a
+// bullet or a sentence of one cell whose words start where the column does,
+// and run on into it. The run is that paragraph's lines beside a picture's
+// labels (a slide's bullet wrapped beside the labels of the pictures left of
+// it: NASA pptx 20250000071 p. 11). null: no column does.
+function carriedAt(above: Line | undefined, head: Line, left: number, leading: number): number | null {
+  if (!above || above.cells.length !== 1 || !(bulleted(above) || proseCell(above.text))) return null;
+  if (above.y - head.y > above.size * leading * 1.35) return null;
+  const words = above.items.find((it) => /[\p{L}\p{N}]/u.test(it.str))?.x ?? above.x;
+  return head.cells.find((c) => c.x > left + 12 && Math.abs(c.x - words) <= 4 && runsOn(above.text, c.text))?.x ?? null;
+}
+
+// Runs of prose side by side (isWrappedParagraph, carriedAt): each run's
+// first line, and the place its reading starts at (the column that carries
+// on the paragraph over it, else the first).
+const sideBySide = new WeakMap<Line, number>();
+
+// Prose side by side is no table: one paragraph, column by column, the
+// column its reading starts at first, a line break between two columns (as
+// a contents list in two columns reads, contents.ts). labels: the other
+// columns are a picture's labels beside the paragraph, a line each.
+function columnsProse(run: Line[], separators: number[], lead: number, labels: boolean): Segment {
+  const columns = Array.from({ length: separators.length + 1 }, (_, c) => c);
+  const builder = new TextBuilder();
+  for (const c of [lead, ...columns.filter((c) => c !== lead)]) {
+    const parts = run.flatMap((line) => {
+      const items = line.items.filter((it) => columnAt(it.x + it.w / 2, separators) === c);
+      if (!items.some((it) => it.str.trim().length > 0)) return [];
+      const cell = cellOfItems(items, line.size);
+      return [{ ...line, cells: [cell], text: cell.text, runs: cell.runs, items, x: cell.x, xEnd: Math.max(...items.map((it) => it.x + it.w)) }];
+    });
+    if (labels && c !== lead) for (const part of parts) builder.append({ text: part.text, runs: part.runs }, "\n");
+    else if (parts.length > 0) builder.append(joinGroup(parts, true), "\n");
+  }
+  return { type: "PARAGRAPH", text: builder.text, page: run[0].page, runs: builder.runs, ...geom(run) };
+}
+
 // A lead-in: a sentence of eight words or more that ends in a colon over the
 // table ("Components of OI&E were as follows (in millions):"), no head or
 // row of it. A group's name in a statement is shorter ("Derivatives not
@@ -681,6 +879,65 @@ function isFormLines(lines: Line[]): boolean {
   return cells.length > 0 && cells.every((t) => /:$/.test(t) || /_{3,}$/.test(t) || /[☐☑☒]/.test(t));
 }
 
+// A line whose cells after the first hold no letter or digit, whose first
+// cell is prose, and that goes on the sentence of the line of one cell
+// above it, at its left edge.
+function besideMarks(line: Line, above: Line | undefined): boolean {
+  return (
+    line.cells.length >= 2 &&
+    line.cells.slice(1).every((c) => !/[\p{L}\p{N}]/u.test(c.text)) &&
+    line.cells[0].text.trim().length >= 30 &&
+    above !== undefined &&
+    above.cells.length === 1 &&
+    Math.abs(above.x - line.x) <= above.size &&
+    /[\p{Ll},]$/u.test(above.text.trim())
+  );
+}
+
+// A line cut to its first cell, in place (other readers keep the line).
+function firstCellOnly(line: Line) {
+  const [first, next] = line.cells;
+  const end = first.text.length;
+  line.items = line.items.filter((it) => it.x + it.w / 2 < next.x);
+  line.cells = [first];
+  line.text = first.text;
+  line.runs = line.runs.filter((r) => r.start < end).map((r) => ({ ...r, end: Math.min(r.end, end) }));
+  line.xEnd = Math.max(...line.items.map((it) => it.x + it.w));
+}
+
+// A row set tight: a short line of one cell whose short words stand an em
+// apart or more, a number after them (Grinstead–Snell's Table 6.2: "HHH 1"
+// under "X Y", its columns closer than a cell's gap). Its parts count as its
+// cells. A list's item is no row ("-  DIAMETER 1200 MM" on a scan: NASA
+// SP-4408 p. 467), and neither is a numbered heading ("3 基于代码特征的代码生成
+// 方法" under arXiv 2303.01056's Table 1).
+function tightCells(line: Line): number {
+  const items = line.items.filter((it) => it.str.trim().length > 0);
+  if (line.cells.length !== 1 || line.text.length > 40 || items.length < 2 || readMarker(line)?.family === "bullet") return line.cells.length;
+  const parts = [items[0].str];
+  items.slice(1).forEach((it, k) => {
+    if (it.x - (items[k].x + items[k].w) >= line.size) parts.push(it.str);
+    else parts[parts.length - 1] += ` ${it.str}`;
+  });
+  const words = line.text.split(/\s+/).filter((w) => /\p{L}{2}/u.test(w)).length;
+  const numeric = (p: string) => NUMERIC_CELL_RE.test(p.trim());
+  return parts.length >= 2 && words <= 4 && parts.slice(1).some(numeric) && parts.every((p) => numeric(p) || p.trim().length <= 12) ? parts.length : 1;
+}
+
+// A line of prose is one cell, whatever its gaps: a cell that opens with a
+// mark the words before it take (", where μ is the mean": a tall formula's
+// gap in a sentence, OpenStax's ch. 6 p. 20), or words all spaced more than
+// half an em apart, five or more (a justified line beside a long link:
+// arXiv 2506.06352 p. 29). A row's cells hold word spaces of a third of an
+// em beside any column gap the line did not part ("CALVIN [101]").
+function proseLine(line: Line): boolean {
+  if (line.cells.slice(1).some((c) => /^[,;:.)\]!?](?!\s?\d)/.test(c.text.trim()))) return true;
+  const items = line.items.filter((it) => it.str.trim().length > 0);
+  const gaps = items.slice(1).map((it, k) => it.x - (items[k].x + items[k].w)).sort((a, b) => b - a);
+  const spaces = gaps.slice(line.cells.length - 1).filter((g) => g > line.size * 0.15);
+  return spaces.length >= 4 && Math.min(...spaces) >= line.size * 0.6;
+}
+
 // Table runs, computed before segmentation. A run grows forward over
 // multi-cell lines and the single-cell lines that continue a wrapped cell
 // (aligned with a column, or indented past the first column, or a first-column
@@ -689,6 +946,15 @@ function isFormLines(lines: Line[]): boolean {
 // line ends a run.
 export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
   const runOf = new Array<number>(lines.length).fill(-1);
+  // Prose beside a form's boxes is a line of one cell: its first cell goes
+  // on the sentence of the line above it, and its other cells are marks
+  // alone (the W-9's Part I beside its SSN boxes: "… However, for a" |
+  // "resident alien, … For other  –  –"). The marks are the boxes', no
+  // words of the sentence: the line keeps its first cell.
+  lines.forEach((line, k) => {
+    if (besideMarks(line, lines[k - 1])) firstCellOnly(line);
+  });
+  const cells = lines.map((line) => (proseLine(line) ? 1 : Math.max(line.cells.length, tightCells(line))));
   let runId = 0;
   let i = 0;
   while (i < lines.length) {
@@ -696,7 +962,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     // whatever its gaps (import compare loop finding: an equation's wide gaps
     // read as cells, and the run swept the sentences around it into a table).
     if (
-      lines[i].cells.length < 2 ||
+      cells[i] < 2 ||
       runOf[i] !== -1 ||
       isLabelLine(lines[i], ctx) ||
       isMonoLine(lines[i]) ||
@@ -726,7 +992,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       ) {
         break;
       }
-      if (next.cells.length >= 2) {
+      if (cells[j] >= 2) {
         members.push(j);
         multi++;
         j++;
@@ -795,6 +1061,30 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       i++;
       continue;
     }
+    // Lines closer than a row's height, one of them a few characters, are a
+    // formula's stacked parts: a fraction's numerator and denominator over
+    // and under the gap it leaves in its sentence (arXiv 2502.02648 p. 10:
+    // "2N" over "at b =" over "5"). A cell's raised citation marks stand as
+    // close over their words ("[26, 29]" in arXiv 2303.01056's Table 1).
+    const part = (line: Line) => line.text.replace(/\s/g, "").length <= 3;
+    const close = (k: number, n: number) => n > 0 && lines[members[n - 1]].y - lines[k].y < lines[k].size * 0.7;
+    if (members.some((k, n) => close(k, n) && (part(lines[members[n - 1]]) || part(lines[k])))) {
+      i++;
+      continue;
+    }
+    // Text boxes side by side interleave their lines: most lines stand
+    // closer than a row's height to the line before them, their words
+    // beside its words, never under them (a slide's three captions under its
+    // drawing, NASA AGU 2023 p. 39). The boxes read one after another.
+    const beside = (a: Line, b: Line) => a.items.every((p) => b.items.every((q) => p.x + p.w <= q.x + 1 || q.x + q.w <= p.x + 1));
+    const interleaved = members.filter((k, n) => close(k, n) && beside(lines[members[n - 1]], lines[k])).length;
+    if (members.length >= 4 && interleaved * 2 > members.length - 1) {
+      sideBySide.set(lines[i], -Infinity);
+      for (const k of members) runOf[k] = runId;
+      runId++;
+      i = j;
+      continue;
+    }
     // One multi-cell line alone is a "Label: text" paragraph, unless the
     // lines around it are a table whose labels sit on their own baselines.
     if (multi < 2 && !(leftOnlyCount >= 2 && alignedCount >= 2)) {
@@ -808,6 +1098,13 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     // wrapped beside a drawing's labels.
     if (isProseColumns(multiCell.map((k) => lines[k]), ctx.ocr) || isFormLines(members.map((k) => lines[k]))) {
       i++;
+      continue;
+    }
+    if (isWrappedParagraph(members.map((k) => lines[k]))) {
+      sideBySide.set(lines[i], -Infinity);
+      for (const k of members) runOf[k] = runId;
+      runId++;
+      i = j;
       continue;
     }
     // Two lines, one of them set far larger than the body, are display
@@ -841,6 +1138,17 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     let absorbed = 0;
     while (first > 0 && absorbed < 3) {
       const prev = lines[first - 1];
+      // A head of short cells right over the run's columns, one in each
+      // (Grinstead–Snell's "n  n!" over its factorials): the run's first row.
+      if (absorbed === 0 && prev.cells.length >= 2 && runOf[first - 1] === -1 && prev.size <= ctx.bodySize * 1.15 && prev.y - lines[first].y <= prev.size * ctx.leading * 2.2) {
+        const separators = runSeparators(members.map((k) => lines[k]));
+        const heads = cellsBySeparators(prev, separators);
+        if (separators.length > 0 && heads.every((c) => c.text.trim().length > 0 && c.text.length <= 24)) {
+          first--;
+          members.unshift(first);
+        }
+        break;
+      }
       if (prev.cells.length !== 1 || runOf[first - 1] !== -1 || bulleted(prev) || leadIn(prev.text)) break;
       if (prev.size > ctx.bodySize * 1.15) break;
       const gap = prev.y - lines[first].y;
@@ -869,6 +1177,8 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       members.unshift(first);
       absorbed++;
     }
+    const carried = runOf[first - 1] === -1 ? carriedAt(lines[first - 1], lines[first], left, ctx.leading) : null;
+    if (carried !== null) sideBySide.set(lines[first], carried);
     for (const k of members) runOf[k] = runId;
     runId++;
     i = j;

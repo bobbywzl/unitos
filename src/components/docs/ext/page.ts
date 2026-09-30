@@ -1,6 +1,7 @@
 import { Extension, type AnyExtension, type Editor } from "@tiptap/core";
 import { DOMSerializer, type Node as PMNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey, TextSelection, type EditorState } from "@tiptap/pm/state";
+import { NodeSelection, Plugin, PluginKey, TextSelection, type EditorState } from "@tiptap/pm/state";
+import { CellSelection } from "@tiptap/pm/tables";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import {
   paginate,
@@ -9,7 +10,7 @@ import {
   type SpacerKind,
   type SpacerPlan,
 } from "@/components/docs/page/paginate";
-import { tabSizes } from "@/components/docs/page/tabs";
+import { tabLinesPlugin, tabSizes } from "@/components/docs/page/tabs";
 
 // The page editor's page extensions (SPEC.md §29): pagination, tab stops,
 // the pageless headings that fold, Docs' caret, and the selection while the
@@ -382,6 +383,7 @@ const Pagination = Extension.create({
         },
         props: { decorations: (state) => tabsKey.getState(state) },
       }),
+      tabLinesPlugin(),
     ];
   },
 });
@@ -544,33 +546,68 @@ const caretViews = new WeakMap<EditorView, DocsCaretView>();
     view, gray, as Google Docs keeps it. A blur turns it gray; the gray goes
     with the next change of the selection or the text, never on the focus
     itself: a redraw then would put the old selection back over the click
-    that brought the focus. */
-const blurredKey = new PluginKey<boolean>("docsBlurred");
+    that brought the focus. A menu open over the page grays a selected range
+    too: the blocks the range crosses take the gray token (docs-menu-gray,
+    css/page.css), so the menu restyles those blocks alone. The token on the
+    whole text restyled every line of the page, 130 ms on a long import. */
+type CaretState = { blurred: boolean; menu: boolean };
+const blurredKey = new PluginKey<CaretState>("docsBlurred");
+/** A menu opened or closed over the page (the menus are the body's children
+    marked data-docs-menu, docs/menu.tsx). */
+const MENU_META = "docsMenuOpen";
+
+/** The blocks a range crosses, marked gray while a menu is open: each
+    textblock, each block with no text (an image, a line), and each selected
+    cell of a table. */
+function menuGray(state: EditorState): Decoration[] {
+  const gray: Decoration[] = [];
+  const mark = (pos: number, node: PMNode) => gray.push(Decoration.node(pos, pos + node.nodeSize, { class: "docs-menu-gray" }));
+  const { selection } = state;
+  if (selection instanceof CellSelection) {
+    selection.forEachCell((cell, pos) => mark(pos, cell));
+    return gray;
+  }
+  for (const { $from, $to } of selection.ranges) {
+    state.doc.nodesBetween($from.pos, $to.pos, (node, pos) => {
+      if (!node.isTextblock && !(node.isBlock && node.isLeaf)) return true;
+      mark(pos, node);
+      return false;
+    });
+  }
+  return gray;
+}
 
 const DocsCaret = Extension.create({
   name: "docsCaret",
   addProseMirrorPlugins() {
     return [
-      new Plugin<boolean>({
+      new Plugin<CaretState>({
         key: blurredKey,
         state: {
-          init: () => false,
-          apply: (tr, blurred) =>
-            (tr.getMeta(blurredKey) as boolean | undefined) ?? (blurred && !tr.selectionSet && !tr.docChanged),
+          init: () => ({ blurred: false, menu: false }),
+          apply: (tr, prev) => {
+            const blurred = (tr.getMeta(blurredKey) as boolean | undefined) ?? (prev.blurred && !tr.selectionSet && !tr.docChanged);
+            const menu = (tr.getMeta(MENU_META) as boolean | undefined) ?? prev.menu;
+            return blurred === prev.blurred && menu === prev.menu ? prev : { blurred, menu };
+          },
         },
         props: {
-          // A range, not a caret: a menu open over the page grays it
-          // (css/page.css). A caret takes no gray, so a menu opened over it
-          // restyles nothing; the gray restyles every line of the page.
-          attributes: (state): Record<string, string> =>
-            state.selection.empty ? { class: "docs-own-caret" } : { class: "docs-own-caret", "data-range": "" },
-          decorations: (state) =>
-            blurredKey.getState(state) && !state.selection.empty
-              ? DecorationSet.create(
-                  state.doc,
-                  state.selection.ranges.map((r) => Decoration.inline(r.$from.pos, r.$to.pos, { class: "docs-blurred-selection" })),
-                )
-              : null,
+          // The browser's selection hides on the whole text for the rarer
+          // selections ProseMirror draws itself (cells, the gap cursor,
+          // Select all matching text); a selected node hides it inside
+          // itself (css/prosemirror.css).
+          attributes: (state): Record<string, string> => ({
+            class: state.selection.visible || state.selection instanceof NodeSelection ? "docs-own-caret" : "docs-own-caret docs-hide-selection",
+          }),
+          decorations: (state) => {
+            const caret = blurredKey.getState(state);
+            if (!caret || state.selection.empty || (!caret.blurred && !caret.menu)) return null;
+            const marks = caret.blurred
+              ? state.selection.ranges.map((r) => Decoration.inline(r.$from.pos, r.$to.pos, { class: "docs-blurred-selection" }))
+              : [];
+            if (caret.menu) marks.push(...menuGray(state));
+            return DecorationSet.create(state.doc, marks);
+          },
           handleDOMEvents: {
             blur: (view) => {
               view.dispatch(view.state.tr.setMeta(blurredKey, true));
@@ -581,7 +618,18 @@ const DocsCaret = Extension.create({
         view: (view) => {
           const caret = new DocsCaretView(view);
           caretViews.set(view, caret);
-          return { update: (v) => caret.update(v), destroy: () => caret.destroy() };
+          const menus = new MutationObserver(() => {
+            const open = Array.from(document.body.children).some((el) => el.hasAttribute("data-docs-menu"));
+            if (open !== blurredKey.getState(view.state)?.menu) view.dispatch(view.state.tr.setMeta(MENU_META, open));
+          });
+          menus.observe(document.body, { childList: true });
+          return {
+            update: (v) => caret.update(v),
+            destroy: () => {
+              menus.disconnect();
+              caret.destroy();
+            },
+          };
         },
       }),
     ];

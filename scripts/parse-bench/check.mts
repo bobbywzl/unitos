@@ -6,10 +6,14 @@ import { listLevelsOf, type RichNode } from "@/lib/docs/schema";
 import type { ParsedBlock } from "@/lib/parse/types";
 import type { Glyph } from "@/lib/parse/pdf/drawing";
 import { fromImport, fromParse, printedNotes, type Doc, type DocBlock } from "./adapt";
-import { borderScore, formulaScaleOf, freeScores, furnitureOf, mathPart, ocrSame, type PdfText } from "./free";
+import { brokenNumbers, checklistWraps, displayDrawn, displayGaps, displaySpace, markerStart, rowHeight, rowHeights } from "./drawn";
+import { blindText, borderScore, formulaScaleOf, freeScores, furnitureOf, mathPart, ocrSame, type PdfText } from "./free";
+import { captionScores, captionSides, contentImages, cropOverlaps, pictureScores } from "./floats";
+import type { PagePaint } from "./paint";
 import { glyphScores, placeCrops, placeEquations, type PageGlyphs } from "./glyphs";
+import { columnScores, cropScores, faceShape, farSpace, figureScores, gridProse, indentScores, labelScores, linesOfUnits, proofBoxes, runInIndents, tableScores, titleMarks, type PageInk } from "./layout";
 import { mathTokens, sequenceSimilarity } from "./math";
-import { flatten, score, type Scores } from "./metrics";
+import { flatten, lostFormulas, score, type Flat, type Scores } from "./metrics";
 import type { RefBlock, Span } from "./model";
 import { CORPUS_PATH } from "./load";
 import { garblesOf, wordsOf } from "./text";
@@ -363,6 +367,50 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   const e = run(edit((b) => (b[3] = eaten)));
   check("math: a formula that eats a word loses that word's recall", (e.words.recall ?? 1) < 1 && (e.math.inline ?? 1) < 1, `recall ${e.words.recall}, inline ${e.math.inline}`);
 }
+{
+  // Where one inline formula ends and the next begins is the writer's choice: "z = (x−μ)/σ = (1−5)/6" as two
+  // formulas and an "=" between, or as one, reads the same on the page.
+  const f = (latex: string): Span => ({ text: latex, latex });
+  const two: RefBlock = { kind: "paragraph", spans: [{ text: "Then z = " }, f("\\frac{x-\\mu}{\\sigma}"), { text: " = " }, f("\\frac{1-5}{6}"), { text: " is the score." }] };
+  const one: RefBlock = { kind: "paragraph", spans: [{ text: "Then z = " }, f("\\frac{x-\\mu}{\\sigma}=\\frac{1-5}{6}"), { text: " is the score." }] };
+  const joined = score({ blocks: [two] }, [], { blocks: [one] }).scores;
+  const split = score({ blocks: [one] }, [], { blocks: [two] }).scores;
+  const wrong = score({ blocks: [two] }, [], { blocks: [{ kind: "paragraph", spans: [{ text: "Then z = " }, f("\\frac{x-\\mu}{\\sigma}=\\frac{1-4}{6}"), { text: " is the score." }] }] }).scores;
+  check(
+    "math: one formula that holds two formulas and the sign between them scores both, and two that make one score it",
+    near(joined.math.inline, 1) && near(split.math.inline, 1) && (wrong.math.inline ?? 1) < 1,
+    `joined ${joined.math.inline}, split ${split.math.inline}, wrong ${wrong.math.inline}`,
+  );
+}
+
+{
+  // A heading's own number and a contents line that repeats it are no page number; a page number before the
+  // heading is.
+  const REF_HEAD: RefBlock[] = [{ kind: "heading", level: 1, spans: [{ text: "3 Flow in the lower channel" }] }, para("The channel narrows below the dam and the water runs faster there.")];
+  const own = score({ blocks: REF_HEAD }, ["3"], { blocks: [para("3 Flow in the lower channel 12"), ...REF_HEAD] }).scores;
+  const leaked = score({ blocks: REF_HEAD }, ["3"], { blocks: [{ kind: "heading", level: 1, spans: [{ text: "3 3 Flow in the lower channel" }] }, REF_HEAD[1]] }).scores;
+  check("furniture: a heading's own number, and a contents line that repeats it, are no page number", own.furniture.leaked === 0 && leaked.furniture.leaked === 1, `${own.furniture.leaked} ${leaked.furniture.leaked}`);
+  // A clause list's numbered titles read either as its items or as headings over lists of their clauses.
+  const clauses: RefBlock[] = [
+    {
+      kind: "list",
+      items: [
+        { depth: 0, marker: "1.", spans: [{ text: "Definitions", bold: true }] },
+        { depth: 1, marker: "1.1", spans: [{ text: "A gauge is a post that shows the water's level." }] },
+        { depth: 0, marker: "2.", spans: [{ text: "Readings", bold: true }] },
+        { depth: 1, marker: "2.1", spans: [{ text: "Each gauge is read at noon every day." }] },
+      ],
+    },
+  ];
+  const asHeadings: DocBlock[] = [
+    { kind: "heading", level: 2, spans: [{ text: "1. Definitions", bold: true }] },
+    { kind: "list", items: [{ depth: 0, marker: "1.1", spans: [{ text: "A gauge is a post that shows the water's level." }] }] },
+    { kind: "heading", level: 2, spans: [{ text: "2. Readings", bold: true }] },
+    { kind: "list", items: [{ depth: 0, marker: "2.1", spans: [{ text: "Each gauge is read at noon every day." }] }] },
+  ];
+  const either = score({ blocks: clauses }, [], { blocks: asHeadings }).scores;
+  check("lists: a clause list's titles read as headings over their clauses score as the list", near(either.composite, 100), JSON.stringify(either.parts));
+}
 
 // ── Footnotes, styles, and roles ────────────────────────────────────────────
 
@@ -510,6 +558,7 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     lines: [line("Let 2k1 t be small.", 100), line("gauge", 400), line("dam wall", 420)],
     furniture: [],
     sizes: new Map([[1, { width: 600, height: 800 }]]),
+    symbols: [],
   };
   const diagram: DocBlock = { kind: "figure", at: { page: 1, region: { kind: "path", points: [[0, 45], [100, 45], [100, 60], [0, 60]] } } };
   const sentence: DocBlock = { kind: "paragraph", spans: [{ text: "Let " }, { text: "", latex: "2k_1t" }, { text: " be small." }] };
@@ -517,11 +566,17 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("free: a formula's glyphs cover the words the text layer splits it into", near(free.recall, 1) && near(free.precision, 1), `recall ${free.recall}, precision ${free.precision}`);
   const bare = freeScores(pdf, flatten({ blocks: [sentence] })).coverage;
   check("free: a diagram's labels are words to cover only without the figure", (bare.recall ?? 1) < 1, `recall ${bare.recall}`);
-  // A display's crop shows every line in it, long ones too; a figure's long line is still a word to cover.
+  // A display's crop and a figure show the lines in them, long ones too; a line the candidate's words hold (a
+  // caption inside its figure's region) stays a word to cover, and a short label it holds is extra.
   const displayPdf: PdfText = { ...pdf, raw: [["Let 2k1 t be small.", "S n equals the sum of the first n terms"]], lines: [line("Let 2k1 t be small.", 100), line("S n equals the sum of the first n terms", 400)] };
   const crop = freeScores(displayPdf, flatten({ blocks: [sentence, { ...diagram, mathImage: "" }] })).coverage;
   const picture = freeScores(displayPdf, flatten({ blocks: [sentence, diagram] })).coverage;
-  check("free: a display's crop shows its lines, a figure's long line is a word to cover", near(crop.recall, 1) && (picture.recall ?? 1) < 1, `crop ${crop.recall}, figure ${picture.recall}`);
+  const captioned = freeScores(displayPdf, flatten({ blocks: [sentence, { ...diagram, caption: [{ text: "S n equals the sum of the first n terms" }] }] })).coverage;
+  check(
+    "free: a crop's and a figure's lines are their picture's words, unless the candidate's words hold them",
+    near(crop.recall, 1) && near(picture.recall, 1) && near(picture.precision, 1) && near(captioned.recall, 1) && near(captioned.precision, 1),
+    `crop ${crop.recall}, figure ${picture.recall}/${picture.precision}, caption ${captioned.recall}/${captioned.precision}`,
+  );
   // Word's hollow bullet read as "o" before an item the candidate draws with a dash; a title broken in capitals.
   const wordPdf: PdfText = { ...pdf, raw: [["o Sand settles behind every bar.", "THE RIVER COM-", "PARED WITH LAKES"]], lines: [] };
   const item: DocBlock = { kind: "list", items: [{ depth: 1, marker: "-", spans: [{ text: "Sand settles behind every bar." }] }] };
@@ -546,6 +601,19 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("free: a math letter the text layer reads twice is one letter", near(doubled.recall, 1) && near(doubled.precision, 1), `recall ${doubled.recall}, precision ${doubled.precision}`);
   // A page number printed with a period ("54."): the candidate's line of it is a page-number line.
   const numbered = freeScores({ ...pdf, raw: [["The yard grew."]], lines: [] }, flatten({ blocks: [para("The yard grew."), para("54.")] }));
+  // Symbol fonts the text layer reads as letters: a Wingdings ◆ read "u", Symbol's α read as a private-use character.
+  const symbolLine = line("u The yard grew \uf061 wide.", 100);
+  const symbolPdf: PdfText = {
+    ...pdf,
+    raw: [[symbolLine.text]],
+    lines: [symbolLine],
+    symbols: [
+      { page: 1, word: "u", reads: "", line: symbolLine },
+      { page: 1, word: "\uf061", reads: "α", line: symbolLine },
+    ],
+  };
+  const symbolic = freeScores(symbolPdf, flatten({ blocks: [para("◆ The yard grew α wide.")] })).coverage;
+  check("free: a symbol font's character counts as the page draws it, not as the text layer's letter", near(symbolic.recall, 1) && near(symbolic.precision, 1), `recall ${symbolic.recall}, precision ${symbolic.precision}`);
   check("free: a line that is a page number and a period counts as a page-number line", numbered.numberLines.count === 1, `count ${numbered.numberLines.count}`);
 }
 {
@@ -839,6 +907,39 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   const norm = glyphScores([bars], doc("", [{ kind: "equation", latex: "‖x‖", at: { page: 1, region: around(15, 20) } }]), undefined);
   console.warn = warn;
   check("glyphs: a norm's bars drawn as ‖ or ∥ are one symbol", norm.checked === 1 && norm.passed === 1, JSON.stringify(norm.fails));
+  // ⟺ drawn as ⇐ and ⇒ overlapping by 3 mu (TeX's \Longleftrightarrow), which also opens ⟸ with "=".
+  const iff: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 90, 400), { ...g("oms", 0x28, "⇐", 100, 400), w: 10 }, { ...g("oms", 0x29, "⇒", 108.3, 400), w: 10 }, g("oml", 0x62, "b", 120, 400)] };
+  const joined = glyphScores([iff], doc("", [{ kind: "equation", latex: "a \\Longleftrightarrow b", at: { page: 1, region: around(14, 22) } }]), undefined);
+  check("glyphs: ⇐ and ⇒ joined by TeX's overlap are ⟺", joined.checked === 1 && joined.passed === 1, JSON.stringify(joined.fails));
+  // A display's printed number "(3)" in its region, set an em and more apart in a text font: the formula is
+  // read without it, whether the candidate kept the label or not.
+  const numbered: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 100, 400), g("ot1", 0x28, "(", 500, 400), g("ot1", 0x33, "3", 504, 400), g("ot1", 0x29, ")", 509, 400)] };
+  const unlabelled = glyphScores([numbered], doc("", [{ kind: "equation", latex: "x", at: { page: 1, region: around(15, 90) } }]), undefined);
+  const labelled = glyphScores([numbered], doc("", [{ kind: "equation", latex: "x", label: "(3)", at: { page: 1, region: around(15, 90) } }]), undefined);
+  check("glyphs: a display's printed number is no symbol of its formula", unlabelled.passed === 1 && labelled.passed === 1, `${JSON.stringify(unlabelled.fails)} ${JSON.stringify(labelled.fails)}`);
+  // A tall paren KaTeX draws as a picture stands for the cmex paren the page draws; a stacked brace counts once.
+  const tall: PageGlyphs = { width: 600, height: 800, glyphs: [g("omx", 0x10, "(", 100, 420), g("omx", 0x5f, "⋁", 110, 420), g("oml", 0x78, "x", 125, 400), g("omx", 0x11, ")", 135, 420)] };
+  const pictured = glyphScores([tall], doc("", [{ kind: "equation", latex: "\\left(\\bigvee_{q\\in Q} x\\right)", at: { page: 1, region: around(15, 25) } }]), undefined);
+  check("glyphs: a delimiter KaTeX draws as a picture stands for the page's", pictured.fails.every((f) => !f.extra.some((x) => x.startsWith("(delimiter)"))) && pictured.fails.every((f) => !f.missing.some((x) => x.startsWith("(@") || x.startsWith(")@"))), JSON.stringify(pictured.fails));
+  const stacked: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 90, 400), g("ot1", 0x3d, "=", 96, 400), g("omx", 0x38, "", 106, 414), g("omx", 0x3c, "", 106, 404), g("omx", 0x3a, "", 106, 394), g("ot1", 0x30, "0", 116, 410), g("ot1", 0x31, "1", 116, 392)] };
+  const cases = glyphScores([stacked], doc("", [{ kind: "equation", latex: "x = \\begin{cases} 0 \\\\ 1 \\end{cases}", at: { page: 1, region: around(14, 22) } }]), undefined);
+  check("glyphs: a brace stacked from pieces is one brace on both sides", cases.fails.every((f) => !f.extra.some((x) => /^[⎧⎨⎩]/.test(x)) && !f.missing.some((x) => x.startsWith("{@"))), JSON.stringify(cases.fails));
+  // An arrow KaTeX draws as a picture (\xrightarrow) stands for the arrow the page draws.
+  const arrowed: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 90, 400), { ...g("oms", 0x21, "→", 100, 400), w: 10 }, g("oml", 0x62, "b", 114, 400)] };
+  const xarrow = glyphScores([arrowed], doc("", [{ kind: "equation", latex: "a \\xrightarrow{} b", at: { page: 1, region: around(14, 22) } }]), undefined);
+  check("glyphs: an arrow KaTeX draws as a picture stands for the page's", xarrow.checked === 1 && xarrow.passed === 1, JSON.stringify(xarrow.fails));
+  // TeX's \vdots and \ddots: three periods of the text font, in a column and stepping right.
+  const dots: PageGlyphs = {
+    width: 600,
+    height: 800,
+    glyphs: [g("ot1", 0x2e, ".", 100, 410), g("ot1", 0x2e, ".", 100, 406), g("ot1", 0x2e, ".", 100, 402), g("ot1", 0x2e, ".", 110, 407), g("ot1", 0x2e, ".", 114, 404), g("ot1", 0x2e, ".", 118, 401)],
+  };
+  const stackedDots = glyphScores([dots], doc("", [{ kind: "equation", latex: "\\vdots \\ddots", at: { page: 1, region: around(14, 22) } }]), undefined);
+  check("glyphs: three periods in a column are ⋮, stepping down right ⋱", stackedDots.checked === 1 && stackedDots.passed === 1, JSON.stringify(stackedDots.fails));
+  // A diagram read with its own labels as its caption (no "Figure N"): its ℱ counts once, from its region.
+  const labelled2: PageGlyphs = { width: 600, height: 800, glyphs: [g("oms", 0x46, "F", 300, 400), g("oms", 0x46, "F", 300, 300)] };
+  const once = glyphScores([labelled2], { blocks: [{ kind: "figure", caption: [{ text: "ℱ loss" }], at: { page: 1, region: around(45, 55) } }, { kind: "paragraph", spans: [{ text: "the ℱ of" }] }] }, undefined);
+  check("glyphs: a figure whose caption is its picture's labels counts its symbols once", once.garbles === 0 && once.hazards === 2, JSON.stringify(once.missing));
   // The import's crop of a display has no caption: it is an equation picture where the parse's is one.
   const parseCrops: Doc = { blocks: [{ kind: "figure", mathImage: "6= F", at: { page: 1, region: around(32, 52) } }, { kind: "figure", caption: [{ text: "Figure 1: The dam." }], at: { page: 1, region: whole } }] };
   const importCrops: Doc = { blocks: [{ kind: "figure", at: { page: 1, region: around(32, 52) } }, { kind: "figure", at: { page: 1, region: whole } }] };
@@ -847,6 +948,12 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     "glyphs: an import's uncaptioned figure is a display's crop where the parse's at its place is one",
     importCrops.blocks[0].kind === "figure" && importCrops.blocks[0].mathImage === "" && importCrops.blocks[1].kind === "figure" && importCrops.blocks[1].mathImage === undefined,
   );
+  // The page sets a, b, and c on one line; LaTeX that stacks them in rows draws another formula, with every
+  // symbol there at its level.
+  const line: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 100, 400), g("oml", 0x62, "b", 110, 400), g("oml", 0x63, "c", 120, 400)] };
+  const inRows = glyphScores([line], doc("", [{ kind: "equation", latex: "\\begin{gathered} a \\\\ b \\\\ c \\end{gathered}", at: { page: 1, region: around(15, 22) } }]), undefined);
+  const onLine = glyphScores([line], doc("", [{ kind: "equation", latex: "abc", at: { page: 1, region: around(15, 22) } }]), undefined);
+  check("glyphs: LaTeX that stacks in rows what the page sets on one line fails the rows check", inRows.rowsWrong === 1 && inRows.passed === 0 && onLine.rowsWrong === 0 && onLine.passed === 1, `${JSON.stringify(inRows.fails)} ${onLine.rowsWrong}`);
 }
 
 // ── Words and garbles ───────────────────────────────────────────────────────
@@ -920,6 +1027,8 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     table.kind === "table" && table.rows[0].cells[0].header === true && table.rows[1].cells[0].spans[0].bold === true && table.rows[1].cells[1].spans[0].text === "gauge reading",
   );
   check("parse: a figure of math is an equation image", page2.blocks[3].kind === "figure" && page2.blocks[3].mathImage !== undefined);
+  const later = fromParse({ title: "Notes", blocks }, [2, 2], (title) => title === "Notes");
+  check("parse: a title whose words stand on the scored pages is scored there", later.blocks[0].kind === "title" && page2.blocks[0].kind !== "title");
   const withBreak = fromParse({ title: null, blocks: [blocks[1]] });
   check("parse: a page start inside a block is a break", withBreak.blocks[0].breaks?.[0]?.at === 19);
   const cells = fromParse({
@@ -996,6 +1105,18 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   };
   const shape = fromImport(doc).blocks.map((b) => (b.kind === "footnote" ? `footnote ${b.label}` : b.kind)).join(", ");
   check("import: an affiliation before the body is no footnote; notes after it are, a formula's symbol their label", shape === "paragraph, paragraph, footnote 2, footnote ‡", shape);
+  // A note the page prints with no mark, set as a small paragraph with no number: the reference's unmarked note.
+  const unmarked: RichNode = {
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { docStyle: "title" }, content: [{ type: "text", text: "River notes" }] },
+      { type: "paragraph", content: [small("2020 River Survey Classification. Primary 11A05.")] },
+      { type: "paragraph", content: [{ type: "text", text: body }] },
+    ],
+  };
+  const notes = [{ kind: "footnote" as const, label: "", spans: [{ text: "2020 River Survey Classification. Primary 11A05." }] }];
+  const read = fromImport(unmarked, undefined, printedNotes(notes)).blocks.map((b) => (b.kind === "footnote" ? `footnote "${b.label}"` : b.kind)).join(", ");
+  check("import: a small paragraph holding a note the page prints with no mark is that note", read === 'title, footnote "", paragraph', read);
 }
 {
   // A caption at the body's own size (a page set in 9 pt) still captions its table; a centered small line
@@ -1165,6 +1286,27 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     f4?.kind === "figure" && f4.caption?.[0]?.text === "Figure 1:" && f4.caption[0].bold === true && f4.caption[1]?.bold === undefined,
     JSON.stringify(f4),
   );
+  // A crop's caption at 0.8rem in the text's color; a Word figure's at its figcaption's size and color.
+  const captions = fromImport(
+    {
+      type: "doc",
+      attrs: {},
+      content: [
+        { type: "figure", attrs: { mediaId: "m1", caption: "Figure 2: The lower gauge." } },
+        { type: "figure", attrs: { mediaId: "m2", caption: "Figure 3: The weir." } },
+      ],
+    },
+    undefined,
+    undefined,
+    undefined,
+    new Map([["m2", '<figure><img src="x.png"><figcaption style="font-size:10pt;color:#44546a">Figure 3: The weir.</figcaption></figure>']]),
+  ).blocks;
+  const [cropFont, wordFont] = captions.map((b) => (b.kind === "figure" ? b.font : undefined));
+  check(
+    "import: a crop's caption at 0.8rem in the text's color; a Word figure's at its figcaption's size and color",
+    cropFont?.size === 9.6 && cropFont.color === undefined && wordFont?.size === 10 && wordFont.color === "#44546a",
+    JSON.stringify([cropFont, wordFont]),
+  );
   check(
     "import: indents and spaces in points, items' alignment and space, borders, and the label's side",
     p0.kind === "paragraph" && p0.indentPt?.first === 5 && p0.spaceAfter === 6 && l1.kind === "list" && l1.align === "justify" && l1.itemSpace === 4 && l1.spaceAfter === 2 && p2.kind === "paragraph" && p2.borders?.join() === "bottom" && e3.kind === "equation" && e3.labelSide === "left",
@@ -1261,6 +1403,7 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     ],
     furniture: [pageNumber],
     sizes: new Map([[1, { width: 612, height: 792 }], [2, { width: 612, height: 792 }]]),
+    symbols: [],
   };
   const heading: DocBlock = { kind: "heading", level: 1, spans: [{ text: "2 VHE OBSERVATIONS" }] };
   const own = freeScores(numberPdf, flatten({ blocks: [heading, para("The telescope saw the source.")] })).furniture;
@@ -1280,9 +1423,311 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   const chart: DocBlock = { kind: "figure", at: { page: 1, region: { kind: "path", points: [[10, 30], [90, 30], [90, 60], [10, 60]] } } };
   const ticked = freeScores(chartPdf, flatten({ blocks: [para("The telescope saw the source."), chart, para("The dam held the flood.")] })).furniture;
   check("free: a furniture line inside the body of a figure (a chart's tick) is no leak", ticked.leaked === 0, `leaked ${ticked.leaked}`);
+  // A section's title that the running head repeats on every page: its heading holds the head's words, once.
+  const sectionHead = { page: 2, top: 20, bottom: 30, left: 200, right: 400, text: "Section 1 River gauges" };
+  const sectionPdf: PdfText = { ...numberPdf, pages: 2, raw: [["The telescope saw the source."], ["Section 1 River gauges"]], lines: [numberPdf.lines[1], sectionHead], furniture: [sectionHead] };
+  const titled = freeScores(sectionPdf, flatten({ blocks: [{ kind: "heading", level: 1, spans: [{ text: "Section 1 River gauges" }] }, para("The telescope saw the source.")] })).furniture;
+  const leakedHead = freeScores(sectionPdf, flatten({ blocks: [{ kind: "heading", level: 1, spans: [{ text: "Section 1 River gauges" }] }, para("The telescope saw the source."), para("Section 1 River gauges")] })).furniture;
+  check("free: a section's heading the running head repeats is its own words, once", titled.leaked === 0 && leakedHead.leaked === 1, `${titled.leaked} ${leakedHead.leaked}`);
+  // A tab set sideways at the page's edge names the section, and a line of the contents names it too: no leak.
+  const tab = { page: 2, top: 60, bottom: 240, left: 560, right: 590, text: "river gauges" };
+  const tabPdf: PdfText = { ...numberPdf, pages: 2, raw: [["River gauges", "The telescope saw the source."], ["river gauges"]], lines: [numberPdf.lines[1], tab], furniture: [tab] };
+  const tabbed = freeScores(tabPdf, flatten({ blocks: [para("River gauges"), para("The telescope saw the source.")] })).furniture;
+  const runningHead = { ...tab, top: 20, bottom: 30, left: 200, right: 400 };
+  const across = freeScores({ ...tabPdf, lines: [numberPdf.lines[1], runningHead], furniture: [runningHead] }, flatten({ blocks: [para("River gauges"), para("The telescope saw the source.")] })).furniture;
+  check("free: a tab set sideways leaks nothing; the same words as a running head leak", tabbed.leaked === 0 && across.leaked === 1, `leaked ${tabbed.leaked} ${across.leaked}`);
   // A display read as words holds a line "12": no page-number line.
   const display = freeScores({ ...numberPdf, furniture: [] }, flatten({ blocks: [para("MSE = 1\n12\nI=0")] }));
   check("free: a number on a line inside a block is no page-number line", display.numberLines.count === 0, `count ${display.numberLines.count}`);
+}
+
+// ── The page's own lines: columns, indents, tables, figures, crops, faces, labels ──
+
+{
+  // A page of two columns, each line of prose: the left column's lines at x 72, the right's at x 320.
+  const L = ["The river rises in the hills above the town and", "runs west through the valley to the lake below", "where the old mill stood until the flood of", "the year the bridge was built across the gorge"];
+  const R = ["Gauges along the bank record the water level", "every hour and send their readings to the office", "where the engineers compare them with the rain", "that fell on the hills during the night before"];
+  const lines: PdfText["lines"] = [...L.map((text, i) => ({ page: 1, top: 100 + 14 * i, bottom: 110 + 14 * i, left: 72, right: 290, text })), ...R.map((text, i) => ({ page: 1, top: 100 + 14 * i, bottom: 110 + 14 * i, left: 320, right: 540, text }))];
+  const pdf: PdfText = { first: 1, pages: 1, raw: [[...L, ...R]], lines, furniture: [], sizes: new Map([[1, { width: 612, height: 792 }]]), symbols: [] };
+  const across = flatten({ blocks: [para(L.flatMap((l, i) => [l, R[i]]).join(" "))] });
+  const read = flatten({ blocks: [para(L.join(" ")), para(R.join(" "))] });
+  const wrong = columnScores(pdf, across, linesOfUnits(pdf, across));
+  const right = columnScores(pdf, read, linesOfUnits(pdf, read));
+  check("layout: two columns read line by line across the gutter are read across; column by column, in order", wrong.across === 8 && near(right.score, 1), `across ${wrong.across}, in order ${right.score}`);
+  // The same lines as a table's cells, a row a line, one sentence running on down each column: prose in a table.
+  const cells = (texts: string[][]) => flatten({ blocks: [{ kind: "table", rows: texts.map((row) => ({ cells: row.map((text) => ({ spans: [{ text }] })) })) }] });
+  const prose = cells(L.map((l, i) => [l, R[i]]));
+  const phrases = cells([["Gauge", "Level"], ["upper dam", "high water"], ["lower dam", "low water"], ["mill race", "no reading"]]);
+  check("layout: prose read into a table's cells is prose; a table of phrases is none", tableScores(prose, linesOfUnits(pdf, prose)).prose > 0 && tableScores(phrases, linesOfUnits(pdf, phrases)).prose === 0);
+  // A paragraph set in 20 pt where the page sets its lines at the column's edge, and one the page sets in; the
+  // column's other paragraph stands at its edge.
+  const block = (left: number): DocBlock => ({ kind: "paragraph", spans: [{ text: L.join(" ") }], indent: "block", indentPt: { left, first: 0 } });
+  const other = [0, 1, 2].map((i) => ({ page: 1, top: 300 + 14 * i, bottom: 310 + 14 * i, left: 72, right: 290, text: `Body line ${i} of the column's other paragraph` }));
+  const own = L.map((text, i) => ({ page: 1, top: 100 + 14 * i, bottom: 110 + 14 * i, left: 72, right: 290, text }));
+  const flushPdf: PdfText = { ...pdf, lines: [...own, ...other] };
+  const setInPdf: PdfText = { ...flushPdf, lines: [...own.map((l) => ({ ...l, left: 92 })), ...other] };
+  const indented = flatten({ blocks: [block(20)] });
+  const falseSet = indentScores(flushPdf, indented, linesOfUnits(flushPdf, indented));
+  const trueSet = indentScores(setInPdf, indented, linesOfUnits(setInPdf, indented));
+  check("layout: a block indent the page does not set is false; one it sets is right", falseSet.wrong === 1 && trueSet.judged === 1 && trueSet.wrong === 0, `${JSON.stringify(falseSet.found)} ${JSON.stringify(trueSet.found)}`);
+  // A drawing read as a display's crop over the captioned rest of its figure: one figure in two pieces.
+  const region = (y1: number, y2: number) => ({ kind: "path" as const, points: [[20, y1], [80, y1], [80, y2], [20, y2]] as [number, number][] });
+  const top: DocBlock = { kind: "figure", mathImage: "", at: { page: 1, region: region(10, 20) } };
+  const rest: DocBlock = { kind: "figure", caption: [{ text: "Figure 1. The dam and its gauges." }], at: { page: 1, region: region(20, 35) } };
+  const gapPdf: PdfText = { ...pdf, lines: [...pdf.lines, { page: 1, top: 160, bottom: 170, left: 150, right: 450, text: "The words between the two pictures" }] };
+  const apart: DocBlock = { ...rest, at: { page: 1, region: region(22, 35) } };
+  check(
+    "layout: a figure's top read apart from its captioned rest is a figure in two pieces; with words between them, two figures",
+    figureScores(pdf, flatten({ blocks: [top, rest] })).split === 2 && figureScores(gapPdf, flatten({ blocks: [top, apart] })).split === 0,
+  );
+  // A display's crop that holds a line of the paragraph (it starts at the column's edge, words of prose) holds prose.
+  const cropPdf = (text: string, left: number): PdfText => ({ ...pdf, lines: [...lines, { page: 1, top: 400, bottom: 410, left, right: left + 200, text }] });
+  const crop: DocBlock = { kind: "figure", mathImage: "", at: { page: 1, region: { kind: "path", points: [[5, 49], [95, 49], [95, 53], [5, 53]] } } };
+  check(
+    "layout: a crop holding a line of prose holds prose; a display's own words (for all, set apart) do not",
+    cropScores(cropPdf("For any set S of gauges, define the level L and", 72), flatten({ blocks: [crop] })).prose === 1 && cropScores(cropPdf("f(x) = 0 for all x in S", 250), flatten({ blocks: [crop] })).prose === 0,
+  );
+}
+{
+  check(
+    "layout: a face's shape by its name",
+    faceShape("FRBWPF+LinLibertineT") === "serif" && faceShape("CQLEKO+CharisSIL") === "serif" && faceShape("SHZHDT+LinBiolinumTB") === "sans" && faceShape("ABCDEF+Arial-BoldMT") === "sans" && faceShape("CMTT10") === "mono" && faceShape("CMR10") === "serif" && faceShape("Wingdings") === null,
+  );
+  const scan = labelScores(["1", "2", "3", "2", "3", "4"], 6, [3, 3]);
+  const book = labelScores(["i", "ii", "iii", "1", "2", "3"], 6, undefined);
+  check("layout: page labels that run backwards are wrong; roman front matter before arabic is right", scan.wrong === 1 && scan.pairs === 2 && book.wrong === 0 && book.pairs === 4, `${JSON.stringify(scan)} ${JSON.stringify(book)}`);
+  // A scan's unnamed page ("") draws no label (page-start.ts), so it is no page number among the named ones.
+  const unnamed = labelScores(["", "", "3", "", "5"], 5, undefined);
+  check("layout: an empty page label draws none and pairs with none", unnamed.wrong === 0 && unnamed.pairs === 0, JSON.stringify(unnamed));
+}
+
+// ── The import's drawing: a display's space, a row's height, a marker's place ──
+
+{
+  const em = 10;
+  const space = displaySpace(em);
+  const doc = (spaceAfter: number): RichNode => ({
+    type: "doc",
+    attrs: { namedStyleNormal: JSON.stringify({ size: em }) },
+    content: [
+      { type: "paragraph", attrs: { spaceAfter }, content: [{ type: "text", text: "The flow over the dam is" }] },
+      { type: "blockMath", attrs: { latex: "Q = v A" } },
+      { type: "paragraph", content: [{ type: "text", text: "where v is the speed of the water." }] },
+    ],
+  });
+  // The page: a line, the display 100 pt wide, a line, their ink as poppler draws it: the lines' baselines
+  // `above` over the formula's ink and `below` under it.
+  const parse: Doc = { blocks: [{ kind: "equation", latex: "Q = v A", at: { page: 1, region: { kind: "path", points: [[40, (300 / 792) * 100], [60, (300 / 792) * 100], [60, (320 / 792) * 100], [40, (320 / 792) * 100]] } } }] };
+  const pdf: PdfText = { first: 1, pages: 1, raw: [[]], lines: [], furniture: [], sizes: new Map([[1, { width: 612, height: 792 }]]), symbols: [] };
+  const ink = (above: number, below: number) => () => [
+    { top: 300 - above - 7, bottom: 300 - above + 2, baseline: 300 - above },
+    { top: 300, bottom: 320, baseline: 318 },
+    { top: 320 + below - 7, bottom: 320 + below + 2, baseline: 320 + below },
+  ];
+  const drawn = displayDrawn(doc(4), 1);
+  const asPage = displayGaps(doc(4), parse, pdf, ink(drawn?.above ?? 0, drawn?.below ?? 0));
+  const offPage = displayGaps(doc(4), parse, pdf, ink((drawn?.above ?? 0) + 10, (drawn?.below ?? 0) + 10));
+  check(
+    "look: a display drawn with the page's space from the lines' baselines to its ink is right; 10 pt more on the page, wrong",
+    drawn !== null && drawn.above !== null && drawn.above > 4 && asPage.right === 2 && asPage.edges === 2 && offPage.right === 0,
+    `${JSON.stringify(drawn)} ${JSON.stringify(asPage)} ${JSON.stringify(offPage)}`,
+  );
+  check("look: a display's space is the paragraph's space after plus the math block's own", near((displayDrawn(doc(8), 1)?.above ?? 0) - (drawn?.above ?? 0), 4) && space.top >= 0);
+  // A table of one-line rows the page sets at the page editor's row height, and at twice it.
+  const row = rowHeight(10, 1);
+  const table: DocBlock = { kind: "table", rows: [0, 1, 2, 3].map((r) => ({ cells: [{ spans: [{ text: `Gauge number ${r} reads` }] }] })), cells: { size: 10, lineSpacing: 1 } };
+  const rowsPdf = (pitch: number): PdfText => ({ first: 1, pages: 1, raw: [[]], lines: [0, 1, 2, 3].map((r) => ({ page: 1, top: 100 + pitch * r, bottom: 110 + pitch * r, left: 72, right: 300, text: `Gauge number ${r} reads` })), furniture: [], sizes: new Map([[1, { width: 612, height: 792 }]]), symbols: [] });
+  const flat = flatten({ blocks: [table] });
+  const asDrawn = rowHeights(flat, linesOfUnits(rowsPdf(row), flat), rowsPdf(row));
+  const tight = rowHeights(flat, linesOfUnits(rowsPdf(row / 2), flat), rowsPdf(row / 2));
+  check("look: a table's rows at the page's height are right; twice the page's, wrong", asDrawn.right === 1 && tight.tables === 1 && tight.right === 0, `${JSON.stringify(asDrawn)} ${JSON.stringify(tight)}`);
+  // A marker drawn as a box at its line's start stands there; one drawn outside, its width and an em left of the words.
+  check("look: a marker drawn at its line's start stands in the column; one hung past a narrow hang stands in the margin", markerStart(true, 15, -15, "(a)", 10) === 0 && markerStart(false, 15, 0, "(a)", 10) < -1);
+}
+
+// ── The page's figures, captions, marks, spaces, grids, heads, and boxes ────
+
+{
+  // A page 612 × 792 pt with two lines of words, and what pdf.js reads and paints there (paint.ts).
+  const line = (top: number, left: number, right: number, text: string, words?: { left: number; right: number; text: string }[]) => ({ page: 1, top, bottom: top + 10, left, right, text, ...(words ? { words } : {}) });
+  const pdfOf = (lines: ReturnType<typeof line>[], pages = 1): PdfText => ({
+    first: 1,
+    pages,
+    raw: Array.from({ length: pages }, () => lines.map((l) => l.text)),
+    lines,
+    furniture: [],
+    sizes: new Map(Array.from({ length: pages }, (_, k) => [k + 1, { width: 612, height: 792 }] as [number, { width: number; height: number }])),
+    symbols: [],
+  });
+  const region = (x1: number, y1: number, x2: number, y2: number) => ({ kind: "path" as const, points: [[(x1 / 612) * 100, (y1 / 792) * 100], [(x2 / 612) * 100, (y1 / 792) * 100], [(x2 / 612) * 100, (y2 / 792) * 100], [(x1 / 612) * 100, (y2 / 792) * 100]] as [number, number][] });
+
+  // Words pdftotext reads as nothing (a heading in a CJK font whose map poppler lacks) are the page's words.
+  const plain = pdfOf([line(100, 72, 400, "The river rose in the night")]);
+  const painted: PagePaint[] = [{ width: 612, height: 792, images: [], items: [{ x1: 72, y1: 60, x2: 300, y2: 75, text: "Flood report of the upper dam" }, { x1: 72, y1: 100, x2: 400, y2: 110, text: "The river rose in the night" }] }];
+  const blind = blindText(plain, painted);
+  check("free: pdf.js's words where pdftotext reads none count as the page's", blind.length === 1 && blind[0].text === "Flood report of the upper dam", JSON.stringify(blind));
+
+  // Pictures: a photo no figure shows, a ground under words, a logo on three pages, a banner across the head.
+  const pages3: PagePaint[] = [1, 2, 3].map((p) => ({
+    width: 612,
+    height: 792,
+    items: [],
+    images: [
+      { x1: 20, y1: 20, x2: 90, y2: 90 },
+      ...(p === 1 ? [{ x1: 100, y1: 300, x2: 300, y2: 450 }, { x1: 320, y1: 300, x2: 560, y2: 450 }, { x1: 0, y1: 0, x2: 612, y2: 110 }] : []),
+    ],
+  }));
+  const withGround = pdfOf([line(350, 330, 540, "Words set over a tinted box")], 3);
+  const pictures = contentImages(withGround, pages3);
+  const shown: Flat = flatten({ blocks: [{ kind: "figure", at: { page: 1, region: region(90, 290, 310, 460) } }] });
+  const none: Flat = flatten({ blocks: [] });
+  check("floats: a photo is a picture; a ground under words, a logo on every page, and a banner are none", pictures.length === 1 && pictures[0].x1 === 100, JSON.stringify(pictures));
+  check("floats: a picture no figure shows is missed; one a figure's crop covers is shown", pictureScores(withGround, none, pictures).missed === 1 && pictureScores(withGround, shown, pictures).missed === 0);
+
+  // Captions apart from their figure, and crops over each other.
+  const floats: DocBlock[] = [
+    { kind: "figure", caption: [{ text: "Figure 1. The upper dam." }], at: { page: 1, region: region(72, 100, 300, 200) } },
+    { kind: "paragraph", spans: [{ text: "Photo 2. Crews on the levee at dawn." }] },
+    { kind: "paragraph", spans: [{ text: "Figure 1 shows the dam before the flood." }] },
+    { kind: "figure", at: { page: 1, region: region(72, 150, 300, 250) } },
+  ];
+  const flatFloats = flatten({ blocks: floats });
+  const captions = captionScores(flatFloats);
+  check("floats: a paragraph that opens as a caption is a caption apart; a sentence that names a figure is none", captions.alone === 1 && captions.captions === 2, JSON.stringify(captions));
+  const overlaps = cropOverlaps(pdfOf([]), flatFloats);
+  check("floats: two crops that share half their area overlap", overlaps.overlapping === 2 && overlaps.figures === 2, JSON.stringify(overlaps));
+
+  // A table's caption on the other side of its grid than the page sets it.
+  const table = (side: "above" | "below"): DocBlock => ({
+    kind: "table",
+    caption: [{ text: "Table 2. Gauge readings by week" }],
+    captionSide: side,
+    rows: [{ cells: [{ spans: [{ text: "Upper gauge reading" }] }] }, { cells: [{ spans: [{ text: "Lower gauge reading" }] }] }],
+  });
+  const tablePage = pdfOf([line(100, 72, 300, "Upper gauge reading"), line(112, 72, 300, "Lower gauge reading"), line(130, 72, 300, "Table 2. Gauge readings by week")]);
+  const sideOf = (side: "above" | "below") => {
+    const f = flatten({ blocks: [table(side)] });
+    return captionSides(tablePage, f, linesOfUnits(tablePage, f));
+  };
+  check("floats: a caption the page sets under its table is wrong over it", sideOf("above").wrong === 1 && sideOf("below").wrong === 0 && sideOf("below").tables === 1, `${JSON.stringify(sideOf("above"))}`);
+
+  // A note mark on the Title the page's title line does not print.
+  const titled = (text: string) => {
+    const doc: Doc = { blocks: [{ kind: "title", spans: [{ text: "Rational curves in weighted space" }, { text: "1", sup: true }], marks: [{ unit: 0, at: 33, end: 34, id: "n1" }] }] };
+    const f = flatten(doc);
+    const page = pdfOf([line(80, 150, 460, text)]);
+    return titleMarks(page, f, linesOfUnits(page, f));
+  };
+  check("layout: a mark on the Title the page's line lacks is wrong; one it prints is right", titled("Rational curves in weighted space").wrong === 1 && titled("Rational curves in weighted space ∗").wrong === 0);
+
+  // Space after a block over 48 pt: the page leaves it before the next block, or it does not.
+  const spaced = (next: number): { f: Flat; page: PdfText; placed: number[][] } => {
+    const doc: Doc = { blocks: [{ kind: "paragraph", spans: [{ text: "The masthead of the report" }], spaceAfter: 120 }, { kind: "paragraph", spans: [{ text: "The first words under it" }] }] };
+    const f = flatten(doc);
+    const page = pdfOf([line(100, 72, 300, "The masthead of the report"), line(110 + next, 72, 300, "The first words under it")]);
+    return { f, page, placed: linesOfUnits(page, f) };
+  };
+  const inkUnder = (next: number): PageInk => ({ bands: () => [{ top: 110 + next, bottom: 120 + next, baseline: 118 + next }], right: () => null });
+  const far = spaced(120);
+  const near2 = spaced(20);
+  check(
+    "layout: a space after the page leaves before the next block is right; one far past the next ink is wrong",
+    farSpace(far.page, inkUnder(120), far.f, far.placed).wrong === 0 && farSpace(near2.page, inkUnder(20), near2.f, near2.placed).wrong === 1,
+  );
+  // The space down to a picture: right where the candidate's next block is the figure that shows it.
+  const overPicture = (figure: boolean) => {
+    const doc: Doc = {
+      blocks: [
+        { kind: "paragraph", spans: [{ text: "The masthead of the report" }], spaceAfter: 120 },
+        ...(figure ? [{ kind: "figure" as const, at: { page: 1, region: region(72, 230, 300, 400) } }] : []),
+        { kind: "paragraph", spans: [{ text: "The first words under it" }] },
+      ],
+    };
+    const f = flatten(doc);
+    const page = pdfOf([line(100, 72, 300, "The masthead of the report"), line(420, 72, 300, "The first words under it")]);
+    return farSpace(page, inkUnder(120), f, linesOfUnits(page, f)).wrong;
+  };
+  check("layout: a space after down to the figure the candidate sets next is the page's; past a picture it lost it is not", overPicture(true) === 0 && overPicture(false) === 1);
+
+  // A grid of numbers read as a paragraph, and as a table.
+  const grid = [0, 1, 2, 3].map((r) => line(100 + 12 * r, 72, 200, `${r} ${[1, 1, 2, 6][r]}`, [{ left: 72, right: 80, text: String(r) }, { left: 180, right: 200, text: String([1, 1, 2, 6][r]) }]));
+  const gridPage = pdfOf(grid);
+  const asProse = flatten({ blocks: [{ kind: "paragraph", spans: [{ text: "0 1 1 1 2 2 3 6" }] }] });
+  const asTable = flatten({ blocks: [{ kind: "table", rows: [0, 1, 2, 3].map((r) => ({ cells: [{ spans: [{ text: String(r) }] }, { spans: [{ text: String([1, 1, 2, 6][r]) }] }] })) }] });
+  check(
+    "layout: a grid of numbers read as a paragraph is prose; read as a table it is not",
+    gridProse(gridPage, asProse).prose === 1 && gridProse(gridPage, asTable).prose === 0 && gridProse(gridPage, asTable).grids === 1,
+  );
+  // Numbers in columns 5 pt apart, a little over a word space ("40,000 45,050"): a grid all the same.
+  const close = [0, 1, 2].map((r) => line(100 + 12 * r, 72, 150, `${40 + r},000 ${45 + r},050 .${r}25`, [{ left: 72, right: 96, text: `${40 + r},000` }, { left: 101, right: 125, text: `${45 + r},050` }, { left: 130, right: 150, text: `.${r}25` }]));
+  const closeText = close.map((l) => l.text).join(" ");
+  check("layout: numbers in columns 5 pt apart are a grid", gridProse(pdfOf(close), flatten({ blocks: [{ kind: "paragraph", spans: [{ text: closeText }] }] })).prose === 1);
+  // A table of contents: a section's number and its page, a title between them, is no grid.
+  const contents = [1, 2, 3].map((r) => line(100 + 12 * r, 72, 200, `1.${r} Part ${r} ${r + 4}`, [{ left: 72, right: 84, text: `1.${r}` }, { left: 100, right: 130, text: "Part" }, { left: 133, right: 138, text: String(r) }, { left: 190, right: 200, text: String(r + 4) }]));
+  const contentsPage = pdfOf(contents);
+  check("layout: a table of contents is no grid of numbers", gridProse(contentsPage, flatten({ blocks: [{ kind: "paragraph", spans: [{ text: contents.map((l) => l.text).join(" ") }] }] })).grids === 0);
+
+  // A run-in head at the page's indent, and at the column's edge.
+  const runIn = (indent: number) => {
+    const doc: Doc = { blocks: [{ kind: "heading", level: 3, spans: [{ text: "1.2.3. Two examples." }], runIn: { indent } }] };
+    const f = flatten(doc);
+    const page = pdfOf([line(100, 90, 300, "1.2.3. Two examples. We state the first"), line(112, 72, 540, "of the two cases the section treats and its"), line(124, 72, 540, "second case under the same assumptions")]);
+    return runInIndents(page, f, linesOfUnits(page, f));
+  };
+  check("layout: a run-in head set at the page's indent is right; at the column's edge wrong", runIn(18).wrong === 0 && runIn(18).heads === 1 && runIn(0).wrong === 1, JSON.stringify(runIn(0)));
+
+  // The end-of-proof box at the column's right edge: after a tab (to a right stop) right, after the words wrong.
+  const proof = (text: string) => {
+    const doc: Doc = { blocks: [{ kind: "paragraph", spans: [{ text }] }] };
+    const f = flatten(doc);
+    const page = pdfOf([
+      line(100, 72, 540, "for every step of the argument holds as the flood"),
+      line(112, 72, 540, "rises, so the claim follows. □", [{ left: 72, right: 110, text: "rises," }, { left: 113, right: 120, text: "so" }, { left: 123, right: 140, text: "the" }, { left: 143, right: 170, text: "claim" }, { left: 173, right: 210, text: "follows." }, { left: 533, right: 540, text: "□" }]),
+    ]);
+    return proofBoxes(page, { bands: () => [], right: () => null }, f, linesOfUnits(page, f));
+  };
+  const whole = "for every step of the argument holds as the flood rises, so the claim follows.";
+  check("layout: a proof's box the page sets at the right edge is wrong after the words, right after a tab", proof(`${whole} □`).wrong === 1 && proof(`${whole}\t□`).wrong === 0 && proof(`${whole}\t□`).boxes === 1);
+
+  // A number too wide for its cell once its paragraph's indent is taken off the column.
+  const cell = (indentLeft: number): RichNode => ({
+    type: "doc",
+    content: [{ type: "table", content: [{ type: "tableRow", content: [{ type: "tableCell", attrs: { colwidth: [86] }, content: [{ type: "paragraph", attrs: { indentLeft }, content: [{ type: "text", text: "51,051", marks: [{ type: "textStyle", attrs: { fontSize: "9pt" } }] }] }] }] }] }],
+  });
+  check("look: a number set in after a wide indent breaks in its cell; set flush it stays whole", brokenNumbers(cell(29)).broken === 1 && brokenNumbers(cell(0)).broken === 0 && brokenNumbers(cell(0)).numbers === 1);
+
+  // A checklist item that wraps: the page sets its wraps back at the margin; the page editor's row sets them beside the box.
+  const checklist = (indents: string) => {
+    const doc: Doc = { blocks: [{ kind: "list", checklist: indents, items: [{ depth: 0, marker: "☐", spans: [{ text: "The buyer reads the whole agreement before it signs the last page of it" }], checked: false }] }] };
+    const f = flatten(doc);
+    const page = pdfOf([line(100, 72, 540, "☐ The buyer reads the whole agreement before it signs"), line(112, 72, 300, "the last page of it"), line(140, 72, 540, "A paragraph of the agreement at the margin of the page"), line(152, 72, 540, "and its second line at the same margin of the page")]);
+    return checklistWraps(f, linesOfUnits(page, f), page);
+  };
+  check("look: a checklist's wraps the page sets at the margin are wrong beside the box", checklist("").wrong === 1 && checklist("").items === 1, JSON.stringify(checklist("")));
+
+  // A formula the saved run held on a page and the candidate lost there (read as words).
+  const lost = lostFormulas({ 26: ["F:\\mathbb{R}\\mapsto[0,1]", "x_{n}"] }, { 26: ["x_{n}"] });
+  const kept = lostFormulas({ 26: ["F:\\mathbb{R}\\mapsto[0,1]"] }, { 27: ["F\\colon\\mathbb{R}\\mapsto[0,1]"] });
+  check("metrics: an inline formula the saved run held and the page lost counts; one kept on the next page, or written alike, does not", lost.length === 1 && lost[0].page === 26 && kept.length === 0, JSON.stringify({ lost, kept }));
+
+  // Word repeats a table's header row at a page's top: the page editor draws it once.
+  const head = [{ left: 72, right: 120, text: "Area" }, { left: 300, right: 340, text: "Grade" }];
+  const repeated: PdfText = {
+    first: 1,
+    pages: 2,
+    raw: [["Area Grade", "Lines B"], ["Area Grade", "Storage C"]],
+    lines: [
+      { page: 1, top: 100, bottom: 110, left: 72, right: 340, text: "Area Grade", words: head },
+      { page: 1, top: 112, bottom: 122, left: 72, right: 340, text: "Lines B" },
+      { page: 2, top: 72, bottom: 82, left: 72, right: 340, text: "Area Grade", words: head },
+      { page: 2, top: 84, bottom: 94, left: 72, right: 340, text: "Storage C" },
+    ],
+    furniture: [],
+    sizes: new Map([[1, { width: 612, height: 792 }], [2, { width: 612, height: 792 }]]),
+    symbols: [],
+  };
+  const wordTable = flatten({ blocks: [{ kind: "table", rows: [["Area", "Grade"], ["Lines", "B"], ["Storage", "C"]].map((row) => ({ cells: row.map((text) => ({ spans: [{ text }] })) })) }] });
+  check("free: a Word file's table header repeated at a page's top is no word to cover", freeScores(repeated, wordTable, undefined, true).coverage.recall === 1 && (freeScores(repeated, wordTable, undefined, false).coverage.recall ?? 1) < 1);
 }
 
 {

@@ -93,10 +93,27 @@ const INVISIBLE = /[\s​-‍⁠﻿]/u;
 const drawnMemo = new Map<string, string[] | null>();
 /** One symbol KaTeX draws two ways: a norm's bars, ‖ (U+2016) or ∥ (U+2225), as \| or \left\| sets it. */
 const SAME_SYMBOL: Record<string, string> = { "‖": "∥" };
+/** A tall delimiter, TeX's and KaTeX's alike, counts as its one symbol:
+    stacked from pieces, its top piece stands for it (the rest are none);
+    drawn by KaTeX as a picture (a tall \left( … \right) around a big
+    operator with limits), it stands for whichever delimiter the glyphs hold
+    there, as its picture names none. */
+const DRAWN_DELIMITER = "(delimiter)";
+/** An arrow KaTeX draws as a picture (\xrightarrow and its kin): it stands
+    for whichever arrow the glyphs hold at its level. */
+const DRAWN_ARROW = "(arrow)";
+const ARROW_RE = /^[\u2190-\u21ff\u27f0-\u27ff\u2900-\u297f]$/u;
+/** The delimiters a TeX display draws, any of which a pictured delimiter stands for. */
+const DELIMITERS = new Set(["(", ")", "[", "]", "{", "}", "|", "∣", "∥", "⟨", "⟩", "⌊", "⌋", "⌈", "⌉", "/", "∖"]);
+/** KaTeX's pieces of a stacked delimiter: the top piece is the delimiter, the others are none. */
+const KATEX_PIECES: Record<string, string> = { "⎛": "(", "⎞": ")", "⎡": "[", "⎤": "]", "⎧": "{", "⎫": "}", "⎜": "", "⎝": "", "⎟": "", "⎠": "", "⎢": "", "⎣": "", "⎥": "", "⎦": "", "⎨": "", "⎩": "", "⎪": "", "⎬": "", "⎭": "", "⏐": "" };
+/** TeX's (cmex) top pieces of a stacked delimiter, as the delimiter they stand for. */
+const TEX_TOP_PIECES: Record<string, string> = { "lparen-top": "(", "rparen-top": ")", "lbrack-top": "[", "rbrack-top": "]", "lbrace-top": "{", "rbrace-top": "}" };
 
 /** Each symbol KaTeX draws for a formula (display style), with its script
     level from the HTML's sizing classes (size 5–6: 0, 3–4: 1, 1–2: 2), as
-    "symbol@level"; null when KaTeX cannot read it. */
+    "symbol@level"; a delimiter drawn as a picture is DRAWN_DELIMITER, an
+    arrow drawn as a picture DRAWN_ARROW; null when KaTeX cannot read it. */
 function drawn(latex: string): string[] | null {
   if (drawnMemo.has(latex)) return drawnMemo.get(latex) ?? null;
   let html: string | null = null;
@@ -107,24 +124,106 @@ function drawn(latex: string): string[] | null {
   }
   let out: string[] | null = null;
   if (html !== null) {
-    out = [];
+    const symbols: string[] = [];
     const stack = [0];
+    // A sized delimiter (KaTeX's delimsizing span) gathers its glyphs and pictures, and counts as one symbol
+    // when it closes: its glyphs, a stacked one's top piece for it, else a picture's DRAWN_DELIMITER.
+    let group: { depth: number; texts: string[]; pictured: boolean; level: number } | null = null;
+    // An extensible arrow (KaTeX's x-arrow span) keeps its labels' glyphs, and its picture counts as DRAWN_ARROW.
+    let arrow: { depth: number; pictured: boolean; level: number } | null = null;
     for (const m of html.matchAll(/<span([^>]*)>|<\/span>|<svg[\s\S]*?<\/svg>|([^<]+)/g)) {
+      const level = stack.at(-1) ?? 0;
+      if (m[0].startsWith("<svg")) {
+        if (group) group.pictured = true;
+        else if (arrow) arrow.pictured = true;
+        continue;
+      }
+      if (m[0] === "</span>") {
+        stack.pop();
+        if (arrow && stack.length === arrow.depth) {
+          if (arrow.pictured) symbols.push(`${DRAWN_ARROW}@${arrow.level}`);
+          arrow = null;
+        }
+        if (group && stack.length === group.depth) {
+          const { texts, pictured, level: at } = group;
+          const kept = texts.map((ch) => KATEX_PIECES[ch] ?? ch).filter(Boolean);
+          if (kept.length > 0) symbols.push(...kept.map((ch) => `${SAME_SYMBOL[ch] ?? ch}@${at}`));
+          else if (pictured && texts.length === 0) symbols.push(`${DRAWN_DELIMITER}@${at}`);
+          group = null;
+        }
+        continue;
+      }
+      if (m[1] !== undefined) {
+        const size = /sizing reset-size\d+ size(\d+)/.exec(m[1]);
+        if (!group && /\bdelimsizing\b/.test(m[1])) group = { depth: stack.length, texts: [], pictured: false, level };
+        else if (!group && !arrow && /\bx-arrow\b/.test(m[1])) arrow = { depth: stack.length, pictured: false, level };
+        stack.push(size ? (Number(size[1]) >= 5 ? 0 : Number(size[1]) >= 3 ? 1 : 2) : level);
+        continue;
+      }
+      const text = (m[2] ?? "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
+      for (const ch of text.normalize("NFKC")) {
+        if (INVISIBLE.test(ch)) continue;
+        if (group) group.texts.push(ch);
+        else symbols.push(`${SAME_SYMBOL[ch] ?? ch}@${level}`);
+      }
+    }
+    out = symbols;
+  }
+  drawnMemo.set(latex, out);
+  return out;
+}
+
+/** KaTeX's size classes (size1 … size11) as font sizes against size6. */
+const SIZES = [0, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.2, 1.44, 1.728, 2.074, 2.488];
+/** A letter or a digit: the symbols whose rows the rows check compares (a delimiter, a rule, an accent, a big
+    operator draw otherwise in TeX and KaTeX). */
+const LETTER = /[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{N}]/u;
+const heightMemo = new Map<string, number | null>();
+
+/** How far a formula's letters and digits reach up and down from one another, in ems: the baselines KaTeX draws
+    them on (a vlist child's `top` less its strut, scaled by the size classes over it), the highest less the
+    lowest; null when KaTeX cannot read it. */
+function letterSpan(latex: string): number | null {
+  if (heightMemo.has(latex)) return heightMemo.get(latex) ?? null;
+  let out: number | null = null;
+  try {
+    const html = katex.renderToString(latex, { output: "html", displayMode: true, throwOnError: true, strict: "ignore" });
+    type Frame = { scale: number; shift: number; skip: boolean; top?: number };
+    const stack: Frame[] = [{ scale: 1, shift: 0, skip: false }];
+    const shifts: number[] = [];
+    for (const m of html.matchAll(/<span([^>]*)>|<\/span>|<svg[\s\S]*?<\/svg>|([^<]+)/g)) {
+      const frame = stack[stack.length - 1];
       if (m[0].startsWith("<svg")) continue;
       if (m[0] === "</span>") {
         stack.pop();
         continue;
       }
       if (m[1] !== undefined) {
-        const size = /sizing reset-size\d+ size(\d+)/.exec(m[1]);
-        stack.push(size ? (Number(size[1]) >= 5 ? 0 : Number(size[1]) >= 3 ? 1 : 2) : (stack.at(-1) ?? 0));
+        const cls = /class="([^"]*)"/.exec(m[1])?.[1] ?? "";
+        const style = /style="([^"]*)"/.exec(m[1])?.[1] ?? "";
+        const child: Frame = { scale: frame.scale, shift: frame.shift, skip: frame.skip || /katex-mathml|delimsizing|large-op|op-symbol/.test(cls) };
+        const size = /reset-size(\d+) size(\d+)/.exec(cls);
+        if (size) child.scale = frame.scale * (SIZES[Number(size[2])] / SIZES[Number(size[1])]);
+        const top = /(?:^|;)\s*top:\s*(-?[\d.]+)em/.exec(style);
+        if (top) child.top = Number(top[1]);
+        // A vlist child's strut: the child's baseline stands its top less the strut's height over the vlist's.
+        if (/\bpstrut\b/.test(cls) && frame.top !== undefined) {
+          const holder = stack[stack.length - 2] ?? frame;
+          frame.shift = holder.shift + (-frame.top - Number(/height:\s*(-?[\d.]+)em/.exec(style)?.[1] ?? 0)) * frame.scale;
+          frame.top = undefined;
+          child.shift = frame.shift;
+        }
+        stack.push(child);
         continue;
       }
-      const text = (m[2] ?? "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
-      for (const ch of text.normalize("NFKC")) if (!INVISIBLE.test(ch)) out.push(`${SAME_SYMBOL[ch] ?? ch}@${stack.at(-1) ?? 0}`);
+      if (frame.skip) continue;
+      for (const ch of (m[2] ?? "").normalize("NFKC")) if (LETTER.test(ch)) shifts.push(frame.shift);
     }
+    out = shifts.length > 0 ? Math.max(...shifts) - Math.min(...shifts) : 0;
+  } catch {
+    out = null;
   }
-  drawnMemo.set(latex, out);
+  heightMemo.set(latex, out);
   return out;
 }
 
@@ -201,16 +300,18 @@ function atomsOf(glyphs: PageGlyph[]): Atom[] | null {
       i = -1;
       continue;
     }
-    const join = JOINED.find(([left]) => named(a, left));
-    if (join) {
-      const j = find((b) => named(b, join[1]) && b.x1 > a.x1 && Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) > 0.08 * em && Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) < 0.3 * em);
-      if (j >= 0) {
-        atoms[j].tex = join[2];
-        atoms[j].cls = "rel";
-        atoms.splice(i, 1);
-        i = -1;
-        continue;
-      }
+    // Every join the glyph opens: ⇐ opens ⟸ (with =) and ⟺ (with ⇒).
+    const joined = JOINED.filter(([left]) => named(a, left)).some(([, right, arrow]) => {
+      const j = find((b) => named(b, right) && b.x1 > a.x1 && Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) > 0.08 * em && Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) < 0.3 * em);
+      if (j < 0) return false;
+      atoms[j].tex = arrow;
+      atoms[j].cls = "rel";
+      atoms.splice(i, 1);
+      return true;
+    });
+    if (joined) {
+      i = -1;
+      continue;
     }
     if ((a.tex === "." && a.fam === "oml") || a.tex === "\\cdot") {
       const j = find((b) => b.tex === a.tex && b.x1 > a.x2 && b.x1 - a.x2 < 0.3 * em);
@@ -218,6 +319,22 @@ function atomsOf(glyphs: PageGlyph[]): Atom[] | null {
       if (k >= 0) {
         atoms[k].tex = a.tex === "." ? "\\ldots" : "\\cdots";
         atoms[k].cls = "ord";
+        for (const d of [i, j].sort((p, q) => q - p)) atoms.splice(d, 1);
+        i = -1;
+        continue;
+      }
+    }
+    // \vdots and \ddots: three periods of the text font, each 0.2–0.6 em below the one before, in a column or
+    // stepping right.
+    if (a.tex === ".") {
+      const below = (p: Atom, column: boolean) =>
+        atoms.findIndex((b) => b !== p && b.tex === "." && p.y - b.y > 0.2 * em && p.y - b.y < 0.6 * em && (column ? Math.abs(b.x1 - p.x1) < 0.1 * em : b.x1 - p.x1 > 0.1 * em && b.x1 - p.x1 < 0.6 * em));
+      const column = below(a, true) >= 0;
+      const j = below(a, column);
+      const k = j >= 0 ? below(atoms[j], column) : -1;
+      if (k >= 0) {
+        atoms[k].tex = column ? "\\vdots" : "\\ddots";
+        atoms[k].cls = column ? "ord" : "inner";
         for (const d of [i, j].sort((p, q) => q - p)) atoms.splice(d, 1);
         i = -1;
       }
@@ -237,6 +354,17 @@ function atomSymbols(atoms: Atom[]): string[] | null {
   const big = Math.max(0, ...atoms.filter((a) => a.fam !== "omx").map((a) => a.size)) || Math.max(1, ...atoms.map((a) => a.size));
   const out: string[] = [];
   for (const a of atoms) {
+    // A stacked delimiter counts once: its top piece, and the top bar of a column of bar pieces.
+    const top = TEX_TOP_PIECES[a.piece ?? ""];
+    if (top) {
+      out.push(`${top}@0`);
+      continue;
+    }
+    if (a.piece === "vrep") {
+      const above = atoms.some((b) => b !== a && b.piece === "vrep" && b.tex === a.tex && Math.abs(b.x1 - a.x1) < 0.2 * a.size && b.y > a.y && b.y - a.y < 1.2 * a.size);
+      if (!above) out.push(`${a.tex === "\\|" ? "∥" : "∣"}@0`);
+      continue;
+    }
     if (a.piece || a.cls === "piece" || a.cls === "radical" || !a.tex) continue;
     const r = a.size / big;
     const level = (a.fam === "omx" && r >= 0.75) || r >= 0.85 ? 0 : r >= 0.6 ? 1 : 2;
@@ -264,18 +392,62 @@ function surplus(a: Map<string, number>, b: Map<string, number>): string[] {
 /** The glyphs whose origin lies in a region of a page (percent of the page,
     y from the top, as the parser writes regions), word spaces aside. A math
     font's blank glyph stays: it is a symbol the text layer read as a space.
-    A cmex glyph (a big delimiter, a radical, a large operator) hangs below
-    its origin, which stands at its top: it is in where the em under its
-    origin meets the region (a cases brace whose top stands above a crop's
-    edge, whose picture holds it whole). */
+    A cmex glyph (a big delimiter, a radical, a large operator, a piece of a
+    tall one) hangs below its origin, which stands at its top: it is in
+    where its depth under its origin (an em where the table gives none)
+    meets the region (a cases brace whose top stands above a crop's edge,
+    whose picture holds it whole; not a bar's last piece in the row above). */
 function glyphsIn(page: PageGlyphs, region: Region): PageGlyph[] {
   const b = regionBounds(region);
   return page.glyphs.filter((g) => {
     const x = (g.x / page.width) * 100;
     const y = ((page.height - g.y) / page.height) * 100;
-    const hang = g.family === "omx" ? (g.size / page.height) * 100 : 0;
+    const hang = g.family === "omx" ? (((mathGlyph("omx", g.code)?.box[1] ?? 1) * g.size) / page.height) * 100 : 0;
     return x >= b.x1 && x <= b.x2 && y + hang >= b.y1 && y <= b.y2 && (g.unicode.trim() !== "" || (g.family !== null && MATH.has(g.family)));
   });
+}
+
+/** An equation's printed number among a display region's glyphs: a run in a
+    text font on one baseline at the region's right or left end that reads
+    "(3)", "(2.1)", "(A.3)", set an em or more apart from the formula
+    (amsmath's \tag, or leqno at the left). The glyph check reads the
+    formula without it: the label is the reference's to judge. */
+export function labelGlyphs(glyphs: PageGlyph[]): PageGlyph[] {
+  const text = (g: PageGlyph) => g.unicode.trim() !== "" && (g.family === null || (!MATH.has(g.family) && g.family !== "omx"));
+  const sorted = [...glyphs].filter((g) => g.unicode.trim() !== "").sort((a, b) => a.x - b.x);
+  for (const side of ["right", "left"] as const) {
+    const order = side === "right" ? [...sorted].reverse() : sorted;
+    const end = order[0];
+    if (!end || !text(end)) continue;
+    const run: PageGlyph[] = [];
+    for (const g of order) {
+      if (!text(g) || Math.abs(g.y - end.y) > 0.2 * end.size) break;
+      run.push(g);
+      const read = (side === "right" ? [...run].reverse() : run).map((x) => x.unicode).join("");
+      if (!/^\(\s*[\w.,:*†‡′'–-]{1,12}\s*\)$/u.test(read)) continue;
+      const rest = glyphs.filter((x) => !run.includes(x));
+      if (rest.length === 0) return [];
+      const gap = side === "right" ? Math.min(...run.map((x) => x.x)) - Math.max(...rest.map((x) => x.x + Math.max(0, x.w))) : Math.min(...rest.map((x) => x.x)) - Math.max(...run.map((x) => x.x + Math.max(0, x.w)));
+      return gap >= end.size ? run : [];
+    }
+  }
+  return [];
+}
+
+/** The symbols one side lacks after a delimiter or an arrow KaTeX draws as
+    a picture stands for a delimiter or an arrow the glyphs hold at its level. */
+function settle(missing: string[], extra: string[]): { missing: string[]; extra: string[] } {
+  const left = [...missing];
+  const kept = extra.filter((x) => {
+    const at = x.lastIndexOf("@");
+    const fits = x.slice(0, at) === DRAWN_DELIMITER ? (y: string) => DELIMITERS.has(y) : x.slice(0, at) === DRAWN_ARROW ? (y: string) => ARROW_RE.test(y) : null;
+    if (!fits) return true;
+    const k = left.findIndex((y) => y.slice(y.lastIndexOf("@")) === x.slice(at) && fits(y.slice(0, y.lastIndexOf("@"))));
+    if (k < 0) return true;
+    left.splice(k, 1);
+    return false;
+  });
+  return { missing: left, extra: kept };
 }
 
 // ── The checks ──────────────────────────────────────────────────────────────
@@ -283,6 +455,8 @@ function glyphsIn(page: PageGlyphs, region: Region): PageGlyph[] {
 export type GlyphScores = {
   /** Math glyphs on the scored pages whose text layer string is not their symbol. */
   hazards: number;
+  /** Display equations whose LaTeX sets its letters and digits over rows the page does not (rowsCheck). */
+  rowsWrong: number;
   /** Of the symbols those glyphs draw, the ones the candidate prints fewer times than the pages draw them. */
   garbles: number;
   missing: [string, number][];
@@ -291,13 +465,24 @@ export type GlyphScores = {
   /** Display equations with a region, and those whose LaTeX draws exactly the region's symbols at their script levels. */
   checked: number;
   passed: number;
-  fails: { latex: string; missing: string[]; extra: string[] }[];
+  fails: { latex: string; missing: string[]; extra: string[]; rows?: string }[];
 };
 
 /** A symbol as the garble count compares it: a relation with \not is one
     class (≠ ∉ ≰ …, precomposed), the maps-to arrows another. */
 const NEGATED = "(negated relation)";
 const MAPSTO = "↦";
+
+/** A figure's caption that is a caption ("Figure 3.", "Table 2"), not the words of its picture. */
+const OWN_CAPTION_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.)\s*[\dIVXLivxl]+/i;
+
+/** The words a figure's caption holds that are its picture's own labels (a
+    diagram read with its labels as its caption, no "Figure N"): the region
+    shows them, so they count once, with the region's glyphs. */
+function pictureWords(block: Extract<Doc["blocks"][number], { kind: "figure" }>): string {
+  const caption = (block.caption ?? []).map((s) => s.text).join("");
+  return block.mathImage ?? (OWN_CAPTION_RE.test(caption.trim()) ? "" : caption);
+}
 
 /** Every character a candidate prints: its words, its list markers, its
     formulas (a parse's readable characters, else the glyphs KaTeX draws),
@@ -323,9 +508,10 @@ function printedText(doc: Doc): string {
         parts.push(mathLeaves(b, true).join(""), b.label ?? "");
         break;
       case "figure":
-        // A crop's glyphs are counted from its region (glyphScores).
+        // A crop's glyphs are counted from its region (glyphScores), and so
+        // are a figure's whose caption is its picture's own words.
         if (b.mathImage && !b.at) parts.push(b.mathImage);
-        spans(b.caption);
+        if (!b.at || b.mathImage !== undefined || OWN_CAPTION_RE.test((b.caption ?? []).map((s) => s.text).join("").trim())) spans(b.caption);
         break;
       case "code":
         parts.push(b.text);
@@ -385,6 +571,30 @@ export function placeCrops(parse: Doc, imported: Doc) {
   }
 }
 
+/** The rows check: a display's LaTeX draws its letters and digits over the
+    page's rows, or stacks what the page sets side by side (a cases row's
+    fractions interleaved into rows of their own, the page's one line of a
+    numerator cut in two). Its letters' baselines, as KaTeX draws them
+    (letterSpan), reach more than 2 em past the page's (and half again),
+    measured in the formula's own size (the size most of its glyphs take).
+    A big operator's limits set beside it where KaTeX stacks them reach 2 em
+    at most. Null when the rows agree; else what differs. */
+function rowsCheck(glyphs: PageGlyph[], latex: string): string | null {
+  const letters = glyphs.flatMap((g) => {
+    if (g.family === "omx") return [];
+    const entry = g.family && MATH.has(g.family) ? mathGlyph(g.family, g.code) : null;
+    return [...(entry?.unicode ?? g.unicode).normalize("NFKC")].some((ch) => LETTER.test(ch)) ? [g] : [];
+  });
+  if (letters.length < 2) return null;
+  const sizes = new Map<number, number>();
+  for (const g of letters) sizes.set(Math.round(g.size * 10) / 10, (sizes.get(Math.round(g.size * 10) / 10) ?? 0) + 1);
+  const em = [...sizes].sort((a, b) => b[1] - a[1])[0][0];
+  const page = (Math.max(...letters.map((g) => g.y)) - Math.min(...letters.map((g) => g.y))) / em;
+  const drawnSpan = letterSpan(latex);
+  if (drawnSpan === null || drawnSpan - page <= Math.max(2, 0.5 * page)) return null;
+  return `its letters span ${drawnSpan.toFixed(1)} em drawn, ${page.toFixed(1)} em on the page`;
+}
+
 /** The glyph checks of one candidate on its scored pages. */
 export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, number] | undefined): GlyphScores {
   const inRange = (p: number) => !range || (p >= range[0] && p <= range[1]);
@@ -426,7 +636,7 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
       if (read) counts.set(read.symbol, (counts.get(read.symbol) ?? 0) + 1);
     }
     const text = new Map<string, number>();
-    for (const ch of (block.mathImage ?? "").normalize("NFC")) text.set(classOf(ch), (text.get(classOf(ch)) ?? 0) + 1);
+    for (const ch of pictureWords(block).normalize("NFC")) text.set(classOf(ch), (text.get(classOf(ch)) ?? 0) + 1);
     for (const symbol of new Set([...counts.keys(), ...text.keys()])) {
       printed.set(symbol, (printed.get(symbol) ?? 0) + Math.max(counts.get(symbol) ?? 0, text.get(symbol) ?? 0));
     }
@@ -439,6 +649,7 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
   let mathImages = 0;
   let checked = 0;
   let passed = 0;
+  let rowsWrong = 0;
   const fails: GlyphScores["fails"] = [];
   for (const block of doc.blocks) {
     if (!block.at || !inRange(block.at.page)) continue;
@@ -450,22 +661,27 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
       continue;
     }
     if (block.kind !== "equation") continue;
-    const atoms = atomsOf(glyphs);
+    // The printed number is the label's, not the formula's: read without it where the region holds it.
+    const number = labelGlyphs(glyphs);
+    const atoms = atomsOf(glyphs.filter((g) => !number.includes(g)));
     if (!atoms || atoms.length === 0) continue;
     checked++;
     const want = atomSymbols(atoms);
-    // The printed label may lie inside the region or beside it.
-    const label = block.label ? (/^\(.*\)$/.test(block.label) ? `\\tag{${block.label.slice(1, -1)}}` : `\\tag*{${block.label}}`) : "";
+    // A printed label the region does not hold may lie beside it.
+    const label = block.label && number.length === 0 ? (/^\(.*\)$/.test(block.label) ? `\\tag{${block.label.slice(1, -1)}}` : `\\tag*{${block.label}}`) : "";
     const forms = [block.latex, ...(label ? [`${block.latex} ${label}`] : [])].map((latex) => drawn(latex));
-    const results = forms.map((got) => (want && got ? { missing: surplus(bag(want), bag(got)), extra: surplus(bag(got), bag(want)) } : null));
-    if (results.some((r) => r && r.missing.length === 0 && r.extra.length === 0)) passed++;
+    const results = forms.map((got) => (want && got ? settle(surplus(bag(want), bag(got)), surplus(bag(got), bag(want))) : null));
+    const rows = rowsCheck(glyphs.filter((g) => !number.includes(g)), block.latex);
+    if (rows) rowsWrong++;
+    if (results.some((r) => r && r.missing.length === 0 && r.extra.length === 0) && !rows) passed++;
     else {
       const r = results.find((x) => x) ?? { missing: ["(KaTeX cannot read it)"], extra: [] };
-      fails.push({ latex: block.latex, missing: r.missing, extra: r.extra });
+      fails.push({ latex: block.latex, missing: r.missing, extra: r.extra, ...(rows ? { rows } : {}) });
     }
   }
   return {
     hazards,
+    rowsWrong,
     garbles: missing.reduce((n, [, k]) => n + k, 0),
     missing: missing.slice(0, 20),
     mathImages,

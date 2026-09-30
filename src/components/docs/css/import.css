@@ -40,6 +40,11 @@
   line-height: 1.45;
   color: var(--docs-gray-2);
 }
+/* A PDF's and a Word file's caption stands in the text's color, as its page
+   sets it (a Word caption also at its own size: its html's style). */
+.docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose .docs-figure :is(p, figcaption) {
+  color: inherit;
+}
 /* A box the page painted under a web figure keeps the light theme's words
    in dark mode, as in the block reader (globals.css .reader-figure). */
 .dark .docs-prose .docs-figure :is(figure, div)[style*="background"] {
@@ -75,6 +80,11 @@
 .docs-prose .docs-figure-crop .docs-figure-caption {
   margin-top: 6px;
   font-size: 0.8rem;
+}
+/* A caption's formula at its words' size (insert/figure.ts), as an inline
+   equation in the page (css/insert.css): KaTeX's own sheet sets 1.21em. */
+.docs-prose .docs-figure-caption .docs-caption-math .katex {
+  font-size: 1em;
 }
 .docs-prose .docs-figure-crop .docs-figure-empty {
   padding: 18px 0;
@@ -120,6 +130,11 @@
   content: attr(data-page-labels);
 }
 .docs-prose [data-page-joined]::before {
+  content: none;
+}
+/* A page the PDF leaves unnumbered draws no label. */
+.docs-prose [data-page-label=""]:not([data-page-labels])::before,
+.docs-prose [data-page-labels=""]::before {
   content: none;
 }
 /* A table holding a page start lets its label out into the margin. */
@@ -198,6 +213,69 @@
 .docs-prose [data-border-left]:not([data-border-top], [data-border-bottom]) + [data-border-left]:not([data-border-top], [data-border-bottom]) {
   margin-top: 0 !important;
   padding-top: var(--docs-bar-top, 0pt) !important;
+}
+/* A run-in heading (an import's bold lead, "1.2.3. Two examples."; its
+   runIn) stands at the start of the paragraph under it, on that
+   paragraph's first line, at the page's indent (its own first-line
+   indent), a word space before its words. Its box reaches a pixel under
+   its first line, so only the lines it stands beside make room for it: a
+   lead with a tall formula pushed the paragraph's second line along too.
+   It stays a heading: the outline and the paragraph index list it. */
+.docs-prose :is(h1, h2, h3, h4, h5, h6)[data-run-in] {
+  float: left;
+  margin: 0 0.3em 0 0;
+  margin-bottom: calc(1px - 1lh);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+/* A PDF's and a Word file's display equation takes the space its page
+   leaves around it (lib/docs/import.ts: the space after the block over it,
+   and its own space after, insert/math.ts), none of its own: the page
+   editor's margin and padding and KaTeX's 1 em margin stacked on it set
+   each display far from the words it belongs to. */
+.docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose .docs-math-block {
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose .docs-math-block > .katex-display {
+  margin: 0;
+}
+/* A PDF's display is as tall as its formula, as TeX sets it: the page's
+   space is measured to the display's glyphs (lib/parse/pdf/paragraphs.ts),
+   and KaTeX's line box stood up to 0.2 em over a short formula. A Word
+   file's display keeps its line's height, as Word draws it. */
+.docs-shell[data-import="pdf"] .docs-prose .docs-math-block > .katex-display > .katex {
+  line-height: 0;
+}
+/* A table's cells padded as its page pads them (a Word file's cell margins:
+   the table's cellPadding, insert/table.ts). A PDF's and a Word file's
+   cells otherwise leave no room over and under their words, as Word and TeX
+   set a cell: the page editor's 5 pt all round drew their rows far taller
+   than the page's. A cell's own padding wins. */
+.docs-shell .docs-prose :is(td, th) {
+  padding: var(--docs-cell-padding, 5pt);
+}
+.docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose :is(td, th) {
+  padding: var(--docs-cell-padding, 0 5pt);
+}
+/* A table set in a size of its own (an import's cellSize): its cells'
+   paragraphs take it, so each line is as tall as its words. */
+.docs-prose [data-cell-size] :is(td, th) {
+  font-size: var(--docs-cell-size);
+}
+/* A PDF's table sets its lines about 1.2 of its words' size apart, as TeX
+   and Word set a table (9 pt words on 11 pt): the page editor's 1.3225
+   drew each row a tenth and more taller than the page's. A cell's own line
+   spacing still wins. */
+.docs-shell[data-import="pdf"] .docs-prose :is(td, th) p {
+  line-height: calc(var(--docs-ls, 1.04) * 1.15);
+}
+/* A formula in an import's cell takes the room of its ink (KaTeX's struts),
+   not KaTeX's own line of 1.2 em, which stood over a line that tight: a
+   cell of "G₁₃" or "g⁴" keeps its words' line. */
+.docs-shell[data-import] .docs-prose :is(td, th) .docs-math .katex {
+  line-height: 0;
 }
 /* A pageless table fills the text column: column widths (an import's,
    lib/docs/import-table.ts) are shares of the width, as a fixed layout

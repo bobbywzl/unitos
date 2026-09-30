@@ -105,7 +105,11 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     // (lettrine: "A" 3.6 pt from "long", "T" 0 pt from "he"). Its str then
     // ends in the space. A float's lines all start at one x, the first line
     // too, and say nothing: the letter joins.
-    const spaced = first.x - (cap.x + cap.w) >= first.size * 0.3 && lines.some((l) => Math.abs(l.x - first.x) > first.size * 0.1);
+    // A word space stays under 0.7 em however a justified line stretches
+    // it: a CSS float's first line is set in by the paragraph's indent, 1.2
+    // em from the letter ("S" + "CIENTIFIC", synth-paper-html).
+    const gap = first.x - (cap.x + cap.w);
+    const spaced = gap >= first.size * 0.3 && gap <= first.size * 0.7 && lines.some((l) => Math.abs(l.x - first.x) > first.size * 0.1);
     const lead: Item = { ...cap, str: cap.str.trim() + (spaced ? " " : ""), y: first.y, size: first.size, w: first.x - cap.x, bold: first.bold, italic: first.italic, mono: first.mono, smallCaps: first.smallCaps, href: first.href, font: first.font, look: first.look };
     out = out.map((i) => (i === cap ? lead : i));
     // The other lines beside it start where the paragraph's next line does,
@@ -137,8 +141,11 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     ends a space short of it (NASA SP-4408's scan boxes overlap, "Igor"
     ending at 170.7 and "Lissov" starting at 167.0: 228 blocks on 161 pages
     read runs of words with no space, 49 on 47 now, where the text layer
-    itself sets none). */
+    itself sets none). The layer's stock font is no face of the page: a
+    scan set in Courier is no listing (a 1922 report read as code, its words
+    run together at the font's character widths). */
 export function fitOcrItems(items: Item[]) {
+  for (const item of items) item.mono = false;
   const text = median(items.map((i) => i.size));
   for (let k = items.length - 1; k >= 0; k--) if (charCount(items[k].str) <= 2 && items[k].size > text * 4) items.splice(k, 1);
   const words = items.filter((i) => i.str.trim()).sort((a, b) => b.y - a.y || a.x - b.x);
@@ -656,33 +663,64 @@ export function buildLines(items: Item[], page: number): Line[] {
   // radical or integral inside prose joins the prose line; anything else
   // stands alone for the equation region to take.
   const standalone: Item[][] = [];
-  for (const op of operators) {
+  // A display operator reaches as wide as its limits ("t′ ∈ {t, t−1, t−2}"
+  // under a ⋀ is wider than it), and one set beside another
+  // (\bigwedge\bigwedge) reaches its line through the one placed before it:
+  // a line takes in the operators it holds (arXiv 2506.06752: the first ⋀
+  // of each display stood alone, and the display failed).
+  const extentOf = (op: Item) => {
     const box = boxes.get(op);
-    const center = box ? (box.top + box.bottom) / 2 : op.y - op.size * 0.6;
-    const near = (n: number, factor: number) =>
-      Math.abs(center - stats[n].y) <= stats[n].size * factor &&
-      op.x < stats[n].x2 + stats[n].size * 2 &&
-      op.x + op.w > stats[n].x1 - stats[n].size * 2;
-    const byDistance = (a: number, b: number) => Math.abs(center - stats[a].y) - Math.abs(center - stats[b].y);
-    // A group emptied by pass 1 is no line: an inline integral's limit that
-    // moved into its sentence must not draw the integral after it.
-    const all = stats.map((_, n) => n).filter((n) => kept[n].length > 0);
-    const mathy = all.filter((n) => stats[n].mathy && near(n, 1.5)).sort(byDistance);
-    const prose = all.filter((n) => stats[n].prose && near(n, 1.05)).sort(byDistance);
-    // A glyph whose box the font's metrics give sits exactly: centered on
-    // its line's math axis, a quarter em over the baseline, whatever else
-    // the line holds (a list item's "2. ∑ m(ω) = 1" is neither prose nor an
-    // equation's line). Else the nearest line of an equation or of prose
-    // takes it (a sentence's inline sum is its own, never the display line
-    // under it). An estimated one goes to an equation's line first.
-    const axis = (n: number) => Math.abs(center - (stats[n].y + stats[n].size * 0.25));
-    const onAxis = box
-      ? all.filter((n) => stats[n].size >= op.size * 0.8 && axis(n) <= stats[n].size * 0.35 && near(n, 1.5)).sort((a, b) => axis(a) - axis(b))
-      : [];
-    const target = onAxis[0] ?? (box ? [...mathy, ...prose].sort(byDistance)[0] : (mathy[0] ?? prose[0]));
-    if (target !== undefined) moved[target].push(op, ...(inlineLimits.get(op) ?? []));
-    else standalone.push([op, ...(inlineLimits.get(op) ?? [])]);
+    let x1 = op.x;
+    let x2 = op.x + op.w;
+    if (!box?.display) return { x1, x2 };
+    for (const item of all) {
+      if (item.size >= op.size * 0.9 || item.x >= op.x + op.w + op.size * 0.5 || item.x + item.w <= op.x - op.size * 0.5) continue;
+      const above = item.y >= box.top - item.size * 0.2 && item.y - box.top < op.size * 0.8;
+      const below = item.y <= box.bottom && box.bottom - item.y < op.size * 1.1;
+      if (!above && !below) continue;
+      const run = runOf(item);
+      x1 = Math.min(x1, run.x1);
+      x2 = Math.max(x2, run.x2);
+    }
+    return { x1, x2 };
+  };
+  const pending = [...operators];
+  for (let placed = true; placed; ) {
+    placed = false;
+    for (const op of [...pending]) {
+      const box = boxes.get(op);
+      const center = box ? (box.top + box.bottom) / 2 : op.y - op.size * 0.6;
+      const extent = extentOf(op);
+      const near = (n: number, factor: number) =>
+        Math.abs(center - stats[n].y) <= stats[n].size * factor &&
+        extent.x1 < stats[n].x2 + stats[n].size * 2 &&
+        extent.x2 > stats[n].x1 - stats[n].size * 2;
+      const byDistance = (a: number, b: number) => Math.abs(center - stats[a].y) - Math.abs(center - stats[b].y);
+      // A group emptied by pass 1 is no line: an inline integral's limit that
+      // moved into its sentence must not draw the integral after it.
+      const all = stats.map((_, n) => n).filter((n) => kept[n].length > 0);
+      const mathy = all.filter((n) => stats[n].mathy && near(n, 1.5)).sort(byDistance);
+      const prose = all.filter((n) => stats[n].prose && near(n, 1.05)).sort(byDistance);
+      // A glyph whose box the font's metrics give sits exactly: centered on
+      // its line's math axis, a quarter em over the baseline, whatever else
+      // the line holds (a list item's "2. ∑ m(ω) = 1" is neither prose nor an
+      // equation's line). Else the nearest line of an equation or of prose
+      // takes it (a sentence's inline sum is its own, never the display line
+      // under it). An estimated one goes to an equation's line first.
+      const axis = (n: number) => Math.abs(center - (stats[n].y + stats[n].size * 0.25));
+      const onAxis = box
+        ? all.filter((n) => stats[n].size >= op.size * 0.8 && axis(n) <= stats[n].size * 0.35 && near(n, 1.5)).sort((a, b) => axis(a) - axis(b))
+        : [];
+      const target = onAxis[0] ?? (box ? [...mathy, ...prose].sort(byDistance)[0] : (mathy[0] ?? prose[0]));
+      if (target === undefined) continue;
+      moved[target].push(op, ...(inlineLimits.get(op) ?? []));
+      stats[target].x1 = Math.min(stats[target].x1, extent.x1);
+      stats[target].x2 = Math.max(stats[target].x2, extent.x2);
+      pending.splice(pending.indexOf(op), 1);
+      placed = true;
+    }
   }
+  for (const op of pending) standalone.push([op, ...(inlineLimits.get(op) ?? [])]);
   const regrouped = [...kept.map((g, k) => [...g, ...moved[k]]), ...standalone].filter((g) => g.length > 0);
   regrouped.sort((a, b) => baselineOf(b, (i) => boxes.has(i)) - baselineOf(a, (i) => boxes.has(i)));
   const lines = regrouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);

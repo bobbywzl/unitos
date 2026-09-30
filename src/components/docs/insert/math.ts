@@ -12,6 +12,19 @@ import { KATEX_MACROS } from "@/lib/katex";
 // equation sits in the line (inlineMath); on a line of its own it is a
 // block (blockMath, an EQUATION row). A press opens the equation box.
 
+/** An import's formula this long, in drawn characters, may break after a
+    relation or an operator at its top level, where KaTeX lets a line break
+    (its parts, .katex-base), as TeX breaks one (css/insert.css): a justified
+    line spread its word spaces an em or more around a long formula that
+    would not fit, and TeX sets none so. A shorter formula, and a blank
+    document's, stays whole. */
+const BREAKS_AT = 16;
+
+function breaks(dom: HTMLElement): boolean {
+  const parts = dom.querySelectorAll(".katex-html > .katex-base");
+  return parts.length > 1 && (dom.querySelector(".katex-html")?.textContent ?? "").length >= BREAKS_AT;
+}
+
 class MathView implements NodeView {
   dom: HTMLElement;
   /** What the view last drew: the TeX, and for an equation on its own line
@@ -41,6 +54,10 @@ class MathView implements NodeView {
     const latex = String(this.node.attrs.latex ?? "");
     const blockId = this.node.attrs.blockId as string | null | undefined;
     if (blockId) this.dom.setAttribute("data-block-id", blockId);
+    // An import's display keeps the space its page leaves under it, drawn
+    // as a paragraph's space after is.
+    const after: unknown = this.display ? this.node.attrs.spaceAfter : null;
+    this.dom.style.paddingBottom = typeof after === "number" && after > 0 ? `${after}pt` : "";
     // An import's equation numbered at the left margin, as the page sets it
     // (amsmath's leqno).
     const leqno = this.display && this.node.attrs.leqno === true;
@@ -65,6 +82,7 @@ class MathView implements NodeView {
     } catch {
       this.dom.textContent = latex;
     }
+    if (!this.display) this.dom.classList.toggle("docs-math-breaks", breaks(this.dom));
   }
 
   update(node: PMNode): boolean {
@@ -95,8 +113,9 @@ class MathView implements NodeView {
 // they did, and a line with room for the formula has room for its mark.
 // The page keeps its spaces (white-space: break-spaces), so a space after
 // the mark takes room at a line's end too, and the formula takes that room
-// as well. A character's room is its width in the widest of the page
-// editor's text fonts, in em, rounded up.
+// as well; so does a space right after a formula, which opened the next
+// line a space in. A character's room is its width in the widest of the
+// page editor's text fonts, in em, rounded up.
 const ROOM: ReadonlyMap<string, number> = new Map([
   [".", 0.35], [",", 0.35], [";", 0.35], [":", 0.35], ["!", 0.4], ["?", 0.6],
   [")", 0.4], ["]", 0.4], ["}", 0.65], ["’", 0.35], ["'", 0.3], ["”", 0.55], ['"', 0.5], ["»", 0.65],
@@ -146,6 +165,8 @@ function blockTails(block: PMNode): Tail[] {
     // The space may open the next run ("." in italics, then " Hint").
     const after = marks < text.length ? text[marks] : block.maybeChild(index + 2)?.text?.[0];
     if (after === " ") room += SPACE_ROOM;
+    // A space right after the formula is its tail's one mark.
+    if (marks === 0 && text[0] === " ") marks = 1;
     if (marks > 0) tails.push({ at: offset, size: child.nodeSize, marks, room: Math.round(room * 100) / 100 });
   });
   tailsOf.set(block, tails);
@@ -222,6 +243,17 @@ const DocsBlockMath = BlockMath.extend({
         default: null,
         parseHTML: (el) => (el.hasAttribute("data-leqno") ? true : null),
         renderHTML: (attrs) => (attrs.leqno === true ? { "data-leqno": "" } : {}),
+      },
+      // The space under an import's display, in points: the page's
+      // (lib/docs/import.ts); null, none.
+      spaceAfter: {
+        default: null,
+        parseHTML: (el) => {
+          const v = Number(el.getAttribute("data-space-after"));
+          return el.hasAttribute("data-space-after") && Number.isFinite(v) && v > 0 ? v : null;
+        },
+        renderHTML: (attrs) =>
+          typeof attrs.spaceAfter === "number" ? { "data-space-after": String(attrs.spaceAfter), style: `padding-bottom: ${attrs.spaceAfter}pt` } : {},
       },
     };
   },

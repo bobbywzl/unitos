@@ -8,9 +8,9 @@
 // before (census class 3: MMWR's Table 1 in six blocks), and prose beside a
 // table joined its rows.
 
-import type { Fill, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
+import type { Fill, PageDrawing, PathBox, Rule } from "@/lib/parse/pdf/drawing";
 import { geom, median } from "@/lib/parse/pdf/geometry";
-import { joinedRules, latticeGrids, ruleStacks, type Grid, type GridCell } from "@/lib/parse/pdf/lattice";
+import { joinedRules, latticeGrids, ruleStacks, type Grid, type GridCell, type RuleStack } from "@/lib/parse/pdf/lattice";
 import { buildLines } from "@/lib/parse/pdf/lines";
 import { resolveZones } from "@/lib/parse/pdf/math/zones";
 import {
@@ -22,11 +22,13 @@ import {
   isProseColumns,
   leadIn,
   LINK_LINE_RE,
+  NUMERIC_CELL_RE,
   rowsOf,
   tableSegment,
   withoutSignColumns,
   type CellParagraph,
   type TableCell,
+  type TableLook,
   type TableRow,
 } from "@/lib/parse/pdf/tables";
 import { escapeHtml, insidePair, isMonoLine, joinGroup } from "@/lib/parse/pdf/text";
@@ -41,6 +43,11 @@ const inBox = (it: Item, b: Box) => {
   const c = centerOf(it);
   return c.x > b.x1 && c.x < b.x2 && c.y > b.y1 && c.y < b.y2;
 };
+// A line as far from both sides of its cell, within a quarter of its size.
+const balancedIn = (l: Line, b: Box) => Math.abs(l.x - b.x1 - (b.x2 - l.xEnd)) <= l.size * 0.25;
+
+// A fill as light as the page: white, or a color too light to see on it.
+const WHITE_RE = /^#(?:f[5-9a-f]){3}$/i;
 
 // A sliver between two grid lines closer than this, with no text in it, is
 // no column or row: a frame drawn double, a shaded cell set inside its border.
@@ -95,7 +102,10 @@ function closeSlivers(grid: Grid, items: Item[]): Grid {
 // other column lines than the rows under it, each part the same lines on
 // every row that draws any (the invoice's order details over its lines of
 // goods read as one grid of eight columns). A row across the whole width
-// goes with the part above it.
+// goes with the part above it. A part that draws one column line is no
+// table of its own: its rows are the other part's, a cell merged across
+// (a form's fields: the W-9 sets its 5 and 6 beside one box, its 3a and 3b
+// beside another, and read as two tables).
 function splitStacked(grid: Grid): Grid[] {
   const rows = grid.ys.length - 1;
   const lines = Array.from({ length: rows }, (_, r) =>
@@ -105,6 +115,7 @@ function splitStacked(grid: Grid): Grid[] {
     const above = [...new Set(lines.slice(0, r).filter(Boolean))];
     const below = [...new Set(lines.slice(r).filter(Boolean))];
     if (above.length !== 1 || below.length !== 1 || !lines[r] || rows - r < 2) continue;
+    if (!above[0].includes(",") || !below[0].includes(",")) continue;
     const shared = above[0].split(",").some((k) => below[0].split(",").includes(k));
     if (shared || grid.cells.some((c) => c.row < r && c.row + c.rowspan > r)) continue;
     return [partOf(grid, 0, r), ...splitStacked(partOf(grid, r, rows))];
@@ -129,24 +140,37 @@ function partOf(grid: Grid, r0: number, r1: number): Grid {
 
 // A grid is a table when its text fills it: two rows and two columns at
 // least, words in two cells or more and in a third of its cells, and no
-// picture, listing, or prose inside. A chart's frame and gridlines hold a
-// legend at most; a lone box or a signature line has one cell; a slide's
-// background and title band reach the page's edges; highlighted lines of a
-// paragraph abut like cells and hold its sentences.
+// listing or prose inside, and no picture but one a cell holds alone (a
+// slide's table of license badges: gslides-oer-5rs pp. 15–17). A chart's
+// frame and gridlines hold a legend at most; a lone box or a signature line
+// has one cell; a slide's background and title band reach the page's edges;
+// highlighted lines of a paragraph abut like cells and hold its sentences.
 function isTableGrid(grid: Grid, items: Item[], drawing: TableDrawing, pageWidth: number, pageHeight: number): boolean {
   const b = grid.box;
   if (grid.ys.length < 3 || grid.xs.length < 3) return false;
+  // A grid the page does not show is no table: no rule on it, every box
+  // filled in the page's white (Word paints a paragraph's lines white, and
+  // a Chinese paper's last three references read as a table).
+  const on = (r: Box) => r.x1 < b.x2 + 1 && r.x2 > b.x1 - 1 && r.y1 < b.y2 + 1 && r.y2 > b.y1 - 1;
+  if (!drawing.rules.some(on) && drawing.fills.filter(on).every((f) => f.color !== undefined && WHITE_RE.test(f.color))) return false;
   const edges = [b.x1 <= pageWidth * 0.02, b.x2 >= pageWidth * 0.98, b.y1 <= pageHeight * 0.02, b.y2 >= pageHeight * 0.98];
   if (edges.filter(Boolean).length >= 2) return false;
-  if (drawing.images.some((img) => img.x1 < b.x2 && img.x2 > b.x1 && img.y1 < b.y2 && img.y2 > b.y1)) return false;
   if (isChart(b, grid.xs, grid.ys, grid.cells.length, drawing)) return false;
   const inside = items.filter((it) => inBox(it, b));
+  const within = (img: Box, c: Box) => img.x1 >= c.x1 - 2 && img.x2 <= c.x2 + 2 && img.y1 >= c.y1 - 2 && img.y2 <= c.y2 + 2;
+  const pictured = (img: Box) => grid.cells.some((c) => within(img, c) && !inside.some((it) => inBox(it, c)));
+  if (drawing.images.some((img) => img.x1 < b.x2 && img.x2 > b.x1 && img.y1 < b.y2 && img.y2 > b.y1 && !pictured(img))) return false;
   if (inside.length === 0 || inside.filter((it) => it.mono).length * 2 > inside.length) return false;
   const lines = buildLines(inside, 0);
   if (lines.filter((l) => isProseLine(l, b.x2 - b.x1)).length * 2 >= lines.length) return false;
-  const filled = grid.cells.filter((c) => inside.some((it) => inBox(it, c)));
+  // The words cut at the column lines, as the rows read them (gridRows): a
+  // row's cells may come as one text item (OpenStax's Table 6.4: "40,000
+  // 40,000 45,050 …" filled one cell of six).
+  const inner = grid.xs.slice(1, -1);
+  const pieces = inside.flatMap((it) => splitAt(it, inner.filter((x) => x > it.x + it.w * 0.05 && x < it.x + it.w * 0.95)));
+  const filled = grid.cells.filter((c) => pieces.some((it) => inBox(it, c)));
   if (filled.length < 2 || filled.length * 3 < grid.cells.length) return false;
-  return !mostlyTiny(filled.map((c) => inside.filter((it) => inBox(it, c)).map((it) => it.str.trim()).join("")));
+  return !mostlyTiny(filled.map((c) => pieces.filter((it) => inBox(it, c)).map((it) => it.str.trim()).join("")));
 }
 
 // A grid drawn around groups of cells, not around each: LaTeX's |l|ccc|
@@ -191,10 +215,11 @@ function isGroupGrid(grid: Grid, items: Item[]): boolean {
 
 // A plot's frame and gridlines hold its tick labels and legend: mostly
 // numbers and letters of one or two characters (tableFromRun reads a run of
-// tiny cells as figure text the same way).
+// tiny cells as figure text the same way). A mark alone (✔, ✘) is a
+// table's value.
 function mostlyTiny(texts: string[]): boolean {
   const filled = texts.filter((t) => t.length > 0);
-  return filled.length > 0 && filled.filter((t) => t.length <= 2).length * 5 > filled.length * 3;
+  return filled.length > 0 && filled.filter((t) => t.length <= 2 && /[\p{L}\p{N}]/u.test(t)).length * 5 > filled.length * 3;
 }
 
 // Is the box a chart's frame? Its axes read as a grid or as booktabs rules
@@ -233,12 +258,18 @@ function isChart(b: Box, xs: number[], ys: number[], cells: number, drawing: Tab
 // too close to part cells, are no prose either: prose has word spaces
 // (MMWR p. 21's "Vaccination status beneficiaries related TE person-days
 // …" cut Table 3's head from its body).
+// A column rule drawn between two of its words parts a line in two cells,
+// however close they stand (the W-9's "• Interest and dividend payments"
+// and "All exempt payees except", 10 pt apart across its rule, p. 4).
 const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
 const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
-function isProseLine(line: Line, width: number): boolean {
+function isProseLine(line: Line, width: number, columns: Rule[] = []): boolean {
   if (line.cells.length !== 1 || line.xEnd - line.x <= width * 0.6) return false;
   const apart = line.items.filter((it, k) => k > 0 && it.x - (line.items[k - 1].x + line.items[k - 1].w) > line.size * 0.7).length;
   if (apart >= 3) return false;
+  const parted = (it: Item, k: number) =>
+    k > 0 && columns.some((r) => r.y1 <= line.y && r.y2 >= line.y && r.x1 > line.items[k - 1].x + line.items[k - 1].w - 0.5 && r.x1 < it.x + 0.5);
+  if (line.items.some(parted)) return false;
   const words = line.text.split(/\s+/).filter((w) => /\p{L}{2}/u.test(w));
   return words.length >= 8 || (line.text.match(CJK_RE)?.length ?? 0) >= 20;
 }
@@ -250,8 +281,9 @@ const CAPTION_START_RE = /^(fig\.|figure|table|tab\.)\s*([\dIVX]+|[A-Z]\d+)\b/i;
 // a caption or prose ends a region (two tables stacked at one width with a
 // heading and the next caption between them, a page's head rule and foot
 // rule around its text, two columns of text between a form's signature
-// rule and the page's foot rule: the IRS W-9's instructions).
-function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[]): Box[] {
+// rule and the page's foot rule: the IRS W-9's instructions). columns: the
+// page's vertical rules, which part a band's lines in cells.
+function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[], columns: Rule[]): Box[] {
   const sorted = [...rules].sort((a, b) => b.y1 - a.y1);
   const regions: Box[] = [];
   let top: number | null = null;
@@ -265,7 +297,7 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[]): Box
     const band = { x1: x1 - 2, x2: x2 + 2, y1: sorted[k + 1].y1, y2: sorted[k].y1 };
     const lines = buildLines(items.filter((it) => inBox(it, band)), 0);
     const breaks =
-      lines.some((l) => isProseLine(l, x2 - x1) || CAPTION_START_RE.test(l.text)) ||
+      lines.some((l) => isProseLine(l, x2 - x1, columns) || CAPTION_START_RE.test(l.text)) ||
       isProseColumns(lines.filter((l) => l.cells.length >= 2), false);
     if (breaks) {
       close();
@@ -285,6 +317,18 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[]): Box
   }
   close();
   return regions;
+}
+
+// A stack's rules, and the rule its last row would have: a table open at
+// its foot, whose column rules run on under its lowest rule and end level
+// with one another where its last row does (the W-9 rules no line under
+// its last row of payments, p. 4).
+function withFoot(stack: RuleStack, columns: Rule[]): Rule[] {
+  const low = Math.min(...stack.rules.map((r) => r.y1));
+  const down = columns.filter((r) => r.x1 > stack.x1 + 2 && r.x1 < stack.x2 - 2 && r.y2 >= low - 2 && r.y1 < low - 6);
+  const end = Math.max(...down.map((r) => r.y1));
+  if (down.length === 0 || down.some((r) => r.y1 < end - 2)) return stack.rules;
+  return [...stack.rules, { dir: "h", x1: stack.x1, x2: stack.x2, y1: end, y2: end, thickness: 0 }];
 }
 
 // A rule stack as wide as one column of a table bounds no table of its
@@ -307,9 +351,9 @@ function slices(box: Box, lines: Line[], items: Item[]): boolean {
 // A rule region is a table when its lines split into two columns or more and
 // two rows or more carry cells in two of them. A listing's frame, a figure's
 // box around one label, a region of prose, and a plot's frame are not.
-function isTableRegion(lines: Line[], width: number): boolean {
+function isTableRegion(lines: Line[], width: number, columns: Rule[]): boolean {
   if (lines.length < 2 || lines.filter((l) => isMonoLine(l)).length * 2 > lines.length) return false;
-  if (lines.some((l) => isProseLine(l, width))) return false;
+  if (lines.some((l) => isProseLine(l, width, columns))) return false;
   const separators = columnSeparators(lines);
   if (separators.length === 0) return false;
   const multi = lines.filter((l) => new Set(l.items.map((it) => columnAt(it.x + it.w / 2, separators))).size >= 2);
@@ -435,12 +479,57 @@ function gridHead(grid: Grid, body: Item[], items: Item[]): Item[] {
   return [...above.filter((it) => centerOf(it).y < cut), ...beside];
 }
 
+// A box to tick: a square drawn empty, its four sides ruled, about the size
+// of the words on its line, apart from other squares, words right after it
+// or right before it (a form's boxes: the W-9's seven boxes of line 3a read
+// as a chart's marks, and their form as no table). Its mark is ☐, set as
+// the words beside it.
+const CHECKBOX = "\u2610";
+function checkboxes(drawing: PageDrawing, items: Item[]): { squares: PathBox[]; marks: Item[] } {
+  const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+  const across = (r: Rule, a: number, b: number) => (r.dir === "h" ? r.x1 <= a + 1 && r.x2 >= b - 1 : r.y1 <= a + 1 && r.y2 >= b - 1);
+  const ruled = (p: Box) =>
+    drawing.rules.some((r) => r.dir === "h" && near(r.y1, p.y1) && across(r, p.x1, p.x2)) &&
+    drawing.rules.some((r) => r.dir === "h" && near(r.y1, p.y2) && across(r, p.x1, p.x2)) &&
+    drawing.rules.some((r) => r.dir === "v" && near(r.x1, p.x1) && across(r, p.y1, p.y2)) &&
+    drawing.rules.some((r) => r.dir === "v" && near(r.x1, p.x2) && across(r, p.y1, p.y2));
+  // A square filled in a color is a chart's legend key, no box to tick.
+  const filled = (p: Box) => drawing.fills.some((f) => f.color !== undefined && !WHITE_RE.test(f.color) && near(f.x1, p.x1) && near(f.x2, p.x2) && near(f.y1, p.y1) && near(f.y2, p.y2));
+  const found = drawing.paths.filter((p) => {
+    const [w, h] = [p.x2 - p.x1, p.y2 - p.y1];
+    return !p.clip && w >= 4 && w <= 16 && Math.abs(w - h) <= w * 0.15 && ruled(p) && !filled(p) && !items.some((it) => inBox(it, p));
+  });
+  const squares: PathBox[] = [];
+  const marks: Item[] = [];
+  for (const p of found) {
+    const side = p.x2 - p.x1;
+    if (found.some((q) => q !== p && q.x1 < p.x2 + side * 0.5 && q.x2 > p.x1 - side * 0.5 && q.y1 < p.y2 + side * 0.5 && q.y2 > p.y1 - side * 0.5)) continue;
+    const beside = items.filter(
+      (it) =>
+        it.y >= p.y1 - it.size * 0.4 &&
+        it.y <= (p.y1 + p.y2) / 2 &&
+        ((it.x >= p.x2 && it.x - p.x2 <= it.size * 2) || (it.x + it.w <= p.x1 && p.x1 - (it.x + it.w) <= it.size * 2)),
+    );
+    const word = beside.sort((a, b) => Math.min(Math.abs(a.x - p.x2), Math.abs(p.x1 - a.x - a.w)) - Math.min(Math.abs(b.x - p.x2), Math.abs(p.x1 - b.x - b.w)))[0];
+    if (!word || side < word.size * 0.6 || side > word.size * 1.8) continue;
+    squares.push(p);
+    marks.push({ ...word, str: CHECKBOX, x: p.x1, w: side, href: null, math: false, glyphs: undefined, zone: undefined, sup: undefined, sub: undefined });
+  }
+  return { squares, marks };
+}
+
 // The ruled tables of a page, from its rules and filled boxes: grids first,
 // then the regions of rule stacks outside them.
-export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number, pageHeight: number): TableRegion[] {
+export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, pageHeight: number): TableRegion[] {
   // Blank items (the spaces pdf.js reports between words) say nothing of
   // where text is: one in a sliver between two cells kept the sliver open.
-  const items = all.filter((it) => it.str.trim().length > 0);
+  const words = all.filter((it) => it.str.trim().length > 0);
+  // A form's boxes to tick read as ☐ in their cells; their squares are no
+  // rules of a table and no marks of a chart.
+  const boxes = checkboxes(page, words);
+  const items = [...words, ...boxes.marks];
+  const squared = (r: Rule) => boxes.squares.some((s) => r.x1 >= s.x1 - 1 && r.x2 <= s.x2 + 1 && r.y1 >= s.y1 - 1 && r.y2 <= s.y2 + 1);
+  const drawing = { ...page, rules: page.rules.filter((r) => !squared(r)), paths: page.paths.filter((p) => !boxes.squares.includes(p)) };
   const regions: TableRegion[] = [];
   // A grid inside the rules of a wider table is part of that table: its
   // vertical rules run between some columns only, and the horizontal rules
@@ -448,8 +537,9 @@ export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number
   // III read as a grid of two cells, the rest of it lost). A frame drawn
   // around a grid holds it and draws none of its rows (the invoice's order
   // grid inside the frame around the sample).
+  const columns = drawing.rules.filter((r) => r.dir === "v");
   const wide = ruleStacks(joinedRules(drawing.rules.filter((r) => r.dir === "h")), 40).flatMap((stack) =>
-    stackRegions(stack.rules, stack.x1, stack.x2, items).map((box) => ({ box, ys: stack.rules.map((r) => r.y1) })),
+    stackRegions(withFoot(stack, columns), stack.x1, stack.x2, items, columns).map((box) => ({ box, ys: stack.rules.map((r) => r.y1) })),
   );
   const grids = latticeGrids(drawing.rules, drawing.fills)
     .map((raw) => closeSlivers(raw, items))
@@ -501,11 +591,11 @@ export function ruledTables(all: Item[], drawing: PageDrawing, pageWidth: number
   const free = (b: Box) => !regions.some((r) => b.x1 < r.box.x2 && b.x2 > r.box.x1 && b.y1 < r.box.y2 && b.y2 > r.box.y1);
   const rules = joinedRules(drawing.rules.filter((r) => r.dir === "h" && free({ x1: r.x1, x2: r.x2, y1: r.y1 - 1, y2: r.y2 + 1 })));
   for (const stack of ruleStacks(rules, 40)) {
-    for (const box of stackRegions(stack.rules, stack.x1, stack.x2, items)) {
+    for (const box of stackRegions(withFoot(stack, columns), stack.x1, stack.x2, items, columns)) {
       if (!free(box)) continue;
       const inside = items.filter((it) => inBox(it, { ...box, x1: box.x1 - 2, x2: box.x2 + 2 }));
       const lines = buildLines(inside, 0);
-      if (!isTableRegion(lines, box.x2 - box.x1) || slices(box, lines, items)) continue;
+      if (!isTableRegion(lines, box.x2 - box.x1, columns) || slices(box, lines, items)) continue;
       const inner = rules.filter((r) => r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3);
       const region = { box, items: inside, lines, grid: null, rules: inner, drawing };
       // The rules drawn between its columns are the table's, no chart's
@@ -605,12 +695,13 @@ export function placeTables(lines: Line[]): Line[] {
 // rule runs between two of its lines), the body rows by the rhythm.
 export function tableFromRegion(region: TableRegion, page: number): Segment {
   // The table's own link under its last rule (linkUnder) is its caption's
-  // line, the caption's words joining it (attachTableCaptions).
+  // line, under the table, the caption's words joining it
+  // (attachTableCaptions).
   const link = region.items.filter((it) => centerOf(it).y < region.box.y1 - 1);
   if (link.length === 0) return tableOfRegion(region, page);
   const table = tableOfRegion({ ...region, items: region.items.filter((it) => !link.includes(it)) }, page);
   const text = buildLines(link, page).map((l) => l.text.trim()).join(" ");
-  if (table.html) captionTable(table, text, escapeHtml(text));
+  if (table.html) captionTable(table, text, escapeHtml(text), true);
   return table;
 }
 
@@ -621,9 +712,9 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   // against the glyphs and rules the page draws (a failed check keeps the
   // words; synth-notes-tex's table of fractions read "1 36" for 1/36).
   const built: Line[] = [];
-  const segment = (rows: TableRow[], headerRows: number, edges: number[]) => {
+  const segment = (rows: TableRow[], headerRows: number, edges: number[], padding?: TableLook["padding"]) => {
     resolveZones(built, region.drawing);
-    const look = { size: Math.round(textSize(region.items) * 2) / 2, columns: edges.slice(1).map((x, k) => x - edges[k]) };
+    const look = { size: Math.round(textSize(region.items) * 2) / 2, columns: edges.slice(1).map((x, k) => x - edges[k]), padding };
     return tableSegment(rows, headerRows, page, where, look);
   };
   if (region.grid) {
@@ -646,10 +737,11 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
     // spans down to (apple-fy24q4 p. 2).
     const label = head.length >= 2 ? head[head.length - 1] : null;
     if (label && label.cells[0].text && label.cells.slice(1).every((c) => !c.text)) label.cells = [{ ...label.cells[0], colspan: grid.xs.length - 1 }];
-    const rows = [...head, ...gridRows(grid, region.items.filter((it) => centerOf(it).y <= grid.box.y2), page, built, region.drawing)];
+    const cells = gridRows(grid, region.items.filter((it) => centerOf(it).y <= grid.box.y2), page, built, region.drawing);
+    const rows = [...head, ...cells.rows];
     const headerRows = boldHeaderRows(rows);
     spanHeadColumns(rows, headerRows);
-    return segment(rows, headerRows, grid.xs);
+    return segment(rows, headerRows, grid.xs, cells.padding);
   }
   const width = region.box.x2 - region.box.x1;
   // A line's phrases are its words: pdf.js reads phrases across a column
@@ -702,11 +794,22 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   // both (arXiv 1706.03762's Table 2).
   const ruledAt = [...new Set(drawn.map((r) => r.x1))];
   const open = (a: number, b: number) => !body.some((l) => l.items.some((it) => it.x < Math.max(a, b) && it.x + it.w > Math.min(a, b)));
+  // A group's label over its rows, a phrase from the table's left edge (and
+  // a value at its end), crosses the gutters the rows leave open: the scan
+  // reads the rows of three phrases or more where two or more hold them,
+  // when they part more columns than all the lines do (2609.29669's "§3.1
+  // Policy / manipulation suites" over "CALVIN [101] | 2021 | RA-L …"
+  // joined its Benchmark and Year columns).
+  const heads = headGroups.at(-1) ?? [];
+  const lined = body.length >= 2 ? body : phrased;
+  const rowsOnly = body.filter((l) => phrasesOf(l).length >= 3 || l.x > region.box.x1 + l.size * 2);
+  const byRows = rowsOnly.filter((l) => phrasesOf(l).length >= 3).length >= 2;
+  const scan = byRows && columnSeparators(rowsOnly, heads).length > columnSeparators(lined, heads).length ? rowsOnly : lined;
   const scanned = withoutSignColumns(
-    body.length >= 2 ? body : phrased,
+    scan,
     [
       ...ruledAt,
-      ...columnSeparators(body.length >= 2 ? body : phrased, headGroups.at(-1) ?? []).filter((x) => !ruledAt.some((d) => open(x, d))),
+      ...columnSeparators(scan, heads).filter((x) => !ruledAt.some((d) => open(x, d))),
     ].sort((a, b) => a - b),
   );
   const separators = [...scanned, ...headSeparators(headGroups.at(-1) ?? [], body, scanned, region.box)].sort((a, b) => a - b);
@@ -719,7 +822,7 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   if (body.length > 0) {
     built.push(...body);
     const cellsOf = body.map((line) => cellsBySeparators(line, separators));
-    const starts = regionRowStarts(body, cellsOf);
+    const starts = oneRow(body, cellsOf, region, drawn) ? [0] : ((drawn.length > 0 ? ruledRowStarts(body, cellsOf, [...full, ...pieceEnds(drawn, region.box)]) : null) ?? regionRowStarts(body, cellsOf));
     const bodyRows = rowsOf(cellsOf, starts, columnCount);
     spanValues(bodyRows, body, starts, separators, ruledAt);
     rows.push(...spanCenteredLabels(bodyRows, starts.map((k) => body[k].y), full));
@@ -949,6 +1052,49 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
   return starts;
 }
 
+// A band ruled over and under, its columns ruled from rule to rule, is one
+// row when it holds two lines and no amounts: a form's field whose label
+// and prompt each take two lines (the W-9's "Sign / Here" beside
+// "Signature of / U.S. person", p. 1).
+function oneRow(body: Line[], cellsOf: Cell[][], region: TableRegion, drawn: Rule[]): boolean {
+  const b = region.box;
+  return (
+    body.length === 2 &&
+    region.rules.length === 0 &&
+    drawn.length > 0 &&
+    drawn.every((r) => r.y1 <= b.y1 + 2 && r.y2 >= b.y2 - 2) &&
+    !cellsOf.flat().some((c) => NUMERIC_CELL_RE.test(c.text.trim()))
+  );
+}
+
+// Where a column rule drawn row by row breaks, inside the table: a row's
+// edge (Word and LaTeX draw a column's rule cell by cell). A piece shorter
+// than 6 pt is a dash, no row.
+function pieceEnds(columns: Rule[], box: Box): number[] {
+  return columns.filter((r) => r.y2 - r.y1 >= 6).flatMap((r) => [r.y1, r.y2]).filter((y) => y > box.y1 + 1 && y < box.y2 - 1);
+}
+
+// The rows of a table that rules its columns, and a line under each row or
+// its column rules row by row, in three bands or more (the W-9's payments
+// and its names, pp. 4 and 5): the lines between two rules are one row,
+// each cell's lines joined, unless the band holds amounts on two lines or
+// more in one column (a group of rows between two rules): each line with
+// an amount there opens a row. rules: where the rows' edges are drawn;
+// null when they part fewer bands, or when a line stands across one (a
+// label set across two rows: arXiv 2503.10997's "Image-only" beside its
+// two models), and the rows come from the lines' rhythm.
+function ruledRowStarts(body: Line[], cellsOf: Cell[][], rules: number[]): number[] | null {
+  if (body.some((l) => rules.some((y) => y > l.y + 1 && y < l.y + l.size * 0.7))) return null;
+  const bands = body.map((l) => rules.filter((y) => y > l.y).length);
+  if (new Set(bands).size < 3) return null;
+  const amount = (k: number, c: number) => NUMERIC_CELL_RE.test(cellsOf[k][c]?.text.trim() ?? "");
+  return body.flatMap((_, k) => {
+    if (k === 0 || bands[k] !== bands[k - 1]) return [k];
+    const band = body.flatMap((__, j) => (bands[j] === bands[k] ? [j] : []));
+    return cellsOf[k].some((__, c) => amount(k, c) && band.filter((j) => amount(j, c)).length >= 2) ? [k] : [];
+  });
+}
+
 // One header row out of lines: the words of each column joined, a phrase
 // over several columns one cell spanning them. bounds are the column edges,
 // the table's left edge first.
@@ -1049,51 +1195,137 @@ function filledBelow(groups: Line[][], bounds: number[]): boolean[] {
 }
 
 // A cell's lines as one run of text: wrapped lines joined, a line-end
-// hyphen decided as in a paragraph, never a line break (a newline ends a
-// table row in the table's text).
+// hyphen decided as in a paragraph at every join (a cell's line short of
+// its edge kept "predic-" before "tion"), never a line break (a newline
+// ends a table row in the table's text).
 function linesText(lines: Line[]): { text: string; runs: Run[] } {
-  const { text, runs } = joinGroup(lines);
+  const { text, runs } = joinGroup(lines, true);
   return { text: text.replace(/\n/g, " "), runs };
 }
 
 // The rows of a grid: each item in the cell its center is in; an item that
 // runs across a column line is cut there (splitAt). Each cell's lines go
 // into `built`, where the table's formulas are read.
-function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawing: TableDrawing): TableRow[] {
+function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawing: TableDrawing): { rows: TableRow[]; padding?: TableLook["padding"] } {
   const inner = grid.xs.slice(1, -1);
   const pieces = items.flatMap((it) => splitAt(it, inner.filter((x) => x > it.x + it.w * 0.05 && x < it.x + it.w * 0.95)));
+  const cells = grid.cells.flatMap((cell) => unmerged(cell, grid.xs, items, pieces));
   const rowCount = grid.ys.length - 1;
-  const rows: TableRow[] = Array.from({ length: rowCount }, () => ({ cells: [] }));
   const size = textSize(items);
-  const cellLines = grid.cells.map((cell) => fractionCell(buildLines(pieces.filter((it) => inBox(it, cell)), page), drawing.rules, size));
+  const cellLines = cells.map((cell) => fractionCell(buildLines(pieces.filter((it) => inBox(it, cell)), page), drawing.rules, size));
+  // A row whose cells with words each hold as many lines on the same
+  // baselines, one cell's lines all amounts, is that many rows: a
+  // statement's lines in one ruled row (the invoice's vehicle price,
+  // plates, and discount read as one row of three-line cells).
+  const splits = Array.from({ length: rowCount }, (_, r) => {
+    const own = cells.flatMap((cell, k) => (cell.row === r && cellLines[k].length > 0 ? [cellLines[k]] : []));
+    const n = own[0]?.length ?? 0;
+    const spanned = cells.some((cell) => cell.rowspan > 1 && cell.row <= r && cell.row + cell.rowspan > r);
+    if (spanned || own.length < 2 || n < 2 || own.some((lines) => lines.length !== n)) return 1;
+    const level = own.every((lines) => lines.every((l, i) => Math.abs(l.y - own[0][i].y) <= l.size * 0.3));
+    return level && own.some((lines) => lines.every((l) => NUMERIC_CELL_RE.test(l.text.trim()))) ? n : 1;
+  });
+  const rows: TableRow[][] = splits.map((n) => Array.from({ length: n }, () => ({ cells: [] })));
+  // A row taller than its words (the lines' baselines and one line's
+  // height) by more than 0.6 of the text size keeps its height rule to
+  // rule: a form's field row, a signature row, a row set with room around
+  // its words. The import sets the row at least that tall.
+  splits.forEach((n, r) => {
+    const lines = cells.flatMap((cell, k) => (cell.row === r && cell.rowspan === 1 ? cellLines[k] : []));
+    const words = lines.length > 0 ? Math.max(...lines.map((l) => l.yMax)) - Math.min(...lines.map((l) => l.yMin)) + Math.max(...lines.map((l) => l.size)) : 0;
+    const tall = grid.ys[r] - grid.ys[r + 1];
+    if (n === 1 && tall - words > size * 0.6) rows[r][0].height = tall;
+  });
   // The cells' padding: the least a line stands from its cell's left edge,
   // and from its right edge (Word's 5.4 pt); more is a line set in.
   const least = (gaps: number[]) => Math.min(10, ...gaps.filter((d) => d >= 0));
   const inset = {
-    left: least(grid.cells.flatMap((cell, k) => cellLines[k].map((l) => l.x - cell.x1))),
-    right: least(grid.cells.flatMap((cell, k) => cellLines[k].map((l) => cell.x2 - l.xEnd))),
+    left: least(cells.flatMap((cell, k) => cellLines[k].map((l) => l.x - cell.x1))),
+    right: least(cells.flatMap((cell, k) => cellLines[k].map((l) => cell.x2 - l.xEnd))),
   };
+  // Over and under the words, measured apart: the least a cell's first
+  // line stands under its top rule and its last line over its bottom rule,
+  // less the room the page editor's line leaves over the words' baseline
+  // (0.92 of their size) and under it (0.23). A form's label under the top
+  // rule of its field has none over it, whatever the room under it.
+  const filledCells = cells.flatMap((cell, k) => (cellLines[k].length > 0 && cell.rowspan === 1 ? [{ cell, lines: cellLines[k] }] : []));
+  const tightest = (gaps: number[]) => Math.max(0, Math.min(10, ...gaps));
+  const over = tightest(filledCells.map(({ cell, lines }) => cell.y2 - lines[0].y - lines[0].size * 0.92));
+  const under = tightest(filledCells.map(({ cell, lines }) => lines[lines.length - 1].y - lines[lines.length - 1].size * 0.23 - cell.y1));
+  const padding: TableLook["padding"] = filledCells.length > 0 && Math.max(over, under) >= 1 ? [Math.round(over * 10) / 10, 5, Math.round(under * 10) / 10, 5] : undefined;
   // A column set flush right (numbers): most of its lines end at one edge,
   // short of the cell's padding when a narrow column sits beside it
-  // (apple-fy24q4's values set in as if indented).
+  // (apple-fy24q4's values set in as if indented). The edge most of them
+  // end at: a negative amount's closing parenthesis hangs past it, and the
+  // edge at the parenthesis set the column's other amounts in (apple-fy24q4's
+  // "19" beside "(565)", drawn 46 pt in and broken in two).
   const flush = new Map<number, number>();
   for (let col = 0; col + 1 < grid.xs.length; col++) {
-    const lines = grid.cells.flatMap((cell, k) => (cell.col === col && cell.colspan === 1 ? cellLines[k] : []));
-    const edge = Math.max(...lines.map((l) => l.xEnd));
-    if (lines.length >= 2 && lines.filter((l) => edge - l.xEnd <= l.size * 0.3).length * 5 >= lines.length * 3) flush.set(col, edge);
+    const lines = cells.flatMap((cell, k) => (cell.col === col && cell.colspan === 1 ? cellLines[k] : []));
+    const at = (edge: number) => lines.filter((l) => Math.abs(edge - l.xEnd) <= l.size * 0.3).length;
+    const edge = lines.map((l) => l.xEnd).reduce((best, x) => (at(x) > at(best) || (at(x) === at(best) && x > best) ? x : best), -Infinity);
+    if (lines.length >= 2 && at(edge) * 5 >= lines.length * 3) flush.set(col, edge);
   }
-  grid.cells.forEach((cell, k) => {
+  // A row's cells sit alike: a cell its words fill, each line as far from
+  // both of its sides, is centered when the row's other cells with words
+  // are, two at least (a form's head row).
+  const sits = cells.map((cell, k) => {
+    const lines = cellLines[k];
+    if (lines.length === 0 || !lines.every((l) => balancedIn(l, cell))) return "other";
+    const short = lines.some((l) => l.x - cell.x1 - inset.left > l.size * 0.3 && cell.x2 - inset.right - l.xEnd > l.size * 0.3);
+    return short ? "center" : "full";
+  });
+  const centeredRow = (row: number) => {
+    const own = cells.flatMap((cell, k) => (cell.row === row && cellLines[k].length > 0 ? [sits[k]] : []));
+    return own.filter((s) => s === "center").length >= 2 && !own.includes("other");
+  };
+  // A cell's words sit at its foot when the room over them passes the room
+  // under them by an em and twice over (a signature row's X on its line, a
+  // form's "Date:"), and in its middle when the two are alike, each over
+  // half an em (a slide's marks in tall rows).
+  const valignOf = (cell: GridCell, lines: Line[]): TableCell["valign"] => {
+    if (lines.length === 0) return undefined;
+    const [first, last] = [lines[0], lines[lines.length - 1]];
+    const over = cell.y2 - first.y - first.size * 0.92;
+    const under = last.y - last.size * 0.23 - cell.y1;
+    if (over > under * 2 && over - under > first.size) return "bottom";
+    if (Math.min(over, under) > first.size * 0.5 && Math.abs(over - under) <= Math.max(over, under) * 0.25) return "middle";
+    return undefined;
+  };
+  cells.forEach((cell, k) => {
     built.push(...cellLines[k]);
     const edge = cell.colspan === 1 ? flush.get(cell.col) : undefined;
-    const words = cellLines[k].length > 0 ? cellParagraphs(cellLines[k], cell, inset, edge) : { text: "", runs: [] };
-    const out: TableCell = words.text.trim() === "" ? { text: "", runs: [] } : words;
-    if (cell.colspan > 1) out.colspan = cell.colspan;
-    if (cell.rowspan > 1) out.rowspan = cell.rowspan;
     const fill = cellFill(cell, grid.box, drawing.fills);
-    if (fill) out.fill = fill;
-    rows[cell.row].cells.push(out);
+    const valign = splits[cell.row] === 1 ? valignOf(cell, cellLines[k]) : undefined;
+    const n = splits[cell.row];
+    const parts = n > 1 ? Array.from({ length: n }, (_, i) => cellLines[k].slice(i, i + 1)) : [cellLines[k]];
+    parts.forEach((lines, i) => {
+      const words = lines.length > 0 ? cellParagraphs(lines, cell, inset, edge, sits[k] === "full" && centeredRow(cell.row)) : { text: "", runs: [] };
+      const out: TableCell = words.text.trim() === "" ? { text: "", runs: [] } : words;
+      if (cell.colspan > 1) out.colspan = cell.colspan;
+      if (cell.rowspan > 1) out.rowspan = cell.rowspan;
+      if (fill) out.fill = fill;
+      if (valign && out.text) out.valign = valign;
+      rows[cell.row][i].cells.push(out);
+    });
   });
-  return rows.filter((r) => r.cells.length > 0);
+  return { rows: rows.flat().filter((r) => r.cells.length > 0), padding };
+}
+
+// A cell merged across columns whose phrases stand in those columns, none
+// across a column's line (half an em past it at most), two columns with
+// words at least, is those columns' cells: a form's row whose inner rules
+// are not drawn (the invoice's vehicle row, set under its order row's
+// columns, read as one cell). pieces: the items cut at the lines.
+function unmerged(cell: GridCell, xs: number[], items: Item[], pieces: Item[]): GridCell[] {
+  if (cell.colspan < 2) return [cell];
+  const lines = xs.slice(cell.col + 1, cell.col + cell.colspan);
+  const across = buildLines(items.filter((it) => inBox(it, cell)), 0).some((l) =>
+    phrasesOf(l).some((p) => lines.some((x) => Math.min(x - p.x1, p.x2 - x) > l.size * 0.5)),
+  );
+  const columns = new Set(pieces.filter((it) => inBox(it, cell)).map((it) => columnAt(centerOf(it).x, lines)));
+  if (across || columns.size < 2) return [cell];
+  return Array.from({ length: cell.colspan }, (_, k) => ({ ...cell, x1: xs[cell.col + k], x2: xs[cell.col + k + 1], col: cell.col + k, colspan: 1 }));
 }
 
 // A table's text size: the size three quarters of its words are set in or
@@ -1133,7 +1365,7 @@ function cellFill(cell: Box, table: Box, fills: Fill[]): string | undefined {
     if (f.x1 < table.x1 - 2 || f.x2 > table.x2 + 2 || f.y1 < table.y1 - 2 || f.y2 > table.y2 + 2) continue;
     const overlap = (Math.min(f.x2, cell.x2) - Math.max(f.x1, cell.x1)) * (Math.min(f.y2, cell.y2) - Math.max(f.y1, cell.y1));
     if (overlap < (cell.x2 - cell.x1) * (cell.y2 - cell.y1) * 0.6) continue;
-    return f.color && !/^#(?:f[5-9a-f]){3}$/i.test(f.color) ? f.color : undefined;
+    return f.color && !WHITE_RE.test(f.color) ? f.color : undefined;
   }
   return undefined;
 }
@@ -1146,8 +1378,9 @@ function cellFill(cell: Box, table: Box, fills: Fill[]): string | undefined {
 // "By:" lines, each on a line of its own, read as one line).
 // Each paragraph keeps how its lines sit in the cell: centered, flush
 // right, or set in from the cell's left edge. inset: the cells' padding;
-// flush: the right edge of a column set flush right.
-function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: number }, flush?: number): TableCell {
+// flush: the right edge of a column set flush right; centered: the cell's
+// row centers its cells.
+function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: number }, flush?: number, centered = false): TableCell {
   const left = box.x1 + inset.left;
   const right = box.x2 - inset.right;
   const groups: Line[][] = [];
@@ -1168,6 +1401,12 @@ function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: n
   const sitOf = (group: Line[]): Pick<CellParagraph, "align" | "indent"> => {
     const size = group[0].size;
     const indent = Math.min(...group.map((l) => l.x)) - left;
+    // Centered lines whose widest fills the cell start at its padding, as
+    // flush left does: lines each as far from both sides of the cell, one
+    // of them short of both paddings, are centered (a form's heads read
+    // flush left); so are lines that fill a cell of a centered row.
+    const short = group.some((l) => l.x - left > size * 0.3 && right - l.xEnd > size * 0.3);
+    if (group.every((l) => balancedIn(l, box)) && (short || centered)) return { align: "center" };
     if (indent <= size * 0.5) return {};
     if (group.every((l) => Math.abs((l.x + l.xEnd) / 2 - middle) <= Math.max(size * 0.6, (box.x2 - box.x1) * 0.04))) return { align: "center" };
     if (group.every((l) => (flush ?? right) - l.xEnd <= size * 0.3)) return { align: "right" };
@@ -1210,16 +1449,20 @@ function splitAt(it: Item, cuts: number[]): Item[] {
   for (const x of [...cuts, it.x + it.w]) {
     let to = Math.min(n, charsBefore(x));
     if (to < n) {
-      for (let d = 0; d <= 3; d++) {
+      let gap = CJK_START_RE.test(it.str.slice(to - 1)) || CJK_START_RE.test(it.str.slice(to));
+      for (let d = 0; d <= 3 && !gap; d++) {
         if (it.str[to - d - 1] === " " || it.str[to - d] === " ") {
           to -= d;
-          break;
-        }
-        if (it.str[to + d - 1] === " " || it.str[to + d] === " ") {
+          gap = true;
+        } else if (it.str[to + d - 1] === " " || it.str[to + d] === " ") {
           to += d;
-          break;
+          gap = true;
         }
       }
+      // A word the line crosses stays whole, in the cell that holds most of
+      // it (the invoice's "Date:" 3 pt past its column's line read ":" in
+      // the next cell). Chinese sets no spaces: it is cut where the line is.
+      if (!gap) continue;
     }
     to = Math.max(from, Math.min(n, to));
     // A share of the width counts UTF-16 units: a cut never halves a character.

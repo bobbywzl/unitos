@@ -233,7 +233,7 @@
      "text": "Question answering(QA) is one of the most crucial research topics within the realm of Natural Language Processing. Recent advances in deep learning methodologies, coupled with the burgeoning availability of linguistic resources, have led to dramatic progresses in QA. However, most of these studies have been conducted in English, and only a little research has been done on QA in Japanese. To encourage research endeavors in Japanese QA, we organized three quiz competitions, encompassing questions posed in Japanese. This study undertook an analysis of the trivia questions employed in these competitions, scrutinized the QA systems submitted, and introduced comparisons with large language models to unveil the current achievements and challenges within the domain of QA in Japanese. This paper presents the findings of the analysis."
     }
    ],
-   "spaceAfter": 2
+   "spaceAfter": 4
   },
   {
    "kind": "paragraph",

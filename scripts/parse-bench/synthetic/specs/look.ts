@@ -74,5 +74,5 @@ export const look: Spec = {
     },
   },
   notes:
-    "The cover's first line is the title by its size (direct formatting on a Normal paragraph). The Word file and LibreOffice's PDF both leave the contents field empty; the reference holds the entries Word draws when it fills the field, so the Word file's parse is scored against it and the PDF is there for the reference-free check.",
+    "The cover's first line is the title by its size (direct formatting on a Normal paragraph). The Word file and LibreOffice's PDF both leave the contents field empty; the reference holds the entries the page editor draws for the field (the headings at its levels, the \"Contents\" heading over it left out), so the Word file's parse is scored against it and the PDF is there for the reference-free check.",
 };

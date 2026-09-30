@@ -71,8 +71,8 @@ export type SpecBlock =
   | { kind: "paragraph"; spans: SpecSpan[]; align?: "center" | "right" | "justify"; indent?: "first" | "hanging" | "block"; role?: Role; small?: true }
   | { kind: "list"; items: SpecItem[]; flush?: true }
   /** A contents field no one updated (Word): it prints no entries until Word
-      fills it on open; the reference holds the entries Word draws, the
-      headings at the levels. */
+      fills it on open; the reference holds the entries the page editor
+      draws, the headings at the levels but the one right over the field. */
   | { kind: "contents"; levels: [number, number] }
   | { kind: "equation"; latex: string; label?: string }
   | { kind: "table"; label?: string; caption?: SpecSpan[]; rows: SpecRow[]; layout?: TableLayout }
@@ -298,7 +298,8 @@ export type Leaf = { block: RenderBlock; groups: Group[] };
 export type FlattenOptions = {
   /** Where footnote blocks stand: after the block with the mark (the page's foot), or at the document's end. */
   footnotes: "after" | "end";
-  /** The text a small-caps span shows in the PDF's text layer: its own letters, or capitals (fake small caps). */
+  /** The text a small-caps span shows in the PDF's text layer: its own letters, or capitals (fake small caps,
+      which draw the capitals at full size: the page shows no small caps). */
   smallCaps: "keep" | "upper";
   /** How a renderer prints a caption's label before the caption ("Table 1." then the caption, one space between). */
   captionJoin?: string;
@@ -311,7 +312,7 @@ export function flatten(spec: Spec, opts: FlattenOptions): Leaf[] {
   let groupId = 0;
 
   const caseOf = (list: SpecSpan[]): SpecSpan[] =>
-    opts.smallCaps === "upper" ? list.map((s) => (s.smallCaps && !s.latex ? { ...s, text: s.text.toUpperCase() } : s)) : list;
+    opts.smallCaps === "upper" ? list.map((s) => (s.smallCaps && !s.latex ? { ...s, text: s.text.toUpperCase(), smallCaps: undefined } : s)) : list;
   // In an italic body every span but math, upright words, and footnote marks is italic.
   const bodyStyle = (list: SpecSpan[], italic: boolean): SpecSpan[] =>
     italic ? list.map((s) => (s.latex || s.up || s.footnote ? s : { ...s, italic: true })) : list;
@@ -568,11 +569,13 @@ export function referenceBlocks(leaves: Leaf[], looks: LeafLook[] = []): { block
         });
         break;
       case "contents": {
-        // The entries Word draws when it fills the field: the headings at its levels, by level, a
+        // The entries the page editor draws for the field: the headings at its levels, by level, a
         // heading's number its entry's marker (the references' contents lists: "1.1", then the words).
+        // The heading right over the field is its title ("Contents"), no entry.
         const [lo, hi] = block.levels;
+        const title = leaves[k - 1]?.block;
         const items = headings
-          .filter((h) => h.level >= lo && h.level <= hi)
+          .filter((h) => h !== title && h.level >= lo && h.level <= hi)
           .map((h) => {
             const spans = cleanSpans(h.spans);
             const number = /^(\d+(?:\.\d+)*\.?)\s+/.exec(spans[0]?.text ?? "");

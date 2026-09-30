@@ -45,15 +45,17 @@ function translator(editor: Editor | undefined): TFunc {
   return translatorFor(zh ? "zh" : DEFAULT_LANG);
 }
 
-/** A PDF page's name: its label when the PDF names its pages, else its number. */
+/** A PDF page's name: its label when the PDF names its pages, else its
+    number; "" for a page the PDF leaves unnumbered among numbered ones. */
 export function pageName(editor: Editor | undefined, page: number): string {
   const labels = editor ? importedOf(editor)?.pageLabels : null;
-  return labels?.[page - 1] || String(page);
+  return labels ? (labels[page - 1] ?? String(page)) : String(page);
 }
 
-/** What a page start draws: "p. 7". */
+/** What a page start draws: "p. 7"; nothing for a page with no number. */
 export function pageStartLabel(editor: Editor | undefined, page: number): string {
-  return translator(editor)("docsInsert.pageStart", { page: pageName(editor, page) });
+  const name = pageName(editor, page);
+  return name ? translator(editor)("docsInsert.pageStart", { page: name }) : "";
 }
 
 /** Whether a fragment holds a page start. */
@@ -199,9 +201,11 @@ function sharedLabel(editor: Editor, pages: number[]): string {
   }
   const t = translator(editor);
   const labels = runs.flatMap((run) =>
-    run.length < 3 ? run.map((page) => pageStartLabel(editor, page)) : [t("docsInsert.pageStart", { page: `${pageName(editor, run[0])}–${pageName(editor, run[run.length - 1])}` })],
+    run.length < 3 || run.some((page) => !pageName(editor, page))
+      ? run.map((page) => pageStartLabel(editor, page))
+      : [t("docsInsert.pageStart", { page: `${pageName(editor, run[0])}–${pageName(editor, run[run.length - 1])}` })],
   );
-  return labels.join(" · ");
+  return labels.filter(Boolean).join(" · ");
 }
 
 /** A page start whose number CSS alone does not place: one in a table's

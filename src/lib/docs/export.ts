@@ -60,6 +60,7 @@ import { fetchFigureImage } from "@/lib/derive/figure";
 import { isAssistantAuthor } from "@/lib/docs/assistant-suggestions";
 import { hex6, inlineText } from "@/lib/docs/blocks";
 import {
+  captionMathOf,
   captionParts,
   captionStylesOf,
   listIndentsOf,
@@ -332,6 +333,11 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
   const lineSpacing = num(a.lineSpacing);
   const firstLine = num(a.indentFirstLine) ?? 0;
   let children = inline(node.content, ctx, run, typeof a.blockId === "string" ? ctx.cuts.get(a.blockId) : undefined);
+  // A run-in heading (an import's bold lead) is Word's style separator: its
+  // paragraph mark hidden, Word draws it at the start of the next
+  // paragraph, a space before its words, and its contents list it.
+  const runIn = node.type === "heading" && a.runIn === true;
+  if (runIn) children = [...children, new TextRun(" ")];
   if (node.type === "heading" && typeof a.blockId === "string") children = [bookmark(ctx, bookmarkName("h", a.blockId), children)];
   const stops = typeof a.tabStops === "string" ? a.tabStops.split(" ").map((stop) => stop.split(":")) : [];
   // A side's line and its padding stand in the indent, as the page draws
@@ -370,6 +376,7 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
     keepLines: a.keepLinesTogether === true || undefined,
     widowControl: a.preventSingleLines !== false,
     pageBreakBefore: a.pageBreakBefore === true || undefined,
+    run: runIn ? { vanish: true, specVanish: true } : undefined,
     children,
     ...extra,
   });
@@ -406,6 +413,15 @@ function levelIndent(level: number, width = 0, indents: ListIndent[] | null = nu
   if (level > last) return { left: tw(indents[last][0]) + 720 * (level - last), hanging };
   const [left, first] = indents[level];
   return first < 0 ? { left: tw(left), hanging: tw(-first) } : { left: tw(left), firstLine: first > 0 ? tw(first) : undefined };
+}
+
+/** Where a level's words stand after a marker that does not hang, in
+    twips: the page's place (listIndents' hang, from the marker's start),
+    the tab stop Word's tab after the number goes to; none past the page's
+    depths or under a hanging marker, whose indent is the stop. */
+function levelTab(level: number, indents: ListIndent[] | null): number | undefined {
+  const at = indents?.[level];
+  return at && at[1] >= 0 && at[2] !== undefined && at[2] > 0 ? tw(at[0] + at[1] + at[2]) : undefined;
 }
 
 /** A glyph's width in Arial 11 pt, in twips: about 70 a narrow character
@@ -447,7 +463,12 @@ function listLevels(list: RichNode, drawer: RichNode, depth: number, indents: Li
               isLegalNumberingStyle: /%\d.*%\d/.test(glyph.format) || undefined,
             }),
       start: level === depth ? Number(list.attrs?.start) || 1 : 1,
-      style: { paragraph: { indent: none && !(indents && level < indents.length) ? { left: indent.left } : indent } },
+      style: {
+        paragraph: {
+          indent: none && !(indents && level < indents.length) ? { left: indent.left } : indent,
+          leftTabStop: none ? undefined : levelTab(level, indents),
+        },
+      },
     };
   });
 }
@@ -523,12 +544,16 @@ function table(node: RichNode, ctx: Ctx): Table {
   const columnWidths = widths.map((w) => Math.round((w ?? share) * 15));
   const align = node.attrs?.tableAlign;
   const indent = num(node.attrs?.tableIndent);
+  // The cells' padding as the page set it (an import's cellPadding), else
+  // 5 pt a side.
+  const [top, right, bottom, left] = typeof node.attrs?.cellPadding === "string" ? node.attrs.cellPadding.split(" ").map(Number) : [];
+  const padded = [top, right, bottom, left].every((v) => typeof v === "number" && Number.isFinite(v) && v >= 0);
   return new Table({
     columnWidths,
     width: { size: columnWidths.reduce((sum, w) => sum + w, 0), type: WidthType.DXA },
     alignment: align === "center" ? AlignmentType.CENTER : align === "right" ? AlignmentType.RIGHT : undefined,
     indent: indent && align !== "center" && align !== "right" ? { size: tw(indent), type: WidthType.DXA } : undefined,
-    margins: { top: 100, bottom: 100, left: 100, right: 100 },
+    margins: padded ? { top: tw(top), right: tw(right), bottom: tw(bottom), left: tw(left) } : { top: 100, bottom: 100, left: 100, right: 100 },
     rows: rows.map((row) => {
       const minHeight = num(row.attrs?.minHeight);
       return new TableRow({
@@ -619,11 +644,14 @@ function figure(node: RichNode, ctx: Ctx): Paragraph[] {
     );
   }
   if (caption) {
-    // A PDF figure's caption keeps its bold label and the rest of its marks.
+    // A PDF figure's caption keeps its bold label and the rest of its marks,
+    // and a formula its TeX, as an inline equation writes it.
     const styles = captionStylesOf(node.attrs?.captionStyles) ?? [];
-    const runs = captionParts(caption, styles).flatMap((part) => {
+    const math = captionMathOf(node.attrs?.captionMath) ?? [];
+    const runs = captionParts(caption, styles, math).flatMap((part) => {
       const marks = [...(node.marks ?? []), ...part.styles.map((style) => ({ type: CAPTION_MARKS[style] }))];
-      return runOf({ type: "text", text: part.text, marks }, ctx, { size: 18, color: "666666" }) ?? [];
+      const words: RichNode = part.latex ? { type: "inlineMath", attrs: { latex: part.latex }, marks } : { type: "text", text: part.text, marks };
+      return runOf(words, ctx, { size: 18, color: "666666" }) ?? [];
     });
     out.push(para(ctx, { spacing: { before: pictures.length > 0 ? 0 : tw(9), after: tw(9) }, children: runs }));
   }
@@ -694,7 +722,14 @@ function blocks(nodes: RichNode[] = [], ctx: Ctx): Block[] {
         break;
       }
       case "blockMath":
-        out.push(para(ctx, { alignment: AlignmentType.CENTER, children: [new TextRun(String(a.latex ?? ""))] }));
+        // An import's display keeps the page's space under it.
+        out.push(
+          para(ctx, {
+            alignment: AlignmentType.CENTER,
+            spacing: num(a.spaceAfter) === undefined ? undefined : { after: tw(a.spaceAfter as number) },
+            children: [new TextRun(String(a.latex ?? ""))],
+          }),
+        );
         break;
       case "figure":
         out.push(...figure(node, ctx));

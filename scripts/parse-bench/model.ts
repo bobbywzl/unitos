@@ -32,9 +32,9 @@ export type Fonts = { body: Font } & Partial<Record<Exclude<FontRole, "body">, F
     first, where the first line starts against them (a first-line indent; negative, a hanging indent). */
 export type Indent = { left: number; first: number };
 /** A paragraph's and a list's look beyond its words, as measured on the page: its indent in points
-    (indentPt; the kind in `indent`), and the space under it beyond the line pitch, in points, to the next
-    paragraph or list below it in its column (spaceAfter). A list's items: their alignment (align) and the
-    space between two items beyond the line pitch (itemSpace). An equation's printed label stands at the
+    (indentPt; the kind in `indent`), and the space under it, in points, to the next paragraph or list below
+    it in its column, beyond the step their two lines take with none between (spaceAfter). A list's items:
+    their alignment (align) and the space between two items beyond the line pitch (itemSpace). An equation's printed label stands at the
     right unless labelSide says left (amsart's and amsbook's leqno). Each is recorded only where measured. */
 export type RefBlock =
   | { kind: "title"; spans: Span[]; align?: Align; font?: Font }

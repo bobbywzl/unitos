@@ -35,7 +35,7 @@
      "bold": true
     }
    ],
-   "spaceAfter": 1
+   "spaceAfter": 2
   },
   {
    "kind": "paragraph",
@@ -45,7 +45,7 @@
      "italic": true
     }
    ],
-   "spaceAfter": 1
+   "spaceAfter": 3
   },
   {
    "kind": "paragraph",
@@ -54,7 +54,7 @@
      "text": "[FR Doc. 2025–10462 Filed 6–9–25; 8:45 am]"
     }
    ],
-   "spaceAfter": 1
+   "spaceAfter": 4
   },
   {
    "kind": "paragraph",
@@ -86,7 +86,7 @@
      "bold": true
     }
    ],
-   "spaceAfter": 5
+   "spaceAfter": 6
   },
   {
    "kind": "paragraph",
@@ -193,7 +193,7 @@
      "text": "."
     }
    ],
-   "spaceAfter": 2
+   "spaceAfter": 4
   },
   {
    "kind": "paragraph",

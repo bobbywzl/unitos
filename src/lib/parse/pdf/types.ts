@@ -3,7 +3,7 @@
 
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
 import type { Grid } from "@/lib/parse/pdf/lattice";
-import type { ParsedBlock } from "@/lib/parse/types";
+import type { ParsedBlock, TabStop } from "@/lib/parse/types";
 
 // sup and sub: set smaller than its line and raised or lowered off the line's
 // baseline (a footnote reference, "1st", H₂O). The line decides (lines.ts
@@ -47,7 +47,9 @@ export type Item = Flags & {
   glyphs?: Glyph[];
   table?: TableRegion; // a ruled table's place in the text flow (ruled.ts takeTables)
 };
-export type Run = Flags & { start: number; end: number };
+// A run over a tab (text.ts) carries its stop, and fill when the page
+// draws a fill-in rule under it (an underlined tab).
+export type Run = Flags & { start: number; end: number; tab?: TabStop & { fill?: true } };
 export type Cell = { x: number; text: string; runs: Run[] };
 export type Line = {
   cells: Cell[];
@@ -94,6 +96,8 @@ export type Segment = ParsedBlock & {
   captionBox?: Box; // a captioned FIGURE: where its caption sits (outside box)
   lineSize?: number; // the lines' median font size
   mathShare?: number; // share of glyphs from math fonts
+  lineBox?: Box; // the lines' extent at their own baselines, their scripts left out: a display's space is measured to it
+  glyphBox?: Box; // an EQUATION: its glyphs' drawn box (math/display.ts), which its space above and below is measured to
   align?: "center" | "right"; // a heading's alignment (a paragraph's is a token of its html)
 };
 

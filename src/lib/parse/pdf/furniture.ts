@@ -25,7 +25,7 @@ type Row = {
   bold: boolean;
   text: string;
   words: number;
-  key: string; // lower case, digits folded: "# 1. probability, measure and integration"
+  key: string; // lower case, digits folded: "12 Chapter 3. The River" is "# chapter #. the river"
   // What sameWords compares: the key's letters alone, and its words of four
   // letters or more.
   letters: string;
@@ -42,7 +42,7 @@ type Side = "head" | "foot";
 // notice 18.5 pt under "Per Curiam").
 type Candidate = { row: Row; side: Side; strong: boolean };
 
-export type FurnitureDrop = { page: number; line: Line; why: "repeat" | "page number" | "place" | "cell" | "continued" | "band" | "blank" };
+export type FurnitureDrop = { page: number; line: Line; why: "repeat" | "page number" | "place" | "cell" | "continued" | "band" | "blank" | "mark" };
 
 // A period may close the number: the 10-K prints "53." at each foot, and
 // its 97 page numbers stayed in the text.
@@ -50,14 +50,28 @@ const LONE_NUMBER_RE = /^[-–—\s]*(?:(?:page|p\.)\s*)?(\d{1,4}|[ivxlc]{1,7})\
 // The notice a book or a thesis prints on a page it leaves empty: the only
 // words of their page on six pages of the NPS thesis.
 const BLANK_PAGE_RE = /^\(?(?:this page (?:is |has been )?(?:intentionally|deliberately) left blank|(?:page )?intentionally left blank)\.?\)?$/i;
+// A printer's job mark at a page's foot: its number, a degree sign, the
+// year, and the sheet ("13061°—22", "9218°—13——1").
+const JOB_MARK_RE = /^\d{3,6}\s*[°º*]\s*[—–-]{1,2}\s*\d{2}(?:\s*[—–-]{1,3}\s*\d{1,3})?$/;
 // A long table's foot on each page it breaks at (LaTeX longtable, Word).
 const CONTINUED_RE = /^\(?continued (?:on (?:the )?next page|overleaf)\)?\.?$/i;
 
 // pageNumbers: each page's 0-based number in the PDF, where the pages are
 // not all of it (a parse of the pages the reader chose, parsePdf); a page
-// number counts with these.
-export function findFurniture(pages: Line[][], pageHeights: number[], pageNumbers?: number[]): FurnitureDrop[] {
+// number counts with these. scans: the pages that are a scan's text layer.
+export function findFurniture(pages: Line[][], pageHeights: number[], pageNumbers?: number[], scans?: boolean[]): FurnitureDrop[] {
   const rows = pages.map((lines, p) => rowsOf(lines, pageNumbers?.[p] ?? p, pageHeights[p]));
+  // A scan's specks at a page's head or foot drop first: a short row with no
+  // letter or digit (the OCR read the paper's edge or a smudge as "—" or
+  // "'") stood over the running head or under the page number, and they
+  // were no first or last row of their page (NASA SP-4408).
+  const specks: Row[] = [];
+  rows.forEach((pageRows, p) => {
+    if (!scans?.[p]) return;
+    const bare = (r: Row | undefined) => r !== undefined && r.text.length <= 8 && !/[\p{L}\p{N}]/u.test(r.text);
+    while (bare(pageRows[0])) specks.push(pageRows.shift()!);
+    while (bare(pageRows[pageRows.length - 1])) specks.push(pageRows.pop()!);
+  });
   const { lead, bodySize } = measures(pages, rows);
   const candidates = rows.flatMap((pageRows) => candidatesOf(pageRows, lead));
   const strong = candidates.filter((c) => c.strong);
@@ -210,10 +224,25 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
     if (whole || part) dropped.set(c.row, "cell");
   }
 
+  // 4. A printer's mark on a scan: a short foot under the text of the
+  // other pages, a job number ("13061°—22") or its words of four letters or
+  // more on no other line of the document (the OCR read a bulletin's
+  // "9218°—13——1" as "Geass ay").
+  const scanned = new Set(pages.flatMap((_, p) => (scans?.[p] ? [pageNumbers?.[p] ?? p] : [])));
+  const seen = new Map<string, number>();
+  for (const row of rows.flat()) for (const w of new Set(wordsOf(row.text))) seen.set(w, (seen.get(w) ?? 0) + 1);
+  for (const c of candidates) {
+    if (c.side !== "foot" || !scanned.has(c.row.page) || dropped.has(c.row) || c.row.words > 3 || c.row.text.length > 16) continue;
+    const long = wordsOf(c.row.text).filter((w) => w.length >= 4);
+    const mark = JOB_MARK_RE.test(c.row.text) || (long.length > 0 && long.every((w) => seen.get(w) === 1));
+    if (mark && outside(c)) dropped.set(c.row, "mark");
+  }
+
   const drops: FurnitureDrop[] = [];
+  for (const row of specks) dropped.set(row, "mark");
   for (const [row, why] of dropped) for (const line of row.lines) drops.push({ page: row.page, line, why });
 
-  // 4. A line of one to four digits in the top or bottom 8% of its page.
+  // 5. A line of one to four digits in the top or bottom 8% of its page.
   const gone = new Set(drops.map((d) => d.line));
   for (const [p, lines] of pages.entries()) {
     const h = pageHeights[p];
@@ -226,8 +255,8 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
 }
 
 // The pages' lines without their furniture.
-export function dropFurniture(pages: Line[][], pageHeights: number[], pageNumbers?: number[]): Line[][] {
-  const gone = new Set(findFurniture(pages, pageHeights, pageNumbers).map((d) => d.line));
+export function dropFurniture(pages: Line[][], pageHeights: number[], pageNumbers?: number[], scans?: boolean[]): Line[][] {
+  const gone = new Set(findFurniture(pages, pageHeights, pageNumbers, scans).map((d) => d.line));
   return pages.map((lines) => lines.filter((l) => !gone.has(l)));
 }
 
@@ -296,6 +325,11 @@ function rowsOf(lines: Line[], page: number, height: number): Row[] {
       lone: lone !== null,
     };
   });
+}
+
+// A row's words of two letters or more, lower case.
+function wordsOf(text: string): string[] {
+  return text.toLowerCase().match(/\p{L}{2,}/gu) ?? [];
 }
 
 function keyOf(text: string): string {

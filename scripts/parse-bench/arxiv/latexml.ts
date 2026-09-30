@@ -222,12 +222,15 @@ class Converter {
 
   /**
    * One LaTeXML equation or equation group → equation blocks. Rows join the tagged row after them (an equation's
-   * continuation lines); each tagged unit is one block with its label; rows of a unit become an aligned environment.
+   * continuation lines), and a tag's cell that spans rows (rowspan="2", the tag set beside a multi-row equation)
+   * takes the rows it spans; each tagged unit is one block with its label; rows of a unit become an aligned
+   * environment.
    */
   private equations(table: Element, role: Role) {
     const kind = table.matches(".ltx_eqn_eqnarray") ? "eqnarray" : table.matches(".ltx_eqn_gather, .ltx_eqn_multline") ? "gather" : "align";
     type Row = { cells: Element[]; label?: string };
     const units: Row[][] = [[]];
+    let span = 0; // rows the last tag's cell still covers
     for (const tr of table.querySelectorAll(":scope > tbody > tr, :scope > tr")) {
       const eqno = tr.querySelector(":scope > td.ltx_eqn_eqno");
       const label = eqno?.textContent?.replace(/\s+/g, " ").trim() || undefined;
@@ -239,12 +242,14 @@ class Converter {
       // cell across the table; a paragraph of its own, its formulas inline
       const intertext = !tr.matches(".ltx_equation") && cells.length === 1 && Number(cells[0].getAttribute("colspan") ?? 1) > 1;
       if (intertext || (!cells.some((td) => td.querySelector("math")) && text)) {
+        span = 0;
         this.flushEquations(units, kind, role);
         this.push({ kind: "paragraph", spans: normalizeSpans(cells.flatMap((td) => this.inline(td, {}))) }, role);
         continue;
       }
       units.at(-1)!.push({ cells, label });
-      if (label) units.push([]);
+      if (label) span = Number(eqno?.getAttribute("rowspan") ?? 1);
+      if (span > 0 && --span === 0) units.push([]);
     }
     this.flushEquations(units, kind, role);
   }

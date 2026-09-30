@@ -57,7 +57,7 @@
     "left": 0,
     "first": 4
    },
-   "spaceAfter": 4
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -90,7 +90,28 @@
      "sup": true
     },
     {
-     "text": "Instituto de Ciencias Nucleares, Universidad Nacional Autónoma de México, Circuito Exterior S/N, C.U., A.P. 70-543,"
+     "text": "Instituto "
+    },
+    {
+     "text": "de Ciencias Nucleares, Universidad Nacional",
+     "italic": true
+    },
+    {
+     "text": " Autónoma "
+    },
+    {
+     "text": "de",
+     "italic": true
+    },
+    {
+     "text": " México, "
+    },
+    {
+     "text": "Circuito Exterior S/N, C.U., A.P. 70-543",
+     "italic": true
+    },
+    {
+     "text": ","
     }
    ],
    "indentPt": {
@@ -103,7 +124,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "CDMX 04510, México."
+     "text": "CDMX 04510",
+     "italic": true
+    },
+    {
+     "text": ", México."
     }
    ],
    "indentPt": {
@@ -120,7 +145,35 @@
      "sup": true
     },
     {
-     "text": "Departamento de Fı́sica Aplicada, Centro de Investigación y de Estudios Avanzados del IPN, Unidad Mérida. A.P. 73, Cordemex,"
+     "text": "Departamento "
+    },
+    {
+     "text": "de",
+     "italic": true
+    },
+    {
+     "text": " Fı́sica "
+    },
+    {
+     "text": "Aplicada, Centro de",
+     "italic": true
+    },
+    {
+     "text": " Investigación "
+    },
+    {
+     "text": "y de Estudios Avanzados del IPN, Unidad",
+     "italic": true
+    },
+    {
+     "text": " Mérida. "
+    },
+    {
+     "text": "A.P. 73, Cordemex",
+     "italic": true
+    },
+    {
+     "text": ","
     }
    ],
    "indentPt": {
@@ -133,7 +186,14 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Mérida, Yucatán 97310, México."
+     "text": "Mérida, Yucatán "
+    },
+    {
+     "text": "97310",
+     "italic": true
+    },
+    {
+     "text": ", México."
     }
    ],
    "indentPt": {
@@ -150,7 +210,14 @@
      "sup": true
     },
     {
-     "text": "Department of Physics and Astronomy, California State University, 1250 Bellflower Boulevard, Long Beach, CA 90840, USA."
+     "text": "Department "
+    },
+    {
+     "text": "of Physics and Astronomy, California State University, 1250 Bellflower Boulevard, Long Beach, CA 90840, USA",
+     "italic": true
+    },
+    {
+     "text": "."
     }
    ],
    "indentPt": {
@@ -281,7 +348,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Key words: BL Lacertae objects: individual: PG 1553+113, galaxies: distances and redshifts, methods: statistical"
+     "text": "Key words",
+     "bold": true
+    },
+    {
+     "text": ": BL Lacertae objects: individual: PG 1553+113, galaxies: distances and redshifts, methods: statistical"
     }
    ]
   },
@@ -1895,7 +1966,11 @@
    "kind": "table",
    "caption": [
     {
-     "text": "Table 1. Details of the seventeen PG 1553+113 observations used in this study are provided. The first and second columns list the observation name and the instrument used, respectively. The third, fourth, fifth, and sixth columns include the start date, end date, period span (in MJD), and live observation duration (in hours), respectively. The seventh column references the work where the data for each observation period is originally reported."
+     "text": "Table 1",
+     "bold": true
+    },
+    {
+     "text": ". Details of the seventeen PG 1553+113 observations used in this study are provided. The first and second columns list the observation name and the instrument used, respectively. The third, fourth, fifth, and sixth columns include the start date, end date, period span (in MJD), and live observation duration (in hours), respectively. The seventh column references the work where the data for each observation period is originally reported."
     }
    ],
    "rows": [
@@ -2866,7 +2941,11 @@
    "kind": "table",
    "caption": [
     {
-     "text": "Table 2. The best-fitting values for the normalization constant "
+     "text": "Table 2",
+     "bold": true
+    },
+    {
+     "text": ". The best-fitting values for the normalization constant "
     },
     {
      "text": "F0",
@@ -4980,7 +5059,11 @@
    "kind": "table",
    "caption": [
     {
-     "text": "Table 3. The redshift values derived from the photohadronic model, based on a global "
+     "text": "Table 3",
+     "bold": true
+    },
+    {
+     "text": ". The redshift values derived from the photohadronic model, based on a global "
     },
     {
      "text": "χ2",
@@ -5239,7 +5322,11 @@
    "kind": "figure",
    "caption": [
     {
-     "text": "Figure 1. The photohadronic model, combined with the Saldana EBL model, is applied to fit the seventeen observed VHE gamma-ray spectra of PG 1553+113. The corresponding redshift is fixed at "
+     "text": "Figure 1",
+     "bold": true
+    },
+    {
+     "text": ". The photohadronic model, combined with the Saldana EBL model, is applied to fit the seventeen observed VHE gamma-ray spectra of PG 1553+113. The corresponding redshift is fixed at "
     },
     {
      "text": "z=0.518",
@@ -5946,5 +6033,5 @@
  ],
  "license": "open",
  "provenance": "latexml",
- "notes": "arXiv 2503.22874v2 (astronomy; MNRAS, two columns, tables), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words."
+ "notes": "arXiv 2503.22874v2 (astronomy; MNRAS, two columns, tables), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Bold and italic set from the page's faces where LaTeXML's HTML has none or another (front matter labels and affiliations, caption labels, run-in heads, cross-references)."
 }

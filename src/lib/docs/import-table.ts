@@ -401,8 +401,10 @@ function cellBlocks(cell: Element, gapped: boolean): RichNode[] {
 
 export type ImportTable = {
   /** The words of a <caption> the table carries, with their marks: drawn
-      as a caption above the table. */
+      as a caption above the table, or under it where the page sets it
+      there (captionBelow: the caption's caption-side is bottom). */
   caption: RichNode[] | null;
+  captionBelow: boolean;
   table: RichNode;
   /** The first paragraph of each row, in the order of the parse's text rows:
       where a page that begins at the row puts its page start. */
@@ -547,8 +549,10 @@ function cellNeed(cell: RichNode): Need {
         }
       }
       end();
-      need.fixedMin = Math.max(need.fixedMin, indent);
-      need.fixedLine = Math.max(need.fixedLine, indent);
+      // A paragraph set in takes its indent's room beside its words.
+      const own = indent + (typeof node.attrs?.indentLeft === "number" && node.attrs.indentLeft > 0 ? node.attrs.indentLeft * PX_PER_PT : 0);
+      need.fixedMin = Math.max(need.fixedMin, own);
+      need.fixedLine = Math.max(need.fixedLine, own);
       return;
     }
     const nested = node.type === "bulletList" || node.type === "orderedList" || node.type === "taskList";
@@ -650,7 +654,7 @@ export function sizedAtMost(node: RichNode, size: number): RichNode {
 type TableLook = { pt: number | null; columns: number[] | null };
 
 function tableNode(
-  rows: { cells: { node: RichNode; colspan: number; rowspan: number }[]; pinned: boolean }[],
+  rows: { cells: { node: RichNode; colspan: number; rowspan: number }[]; pinned: boolean; minHeight?: number | null }[],
   room: number,
   look: TableLook = { pt: null, columns: null },
 ): {
@@ -678,7 +682,8 @@ function tableNode(
   const content = grid.map((cells, r): RichNode => {
     // A row the rows above fill whole has no cell of its own.
     const row: RichNode = cells.length > 0 ? { type: "tableRow", content: cells.map((c) => c.node) } : { type: "tableRow" };
-    if (rows[r].pinned && !pinAll) row.attrs = { pinned: true };
+    const attrs = { ...(rows[r].pinned && !pinAll ? { pinned: true } : {}), ...(rows[r].minHeight ? { minHeight: rows[r].minHeight } : {}) };
+    if (Object.keys(attrs).length > 0) row.attrs = attrs;
     return row;
   });
   return { table: { type: "table", content }, rowStarts };
@@ -737,9 +742,16 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
   const trs = [...table.querySelectorAll("tr")].filter((tr) => tr.closest("table") === table);
   if (trs.length === 0) return null;
   const cellsOf = (tr: Element) => [...tr.children].filter((c) => /^(td|th)$/i.test(c.tagName));
-  // A colspan past the most cells a row holds ("99" for a row the width of
-  // the table) spans the table, never columns no row fills.
-  const widest = Math.max(1, ...trs.map((tr) => cellsOf(tr).length));
+  // The table's text size and its columns' widths on the page.
+  const cols = [...table.querySelectorAll(":scope > colgroup > col")].map((col) => pointsOf(styleOf(col, "width"), 2000));
+  // A colspan past the table's columns ("99" for a row the width of the
+  // table) spans the table, never columns no row fills. The columns are the
+  // colgroup's, or the most a row fills, each of its merged cells over the
+  // most cells a row holds at most: a form's rows of merged cells fill six
+  // columns where no row holds six cells (the SF 298), and a full row drew
+  // four columns wide and two empty cells.
+  const most = Math.max(1, ...trs.map((tr) => cellsOf(tr).length));
+  const widest = Math.max(cols.length, ...trs.map((tr) => cellsOf(tr).reduce((sum, cell) => sum + spanOf(cell, "colspan", most), 0)));
   // Header rows (<thead>) that open the table repeat on every page the
   // table runs on, as Google Docs' pinned header rows do.
   let pinning = true;
@@ -747,10 +759,13 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
   const rows = trs.map((tr) => {
     pinning = pinning && tr.parentElement?.tagName.toLowerCase() === "thead";
     const cells = cellsOf(tr).map((cell) => {
-      // The cell's fill and its sides as the page sets them.
+      // The cell's fill, its sides, and where its words sit, as the page
+      // sets them.
       const attrs: Record<string, string> = {};
       const fill = colorOf(cell, "background-color");
       if (fill) attrs.backgroundColor = fill;
+      const valign = styleOf(cell, "vertical-align");
+      if (valign === "middle" || valign === "bottom") attrs.valign = valign;
       for (const [name, side] of Object.entries(CELL_SIDES)) {
         const value = sideOf(cell, side);
         if (value) attrs[name] = value;
@@ -761,10 +776,11 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
         rowspan: spanOf(cell, "rowspan", trs.length),
       };
     });
-    return { cells, pinned: pinning };
+    // A row the page sets taller than its words keeps its height as its
+    // least height: a cell of one row carries it (a form's field row).
+    const minHeight = Math.max(0, ...cellsOf(tr).map((cell) => (spanOf(cell, "rowspan", trs.length) === 1 ? (pointsOf(styleOf(cell, "height"), 2000) ?? 0) : 0)));
+    return { cells, pinned: pinning, minHeight: minHeight > 0 ? minHeight : null };
   });
-  // The table's text size and its columns' widths on the page.
-  const cols = [...table.querySelectorAll(":scope > colgroup > col")].map((col) => pointsOf(styleOf(col, "width"), 2000));
   const look: TableLook = {
     pt: pointsOf(styleOf(table, "font-size"), 72),
     columns: cols.length > 0 && cols.every((w) => w !== null) ? (cols as number[]) : null,
@@ -781,7 +797,8 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
     reader.flush();
   }
   const caption = reader.blocks.filter((b) => b.type === "paragraph").flatMap((b, k) => [...(k > 0 ? [{ type: "text", text: " " }] : []), ...(b.content ?? [])]);
-  return { caption: caption.length > 0 ? caption : null, ...built };
+  const captionBelow = captionEl !== undefined && styleOf(captionEl, "caption-side") === "bottom";
+  return { caption: caption.length > 0 ? caption : null, captionBelow, ...built };
 }
 
 /** A table from the parse's grid text (cells by tab, rows by line): for a
@@ -798,5 +815,5 @@ export function tableFromText(text: string, room: number): ImportTable | null {
     pinned: false,
   }));
   const built = tableNode(rows, room);
-  return built ? { caption: null, ...built } : null;
+  return built ? { caption: null, captionBelow: false, ...built } : null;
 }

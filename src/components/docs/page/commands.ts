@@ -241,6 +241,16 @@ registerDocsCommands([
     enabled: (editor) => insertContext(editor)?.projectEditor === true,
   },
   {
+    // Tools > Translate document: a translated copy, made as Make a copy
+    // is, through the Translate bar's service (page/translate-dialog.tsx).
+    id: "page:translate",
+    label: "docsPage.translateDocument",
+    menu: "tools",
+    keywords: ["translate", "translation", "translated copy", "language", "chinese", "english", "翻译"],
+    run: (editor) => store(editor)?.set({ dialog: "translate" }),
+    enabled: (editor) => insertContext(editor)?.projectEditor === true,
+  },
+  {
     // Tools > Line numbers: each line numbered in the left margin
     // (page/line-numbers.tsx); pages format only, as in Google Docs.
     id: "page:line-numbers",
