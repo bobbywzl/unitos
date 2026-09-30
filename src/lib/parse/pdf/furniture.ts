@@ -25,7 +25,7 @@ type Row = {
   bold: boolean;
   text: string;
   words: number;
-  key: string; // lower case, digits folded: "# 1. probability, measure and integration"
+  key: string; // lower case, digits folded: "12 Chapter 3. The River" is "# chapter #. the river"
   // What sameWords compares: the key's letters alone, and its words of four
   // letters or more.
   letters: string;
@@ -61,6 +61,17 @@ const CONTINUED_RE = /^\(?continued (?:on (?:the )?next page|overleaf)\)?\.?$/i;
 // number counts with these. scans: the pages that are a scan's text layer.
 export function findFurniture(pages: Line[][], pageHeights: number[], pageNumbers?: number[], scans?: boolean[]): FurnitureDrop[] {
   const rows = pages.map((lines, p) => rowsOf(lines, pageNumbers?.[p] ?? p, pageHeights[p]));
+  // A scan's specks at a page's head or foot drop first: a short row with no
+  // letter or digit (the OCR read the paper's edge or a smudge as "—" or
+  // "'") stood over the running head or under the page number, and they
+  // were no first or last row of their page (NASA SP-4408).
+  const specks: Row[] = [];
+  rows.forEach((pageRows, p) => {
+    if (!scans?.[p]) return;
+    const bare = (r: Row | undefined) => r !== undefined && r.text.length <= 8 && !/[\p{L}\p{N}]/u.test(r.text);
+    while (bare(pageRows[0])) specks.push(pageRows.shift()!);
+    while (bare(pageRows[pageRows.length - 1])) specks.push(pageRows.pop()!);
+  });
   const { lead, bodySize } = measures(pages, rows);
   const candidates = rows.flatMap((pageRows) => candidatesOf(pageRows, lead));
   const strong = candidates.filter((c) => c.strong);
@@ -228,6 +239,7 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
   }
 
   const drops: FurnitureDrop[] = [];
+  for (const row of specks) dropped.set(row, "mark");
   for (const [row, why] of dropped) for (const line of row.lines) drops.push({ page: row.page, line, why });
 
   // 5. A line of one to four digits in the top or bottom 8% of its page.

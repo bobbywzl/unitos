@@ -20,8 +20,10 @@
 // reference is committed, and the open and public-domain documents read
 // without one; .bench/baseline-private.json holds the rest. With
 // no file named, --baseline reads both and --save-baseline writes each
-// document into its own (merged with what the file holds). The exit code is
-// 1 when a metric dropped against the baseline.
+// document into its own (merged with what the file holds), and every
+// document's inline formulas by page into .bench/formulas-baseline.json,
+// against which --baseline counts the formulas a page lost. The exit code
+// is 1 when a metric dropped against the baseline.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -32,11 +34,13 @@ import { parsePdf } from "@/lib/parse/pdf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { resolveContentsLinks } from "@/lib/parse/url";
 import { fromImport, fromParse, printedNotes, type Doc } from "./adapt";
-import { forgetText, freeScores, laterTitle, lookScores, pdfText, wordBorders, type FreeScores, type PageSetup, type PdfText } from "./free";
+import { blindText, forgetText, freeScores, laterTitle, lookScores, pdfText, wordBorders, type FreeScores, type PageSetup, type PdfText } from "./free";
 import { forgetGlyphs, glyphScores, pdfGlyphs, placeCrops, placeEquations, type GlyphScores } from "./glyphs";
-import { bodyFace, labelScores, layoutScores, linesOfUnits } from "./layout";
+import { bodyFace, labelScores, layoutScores, linesOfUnits, type PageInk } from "./layout";
 import { loadCorpus, loadRef, refPath, REF_DIRS, ROOT, type CorpusEntry } from "./load";
-import { flatten, score, type Scores } from "./metrics";
+import { contentImages } from "./floats";
+import { flatten, formulasByPage, lostFormulas, score, type Scores } from "./metrics";
+import { forgetPaint, inkBands, inkRight, pdfPaint, type PagePaint } from "./paint";
 import type { RefBlock, RefDoc, Span } from "./model";
 import { detailReport } from "./report";
 
@@ -53,6 +57,9 @@ const category = value("--category");
 const detail = value("--detail");
 const BASELINE_PUBLIC = join(import.meta.dirname, "baseline.json");
 const BASELINE_PRIVATE = join(ROOT, ".bench", "baseline-private.json");
+/** Each document's inline formulas by page, as the run saved with the baselines (never committed: the owner's
+    formulas are among them): --baseline counts the formulas a candidate lost against them (lostFormulas). */
+const FORMULAS = join(ROOT, ".bench", "formulas-baseline.json");
 
 // ── Parsing, once per file ──────────────────────────────────────────────────
 
@@ -75,6 +82,8 @@ type Parsed = {
   guarded?: { rows: number; json: number };
   /** A PDF's own page labels, which the page editor draws at each page start. */
   pageLabels?: string[];
+  /** A Word figure's html by its media id: the page editor draws its caption from it. */
+  media?: Map<string, string>;
   ms: number;
 } & Look;
 const parses = new Map<string, Promise<Parsed>>();
@@ -128,7 +137,7 @@ function parseFile(path: string): Promise<Parsed> {
       // not the parse's.
       const look: Look = { bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign, titleLines: parsed.titleLines, titlePage: parsed.titlePage };
       try {
-        const { richText, size, pageSetup } = richTextFromImport({
+        const { richText, size, pageSetup, figures } = richTextFromImport({
           kind: word ? "docx" : "pdf",
           title: parsed.title ?? basename(path).replace(/\.(pdf|docx)$/i, ""),
           titleFromOriginal: Boolean(parsed.title),
@@ -144,7 +153,8 @@ function parseFile(path: string): Promise<Parsed> {
         if (lone) throw new Error(`the rich text holds a lone surrogate the save refuses, in "${lone}"`);
         const guarded = size.rows > GUARD.rows || size.json > GUARD.json ? { rows: size.rows, json: size.json } : undefined;
         const labels = "pageLabels" in parsed ? { pageLabels: parsed.pageLabels } : {};
-        return { title: parsed.title, blocks: parsed.blocks, richText, pageSize: parsed.pageSize, pageSetup, ms, ...look, ...labels, ...(guarded ? { guarded } : {}) };
+        const media = new Map(figures.flatMap((f) => (f.html ? [[f.mediaId, f.html] as [string, string]] : [])));
+        return { title: parsed.title, blocks: parsed.blocks, richText, pageSize: parsed.pageSize, pageSetup, media, ms, ...look, ...labels, ...(guarded ? { guarded } : {}) };
       } catch (err) {
         since("import", t1);
         const labels = "pageLabels" in parsed ? { pageLabels: parsed.pageLabels } : {};
@@ -235,6 +245,8 @@ type Result = {
   glyphs?: { parse: GlyphScores; import?: GlyphScores };
   docs?: { parse: Doc; import: Doc };
   pdf?: PdfText;
+  /** Each candidate's inline formulas by page (formulasByPage). */
+  formulas?: { parse: Record<number, string[]>; import?: Record<number, string[]> };
 };
 
 async function runEntry(entry: CorpusEntry): Promise<Result> {
@@ -270,9 +282,10 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   // A title the parse takes from a later page is scored with that page.
   const pdfPath = path.replace(/\.docx$/i, ".pdf");
   const shown = pages && pages[0] > 1 && existsSync(pdfPath) ? laterTitle(pdfTextOf(pdfPath, pages), pdfTextOf(pdfPath, [1, 1])) : undefined;
-  const docs = { parse: fromParse(parsed, pages, shown), import: parsed.richText ? fromImport(parsed.richText, pages, ref ? printedNotes(ref.blocks) : undefined, shown) : { blocks: [] } };
+  const docs = { parse: fromParse(parsed, pages, shown), import: parsed.richText ? fromImport(parsed.richText, pages, ref ? printedNotes(ref.blocks) : undefined, shown, parsed.media, /\.docx$/i.test(path) ? "docx" : "pdf") : { blocks: [] } };
   if (parsed.richText) placeCrops(docs.parse, docs.import);
   result.docs = docs;
+  result.formulas = { parse: formulasByPage(flatten(docs.parse)), ...(parsed.richText ? { import: formulasByPage(flatten(docs.import)) } : {}) };
   if (result.ref) {
     const reference: Doc = { blocks: result.ref.blocks, fonts: result.ref.fonts };
     result.parse = score(reference, result.ref.furniture, docs.parse).scores;
@@ -281,7 +294,10 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   t0 = since("reference", t0);
   // A Word file is checked against its PDF rendering beside it, when there is one.
   if (!existsSync(pdfPath)) return result;
-  result.pdf = pdfTextOf(pdfPath, pages);
+  // What the pages paint beyond pdftotext's lines (paint.ts): the text it cannot read, the images.
+  const paint: PagePaint[] = await quietly(() => pdfPaint(pdfPath));
+  const text = pdfTextOf(pdfPath, pages);
+  result.pdf = { ...text, blind: blindText(text, paint) };
   // The text layer and its furniture are the reference-free checks' (a 500-page scan's took most of the time
   // the line charged to the glyph checks).
   t0 = since("free", t0);
@@ -296,15 +312,18 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   // document's, the rest each candidate's.
   const face = bodyFace(pdfPath, pages);
   const labels = labelScores(parsed.pageLabels, result.pdf.sizes.size, pages);
+  // A Word file's pictures are its own images, not crops of its rendering's pages: no picture to find.
+  const pictures = word ? [] : contentImages(result.pdf, paint);
+  const ink: PageInk = { bands: (page, box) => inkBands(pdfPath, page, box), right: (page, box) => inkRight(pdfPath, page, box) };
   const parseFlat = flatten(docs.parse);
   const parsePlaced = linesOfUnits(result.pdf, parseFlat);
-  const parseLayout = layoutScores(result.pdf, parseFlat, parsePlaced, { drawn: docs.parse.fonts?.body.shape, face, labels });
+  const parseLayout = layoutScores(result.pdf, parseFlat, parsePlaced, { drawn: docs.parse.fonts?.body.shape, face, labels, pictures, ink });
   result.freeParse = freeScores(result.pdf, parseFlat, result.glyphs?.parse, word, null, parseLayout);
   if (parsed.richText) {
     const imported = flatten(docs.import);
     const placed = linesOfUnits(result.pdf, imported);
-    const look = lookScores(imported, { page: parsed.pageSize, setup: parsed.pageSetup, word: word ? wordBorders(path) : undefined, rich: parsed.richText, parse: docs.parse, pdf: result.pdf, placed });
-    const importLayout = layoutScores(result.pdf, imported, placed, { drawn: docs.import.fonts?.body.shape, face, labels });
+    const look = lookScores(imported, { page: parsed.pageSize, setup: parsed.pageSetup, word: word ? wordBorders(path) : undefined, rich: parsed.richText, parse: docs.parse, pdf: result.pdf, placed, path: pdfPath });
+    const importLayout = layoutScores(result.pdf, imported, placed, { drawn: docs.import.fonts?.body.shape, face, labels, pictures, ink });
     result.freeImport = freeScores(result.pdf, imported, result.glyphs?.import, word, look, importLayout);
   }
   since("free", t0);
@@ -333,6 +352,18 @@ const LOWER_IS_BETTER = new Set([
   "figurePieces",
   "cropProse",
   "labelsBackward",
+  "figuresMissed",
+  "captionsAlone",
+  "cropsOverlap",
+  "captionSide",
+  "titleMarks",
+  "farSpace",
+  "gridProse",
+  "brokenNumbers",
+  "mathRows",
+  "runInIndent",
+  "qedPlace",
+  "checklistWraps",
 ]);
 
 function numbers(s: Scores): Record<string, number | null> {
@@ -416,6 +447,10 @@ function freeNumbers(f: FreeScores): Record<string, number | null> {
     lookDisplays: f.look?.displays ?? null,
     lookRows: f.look?.rows ?? null,
     lookMarkers: f.look?.markers ?? null,
+    lookNumbers: f.look?.numbers ?? null,
+    brokenNumbers: f.look ? f.look.broken : null,
+    lookChecklists: f.look?.checklists ?? null,
+    checklistWraps: f.look ? f.look.checklistsWrong : null,
     order: f.layout?.order ?? null,
     linesAcross: f.layout ? f.layout.columns.across : null,
     structure: f.layout?.structure ?? null,
@@ -426,6 +461,15 @@ function freeNumbers(f: FreeScores): Record<string, number | null> {
     falseIndents: f.layout ? f.layout.indents.wrong : null,
     face: f.layout?.face.score ?? null,
     labelsBackward: f.layout ? f.layout.labels.wrong : null,
+    figuresMissed: f.layout ? f.layout.pictures.missed : null,
+    captionsAlone: f.layout ? f.layout.captions.alone : null,
+    cropsOverlap: f.layout ? f.layout.overlaps.overlapping : null,
+    captionSide: f.layout ? f.layout.sides.wrong : null,
+    titleMarks: f.layout ? f.layout.marks.wrong : null,
+    farSpace: f.layout ? f.layout.spaces.wrong : null,
+    gridProse: f.layout ? f.layout.grids.prose : null,
+    runInIndent: f.layout ? f.layout.runIns.wrong : null,
+    qedPlace: f.layout ? f.layout.proofs.wrong : null,
   };
 }
 
@@ -439,6 +483,7 @@ function glyphNumbers(g: GlyphScores | undefined): Record<string, number | null>
     mathChecked: g.checked,
     mathPassed: g.passed,
     mathCheck: g.checked > 0 ? g.passed / g.checked : null,
+    mathRows: g.rowsWrong,
   };
 }
 
@@ -583,6 +628,7 @@ function release(file: string) {
     for (const key of [...texts.keys()]) if (key.startsWith(`${path}|`)) texts.delete(key);
     forgetText(path);
     forgetGlyphs(path);
+    forgetPaint(path);
   }
 }
 const results: Result[] = [];
@@ -678,6 +724,20 @@ if (flag("--baseline")) {
       if (worse) lines.push(`  ${r.entry.id} ${key}: ${was} → ${is}`);
     }
   }
+  // The inline formulas a saved run held on a page that the candidate lost there.
+  const saved = existsSync(FORMULAS) ? (JSON.parse(readFileSync(FORMULAS, "utf8")) as Record<string, { parse: Record<number, string[]>; import?: Record<number, string[]> }>) : {};
+  for (const r of results) {
+    const was = saved[r.entry.id];
+    if (!was || !r.formulas) continue;
+    for (const mode of ["parse", "import"] as const) {
+      const [before, now] = [was[mode], r.formulas[mode]];
+      if (!before || !now) continue;
+      const lost = lostFormulas(before, now);
+      if (lost.length === 0) continue;
+      const pages = [...new Set(lost.map((f) => f.page))].sort((a, b) => a - b);
+      lines.push(`  ${r.entry.id} free.${mode}.inlineLost: 0 → ${lost.length} (inline formulas the saved run held, on pages ${pages.join(", ")})`);
+    }
+  }
   dropped = lines.length;
   console.log(lines.length > 0 ? `\nDropped against the baseline (${lines.length}):\n${lines.join("\n")}` : "\nNo metric dropped against the baseline.");
 }
@@ -694,6 +754,9 @@ if (flag("--save-baseline")) {
   else {
     if (Object.keys(pub).length > 0) writeBaseline(BASELINE_PUBLIC, pub);
     if (Object.keys(priv).length > 0) writeBaseline(BASELINE_PRIVATE, priv);
+    const formulas: Record<string, unknown> = existsSync(FORMULAS) ? (JSON.parse(readFileSync(FORMULAS, "utf8")) as Record<string, unknown>) : {};
+    for (const r of results) if (!r.skipped && r.formulas) formulas[r.entry.id] = r.formulas;
+    writeFileSync(FORMULAS, `${JSON.stringify(formulas)}\n`);
   }
   console.log(`Saved the baseline for ${Object.keys(pub).length + Object.keys(priv).length} documents.`);
 }

@@ -102,6 +102,11 @@ export type LinkSpan = {
 // its marker included; in a table, at the row.
 export type PageStart = { offset: number; page: number };
 
+// A tab stop: where a "\t" in a block's text goes, in points from the
+// column's left edge: the words after the tab start at a left stop, center
+// on a center stop, and end at a right stop.
+export type TabStop = { at: number; align: "left" | "center" | "right" };
+
 export type ParsedBlock = {
   type: BlockType;
   text: string;
@@ -136,6 +141,14 @@ export type ParsedBlock = {
   // blank line, a Word paragraph's space after); absent where a figure, a
   // table, or the page's end follows. The import's space after.
   spaceAfter?: number;
+  // PDF and Word paragraphs, headings, and lists: the tab stops of the
+  // tabs in the text, in order (a form's fields, a pair set flush right, a
+  // proof's box). A PDF sets a right stop only at its column's right edge,
+  // and an underlined tab is a fill-in rule.
+  tabStops?: TabStop[];
+  // Word paragraphs: the line spacing Word sets (w:spacing w:line under
+  // the auto rule), as a multiple of single spacing, as Docs sets one.
+  lineSpacing?: number;
   // PDF paragraphs: the indent the page sets; absent where every line starts
   // at the column's edge. The html's indent token names its kind.
   indent?: Indent;
@@ -398,7 +411,27 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     row of its own is the display's. Word: the right indent, a display's
 //     spacing, the cells' margins, and a paragraph's shading and the line
 //     between the paragraphs of a box.
+// 24: the parse loop's round 5 (SPEC.md §30, §31) — PDF: the masthead over
+//     the title drops or stands over it as its kicker, a note the title's
+//     page leaves unmarked stays a paragraph at the front matter's end, a
+//     run-in head keeps the page's indent, and a contents entry may be a
+//     title with its page number. A paragraph's halves join over a float or
+//     a page only where they are set alike, the space after a block is
+//     measured from its lines' own boxes and a display's glyphs, a gap a
+//     drawing reaches into is no blank, a rule across a gutter ends a band
+//     of columns, and the English dictionary decides a line-end hyphen. A
+//     gap at a stop reads as a tab, a fill-in rule as an underlined tab, and
+//     a proof's box as a right tab to the column's edge. A table's caption
+//     stands on the side the page sets it, a grid's cells keep the room the
+//     page leaves around their words, a column rule parts two words, and
+//     prose side by side is one paragraph. Photos, maps, and charts take
+//     their captions, pictures that touch are one figure, and a table drawn
+//     as glyph outlines is one drawing. A display's pieces join (a tall
+//     integral and its limits, a label on one row), a formula built wrong is
+//     a crop, and TeX's bold and sans letters in Times text are formulas.
+//     Word: each paragraph's line spacing, its tab stops, and captions at
+//     their own size.
 // Slides and sheets (SPEC.md §27) parse with their own parsers
 // (lib/parse/slides.ts, lib/parse/sheets.ts) and re-parse only on request:
 // they carry no version of their own.
-export const PARSER_VERSION = 23;
+export const PARSER_VERSION = 24;

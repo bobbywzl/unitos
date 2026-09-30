@@ -60,6 +60,7 @@ import { fetchFigureImage } from "@/lib/derive/figure";
 import { isAssistantAuthor } from "@/lib/docs/assistant-suggestions";
 import { hex6, inlineText } from "@/lib/docs/blocks";
 import {
+  captionMathOf,
   captionParts,
   captionStylesOf,
   listIndentsOf,
@@ -643,11 +644,14 @@ function figure(node: RichNode, ctx: Ctx): Paragraph[] {
     );
   }
   if (caption) {
-    // A PDF figure's caption keeps its bold label and the rest of its marks.
+    // A PDF figure's caption keeps its bold label and the rest of its marks,
+    // and a formula its TeX, as an inline equation writes it.
     const styles = captionStylesOf(node.attrs?.captionStyles) ?? [];
-    const runs = captionParts(caption, styles).flatMap((part) => {
+    const math = captionMathOf(node.attrs?.captionMath) ?? [];
+    const runs = captionParts(caption, styles, math).flatMap((part) => {
       const marks = [...(node.marks ?? []), ...part.styles.map((style) => ({ type: CAPTION_MARKS[style] }))];
-      return runOf({ type: "text", text: part.text, marks }, ctx, { size: 18, color: "666666" }) ?? [];
+      const words: RichNode = part.latex ? { type: "inlineMath", attrs: { latex: part.latex }, marks } : { type: "text", text: part.text, marks };
+      return runOf(words, ctx, { size: 18, color: "666666" }) ?? [];
     });
     out.push(para(ctx, { spacing: { before: pictures.length > 0 ? 0 : tw(9), after: tw(9) }, children: runs }));
   }

@@ -235,6 +235,9 @@ export function levelStyle(levels: ListLevel[]): string {
 
 /** Half an inch: a list depth's step where its page sets none. */
 const DEPTH_PT = 36;
+/** The room a checklist's box takes before its words: the box (docs.css)
+    and a third of an em. */
+const TASK_BOX = "14px + 0.35em";
 
 /** A list set at its page's depths (an import's listIndents) as its inline
     style (listSheet): each depth's words at its left (--docs-indent-n), its
@@ -263,13 +266,17 @@ export function indentStyle(indents: ListIndent[]): string {
     ::marker content. A list set at its page's depths (data-list-indents,
     indentStyle) draws no ::marker: each line's marker is a box at its first
     line's start, before its words, and a depth that draws no marker has
-    none. A line a suggestion adds or removes whole sits in the
-    suggestion's wrapper (css/suggest.css). */
+    none. So does a checklist's box there, its wraps back at the depth's
+    left, as the page sets them; a checklist of the page editor's own keeps
+    its box beside its words (docs.css). A line a suggestion adds or
+    removes whole sits in the suggestion's wrapper (css/suggest.css). */
 export function listSheet(root: string): string {
   const li = (n: number) => `${root} ${Array.from({ length: n }, () => "li").join(" ")}`;
   // A list set at its page's depths, and the lists inside it.
   const own = (tag: string) => `:is(${tag}[data-list-indents], [data-list-indents] ${tag})`;
   const first = (list: string) => [`${root} ${list} > li > p:first-child`, `${root} ${list} > [data-suggestion-block] > li > p:first-child`];
+  const tasks = own('ul[data-type="taskList"]');
+  const task = (tail: string) => [`${root} ${tasks} > li${tail}`, `${root} ${tasks} > [data-suggestion-block] > li${tail}`].join(", ");
   return [
     `${root} { ${levelStyle(BULLET_PRESETS[0].levels)}; ${levelStyle(NUMBER_PRESETS[0].levels)}; }`,
     ...Array.from(
@@ -285,13 +292,20 @@ export function listSheet(root: string): string {
     `${first(`${own("ul")}:not([data-type="taskList"])`).map((p) => `${p}::before`).join(", ")} { content: var(--docs-level-glyph); }`,
     `${first(own("ol")).map((p) => `${p}::before`).join(", ")} { content: var(--docs-level-count); }`,
     `${[...first(`${own("ul")}:not([data-type="taskList"])`), ...first(own("ol"))].map((p) => `${p}::before`).join(", ")} { display: inline-block; box-sizing: border-box; min-width: var(--docs-level-hang); padding-right: 0.25em; text-indent: 0; }`,
+    // A checklist at its page's depths: the box at the first line's start
+    // (on the words' baseline), the words after it, never closer than the
+    // box's width, and the wraps at the depth's left.
+    `${task("")} { display: block; position: relative; }`,
+    `${task(" > label")} { position: absolute; top: 0; left: var(--docs-level-first); line-height: calc(var(--docs-ls, 1.15) * 1.15); }`,
+    `${task(" > div > p:first-child")} { text-indent: calc(var(--docs-level-first) + max(var(--docs-level-hang), ${TASK_BOX})); }`,
     // Each depth's words: where the outermost list's page sets them
-    // (listIndents), else a half inch a depth. A checklist keeps its own.
-    ...Array.from(
-      { length: 9 },
-      (_, k) =>
-        `${root} ${"li ".repeat(k)}:is(ul, ol):not([data-type="taskList"]) { padding-left: calc(var(--docs-indent-${k + 1}, ${DEPTH_PT * (k + 1)}pt) - var(--docs-indent-${k}, ${DEPTH_PT * k}pt)); }`,
-    ),
+    // (listIndents), else a half inch a depth; a depth the page sets left
+    // of the one above it steps back (a negative margin: padding takes
+    // none). A checklist of the page editor's own keeps its own.
+    ...Array.from({ length: 9 }, (_, k) => {
+      const step = `var(--docs-indent-${k + 1}, ${DEPTH_PT * (k + 1)}pt) - var(--docs-indent-${k}, ${DEPTH_PT * k}pt)`;
+      return `${root} ${"li ".repeat(k)}:is(ul, ol):not([data-type="taskList"]), ${root} ${"li ".repeat(k)}${tasks} { padding-left: max(0pt, ${step}); margin-left: min(0pt, ${step}); }`;
+    }),
   ].join("\n");
 }
 

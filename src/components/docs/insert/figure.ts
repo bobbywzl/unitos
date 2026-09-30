@@ -7,16 +7,19 @@ import { useT } from "@/components/lang-provider";
 import { insertContext, insertT, toast } from "@/components/docs/insert/context";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { MediaHtml } from "@/components/reader/figure-media";
-import { captionParts, captionStylesOf, type CaptionStyle } from "@/lib/docs/schema";
+import katex from "katex";
+import { captionMathOf, captionParts, captionStylesOf, type CaptionMath, type CaptionStyle } from "@/lib/docs/schema";
+import { KATEX_MACROS } from "@/lib/katex";
 
 // A figure object (SPEC.md §29): an import's figure, one block atom in the
 // page. It draws the figure as the block reader does (.reader-figure): a
 // web page's figure from its html, a PDF's figure as the crop of its page at
 // the size the PDF prints it, over its caption in the marks the page sets it
-// in (captionStyles). The media is the document's FigureMedia row, which the
-// page sends; the rich text holds only its id, so no save and no paste can
-// put markup in the page. A click opens the figure's tools
-// (DOCS_EVENT.figureTools); the caption is the figure's, never typed into.
+// in (captionStyles) and with its formulas as equations (captionMath). The
+// media is the document's FigureMedia row, which the page sends; the rich
+// text holds only its id, so no save and no paste can put markup in the
+// page. A click opens the figure's tools (DOCS_EVENT.figureTools); the
+// caption is the figure's, never typed into.
 
 /** A figure object's media, as the page sends it (FigureMedia). `src` is a
     PDF figure's crop (figureImageUrl, the address the finishing step and the
@@ -78,6 +81,7 @@ function figureOf(node: PMNode, imported: ImportedEditor | null, editor: Editor 
     html: media?.html ?? null,
     caption: media ? media.caption : typeof node.attrs.caption === "string" ? node.attrs.caption : "",
     styles: captionStylesOf(node.attrs.captionStyles) ?? [],
+    math: captionMathOf(node.attrs.captionMath) ?? [],
     src: media ? (media.html ? null : media.src) : ownPage ? figureImageUrl(documentId, mediaId) : null,
     size: media?.size ?? null,
   };
@@ -94,21 +98,37 @@ const CAPTION_TAGS: Record<CaptionStyle["style"], [string, Record<string, string
   sup: ["sup", {}],
 };
 
-/** A caption's words in the marks the page sets them in, as the view's
-    elements. */
-function captionContent(caption: string, styles: CaptionStyle[]) {
-  return captionParts(caption, styles).map((part, k) =>
-    part.styles.reduce<ReturnType<typeof h> | string>((inner, style) => {
-      const [tag, attrs] = CAPTION_TAGS[style];
-      return h(tag, { key: k, ...(attrs.style ? { style: { fontVariant: "small-caps" } } : {}) }, inner);
-    }, part.text),
-  );
+/** A caption's formula drawn as the page editor draws an inline equation
+    (insert/math.ts), its TeX in the markup for a screen reader. */
+function formulaHtml(latex: string): string {
+  try {
+    return katex.renderToString(latex, { throwOnError: false, strict: "ignore", trust: false, macros: { ...KATEX_MACROS } });
+  } catch {
+    return "";
+  }
 }
 
-/** The same as a copy's html (renderHTML): words, or a spec that holds them. */
-function captionSpec(caption: string, styles: CaptionStyle[]): (DOMOutputSpec | string)[] {
-  return captionParts(caption, styles).map((part) =>
-    part.styles.reduce<DOMOutputSpec | string>((inner, style) => [CAPTION_TAGS[style][0], CAPTION_TAGS[style][1], inner], part.text),
+/** A caption's words in the marks the page sets them in, and its formulas
+    as equations, as the view's elements. */
+function captionContent(caption: string, styles: CaptionStyle[], math: CaptionMath[]) {
+  return captionParts(caption, styles, math).map((part, k) => {
+    const drawn = part.latex ? formulaHtml(part.latex) : "";
+    if (drawn) return h("span", { key: k, className: "docs-caption-math", dangerouslySetInnerHTML: { __html: drawn } });
+    return part.styles.reduce<ReturnType<typeof h> | string>((inner, style) => {
+      const [tag, attrs] = CAPTION_TAGS[style];
+      return h(tag, { key: k, ...(attrs.style ? { style: { fontVariant: "small-caps" } } : {}) }, inner);
+    }, part.text);
+  });
+}
+
+/** The same as a copy's html (renderHTML): words, or a spec that holds
+    them; a formula as an inline equation's markup (its TeX, its readable
+    characters), which a download draws. */
+function captionSpec(caption: string, styles: CaptionStyle[], math: CaptionMath[]): (DOMOutputSpec | string)[] {
+  return captionParts(caption, styles, math).map((part) =>
+    part.latex
+      ? ["span", { "data-type": "inline-math", "data-latex": part.latex }, part.text]
+      : part.styles.reduce<DOMOutputSpec | string>((inner, style) => [CAPTION_TAGS[style][0], CAPTION_TAGS[style][1], inner], part.text),
   );
 }
 
@@ -170,12 +190,14 @@ function CropFigure({
   size,
   caption,
   styles,
+  math,
 }: {
   blockId: string;
   src: string | null;
   size: { width: number; height: number } | null;
   caption: string;
   styles: CaptionStyle[];
+  math: CaptionMath[];
 }) {
   const t = useT();
   const [failed, setFailed] = useState<string | null>(null);
@@ -201,7 +223,7 @@ function CropFigure({
           onError: () => setFailed(shown),
         })
       : null,
-    caption ? h("p", { className: "docs-figure-caption" }, ...captionContent(caption, styles)) : null,
+    caption ? h("p", { className: "docs-figure-caption" }, ...captionContent(caption, styles, math)) : null,
     // Nothing to draw: the object still shows where it stands.
     !shown && !caption ? h("p", { className: "docs-figure-empty" }, t("docsInsert.figure")) : null,
   );
@@ -216,7 +238,7 @@ function FigureView({ node, editor }: NodeViewProps) {
     { ref: setEl, className: "docs-figure-body" },
     figure.html
       ? h(MediaHtml, { blockId: figure.blockId, className: "reader-figure", html: figure.html })
-      : h(CropFigure, { blockId: figure.blockId, src: figure.src, size: figure.size, caption: figure.caption, styles: figure.styles }),
+      : h(CropFigure, { blockId: figure.blockId, src: figure.src, size: figure.size, caption: figure.caption, styles: figure.styles, math: figure.math }),
   );
 }
 
@@ -291,9 +313,11 @@ export const Figure = Node.create<FigureOptions>({
         renderHTML: (attrs) => (attrs.mediaId ? { "data-media-id": String(attrs.mediaId) } : {}),
       },
       caption: { default: "", rendered: false },
-      // The caption's marks as its page sets them (lib/docs/schema.ts
-      // captionStylesOf); the caption itself stays words, not rich text.
+      // The caption's marks as its page sets them, and its formulas
+      // (lib/docs/schema.ts captionStylesOf, captionMathOf); the caption
+      // itself stays words, not rich text.
       captionStyles: { default: null, rendered: false },
+      captionMath: { default: null, rendered: false },
       page: { default: null, rendered: false },
       region: { default: null, rendered: false },
       // A PDF page that begins at the figure (insert/page-start.ts).
@@ -324,7 +348,7 @@ export const Figure = Node.create<FigureOptions>({
     }
     const parts: DOMOutputSpec[] = [];
     if (figure.src) parts.push(["img", { src: figure.src, alt: "" }]);
-    if (figure.caption) parts.push(["p", { class: "docs-figure-caption" }, ...captionSpec(figure.caption, figure.styles)]);
+    if (figure.caption) parts.push(["p", { class: "docs-figure-caption" }, ...captionSpec(figure.caption, figure.styles, figure.math)]);
     return ["div", attrs, ["div", { class: "reader-figure docs-figure-crop" }, ...parts]];
   },
 

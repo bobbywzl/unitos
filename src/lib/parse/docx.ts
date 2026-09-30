@@ -21,7 +21,7 @@ import {
   type OfficeZip,
   type Relationship,
 } from "@/lib/parse/office";
-import type { FootnoteRef, LinkSpan, MathSpan, ParsedBlock, ParsedDocument, StyleSpan, TextFont } from "@/lib/parse/types";
+import type { FootnoteRef, LinkSpan, MathSpan, ParsedBlock, ParsedDocument, StyleSpan, TabStop, TextFont } from "@/lib/parse/types";
 import type { HexColor } from "@/lib/text-style";
 
 // The Word parser: a .docx read part by part into blocks, the way a Markdown
@@ -385,6 +385,9 @@ type ParaProps = {
   line: { value: number; rule: "auto" | "exact" | "atLeast" };
   /** The paragraph starts a page (w:pageBreakBefore). */
   pageBefore: boolean;
+  /** The tab stops (w:tabs), its style's and its own, in points from the
+      margin; none, and Word's every half inch go on. */
+  tabs: TabStop[];
 };
 
 const ROLE_BY_NAME: Record<string, Role> = {
@@ -447,8 +450,10 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     styleId,
     line: { value: 240, rule: "auto" },
     pageBefore: false,
+    tabs: [],
   };
   let outline: number | null = null;
+  const tabs = new Map<number, TabStop["align"]>();
   for (const layer of [styles.docPPr, ...table.map((s) => s.pPr), ...chain.map((s) => s.pPr), pPr]) {
     if (!layer) continue;
     const jc = attr(child(layer, "jc"), "val");
@@ -485,7 +490,9 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     }
     out.contextual = flag(child(layer, "contextualSpacing")) ?? out.contextual;
     out.pageBefore = flag(child(layer, "pageBreakBefore")) ?? out.pageBefore;
+    tabStopsOf(layer, tabs);
   }
+  out.tabs = [...tabs].filter(([pos]) => pos >= 0 && pos < 100_000).sort((a, b) => a[0] - b[0]).map(([pos, align]) => ({ at: points(pos), align }));
   // An outline level makes a heading of a style Word does not name one (a
   // "Chapter" style at level 1).
   if (out.heading === null && out.role === null && outline !== null && outline < 9) out.heading = outline + 1;
@@ -508,6 +515,21 @@ function rightOf(ind: Element | null): number | null {
 function firstOf(ind: Element | null): number | null {
   const hanging = intAttr(ind, "hanging");
   return hanging !== null ? -hanging : intAttr(ind, "firstLine");
+}
+
+/** A layer's tab stops (w:tabs w:tab) over the ones before it, by their
+    place in twips: a stop the layer clears goes. A decimal stop takes its
+    number's end, as a right stop; a bar draws a rule and holds no tab. */
+function tabStopsOf(layer: Element, stops: Map<number, TabStop["align"]>) {
+  for (const tab of children(child(layer, "tabs"), "tab")) {
+    const pos = intAttr(tab, "pos");
+    const val = attr(tab, "val") ?? "left";
+    if (pos === null) continue;
+    if (val === "clear") stops.delete(pos);
+    else if (val === "center") stops.set(pos, "center");
+    else if (val === "right" || val === "end" || val === "decimal") stops.set(pos, "right");
+    else if (val !== "bar") stops.set(pos, "left");
+  }
 }
 
 // ── Borders ─────────────────────────────────────────────────────────────────
@@ -556,6 +578,12 @@ function spaceOf(spacing: Element | null, side: "before" | "after" | "line"): nu
 function spaceBetween(above: ParaProps, below: ParaProps): number {
   const same = above.styleId === below.styleId;
   return (same && above.contextual ? 0 : above.after) + (same && below.contextual ? 0 : below.before);
+}
+
+/** A paragraph's line spacing as a multiple of single spacing (w:line in
+    240ths under the auto rule); none under an exact or at-least rule. */
+function lineMultiple(props: ParaProps): number | undefined {
+  return props.line.rule === "auto" ? Math.round((props.line.value / 240) * 100) / 100 : undefined;
 }
 
 /** A blank paragraph's height in twips: one line at its mark's size (half
@@ -803,8 +831,14 @@ class Line {
   /** Every run with words is code (Look.code). */
   mono = true;
 
+  /** No words, and no underlined tab (a line to fill in). */
   get empty(): boolean {
-    return this.text.trim() === "";
+    return this.text.trim() === "" && !this.lined(0, this.text.length);
+  }
+
+  /** Whether an underlined tab stands from `from` to `to`. */
+  lined(from: number, to: number): boolean {
+    return this.marks.some((m) => m.style === "underline" && m.start < to && m.end > from && this.text.slice(Math.max(from, m.start), Math.min(to, m.end)).includes("\t"));
   }
 
   add(text: string, look: Look, link: LinkTarget | null) {
@@ -881,8 +915,9 @@ class Line {
     this.notes = moveSpans(this.notes, words.length);
   }
 
-  /** The words tidied — a tab or a run of spaces one space, none at a line's
-      ends or the paragraph's — or kept exactly (code). */
+  /** The words tidied — a run of spaces one space, none at a line's ends
+      or the paragraph's; a tab stays a tab, and one at the end stays when
+      it is underlined (a line to fill in) — or kept exactly (code). */
   finish(exact: boolean): Words {
     const raw = this.text;
     const map = new Int32Array(raw.length + 1);
@@ -891,17 +926,20 @@ class Line {
       for (let i = 0; i <= raw.length; i++) map[i] = i;
       out = raw;
     } else {
+      // Where the last underlined tab stands in the words.
+      let lined = -1;
       for (let i = 0; i < raw.length; i++) {
         let ch = raw[i];
-        if (ch === "\t" || ch === "\u00a0") ch = " ";
+        if (ch === "\u00a0") ch = " ";
         if (ch === "\n" && out.endsWith(" ")) out = out.slice(0, -1);
         map[i] = out.length;
         if (ch === " " && (out.length === 0 || out.endsWith(" ") || out.endsWith("\n"))) continue;
+        if (ch === "\t" && this.lined(i, i + 1)) lined = out.length;
         out += ch;
       }
       map[raw.length] = out.length;
-      const end = out.replace(/\s+$/, "").length;
-      const lead = out.length - out.replace(/^\s+/, "").length;
+      const end = Math.max(out.replace(/\s+$/, "").length, lined + 1);
+      const lead = out.length - out.replace(/^[^\S\t]+/, "").length;
       out = out.slice(lead, Math.max(lead, end));
       for (let i = 0; i <= raw.length; i++) map[i] = Math.max(0, Math.min(end, map[i]) - lead);
     }
@@ -1103,6 +1141,8 @@ type ListLine = {
       the line's alignment. */
   gap?: number;
   align: ParaProps["align"];
+  /** The line's paragraph's tab stops. */
+  tabs?: TabStop[];
 };
 /** A list being read: its lines, whether it is a contents list, the notes
     its lines cite, its first line's paragraph (the space above the list),
@@ -1311,6 +1351,10 @@ class DocxReader {
     for (const line of list.lines) if (line.gap !== undefined) gaps.set(line.gap, (gaps.get(line.gap) ?? 0) + 1);
     const gap = [...gaps].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? 0;
     if (gap > 0) block.itemSpace = points(gap);
+    // The tab stops of the lines that hold a tab, one to a place.
+    const stops = new Map<number, TabStop>();
+    for (const line of list.lines) if (line.words.text.includes("\t")) for (const stop of line.tabs ?? []) stops.set(stop.at, stop);
+    if (stops.size > 0) block.tabStops = [...stops.values()].sort((a, b) => a.at - b.at);
     // Each depth's indent as Word sets it: its first line's words and marker.
     if (!list.contents) {
       const indents = steps.map((step, d) => {
@@ -1481,6 +1525,7 @@ class DocxReader {
           words: { ...words, text: words.text.replace(/\n/g, " ") },
           gap: this.listGap(props),
           align: props.align,
+          tabs: props.tabs,
         });
         this.list.first ??= props;
         this.list.trail = { props, blank: 0 };
@@ -1496,7 +1541,8 @@ class DocxReader {
       this.code.push("");
       return;
     }
-    if (only && props.heading === null && props.role !== "title" && (props.role === "code" || only.mono)) {
+    // A line of underlined tabs alone (a line to fill in) holds no words: no code.
+    if (only && props.heading === null && props.role !== "title" && (props.role === "code" || (only.mono && only.text.trim() !== ""))) {
       this.closeList();
       (this.code ??= []).push(only.finish(true).text.replace(/\s+$/, ""));
       return;
@@ -1556,6 +1602,7 @@ class DocxReader {
     if (props.heading !== null || props.role === "title") {
       const level = Math.min(6, props.heading ?? 1);
       const block = this.textBlock("HEADING", words, `<h${level}${align}>${escapeHtml(words.text)}</h${level}>`, { headingBold: true });
+      if (props.tabs.length > 0 && words.text.includes("\t")) block.tabStops = props.tabs;
       if (props.role === "title") this.titles.add(block);
       if (props.outline === 9) this.unlisted.add(block);
       this.bordered(block, props);
@@ -1570,6 +1617,7 @@ class DocxReader {
     else if (props.role === "quote" || (props.border.left && props.left > 0 && !props.border.right)) tokens.push("quote");
     if (props.align) tokens.push(props.align);
     const block = this.textBlock("PARAGRAPH", words, tokens.length > 0 ? `<p class="${tokens.join(" ")}">${escapeHtml(words.text)}</p>` : undefined);
+    if (props.tabs.length > 0 && words.text.includes("\t")) block.tabStops = props.tabs;
     this.bordered(block, props);
     // The paragraph's indent as Word sets it. A quotation's inset is the
     // page editor's quote, unless the quotation draws its own bar; its
@@ -1579,6 +1627,8 @@ class DocxReader {
     const first = inset && Math.abs(props.first) < 100_000 ? points(props.first) : 0;
     const right = props.right > 0 && props.right < 100_000 ? points(props.right) : 0;
     if (left || first || right) block.indent = { left, first, ...(right ? { right } : {}) };
+    const lines = lineMultiple(props);
+    if (lines !== undefined) block.lineSpacing = lines;
     this.spaced(block, props, { props, blank: 0 });
     return block;
   }
@@ -2245,6 +2295,8 @@ function tableLooksFirstRow(tblPr: Element | null): boolean {
 
 const FIGURE_LABEL = /^(?:figure|fig\.?|chart|graph|diagram|image|photo|picture|illustration|plate|exhibit|scheme|图)\s*\d/i;
 const TABLE_LABEL = /^(?:table|tab\.|表)\s*\d/i;
+/** A face a caption's html may name (the import reads the same). */
+const CSS_FACE = /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/;
 
 /** Is the block a caption for a figure or a table: a paragraph in the
     Caption style, or one that opens with the kind's label ("Figure 3",
@@ -2270,7 +2322,13 @@ function attachCaptions(blocks: ParsedBlock[], noteRefs: DocxReader["noteRefs"])
       if (!caption) return;
       taken.add(caption);
       block.text = caption.text;
-      block.html = (block.html ?? "<figure></figure>").replace(/<\/figure>$/, `<figcaption>${escapeHtml(caption.text)}</figcaption></figure>`);
+      // The figure's words are its caption's, and so is its font.
+      if (caption.font) block.font = caption.font;
+      // The caption keeps its look: its size, its color (not the ink's), and
+      // its runs' marks (a bold label), as the page sets them.
+      const words = { text: caption.text, marks: (caption.styles ?? []).map((s) => ({ start: s.start, end: s.end, style: s.style })), links: [], math: caption.math ?? [] };
+      const look = [caption.font ? `font-size:${caption.font.size}pt` : "", caption.font?.color && !isInk(caption.font.color) ? `color:${caption.font.color}` : ""].filter(Boolean).join(";");
+      block.html = (block.html ?? "<figure></figure>").replace(/<\/figure>$/, `<figcaption${look ? ` style="${look}"` : ""}>${inlineHtml(words)}</figcaption></figure>`);
       const refs = noteRefs.get(caption);
       if (refs) noteRefs.set(block, refs);
     } else if (block.type === "TABLE" && block.html?.startsWith("<table") && !block.html.includes("<caption>")) {
@@ -2278,7 +2336,12 @@ function attachCaptions(blocks: ParsedBlock[], noteRefs: DocxReader["noteRefs"])
       if (!caption) return;
       taken.add(caption);
       const words = { text: caption.text, marks: (caption.styles ?? []).map((s) => ({ start: s.start, end: s.end, style: s.style })), links: [], math: caption.math ?? [] };
-      block.html = block.html.replace(/^<table([^>]*)>/, `<table$1><caption>${inlineHtml(words)}${textGap("\n")}</caption>`);
+      // The caption's words keep the face and the size the page sets them
+      // in, on a span, as a PDF's table caption does (pdf/tables.ts): the
+      // import draws them at that size where it is under the body's.
+      const look = caption.font ? [`font-size:${caption.font.size}pt`, CSS_FACE.test(caption.font.family) ? `font-family:${caption.font.family}` : ""].filter(Boolean).join(";") : "";
+      const html = look ? `<span style="${look}">${inlineHtml(words)}</span>` : inlineHtml(words);
+      block.html = block.html.replace(/^<table([^>]*)>/, `<table$1><caption>${html}${textGap("\n")}</caption>`);
       block.text = `${caption.text}\n${block.text}`;
       const refs = [...(noteRefs.get(caption) ?? []), ...moveSpans(noteRefs.get(block) ?? [], caption.text.length + 1)];
       if (refs.length > 0) noteRefs.set(block, refs);
@@ -2370,9 +2433,11 @@ export async function parseDocx(bytes: Uint8Array, filename: string, opts: DocxP
 
   // A contents field with no entries lists the headings at its levels, each
   // linked to its heading, as Word draws it on update; with no heading to
-  // list it stands for nothing.
+  // list it stands for nothing. The heading right over the field is its
+  // title ("Contents"), no entry of it: the list opened with its own title.
   const levelOf = (b: ParsedBlock) => (b.type === "HEADING" ? Number(/^<h([1-6])/.exec(b.html ?? "")?.[1] ?? 0) : 0);
-  const listed = ([lo, hi]: [number, number]) => (b: ParsedBlock) => levelOf(b) >= lo && levelOf(b) <= hi && !reader.unlisted.has(b);
+  const titles = new Set(reader.unfilledContents.map(({ block }) => blocks[blocks.indexOf(block) - 1]).filter((b) => b?.type === "HEADING"));
+  const listed = ([lo, hi]: [number, number]) => (b: ParsedBlock) => levelOf(b) >= lo && levelOf(b) <= hi && !reader.unlisted.has(b) && !titles.has(b);
   for (const { block, levels } of reader.unfilledContents) if (!blocks.some(listed(levels))) blocks = blocks.filter((b) => b !== block);
   for (const { block, levels } of reader.unfilledContents) {
     const lines: string[] = [];

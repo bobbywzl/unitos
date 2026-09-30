@@ -105,7 +105,11 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     // (lettrine: "A" 3.6 pt from "long", "T" 0 pt from "he"). Its str then
     // ends in the space. A float's lines all start at one x, the first line
     // too, and say nothing: the letter joins.
-    const spaced = first.x - (cap.x + cap.w) >= first.size * 0.3 && lines.some((l) => Math.abs(l.x - first.x) > first.size * 0.1);
+    // A word space stays under 0.7 em however a justified line stretches
+    // it: a CSS float's first line is set in by the paragraph's indent, 1.2
+    // em from the letter ("S" + "CIENTIFIC", synth-paper-html).
+    const gap = first.x - (cap.x + cap.w);
+    const spaced = gap >= first.size * 0.3 && gap <= first.size * 0.7 && lines.some((l) => Math.abs(l.x - first.x) > first.size * 0.1);
     const lead: Item = { ...cap, str: cap.str.trim() + (spaced ? " " : ""), y: first.y, size: first.size, w: first.x - cap.x, bold: first.bold, italic: first.italic, mono: first.mono, smallCaps: first.smallCaps, href: first.href, font: first.font, look: first.look };
     out = out.map((i) => (i === cap ? lead : i));
     // The other lines beside it start where the paragraph's next line does,

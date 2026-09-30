@@ -29,9 +29,14 @@ export function lineColumn(line: Line): [number, number] | undefined {
 
 const chars = (list: Item[]) => list.reduce((n, i) => n + i.str.trim().length, 0);
 
-export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = []): Line[] {
+// The page's horizontal rules outside its tables, while pageLines reads it:
+// a rule across a gutter ends the band of columns above it (splitAt).
+let pageRules: Box[] = [];
+
+export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = []): Line[] {
   const text = items.filter((i) => i.str.trim().length > 0);
   if (text.length === 0 && graphics.length === 0) return [];
+  pageRules = rules;
   const pieces = readRegion(text, graphics, page, pageWidth, 0);
   const lines: Line[] = [];
   let order = 0;
@@ -112,6 +117,7 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
 }
 
 const extentOf = (items: Item[]): [number, number] => [Math.min(...items.map((i) => i.x)), Math.max(...items.map((i) => i.x + i.w))];
+const width = (items: Item[]) => extentOf(items)[1] - extentOf(items)[0];
 
 // One column: its lines top to bottom, and each graphic after the lines
 // above it and the lines beside it on its left (a slide's text beside its
@@ -310,14 +316,22 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
   if (!banded && graphics.every((p) => p.box.x1 < g && p.box.x2 > g) && total - chars([...spanning]) < total * 0.4) return null;
   const rows = buildLines([...spanning], page);
   const crossingGraphics = graphics.filter((p) => p.box.x1 < g && p.box.x2 > g);
-  // Separators top to bottom: the spanning rows (by baseline) and the
-  // graphics that cross the gutter (by their middle). A script raised
-  // beside a row, set smaller and half the row's size over its baseline at
-  // most, stands in the band under the row, with the words it is set on (a
-  // running head's "Ca²⁺" beside the journal's name across the gutter).
-  const separators: { y: number; size: number; piece: Piece }[] = [
+  // Separators top to bottom: the spanning rows (by baseline), the
+  // graphics that cross the gutter (by their middle), and the rules drawn
+  // across it in the white between two lines (an appendix over its
+  // references, each two columns: arXiv 2502.02648 p. 11 read the page
+  // column by column, the appendix and the references twice interleaved). A
+  // script raised beside a row, set smaller and half the row's size over its
+  // baseline at most, stands in the band under the row, with the words it
+  // is set on (a running head's "Ca²⁺" beside the journal's name across the
+  // gutter).
+  const [top, bottom] = [Math.max(...items.map((i) => i.y)), Math.min(...items.map((i) => i.y))];
+  const clear = (y: number) => !items.some((i) => y > i.y - i.size * 0.5 && y < i.y + i.size);
+  const crossingRules = pageRules.filter((r) => r.x1 < g - maxSize * 2 && r.x2 > g + maxSize * 2 && r.x2 - r.x1 >= width(items) * 0.2 && r.y1 < top && r.y1 > bottom && clear(r.y1));
+  const separators: { y: number; size: number; piece: Piece | null }[] = [
     ...rows.map((l) => ({ y: l.y, size: l.size, piece: { items: l.items } as Piece })),
     ...crossingGraphics.map((p) => ({ y: (p.box.y1 + p.box.y2) / 2, size: 0, piece: { graphic: p } as Piece })),
+    ...crossingRules.map((r) => ({ y: r.y1, size: 0, piece: null })),
   ].sort((a, b) => b.y - a.y);
   const bands: Band[] = separators.map((s) => ({ left: { items: [], graphics: [] }, right: { items: [], graphics: [] }, separator: s.piece }));
   bands.push({ left: { items: [], graphics: [] }, right: { items: [], graphics: [] }, separator: null });

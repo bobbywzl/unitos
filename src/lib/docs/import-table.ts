@@ -401,8 +401,10 @@ function cellBlocks(cell: Element, gapped: boolean): RichNode[] {
 
 export type ImportTable = {
   /** The words of a <caption> the table carries, with their marks: drawn
-      as a caption above the table. */
+      as a caption above the table, or under it where the page sets it
+      there (captionBelow: the caption's caption-side is bottom). */
   caption: RichNode[] | null;
+  captionBelow: boolean;
   table: RichNode;
   /** The first paragraph of each row, in the order of the parse's text rows:
       where a page that begins at the row puts its page start. */
@@ -547,8 +549,10 @@ function cellNeed(cell: RichNode): Need {
         }
       }
       end();
-      need.fixedMin = Math.max(need.fixedMin, indent);
-      need.fixedLine = Math.max(need.fixedLine, indent);
+      // A paragraph set in takes its indent's room beside its words.
+      const own = indent + (typeof node.attrs?.indentLeft === "number" && node.attrs.indentLeft > 0 ? node.attrs.indentLeft * PX_PER_PT : 0);
+      need.fixedMin = Math.max(need.fixedMin, own);
+      need.fixedLine = Math.max(need.fixedLine, own);
       return;
     }
     const nested = node.type === "bulletList" || node.type === "orderedList" || node.type === "taskList";
@@ -755,10 +759,13 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
   const rows = trs.map((tr) => {
     pinning = pinning && tr.parentElement?.tagName.toLowerCase() === "thead";
     const cells = cellsOf(tr).map((cell) => {
-      // The cell's fill and its sides as the page sets them.
+      // The cell's fill, its sides, and where its words sit, as the page
+      // sets them.
       const attrs: Record<string, string> = {};
       const fill = colorOf(cell, "background-color");
       if (fill) attrs.backgroundColor = fill;
+      const valign = styleOf(cell, "vertical-align");
+      if (valign === "middle" || valign === "bottom") attrs.valign = valign;
       for (const [name, side] of Object.entries(CELL_SIDES)) {
         const value = sideOf(cell, side);
         if (value) attrs[name] = value;
@@ -790,7 +797,8 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
     reader.flush();
   }
   const caption = reader.blocks.filter((b) => b.type === "paragraph").flatMap((b, k) => [...(k > 0 ? [{ type: "text", text: " " }] : []), ...(b.content ?? [])]);
-  return { caption: caption.length > 0 ? caption : null, ...built };
+  const captionBelow = captionEl !== undefined && styleOf(captionEl, "caption-side") === "bottom";
+  return { caption: caption.length > 0 ? caption : null, captionBelow, ...built };
 }
 
 /** A table from the parse's grid text (cells by tab, rows by line): for a
@@ -807,5 +815,5 @@ export function tableFromText(text: string, room: number): ImportTable | null {
     pinned: false,
   }));
   const built = tableNode(rows, room);
-  return built ? { caption: null, ...built } : null;
+  return built ? { caption: null, captionBelow: false, ...built } : null;
 }

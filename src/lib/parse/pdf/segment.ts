@@ -6,14 +6,15 @@
 // makes its segments.
 
 import { TOC_ENTRY_RE, TOC_LABEL_RE, TOC_TAIL_RE, isContentsEntry, readContentsEntries, twoColumnList } from "@/lib/parse/pdf/contents";
+import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { readHeading } from "@/lib/parse/pdf/headings";
 import { closeLists, joinMarkerCells, readAlgorithm, readList, readReferences } from "@/lib/parse/pdf/lists";
-import { markEdges, readParagraph } from "@/lib/parse/pdf/paragraphs";
+import { leftEdge, markEdges, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { tableFromRegion } from "@/lib/parse/pdf/ruled";
 import { findTableRuns, isLabelLine, tableFromRun } from "@/lib/parse/pdf/tables";
-import { TextBuilder, isMonoLine, lineAsPart } from "@/lib/parse/pdf/text";
-import type { Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
+import { TextBuilder, appendProofBox, boldShare, fillLines, isFillRule, isMonoLine, lineAsPart, markTabs } from "@/lib/parse/pdf/text";
+import type { Cell, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 
 // ── Page segmentation ───────────────────────────────────────────────────────
 
@@ -29,6 +30,8 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
   // A document's first page opens no list the last document left open.
   if (lines[0]?.page === 0) closeLists();
   const runOf = findTableRuns(lines, ctx);
+  // Tabs and fill-in rules in the lines outside tables (text.ts).
+  const fills = markTabs(lines, (k) => runOf[k] === -1, (l) => leftEdge(l, ctx), ctx.drawing, !ctx.tex);
   let tocMode = tocCarry && lines.length > 0 && TOC_ENTRY_RE.test(lines[0].text) && TOC_TAIL_RE.test(lines[0].text);
   tocCarry = false;
   // Where each reader's segments begin: its first line and its first segment.
@@ -40,16 +43,18 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     const line = lines[i];
 
     // Contents label ("CONTENTS", "INSIDE"): the entries that follow become a
-    // linked list, not headings.
+    // linked list, not headings. Set as a heading (larger than the body, or
+    // bold), the label is one: a paper's "Contents" read as a paragraph.
     if (line.cells.length === 1 && TOC_LABEL_RE.test(line.text.trim())) {
-      segments.push({ type: "PARAGRAPH", text: line.text.trim(), page: line.page, runs: line.runs, ...geom([line]) });
+      const heading = line.size >= ctx.bodySize * 1.14 || boldShare(line.runs, line.text.length) > 0.9;
+      segments.push({ type: heading ? "HEADING" : "PARAGRAPH", text: line.text.trim(), page: line.page, runs: line.runs, ...(heading ? { rawSize: line.size } : {}), ...geom([line]) });
       tocMode = true;
       i++;
       continue;
     }
 
     if (tocMode && isContentsEntry(line)) {
-      const step = readContentsEntries(lines, i);
+      const step = readContentsEntries(lines, i, ctx.leading);
       segments.push(...step.segments);
       tocMode = false;
       tocCarry = step.next >= lines.length;
@@ -86,7 +91,7 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     // ends the block before it, as the page shows it.
     const last = segments[segments.length - 1];
     if (PROOF_END_RE.test(line.text.trim()) && last !== undefined && (last.type === "PARAGRAPH" || last.type === "LIST")) {
-      last.text = `${last.text} ${line.text.trim()}`;
+      appendProofBox(last, line);
       i++;
       continue;
     }
@@ -108,6 +113,7 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     }
 
     const step =
+      readSplitLine(lines, i) ??
       readCodeListing(lines, i, ctx, runOf) ??
       readRuleLine(lines, i) ??
       readLabelLine(lines, i, ctx) ??
@@ -122,7 +128,7 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     i = step.next;
   }
   markPullQuotes(segments);
-  return withDrawnSeparators(segments, starts, lines, ctx, runOf);
+  return fillLines(withDrawnSeparators(segments, starts, lines, ctx, runOf), fills, lines[0]?.page ?? 0);
 }
 
 // ── Raised marks ────────────────────────────────────────────────────────────
@@ -276,7 +282,9 @@ function readRuleLine(lines: Line[], i: number): Step | null {
 // lines on both sides are prose, set apart from the rule, and the rule spans
 // most of their width. A float's frame is not either: the rules over and
 // under an algorithm's caption or a table's header row lie within three
-// lines of each other, and a separator stands alone.
+// lines of each other, and a separator stands alone. Nor is a box's edge: a
+// rule drawn down from its end meets it at a corner (the frame around the
+// Earth Observer p. 13's meeting story and its photos).
 function withDrawnSeparators(
   segments: Segment[],
   starts: { line: number; at: number }[],
@@ -286,7 +294,7 @@ function withDrawnSeparators(
 ): Segment[] {
   const at = new Set<number>();
   for (const rule of ctx.drawing.rules) {
-    if (rule.dir !== "h") continue;
+    if (rule.dir !== "h" || isFillRule(rule)) continue;
     const y = (rule.y1 + rule.y2) / 2;
     const start = starts.find((s) => s.line > 0 && lines[s.line - 1].y > y && lines[s.line].y < y);
     if (!start || runOf[start.line - 1] !== -1 || runOf[start.line] !== -1) continue;
@@ -295,19 +303,47 @@ function withDrawnSeparators(
     // A ruled table taken out of the flow is one line with no cells: its
     // own rules fall between it and the line under it.
     if (above.cells.length === 0 || below.cells.length === 0) continue;
-    // A chart's axis between its labels: small words on both sides.
-    if (Math.min(above.size, below.size) < ctx.bodySize * 0.9 || Math.max([...above.text].length, [...below.text].length) < 30) continue;
     const size = Math.max(above.size, below.size);
     const left = Math.min(above.x, below.x);
     const right = Math.max(above.xEnd, below.xEnd);
+    // A chart's axis between its labels: small words on both sides. A rule
+    // across the whole column may stand between short lines (a billing code
+    // over the next document's agency line: the Federal Register p. 1),
+    // unless it frames smaller type with a rule of its extent on the small
+    // lines' other side (a listing's box: synth-paper-tex); a shorter one
+    // wants a line of prose beside it.
+    const column = lineColumn(above) ?? lineColumn(below);
+    const across = column !== undefined && rule.x1 <= column[0] + size && rule.x2 >= column[1] - size;
+    const small = (l: Line) => l.size < ctx.bodySize * 0.9;
+    const plain = Math.min(above.size, below.size) >= ctx.bodySize * 0.9 && Math.max([...above.text].length, [...below.text].length) >= 30;
+    const boxed = ctx.drawing.rules.some((r) => {
+      if (r === rule || r.dir !== "h" || Math.abs(r.x1 - rule.x1) > size || Math.abs(r.x2 - rule.x2) > size) return false;
+      const [lo, hi] = [Math.min(y, (r.y1 + r.y2) / 2), Math.max(y, (r.y1 + r.y2) / 2)];
+      const inside = lines.filter((l) => l.y > lo && l.y < hi && l.x < rule.x2 && l.xEnd > rule.x1);
+      return inside.length > 0 && inside.every(small);
+    });
+    if (size < ctx.bodySize * 0.9 || (!plain && (!across || boxed))) continue;
+    // A rule over the page's notes: every line under it, across its extent,
+    // is set smaller than the line over it (a first page's notes and its
+    // number under their rule: 2609.29669 p. 1).
+    if (lines.every((l) => l.y >= y || l.xEnd <= rule.x1 || l.x >= rule.x2 || l.size < above.size * 0.95)) continue;
     if (rule.x2 - rule.x1 < Math.max(size * 10, (right - left) * 0.5) || rule.x2 < left || rule.x1 > right) continue;
     if (above.yMin - y < size * 0.4 || y - below.yMax < size * 0.85) continue;
+    // A float's frame: another rule across most of this one, within three
+    // lines. A ruled table's own rules frame nothing (a table over the rule:
+    // synth-gdocs-docx), nor do a heading's side marks (the Earth Observer
+    // p. 11).
+    const tables = lines.flatMap((l) => (l.table ? [l.table.box] : []));
     const framed = ctx.drawing.rules.some((r) => {
       const d = Math.abs((r.y1 + r.y2) / 2 - y);
+      const inTable = tables.some((b) => r.y1 >= b.y1 - 1 && r.y2 <= b.y2 + 1 && r.x1 >= b.x1 - 1 && r.x2 <= b.x2 + 1);
       // A double rule's second stroke is the same separator.
-      return r.dir === "h" && d > size * 0.5 && d < size * ctx.leading * 3 && r.x1 < rule.x2 && r.x2 > rule.x1;
+      return r.dir === "h" && !inTable && d > size * 0.5 && d < size * ctx.leading * 3 && Math.min(r.x2, rule.x2) - Math.max(r.x1, rule.x1) >= (rule.x2 - rule.x1) * 0.5;
     });
-    if (framed) continue;
+    const corner = ctx.drawing.rules.some(
+      (r) => r.dir === "v" && [r.y1, r.y2].some((end) => Math.abs(end - y) <= 2) && [rule.x1, rule.x2].some((x) => Math.abs((r.x1 + r.x2) / 2 - x) <= 2),
+    );
+    if (framed || corner) continue;
     at.add(start.at);
   }
   if (at.size === 0) return segments;
@@ -367,6 +403,31 @@ function readCodeListing(lines: Line[], i: number, ctx: PageContext, runOf: numb
   return { segments: [{ type: "CODE", text: rows.join("\n"), page: line.page, runs: [], ...geom(run) }], next: j };
 }
 
+// ── Split lines ─────────────────────────────────────────────────────────────
+
+// The document's first line in two parts far apart, one at each side (a
+// journal's "一般論文" at the left, a boxed "Peer-Reviewed" at the right):
+// two lines, the second flush right, not one paragraph that joins them.
+function readSplitLine(lines: Line[], i: number): Step | null {
+  const line = lines[i];
+  if (i !== 0 || line.page !== 0 || line.cells.length !== 2 || line.table) return null;
+  const [a, b] = line.cells;
+  const aEnd = Math.max(...line.items.filter((it) => it.x < b.x - 0.5).map((it) => it.x + it.w));
+  if (!Number.isFinite(aEnd) || b.x - aEnd < (line.xEnd - line.x) / 3) return null;
+  const { box, ...rest } = geom([line]);
+  const part = (cell: Cell, x1: number, x2: number, html?: string): Segment => ({
+    type: "PARAGRAPH",
+    text: cell.text,
+    runs: cell.runs,
+    page: line.page,
+    ...(html ? { html } : {}),
+    ...rest,
+    box: { ...box, x1, x2 },
+  });
+  const right = line.xEnd >= Math.max(...lines.map((l) => l.xEnd)) - line.size;
+  return { segments: [part(a, line.x, aEnd), part(b, b.x, line.xEnd, right ? '<p class="right"></p>' : undefined)], next: i + 1 };
+}
+
 // ── Label lines ─────────────────────────────────────────────────────────────
 
 // Label line: the label and the entry's title read as one paragraph; the
@@ -374,5 +435,5 @@ function readCodeListing(lines: Line[], i: number, ctx: PageContext, runOf: numb
 function readLabelLine(lines: Line[], i: number, ctx: PageContext): Step | null {
   const line = lines[i];
   if (!isLabelLine(line, ctx)) return null;
-  return { segments: [{ type: "PARAGRAPH", text: lineAsPart(line).text, page: line.page, runs: line.runs, ...geom([line]) }], next: i + 1 };
+  return { segments: [{ type: "PARAGRAPH", ...lineAsPart(line), page: line.page, ...geom([line]) }], next: i + 1 };
 }

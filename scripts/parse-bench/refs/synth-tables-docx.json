@@ -28,7 +28,7 @@
         "size": 13,
         "color": "#595959"
       },
-      "spaceAfter": 7
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",
@@ -3841,7 +3841,7 @@
         }
       ],
       "itemSpace": 2,
-      "spaceAfter": 4
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",

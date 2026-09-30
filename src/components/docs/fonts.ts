@@ -48,13 +48,21 @@ export const DOCS_FONTS: DocsFont[] = [
 ];
 
 // Faces an import names that the menu does not list: TeX's Computer Modern,
-// drawn by the computer's own copy or KaTeX's (the page editor loads KaTeX's
-// fonts for its equations), a serif for the letters KaTeX's lacks (ß, ø).
+// drawn in KaTeX's copy, the face of the page editor's equations, so a
+// formula and its words take one weight whatever fonts the computer has.
+// The computer's Latin Modern or CMU Serif drew the words about a fifth
+// lighter than KaTeX's formulas beside them, and an operator name read bold.
+// A letter KaTeX's copy lacks (é, ü) takes the computer's copy, else a serif.
+// A drawn face's stack is its fallback alone: a font the computer has under
+// the face's own name never draws its words.
 const DRAWN_FONTS: DocsFont[] = [
-  { name: "Computer Modern", fallback: "'Latin Modern Roman', 'CMU Serif', KaTeX_Main, serif", web: false, weights: W2 },
+  { name: "Computer Modern", fallback: "KaTeX_Main, 'Latin Modern Roman', 'CMU Serif', serif", web: false, weights: W2 },
 ];
 
 const BY_NAME = new Map([...DOCS_FONTS, ...DRAWN_FONTS].map((f) => [f.name.toLowerCase(), f]));
+/** A drawn face by the first family of its stack (KaTeX_Main: Computer
+    Modern), so a copy's html names the face its words were stored in. */
+const DRAWN_BY_STACK = new Map(DRAWN_FONTS.map((f) => [f.fallback.split(",")[0].trim().toLowerCase(), f.name]));
 
 /** The generic family a Google Fonts category falls back to. */
 export function categoryFallback(category: string): string {
@@ -130,7 +138,7 @@ export function fontStack(name: string): string {
   const clean = name.replace(/['"]/g, "");
   const quoted = /^[\w-]+$/.test(clean) ? clean : `'${clean}'`;
   const font = BY_NAME.get(clean.toLowerCase());
-  if (font) return `${quoted}, ${font.fallback}`;
+  if (font) return DRAWN_FONTS.includes(font) ? font.fallback : `${quoted}, ${font.fallback}`;
   if (typeof window !== "undefined") {
     const mine = userFonts().find((f) => f.name.toLowerCase() === clean.toLowerCase());
     if (mine) return `${quoted}, ${mine.fallback}`;
@@ -138,11 +146,12 @@ export function fontStack(name: string): string {
   return `${quoted}, sans-serif`;
 }
 
-/** The first face of a CSS font-family value, unquoted. */
+/** The first face of a CSS font-family value, unquoted; a drawn face's
+    stack names the drawn face. */
 export function firstFamily(value: string | null | undefined): string | null {
   if (!value) return null;
   const first = value.split(",")[0]?.trim().replace(/^['"]|['"]$/g, "");
-  return first || null;
+  return (first && DRAWN_BY_STACK.get(first.toLowerCase())) || first || null;
 }
 
 /** The weights a face comes in: the menu's list, the reader's own, or

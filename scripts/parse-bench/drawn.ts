@@ -1,13 +1,19 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import * as listDrawing from "@/components/docs/toolbar/lists";
-import { readStyles } from "@/components/docs/toolbar/styles";
+import { readStyles, sizeInPt } from "@/components/docs/toolbar/styles";
+import { fontStack } from "@/components/docs/fonts";
+import katex from "katex";
+import { KATEX_MACROS } from "@/lib/katex";
 import type { RichNode } from "@/lib/docs/schema";
 import { regionBounds } from "@/lib/video/types";
-import type { Doc } from "./adapt";
-import type { PdfText } from "./free";
+import { shapeOf, type Doc } from "./adapt";
+import { formulaScale, type PdfText } from "./free";
 import { ROOT } from "./load";
 import { splitTag } from "./math";
+import { wordsOf } from "./text";
+import { columnEdge } from "./layout";
+import type { InkBand, Rect } from "./paint";
 import type { Flat } from "./metrics";
 
 // What the page editor draws around an import's words, read from its own
@@ -139,7 +145,7 @@ function points(value: string | undefined, em: number): number | null {
     from the most specific rule that sets it, the last in file order among
     rules as specific (an import's rules, `[data-import="pdf"]`, win over the
     page editor's own though an earlier file holds them). */
-function side(rules: Rule[], matches: (selector: string) => boolean, property: "margin" | "padding", which: "top" | "bottom", em: number, vars: Record<string, string> = {}): number | null {
+function side(rules: Rule[], matches: (selector: string) => boolean, property: "margin" | "padding", which: "top" | "right" | "bottom" | "left", em: number, vars: Record<string, string> = {}): number | null {
   const cascade = rules
     .map((rule, order) => ({ rule, order, weight: Math.max(-1, ...rule.selectors.filter((s) => matches(s) && applies(s)).map(specificity)) }))
     .filter((r) => r.weight >= 0)
@@ -150,8 +156,10 @@ function side(rules: Rule[], matches: (selector: string) => boolean, property: "
       const text = resolved(raw, vars);
       if (key === `${property}-${which}`) value = points(text, em) ?? value;
       else if (key === property) {
+        // The shorthand's values: top, right, bottom, left, the missing ones taken from their opposite side.
         const parts = text.split(/\s+/);
-        value = points(parts[which === "top" ? 0 : parts.length >= 3 ? 2 : 0], em) ?? value;
+        const at = { top: 0, right: parts.length >= 2 ? 1 : 0, bottom: parts.length >= 3 ? 2 : 0, left: parts.length >= 4 ? 3 : parts.length >= 2 ? 1 : 0 }[which];
+        value = points(parts[at], em) ?? value;
       }
     }
   }
@@ -181,23 +189,88 @@ export function displaySpace(em: number, after?: number): { top: number; bottom:
   return { top: drawn("top"), bottom: drawn("bottom") };
 }
 
-/** A display's space above and below: the page's, from the display's region
-    to the line over it and the line under it in its column (a TeX display
-    stands about 4 pt from its lines), against the page editor's, the space
-    after the paragraph above (its padding) and the math block's margin and
-    padding, and KaTeX's display margin inside it (collapsed into the
-    block's margin where the block has no padding); right within 2 pt or a
-    quarter. A display whose neighbor is no paragraph (a heading, a figure,
-    another display), or whose page leaves more than 36 pt, is not judged. */
-export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText): DisplayGaps {
-  const styles = readStyles({ attrs: rich.attrs ?? {} });
+/** The words' ascent less their descent, in ems, by the face the page
+    editor draws them in (hhea): it sets where a line's baseline stands in
+    its line box, half of it over the box's middle. */
+const FACE_RISE: [RegExp, number][] = [
+  [/^katex_main$/i, 0.631],
+  [/^(?:latin modern roman|cmu serif)$/i, 0.837],
+  [/^(?:arial|arimo|liberation sans|helvetica)$/i, 0.693],
+  [/^(?:times new roman|tinos|liberation serif|times)$/i, 0.675],
+  [/^(?:calibri|carlito)$/i, 0.5],
+  [/^(?:cambria|caladea|georgia|gelasio)$/i, 0.7],
+];
+
+/** The rise of the first face of a font stack this table knows (a name no
+    computer has, "Computer Modern", passes to its fallbacks); an average
+    face's where it knows none. */
+function faceRise(family: string): number {
+  for (const name of fontStack(family).split(",").map((f) => f.trim().replace(/^['"]|['"]$/g, ""))) {
+    const hit = FACE_RISE.find(([re]) => re.test(name));
+    if (hit) return hit[1];
+  }
+  return 0.69;
+}
+
+const strutMemo = new Map<string, { height: number; depth: number } | null>();
+
+/** A display formula's height and depth over its baseline in ems, as KaTeX
+    draws it (its struts); null when KaTeX cannot read it. */
+export function formulaBox(latex: string): { height: number; depth: number } | null {
+  if (strutMemo.has(latex)) return strutMemo.get(latex) ?? null;
+  let out: { height: number; depth: number } | null = null;
+  try {
+    const html = katex.renderToString(latex, { displayMode: true, output: "html", throwOnError: true, strict: "ignore", macros: { ...KATEX_MACROS } });
+    let height = 0;
+    let depth = 0;
+    for (const m of html.matchAll(/class="(?:katex-)?strut" style="height:([\d.]+)em;(?:vertical-align:(-?[\d.]+)em;)?/g)) {
+      const d = -Number(m[2] ?? 0);
+      height = Math.max(height, Number(m[1]) - d);
+      depth = Math.max(depth, d);
+    }
+    out = { height, depth };
+  } catch {
+    out = null;
+  }
+  strutMemo.set(latex, out);
+  return out;
+}
+
+/** The line height the page editor gives a display's formula (KaTeX's
+    `.katex`, 1.2, unless the page editor's own sheet sets it for a
+    display's formula). */
+function formulaLineHeight(): number {
+  const { own, katex: sheet } = stylesheets();
+  const read = (rules: Rule[], test: (s: string) => boolean) => {
+    let value: number | null = null;
+    for (const rule of rules) {
+      if (!rule.selectors.some((sel) => test(sel) && applies(sel))) continue;
+      const v = rule.declarations.get("line-height");
+      if (v !== undefined) value = v === "normal" ? 1.2 : /^[\d.]+$/.test(v) ? Number(v) : (points(v, 1) ?? value);
+    }
+    return value;
+  };
+  return read(own, (sel) => /(?:docs-math-block|katex-display)\b.*\.katex$/.test(sel)) ?? read(sheet, (sel) => sel === ".katex") ?? 1.2;
+}
+
+/** A display's space above and below, from the ink: the page's, from the
+    baseline of the line over the display to the display's first row of ink,
+    and from its last row of ink to the baseline of the line under it
+    (poppler's drawing in the display's column: paint.ts inkBands), against
+    the page editor's, from the stylesheets and the import: the line's
+    baseline in its line box (its face's rise, faceRise), the space after
+    the paragraph over it and the math block's margin and padding (and
+    KaTeX's display margin), and the formula's ink in its line box (KaTeX's
+    struts in a line of `.katex`'s height: formulaBox). Right within 2 pt or
+    a quarter. A display whose neighbor is no paragraph, or whose page
+    leaves more than 36 pt, is not judged. `bandsOf`: the page's ink in a
+    box (paint.ts inkBands). */
+export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText, bandsOf: (page: number, box: Rect) => InkBand[]): DisplayGaps {
   const placed = parse.blocks.filter((b) => b.kind === "equation" && b.at);
   let next = 0;
   let edges = 0;
   let right = 0;
   const misses: string[] = [];
-  const spacing = (node: RichNode | undefined, key: "spaceAfter" | "spaceBefore") =>
-    typeof node?.attrs?.[key] === "number" ? (node.attrs[key] as number) : node?.type === "paragraph" ? styles[node.attrs?.docStyle === "title" ? "title" : "normal"][key] : 0;
   const nodes = rich.content ?? [];
   nodes.forEach((node, i) => {
     if (node.type !== "blockMath") return;
@@ -207,24 +280,76 @@ export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText): DisplayGa
     next = k + 1;
     const at = placed[k].at;
     const size = at ? pdf.sizes.get(at.page) : undefined;
-    if (!at || !size) return;
+    const drawn = displayDrawn(rich, i);
+    if (!at || !size || !drawn) return;
     const r = regionBounds(at.region);
     const [x1, x2, y1, y2] = [(r.x1 / 100) * size.width, (r.x2 / 100) * size.width, (r.y1 / 100) * size.height, (r.y2 / 100) * size.height];
-    const column = pdf.lines.filter((l) => l.page === at.page && Math.min(l.right, x2) > Math.max(l.left, x1) && ((l.top + l.bottom) / 2 < y1 || (l.top + l.bottom) / 2 > y2));
-    const above = column.filter((l) => l.bottom <= y1 + 2).sort((a, b) => b.bottom - a.bottom)[0];
-    const below = column.filter((l) => l.top >= y2 - 2).sort((a, b) => a.top - b.top)[0];
-    const judge = (page: number | null, drawnPt: number, what: string) => {
-      if (page === null || page > 36) return;
+    // The display's column: the region and the lines over and under it that share its width.
+    const column = pdf.lines.filter((l) => l.page === at.page && Math.min(l.right, x2) > Math.max(l.left, x1) && l.bottom > y1 - 60 && l.top < y2 + 60);
+    const left = Math.max(0, Math.min(x1, ...column.map((l) => l.left)) - 2);
+    const width = Math.min(size.width, Math.max(x2, ...column.map((l) => l.right)) + 2);
+    const bands = bandsOf(at.page, { x1: left, x2: width, y1: Math.max(0, y1 - 45), y2: Math.min(size.height, y2 + 45) });
+    const own = bands.filter((b) => b.bottom > y1 && b.top < y2);
+    if (own.length === 0) return;
+    const [inkTop, inkBottom] = [own[0].top, own[own.length - 1].bottom];
+    const above = bands.filter((b) => b.bottom <= inkTop - 0.5).at(-1);
+    const below = bands.find((b) => b.top >= inkBottom + 0.5);
+    const judge = (page: number | null, drawnPt: number | null, what: string) => {
+      if (page === null || drawnPt === null || page > 36) return;
       edges++;
       if (Math.abs(drawnPt - page) <= Math.max(2, 0.25 * page)) right++;
       else misses.push(`p${at.page}: ${what} ${Math.round(drawnPt)} pt, the page's ${Math.round(page)} pt`);
     };
-    const [before, after] = [nodes[i - 1], nodes[i + 1]];
-    const drawn = displaySpace(styles.normal.size, typeof node.attrs?.spaceAfter === "number" ? node.attrs.spaceAfter : undefined);
-    if (before?.type === "paragraph") judge(above ? y1 - above.bottom : null, spacing(before, "spaceAfter") + drawn.top, "above");
-    if (after?.type === "paragraph") judge(below ? below.top - y2 : null, drawn.bottom + spacing(after, "spaceBefore"), "below");
+    judge(above ? inkTop - above.baseline : null, drawn.above, "above");
+    judge(below ? below.baseline - inkBottom : null, drawn.below, "below");
   });
   return { edges, right, score: edges > 0 ? right / edges : null, misses };
+}
+
+/** The page editor's space over and under the display at `index` of the
+    import's nodes, from the baseline of the paragraph's line over it to
+    the formula's first ink, and from its last ink to the baseline of the
+    paragraph's line under it (null where no paragraph neighbors it, or
+    KaTeX cannot read the formula). */
+export function displayDrawn(rich: RichNode, index: number): { above: number | null; below: number | null } | null {
+  const styles = readStyles({ attrs: rich.attrs ?? {} });
+  const nodes = rich.content ?? [];
+  const node = nodes[index];
+  const box = node?.type === "blockMath" ? formulaBox(splitTag(String(node.attrs?.latex ?? "")).latex) : null;
+  if (!box) return null;
+  const spacing = (n: RichNode, key: "spaceAfter" | "spaceBefore") => (typeof n.attrs?.[key] === "number" ? (n.attrs[key] as number) : styles[n.attrs?.docStyle === "title" ? "title" : "normal"][key]);
+  // A paragraph's line: its words' size and face, its line's height (the stylesheet's factor on its spacing).
+  const { own } = stylesheets();
+  let factor = 1.15;
+  for (const rule of own) {
+    if (!rule.selectors.some((sel) => /\.docs-prose p$/.test(sel))) continue;
+    const m = /calc\(\s*var\(--docs-ls\s*,\s*[\d.]+\)\s*\*\s*([\d.]+)\s*\)/.exec(rule.declarations.get("line-height") ?? "");
+    if (m) factor = Number(m[1]);
+  }
+  const lineOf = (n: RichNode) => {
+    const run = (n.content ?? []).find((c) => c.type === "text");
+    const look = run?.marks?.find((m) => m.type === "textStyle")?.attrs;
+    const size = sizeInPt(look?.fontSize) ?? styles.normal.size;
+    const lineSpacing = typeof n.attrs?.lineSpacing === "number" ? n.attrs.lineSpacing : styles.normal.lineSpacing;
+    const family = typeof look?.fontFamily === "string" ? look.fontFamily : (styles.normal.font ?? "Arial");
+    return { line: size * lineSpacing * factor, rise: faceRise(family) * size };
+  };
+  const drawn = displaySpace(styles.normal.size, typeof node.attrs?.spaceAfter === "number" ? node.attrs.spaceAfter : undefined);
+  // The formula in its line box: KaTeX's struts in a line of `.katex`'s height, KaTeX_Main's rise (0.631 em).
+  const em = styles.normal.size * formulaScale();
+  const lineHeight = formulaLineHeight();
+  const inkOver = (Math.max(box.height, lineHeight / 2 + 0.631 / 2) - box.height) * em;
+  const inkUnder = (Math.max(box.depth, lineHeight / 2 - 0.631 / 2) - box.depth) * em;
+  const [before, after] = [nodes[index - 1], nodes[index + 1]];
+  const above = before?.type === "paragraph" ? (() => {
+    const w = lineOf(before);
+    return w.line / 2 - w.rise / 2 + spacing(before, "spaceAfter") + drawn.top + inkOver;
+  })() : null;
+  const below = after?.type === "paragraph" ? (() => {
+    const w = lineOf(after);
+    return inkUnder + drawn.bottom + spacing(after, "spaceBefore") + w.line / 2 + w.rise / 2;
+  })() : null;
+  return { above, below };
 }
 
 // ── A table row's height ────────────────────────────────────────────────────
@@ -253,7 +378,9 @@ export function rowHeight(size: number, lineSpacing: number, padding?: string): 
 }
 
 /** A table row's height: the page's, the median step from one row to the
-    next where each of their cells is one line of the page, against the page
+    next where each of their cells is one line of the page (a row that wraps
+    on the page is two lines there, where the page editor's wider column may
+    draw it in one), against the page
     editor's for the same rows: a row of one line (rowHeight), or the row's
     own least height where it is taller (an import's ruled row, drawn as the
     row's height); right within a fifth (Word and a PDF's tables set cells
@@ -274,8 +401,20 @@ export function rowHeights(cand: Flat, placed: number[][], pdf: PdfText): RowHei
       rows.set(unit.row, [...(rows.get(unit.row) ?? []), u]);
     }
     const tops: { row: number; top: number; page: number }[] = [];
+    // A cell on one line of the page: its one line holds all its words (a cell that wraps on the page places
+    // only the line its runs of words find).
+    const oneLine = (u: number) => {
+      if (placed[u].length !== 1) return false;
+      const held = new Map<string, number>();
+      for (const w of wordsOf(pdf.lines[placed[u][0]].text)) held.set(w.w, (held.get(w.w) ?? 0) + 1);
+      return cand.toks.slice(cand.units[u].first, cand.units[u].end).every((t) => {
+        const n = held.get(t.w) ?? 0;
+        held.set(t.w, n - 1);
+        return n > 0;
+      });
+    };
     for (const [row, units] of [...rows].sort((a, c) => a[0] - c[0])) {
-      if (!units.every((u) => placed[u].length === 1)) continue;
+      if (!units.every(oneLine)) continue;
       const lines = units.map((u) => pdf.lines[placed[u][0]]);
       tops.push({ row, top: Math.min(...lines.map((l) => l.top)), page: lines[0].page });
     }
@@ -289,6 +428,137 @@ export function rowHeights(cand: Flat, placed: number[][], pdf: PdfText): RowHei
     else misses.push(`a table's rows drawn ${Math.round(drawnPt)} pt apart, the page's ${Math.round(page)} pt`);
   });
   return { tables, right, score: tables > 0 ? right / tables : null, misses };
+}
+
+// ── A number broken in a table cell ─────────────────────────────────────────
+
+/** A character's advance in ems, as a face of each shape sets the characters
+    of a number (Arial's, Times's, a typewriter's). */
+function numberEm(ch: string, shape: "serif" | "sans" | "mono"): number {
+  if (shape === "mono") return 0.6;
+  const serif = shape === "serif";
+  if (/\d/.test(ch)) return serif ? 0.5 : 0.556;
+  if (ch === "," || ch === ".") return serif ? 0.25 : 0.278;
+  if (ch === "%") return serif ? 0.833 : 0.889;
+  if (ch === "−" || ch === "+") return serif ? 0.564 : 0.584;
+  if (ch === "(" || ch === ")" || ch === "-" || ch === "–") return 0.333;
+  return serif ? 0.5 : 0.556;
+}
+
+/** A number as a table's cell prints it: "51,051", "(565)", "−3.2", "12%", "$14,736". */
+const CELL_NUMBER_RE = /^[−–\-+(]?[$€£]?\d[\d,.]*\)?%?$/u;
+
+export type BrokenNumbers = { numbers: number; broken: number; score: number | null; misses: string[] };
+
+/** Numbers the page editor breaks in a table's cell: a cell is its columns'
+    widths (colwidth, px) less its padding (the table's own, else the
+    stylesheet's), its grid line, and its paragraph's indents; a number
+    wider than that (its characters' advances at its size, in the face the
+    document's style names) wraps mid-number ("51,05" over "1"), which a
+    number never does on the page. The score is the share of the tables'
+    numbers drawn whole. */
+export function brokenNumbers(rich: RichNode): BrokenNumbers {
+  const styles = readStyles({ attrs: rich.attrs ?? {} });
+  const { own } = stylesheets();
+  const cellRule = (s: string) => /\.docs-prose (?:td|th|:is\(td, ?th\))$/.test(s);
+  const px = 96 / 72;
+  let numbers = 0;
+  let broken = 0;
+  const misses: string[] = [];
+  const walk = (node: RichNode) => {
+    if (node.type !== "table") {
+      for (const child of node.content ?? []) walk(child);
+      return;
+    }
+    const padding = typeof node.attrs?.cellPadding === "string" ? node.attrs.cellPadding : undefined;
+    const vars: Record<string, string> = padding ? { "--docs-cell-padding": padding.trim().split(/\s+/).map((v) => `${v}pt`).join(" ") } : {};
+    const size0 = typeof node.attrs?.cellSize === "number" ? node.attrs.cellSize : styles.normal.size;
+    const pad = (side(own, cellRule, "padding", "left", size0, vars) ?? 0) + (side(own, cellRule, "padding", "right", size0, vars) ?? 0);
+    for (const row of node.content ?? []) {
+      for (const cell of row.content ?? []) {
+        const widths = Array.isArray(cell.attrs?.colwidth) ? (cell.attrs.colwidth as unknown[]).filter((w): w is number => typeof w === "number") : [];
+        if (widths.length === 0) continue;
+        for (const para of cell.content ?? []) {
+          if (para.type !== "paragraph") continue;
+          const indent = (Number(para.attrs?.indentLeft ?? 0) || 0) + (Number(para.attrs?.indentRight ?? 0) || 0);
+          const room = widths.reduce((a, b) => a + b, 0) - (pad + indent) * px - 1;
+          for (const run of para.content ?? []) {
+            if (run.type !== "text") continue;
+            const look = run.marks?.find((m) => m.type === "textStyle")?.attrs;
+            const size = sizeInPt(look?.fontSize) ?? size0;
+            const family = typeof look?.fontFamily === "string" ? look.fontFamily : (styles.normal.font ?? "Arial");
+            const shape = shapeOf(family);
+            for (const token of (run.text ?? "").split(/\s+/)) {
+              if (!CELL_NUMBER_RE.test(token)) continue;
+              numbers++;
+              const width = [...token].reduce((n, ch) => n + numberEm(ch, shape), 0) * size * px;
+              if (width <= room + 0.5) continue;
+              broken++;
+              misses.push(`"${token}" ${Math.round(width)} px wide in a cell with ${Math.round(room)} px of room`);
+            }
+          }
+        }
+      }
+    }
+  };
+  walk(rich);
+  return { numbers, broken, score: numbers > 0 ? 1 - broken / numbers : null, misses };
+}
+
+// ── A checklist's wraps ─────────────────────────────────────────────────────
+
+export type ChecklistWraps = { items: number; wrong: number; score: number | null; misses: string[] };
+
+/** A checklist item's wrapped lines: the page sets them where it sets them
+    (back at the margin under the box, or under the words), and the page
+    editor where its drawing puts them: a checklist with listIndents at its
+    depth's left (lists.ts listSheet, --docs-indent-N), one without them in
+    docs.css's row (the list's padding, the box, the gap: the words and their
+    wraps beside the box). Each item that wraps on the page (two of its
+    lines placed there, linesOfUnits), right within 3 pt or a quarter of
+    the page's indent, from its column's edge (layout.ts columnEdge). */
+export function checklistWraps(cand: Flat, placed: number[][], pdf: PdfText): ChecklistWraps {
+  const { own } = stylesheets();
+  const lists = listDrawing as Partial<typeof listDrawing>;
+  const px = 0.75;
+  const read = (test: (s: string) => boolean, property: string) => {
+    let value: number | null = null;
+    for (const rule of own) if (rule.selectors.some(test)) value = points(rule.declarations.get(property), 11) ?? value;
+    return value;
+  };
+  const box = read((s) => /taskList"\] li > label input$/.test(s), "width") ?? 14 * px;
+  const gap = read((s) => /taskList"\] li$/.test(s), "gap") ?? 8 * px;
+  const pad = read((s) => /taskList"\]$/.test(s), "padding-left") ?? 18;
+  let items = 0;
+  let wrong = 0;
+  const misses: string[] = [];
+  cand.blocks.forEach((block, b) => {
+    if (block.kind !== "list" || block.checklist === undefined) return;
+    let indents: [number, number, number?][] = [];
+    try {
+      const parsed: unknown = JSON.parse(block.checklist || "null");
+      if (Array.isArray(parsed)) indents = parsed.filter((x): x is [number, number, number?] => Array.isArray(x) && x.length >= 2 && x.every((n) => typeof n === "number"));
+    } catch {
+      indents = [];
+    }
+    const style = indents.length > 0 && typeof lists.indentStyle === "function" ? (lists.indentStyle as (i: typeof indents, l: null) => string)(indents, null) : "";
+    cand.unitsOf[b].forEach((u, k) => {
+      const lines = placed[u].map((i) => pdf.lines[i]);
+      if (lines.length < 2 || lines.some((l) => l.page !== lines[0].page)) return;
+      const depth = block.items[k]?.depth ?? 0;
+      const variable = new RegExp(`--docs-indent-${depth + 1}:\\s*([^;]+)`).exec(style)?.[1];
+      const drawn = variable ? styleLength(variable, 11) : (pad + box + gap) * (depth + 1);
+      const edge = columnEdge(pdf, lines[0], Math.max(...lines.map((l) => l.right - l.left)), new Set(lines));
+      if (edge === null) return;
+      const wraps = lines.slice(1).map((l) => l.left - edge).sort((a, c) => a - c);
+      const set = wraps[Math.floor(wraps.length / 2)];
+      items++;
+      if (Math.abs(drawn - set) <= Math.max(3, 0.25 * set)) return;
+      wrong++;
+      misses.push(`p${lines[0].page}: a checklist's wraps drawn ${Math.round(drawn)} pt in, the page's ${Math.round(set)} pt`);
+    });
+  });
+  return { items, wrong, score: items > 0 ? 1 - wrong / items : null, misses };
 }
 
 // ── A list marker's place ───────────────────────────────────────────────────

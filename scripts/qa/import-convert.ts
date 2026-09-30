@@ -200,7 +200,8 @@ function keptMath(b: ParsedBlock): { start: number; end: number; words: string }
     linkFootnotes, cellNotes): each citing block's references, whose labels
     become footnote numbers — a paragraph's, a heading's, and a list's
     first, then the Title's (a PDF's first-page footnote whose label ends
-    the title, or one with no label), then a table cell's — and the
+    the title; a note the page marks nowhere stays a paragraph), then a
+    table cell's — and the
     footnotes they number, in the numbers' order, with the labels the page
     prints for them and the mark the Title leaves out. Set for each fixture. */
 let footnoteRefs = new Map<ParsedBlock, { start: number; end: number }[]>();
@@ -236,7 +237,7 @@ function linkFootnotes(f: Fixture) {
       .filter(({ label, i }) => label !== undefined && (blocks[i].page ?? 1) <= 1 && !taken.has(i) && blocks[i].text.trim());
     const marked = loose.find(({ label }) => label && title.endsWith(label) && /[\p{L})\].,:;!?]$/u.test(title.slice(0, -label.length)));
     if (marked) titleMark = marked.label ?? "";
-    for (const { i } of [...(marked ? [marked] : []), ...loose.filter(({ label }) => label === "")]) taken.set(i, { at: -1, start: 0, label: blocks[i].footnote?.label ?? "" });
+    if (marked) taken.set(marked.i, { at: -1, start: 0, label: blocks[marked.i].footnote?.label ?? "" });
   }
   // A cell's label, never its caption's: the footnote stands after the table.
   blocks.forEach((b, i) => {
@@ -690,6 +691,8 @@ function lookChecks(f: Fixture, doc: RichNode, check: (ok: boolean, name: string
   walk(doc, (node) => {
     let last = new Set<string>();
     for (const child of node.content ?? []) {
+      // A page start adds no words: a run the page turns in stays one run.
+      if (child.type === "pageStart") continue;
       const keys = new Set<string>();
       if (child.type === "text") {
         for (const m of child.marks ?? []) {
@@ -733,7 +736,17 @@ function lookChecks(f: Fixture, doc: RichNode, check: (ok: boolean, name: string
     const key = norm((node.content ?? []).map((c) => c.text ?? "").join("")).slice(0, 40);
     after.set(key, [...(after.get(key) ?? []), Number(node.attrs?.spaceAfter ?? 0)]);
   }
-  const spaced = f.blocks.filter((b) => b.type === "PARAGRAPH" && b.spaceAfter !== undefined && b.text.length < 200_000 && !tokensOf(b).some((t) => ["kicker", "meta", "quote"].includes(t)) && !b.footnote && !(b.math ?? []).length);
+  // A PDF's paragraph right over a display equation (linked footnotes
+  // aside) takes the space to the display as the page editor draws it
+  // (lib/docs/import.ts displayGap), not its own.
+  const overDisplay = new Set<ParsedBlock>();
+  let above: ParsedBlock | null = null;
+  for (const b of f.kind === "pdf" ? f.blocks : []) {
+    if (footnotesLinked.includes(b)) continue;
+    if (b.type === "EQUATION" && above) overDisplay.add(above);
+    above = b;
+  }
+  const spaced = f.blocks.filter((b) => b.type === "PARAGRAPH" && b.spaceAfter !== undefined && b.text.length < 200_000 && !tokensOf(b).some((t) => ["kicker", "meta", "quote"].includes(t)) && !b.footnote && !(b.math ?? []).length && !overDisplay.has(b));
   const off = spaced.filter((b) => {
     const values = after.get(norm(b.text).slice(0, 40));
     return values !== undefined && values.length === 1 && values[0] !== b.spaceAfter;
@@ -1502,14 +1515,17 @@ async function checkFixture(f: Fixture): Promise<Report> {
     return [left || null, first || null];
   };
   // Paragraphs pair by their words, the k-th of the parse with the k-th of
-  // the page: two with the same words may stand at two indents. A table's
-  // cells, a list's lines, and the Title are no parse paragraphs; a
-  // paragraph a list item holds after its line is (a list that resumes).
+  // the page: two with the same words may stand at two indents. A
+  // paragraph of tabs alone (a line to write on) has no words: it pairs by
+  // its tabs. A table's cells, a list's lines, and the Title are no parse
+  // paragraphs; a paragraph a list item holds after its line is (a list
+  // that resumes).
+  const pairKey = (text: string) => norm(text) || text.replace(/[^\t]/g, "");
   const byWords = new Map<string, RichNode[]>();
   const paragraphsOf = (node: RichNode) => {
     if (node.type === "table") return;
     if (node.type === "paragraph") {
-      const words = node.attrs?.docStyle !== "title" ? norm(inlineText(node)) : "";
+      const words = node.attrs?.docStyle !== "title" ? pairKey(inlineText(node)) : "";
       if (words) byWords.set(words, [...(byWords.get(words) ?? []), node]);
       return;
     }
@@ -1520,7 +1536,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
   const taken = new Map<string, number>();
   const indented = f.blocks.flatMap((b) => {
     if (b.type !== "PARAGRAPH") return [];
-    const words = norm(indexedText(b));
+    const words = pairKey(indexedText(b));
     const k = taken.get(words) ?? 0;
     taken.set(words, k + 1);
     const token = tokensOf(b).find((t) => t in INDENT_ATTRS);
@@ -1801,15 +1817,13 @@ function syntheticPdf(): Fixture {
     { type: "PARAGRAPH", text: "2 The list line's note.", html: '<p class="footnote">', page: 17, footnote: { label: "2" } },
     { type: "PARAGRAPH", text: "* A table's note, with no reference.", html: '<p class="footnote">', page: 17, footnote: { label: "*" } },
   );
-  // A footnote cited in a table's cell (its number in the cell), and one the
-  // first page prints with no mark (its number at the Title's end).
+  // A footnote cited in a table's cell: its number in the cell.
   const cells = pdfTable([["Model", "Score"], ["Base", "27.3 on the best run3"]], true);
   const label = cells.text.indexOf("run3") + 3;
   const tableAt = blocks.length;
   blocks.push(
     { type: "TABLE", ...cells, page: 17, footnoteRefs: [{ start: label, end: label + 1, targetOrder: tableAt + 1 }] },
     { type: "PARAGRAPH", text: "3 The best of five runs.", html: '<p class="footnote">', page: 17, footnote: { label: "3" } },
-    { type: "PARAGRAPH", text: "The authors thank the reviewers.", html: '<p class="footnote">', page: 1, footnote: { label: "" } },
   );
   return {
     name: "synthetic:pdf",

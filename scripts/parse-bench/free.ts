@@ -6,9 +6,10 @@ import { attr, child, descendants, parseXmlPart, unzipOffice } from "@/lib/parse
 import { regionBounds } from "@/lib/video/types";
 import type { RichNode } from "@/lib/docs/schema";
 import type { Doc, DocBlock, Side } from "./adapt";
-import { displayGaps, markerPlaces, rowHeights } from "./drawn";
+import { brokenNumbers, checklistWraps, displayGaps, markerPlaces, rowHeights } from "./drawn";
 import type { GlyphScores } from "./glyphs";
 import type { LayoutScores } from "./layout";
+import { inkBands, type PagePaint } from "./paint";
 import { ROOT } from "./load";
 import { mathLeaves } from "./math";
 import { FREE_WEIGHTS, furnitureMatches, type Flat } from "./metrics";
@@ -17,7 +18,8 @@ import { garblesOf, normText, PAGE_NUMBER_RE, pageNumberOf, wordsOf } from "./te
 // Checks that need no reference: the PDF's own text (pdftotext) against the
 // candidate's words, and detectors for what should never be in a parse.
 
-type Line = { page: number; top: number; bottom: number; left: number; right: number; text: string };
+/** A line of the page: its box, its text, and its words' boxes (pdftotext -tsv). */
+type Line = { page: number; top: number; bottom: number; left: number; right: number; text: string; words?: { left: number; right: number; text: string }[] };
 
 /** A word pdftotext reads with a symbol font's characters in it, as it
     reads it and as the page draws it, on its line (layoutOf, symbolChars). */
@@ -34,6 +36,8 @@ export type PdfText = {
   furniture: Line[];
   sizes: Map<number, { width: number; height: number }>;
   symbols: SymbolWord[];
+  /** The text pdftotext cannot read, which pdf.js reads (blindText): words to cover. */
+  blind?: { page: number; text: string }[];
 };
 
 function run(args: string[]): string {
@@ -162,9 +166,12 @@ function layoutOf(pdf: string): Layout {
     const [left, top, width, height] = [6, 7, 8, 9].map((i) => Number(f[i]));
     if (level === 1) sizes.set(page, { width, height });
     const key = `${page}|${par}|${block}|${line}`;
-    if (level === 4) byKey.set(key, { page, top, bottom: top + height, left, right: left + width, text: "" });
+    if (level === 4) byKey.set(key, { page, top, bottom: top + height, left, right: left + width, text: "", words: [] });
     const entry = byKey.get(key);
-    if (level === 5 && entry) entry.text = entry.text ? `${entry.text} ${f[11]}` : f[11];
+    if (level === 5 && entry) {
+      entry.text = entry.text ? `${entry.text} ${f[11]}` : f[11];
+      (entry.words ??= []).push({ left, right: left + width, text: f[11] });
+    }
     // A word with a symbol font's characters in it: each, in its place, becomes what the page draws.
     const own = level === 5 ? (chars.get(page) ?? []).filter((c) => c.x >= left - 1 && c.x <= left + width + 1 && c.top < top + height && c.bottom > top) : [];
     if (own.length === 0) continue;
@@ -190,7 +197,7 @@ const sideways = (l: Line) => l.bottom - l.top > 30 && l.bottom - l.top > 3 * (l
 
 /** Each page's rows: lines whose tops lie within 3 pt, left to right, the
     pages in their order. */
-function rowsOf(lines: Line[]): Line[][] {
+export function rowsOf(lines: Line[]): Line[][] {
   const byPage = new Map<number, Line[]>();
   for (const l of lines) {
     const list = byPage.get(l.page);
@@ -417,6 +424,36 @@ export function pdfText(pdf: string, pages?: [number, number]): PdfText {
     sizes: layout.sizes,
     symbols: layout.symbols.filter((s) => !pages || (s.page >= pages[0] && s.page <= pages[1])),
   };
+}
+
+/** The text pdftotext cannot read: pdf.js's text items (paint.ts) that stand
+    where no line of pdftotext's is, and whose words no line of the page
+    holds (a CID font whose map this sandbox's poppler lacks: a report's
+    headings in a Japanese font read as nothing). Vertical writing in the
+    margin and an item that stands at one place on several pages are the
+    page's furniture, as pdftotext's own are. */
+export function blindText(pdf: PdfText, paint: PagePaint[]): { page: number; text: string }[] {
+  const found: { page: number; text: string; key: string }[] = [];
+  const furniture = new Set(pdf.furniture);
+  const last = pdf.first + pdf.raw.length - 1;
+  for (let page = pdf.first; page <= last; page++) {
+    const painted = paint[page - 1];
+    if (!painted) continue;
+    const lines = pdf.lines.filter((l) => l.page === page);
+    // Words the page's furniture holds are no words to cover: a title the margin's tab repeats is the page's own.
+    const held = heldBy(lines.filter((l) => !furniture.has(l)).map((l) => wordsOf(l.text).map((w) => w.w)));
+    for (const item of painted.items) {
+      if (item.vertical || wordsOf(item.text).length === 0) continue;
+      const [x, y] = [(item.x1 + item.x2) / 2, (item.y1 + item.y2) / 2];
+      if (lines.some((l) => x >= l.left - 2 && x <= l.right + 2 && y >= l.top - 2 && y <= l.bottom + 2) || held(item.text)) continue;
+      const place = `${Math.round(item.y1 / (0.03 * painted.height))} ${Math.round(item.x1 / (0.02 * painted.width))}`;
+      found.push({ page, text: item.text, key: `${normText(item.text)}|${place}` });
+    }
+  }
+  const pages = new Map<string, Set<number>>();
+  for (const f of found) pages.set(f.key, (pages.get(f.key) ?? new Set<number>()).add(f.page));
+  const needed = pdf.sizes.size <= 8 ? 2 : 3;
+  return found.filter((f) => (pages.get(f.key)?.size ?? 0) < needed).map(({ page, text }) => ({ page, text }));
 }
 
 type Leaks = {
@@ -667,13 +704,19 @@ export type LookScores = {
   displays: number | null;
   rows: number | null;
   markers: number | null;
+  /** Numbers drawn whole in their table cells (drawn.ts brokenNumbers), and the count broken. */
+  numbers: number | null;
+  broken: number;
+  /** Checklist items whose wraps stand at the page's indent (drawn.ts checklistWraps), and the count that do not. */
+  checklists: number | null;
+  checklistsWrong: number;
   score: number | null;
   misses: string[];
 };
 
 export function lookScores(
   cand: Flat,
-  input: { page?: Box; setup?: PageSetup; word?: { words: string; sides: Side[] }[]; rich?: RichNode; parse?: Doc; pdf?: PdfText; placed?: number[][] },
+  input: { page?: Box; setup?: PageSetup; word?: { words: string; sides: Side[] }[]; rich?: RichNode; parse?: Doc; pdf?: PdfText; placed?: number[][]; path?: string },
 ): LookScores {
   const inline = cand.math.some((m) => !m.display);
   const formulas = inline ? (Math.abs(formulaScale() - 1) <= 0.05 ? 1 : 0) : null;
@@ -681,13 +724,33 @@ export function lookScores(
   const figures = widths && widths.total > 0 ? widths.right / widths.total : null;
   const borders = input.word ? borderScore(input.word, cand) : null;
   // Against the page (a PDF's, a Word file's rendering): the page editor's own drawing of what the page sets.
-  const gaps = input.rich && input.parse && input.pdf ? displayGaps(input.rich, input.parse, input.pdf) : null;
+  const path = input.path;
+  const gaps = input.rich && input.parse && input.pdf && path ? displayGaps(input.rich, input.parse, input.pdf, (page, box) => inkBands(path, page, box)) : null;
   const rows = input.placed && input.pdf ? rowHeights(cand, input.placed, input.pdf) : null;
   const markers = input.rich ? markerPlaces(input.rich) : null;
-  const all = { formulas, figures, borders, displays: gaps?.score ?? null, rows: rows?.score ?? null, markers: markers?.score ?? null };
+  const numbers = input.rich ? brokenNumbers(input.rich) : null;
+  const checklists = input.placed && input.pdf ? checklistWraps(cand, input.placed, input.pdf) : null;
+  const all = {
+    formulas,
+    figures,
+    borders,
+    displays: gaps?.score ?? null,
+    rows: rows?.score ?? null,
+    markers: markers?.score ?? null,
+    numbers: numbers?.score ?? null,
+    checklists: checklists?.score ?? null,
+  };
   const parts = Object.values(all).filter((x): x is number => x !== null);
-  const misses = [...(formulas === 0 ? [`inline formulas drawn at ${formulaScale()} times their words' size`] : []), ...(widths?.misses ?? []), ...(gaps?.misses ?? []), ...(rows?.misses ?? []), ...(markers?.misses ?? [])];
-  return { ...all, score: parts.length > 0 ? parts.reduce((a, b) => a + b, 0) / parts.length : null, misses };
+  const misses = [
+    ...(formulas === 0 ? [`inline formulas drawn at ${formulaScale()} times their words' size`] : []),
+    ...(widths?.misses ?? []),
+    ...(gaps?.misses ?? []),
+    ...(rows?.misses ?? []),
+    ...(markers?.misses ?? []),
+    ...(numbers?.misses ?? []),
+    ...(checklists?.misses ?? []),
+  ];
+  return { ...all, broken: numbers?.broken ?? 0, checklistsWrong: checklists?.wrong ?? 0, score: parts.length > 0 ? parts.reduce((a, b) => a + b, 0) / parts.length : null, misses };
 }
 
 export type FreeScores = {
@@ -714,6 +777,36 @@ export type FreeScores = {
   /** The import's look (lookScores); none for a parse. */
   look: LookScores | null;
 };
+
+/** A table's header row as a Word file's rendering repeats it: a row of the
+    page, among a page's first three rows under its furniture, whose words
+    are the words of one of the candidate's tables' first row, after that
+    row's first place on an earlier page. */
+function repeatedHeads(pdf: PdfText, cand: Flat): Line[] {
+  const key = (words: string[]) => [...words].sort().join(" ");
+  const heads = new Set<string>();
+  cand.blocks.forEach((block, b) => {
+    if (block.kind !== "table") return;
+    const words = cand.unitsOf[b].filter((u) => cand.units[u].row === 0).flatMap((u) => cand.toks.slice(cand.units[u].first, cand.units[u].end).map((t) => t.w));
+    if (words.length >= 2) heads.add(key(words));
+  });
+  if (heads.size === 0) return [];
+  const furniture = new Set(pdf.furniture);
+  const seen = new Set<string>();
+  const out: Line[] = [];
+  const rows = rowsOf(pdf.lines.filter((l) => !furniture.has(l)));
+  let page = -1;
+  let rank = 0;
+  for (const row of rows) {
+    rank = row[0].page === page ? rank + 1 : 0;
+    page = row[0].page;
+    const k = key(row.flatMap((l) => wordsOf(l.text).map((w) => w.w)));
+    if (!heads.has(k)) continue;
+    if (seen.has(k) && rank < 3) out.push(...row);
+    seen.add(k);
+  }
+  return out;
+}
 
 /** Whether some of these runs of words hold a text's words in their order:
     half of its runs of three words (of two, for a shorter text) stand in
@@ -847,6 +940,9 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
   const shown = picturedBy(pdf, cand);
   const held = heldLines(cand);
   const labels = pdf.lines.filter((l) => shown(l).some((f) => f.mathImage !== undefined || labelWords(l.text) <= 3 || !held(l.text)));
+  // Word repeats a table's header row at the top of each page the table runs onto (LibreOffice's rendering does
+  // too); the page editor draws the header row once and repeats it itself: a repeat is no words to cover.
+  if (word) labels.push(...repeatedHeads(pdf, cand));
   pdf.raw.forEach((rawLines, p) => {
     const lines = rawLines.map((line) => {
       // A raised footnote label runs into its note's first word ("1All amounts…"),
@@ -865,6 +961,8 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
     const symbols = pdf.symbols.filter((s) => s.page === pdf.first + p && !dropped.includes(s.line));
     for (const s of symbols) for (const w of wordsOf(s.word)) drop.set(w.w, (drop.get(w.w) ?? 0) + 1);
     for (const s of symbols) for (const w of wordsOf(s.reads)) expected.set(w.w, (expected.get(w.w) ?? 0) + 1);
+    // The words pdftotext cannot read are the page's words all the same.
+    for (const b of pdf.blind ?? []) if (b.page === pdf.first + p) for (const w of wordsOf(b.text)) expected.set(w.w, (expected.get(w.w) ?? 0) + 1);
     for (let i = 0; i + 1 < lines.length; i++) {
       const m = /(\p{L}+)-\s*$/u.exec(lines[i]);
       // A title in capitals breaks its words in capitals: "COM-", "PARED".

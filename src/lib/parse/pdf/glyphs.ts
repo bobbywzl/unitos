@@ -554,7 +554,13 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
     if (font.kind === "katex") tex = katexChar(g.unicode, font.face, font.style);
     else if (font.kind === "size") tex = sizeFontGlyph(font.name, g.unicode);
     else if (font.kind === "tex") {
-      tex = font.blackboard && g.code >= 0x41 && g.code <= 0x5a ? { family: "msb", code: g.code } : font.unread ? null : texWorldChar(g.unicode, font.italic, font.bullets);
+      // MathTime Pro 2's math italic sets its upright Δ ("Delta1") at 0x31,
+      // a glyph the PDF's Unicode map leaves out: pdf.js reads the code as
+      // "1", and ΔI²PI read 1I²PI (IEEE Access p. 9). A digit is half an em
+      // wide.
+      const delta = /^RMTMI/.test(g.base) && g.code === 0x31 && g.w > g.size * 0.65;
+      if (delta) g.unicode = "Δ";
+      tex = font.blackboard && g.code >= 0x41 && g.code <= 0x5a ? { family: "msb", code: g.code } : font.unread ? null : texWorldChar(g.unicode, font.italic && !delta, font.bullets);
     }
     else {
       tex = openTypeSized(g, font.name);

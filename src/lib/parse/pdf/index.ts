@@ -5,7 +5,7 @@ import { fitOcrItems } from "@/lib/parse/pdf/lines";
 import { resolveContentsLinks } from "@/lib/parse/pdf/contents";
 import { itemGlyphs, readDrawing, type FontLookup, type Glyph, type PageDrawing } from "@/lib/parse/pdf/drawing";
 import { attachFigureRegions, pageGraphics, type Graphic } from "@/lib/parse/pdf/figures";
-import { cutFootnotes, placeFootnotes } from "@/lib/parse/pdf/footnotes";
+import { ABSTRACT_RE, cutFootnotes, placeFootnotes } from "@/lib/parse/pdf/footnotes";
 import { dropFurniture } from "@/lib/parse/pdf/furniture";
 import { median, unionBox } from "@/lib/parse/pdf/geometry";
 import {
@@ -18,7 +18,7 @@ import {
   unreadRuns,
   type FontFlags,
 } from "@/lib/parse/pdf/glyphs";
-import { assignHeadingLevels } from "@/lib/parse/pdf/headings";
+import { assignHeadingLevels, centerLikeOthers } from "@/lib/parse/pdf/headings";
 import { lookItems, takeBodyFont } from "@/lib/parse/pdf/look";
 import { displayEquations, displayLines, isTexPage } from "@/lib/parse/pdf/math/display";
 import { mathSpans, resolveZones } from "@/lib/parse/pdf/math/zones";
@@ -27,7 +27,7 @@ import { isOcrLayer, measureSpacing, pageLeading } from "@/lib/parse/pdf/paragra
 import { placeTables, ruledTables, takeTables } from "@/lib/parse/pdf/ruled";
 import { segmentPage } from "@/lib/parse/pdf/segment";
 import { attachTableCaptions, isWrappedRowLine } from "@/lib/parse/pdf/tables";
-import { collectHyphenation, spansFromRuns } from "@/lib/parse/pdf/text";
+import { collectHyphenation, holdsFill, spansFromRuns, tabStopsOf } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, Segment, UriRegion } from "@/lib/parse/pdf/types";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 
@@ -236,18 +236,23 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       // its box gives, with the formula it encloses.
       const hung = glyphs !== undefined && glyphs.length > 0 && glyphs.every((g) => g.family === "omx");
       const y = hung ? t[5] + standingBaseline(glyphs[0], drawing.glyphs) - glyphs[0].y : t[5];
-      items.push({
-        str,
-        x: read.x,
-        y,
-        w: read.w,
-        size,
-        ...flags,
-        bold: flags.bold || strokedBold,
-        href: hrefAt(read.x, y, read.w, size),
-        font: fontName,
-        glyphs,
-      });
+      // One item may hold stroked and filled glyphs (a Chinese paper's
+      // "中图分类号：" stroked but for its colon, "文献标识码：Ａ" with a
+      // regular "Ａ"): it is cut where the stroke starts or stops.
+      for (const part of strokeParts(str, glyphs) ?? [{ str, x: read.x, w: read.w, glyphs, stroked: strokedBold }]) {
+        items.push({
+          str: part.str,
+          x: part.x,
+          y,
+          w: part.w,
+          size,
+          ...flags,
+          bold: flags.bold || part.stroked,
+          href: hrefAt(part.x, y, part.w, size),
+          font: fontName,
+          glyphs: part.glyphs,
+        });
+      }
     }
     // Math glyphs the text layer never read (it drops a code it takes for a
     // space: ⊖ ⊘ ⊙ in a CMSY font with no Unicode map, a \big⟨) become items
@@ -322,7 +327,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     const inGraphics = new Set(found.flatMap((graphic) => [...graphic.labels, ...graphic.caption]));
     // A kept page's lines count their page among the kept pages; a page read
     // for the furniture's evidence alone counts none.
-    const lines = placeTables(pageLines(takeTables(text.filter((i) => !inGraphics.has(i)), tables), viewport.width, keep ? pages.length : -1, found));
+    const lines = placeTables(pageLines(takeTables(text.filter((i) => !inGraphics.has(i)), tables), viewport.width, keep ? pages.length : -1, found, drawing.rules.filter((r) => r.dir === "h" && !inTable(r))));
     // Each inline formula's LaTeX, from its glyphs and the page's rules.
     resolveZones(lines, drawing);
     // From here on only a TeX page's display equations read the page's
@@ -360,12 +365,14 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
 
   // Running heads, feet, and page numbers drop before anything is segmented,
   // on the evidence of every page read; then the kept pages go on alone.
-  // The lines that dropped name the publication a masthead names (titleOf).
+  // The lines that dropped, and the first cell of a line of cells, name the
+  // publication a masthead names (titleOf, mastheadOf: PLOS's running head
+  // sets its name and the paper's title as one line of two cells).
   const furnished = dropFurniture(readLines, readHeights, readPages, readScans);
   const running = new Set(
     readLines.flatMap((lines, k) => {
       const stays = new Set(furnished[k]);
-      return lines.filter((l) => !stays.has(l)).map((l) => squash(l.text));
+      return lines.filter((l) => !stays.has(l)).flatMap((l) => (l.cells.length > 1 ? [l.text, l.cells[0].text] : [l.text]).map(squash));
     }),
   );
   const cleaned = furnished.filter((_, k) => kept.has(readPages[k] + 1));
@@ -466,12 +473,12 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     const missed = { graphics: graphics[p].map((g) => g.box) };
     const done = ctx.tex ? displayEquations(withFigures, shown, ctx, pageWidths[p], pageHeights[p], missed) : withFigures;
     // The space after each text block, from the page's own gaps.
-    measureSpacing(done, ctx);
+    measureSpacing(done, ctx, shown);
     segments.push(...done);
   }
   // A FIGURE with a region and no caption is an embedded image; every other
   // empty segment drops.
-  segments = segments.filter((s) => s.text.trim().length > 0 || (s.type === "FIGURE" && s.region));
+  segments = segments.filter((s) => s.text.trim().length > 0 || holdsFill(s) || (s.type === "FIGURE" && s.region));
   // Vector-figure debris: chart axis ticks read as tiny numeric-only lines.
   // Inline-math debris: a sum limit or exponent too far from its base line
   // to join it reads as a paragraph of one or two math glyphs.
@@ -479,6 +486,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     (s) =>
       !(
         s.type === "PARAGRAPH" &&
+        !holdsFill(s) &&
         s.text.length <= 14 &&
         /^[\d\s.,%−–-]+$/.test(s.text) &&
         !/\d\.$/.test(s.text.trim())
@@ -534,6 +542,11 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   const deckTitle = slides ? titleSlideOf(segments, bodySize, clues) : undefined;
   const titleSegment = deckTitle ?? titleOf(segments, bodySize, clues);
 
+  // The masthead over a paper's title (mastheadOf). Its side column waits
+  // for the front matter's end.
+  const masthead = titleSegment && !deckTitle ? mastheadOf(segments, titleSegment, running, bodySize) : { segments, side: [] };
+  segments = masthead.segments;
+
   // Front matter. Before the title, on its page or a notice's, a heading is
   // a paragraph: a masthead's lines, a report's number, a rule's agency and
   // docket lines. After it, a heading before the abstract (its heading, or a
@@ -545,24 +558,31 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   const abstracts = segments.flatMap((s, k) => (s.page === titlePage && (s.type === "HEADING" || s.type === "PARAGRAPH") && ABSTRACT_RE.test(s.text) ? [k] : []));
   const abstractAt = abstracts[0] ?? -1;
   const frontEnd = deckTitle ? segments.findIndex((s, k) => k > titleAt && s.page !== deckTitle.page) : abstractAt;
-  const front = segments.slice(0, Math.max(0, titleAt)).filter((s) => s.page === titleSegment?.page || s.page <= notice);
+  const frontMatter = segments.slice(0, Math.max(0, titleAt)).filter((s) => s.page === titleSegment?.page || s.page <= notice);
   if (titleAt >= 0 && (deckTitle !== undefined || abstractAt > titleAt)) {
-    front.push(...segments.slice(titleAt + 1, frontEnd < 0 ? segments.length : frontEnd));
+    frontMatter.push(...segments.slice(titleAt + 1, frontEnd < 0 ? segments.length : frontEnd));
     // A paper in two languages sets its title again over its second
     // abstract (a Chinese paper's English title, authors, and "Abstract",
     // arXiv 2111.04880): that title stays a heading, and the headings
     // between it and its abstract are its front matter.
     for (let n = 1; n < abstracts.length; n++) {
       const again = segments.findIndex((s, k) => k > abstracts[n - 1] && k < abstracts[n] && s.type === "HEADING");
-      if (again >= 0) front.push(...segments.slice(again + 1, abstracts[n]));
+      if (again >= 0) frontMatter.push(...segments.slice(again + 1, abstracts[n]));
     }
   }
-  for (const s of front) {
+  // A heading right under a centered title, centered too, set smaller and
+  // not bold, is its subtitle ("Kestrel Energy Group" under a report's
+  // title, "Lecture notes for a first graduate course" under a course's):
+  // a paragraph, not a section.
+  const subtitle = titleAt >= 0 && !deckTitle ? segments[titleAt + 1] : undefined;
+  if (subtitle?.type === "HEADING" && subtitle.page === titleSegment?.page && titleSegment.align === "center" && subtitle.align === "center" && (subtitle.rawSize ?? 0) < (titleSegment.rawSize ?? 0) && !boldHeadingText(subtitle)) frontMatter.push(subtitle);
+  for (const s of frontMatter) {
     if (s.type !== "HEADING") continue;
     s.type = "PARAGRAPH";
     s.html = s.align ? `<p class="${s.align}"></p>` : undefined;
   }
 
+  centerLikeOthers(segments);
   assignHeadingLevels(segments, bodySize, { slides, title: titleSegment, scan });
 
   // The title's look and alignment (the import's Title), read before the
@@ -571,7 +591,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   // line's size).
   // One line: the title is the document's name in every add path. A line
   // break the writer set stays in the heading's own text.
-  const title = titleSegment?.text.replace(/\s*\n\s*/g, " ") ?? null;
+  const title = titleSegment?.text.replace(/\s*[\n\t]\s*/g, " ") ?? null;
   const titleRuns = titleSegment?.runs?.filter((r) => (r.look?.size ?? 0) >= (titleSegment.rawSize ?? 0) - 0.5);
   const titleFont = titleSegment ? spansFromRuns(titleSegment.text, titleRuns?.length ? titleRuns : titleSegment.runs).font : undefined;
 
@@ -580,13 +600,21 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   // that are no heading (a journal's label over a paper's title), and on a
   // deck's title slide.
   const titleHeading = titleSegment ? segments.indexOf(titleSegment) : -1;
+  // Where the front matter ends: at the body's first heading on the title's
+  // page, the parts of the front matter aside (an abstract, an author
+  // summary, keywords).
+  const bodyStart = titleSegment ? segments.slice(titleHeading + 1).find((s) => s.type === "HEADING" && s.page === titleSegment.page && !FRONT_PART_RE.test(s.text)) : undefined;
   if (titleHeading >= 0 && (deckTitle !== undefined || segments.slice(0, titleHeading).every((s) => s.type !== "HEADING"))) segments.splice(titleHeading, 1);
 
   // The segments are the blocks now, in their order: a contents entry links
   // to its heading by that order. Resolved before the title merge and the
   // title's removal, every link pointed past its heading.
-  segments = segments.filter((s) => s.text.trim().length > 0 || (s.type === "FIGURE" && s.region));
-  segments = placeFootnotes(segments, footnotes);
+  segments = segments.filter((s) => s.text.trim().length > 0 || holdsFill(s) || (s.type === "FIGURE" && s.region));
+  // The masthead's side column and the title's notes with no mark stand at
+  // the front matter's end, else after the title page's last words.
+  const front = titleSegment ? { page: titleSegment.page, before: bodyStart } : undefined;
+  if (front && masthead.side.length > 0) segments.splice(frontEndAt(segments, front), 0, ...masthead.side);
+  segments = placeFootnotes(segments, footnotes, front);
   resolveContentsLinks(segments);
 
   const blocks: ParsedBlock[] = segments.map((s) => {
@@ -607,7 +635,13 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     if (s.type === "FIGURE" && s.mathCrop) block.mathCrop = true;
     const allLinks = [...(s.links ?? []), ...links];
     if (styles.length > 0) block.styles = styles;
-    const math = s.type === "PARAGRAPH" || s.type === "LIST" || s.type === "HEADING" ? mathSpans(s.text, s.runs) : [];
+    // Inline formulas: a figure's words are its caption's (a display's crop
+    // keeps its glyphs and no formula), and a table's caption formulas come
+    // from attachTableCaptions.
+    const math =
+      s.type === "PARAGRAPH" || s.type === "LIST" || s.type === "HEADING" || (s.type === "FIGURE" && !s.mathCrop) ? mathSpans(s.text, s.runs)
+      : s.type === "TABLE" ? (s.math ?? [])
+      : [];
     if (math.length > 0) block.math = math;
     if (allLinks.length > 0) block.links = allLinks;
     if (s.footnote) block.footnote = s.footnote;
@@ -617,6 +651,10 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     if (s.indent) block.indent = s.indent;
     if (s.listIndents) block.listIndents = s.listIndents;
     if (s.itemSpace !== undefined) block.itemSpace = s.itemSpace;
+    // Tabs: the stops their runs carry, a fill-in rule's underline.
+    const tabs = s.type === "PARAGRAPH" || s.type === "HEADING" || s.type === "LIST" ? tabStopsOf(s.text, s.runs) : null;
+    if (tabs && tabs.stops.length > 0) block.tabStops = tabs.stops;
+    if (tabs && tabs.fills.length > 0) block.styles = [...(block.styles ?? []), ...tabs.fills];
     return block;
   });
 
@@ -660,6 +698,26 @@ function drawnRunAt(str: string, x: number, y: number, glyphs: Glyph[], taken: S
   if (spelled !== letters) return undefined;
   for (const g of run) taken.add(g);
   return run;
+}
+
+// An item's parts where its glyphs are stroked in some places and only
+// filled in others, one glyph to each of its characters; null where they
+// are drawn alike, or its text does not map onto its glyphs one to one.
+function strokeParts(str: string, glyphs: Glyph[] | undefined): { str: string; x: number; w: number; glyphs: Glyph[]; stroked: boolean }[] | null {
+  const chars = [...str];
+  if (!glyphs || glyphs.length < 2 || chars.length !== glyphs.length) return null;
+  const stroked = glyphs.map((g) => g.mode === 2);
+  if (stroked.every((b) => b === stroked[0])) return null;
+  const parts: { str: string; x: number; w: number; glyphs: Glyph[]; stroked: boolean }[] = [];
+  glyphs.forEach((g, k) => {
+    const last = parts.at(-1);
+    if (last && last.stroked === stroked[k]) {
+      last.str += chars[k];
+      last.glyphs.push(g);
+      last.w = g.x + g.w - last.x;
+    } else parts.push({ str: chars[k], x: g.x, w: g.w, glyphs: [g], stroked: stroked[k] });
+  });
+  return parts;
 }
 
 // A drawn run's words and extent: a space where it draws one or leaves a
@@ -848,9 +906,102 @@ function squash(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-// An abstract's heading, or the paragraph it runs into ("Abstract—…",
-// "Abstract. …", a Chinese paper's "摘要 本文…", a Japanese one's "要旨").
-const ABSTRACT_RE = /^\s*(?:abstract\b|摘\s*要|要\s*旨)/i;
+// The parts of a paper's front matter that its headings name.
+const FRONT_PART_RE =
+  /^\s*(?:(?:abstract|author summary|lay summary|significance(?: statement)?|highlights|graphical abstract|key ?words|index terms|article info|ccs concepts)\b|摘\s*要|要\s*旨|关\s*键\s*词|キーワード)/i;
+
+// The masthead over a paper's title, on its page, in the lines read before
+// it: a line the running heads repeat drops (PLOS's "PLOS COMPUTATIONAL
+// BIOLOGY", Nature's "Article" and DOI, Elsevier's journal line); short lines
+// set over the title are its kicker, which the import sets over the Title (a
+// journal's name and dates, a report's number, "RESEARCH ARTICLE"), and a
+// rule between them drops; a side column set small under the title's foot
+// goes to the front matter's end (PLOS's citation, editor, and dates): read
+// in the page's order, all of them stood between the Title and its
+// authors, PLOS's masthead with 292 pt of space after it. Lines over the
+// title that are more than a masthead (a 10-K cover's check boxes, a
+// court's notice, more than four blocks: the Federal Register's page opens
+// with the end of the rule before and this one's agency and docket lines)
+// stay as they are, and so do words at the body's size under it. Lines
+// beside the title, stacked with no paragraph gap, are one paragraph
+// (joinBeside); a side column runs down the page, and lines that end a few
+// lines under the title's foot are no side column.
+function mastheadOf(segments: Segment[], title: Segment, running: Set<string>, bodySize: number): { segments: Segment[]; side: Segment[] } {
+  const at = segments.indexOf(title);
+  const tb = title.box;
+  if (at <= 0 || !tb) return { segments, side: [] };
+  const before = segments.slice(0, at).filter((s) => s.page === title.page);
+  const drop = new Set(before.filter((s) => (s.type === "PARAGRAPH" || s.type === "HEADING") && isRunning(s.text, running)));
+  for (const s of joinBeside(before.filter((s) => !drop.has(s)), tb, bodySize)) drop.add(s);
+  const under = before.filter((s) => !drop.has(s) && s.type !== "FIGURE" && s.box !== undefined && s.box.y2 <= tb.y1 + 2);
+  const deep = under.some((s) => s.box!.y1 < tb.y1 - bodySize * 6);
+  const side = deep && under.every((s) => (s.lineSize ?? bodySize) < bodySize * 0.95) ? under : [];
+  const over = before.filter((s) => !drop.has(s) && s.type !== "FIGURE" && s.type !== "SEPARATOR" && s.box !== undefined && s.box.y1 >= tb.y2 - 2);
+  if (over.length <= 4 && over.every((s) => (s.type === "PARAGRAPH" || s.type === "HEADING") && [...s.text].length <= 150)) {
+    for (const s of before) if (s.type === "SEPARATOR") drop.add(s);
+    for (const s of over) {
+      const align = s.type === "HEADING" ? s.align : (/\b(center|right)\b/.exec(s.html ?? "")?.[1] as Segment["align"]);
+      s.type = "PARAGRAPH";
+      s.html = `<p class="kicker${align ? ` ${align}` : ""}"></p>`;
+    }
+  }
+  return { segments: segments.filter((s) => !drop.has(s) && !side.includes(s)), side };
+}
+
+// Lines beside the title, stacked at one left edge with no paragraph gap
+// between them, are one paragraph of the masthead, a line apiece: a form's
+// number, revision, and agency ("Form W-9", "(Rev. March 2024)",
+// "Department of the Treasury", "Internal Revenue Service"). The first line
+// stands in the title's band; the lines under it follow it down. Returns
+// the lines joined into the first.
+function joinBeside(before: Segment[], tb: Box, bodySize: number): Segment[] {
+  const joined: Segment[] = [];
+  const line = (s: Segment) => s.type === "PARAGRAPH" && s.box !== undefined && !s.text.includes("\n") && s.box.y2 - s.box.y1 <= (s.lineSize ?? bodySize) * 1.6;
+  for (let k = 0; k < before.length; k++) {
+    const head = before[k];
+    const hb = head.box;
+    if (!line(head) || !hb || !(hb.x2 <= tb.x1 || hb.x1 >= tb.x2) || hb.y1 >= tb.y2 || hb.y2 <= tb.y1) continue;
+    let last = head;
+    while (k + 1 < before.length) {
+      const next = before[k + 1];
+      const nb = next.box;
+      const lb = last.box!;
+      if (!line(next) || !nb || Math.abs(nb.x1 - hb.x1) > 2 || nb.y2 > lb.y2 || lb.y1 - nb.y2 > (next.lineSize ?? bodySize) * 0.6) break;
+      const offset = head.text.length + 1;
+      head.text = `${head.text}\n${next.text}`;
+      shiftSpansInto(head, next, offset);
+      head.box = unionBox(head.box!, nb);
+      if (head.lineBox && next.lineBox) head.lineBox = unionBox(head.lineBox, next.lineBox);
+      head.spaceAfter = next.spaceAfter;
+      joined.push(next);
+      last = next;
+      k++;
+    }
+  }
+  return joined;
+}
+
+// A heading set bold, most of its words: a section's look, no subtitle's.
+function boldHeadingText(s: Segment): boolean {
+  const bold = (s.runs ?? []).reduce((n, r) => n + (r.bold ? r.end - r.start : 0), 0);
+  return bold * 2 > s.text.length;
+}
+
+// A line the running heads repeat: one of them, or two of them side by side
+// (Nature's "Article" and its DOI).
+function isRunning(text: string, running: Set<string>): boolean {
+  const line = squash(text);
+  return running.has(line) || [...running].some((head) => head.length >= 3 && line.startsWith(`${head} `) && running.has(line.slice(head.length + 1)));
+}
+
+// Where the front matter's leftovers go: before the body's first heading
+// on the title's page, else after the page's last block that is no heading.
+function frontEndAt(segments: Segment[], front: { page: number; before?: Segment }): number {
+  const at = front.before ? segments.indexOf(front.before) : -1;
+  if (at >= 0) return at;
+  const last = segments.findLastIndex((s) => s.type !== "HEADING" && (s.breaks?.at(-1)?.page ?? s.page) === front.page);
+  return last >= 0 ? last + 1 : segments.length;
+}
 
 // A size in points, to a hundredth: A4 is 595.28 × 841.89.
 function points(value: number): number {

@@ -173,6 +173,60 @@ function drawn(latex: string): string[] | null {
   return out;
 }
 
+/** KaTeX's size classes (size1 … size11) as font sizes against size6. */
+const SIZES = [0, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.2, 1.44, 1.728, 2.074, 2.488];
+/** A letter or a digit: the symbols whose rows the rows check compares (a delimiter, a rule, an accent, a big
+    operator draw otherwise in TeX and KaTeX). */
+const LETTER = /[\p{Ll}\p{Lu}\p{Lt}\p{Lo}\p{N}]/u;
+const heightMemo = new Map<string, number | null>();
+
+/** How far a formula's letters and digits reach up and down from one another, in ems: the baselines KaTeX draws
+    them on (a vlist child's `top` less its strut, scaled by the size classes over it), the highest less the
+    lowest; null when KaTeX cannot read it. */
+function letterSpan(latex: string): number | null {
+  if (heightMemo.has(latex)) return heightMemo.get(latex) ?? null;
+  let out: number | null = null;
+  try {
+    const html = katex.renderToString(latex, { output: "html", displayMode: true, throwOnError: true, strict: "ignore" });
+    type Frame = { scale: number; shift: number; skip: boolean; top?: number };
+    const stack: Frame[] = [{ scale: 1, shift: 0, skip: false }];
+    const shifts: number[] = [];
+    for (const m of html.matchAll(/<span([^>]*)>|<\/span>|<svg[\s\S]*?<\/svg>|([^<]+)/g)) {
+      const frame = stack[stack.length - 1];
+      if (m[0].startsWith("<svg")) continue;
+      if (m[0] === "</span>") {
+        stack.pop();
+        continue;
+      }
+      if (m[1] !== undefined) {
+        const cls = /class="([^"]*)"/.exec(m[1])?.[1] ?? "";
+        const style = /style="([^"]*)"/.exec(m[1])?.[1] ?? "";
+        const child: Frame = { scale: frame.scale, shift: frame.shift, skip: frame.skip || /katex-mathml|delimsizing|large-op|op-symbol/.test(cls) };
+        const size = /reset-size(\d+) size(\d+)/.exec(cls);
+        if (size) child.scale = frame.scale * (SIZES[Number(size[2])] / SIZES[Number(size[1])]);
+        const top = /(?:^|;)\s*top:\s*(-?[\d.]+)em/.exec(style);
+        if (top) child.top = Number(top[1]);
+        // A vlist child's strut: the child's baseline stands its top less the strut's height over the vlist's.
+        if (/\bpstrut\b/.test(cls) && frame.top !== undefined) {
+          const holder = stack[stack.length - 2] ?? frame;
+          frame.shift = holder.shift + (-frame.top - Number(/height:\s*(-?[\d.]+)em/.exec(style)?.[1] ?? 0)) * frame.scale;
+          frame.top = undefined;
+          child.shift = frame.shift;
+        }
+        stack.push(child);
+        continue;
+      }
+      if (frame.skip) continue;
+      for (const ch of (m[2] ?? "").normalize("NFKC")) if (LETTER.test(ch)) shifts.push(frame.shift);
+    }
+    out = shifts.length > 0 ? Math.max(...shifts) - Math.min(...shifts) : 0;
+  } catch {
+    out = null;
+  }
+  heightMemo.set(latex, out);
+  return out;
+}
+
 // ── A formula's atoms ───────────────────────────────────────────────────────
 
 type Atom = { tex: string; cls: string; piece?: string; fam: string; code: number; size: number; x1: number; x2: number; y: number };
@@ -358,7 +412,7 @@ function glyphsIn(page: PageGlyphs, region: Region): PageGlyph[] {
     "(3)", "(2.1)", "(A.3)", set an em or more apart from the formula
     (amsmath's \tag, or leqno at the left). The glyph check reads the
     formula without it: the label is the reference's to judge. */
-function labelGlyphs(glyphs: PageGlyph[]): PageGlyph[] {
+export function labelGlyphs(glyphs: PageGlyph[]): PageGlyph[] {
   const text = (g: PageGlyph) => g.unicode.trim() !== "" && (g.family === null || (!MATH.has(g.family) && g.family !== "omx"));
   const sorted = [...glyphs].filter((g) => g.unicode.trim() !== "").sort((a, b) => a.x - b.x);
   for (const side of ["right", "left"] as const) {
@@ -401,6 +455,8 @@ function settle(missing: string[], extra: string[]): { missing: string[]; extra:
 export type GlyphScores = {
   /** Math glyphs on the scored pages whose text layer string is not their symbol. */
   hazards: number;
+  /** Display equations whose LaTeX sets its letters and digits over rows the page does not (rowsCheck). */
+  rowsWrong: number;
   /** Of the symbols those glyphs draw, the ones the candidate prints fewer times than the pages draw them. */
   garbles: number;
   missing: [string, number][];
@@ -409,7 +465,7 @@ export type GlyphScores = {
   /** Display equations with a region, and those whose LaTeX draws exactly the region's symbols at their script levels. */
   checked: number;
   passed: number;
-  fails: { latex: string; missing: string[]; extra: string[] }[];
+  fails: { latex: string; missing: string[]; extra: string[]; rows?: string }[];
 };
 
 /** A symbol as the garble count compares it: a relation with \not is one
@@ -515,6 +571,30 @@ export function placeCrops(parse: Doc, imported: Doc) {
   }
 }
 
+/** The rows check: a display's LaTeX draws its letters and digits over the
+    page's rows, or stacks what the page sets side by side (a cases row's
+    fractions interleaved into rows of their own, the page's one line of a
+    numerator cut in two). Its letters' baselines, as KaTeX draws them
+    (letterSpan), reach more than 2 em past the page's (and half again),
+    measured in the formula's own size (the size most of its glyphs take).
+    A big operator's limits set beside it where KaTeX stacks them reach 2 em
+    at most. Null when the rows agree; else what differs. */
+function rowsCheck(glyphs: PageGlyph[], latex: string): string | null {
+  const letters = glyphs.flatMap((g) => {
+    if (g.family === "omx") return [];
+    const entry = g.family && MATH.has(g.family) ? mathGlyph(g.family, g.code) : null;
+    return [...(entry?.unicode ?? g.unicode).normalize("NFKC")].some((ch) => LETTER.test(ch)) ? [g] : [];
+  });
+  if (letters.length < 2) return null;
+  const sizes = new Map<number, number>();
+  for (const g of letters) sizes.set(Math.round(g.size * 10) / 10, (sizes.get(Math.round(g.size * 10) / 10) ?? 0) + 1);
+  const em = [...sizes].sort((a, b) => b[1] - a[1])[0][0];
+  const page = (Math.max(...letters.map((g) => g.y)) - Math.min(...letters.map((g) => g.y))) / em;
+  const drawnSpan = letterSpan(latex);
+  if (drawnSpan === null || drawnSpan - page <= Math.max(2, 0.5 * page)) return null;
+  return `its letters span ${drawnSpan.toFixed(1)} em drawn, ${page.toFixed(1)} em on the page`;
+}
+
 /** The glyph checks of one candidate on its scored pages. */
 export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, number] | undefined): GlyphScores {
   const inRange = (p: number) => !range || (p >= range[0] && p <= range[1]);
@@ -569,6 +649,7 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
   let mathImages = 0;
   let checked = 0;
   let passed = 0;
+  let rowsWrong = 0;
   const fails: GlyphScores["fails"] = [];
   for (const block of doc.blocks) {
     if (!block.at || !inRange(block.at.page)) continue;
@@ -590,14 +671,17 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
     const label = block.label && number.length === 0 ? (/^\(.*\)$/.test(block.label) ? `\\tag{${block.label.slice(1, -1)}}` : `\\tag*{${block.label}}`) : "";
     const forms = [block.latex, ...(label ? [`${block.latex} ${label}`] : [])].map((latex) => drawn(latex));
     const results = forms.map((got) => (want && got ? settle(surplus(bag(want), bag(got)), surplus(bag(got), bag(want))) : null));
-    if (results.some((r) => r && r.missing.length === 0 && r.extra.length === 0)) passed++;
+    const rows = rowsCheck(glyphs.filter((g) => !number.includes(g)), block.latex);
+    if (rows) rowsWrong++;
+    if (results.some((r) => r && r.missing.length === 0 && r.extra.length === 0) && !rows) passed++;
     else {
       const r = results.find((x) => x) ?? { missing: ["(KaTeX cannot read it)"], extra: [] };
-      fails.push({ latex: block.latex, missing: r.missing, extra: r.extra });
+      fails.push({ latex: block.latex, missing: r.missing, extra: r.extra, ...(rows ? { rows } : {}) });
     }
   }
   return {
     hazards,
+    rowsWrong,
     garbles: missing.reduce((n, [, k]) => n + k, 0),
     missing: missing.slice(0, 20),
     mathImages,

@@ -103,17 +103,23 @@ export function readHeading(lines: Line[], i: number, ctx: PageContext, runOf: n
     capsHeading(lines, i, ctx) ??
     abstractHeading(lines, i, ctx) ??
     boldHeading(lines, i, ctx, runOf) ??
+    italicHeading(lines, i, ctx) ??
     partHeading(lines, i, ctx);
-  if (step?.segments.some((s) => s.type === "HEADING" && (wordless(s.text) || (ctx.ocr && !/\p{L}{2}/u.test(s.text))))) return null;
+  if (step?.segments.some((s) => s.type === "HEADING" && (wordless(s.text) || SIGNATURE_RE.test(s.text) || (ctx.ocr && !/\p{L}{2}/u.test(s.text))))) return null;
   // A heading of its own lines keeps where it stands: centered or flush
   // right in its column (a run-in lead's is its paragraph's).
   const [heading] = step?.segments ?? [];
   if (step && step.segments.length === 1 && heading.type === "HEADING") {
-    const align = lineAlign(lines, i, step.next, ctx);
+    const align = lineAlign(lines, i, step.next, ctx) ?? (step.next === i + 1 && symmetric(lines[i]) ? "center" : null);
     if (align === "center" || align === "right") heading.align = align;
   }
   return step;
 }
+
+// A line that opens with a dash signs a piece or names a quotation's
+// source: no heading (the Earth Observer's "—Alan Ward [Executive Editor,
+// …]", set large and bold, read as h2).
+const SIGNATURE_RE = /^\s*[—–―]/;
 
 // A heading has a word. Panel letters ("(b)", "b)", "(a) (b)") or a number
 // alone are no heading: Grinstead–Snell's "(b)" under Figure 4.6's second
@@ -232,8 +238,14 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
   const { text, runs } = joinGroup(run);
   const flat = text.replace(/\n/g, " ");
   // A title set in capitals may end in a period (a 1913 bulletin's
-  // "BOUILLON CUBES: … PREPARATIONS OF MEAT.").
-  const prose = /[.!?]$/.test(flat.trim()) && [...flat].length > 80 && capsShare(flat) < 0.9;
+  // "BOUILLON CUBES: … PREPARATIONS OF MEAT."). Past 200 characters, lines
+  // set a little larger than the body that end their column are a paragraph
+  // the page break cut before its period (a survey's 9 pt text over its 7 pt
+  // tables); lines over more lines are no such paragraph (a paper's authors
+  // over their affiliations).
+  const last = run[run.length - 1];
+  const ends = lines.slice(j).every((l) => l.y > last.y || l.x >= last.xEnd || l.xEnd <= line.x);
+  const prose = (/[.!?]$/.test(flat.trim()) ? [...flat].length > 80 : [...flat].length > 200 && ends) && capsShare(flat) < 0.9;
   // A numbered sentence set large is an exercise, an item of its list
   // (OpenStax's "6.2 Fill in the blanks.", "6.4 In 2012, … took the SAT
   // exam. The …", read as headings among its sections "6.1 | …").
@@ -316,11 +328,14 @@ function runInHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
   if (cut >= line.text.length) return { segments: [heading], next: i + 1 };
   heading.html = '<h3 class="run-in"></h3>';
   // The paragraph's first line: the line after the lead, set at the
-  // column's edge. The lead's indent is the heading's: under a run-in head
-  // the paragraph drew a first-line indent.
+  // column's edge. The lead's indent is the heading's (ParsedBlock.indent,
+  // the first line's): under a run-in head the paragraph drew a first-line
+  // indent, and the page editor drew the head at the column's edge where
+  // the page sets it in.
   const text = line.text.slice(cut);
   const runs = line.runs.filter((r) => r.end > cut).map((r) => ({ ...r, start: Math.max(0, r.start - cut), end: r.end - cut }));
   const x = leftEdge(line, ctx);
+  if (line.x - x >= line.size * 0.5) heading.indent = { left: 0, first: Math.round(line.x - x) };
   const first: Line = { ...line, x, text, runs, cells: [{ x, text, runs }] };
   const paragraph = readParagraph([...lines.slice(0, i), first, ...lines.slice(i + 1)], i, ctx, runOf);
   return { segments: [heading, ...paragraph.segments], next: paragraph.next };
@@ -370,12 +385,25 @@ function apartBelow(line: Line, below: Line, ctx: PageContext): boolean {
   return line.y - below.y < line.size * 0.5 || line.y - below.y > line.size * ctx.leading * 1.15;
 }
 
+// A line set as far in from its column's right edge as from its left one,
+// half an em or more: centered, where the test against the page's lines
+// (isCentered) wants two ems in (REVTeX's "A. Spectral Form Factor
+// Analytical Expression", 10 pt in from both edges of its column, read as
+// a paragraph, and "1. Time for the beginning of the ramp for BRM: tdip"
+// as a list item).
+function symmetric(line: Line): boolean {
+  const column = lineColumn(line);
+  if (!column) return false;
+  const [left, right] = [line.x - column[0], column[1] - line.xEnd];
+  return left >= line.size * 0.5 && Math.abs(left - right) <= line.size * 0.3;
+}
+
 function sectionHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
   const line = lines[i];
   const text = line.text.trim();
   if (line.cells.length !== 1 || [...text].length > 80 || /[.,;:]$/.test(text)) return null;
   if (line.size < ctx.bodySize * 0.85 || line.size > ctx.bodySize * 1.14) return null;
-  const centered = isCentered(lines, i, ctx);
+  const centered = isCentered(lines, i, ctx) || symmetric(line);
   const italic = (l: Line) => textShare(l, (item) => item.italic) > 0.9;
   const bold = (l: Line) => textShare(l, (item) => item.bold) > 0.9;
   const caps = (l: Line) => capsShare(l.text) >= 0.9;
@@ -509,7 +537,11 @@ function numberedHeading(lines: Line[], i: number, ctx: PageContext, runOf: numb
   const line = lines[i];
   const lineBold = boldShare(line.runs, line.text.length) > 0.6;
   const styled = styledShare(line) > 0.6;
-  const centered = isCentered(lines, i, ctx);
+  const centered = isCentered(lines, i, ctx) || symmetric(line);
+  // amsart closes a subsection's title with a period; alone on its line,
+  // over its paragraph, it is a heading ("3.2. Proofs of Propositions 3.2
+  // and 3.3.", its number set plain and its title bold).
+  const closed = /\.$/.test(line.text.trim()) && styledShare(line) > 0.8;
   if (
     !(
       line.cells.length === 1 &&
@@ -517,7 +549,7 @@ function numberedHeading(lines: Line[], i: number, ctx: PageContext, runOf: numb
       !(BULLET_RE.test(line.text) && !styled && !centered) &&
       !TOC_TAIL_RE.test(line.text) &&
       [...line.text].length < 120 &&
-      !/[.,;:]$/.test(line.text) &&
+      (!/[.,;:]$/.test(line.text) || closed) &&
       line.size >= ctx.bodySize * 0.98 &&
       (styled ||
         centered ||
@@ -556,12 +588,16 @@ function numberedHeading(lines: Line[], i: number, ctx: PageContext, runOf: numb
   // "4.1 …": a Chinese paper's section and subsection read as one heading).
   const number = HEADING_NUMBER_RE.exec(line.text);
   const subsection = number !== null && below !== undefined && below.text.startsWith(`${number[1]}${number[2]}.`) && HEADING_NUM_STRICT_RE.test(below.text) && styledShare(below) > 0.6;
+  // A page's first line has nothing over it: set in from the column, over
+  // regular text, it is apart above (amsart's "2. Fractions and roots" atop
+  // a page read as a list item).
+  const apart = above === undefined ? line.x > ctx.columnLeft + line.size * 2 : above.y - line.y > line.size * ctx.leading * 1.3;
   const isolated =
     !below ||
     last.y - below.y > last.size * ctx.leading * 1.15 ||
-    (styled && subsection) ||
+    (!closed && styled && subsection) ||
     (styled && centered) ||
-    (styled && above !== undefined && above.y - line.y > line.size * ctx.leading * 1.3 && styledShare(below) < 0.5) ||
+    (styled && apart && styledShare(below) < 0.5) ||
     (styled && below.x > last.x + last.size && last.xEnd < below.xEnd - last.size * 3);
   if (!isolated) return null;
   const { text, runs } = headingText(run, centered);
@@ -694,6 +730,43 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   return { segments: [headingOf(run, joined, runs)], next: j };
 }
 
+// An italic line alone at the body's size, set apart above and below, over
+// a paragraph of regular type at its left edge, on a page whose headings
+// are bold: a subhead a level under them (the Earth Observer's "A
+// Diversified Portfolio" under its bold "Twenty-fifth Anniversary
+// Analysis", read as a paragraph). A byline ("By …"), a caption, and a line
+// with a sentence's end stay words, and so does a TeX page's italic line:
+// a theorem's words between two displays ("Then the inequality").
+function italicHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
+  const line = lines[i];
+  const text = line.text.trim();
+  if (ctx.tex || line.cells.length !== 1 || !ctx.hasBold || textShare(line, (item) => item.italic) < 0.9 || textShare(line, (item) => item.bold) > 0.1) return null;
+  if ([...text].length < 3 || [...text].length > 60 || /[.,;:?!]$/.test(text) || /^by\s/i.test(text) || CAPTION_RE.test(text) || wordless(text)) return null;
+  if (Math.abs(line.size - ctx.bodySize) > ctx.bodySize * 0.1) return null;
+  const above = lines[i - 1];
+  const below = lines[i + 1];
+  if (!above || !below || !apartAbove(above, line, ctx) || !apartBelow(line, below, ctx)) return null;
+  if (Math.abs(below.x - line.x) > line.size * 2 || textShare(below, (item) => item.italic) > 0.5 || below.size < line.size * 0.9) return null;
+  return { segments: [headingOf([line], text, line.runs)], next: i + 1 };
+}
+
+// ── Heading alignment ───────────────────────────────────────────────────────
+
+/** A heading set at the middle of two or more centered headings of its size
+    is centered too: on a page with no full line to read its column's right
+    edge by (a sheet of formulas), "1. Scripts and accents" and "5. Fonts"
+    read as flush left beside a centered "4. Delimiters". A run-in head's box
+    is its paragraph's line: it is never centered so. */
+export function centerLikeOthers(segments: Segment[]) {
+  const centered = segments.filter((s) => s.type === "HEADING" && s.align === "center" && s.box && s.rawSize !== undefined);
+  const middle = (s: Segment) => (s.box!.x1 + s.box!.x2) / 2;
+  for (const s of segments) {
+    if (s.type !== "HEADING" || s.align || !s.box || s.rawSize === undefined || RUN_IN_TOKEN_RE.test(s.html ?? "")) continue;
+    const peers = centered.filter((c) => Math.abs(c.rawSize! - s.rawSize!) < 0.5 && Math.abs(middle(c) - middle(s)) <= s.rawSize! * 0.2);
+    if (peers.length >= 2) s.align = "center";
+  }
+}
+
 // ── Heading levels ──────────────────────────────────────────────────────────
 
 // Ranked by size: the biggest heading size in the document gets the level its
@@ -711,6 +784,9 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
 // A paper's unnumbered parts stand at its sections' level whatever their
 // size: LIPIcs sets "Abstract" smaller than its numbered sections.
 const PART_RE = /^(?:abstract|acknowledge?ments?|references|bibliography|appendix|appendices|contents|conclusions?)$/i;
+// A form's part: its label and its name on one line ("Part I Taxpayer
+// Identification Number (TIN)", "Part II Certification").
+const FORM_PART_RE = /^part\s+(?:[IVXL]{1,4}|\d{1,2}|[A-Z])\.?\s+\S/i;
 
 /** How a document's headings rank: a deck ranks each slide apart; the
     document's title (it leaves the blocks or reads as the Title) counts in
@@ -757,7 +833,16 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, { sli
     : LETTER_SECTION_RE.test(s.text) ? 2
     : /^\d{1,2}[.)]\s/.test(s.text) ? 3
     : headingDepth(s.text);
-  const depths = segments.map((s) => (s.type === "HEADING" && s !== title ? depthOf(s) : null));
+  // A capital alone before a title numbers it only beside a heading that
+  // opens with the letter before or after it: "A Diversified Portfolio" is
+  // a subhead, where "A Benchmarks" over "B Metrics" are appendices.
+  const letterOf = (s: Segment) => (s.type === "HEADING" && s !== title ? /^([A-Z])\.?\s/.exec(s.text)?.[1] : undefined);
+  const letters = new Set(segments.map(letterOf).filter((l): l is string => l !== undefined));
+  const lone = (s: Segment) => {
+    const l = letterOf(s);
+    return l !== undefined && !roman && ![-1, 1].some((d) => letters.has(String.fromCharCode(l.charCodeAt(0) + d)));
+  };
+  const depths = segments.map((s) => (s.type === "HEADING" && s !== title && !lone(s) ? depthOf(s) : null));
   // A division's label stands at its kind's depth, and the title under it one
   // deeper (a contract's exhibits, sections, and their titles all read at
   // one level).
@@ -786,6 +871,14 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, { sli
     depths[k] = depth + Math.max(0, bySize.get(depth)!.findIndex((v) => Math.abs(v - s.rawSize!) < v * 0.1));
   });
   const minDepth = Math.min(...depths.filter((d): d is number => d !== null));
+  // The parts that open a document's headings stand at the top level,
+  // whatever their size: a form's "Part I" and "Part II" before its
+  // instructions' larger "General Instructions" (IRS W-9).
+  const leadParts = new Set<Segment>();
+  for (const s of heads) {
+    if (!FORM_PART_RE.test(s.text.trim())) break;
+    leadParts.add(s);
+  }
   // The level most numbered headings of each size take, a paper's parts
   // voting as its sections: "CCS Concepts" and "Keywords", set the size of
   // "Abstract", stand at its level.
@@ -822,9 +915,12 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, { sli
   // never above a larger size's (OpenStax's one "6.0 Introduction" among a
   // dozen labels at 10 pt set the labels, and the solutions a size under
   // them, over its examples). Over the first numbered size, each size a
-  // heading takes stands a level over the next (a subscription agreement's
+  // heading takes stands a level over the next, and the lowest of them over
+  // that size's highest numbered heading (a subscription agreement's
   // "Recitals" over its numbered sections, a Chinese paper's English title
-  // over its numbered sections), where the levels leave room; else, and with
+  // over its numbered sections, a chapter's title over its "2.1" sections
+  // where its "2.1.1" run-in heads, set at their size, outnumber them),
+  // where the levels leave room; else, and with
   // no numbered size, a size takes its rank under the biggest, two levels
   // under it at most. Under the numbered sizes, a size none numbers stands a
   // level under the next larger size (OpenStax's "Z-Scores", "Example 6.1",
@@ -842,7 +938,8 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, { sli
   const first = voted.findIndex((level) => level !== null);
   const counts = sizes.map((_, idx) => heads.filter((s) => clusterOf(s) === idx).length);
   const over = sizes.map((_, idx) => idx).filter((idx) => idx < first && counts[idx] > 0);
-  const upward = first > 0 && over.length < voted[first]!;
+  const top = first >= 0 ? Math.min(...(votes.get(first)?.keys() ?? [])) : 0;
+  const upward = first > 0 && over.length < top;
   const sizeLevels: number[] = [];
   let votedLevel: number | null = null;
   let ranked = 0;
@@ -852,7 +949,7 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, { sli
     if (level !== null) votedLevel = level;
     sizeLevels[idx] =
       scan ? (level ?? (votedLevel !== null ? votedLevel + 1 : Math.min(3, base + idx)))
-      : upward && idx < first ? voted[first]! - over.filter((k) => k >= idx).length
+      : upward && idx < first ? top - over.filter((k) => k >= idx).length
       : first < 0 || idx < first ? base + Math.min(2, ranked)
       : level !== null ? (voters[idx] * 2 >= counts[idx] ? level : Math.max(level, rankedLevel))
       : Math.min(6, rankedLevel + 1);
@@ -861,15 +958,21 @@ export function assignHeadingLevels(segments: Segment[], bodySize: number, { sli
       rankedLevel = sizeLevels[idx];
     }
   });
+  // At one size, an italic heading stands a level under the bold ones (the
+  // Earth Observer's italic subheads under its bold sections).
+  const share = (s: Segment, flag: "bold" | "italic") => (s.runs ?? []).reduce((n, r) => n + (r[flag] ? r.end - r.start : 0), 0) / Math.max(1, s.text.length);
+  const boldSizes = new Set(heads.filter((s) => share(s, "bold") > 0.5).map((s) => clusterOf(s)));
   segments.forEach((s, k) => {
     if (s.type !== "HEADING") return;
     const idx = clusterOf(s);
     const depth = depths[k];
+    const under = depth === null && !part(s) && share(s, "italic") > 0.5 && share(s, "bold") < 0.5 && boldSizes.has(idx) ? 1 : 0;
     const level =
       slides ? Math.min(3, 2 + Math.max(0, clusterOf(s, slideSizes.get(s.page) ?? [])))
+      : leadParts.has(s) ? base
       : depth !== null ? numberedBase + depth - minDepth
       : part(s) ? numberedBase
-      : (sizeLevels[idx] ?? Math.min(3, base));
+      : (sizeLevels[idx] ?? Math.min(3, base)) + under;
     const capped = Math.min(6, Math.max(1, level));
     // A run-in lead (runInHeading) keeps its token: the page editor draws it
     // as its paragraph's bold opening words.

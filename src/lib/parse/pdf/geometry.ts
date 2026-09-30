@@ -21,6 +21,22 @@ function boxOf(lines: Line[]): Box {
   return { x1, y1, x2, y2 };
 }
 
+// The lines' extent at their own baselines: a line's scripts (X_n, EX⁺)
+// reach past it, and a display's space is measured to the line itself.
+function lineBoxOf(lines: Line[]): Box {
+  let x1 = Infinity;
+  let y1 = Infinity;
+  let x2 = -Infinity;
+  let y2 = -Infinity;
+  for (const l of lines) {
+    x1 = Math.min(x1, l.x);
+    x2 = Math.max(x2, l.xEnd);
+    y1 = Math.min(y1, l.y - l.size * 0.3);
+    y2 = Math.max(y2, l.y + l.size * 0.85);
+  }
+  return { x1, y1, x2, y2 };
+}
+
 export function unionBox(a: Box, b: Box): Box {
   return {
     x1: Math.min(a.x1, b.x1),
@@ -31,11 +47,12 @@ export function unionBox(a: Box, b: Box): Box {
 }
 
 // What a segment's lines say about it: extent, font size, math share.
-export function geom(lines: Line[]): { box: Box; lineSize: number; mathShare: number } {
+export function geom(lines: Line[]): { box: Box; lineBox: Box; lineSize: number; mathShare: number } {
   const chars = lines.reduce((n, l) => n + charCount(l.text), 0);
   const math = lines.reduce((n, l) => n + l.mathChars, 0);
   return {
     box: boxOf(lines),
+    lineBox: lineBoxOf(lines),
     lineSize: median(lines.map((l) => l.size)),
     mathShare: chars > 0 ? math / chars : 0,
   };
