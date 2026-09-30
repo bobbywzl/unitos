@@ -40,7 +40,7 @@ import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { gatewayHeaders } from "@/lib/gateway";
 import { kimiConfigured, WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
-import { featureCall } from "@/lib/feature-models";
+import { featureCall, pictureFeature } from "@/lib/feature-models";
 import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { synthesisAskPrompt, synthesisHistoryTurn, synthesisTaskPrompt } from "@/lib/prompts/synthesis";
@@ -290,17 +290,21 @@ async function handle(req: Request, t: TFunc) {
     });
   }
 
-  // Kimi K3 when the answer needs what GLM 5.3 lacks (SPEC.md §2): the
-  // web-search tool is Moonshot's, and GLM takes text alone, so a picture
-  // among the messages — one actually attached, this turn's or an earlier
-  // one's — sends the whole conversation to Kimi. A text file rides as
-  // text and changes nothing.
+  // The assistant runs on Gemini 3.8 Flash (SPEC.md §2). With Web on it runs
+  // on WEB_SEARCH_MODEL, whose provider does the search. A picture among the
+  // messages — one actually attached, this turn's or an earlier one's —
+  // stays on the assistant's model when it reads pictures, and goes to Kimi
+  // K3 when it is GLM, which takes text alone (pictureFeature). A text file
+  // rides as text and changes nothing.
   const pictured = messages.some(
     (m) =>
       Array.isArray(m.content) &&
       m.content.some((part) => part.type === "file" && part.mediaType.startsWith("image/")),
   );
-  const chat = await featureCall(data.web === true ? "web" : pictured ? "vision" : "assistant", effort);
+  const chat = await featureCall(
+    data.web === true ? "web" : pictured ? await pictureFeature("assistant") : "assistant",
+    effort,
+  );
   usageMeta.model = chat.modelId;
   const model = chat.model;
 

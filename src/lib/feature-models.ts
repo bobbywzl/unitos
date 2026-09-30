@@ -8,6 +8,7 @@ import {
   CONVERT_MODEL,
   DERIVATION_MODEL,
   GIST_MODEL,
+  GLM_5_3,
   GLM_5_3_FLASH,
   MERGE_MODEL,
   PARSE_MODEL,
@@ -21,8 +22,8 @@ import {
   VOICE_MODEL,
   WEB_SEARCH_MODEL,
 } from "@/lib/derive/config";
-import { isGlmModel } from "@/lib/models";
-import { isClaudeId, modelCall, modelConfigured, type Effort, type ModelCall } from "@/lib/model-call";
+import { isGlmModel, resolveModelId } from "@/lib/models";
+import { modelCall, modelConfigured, modelKeyName, type Effort, type ModelCall } from "@/lib/model-call";
 import { probeChatModel } from "@/lib/model-update";
 
 // The model per feature (SPEC.md §2). Each feature has a default, the
@@ -104,6 +105,14 @@ export const FEATURE_DEFAULTS: Record<Feature, string> = {
   parse: PARSE_MODEL,
   classify: CLASSIFY_MODEL,
   convert: CONVERT_MODEL,
+};
+
+/** The model a feature falls back to when its default's client has no key:
+    the assistant ran on GLM 5.3 before Gemini 3.8 Flash, and keeps running
+    there on a deploy with no Gemini key rather than turning off. */
+const FEATURE_FALLBACKS: Partial<Record<Feature, string>> = {
+  assistant: GLM_5_3,
+  act: GLM_5_3,
 };
 
 /** The order the admin page lists the features in: the reader's tools, the
@@ -206,10 +215,22 @@ export function forgetFeatureModels(): void {
   cache = null;
 }
 
-/** The id the feature calls: its row, or its default. A role's default id
-    still resolves to the role's current id in the client. */
+/** The id the feature calls: its row, or its default — or the default's
+    fallback when the default's client has no key. A role's default id still
+    resolves to the role's current id in the client. */
 export async function featureModelId(feature: Feature): Promise<string> {
-  return (await rows())[feature] ?? FEATURE_DEFAULTS[feature];
+  const row = (await rows())[feature];
+  if (row) return row;
+  const id = FEATURE_DEFAULTS[feature];
+  const fallback = FEATURE_FALLBACKS[feature];
+  return fallback && !modelConfigured(id) ? fallback : id;
+}
+
+/** The feature a call that carries a picture runs as: the feature itself
+    when its model reads pictures (Gemini, Claude, Kimi), else "vision"
+    (Kimi K3) — GLM takes text alone. */
+export async function pictureFeature(feature: Feature): Promise<Feature> {
+  return isGlmModel(await resolveModelId(await featureModelId(feature))) ? "vision" : feature;
 }
 
 /** The feature's model at this effort, and the id called. */
@@ -242,7 +263,7 @@ export async function setFeatureModel(feature: Feature, modelId: string): Promis
   }
   if (!MODEL_ID_RX.test(id)) return { ok: false, error: `${id} is not a model id.` };
   if (!modelConfigured(id)) {
-    return { ok: false, error: `${isClaudeId(id) ? "ANTHROPIC_API_KEY" : "MOONSHOT_API_KEY"} is not set.` };
+    return { ok: false, error: `${modelKeyName(id)} is not set.` };
   }
   if (feature === "web" && !(isGlmModel(id) || id.startsWith("kimi-"))) {
     return { ok: false, error: "The assistant with Web on searches with its model's provider: a GLM or Kimi id." };

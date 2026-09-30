@@ -3,8 +3,11 @@ import { isLang, LANG_COOKIE } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
 import type { AssistantAction } from "@/lib/types";
 
-// The models (SPEC.md §2). GLM 5.3, Z.ai's flagship, is behind the reader's
-// tools, the assistant, Stitch's answer, and the merge of notes; GLM 5.3
+// The models (SPEC.md §2). The assistant — its answers and its edit
+// commands — runs on Gemini 3.8 Flash (GEMINI_3_8_FLASH below; the client is
+// lib/gemini.ts); where no Gemini key is set it falls back to GLM 5.3
+// (lib/feature-models.ts). GLM 5.3, Z.ai's flagship, is behind the reader's
+// tools, the assistant with Web on, Stitch's answer, and the merge of notes; GLM 5.3
 // Flash, its small sibling, behind every reading but the parse — the
 // readings copy claims into structure, and Flash reads a million tokens for
 // a tenth of the price. The parse passes run on Claude Opus 5.5 at max
@@ -37,6 +40,12 @@ export const CLAUDE_SONNET_5 = "claude-sonnet-5";
 // Gemini's flash model reads video (SPEC.md §11): transcription and clip
 // descriptions. The client is lib/video/gemini.ts.
 export const GEMINI_FLASH = "gemini-3.7-flash";
+// The assistant (SPEC.md §7): its answers and its edit commands. Called as
+// written, not as the gemini role's default: the bimonthly model update
+// moves the video's flash, and the assistant stays on 3.8 Flash until
+// someone changes this line. Gemini reads pictures, so a picture in the
+// assistant stays on it too (VISION_MODEL is for the models that cannot).
+export const GEMINI_3_8_FLASH = "gemini-3.8-flash";
 
 // The constants above are the roles' defaults. The bimonthly model update
 // (lib/models.ts, /api/cron/models) moves each role to the newest version
@@ -82,7 +91,7 @@ export const DERIVATION_MODEL: Record<DerivationType, string> = {
   SALIENCE: GLM_5_3_FLASH,
   EXTRACT: GLM_5_3_FLASH,
   SUMMARIZE: GLM_5_3,
-  SYNTHESIS: GLM_5_3,
+  SYNTHESIS: GEMINI_3_8_FLASH,
   FIND: GLM_5_3_FLASH,
   DISTILL: KIMI_K3, // Extract: the reader's question and the quotes that answer it
   FORMALIZE: GLM_5_3,

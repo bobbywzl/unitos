@@ -51,7 +51,7 @@ import { parseBody } from "@/lib/validate";
 import { ultraActive } from "@/lib/tiers";
 import { formatTimeRange, regionSchema } from "@/lib/video/types";
 import type { AssistantAction, AssistantPlan } from "@/lib/types";
-import { featureCall, featureConfigured } from "@/lib/feature-models";
+import { featureCall, featureConfigured, pictureFeature } from "@/lib/feature-models";
 
 export const maxDuration = 180;
 
@@ -422,10 +422,14 @@ async function handle(req: Request, t: TFunc) {
       : { role: "user", content: userPrompt },
   ];
 
-  // A video frame goes to the model that reads images (SPEC.md §2); an SVG
+  // A video frame goes to a model that reads images (SPEC.md §2): the act's
+  // own when it reads them (Gemini), else Kimi K3 (pictureFeature); an SVG
   // chart to Claude Opus 5.5, which reads the source whole (lib/derive/svg-chart.ts);
   // a turn with the web on to WEB_SEARCH_MODEL, with its provider's search.
-  const chatCall = await featureCall(web ? "web" : attachedImage ? "vision" : "act", thinkingEffort(data.thinking));
+  const chatCall = await featureCall(
+    web ? "web" : attachedImage ? await pictureFeature("act") : "act",
+    thinkingEffort(data.thinking),
+  );
   const chat = svgChart ?? chatCall;
   // A chip asks the chat model nothing: its command is fixed.
   const result = chip

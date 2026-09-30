@@ -35,6 +35,9 @@ const MODEL_PRICING: Record<string, Price> = {
   "glm-5.3-flash": { input: 0.15, output: 0.5, cacheRead: 0.03, cacheWrite: 0.15 },
   "kimi-k3": price(3, 15),
   "gemini-3.7-flash": price(0.3, 2.5),
+  // Gemini 3.8 Flash, the assistant: Google's price to 31 December 2026. From
+  // 1 January 2027 it is $1.50 in and $7.50 out; change this line then.
+  "gemini-3.8-flash": price(0.75, 3.75),
   "gemini-flash-latest": price(0.3, 2.5),
   // OpenAI: whisper-1 is per-minute — its callers pass costUsd directly.
   // gpt-4o-mini-tts: text in ($0.60/1M), audio out (≈$12/1M audio tokens).
