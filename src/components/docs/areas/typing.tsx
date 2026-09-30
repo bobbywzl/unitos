@@ -17,15 +17,19 @@ import { setCase, toggleSmallCaps, type TextCase } from "@/components/docs/typin
 import { listenNavigation, lookUpWord } from "@/components/docs/typing/navigate";
 import { listenImageDrop, type DropState } from "@/components/docs/typing/drop";
 import { copyMarkdown, pasteMarkdown, setImagePremium } from "@/components/docs/typing/paste";
-import { typingPrefs } from "@/components/docs/typing/prefs";
+import { DictionaryDialog } from "@/components/docs/typing/dictionary-dialog";
+import { subscribeTypingPrefs, typingPrefs } from "@/components/docs/typing/prefs";
 import { PreferencesDialog } from "@/components/docs/typing/preferences-dialog";
+import { acceptedWords, setAcceptedWords } from "@/components/docs/typing/spelling";
 import { ShortcutsDialog } from "@/components/docs/typing/shortcuts-dialog";
 import { VoiceTyping } from "@/components/docs/typing/voice-typing";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The typing area (SPEC.md §29): find and find and replace, Tools >
 // Preferences, the keyboard shortcuts, voice typing, the spelling switch,
-// and images dropped anywhere on the page (typing/drop.ts); in Search the
+// the personal dictionary and the words ignored in the document
+// (typing/spelling.ts), and images dropped anywhere on the page
+// (typing/drop.ts); in Search the
 // menus also Format > Text, View > Show non-printing characters, and Edit's
 // clipboard items. Their keys answer when the page
 // editor has the focus, or when nothing else does — never in the notes
@@ -112,6 +116,13 @@ registerDocsCommands([
     enabled: (editor) => typingPrefs().markdown && !editor.state.selection.empty,
   },
   {
+    id: "typing:personal-dictionary",
+    label: "docsTyping.personalDictionary",
+    menu: "tools",
+    keywords: ["personal dictionary", "add to dictionary", "spelling", "custom words", "个人词典", "拼写"],
+    run: (editor) => fireDocs(editor, TYPING_EVENT.personalDictionary),
+  },
+  {
     id: "typing:shortcuts",
     label: "docsTyping.keyboardShortcuts",
     menu: "tools",
@@ -167,7 +178,7 @@ function docsActive(editor: Editor): boolean {
   return false;
 }
 
-export function TypingLayer({ editor, canEdit, projectEditor, editing }: DocsAreaProps) {
+export function TypingLayer({ editor, documentId, canEdit, projectEditor, editing }: DocsAreaProps) {
   const t = useT();
   const { premium } = useCollab();
   const [findMode, setFindMode] = useState<FindMode>(null);
@@ -183,6 +194,15 @@ export function TypingLayer({ editor, canEdit, projectEditor, editing }: DocsAre
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [dictionaryOpen, setDictionaryOpen] = useState(false);
+
+  // The reader's own words, the personal dictionary's and this document's
+  // ignored ones: the page's spelling check passes them (typing/spelling.ts).
+  useEffect(() => {
+    const send = () => setAcceptedWords(editor, acceptedWords(documentId));
+    send();
+    return subscribeTypingPrefs(send);
+  }, [editor, documentId]);
 
   // Google Docs' navigation keys: the chords, the misspellings, Dictionary.
   // A layout effect: the chords' listener is the window's first, so the key
@@ -236,6 +256,7 @@ export function TypingLayer({ editor, canEdit, projectEditor, editing }: DocsAre
       [TYPING_EVENT.shortcuts, () => setShortcutsOpen(true)],
       [TYPING_EVENT.voice, () => setVoiceOpen(true)],
       [TYPING_EVENT.spelling, toggleSpelling],
+      [TYPING_EVENT.personalDictionary, () => setDictionaryOpen(true)],
     ];
     window.addEventListener("keydown", onKey);
     for (const [name, on] of events) view.dom.addEventListener(name, on);
@@ -266,6 +287,14 @@ export function TypingLayer({ editor, canEdit, projectEditor, editing }: DocsAre
         <PreferencesDialog
           onClose={() => {
             setPrefsOpen(false);
+            editor.commands.focus();
+          }}
+        />
+      )}
+      {dictionaryOpen && (
+        <DictionaryDialog
+          onClose={() => {
+            setDictionaryOpen(false);
             editor.commands.focus();
           }}
         />

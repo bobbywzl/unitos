@@ -23,6 +23,13 @@ const prefsSchema = z.object({
   spellingBlocklist: z.array(z.string().max(100)).max(2000),
   // Substitutions undone right after they fired: skipped from then on.
   substitutionBlocklist: z.array(z.string().max(100)).max(2000),
+  // The personal dictionary (Add to dictionary; Tools > Spelling and
+  // grammar > Personal dictionary): words the spelling check takes as
+  // spelled right in every document.
+  dictionary: z.array(z.string().min(1).max(100)).max(2000),
+  // Ignore all: words the spelling check takes as spelled right in one
+  // document, by the document's id; the newest documents kept.
+  ignoredWords: z.record(z.string().max(64), z.array(z.string().min(1).max(100)).max(500)),
   // The metric the floating word counter shows.
   counterMetric: z.enum(["pages", "words", "characters", "charactersNoSpaces"]),
 });
@@ -73,6 +80,8 @@ const DEFAULT_PREFS: TypingPrefs = {
   substitutions: DEFAULT_SUBSTITUTIONS.map(([from, to]) => ({ from, to, enabled: true })),
   spellingBlocklist: [],
   substitutionBlocklist: [],
+  dictionary: [],
+  ignoredWords: {},
   counterMetric: "words",
 };
 
