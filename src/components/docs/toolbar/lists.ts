@@ -236,8 +236,8 @@ export function levelStyle(levels: ListLevel[]): string {
 /** Half an inch: a list depth's step where its page sets none. */
 const DEPTH_PT = 36;
 /** The room a checklist's box takes before its words: the box (docs.css)
-    and a quarter em. */
-const TASK_BOX = "14px + 0.25em";
+    and a third of an em. */
+const TASK_BOX = "14px + 0.35em";
 
 /** A list set at its page's depths (an import's listIndents) as its inline
     style (listSheet): each depth's words at its left (--docs-indent-n), its

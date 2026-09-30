@@ -141,17 +141,29 @@ type Atom = { start: number; end: number; node: RichNode };
     (ParsedBlock.spaceAfter). */
 const PARAGRAPH_SPACE_PT = 10;
 /** The space over and under a PDF's display equation where the parse
-    measured none, in points: with the room the page editor's lines leave,
-    a display stands as far from its text as amsbook and amsart's 6 pt skip
-    sets it (article's 10 pt skip draws about 4 pt closer). A PDF's and a
-    Word file's displays draw no space of their own (css/import.css): the
-    page editor's margin and KaTeX's 1 em stacked on the page's space after
-    a paragraph set each display far from the words it belongs to. */
+    measured none, in points: about amsbook and amsart's 6 pt skip. A PDF's
+    and a Word file's displays draw no space of their own (css/import.css):
+    the page editor's margin and KaTeX's 1 em stacked on the page's space
+    after a paragraph set each display far from the words it belongs to. */
 const DISPLAY_SPACE_PT = 4;
+/** A PDF's display space as the parse measures it: from the line box over
+    the display to its glyphs, and from its glyphs to the line box under it
+    (lib/parse/pdf/paragraphs.ts measureSpacing; a line box reaches 0.3 of
+    its size under its baseline and 0.85 over it). The page editor draws a
+    PDF's display as tall as its formula (css/import.css), and a line of
+    Normal text 1.3225 em tall, its baseline 0.98 em under its top in
+    Computer Modern, within 0.03 em in Times and Arial: the space over a
+    display is the page's less 0.04 em of the words' size, and the space
+    under it less 0.13 em, so ink stands from ink as on the page. */
+const DISPLAY_OVER_EM = 0.04;
+const DISPLAY_UNDER_EM = 0.13;
 /** A small line (the kicker, a label, a caption) and a display line, as
     text sizes. */
 const SMALL_SIZE = "9pt";
 const DISPLAY_SIZE = "21pt";
+/** The size the page editor draws its footnotes in, in points
+    (css/insert.css .docs-footnotes). */
+const FOOTNOTE_PT = 10;
 /** One indent step, as the page editor's (components/docs/extensions.ts):
     an indent a parse names but does not measure, and a contents entry's
     level. */
@@ -794,8 +806,8 @@ class Converter {
   private readonly footnoteIds = new Map<number, string>();
   private readonly numbers = new Map<ParsedBlock, Atom[]>();
   private readonly footnotes = new Map<string, RichNode>();
-  /** The numbers at the Title's end, and the mark the first of them stands
-      for when the title prints one (linkFootnotes). */
+  /** The number at the Title's end, of the title's own footnote, and the
+      mark it stands for (linkFootnotes). */
   private readonly titleNotes: RichNode[] = [];
   private titleMark = "";
   /** The named styles the page's look sets (styleLooks). */
@@ -805,8 +817,9 @@ class Converter {
       (a web page, a text file). */
   private readonly spacing: number | null;
   /** The blocks right over a display equation: their space after is the
-      space over the display. */
+      space over the display. And the block right under each display. */
   private readonly overDisplay = new Set<ParsedBlock>();
+  private readonly underDisplay = new Map<ParsedBlock, ParsedBlock>();
 
   constructor(private readonly input: ImportInput) {
     this.looks = styleLooks(input);
@@ -824,6 +837,7 @@ class Converter {
     input.blocks.forEach((block, index) => {
       if (this.footnoteIds.has(index)) return;
       if (block.type === "EQUATION" && above) this.overDisplay.add(above);
+      if (above?.type === "EQUATION") this.underDisplay.set(above, block);
       above = block;
     });
   }
@@ -1032,14 +1046,24 @@ class Converter {
     return marks;
   }
 
-  /** The space after a block in points: the page's (ParsedBlock.spaceAfter),
-      over a PDF's or a Word file's display TeX's skip, the page's most
-      common for a block it measured none for, or Docs' "Add space after
-      paragraph" where the parse measures no spacing. */
+  /** The space after a block in points: the page's (ParsedBlock.spaceAfter;
+      over a PDF's display, to its glyphs: displayGap), over a PDF's or a
+      Word file's display TeX's skip, the page's most common for a block it
+      measured none for, or Docs' "Add space after paragraph" where the
+      parse measures no spacing. */
   private spaceAfter(block: ParsedBlock): number {
-    if (block.spaceAfter !== undefined) return block.spaceAfter;
-    if (this.overDisplay.has(block) && this.pageDisplays) return DISPLAY_SPACE_PT;
+    const over = this.overDisplay.has(block);
+    if (block.spaceAfter !== undefined) return over && this.input.kind === "pdf" ? this.displayGap(block.spaceAfter, block, DISPLAY_OVER_EM) : block.spaceAfter;
+    if (over && this.pageDisplays) return DISPLAY_SPACE_PT;
     return this.spacing ?? PARAGRAPH_SPACE_PT;
+  }
+
+  /** A PDF's display space measured to its glyphs, as the page editor
+      draws it: less `em` of the words' size beside it (DISPLAY_OVER_EM,
+      DISPLAY_UNDER_EM), to a half point. */
+  private displayGap(space: number, words: ParsedBlock | undefined, em: number): number {
+    const size = words?.font?.size ?? this.input.bodyFont?.size ?? DEFAULT_STYLES.normal.size;
+    return Math.max(0, Math.round((space - em * size) * 2) / 2);
   }
 
   /** A PDF's and a Word file's displays: the page editor draws them with
@@ -1148,13 +1172,17 @@ class Converter {
   }
 
   /** A footnote's words without its label (the page editor draws the
-      number), for the footnotes at the document's end. */
+      number), for the footnotes at the document's end, at the size a PDF
+      or a Word file sets them in: the page editor draws notes at 10 pt, and
+      a Word file's 8 pt notes drew larger than the page's. */
   private footnote(block: ParsedBlock, footnoteId: string) {
     const label = block.footnote?.label ?? "";
     const rest = block.text.startsWith(label) ? block.text.slice(label.length) : block.text;
     const from = block.text.length - rest.trimStart().length;
     const words = sliceSource(this.sourceOf(block, []), from, block.text.length);
-    this.footnotes.set(footnoteId, { type: "footnote", attrs: { footnoteId }, content: [paragraphNode(inline(words))] });
+    const size = this.input.kind === "pdf" || this.input.kind === "docx" ? block.font?.size : undefined;
+    const extra: RichMark[] = size && size !== FOOTNOTE_PT ? [{ type: "textStyle", attrs: { fontSize: `${Math.round(size * 2) / 2}pt` } }] : [];
+    this.footnotes.set(footnoteId, { type: "footnote", attrs: { footnoteId }, content: [paragraphNode(inline(words, extra))] });
   }
 
   private paragraph(block: ParsedBlock, index: number, starts: PageStart[]) {
@@ -1422,9 +1450,11 @@ class Converter {
     if (pageStart !== undefined) attrs.pageStart = pageStart;
     // The page numbers the equation at the left margin (the parse's leqno).
     if (tokensOf(block.html).includes("leqno")) attrs.leqno = true;
-    // The space under a PDF's or a Word file's display: the page's, else
-    // TeX's skip.
-    const after = this.pageDisplays ? (block.spaceAfter ?? DISPLAY_SPACE_PT) : 0;
+    // The space under a PDF's or a Word file's display: the page's (a
+    // PDF's to its glyphs), else TeX's skip.
+    const measured =
+      block.spaceAfter !== undefined && this.input.kind === "pdf" ? this.displayGap(block.spaceAfter, this.underDisplay.get(block), DISPLAY_UNDER_EM) : block.spaceAfter;
+    const after = this.pageDisplays ? (measured ?? DISPLAY_SPACE_PT) : 0;
     if (after > 0) attrs.spaceAfter = after;
     this.place(index, [{ type: "blockMath", attrs }]);
   }

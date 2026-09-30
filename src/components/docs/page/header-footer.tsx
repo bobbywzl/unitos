@@ -179,6 +179,8 @@ function HeaderEditor({
       ],
       content: doc as JSONContent,
       immediatelyRender: false,
+      // ProseMirror's styles come with the page's (css/prosemirror.css).
+      injectCSS: false,
       editorProps: {
         attributes: { class: "docs-hf-prose", spellcheck: "true" },
         handleKeyDown: (_view, event) => {

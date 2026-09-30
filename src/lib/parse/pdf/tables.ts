@@ -30,8 +30,10 @@ export type TableCell = { text: string; runs: Run[]; colspan?: number; rowspan?:
 export type TableRow = { cells: TableCell[]; height?: number };
 // What a table keeps of the page's look: its words' size and each column's
 // width on the page, in points (the import sets the table at that size and
-// its columns in those proportions: an empty form column keeps its width).
-export type TableLook = { size: number; columns: number[] };
+// its columns in those proportions: an empty form column keeps its width),
+// and a ruled table's cell padding, top, right, bottom, and left, in points
+// (the html's data-cell-padding, as a Word table's cell margins).
+export type TableLook = { size: number; columns: number[]; padding?: [number, number, number, number] };
 
 function clusterColumns(lines: Line[]): number[] {
   const xs = lines.flatMap((l) => l.cells.map((c) => c.x)).sort((a, b) => a - b);
@@ -291,8 +293,9 @@ export function tableSegment(
       })
       .join("")}</tr>`;
   };
+  const padding = look?.padding?.every((v) => v >= 0 && v < 100) ? ` data-cell-padding="${look.padding.map(points).join(" ")}"` : "";
   const html =
-    (look ? `<table style="font-size:${points(look.size)}pt">` : "<table>") +
+    (look ? `<table style="font-size:${points(look.size)}pt"${padding}>` : "<table>") +
     (look ? `<colgroup>${look.columns.map((w) => `<col style="width:${points(w)}pt">`).join("")}</colgroup>` : "") +
     (headerRows > 0 ? `<thead>${rows.slice(0, headerRows).map((r, i) => rowHtml(r, "th", i)).join("")}</thead>` : "") +
     `<tbody>${rows.slice(headerRows).map((r, i) => rowHtml(r, "td", headerRows + i)).join("")}</tbody>` +
@@ -479,13 +482,21 @@ function captionLine(s: Segment, page: number): { text: string; runs: Run[] } | 
   return { text: tail, runs: runs.filter((r) => r.end > at + 1).map((r) => ({ ...r, start: Math.max(0, r.start - at - 1), end: r.end - at - 1 })) };
 }
 
-// Leading rows whose words are bold: the header rows (never every row).
+// Leading rows whose words are bold: the header rows (never every row). A
+// bold row in a color under a head in the page's ink is the body's (a
+// slide's green "Yes" rows under its black heads: gslides-oer-5rs p. 17).
 export function boldHeaderRows(rows: TableRow[]): number {
+  const colored = (row: TableRow) => {
+    const runs = row.cells.flatMap((c) => c.runs);
+    const length = runs.reduce((sum, r) => sum + r.end - r.start, 0);
+    return length > 0 && runs.reduce((sum, r) => sum + (r.look?.color ? r.end - r.start : 0), 0) * 2 > length;
+  };
   let n = 0;
   while (n < rows.length - 1) {
     const cells = rows[n].cells;
     const length = cells.reduce((sum, c) => sum + c.text.length, 0);
     if (length === 0 || boldShare(cells.flatMap((c) => c.runs), length) <= 0.5) break;
+    if (n > 0 && colored(rows[n]) && !colored(rows[0])) break;
     n++;
   }
   return n;
@@ -615,14 +626,19 @@ export function rowsOf(cellsOf: Cell[][], rowStarts: number[], columnCount: numb
 }
 
 // A run's columns: the gutters its lines leave open. The lines over its
-// first line that starts at the table's left edge are heads, a head over
+// first line with words in its first column are heads, a head over
 // several columns among them ("Year Ended December 31," over a
 // statement's years, "As of December 31, 2023" over its assets and
 // liabilities): they part no gutter (the 10-K's OI&E statement read two
-// years as one column, p. 78).
+// years as one column, p. 78). A line in the first column starts at the
+// table's left edge, or left of the first gutter every line leaves open:
+// a column of numbers set flush right starts its short ones further in
+// (Grinstead–Snell's Table 3.3 read its rows over "10" as heads, and the
+// table as a paragraph).
 function runSeparators(run: Line[]): number[] {
   const left = Math.min(...run.map((l) => l.x));
-  const first = Math.max(0, run.findIndex((l) => l.x <= left + 3));
+  const gutter = columnSeparators(run)[0];
+  const first = Math.max(0, run.findIndex((l) => l.x <= left + 3 || (gutter !== undefined && l.x < gutter)));
   return withoutSignColumns(run, columnSeparators(run.slice(first), run.slice(0, first)));
 }
 

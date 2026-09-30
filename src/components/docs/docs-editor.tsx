@@ -1,6 +1,8 @@
 "use client";
 
 import "./docs.css";
+// After the page's styles, where Tiptap put its own sheet: its rules win a tie.
+import "./css/prosemirror.css";
 import type { JSONContent } from "@tiptap/core";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
@@ -419,6 +421,8 @@ export function DocsEditor({
       editable: writable && openedIn !== "viewing",
       immediatelyRender: false,
       shouldRerenderOnTransaction: false,
+      // ProseMirror's styles come with the page's (css/prosemirror.css).
+      injectCSS: false,
       // Docs' own autocorrect formats typing (ext/typing.ts); a paste only links addresses.
       enableInputRules: false,
       enablePasteRules: ["link"],

@@ -549,8 +549,10 @@ function cellNeed(cell: RichNode): Need {
         }
       }
       end();
-      need.fixedMin = Math.max(need.fixedMin, indent);
-      need.fixedLine = Math.max(need.fixedLine, indent);
+      // A paragraph set in takes its indent's room beside its words.
+      const own = indent + (typeof node.attrs?.indentLeft === "number" && node.attrs.indentLeft > 0 ? node.attrs.indentLeft * PX_PER_PT : 0);
+      need.fixedMin = Math.max(need.fixedMin, own);
+      need.fixedLine = Math.max(need.fixedLine, own);
       return;
     }
     const nested = node.type === "bulletList" || node.type === "orderedList" || node.type === "taskList";
