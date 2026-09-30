@@ -1,4 +1,4 @@
-import { isMathText, type Doc, type DocBlock } from "./adapt";
+import { dropChars, isMathText, type Doc, type DocBlock } from "./adapt";
 import { mathLeaves, mathTokens, normLabel, sequenceSimilarity, textMathTokens } from "./math";
 import type { Font, FontRole, Fonts, RefBlock, Span } from "./model";
 import { garblesOf, wordsOf, type Garble } from "./text";
@@ -55,7 +55,10 @@ export const FREE_WEIGHTS = {
   numbers: 10, // no line that is only a page number
   garbles: 10, // no garbled glyph, by string and by the math font's code
   math: 10, // display equations as LaTeX that draws the page's symbols (glyphs.ts)
-  look: 10, // the import's inline formulas at their words' size, crops at their printed width, a Word file's borders
+  order: 10, // no line read across a column's gutter (layout.ts)
+  structure: 10, // no prose in a table's cells or a display's crop, no figure in two pieces (layout.ts)
+  layout: 10, // indents the page sets, the body's face, page labels in order (layout.ts)
+  look: 10, // the import's formulas at their words' size, crops at their printed width, Word borders, a display's space, a row's height, a marker's place
 } as const;
 
 // ── The flat view ───────────────────────────────────────────────────────────
@@ -522,6 +525,18 @@ export function orderScore(al: Alignment, notesApart?: { ref: Flat; cand: Flat }
 export function furnitureMatches(flat: Flat, strings: string[][], cells = true, marks = true): { unit: number; tok: number }[][] {
   const out = strings.map(() => new Map<string, { unit: number; tok: number }>());
   const gap = (text: string) => /^[\s\-–—]*$/.test(text);
+  // A heading's own number ("3 Well-posedness of …") is no page number, in the heading or in a line that
+  // repeats it (a contents entry): a number that opens the words a heading opens with, a word after it.
+  const HEAD = 3;
+  const openings = new Set<string>();
+  flat.units.forEach((unit) => {
+    const kind = flat.blocks[unit.block].kind;
+    if ((kind === "heading" || kind === "title") && unit.end - unit.first >= 2 && /^\d+$/.test(flat.toks[unit.first].w) && !/^\d+$/.test(flat.toks[unit.first + 1].w)) {
+      openings.add(flat.toks.slice(unit.first, Math.min(unit.end, unit.first + HEAD)).map((t) => t.w).join(" "));
+    }
+  });
+  const headingNumber = (t: number, end: number, words: string[]) =>
+    words.length === 1 && /^\d+$/.test(words[0]) && [2, HEAD].some((k) => t + k <= end && openings.has(flat.toks.slice(t, t + k).map((x) => x.w).join(" ")));
   flat.units.forEach((unit, u) => {
     if (!cells && flat.blocks[unit.block].kind === "table") return;
     if (!marks && flat.blocks[unit.block].role === "contents") return;
@@ -547,7 +562,7 @@ export function furnitureMatches(flat: Flat, strings: string[][], cells = true, 
     const label = !marks && block.kind === "footnote" && block.label ? block.label.length + 1 : 0;
     const marked = (t: number) =>
       !marks && (toks[t].start < label || unit.raised.some(([a, b]) => toks[t].start >= a && toks[t].end <= b) || unit.marks.some((m) => toks[t].start >= m.at && toks[t].end <= m.end));
-    const at = (t: number, words: string[]) => t >= first && t + words.length <= end && !marked(t) && words.every((w, x) => toks[t + x].w === w);
+    const at = (t: number, words: string[]) => t >= first && t + words.length <= end && !marked(t) && words.every((w, x) => toks[t + x].w === w) && !headingNumber(t, end, words);
     for (let round = 0, grew = true; grew && round < 4; round++) {
       grew = false;
       strings.forEach((words, x) => {
@@ -1792,6 +1807,75 @@ export function composite(parts: Record<Part, number | null>): number {
   return weight > 0 ? (100 * sum) / weight : 0;
 }
 
+// ── Readings a page allows ──────────────────────────────────────────────────
+
+type ListBlock = Extract<DocBlock, { kind: "list" }>;
+
+/** A clause list's numbered titles ("1. Definitions" in bold over "1.1 …",
+    "1.2 …") read either as the list's items or as headings over lists of
+    their clauses: a candidate that reads a reference's title item as a
+    heading, with the lists after it holding the item's clauses one depth
+    up, reads as the reference's list (the heading its item, the lists
+    their items at the reference's depths, a footnote between them after
+    the list), unless the reference sets those words as a heading too (a
+    contents list's entry). Either reading scores alike. */
+export function readAsReference(reference: Doc, candidate: Doc): Doc {
+  const key = (text: string) => wordsOf(text).map((w) => w.w).join(" ");
+  // A title the reference also sets as a heading (a contents list's entry for a section) reads as that heading.
+  const headings = new Set(reference.blocks.flatMap((block) => (block.kind === "heading" ? [key(block.spans.map((span) => span.text).join("")).replace(/^[\d\s]+(?=\p{L})/u, "")] : [])));
+  const titles = new Map<string, { marker: string; depth: number }>();
+  for (const block of reference.blocks) {
+    if (block.kind !== "list") continue;
+    block.items.forEach((item, i) => {
+      const words = item.spans.filter((span) => span.text.trim());
+      const next = block.items[i + 1];
+      const text = item.spans.map((span) => span.text).join("");
+      if (item.marker && words.length > 0 && words.every((span) => span.bold) && next && next.depth > item.depth && !headings.has(key(text))) {
+        titles.set(key(`${item.marker} ${text}`), { marker: item.marker, depth: item.depth });
+      }
+    });
+  }
+  if (titles.size === 0) return candidate;
+  const out: DocBlock[] = [];
+  let changed = false;
+  for (let i = 0; i < candidate.blocks.length; ) {
+    const block = candidate.blocks[i];
+    const title = block.kind === "heading" ? titles.get(key(block.spans.map((span) => span.text).join(""))) : undefined;
+    if (block.kind !== "heading" || !title) {
+      out.push(candidate.blocks[i++]);
+      continue;
+    }
+    // The titles and their clause lists that follow one another, a footnote between them set aside.
+    const list: ListBlock = { kind: "list", items: [] };
+    const notes: DocBlock[] = [];
+    const add = (from: ListBlock, shift: number) => {
+      const at = list.items.length;
+      list.items.push(...from.items.map((item) => ({ ...item, depth: item.depth + shift })));
+      for (const b of from.breaks ?? []) (list.breaks ??= []).push({ ...b, unit: b.unit + at });
+      for (const m of from.marks ?? []) (list.marks ??= []).push({ ...m, unit: m.unit + at });
+      list.font ??= from.font;
+    };
+    for (let open: { depth: number } | null = null; i < candidate.blocks.length; i++) {
+      const b = candidate.blocks[i];
+      const text = b.kind === "heading" ? b.spans.map((span) => span.text).join("") : "";
+      const next = b.kind === "heading" ? titles.get(key(text)) : undefined;
+      if (b.kind === "heading" && next) {
+        const cut = text.indexOf(next.marker) + next.marker.length;
+        const lead = cut + (/^\s*/.exec(text.slice(cut))?.[0].length ?? 0);
+        add({ kind: "list", items: [{ depth: next.depth, marker: next.marker, spans: dropChars(b.spans, lead) }], breaks: (b.breaks ?? []).filter((x) => x.at >= lead).map((x) => ({ ...x, at: x.at - lead })), marks: (b.marks ?? []).filter((x) => x.at >= lead).map((x) => ({ ...x, at: x.at - lead, end: x.end - lead })) }, 0);
+        open = next;
+      } else if (b.kind === "list" && open && b.items.length > 0) {
+        add(b, open.depth + 1 - Math.min(...b.items.map((item) => item.depth)));
+      } else if (b.kind === "footnote" && open) {
+        notes.push(b);
+      } else break;
+    }
+    out.push(list, ...notes);
+    changed = true;
+  }
+  return changed ? { ...candidate, blocks: out } : candidate;
+}
+
 // ── One score ───────────────────────────────────────────────────────────────
 
 export type Scores = {
@@ -1815,7 +1899,7 @@ export type Scores = {
 /** A candidate scored against a reference: every metric and the composite. */
 export function score(reference: Doc, furniture: string[], candidate: Doc): { scores: Scores; ref: Flat; cand: Flat; al: Alignment } {
   const ref = flatten(reference);
-  const cand = flatten(candidate);
+  const cand = flatten(readAsReference(reference, candidate));
   const al = align(ref, cand);
   const words = wordScores(ref, cand);
   const order = orderScore(al, { ref, cand });

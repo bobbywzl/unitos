@@ -578,6 +578,18 @@ GROUPS.VIEW = async () => {
 
 // ── The block reader ────────────────────────────────────────────────────────
 
+/** Edit mode, as a person enters it: a double-click on the block that starts
+    with `words` (again, while the page is still coming to life), which
+    takes the focus. */
+async function editBlock(page, words) {
+  for (let i = 0; i < 4; i++) {
+    await page.locator("article.reader-prose [data-block-id], article.reader-prose [data-edit-block]").filter({ hasText: words }).first().dblclick();
+    const on = await page.waitForSelector("[data-edit-block]:focus", { timeout: 4000 }).catch(() => null);
+    if (on) return;
+  }
+  throw new Error(`no edit mode on "${words}"`);
+}
+
 GROUPS.BLOCK = async () => {
   const id = await blockDocument("read");
   const { page, cdp, posts, errors, close } = await newPage();
@@ -659,10 +671,7 @@ GROUPS.BLOCK = async () => {
   // 5. Edit mode: a WebP pasted while the third block is edited lands after it.
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("article.reader-prose [data-block-id]", { timeout: 120_000 });
-  await sleep(800);
-  const third = page.locator("article.reader-prose [data-block-id]").filter({ hasText: "The third" }).first();
-  await third.dblclick();
-  await page.waitForSelector('[data-edit-block]:focus', { timeout: 10_000 }).catch(() => {});
+  await editBlock(page, "The third");
   const pasted = await paste(page, "webp");
   const r5 = await until(async () => (/PARAGRAPH\(The third\) FIGURE/.test(await rows()) ? rows() : null), 15_000);
   check("BLOCK", pasted.taken && /PARAGRAPH\(The third\) FIGURE\(stored\)/.test(r5 ?? ""), "edit mode: a WebP pasted in a block lands right after it", `${pasted.target}; ${r5 ?? (await rows())}`);
@@ -676,26 +685,42 @@ GROUPS.BLOCK = async () => {
 
 const LONG_TOAST = "Skipped: A page keeps its text, which its annotations find it by: its words are in the blocks converted from it. (Edit the words on page 1)";
 
+// A long message in the block reader's toast, in reading mode: Collapse,
+// whose run the server refuses with that message.
 GROUPS.TOAST = async () => {
   const id = await blockDocument("toast");
   for (const [width, height] of [[1440, 900], [1024, 768]]) {
     const { page, close } = await newPage({ width, height });
+    await page.route("**/api/documents/*/collapse", (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: LONG_TOAST }) })
+        : route.continue(),
+    );
     await page.goto(`${BASE}/n/${ctx.notebookId}?doc=${id}`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector("article.reader-prose [data-block-id]", { timeout: 120_000 });
-    await sleep(800);
-    await page.evaluate((text) => {
-      document.querySelector("article.reader-prose [data-block-id]").dispatchEvent(new CustomEvent("dissect:toast", { bubbles: true, detail: { text, action: { label: "Undo", run: () => {} } } }));
-    }, LONG_TOAST);
-    await sleep(500);
-    const boxes = await page.evaluate(() => {
-      const contents = document.querySelector('[data-track-surface="article-menu"] button')?.getBoundingClientRect();
-      const toast = [...document.querySelectorAll("span")].find((s) => s.textContent.startsWith("Skipped: A page keeps") && s.className.includes("bg-ink"))?.getBoundingClientRect();
-      const hit = toast ? document.elementFromPoint(toast.left + 12, toast.top + toast.height / 2) : null;
-      return { contents: contents?.toJSON(), toast: toast?.toJSON(), firstWordsOnTop: Boolean(hit && hit.closest("span")?.textContent.startsWith("Skipped")) };
-    });
+    await sleep(1200);
+    const needle = LONG_TOAST.slice(0, 30);
+    const find = (text) => [...document.querySelectorAll("span")].find((s) => s.textContent.includes(text) && s.className.includes("bg-ink"));
+    let shown = null;
+    for (let i = 0; i < 3 && !shown; i++) {
+      await page.click('[data-track="collapse"]');
+      shown = await until(() => page.evaluate(`(${find})(${JSON.stringify(needle)}) !== undefined`), 6000);
+    }
+    await sleep(400);
+    const boxes = await page.evaluate(
+      ({ needle, find }) => {
+        const toastEl = new Function("text", `return (${find})(text)`)(needle);
+        const contents = document.querySelector('[data-track-surface="article-menu"] button')?.getBoundingClientRect();
+        const toast = toastEl?.getBoundingClientRect();
+        const hit = toast ? document.elementFromPoint(toast.left + 14, toast.top + Math.min(10, toast.height / 2)) : null;
+        return { contents: contents?.toJSON(), toast: toast?.toJSON(), firstWordsOnTop: Boolean(toastEl && hit && toastEl.contains(hit)) };
+      },
+      { needle, find: String(find) },
+    );
     const overlap = boxes.contents && boxes.toast && !(boxes.toast.right <= boxes.contents.left || boxes.toast.left >= boxes.contents.right || boxes.toast.bottom <= boxes.contents.top || boxes.toast.top >= boxes.contents.bottom);
     const file = await shot(page, `toast-${width}`);
-    check("TOAST", Boolean(boxes.toast) && !overlap && boxes.firstWordsOnTop, `${width}×${height}: the toast never sits under the Contents button`, `toast ${boxes.toast ? `${Math.round(boxes.toast.left)}–${Math.round(boxes.toast.right)} × ${Math.round(boxes.toast.top)}–${Math.round(boxes.toast.bottom)}` : "none"}; Contents ${boxes.contents ? `${Math.round(boxes.contents.left)}–${Math.round(boxes.contents.right)} × ${Math.round(boxes.contents.top)}–${Math.round(boxes.contents.bottom)}` : "none"}; first words on top ${boxes.firstWordsOnTop}; ${file}`);
+    const box = (b) => (b ? `${Math.round(b.left)}–${Math.round(b.right)} × ${Math.round(b.top)}–${Math.round(b.bottom)}` : "none");
+    check("TOAST", Boolean(shown) && !overlap && boxes.firstWordsOnTop, `${width}×${height}: the toast never sits under the Contents button`, `toast ${box(boxes.toast)}; Contents ${box(boxes.contents)}; its first words on top ${boxes.firstWordsOnTop}; ${file}`);
     await close();
   }
 };

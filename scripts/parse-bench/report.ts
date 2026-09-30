@@ -219,9 +219,24 @@ function freeDetail(f: FreeScores, candidate: Doc) {
   for (const l of f.numberLines.found.slice(0, 20)) console.log(`  "${l.text}" in … ${clip(c.units[l.unit].text, 100)}`);
   console.log(`Garbled glyphs: ${f.garbles.count}.`);
   for (const g of f.garbles.found.slice(0, 40)) console.log(`  ${g.kind}: "${g.match}" in … ${clip(g.text, 100)}`);
+  const r2 = (x: number | null) => (x === null ? "—" : x.toFixed(2));
+  const l = f.layout;
+  if (l) {
+    console.log(`Against the page's lines: ${l.columns.across} of ${l.columns.lines} lines read across a column's gutter${l.columns.pages.length > 0 ? ` (pages ${l.columns.pages.join(", ")})` : ""}.`);
+    for (const x of l.columns.found) console.log(`  p${x.page}: ${clip(x.text, 100)}`);
+    console.log(`  Set-in paragraphs the page sets flush: ${l.indents.wrong} of ${l.indents.judged} judged (${l.indents.indented} set in).`);
+    for (const x of l.indents.found.slice(0, 12)) console.log(`    p${x.page}: ${x.left} pt in, the page ${x.shown} pt: ${clip(x.text, 70)}`);
+    console.log(`  Prose in a table's cells: ${l.tables.prose} of ${l.tables.words} table words.`);
+    for (const x of l.tables.found.slice(0, 6)) console.log(`    ${x.rows} rows, ${x.runs} running on: ${clip(x.text, 100)}`);
+    console.log(`  Figures in two pieces: ${l.figures.split} of ${l.figures.figures}. Crops holding prose: ${l.crops.prose} of ${l.crops.crops}.`);
+    for (const x of [...l.figures.found, ...l.crops.found].slice(0, 10)) console.log(`    p${x.page}: ${clip(x.text, 100)}`);
+    console.log(`  The body's face: the page's ${l.face.family ?? "—"} (${l.face.want ?? "not told"}), drawn ${l.face.drawn ?? "—"}. Page labels backward: ${l.labels.wrong} of ${l.labels.pairs} pairs.`);
+    for (const x of l.labels.found.slice(0, 6)) console.log(`    p${x.page}: ${x.labels}`);
+  }
   if (f.look) {
-    const r2 = (x: number | null) => (x === null ? "—" : x.toFixed(2));
-    console.log(`The import's look: inline formulas at their words' size ${r2(f.look.formulas)}, crops at their printed width ${r2(f.look.figures)}, Word borders ${r2(f.look.borders)}.`);
+    console.log(
+      `The import's look: inline formulas at their words' size ${r2(f.look.formulas)}, crops at their printed width ${r2(f.look.figures)}, Word borders ${r2(f.look.borders)}, a display's space ${r2(f.look.displays)}, a row's height ${r2(f.look.rows)}, a marker's place ${r2(f.look.markers)}.`,
+    );
     for (const m of f.look.misses.slice(0, 20)) console.log(`  ${m}`);
   }
 }

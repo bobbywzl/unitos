@@ -298,7 +298,8 @@ export type Leaf = { block: RenderBlock; groups: Group[] };
 export type FlattenOptions = {
   /** Where footnote blocks stand: after the block with the mark (the page's foot), or at the document's end. */
   footnotes: "after" | "end";
-  /** The text a small-caps span shows in the PDF's text layer: its own letters, or capitals (fake small caps). */
+  /** The text a small-caps span shows in the PDF's text layer: its own letters, or capitals (fake small caps,
+      which draw the capitals at full size: the page shows no small caps). */
   smallCaps: "keep" | "upper";
   /** How a renderer prints a caption's label before the caption ("Table 1." then the caption, one space between). */
   captionJoin?: string;
@@ -311,7 +312,7 @@ export function flatten(spec: Spec, opts: FlattenOptions): Leaf[] {
   let groupId = 0;
 
   const caseOf = (list: SpecSpan[]): SpecSpan[] =>
-    opts.smallCaps === "upper" ? list.map((s) => (s.smallCaps && !s.latex ? { ...s, text: s.text.toUpperCase() } : s)) : list;
+    opts.smallCaps === "upper" ? list.map((s) => (s.smallCaps && !s.latex ? { ...s, text: s.text.toUpperCase(), smallCaps: undefined } : s)) : list;
   // In an italic body every span but math, upright words, and footnote marks is italic.
   const bodyStyle = (list: SpecSpan[], italic: boolean): SpecSpan[] =>
     italic ? list.map((s) => (s.latex || s.up || s.footnote ? s : { ...s, italic: true })) : list;
