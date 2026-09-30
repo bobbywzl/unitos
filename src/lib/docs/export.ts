@@ -23,6 +23,7 @@ import {
   InternalHyperlink,
   LevelFormat,
   LevelSuffix,
+  LineNumberRestartFormat,
   LineRuleType,
   Packer,
   PageBreak,
@@ -369,6 +370,7 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
     // Borders and shading's background (toolbar/borders.ts): "#rrggbb <padding pt>".
     shading: paragraphShading(a),
     keepNext: a.keepWithNext === true || undefined,
+    suppressLineNumbers: a.suppressLineNumbers === true || undefined,
     keepLines: a.keepLinesTogether === true || undefined,
     widowControl: a.preventSingleLines !== false,
     pageBreakBefore: a.pageBreakBefore === true || undefined,
@@ -1110,6 +1112,11 @@ export async function richTextDocx(
       {
         properties: {
           titlePage: first || undefined,
+          // Tools > Line numbers: every line, from 1 on each page or on through the document.
+          lineNumbers:
+            setup.lineNumbers && !setup.pageless
+              ? { countBy: 1, restart: setup.lineNumbers === "page" ? LineNumberRestartFormat.NEW_PAGE : LineNumberRestartFormat.CONTINUOUS }
+              : undefined,
           page: {
             // Word takes the portrait sides and turns them for landscape.
             size: {

@@ -718,6 +718,10 @@ export type PageSetup = {
   /** Insert > Watermark: words or an image behind the text of every page
       (lib/docs/watermark.ts); absent or null = none. */
   watermark?: Watermark | null;
+  /** Tools > Line numbers: each line of the text numbered in the left
+      margin, from 1 on each page or on through the document; absent or
+      null = none. */
+  lineNumbers?: "page" | "continuous" | null;
 };
 
 /** Letter, 1 in margins, pages, white: a new document's page (SPEC.md §29). */
@@ -752,6 +756,7 @@ export const pageSetupSchema = z.object({
   evenFooter: richDocSchema.nullable().optional(),
   pageNumberStart: z.number().int().min(0).max(999).optional(),
   watermark: watermarkSchema.nullable().optional(),
+  lineNumbers: z.enum(["page", "continuous"]).nullable().optional(),
 });
 
 /** The stored page setup, or the default when it is missing or broken. */
