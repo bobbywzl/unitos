@@ -12,6 +12,18 @@ import { KATEX_MACROS } from "@/lib/katex";
 // equation sits in the line (inlineMath); on a line of its own it is a
 // block (blockMath, an EQUATION row). A press opens the equation box.
 
+/** A formula this long, in drawn characters, may break after a relation or
+    an operator at its top level, where KaTeX lets a line break (its parts,
+    .katex-base), as TeX breaks one: a justified line spread its word spaces
+    an em or more around a long formula that would not fit, and TeX sets
+    none so. A shorter formula stays whole. */
+const BREAKS_AT = 16;
+
+function breaks(dom: HTMLElement): boolean {
+  const parts = dom.querySelectorAll(".katex-html > .katex-base");
+  return parts.length > 1 && (dom.querySelector(".katex-html")?.textContent ?? "").length >= BREAKS_AT;
+}
+
 class MathView implements NodeView {
   dom: HTMLElement;
   /** What the view last drew: the TeX, and for an equation on its own line
@@ -69,6 +81,7 @@ class MathView implements NodeView {
     } catch {
       this.dom.textContent = latex;
     }
+    if (!this.display) this.dom.classList.toggle("docs-math-breaks", breaks(this.dom));
   }
 
   update(node: PMNode): boolean {

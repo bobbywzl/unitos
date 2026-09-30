@@ -333,10 +333,13 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
   const taken = new Set<Segment>();
   // The table right under (below) or right over a caption at k, on the
   // caption's page: the one a caption under a table or over it would join.
-  const tableBy = (k: number, below: boolean): Segment | undefined => {
+  // through: past sub-table captions, as the side's count reads a caption
+  // under a group of sub-tables (arXiv 2411.19946's "Table 4." under "(e)
+  // Comparison …" and its grid).
+  const tableBy = (k: number, below: boolean, through = false): Segment | undefined => {
     let j = k;
     do j += below ? -1 : 1;
-    while (segments[j] && taken.has(segments[j]));
+    while (segments[j] && (taken.has(segments[j]) || (through && isSubCaption(segments[j]))));
     const table = segments[j];
     if (table?.type !== "TABLE" || !table.html) return undefined;
     const page = below ? (table.breaks?.at(-1)?.page ?? firstPageOf(table)) : firstPageOf(table);
@@ -350,7 +353,7 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
   let over = 0;
   let under = 0;
   for (const k of labeled) {
-    const [below, above] = [tableBy(k, true), tableBy(k, false)];
+    const [below, above] = [tableBy(k, true, true), tableBy(k, false, true)];
     if (below && !above) under++;
     if (above && !below) over++;
   }
