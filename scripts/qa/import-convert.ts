@@ -691,6 +691,8 @@ function lookChecks(f: Fixture, doc: RichNode, check: (ok: boolean, name: string
   walk(doc, (node) => {
     let last = new Set<string>();
     for (const child of node.content ?? []) {
+      // A page start adds no words: a run the page turns in stays one run.
+      if (child.type === "pageStart") continue;
       const keys = new Set<string>();
       if (child.type === "text") {
         for (const m of child.marks ?? []) {
@@ -1513,14 +1515,17 @@ async function checkFixture(f: Fixture): Promise<Report> {
     return [left || null, first || null];
   };
   // Paragraphs pair by their words, the k-th of the parse with the k-th of
-  // the page: two with the same words may stand at two indents. A table's
-  // cells, a list's lines, and the Title are no parse paragraphs; a
-  // paragraph a list item holds after its line is (a list that resumes).
+  // the page: two with the same words may stand at two indents. A
+  // paragraph of tabs alone (a line to write on) has no words: it pairs by
+  // its tabs. A table's cells, a list's lines, and the Title are no parse
+  // paragraphs; a paragraph a list item holds after its line is (a list
+  // that resumes).
+  const pairKey = (text: string) => norm(text) || text.replace(/[^\t]/g, "");
   const byWords = new Map<string, RichNode[]>();
   const paragraphsOf = (node: RichNode) => {
     if (node.type === "table") return;
     if (node.type === "paragraph") {
-      const words = node.attrs?.docStyle !== "title" ? norm(inlineText(node)) : "";
+      const words = node.attrs?.docStyle !== "title" ? pairKey(inlineText(node)) : "";
       if (words) byWords.set(words, [...(byWords.get(words) ?? []), node]);
       return;
     }
@@ -1531,7 +1536,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
   const taken = new Map<string, number>();
   const indented = f.blocks.flatMap((b) => {
     if (b.type !== "PARAGRAPH") return [];
-    const words = norm(indexedText(b));
+    const words = pairKey(indexedText(b));
     const k = taken.get(words) ?? 0;
     taken.set(words, k + 1);
     const token = tokensOf(b).find((t) => t in INDENT_ATTRS);
