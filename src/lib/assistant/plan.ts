@@ -138,9 +138,13 @@ function clip(text: string, max: number): string {
     or past BLOCK_IDS_MAX ids means the whole document; a description or an
     instruction past its length is cut to it; a suggest action with no
     description takes its instruction's words. */
-function lenient(item: unknown): unknown {
+function lenient(item: unknown, edits?: DocumentEdits): unknown {
   if (!item || typeof item !== "object" || Array.isArray(item)) return item;
   const fields: Record<string, unknown> = Object.fromEntries(Object.entries(item).filter(([key, value]) => value !== null || key === "afterBlockId"));
+  // A model that forgets the type: read it from the fields the action
+  // carries. A change of many blocks is the document's own kind of it.
+  if (typeof fields.type !== "string" || !fields.type) fields.type = inferType(fields, edits);
+  else fields.type = changeTypeFor(fields.type, edits);
   const ids = Array.isArray(fields.blockIds) ? [...new Set(fields.blockIds.filter((id) => typeof id === "string" && id))] : [];
   if (ids.length > 0 && ids.length <= BLOCK_IDS_MAX) fields.blockIds = ids;
   else delete fields.blockIds;
@@ -156,12 +160,39 @@ function lenient(item: unknown): unknown {
     `actions`, or one action alone. Each is read on its own (lenient, then
     the schema): one that does not read is named in `unreadable`, and the
     others stand. At most ACTIONS_MAX. */
-export function readActions(value: unknown): ReadActions {
+/** A change of many blocks in the kind the document takes: suggest on a
+    document with rich text, revise on an article. Other types stand, and so
+    does every type when the document's kind is not known yet. */
+function changeTypeFor(type: unknown, edits?: DocumentEdits): unknown {
+  if (type === "revise" && edits === "suggestions") return "suggest";
+  if (type === "suggest" && edits === "blocks") return "revise";
+  return type;
+}
+
+/** Read actions put in the kind the document takes (changeTypeFor): the
+    selection chat reads its actions before it knows the document. */
+export function fitActions(read: ReadActions, edits: DocumentEdits): ReadActions {
+  return { ...read, actions: read.actions.map((a) => ({ ...a, type: changeTypeFor(a.type, edits) }) as RawAction) };
+}
+
+function inferType(fields: Record<string, unknown>, edits?: DocumentEdits): string {
+  const has = (key: string) => typeof fields[key] === "string" && (fields[key] as string).length > 0;
+  if (has("instruction")) return edits === "suggestions" ? "suggest" : "revise";
+  if (has("blockId") && has("newText")) return "edit_block";
+  if (has("blockId") && has("quote") && has("comment")) return "comment";
+  if (has("blockId") && has("quote") && has("color")) return "highlight";
+  if (has("blockId") && has("quote") && (has("href") || has("toDocumentId"))) return "link";
+  if (has("content")) return "add_note";
+  if ("afterBlockId" in fields && has("text")) return "insert_paragraph";
+  return "";
+}
+
+export function readActions(value: unknown, edits?: DocumentEdits): ReadActions {
   const holder = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-  const list = Array.isArray(value) ? value : Array.isArray(holder?.actions) ? holder.actions : holder && "type" in holder ? [holder] : [];
+  const list = Array.isArray(value) ? value : Array.isArray(holder?.actions) ? holder.actions : holder && ("type" in holder || "instruction" in holder) ? [holder] : [];
   const read: ReadActions = { actions: [], unreadable: [] };
   for (const item of list.slice(0, ACTIONS_MAX)) {
-    const parsed = actionSchema.safeParse(lenient(item));
+    const parsed = actionSchema.safeParse(lenient(item, edits));
     if (parsed.success) {
       read.actions.push(parsed.data);
       continue;
@@ -175,7 +206,7 @@ export function readActions(value: unknown): ReadActions {
 }
 
 /** The selection chat's actions field: read as readActions reads a fence. */
-export const actionsSchema = z.unknown().transform(readActions);
+export const actionsSchema = z.unknown().transform((value) => readActions(value));
 
 // The action types as the prompts list them: one line per type, the same
 // lines for the selection chat and the sidebar assistant.
@@ -485,14 +516,84 @@ export const planShape = (ctx: Pick<PlanContext, "format" | "blocks">): Document
 // the server, read here, and sent after the answer as the plan.
 export const ACTIONS_FENCE = "```actions";
 
-/** Split an answer into the text before the actions fence and the fence's
-    content; content is null when the answer carries no fence. The fence
-    closes at the first ``` outside a JSON string, so a code fence inside an
-    instruction stays in it. */
+// Info strings a model writes on the actions block when it does not write
+// actions: a JSON fence, or none. Such a fence counts when its JSON holds the
+// actions (FENCE_ACTIONS_PROBE).
+const LOOSE_FENCE_INFO = new Set(["", "json", "jsonc", "json5"]);
+// JSON that is actions: an object keyed "actions", or a list whose first
+// item names an action type or carries an instruction.
+const FENCE_ACTIONS_PROBE = /^\{\s*"actions"\s*:|^\[\s*\{\s*"(?:type|instruction)"\s*:/;
+// How much of a fence's body the probe waits for before it decides.
+const PROBE_CHARS = 40;
+
+export type ActionsFenceScan =
+  // An actions block opens at `at`; its JSON starts at `body`; fenced =
+  // opened with ``` (closes at the next ```), else bare JSON to the end.
+  | { at: number; body: number; fenced: boolean }
+  // Text from `at` could still turn out to be the block: a stream holds it.
+  | { at: number; pending: true }
+  | null;
+
+/** Where the actions block of an answer opens. The block is a fence whose
+    info string is actions; or a ```json or bare ``` fence, or JSON on a line
+    of its own, whose JSON is actions: a model writes it so when it forgets
+    the info string. done = the answer is whole; before that, text that could
+    still become the block reads as pending. */
+export function scanActionsFence(text: string, done: boolean): ActionsFenceScan {
+  const exact = text.indexOf(ACTIONS_FENCE);
+  const limit = exact === -1 ? text.length : exact;
+  // Every line start before the exact fence: a loose fence or bare JSON.
+  for (let lineStart = 0; lineStart < limit; ) {
+    const lineEnd = text.indexOf("\n", lineStart);
+    const indent = text.slice(lineStart).match(/^[ \t]*/)![0].length;
+    const at = lineStart + indent;
+    if (at < limit) {
+      const verdict = probeAt(text, at, done);
+      if (verdict) return verdict;
+    }
+    if (lineEnd === -1) break;
+    lineStart = lineEnd + 1;
+  }
+  if (exact !== -1) return { at: exact, body: exact + ACTIONS_FENCE.length, fenced: true };
+  return null;
+}
+
+function probeAt(text: string, at: number, done: boolean): ActionsFenceScan {
+  const rest = text.slice(at);
+  if (!done && rest.length < 3 && "```".startsWith(rest)) return { at, pending: true };
+  if (rest.startsWith("```")) {
+    const nl = rest.indexOf("\n");
+    if (nl === -1) {
+      if (done) return null;
+      const info = rest.slice(3).trim().toLowerCase();
+      return [...LOOSE_FENCE_INFO, "actions"].some((known) => known.startsWith(info)) ? { at, pending: true } : null;
+    }
+    if (!LOOSE_FENCE_INFO.has(rest.slice(3, nl).trim().toLowerCase())) return null;
+    const body = rest.slice(nl + 1);
+    return probeJson(body, done, at, at + nl + 1, true);
+  }
+  if (rest[0] === "{" || rest[0] === "[") return probeJson(rest, done, at, at, false);
+  return null;
+}
+
+function probeJson(body: string, done: boolean, at: number, bodyAt: number, fenced: boolean): ActionsFenceScan {
+  const json = body.trimStart().slice(0, 400).replace(/\s+/g, " ");
+  if (!json) return done ? null : { at, pending: true };
+  if (json[0] !== "{" && json[0] !== "[") return null;
+  if (FENCE_ACTIONS_PROBE.test(json.replace(/\s+(?=["{[:])/g, ""))) return { at, body: bodyAt, fenced };
+  // Not enough of the JSON yet to tell.
+  return !done && json.length < PROBE_CHARS ? { at, pending: true } : null;
+}
+
+/** Split an answer into the text before the actions block and the block's
+    content; content is null when the answer carries no block. A fence closes
+    at the first ``` outside a JSON string, so a code fence inside an
+    instruction stays in it; bare JSON runs to the answer's end. */
 export function splitActionsFence(text: string): { text: string; content: string | null } {
-  const at = text.indexOf(ACTIONS_FENCE);
-  if (at === -1) return { text, content: null };
-  const rest = text.slice(at + ACTIONS_FENCE.length);
+  const scan = scanActionsFence(text, true);
+  if (!scan || "pending" in scan) return { text, content: null };
+  const rest = text.slice(scan.body);
+  if (!scan.fenced) return { text: text.slice(0, scan.at).trimEnd(), content: rest.trim() };
   let close = -1;
   let inString = false;
   for (let i = 0; i < rest.length && close === -1; i++) {
@@ -506,7 +607,7 @@ export function splitActionsFence(text: string): { text: string; content: string
   // Quotes that never pair up: the last ``` closes.
   if (close === -1) close = rest.lastIndexOf("```");
   return {
-    text: text.slice(0, at).trimEnd(),
+    text: text.slice(0, scan.at).trimEnd(),
     content: (close === -1 ? rest : rest.slice(0, close)).trim(),
   };
 }
@@ -607,7 +708,7 @@ function looseJsonAt(text: string, start: number): unknown {
     instruction: the answer says what will change (the prompt's rule 7). */
 export function parseActionsFence(content: string, answer = "", edits: DocumentEdits = "blocks"): ReadActions | null {
   const json = looseJson(content);
-  const read = json === undefined ? null : readActions(json);
+  const read = json === undefined ? null : readActions(json, edits);
   const lost = read ? read.unreadable.some((u) => u.type === "suggest") : /"suggest"/.test(content);
   if (edits !== "suggestions" || !lost || !answer.trim() || read?.actions.some((a) => a.type === "suggest")) return read;
   return {

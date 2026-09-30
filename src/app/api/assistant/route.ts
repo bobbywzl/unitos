@@ -21,7 +21,7 @@ import {
 } from "@/lib/derive/config";
 import { loadProfile, sectionSkeleton } from "@/lib/derive/context";
 import {
-  ACTIONS_FENCE,
+  scanActionsFence,
   enrichActions,
   parseActionsFence,
   planShape,
@@ -435,35 +435,28 @@ async function handle(req: Request, t: TFunc) {
             cancelled = true;
           }
         };
-        // This page scope: the answer streams up to the actions fence; the
-        // fence and what follows stay on the server. A tail that could be
-        // the fence's start waits for the next chunk.
+        // This page scope: the answer streams up to the actions block; the
+        // block and what follows stay on the server. Text that could still
+        // become the block (a fence whose JSON is not read yet) waits for
+        // the next chunk (scanActionsFence).
         let relayed = "";
         let sent = 0;
         const relay = (chunk: string) => {
           relayed += chunk;
-          const at = relayed.indexOf(ACTIONS_FENCE);
-          let safe = at === -1 ? relayed.length : at;
-          if (at === -1) {
-            for (let k = Math.min(ACTIONS_FENCE.length - 1, relayed.length); k > 0; k--) {
-              if (ACTIONS_FENCE.startsWith(relayed.slice(relayed.length - k))) {
-                safe = relayed.length - k;
-                break;
-              }
-            }
-          }
+          const scan = scanActionsFence(relayed, false);
+          const safe = scan ? scan.at : relayed.length;
           if (safe > sent) {
             send(relayed.slice(sent, safe));
             sent = safe;
           }
         };
         // The answer whole, once the model is done: what the relay held back
-        // and was not the fence goes out now.
+        // and was not the block goes out now.
         const flush = () => {
-          const at = relayed.indexOf(ACTIONS_FENCE);
-          const end = at === -1 ? relayed.length : at;
+          const scan = scanActionsFence(relayed, true);
+          const end = scan ? scan.at : relayed.length;
           if (end > sent) send(relayed.slice(sent, end));
-          sent = end;
+          sent = Math.max(sent, end);
         };
         try {
           const full = await streamTextTo(result, act ? relay : send, {

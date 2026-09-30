@@ -102,6 +102,15 @@ type Turn = {
   suggest?: string;
 };
 const plural = (n: number) => (n === 1 ? "" : "s");
+// An answer as the next message's history reads it: with the actions it
+// proposed named, so a later "implement" reads which change it confirms.
+const withProposed = (turn: Turn): string => {
+  const proposed = [
+    ...(turn.plan?.actions.map((a) => a.description) ?? []),
+    ...(turn.suggest ? ["suggestions on the page"] : []),
+  ].filter(Boolean);
+  return proposed.length > 0 ? `${turn.content}\n\nProposed actions: ${proposed.join("; ")}` : turn.content;
+};
 // One side chat of this conversation (SPEC.md §7): the quote it was started
 // from and its own turns. noteId = the note it saves on, null until the
 // first answer lands; key holds it together before then.
@@ -943,7 +952,7 @@ export function AssistantPanel({
             images: turn.images?.map((img) => ({ id: img.id, name: img.name })),
             files: turn.files?.map((f) => ({ name: f.name })),
           }
-        : { role: "assistant", content: turn.content.slice(0, TURN_MAX_CHARS) },
+        : { role: "assistant", content: withProposed(turn).slice(0, TURN_MAX_CHARS) },
     );
     const userTurn: Turn = { role: "user", content: q, images, files };
     setTurns((prev) => [...prev, userTurn, { role: "assistant", content: "" }]);

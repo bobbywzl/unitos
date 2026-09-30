@@ -40,7 +40,7 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { actionsSchema, enrichActions, planShape, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
+import { actionsSchema, enrichActions, fitActions, planShape, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { transcriptContext } from "@/lib/assistant/transcript";
@@ -469,7 +469,7 @@ async function handle(req: Request, t: TFunc) {
     sectionIds: new Set(sections.map((s) => s.id)),
     t,
   };
-  const enriched = enrichActions(result.data.actions, planContext);
+  const enriched = enrichActions(fitActions(result.data.actions, edits), planContext);
   let actions = enriched.actions;
   const warnings = enriched.warnings;
 
@@ -557,13 +557,16 @@ async function handle(req: Request, t: TFunc) {
     (suggestions
       ? suggestions.summary || t(suggestions.ops.length > 0 ? "api.suggestMade" : "api.suggestNoChange")
       : actions.length > 0
-        ? `Applied ${actions.length} action${actions.length === 1 ? "" : "s"}.`
+        ? `Proposed ${actions.length} action${actions.length === 1 ? "" : "s"} for approval.`
         : "No actions proposed.");
   const replyText = answer;
+  // The stored turn names the actions it proposed, so a later "implement"
+  // reads which change it confirms.
+  const proposed = actions.map((a) => a.description).filter(Boolean);
   const turns: ChatTurn[] = [
     ...priorTurns,
     { role: "user", content: data.command },
-    { role: "assistant", content: replyText },
+    { role: "assistant", content: proposed.length > 0 ? `${replyText}\n\nProposed actions: ${proposed.join("; ")}` : replyText },
   ];
   if (data.sideChatOf) {
     // A side chat persists like the conversation it came from, on a note that
