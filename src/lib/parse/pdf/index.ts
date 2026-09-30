@@ -607,7 +607,13 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     if (s.type === "FIGURE" && s.mathCrop) block.mathCrop = true;
     const allLinks = [...(s.links ?? []), ...links];
     if (styles.length > 0) block.styles = styles;
-    const math = s.type === "PARAGRAPH" || s.type === "LIST" || s.type === "HEADING" ? mathSpans(s.text, s.runs) : [];
+    // Inline formulas: a figure's words are its caption's (a display's crop
+    // keeps its glyphs and no formula), and a table's caption formulas come
+    // from attachTableCaptions.
+    const math =
+      s.type === "PARAGRAPH" || s.type === "LIST" || s.type === "HEADING" || (s.type === "FIGURE" && !s.mathCrop) ? mathSpans(s.text, s.runs)
+      : s.type === "TABLE" ? (s.math ?? [])
+      : [];
     if (math.length > 0) block.math = math;
     if (allLinks.length > 0) block.links = allLinks;
     if (s.footnote) block.footnote = s.footnote;
