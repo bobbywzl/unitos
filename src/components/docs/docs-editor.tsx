@@ -574,8 +574,10 @@ export function DocsEditor({
   }, [editor, t]);
   useEffect(() => {
     if (!fullScreen) return;
+    // The page cancels every Esc it gets (ProseMirror), so an open menu or
+    // dialog, not the cancel, says the key was someone else's.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || document.querySelector("[data-docs-menu], [role='dialog']")) return;
+      if (e.key !== "Escape" || e.isComposing || document.querySelector("[data-docs-menu], [role='dialog']")) return;
       setFullScreen(false);
     };
     window.addEventListener("keydown", onKey);
