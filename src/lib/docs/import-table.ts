@@ -401,8 +401,10 @@ function cellBlocks(cell: Element, gapped: boolean): RichNode[] {
 
 export type ImportTable = {
   /** The words of a <caption> the table carries, with their marks: drawn
-      as a caption above the table. */
+      as a caption above the table, or under it where the page sets it
+      there (captionBelow: the caption's caption-side is bottom). */
   caption: RichNode[] | null;
+  captionBelow: boolean;
   table: RichNode;
   /** The first paragraph of each row, in the order of the parse's text rows:
       where a page that begins at the row puts its page start. */
@@ -790,7 +792,8 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
     reader.flush();
   }
   const caption = reader.blocks.filter((b) => b.type === "paragraph").flatMap((b, k) => [...(k > 0 ? [{ type: "text", text: " " }] : []), ...(b.content ?? [])]);
-  return { caption: caption.length > 0 ? caption : null, ...built };
+  const captionBelow = captionEl !== undefined && styleOf(captionEl, "caption-side") === "bottom";
+  return { caption: caption.length > 0 ? caption : null, captionBelow, ...built };
 }
 
 /** A table from the parse's grid text (cells by tab, rows by line): for a
@@ -807,5 +810,5 @@ export function tableFromText(text: string, room: number): ImportTable | null {
     pinned: false,
   }));
   const built = tableNode(rows, room);
-  return built ? { caption: null, ...built } : null;
+  return built ? { caption: null, captionBelow: false, ...built } : null;
 }
