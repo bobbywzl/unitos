@@ -847,14 +847,16 @@ function tightCells(line: Line): number {
 
 // A line of prose is one cell, whatever its gaps: a cell that opens with a
 // mark the words before it take (", where μ is the mean": a tall formula's
-// gap in a sentence, OpenStax's ch. 6 p. 20), or words spaced an em apart
-// or more (a justified line beside a long link: arXiv 2506.06352 p. 29).
+// gap in a sentence, OpenStax's ch. 6 p. 20), or words all spaced more than
+// half an em apart, five or more (a justified line beside a long link:
+// arXiv 2506.06352 p. 29). A row's cells hold word spaces of a third of an
+// em beside any column gap the line did not part ("CALVIN [101]").
 function proseLine(line: Line): boolean {
   if (line.cells.slice(1).some((c) => /^[,;:.)\]!?](?!\d)/.test(c.text.trim()))) return true;
   const items = line.items.filter((it) => it.str.trim().length > 0);
   const gaps = items.slice(1).map((it, k) => it.x - (items[k].x + items[k].w)).sort((a, b) => b - a);
   const spaces = gaps.slice(line.cells.length - 1).filter((g) => g > line.size * 0.15);
-  return spaces.length >= 2 && median(spaces) >= line.size * 0.6;
+  return spaces.length >= 4 && Math.min(...spaces) >= line.size * 0.6;
 }
 
 // Table runs, computed before segmentation. A run grows forward over

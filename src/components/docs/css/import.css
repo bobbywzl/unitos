@@ -40,6 +40,11 @@
   line-height: 1.45;
   color: var(--docs-gray-2);
 }
+/* A PDF's and a Word file's caption stands in the text's color, as its page
+   sets it (a Word caption also at its own size: its html's style). */
+.docs-shell:is([data-import="pdf"], [data-import="docx"]) .docs-prose .docs-figure :is(p, figcaption) {
+  color: inherit;
+}
 /* A box the page painted under a web figure keeps the light theme's words
    in dark mode, as in the block reader (globals.css .reader-figure). */
 .dark .docs-prose .docs-figure :is(figure, div)[style*="background"] {

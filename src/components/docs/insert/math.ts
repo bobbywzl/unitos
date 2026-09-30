@@ -12,11 +12,12 @@ import { KATEX_MACROS } from "@/lib/katex";
 // equation sits in the line (inlineMath); on a line of its own it is a
 // block (blockMath, an EQUATION row). A press opens the equation box.
 
-/** A formula this long, in drawn characters, may break after a relation or
-    an operator at its top level, where KaTeX lets a line break (its parts,
-    .katex-base), as TeX breaks one: a justified line spread its word spaces
-    an em or more around a long formula that would not fit, and TeX sets
-    none so. A shorter formula stays whole. */
+/** An import's formula this long, in drawn characters, may break after a
+    relation or an operator at its top level, where KaTeX lets a line break
+    (its parts, .katex-base), as TeX breaks one (css/insert.css): a justified
+    line spread its word spaces an em or more around a long formula that
+    would not fit, and TeX sets none so. A shorter formula, and a blank
+    document's, stays whole. */
 const BREAKS_AT = 16;
 
 function breaks(dom: HTMLElement): boolean {

@@ -2270,7 +2270,11 @@ function attachCaptions(blocks: ParsedBlock[], noteRefs: DocxReader["noteRefs"])
       if (!caption) return;
       taken.add(caption);
       block.text = caption.text;
-      block.html = (block.html ?? "<figure></figure>").replace(/<\/figure>$/, `<figcaption>${escapeHtml(caption.text)}</figcaption></figure>`);
+      // The caption keeps its look: its size, its color (not the ink's), and
+      // its runs' marks (a bold label), as the page sets them.
+      const words = { text: caption.text, marks: (caption.styles ?? []).map((s) => ({ start: s.start, end: s.end, style: s.style })), links: [], math: caption.math ?? [] };
+      const look = [caption.font ? `font-size:${caption.font.size}pt` : "", caption.font?.color && !isInk(caption.font.color) ? `color:${caption.font.color}` : ""].filter(Boolean).join(";");
+      block.html = (block.html ?? "<figure></figure>").replace(/<\/figure>$/, `<figcaption${look ? ` style="${look}"` : ""}>${inlineHtml(words)}</figcaption></figure>`);
       const refs = noteRefs.get(caption);
       if (refs) noteRefs.set(block, refs);
     } else if (block.type === "TABLE" && block.html?.startsWith("<table") && !block.html.includes("<caption>")) {
@@ -2370,9 +2374,11 @@ export async function parseDocx(bytes: Uint8Array, filename: string, opts: DocxP
 
   // A contents field with no entries lists the headings at its levels, each
   // linked to its heading, as Word draws it on update; with no heading to
-  // list it stands for nothing.
+  // list it stands for nothing. The heading right over the field is its
+  // title ("Contents"), no entry of it: the list opened with its own title.
   const levelOf = (b: ParsedBlock) => (b.type === "HEADING" ? Number(/^<h([1-6])/.exec(b.html ?? "")?.[1] ?? 0) : 0);
-  const listed = ([lo, hi]: [number, number]) => (b: ParsedBlock) => levelOf(b) >= lo && levelOf(b) <= hi && !reader.unlisted.has(b);
+  const titles = new Set(reader.unfilledContents.map(({ block }) => blocks[blocks.indexOf(block) - 1]).filter((b) => b?.type === "HEADING"));
+  const listed = ([lo, hi]: [number, number]) => (b: ParsedBlock) => levelOf(b) >= lo && levelOf(b) <= hi && !reader.unlisted.has(b) && !titles.has(b);
   for (const { block, levels } of reader.unfilledContents) if (!blocks.some(listed(levels))) blocks = blocks.filter((b) => b !== block);
   for (const { block, levels } of reader.unfilledContents) {
     const lines: string[] = [];
