@@ -134,10 +134,17 @@ function childDifferences(a: PMNode, b: PMNode, start: number, edits: Edit[]): v
   const at: number[] = [start];
   for (const node of A) at.push(at[at.length - 1] + node.nodeSize);
   const run = [...commonRun(A.map(keyOf), B.map(keyOf)), [A.length, B.length] as [number, number]];
+  // The base's blocks from..to give way to the other's: one edit, so a block
+  // out and a block in at one place stay two clear suggestions.
+  const swap = (from: number, to: number, content: PMNode[]) => {
+    if (from < to || content.length > 0) edits.push({ from: at[from], to: at[to], content: freshAll(content) });
+  };
   let i = 0;
   let j = 0;
   for (const [ai, bj] of run) {
-    // The stretch between two shared blocks: pair what is alike, the rest in or out.
+    // The stretch between two shared blocks: pair what is alike; what is
+    // left between two pairs goes out, and the other's comes in its place.
+    let x0 = i;
     let k = j;
     for (let x = i; x < ai; x++) {
       let partner = -1;
@@ -147,16 +154,14 @@ function childDifferences(a: PMNode, b: PMNode, start: number, edits: Edit[]): v
           break;
         }
       }
-      if (partner < 0) {
-        edits.push({ from: at[x], to: at[x + 1], content: Fragment.empty });
-        continue;
-      }
-      if (partner > k) edits.push({ from: at[x], to: at[x], content: freshAll(B.slice(k, partner)) });
+      if (partner < 0) continue;
+      swap(x0, x, B.slice(k, partner));
       if (A[x].isTextblock) changedWords(A[x], B[partner], at[x], edits);
       else childDifferences(A[x], B[partner], at[x] + 1, edits);
+      x0 = x + 1;
       k = partner + 1;
     }
-    if (k < bj) edits.push({ from: at[ai], to: at[ai], content: freshAll(B.slice(k, bj)) });
+    swap(x0, ai, B.slice(k, bj));
     i = ai + 1;
     j = bj + 1;
   }

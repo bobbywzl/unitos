@@ -25,7 +25,7 @@ import { hasQuoteDrag, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 // and adds them as documents (document-bar.tsx), which is what a drop on the
 // page still does — but an image or a link dropped on a note belongs to the
 // note. A surface that takes no links (a paragraph) lets a link travel on.
-// A surface that takes pictures dragged from another page (the article)
+// A surface that takes images dragged from another page (the article)
 // stores each the browser may read, and keeps the address of any other.
 // An image dragged from the page editor (lib/image-drop.ts) lands on every
 // surface as a stored image: one stored already keeps its address.
@@ -36,7 +36,7 @@ const REFUSAL_KEY: Record<ImageRefusal, Parameters<TFunc>[0]> = {
   "too-large": "api.imageTooLarge",
 };
 
-/** A stored image (id and url), or a picture from another page the browser
+/** A stored image (id and url), or an image from another page the browser
     could not read: no id, its own address. */
 export type DroppedImage = { id: string; url: string; name: string };
 
@@ -56,7 +56,7 @@ export function useNoteDrop({
 }: {
   premium: boolean;
   enabled?: boolean;
-  /** Pictures dragged from another page land as images
+  /** The surface takes images dragged from another page
       (lib/image-drop.ts); a link then says the surface takes images. */
   pageImages?: boolean;
   t: TFunc;
@@ -135,7 +135,7 @@ export function useNoteDrop({
     }
     const files = [...(e.dataTransfer?.files ?? [])];
     if (files.length === 0 && pageImages) {
-      // A picture from another page, or a link, which this surface refuses.
+      // An image from another page, or a link, which this surface refuses.
       e.preventDefault();
       e.stopPropagation();
       setOver(null);
