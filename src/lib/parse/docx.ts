@@ -2245,6 +2245,8 @@ function tableLooksFirstRow(tblPr: Element | null): boolean {
 
 const FIGURE_LABEL = /^(?:figure|fig\.?|chart|graph|diagram|image|photo|picture|illustration|plate|exhibit|scheme|图)\s*\d/i;
 const TABLE_LABEL = /^(?:table|tab\.|表)\s*\d/i;
+/** A face a caption's html may name (the import reads the same). */
+const CSS_FACE = /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/;
 
 /** Is the block a caption for a figure or a table: a paragraph in the
     Caption style, or one that opens with the kind's label ("Figure 3",
@@ -2270,6 +2272,8 @@ function attachCaptions(blocks: ParsedBlock[], noteRefs: DocxReader["noteRefs"])
       if (!caption) return;
       taken.add(caption);
       block.text = caption.text;
+      // The figure's words are its caption's, and so is its font.
+      if (caption.font) block.font = caption.font;
       // The caption keeps its look: its size, its color (not the ink's), and
       // its runs' marks (a bold label), as the page sets them.
       const words = { text: caption.text, marks: (caption.styles ?? []).map((s) => ({ start: s.start, end: s.end, style: s.style })), links: [], math: caption.math ?? [] };
@@ -2282,7 +2286,12 @@ function attachCaptions(blocks: ParsedBlock[], noteRefs: DocxReader["noteRefs"])
       if (!caption) return;
       taken.add(caption);
       const words = { text: caption.text, marks: (caption.styles ?? []).map((s) => ({ start: s.start, end: s.end, style: s.style })), links: [], math: caption.math ?? [] };
-      block.html = block.html.replace(/^<table([^>]*)>/, `<table$1><caption>${inlineHtml(words)}${textGap("\n")}</caption>`);
+      // The caption's words keep the face and the size the page sets them
+      // in, on a span, as a PDF's table caption does (pdf/tables.ts): the
+      // import draws them at that size where it is under the body's.
+      const look = caption.font ? [`font-size:${caption.font.size}pt`, CSS_FACE.test(caption.font.family) ? `font-family:${caption.font.family}` : ""].filter(Boolean).join(";") : "";
+      const html = look ? `<span style="${look}">${inlineHtml(words)}</span>` : inlineHtml(words);
+      block.html = block.html.replace(/^<table([^>]*)>/, `<table$1><caption>${html}${textGap("\n")}</caption>`);
       block.text = `${caption.text}\n${block.text}`;
       const refs = [...(noteRefs.get(caption) ?? []), ...moveSpans(noteRefs.get(block) ?? [], caption.text.length + 1)];
       if (refs.length > 0) noteRefs.set(block, refs);

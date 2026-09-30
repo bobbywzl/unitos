@@ -12,8 +12,8 @@ import { closeLists, joinMarkerCells, readAlgorithm, readList, readReferences } 
 import { markEdges, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { tableFromRegion } from "@/lib/parse/pdf/ruled";
 import { findTableRuns, isLabelLine, tableFromRun } from "@/lib/parse/pdf/tables";
-import { TextBuilder, isMonoLine, lineAsPart } from "@/lib/parse/pdf/text";
-import type { Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
+import { TextBuilder, boldShare, isMonoLine, lineAsPart } from "@/lib/parse/pdf/text";
+import type { Cell, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 
 // ── Page segmentation ───────────────────────────────────────────────────────
 
@@ -40,16 +40,18 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     const line = lines[i];
 
     // Contents label ("CONTENTS", "INSIDE"): the entries that follow become a
-    // linked list, not headings.
+    // linked list, not headings. Set as a heading (larger than the body, or
+    // bold), the label is one: a paper's "Contents" read as a paragraph.
     if (line.cells.length === 1 && TOC_LABEL_RE.test(line.text.trim())) {
-      segments.push({ type: "PARAGRAPH", text: line.text.trim(), page: line.page, runs: line.runs, ...geom([line]) });
+      const heading = line.size >= ctx.bodySize * 1.14 || boldShare(line.runs, line.text.length) > 0.9;
+      segments.push({ type: heading ? "HEADING" : "PARAGRAPH", text: line.text.trim(), page: line.page, runs: line.runs, ...(heading ? { rawSize: line.size } : {}), ...geom([line]) });
       tocMode = true;
       i++;
       continue;
     }
 
     if (tocMode && isContentsEntry(line)) {
-      const step = readContentsEntries(lines, i);
+      const step = readContentsEntries(lines, i, ctx.leading);
       segments.push(...step.segments);
       tocMode = false;
       tocCarry = step.next >= lines.length;
@@ -108,6 +110,7 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     }
 
     const step =
+      readSplitLine(lines, i) ??
       readCodeListing(lines, i, ctx, runOf) ??
       readRuleLine(lines, i) ??
       readLabelLine(lines, i, ctx) ??
@@ -365,6 +368,31 @@ function readCodeListing(lines: Line[], i: number, ctx: PageContext, runOf: numb
     rows.push(codeLineText(l, left, advance));
   });
   return { segments: [{ type: "CODE", text: rows.join("\n"), page: line.page, runs: [], ...geom(run) }], next: j };
+}
+
+// ── Split lines ─────────────────────────────────────────────────────────────
+
+// The document's first line in two parts far apart, one at each side (a
+// journal's "一般論文" at the left, a boxed "Peer-Reviewed" at the right):
+// two lines, the second flush right, not one paragraph that joins them.
+function readSplitLine(lines: Line[], i: number): Step | null {
+  const line = lines[i];
+  if (i !== 0 || line.page !== 0 || line.cells.length !== 2 || line.table) return null;
+  const [a, b] = line.cells;
+  const aEnd = Math.max(...line.items.filter((it) => it.x < b.x - 0.5).map((it) => it.x + it.w));
+  if (!Number.isFinite(aEnd) || b.x - aEnd < (line.xEnd - line.x) / 3) return null;
+  const { box, ...rest } = geom([line]);
+  const part = (cell: Cell, x1: number, x2: number, html?: string): Segment => ({
+    type: "PARAGRAPH",
+    text: cell.text,
+    runs: cell.runs,
+    page: line.page,
+    ...(html ? { html } : {}),
+    ...rest,
+    box: { ...box, x1, x2 },
+  });
+  const right = line.xEnd >= Math.max(...lines.map((l) => l.xEnd)) - line.size;
+  return { segments: [part(a, line.x, aEnd), part(b, b.x, line.xEnd, right ? '<p class="right"></p>' : undefined)], next: i + 1 };
 }
 
 // ── Label lines ─────────────────────────────────────────────────────────────

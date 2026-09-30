@@ -15,10 +15,11 @@ import { KATEX_MACROS } from "@/lib/katex";
 // page. It draws the figure as the block reader does (.reader-figure): a
 // web page's figure from its html, a PDF's figure as the crop of its page at
 // the size the PDF prints it, over its caption in the marks the page sets it
-// in (captionStyles) and with its formulas as equations (captionMath). The media is the document's FigureMedia row, which the
-// page sends; the rich text holds only its id, so no save and no paste can
-// put markup in the page. A click opens the figure's tools
-// (DOCS_EVENT.figureTools); the caption is the figure's, never typed into.
+// in (captionStyles) and with its formulas as equations (captionMath). The
+// media is the document's FigureMedia row, which the page sends; the rich
+// text holds only its id, so no save and no paste can put markup in the
+// page. A click opens the figure's tools (DOCS_EVENT.figureTools); the
+// caption is the figure's, never typed into.
 
 /** A figure object's media, as the page sends it (FigureMedia). `src` is a
     PDF figure's crop (figureImageUrl, the address the finishing step and the
