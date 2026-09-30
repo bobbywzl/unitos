@@ -38,6 +38,11 @@ export function isChartImage(node: PMNode): boolean {
   return node.type.name === "image" && typeof node.attrs.chart === "string" && node.attrs.chart.length > 0;
 }
 
+/** A drawing (Insert > Drawing): an image that keeps its shapes. */
+export function isDrawingImage(node: PMNode): boolean {
+  return node.type.name === "image" && typeof node.attrs.drawing === "string" && node.attrs.drawing.length > 0;
+}
+
 /** An image's attributes, every value checked. */
 export function imageAttrs(node: PMNode) {
   const a = node.attrs;
@@ -168,9 +173,11 @@ class ImageView implements NodeView {
     this.frame.addEventListener("dblclick", (e) => {
       if (!this.editor.isEditable) return;
       e.preventDefault();
-      // A chart opens its data (insert/chart-dialog.tsx); any other image crops.
+      // A chart opens its data (insert/chart-dialog.tsx), a drawing its
+      // shapes (insert/drawing-dialog.tsx); any other image crops.
       const pos = this.getPos();
       if (isChartImage(this.node) && pos !== undefined) emitInsert(this.editor, { type: "chart", pos });
+      else if (isDrawingImage(this.node) && pos !== undefined) emitInsert(this.editor, { type: "drawing", pos });
       else this.startCrop();
     });
     this.box.addEventListener("mousedown", (e) => this.onBoxDown(e));
@@ -598,8 +605,8 @@ export async function replaceImage(editor: Editor, pos: number, source: ImageSou
   try {
     const src = "file" in source ? (await uploadImage(source.file)).url : source.url;
     const node = editor.state.doc.nodeAt(pos);
-    // A replaced chart is a plain image: its data no longer draws it.
-    if (node) setImageAttrs(editor.view, pos, { ...RESET_ATTRS, src, width: imageAttrs(node).width, chart: null });
+    // A replaced chart or drawing is a plain image: its data no longer draws it.
+    if (node) setImageAttrs(editor.view, pos, { ...RESET_ATTRS, src, width: imageAttrs(node).width, chart: null, drawing: null });
   } catch (err) {
     toast(err instanceof Error ? err.message : "", editor);
   }
@@ -708,6 +715,8 @@ export const DocsImage = Extension.create({
           contrast: data("contrast", n, 0),
           // A chart's data (lib/docs/chart.ts), a JSON string; null for an image.
           chart: data("chart", s, null),
+          // A drawing's shapes (lib/docs/drawing.ts), a JSON string; null for an image.
+          drawing: data("drawing", s, null),
         },
       },
     ];

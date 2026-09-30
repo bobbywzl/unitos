@@ -56,6 +56,8 @@ type InsertEvent =
   // Insert > Chart: a new chart of `kind` (from the table the caret is in,
   // if any), or the chart image at `pos` to edit.
   | { type: "chart"; kind?: ChartType; pos?: number }
+  // Insert > Drawing: a new drawing, or the drawing image at `pos` to edit.
+  | { type: "drawing"; pos?: number }
   | { type: "clipboard-blocked" };
 
 type Handler = (event: InsertEvent) => void;

@@ -1,0 +1,154 @@
+/* Insert > Drawing (drawing-dialog.tsx): the tools in a row, the colors,
+   the line weights, and the text sizes under them, and the white canvas.
+   On a narrow screen the canvas scrolls sideways inside the dialog. */
+.docs-drawing-dialog {
+  width: 940px;
+  max-width: calc(100vw - 32px);
+}
+.docs-drawing-bar,
+.docs-drawing-styles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.docs-drawing-styles {
+  margin: 8px 0 12px;
+  gap: 4px;
+}
+.docs-drawing-tool {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: var(--docs-ink);
+  cursor: pointer;
+}
+.docs-drawing-tool:hover:not(:disabled) {
+  background: var(--docs-hover);
+}
+.docs-drawing-tool[aria-pressed="true"] {
+  background: var(--clay-200);
+}
+.docs-drawing-tool:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.docs-drawing-sep {
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: var(--docs-sep);
+}
+.docs-drawing-label {
+  margin: 0 2px 0 6px;
+  color: var(--docs-muted);
+  font: 600 12px/16px var(--docs-ui-font);
+}
+.docs-drawing-label:first-child {
+  margin-left: 0;
+}
+.docs-drawing-swatch {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--docs-sep);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.docs-drawing-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: 2px;
+}
+/* No fill: a white circle struck through. */
+.docs-drawing-none {
+  background: linear-gradient(135deg, #ffffff 45%, #c5221f 45%, #c5221f 55%, #ffffff 55%);
+}
+.docs-drawing-weight,
+.docs-drawing-size {
+  display: inline-flex;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 4px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--docs-ink);
+  font: 500 12px/16px var(--docs-ui-font);
+  cursor: pointer;
+}
+.docs-drawing-weight span {
+  display: block;
+  width: 18px;
+  border-radius: 4px;
+  background: currentColor;
+}
+.docs-drawing-weight:hover,
+.docs-drawing-size:hover {
+  background: var(--docs-hover);
+}
+.docs-drawing-weight[aria-pressed="true"],
+.docs-drawing-size[aria-pressed="true"] {
+  background: var(--clay-200);
+}
+.docs-drawing-stage {
+  position: relative;
+  width: 880px;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--docs-sep);
+  border-radius: 12px;
+  background-color: #ffffff;
+  background-image: radial-gradient(#e5ddd0 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.docs-drawing-canvas {
+  display: block;
+  touch-action: none;
+  cursor: crosshair;
+}
+.docs-drawing-canvas[data-tool="select"] {
+  cursor: default;
+}
+.docs-drawing-canvas[data-tool="text"] {
+  cursor: text;
+}
+.docs-drawing-pick rect {
+  stroke: var(--docs-blue);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+.docs-drawing-pick circle {
+  fill: #ffffff;
+  stroke: var(--docs-blue);
+  stroke-width: 1.5;
+  cursor: grab;
+}
+.docs-drawing-text {
+  position: absolute;
+  min-width: 140px;
+  padding: 0;
+  border: 1px dashed var(--docs-blue);
+  background: transparent;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+}
+.docs-drawing-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  margin: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--docs-muted);
+  font: 400 13px/18px var(--docs-ui-font);
+  pointer-events: none;
+}
+.docs-drawing-error {
+  margin: 8px 0 0;
+  color: #c5221f;
+  font: 400 12px/16px var(--docs-ui-font);
+}

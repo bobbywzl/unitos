@@ -7,7 +7,7 @@ import { buildingBlock, type BuildingBlock } from "@/components/docs/insert/buil
 import { emitInsert, insertContext, type PickerKind } from "@/components/docs/insert/context";
 import { insertFootnote } from "@/components/docs/insert/footnotes";
 import { selectAllMatching } from "@/components/docs/insert/format-match";
-import { imageViewAt, isChartImage, resetImage, selectedImage } from "@/components/docs/insert/image";
+import { imageViewAt, isChartImage, isDrawingImage, resetImage, selectedImage } from "@/components/docs/insert/image";
 import { distributeRows, tableRectOf } from "@/components/docs/insert/table";
 import type { ChartType } from "@/lib/docs/chart";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -67,6 +67,7 @@ registerDocsCommands([
   chart("bar", "docsInsert.chartBar", ["bar", "horizontal bars", "条形图"]),
   chart("line", "docsInsert.chartLine", ["line", "trend", "折线图"]),
   chart("pie", "docsInsert.chartPie", ["pie", "share", "饼图"]),
+  insert("drawing", "docsInsert.drawing", ["drawing", "draw", "sketch", "shape", "arrow", "diagram", "绘图"], (editor) => emitInsert(editor, { type: "drawing" })),
   insert("special-characters", "docsInsert.itemSpecialCharacters", ["symbol", "character", "omega", "arrow", "符号"], (editor) =>
     emitInsert(editor, { type: "special-characters" }),
   ),
@@ -103,6 +104,13 @@ registerDocsCommands([
     enabled: (editor) => {
       const hit = selectedImage(editor.state);
       return editor.isEditable && hit !== null && isChartImage(hit.node);
+    },
+  },
+  {
+    ...image("edit-drawing", "docsInsert.editDrawing", ["drawing", "draw", "shape", "绘图"], (editor, pos) => emitInsert(editor, { type: "drawing", pos })),
+    enabled: (editor) => {
+      const hit = selectedImage(editor.state);
+      return editor.isEditable && hit !== null && isDrawingImage(hit.node);
     },
   },
   image("replace-image", "docsInsert.replaceImage", ["replace", "image"], (editor) => emitInsert(editor, { type: "image-replace" })),

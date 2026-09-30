@@ -30,6 +30,7 @@ import {
   CropIcon,
   CutIcon,
   DeleteIcon,
+  DrawingIcon,
   DistributeColumnsIcon,
   DistributeRowsIcon,
   ImageOptionsIcon,
@@ -46,7 +47,7 @@ import {
   TextFormatIcon,
   UnpinIcon,
 } from "@/components/docs/insert/icons";
-import { imageViewAt, isChartImage, resetImage, selectedImage } from "@/components/docs/insert/image";
+import { imageViewAt, isChartImage, isDrawingImage, resetImage, selectedImage } from "@/components/docs/insert/image";
 import { openLinkHref } from "@/components/docs/insert/links";
 import { distributeRows, pinnedCount, tableRectOf } from "@/components/docs/insert/table";
 import { refreshTocs } from "@/components/docs/insert/toc";
@@ -289,6 +290,7 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
     return [
       ...out,
       ...(isChartImage(image.node) ? [item("docsInsert.editChart", <ChartIcon />, () => emitInsert(editor, { type: "chart", pos }))] : []),
+      ...(isDrawingImage(image.node) ? [item("docsInsert.editDrawing", <DrawingIcon />, () => emitInsert(editor, { type: "drawing", pos }))] : []),
       item("docsInsert.cropImage", <CropIcon />, () => imageViewAt(editor.view, pos)?.startCrop()),
       item("docsInsert.replaceImage", <ResetIcon />, () => emitInsert(editor, { type: "image-replace" })),
       item("docsInsert.imageOptions", <ImageOptionsIcon />, () => emitInsert(editor, { type: "image-options" })),

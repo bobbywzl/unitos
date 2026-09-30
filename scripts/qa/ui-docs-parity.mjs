@@ -5,11 +5,12 @@
 // from the page onto a note in the notes tray (a person's mouse drag, which
 // the browser runs as its own drag); SPELLING is Add to dictionary, Ignore
 // all, and Tools > Spelling and grammar > Personal dictionary; CHART is
-// Insert > Chart. Each check prints PASS or FAIL with its evidence; each
-// case leaves a screenshot (light theme, 1440×900; the dark case in dark).
+// Insert > Chart; DRAWING is Insert > Drawing. Each check prints PASS or
+// FAIL with its evidence; each case leaves a screenshot (light theme,
+// 1440×900; the dark case in dark).
 //
 // Usage:
-//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART] [--label after] [--keep]
+//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING] [--label after] [--keep]
 // With no group named, every group runs. Env: BASE (default
 // http://localhost:3111), SHOT_DIR (default <tmp>/ui-docs-parity), CHROME
 // (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3492), DATABASE_URL
@@ -907,6 +908,161 @@ GROUPS.CHART = async () => {
   await page.mouse.dblclick(pie.x + pie.width / 2, pie.y + pie.height / 2);
   await sleep(600);
   check(G, (await chartDialog(page).count()) === 0, "in Viewing a double-click on a chart opens nothing");
+  check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
+  await close();
+};
+
+// ── Insert > Drawing ────────────────────────────────────────────────────────
+
+const drawingDialog = (page) => page.locator(".docs-drawing-dialog");
+/** The kinds of the shapes on the dialog's canvas, in order. */
+const canvasShapes = (page) => page.evaluate(() => [...document.querySelectorAll(".docs-drawing-canvas [data-shape]")].map((g) => g.getAttribute("data-shape")));
+/** The drawing images of the page: their shapes, address, size, and alt text. */
+async function drawings(page) {
+  return page.evaluate(() => {
+    const out = [];
+    window.__docsEditor.state.doc.descendants((node, pos) => {
+      if (node.type.name !== "image" || !node.attrs.drawing) return true;
+      out.push({ pos, shapes: JSON.parse(node.attrs.drawing).shapes, src: node.attrs.src, alt: node.attrs.alt, width: node.attrs.width, height: node.attrs.height });
+      return false;
+    });
+    return out;
+  });
+}
+/** A press, a drag in steps, and a release on the canvas, at canvas points. */
+async function drawOn(page, from, to) {
+  const box = await page.locator(".docs-drawing-canvas").boundingBox();
+  await page.mouse.move(box.x + from[0], box.y + from[1]);
+  await page.mouse.down();
+  await page.mouse.move(box.x + to[0], box.y + to[1], { steps: 10 });
+  await page.mouse.up();
+  await sleep(200);
+}
+async function canvasClick(page, at) {
+  const box = await page.locator(".docs-drawing-canvas").boundingBox();
+  await page.mouse.click(box.x + at[0], box.y + at[1]);
+  await sleep(250);
+}
+const tool = (page, name) => drawingDialog(page).locator(`[data-track="docs:drawing:${name}"]`).first().click();
+
+GROUPS.DRAWING = async () => {
+  const G = "DRAWING";
+  const id = await richDocument("Drawing", [paragraph("The camp sits on the ridge, above the river."), paragraph("The path runs down to the east bank.")]);
+  const { page, errors, close } = await newPage();
+  await openEditor(page, id, "east bank");
+
+  // 1. Search the menus has Insert > Drawing; the dialog opens empty.
+  await clickIn(page, "The camp");
+  await page.keyboard.press("End");
+  const rows = await searchMenus(page, "drawing");
+  const opened = await drawingDialog(page).waitFor({ state: "visible", timeout: 10_000 }).then(() => true, () => false);
+  const saveOff = opened && (await drawingDialog(page).locator('[data-track="docs:drawing:save"]').isDisabled());
+  check(G, rows.some((r) => r.startsWith("Drawing")) && opened && saveOff, "Search the menus opens Insert > Drawing, and Save and close waits for a shape", JSON.stringify(rows.slice(0, 2)));
+
+  // 2. A rectangle with a fill, an arrow, a text box, a scribble.
+  await tool(page, "rect");
+  await drawingDialog(page).locator('[data-track="docs:drawing:fill"]').nth(4).click();
+  await drawOn(page, [120, 80], [320, 200]);
+  const afterRect = await page.evaluate(() => document.querySelector('.docs-drawing-tool[aria-pressed="true"]')?.getAttribute("data-track"));
+  await tool(page, "arrow");
+  await drawOn(page, [330, 180], [520, 300]);
+  await tool(page, "text");
+  await canvasClick(page, [150, 130]);
+  await page.keyboard.type("Camp");
+  await canvasClick(page, [800, 60]);
+  await tool(page, "text");
+  await canvasClick(page, [600, 60]);
+  await canvasClick(page, [800, 420]);
+  await tool(page, "scribble");
+  {
+    const box = await page.locator(".docs-drawing-canvas").boundingBox();
+    await page.mouse.move(box.x + 530, box.y + 410);
+    await page.mouse.down();
+    for (let i = 0; i <= 20; i++) await page.mouse.move(box.x + 530 + i * 8, box.y + 410 + Math.sin(i / 3) * 12);
+    await page.mouse.up();
+    await sleep(250);
+  }
+  let kinds = await canvasShapes(page);
+  check(G, kinds.join() === "rect,arrow,text,scribble" && afterRect === "docs:drawing:select", "the tools draw a rectangle, an arrow, a text box, and a scribble; an empty text box goes", `${JSON.stringify(kinds)}; after a shape the tool is ${afterRect}`);
+
+  // 3. Undo and Redo, each one shape.
+  await page.keyboard.press("Control+z");
+  await sleep(200);
+  const undone = await canvasShapes(page);
+  await page.keyboard.press("Control+y");
+  await sleep(200);
+  kinds = await canvasShapes(page);
+  check(G, undone.join() === "rect,arrow,text" && kinds.join() === "rect,arrow,text,scribble", "Undo takes the last shape out, Redo puts it back", `${JSON.stringify(undone)} → ${JSON.stringify(kinds)}`);
+
+  // 4. Select: a drag moves the rectangle, its corner resizes it, Delete removes it.
+  await tool(page, "select");
+  const rectOf = () => page.evaluate(() => { const r = document.querySelector('.docs-drawing-canvas [data-shape="rect"] rect'); return r ? { x: +r.getAttribute("x"), y: +r.getAttribute("y"), w: +r.getAttribute("width"), h: +r.getAttribute("height") } : null; });
+  const before = await rectOf();
+  await drawOn(page, [200, 100], [240, 120]);
+  const moved = await rectOf();
+  await drawOn(page, [360, 220], [400, 260]);
+  const resized = await rectOf();
+  check(G, moved.x === before.x + 40 && moved.y === before.y + 20 && Math.round(resized.w) === Math.round(before.w + 40) && Math.round(resized.h) === Math.round(before.h + 40), "Select moves a shape by a drag and resizes it by its corner", `${JSON.stringify(before)} → ${JSON.stringify(moved)} → ${JSON.stringify(resized)}`);
+  await page.keyboard.press("Delete");
+  await sleep(200);
+  const deleted = await canvasShapes(page);
+  await page.keyboard.press("Control+z");
+  await sleep(200);
+  check(G, !deleted.includes("rect") && (await canvasShapes(page)).includes("rect"), "Delete removes the picked shape, and Undo brings it back", JSON.stringify(deleted));
+
+  // 5. Escape in a text box ends it and keeps the dialog open.
+  await tool(page, "text");
+  await canvasClick(page, [700, 200]);
+  await page.keyboard.type("Ridge");
+  await page.keyboard.press("Escape");
+  await sleep(300);
+  kinds = await canvasShapes(page);
+  check(G, (await drawingDialog(page).count()) === 1 && kinds.filter((k) => k === "text").length === 2, "Escape in a text box ends the text box and keeps the dialog open", JSON.stringify(kinds));
+  await shot(page, "drawing-5-dialog");
+
+  // 6. Save and close: an image that keeps its shapes, cut to what is drawn.
+  await drawingDialog(page).locator('[data-track="docs:drawing:save"]').click();
+  await drawingDialog(page).waitFor({ state: "hidden", timeout: 20_000 });
+  await page.waitForFunction(() => [...document.querySelectorAll(".docs-prose figure.docs-img img")].some((i) => i.complete && i.naturalWidth > 0), null, { timeout: 20_000 }).catch(() => {});
+  let found = await drawings(page);
+  const one = found[0];
+  check(G, found.length === 1 && /^\/api\/images\//.test(one.src) && one.alt === "Drawing" && one.width <= 624 && one.shapes.map((x) => x.kind).join() === "rect,arrow,text,scribble,text", "Save and close puts an image in the page that keeps its shapes", JSON.stringify({ ...one, shapes: one?.shapes.map((x) => x.kind) }));
+  await page.mouse.click(10, 880);
+  await shot(page, "drawing-6-in-page");
+
+  // 7. The image's bar and its right-click menu offer Edit drawing; a double-click edits it.
+  const img = await page.locator(".docs-prose figure.docs-img img").first().boundingBox();
+  await page.mouse.click(img.x + img.width / 2, img.y + img.height / 2);
+  const bar = await page.locator('.docs-img-toolbar [aria-label="Edit drawing"]').waitFor({ state: "visible", timeout: 5000 }).then(() => true, () => false);
+  await page.mouse.click(img.x + img.width / 2, img.y + img.height / 2, { button: "right" });
+  const menu = await page.locator(".docs-context-menu [role='menuitem']", { hasText: "Edit drawing" }).first().waitFor({ state: "visible", timeout: 5000 }).then(() => true, () => false);
+  await page.keyboard.press("Escape");
+  await sleep(300);
+  check(G, bar && menu, "the image's bar and its right-click menu offer Edit drawing", `bar ${bar}, menu ${menu}`);
+  await page.mouse.dblclick(img.x + img.width / 2, img.y + img.height / 2);
+  await drawingDialog(page).waitFor({ state: "visible", timeout: 10_000 });
+  const title = await drawingDialog(page).locator("h2").textContent();
+  const back = await canvasShapes(page);
+  await tool(page, "line");
+  await drawOn(page, [100, 400], [300, 420]);
+  await drawingDialog(page).locator('[data-track="docs:drawing:save"]').click();
+  await drawingDialog(page).waitFor({ state: "hidden", timeout: 20_000 });
+  await sleep(500);
+  found = await drawings(page);
+  check(G, title === "Edit drawing" && back.length === 5 && found.length === 1 && found[0].shapes.length === 6 && found[0].shapes[5].kind === "line" && found[0].src !== one.src, "a double-click opens Edit drawing with the shapes, and Save and close draws the image again in its place", `${title}; ${back.length} shapes back; ${found[0]?.shapes.length} after`);
+
+  // 8. Saved, and the same after a reload.
+  const ok = await saved(page);
+  await openEditor(page, id, "east bank");
+  const reloaded = await drawings(page);
+  check(G, Boolean(ok) && reloaded.length === 1 && reloaded[0].shapes.length === 6, "saved, and after a reload the drawing keeps its shapes", `${reloaded[0]?.shapes.length} shapes`);
+
+  // 9. In Viewing a double-click opens nothing.
+  await setMode(page, "viewing");
+  const shown = await page.locator(".docs-prose figure.docs-img img").first().boundingBox();
+  await page.mouse.dblclick(shown.x + shown.width / 2, shown.y + shown.height / 2);
+  await sleep(600);
+  check(G, (await drawingDialog(page).count()) === 0, "in Viewing a double-click on a drawing opens nothing");
   check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
   await close();
 };
