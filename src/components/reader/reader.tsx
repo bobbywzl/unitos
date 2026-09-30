@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BookmarkIcon, PlusIcon, RedoIcon, UndoIcon } from "@/components/icons";
 import { setQuoteDragImage, writeQuoteDrag } from "@/lib/quote-drag";
 import { isImeKey } from "@/lib/ime";
@@ -30,7 +30,7 @@ import {
   type Highlight,
 } from "@/components/reader/block-view";
 import { FigurePlace, type FigureRenderInfo } from "@/components/reader/figure-capture";
-import { Reveal, inactiveReveal, useReveal, type RevealKind } from "@/components/reader/reveal";
+import { Reveal, inactiveReveal, useReveal, type RevealContext } from "@/components/reader/reveal";
 import { TranslationLine } from "@/components/reader/translation-bar";
 import { CoreBlock, CoreToggle } from "@/components/reader/core-block";
 import { coreKey } from "@/lib/anchors/core-key";
@@ -690,43 +690,23 @@ export function Reader({
   onDeleteBlock: (blockId: string) => Promise<void>;
 }) {
   const t = useT();
-  const uiLang = useLang();
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
-  const translationOf = (block: BlockData) =>
-    mode === "read" && translations?.[block.id] ? (
-      <TranslationLine text={translations[block.id]} lang={uiLang} />
-    ) : null;
-  // Collapse (SPEC.md §28): a block with a core shows the core in its place
-  // until the reader opens it; a block read whole shows as it is, with the
-  // chip that folds it again under it. Reading mode only, like translations.
-  const blockNode = (block: BlockData) => {
-    const core = mode === "read" && collapse ? collapse.cores[block.id] : undefined;
-    const view = <BlockView block={block} highlights={highlightsByBlock[block.id]} documentId={documentId} />;
-    if (core === undefined || !collapse) return view;
-    // A block shows its core when the article is collapsed, unless its own
-    // button flipped it — and the other way round.
-    const showsCore = collapse.on !== collapse.flipped.has(block.id);
-    const toggle = <CoreToggle showsCore={showsCore} onToggle={() => collapse.flip(block.id)} />;
-    if (showsCore) {
-      return (
-        <>
-          <CoreBlock
-            block={block}
-            core={core}
-            highlights={highlightsByBlock[coreKey(block.id)] ?? []}
-            annotated={(highlightsByBlock[block.id] ?? []).some((h) => h.kind === "anchor" && !h.leaving)}
-          />
-          {toggle}
-        </>
-      );
-    }
-    return (
-      <>
-        {view}
-        {toggle}
-      </>
-    );
-  };
+  // The rows' actions, the same functions for the article's life: a row is
+  // drawn again only when what it shows changes (BlockRow), and the reader
+  // passes new callbacks on every draw.
+  const latest = useRef({ onSaveText, onInsertBlock, flip: collapse?.flip });
+  useLayoutEffect(() => {
+    latest.current = { onSaveText, onInsertBlock, flip: collapse?.flip };
+  });
+  const rowActions = useMemo<RowActions>(
+    () => ({
+      save: (blockId, text) => latest.current.onSaveText(blockId, text),
+      insert: (afterBlockId) => latest.current.onInsertBlock(afterBlockId),
+      flip: (blockId) => latest.current.flip?.(blockId),
+      focus: setFocusedBlockId,
+    }),
+    [],
+  );
   // Optimistic overrides: applied the instant a bar button is clicked, cleared
   // when the server round-trip lands (the blocks prop identity changes then).
   const [localKinds, setLocalKinds] = useState<Record<string, Kind>>({});
@@ -786,7 +766,7 @@ export function Reader({
   const focusedBlock = blocks.find((b) => b.id === focusedBlockId) ?? null;
   const effectiveKind = (block: BlockData): Kind => localKinds[block.id] ?? blockKind(block);
   const effectiveStyles = (block: BlockData): StyleSpan[] =>
-    localStyles[block.id] ?? stylesByBlock[block.id] ?? [];
+    localStyles[block.id] ?? stylesByBlock[block.id] ?? NO_SPANS;
   const effectiveText = (block: BlockData): string => localTexts[block.id] ?? block.text;
 
   // Bar buttons prevent blur, so unsaved typing must be saved by hand before a
@@ -1032,6 +1012,47 @@ export function Reader({
   // reading mode only, never the transcript, never over a resume.
   const reveal = useReveal(documentId, mode === "read" && !transcript && !accountPositionAtOpen);
   const blockReveal = mode === "read" ? reveal : inactiveReveal;
+
+  // Reading mode and edit mode draw a block differently, so a switch draws
+  // every block anew, and a long document takes a moment to lay out again
+  // (1,432 blocks: 700 ms). The blocks in view switch at once, before the
+  // paint; the rest follow a few dozen a frame, outward from the view. The
+  // blocks from lo to hi are drawn for `mode`, the rest still for the other.
+  const [switched, setSwitched] = useState<{ mode: "read" | "edit"; lo: number; hi: number }>({
+    mode,
+    lo: 0,
+    hi: Infinity,
+  });
+  const lookOf = (i: number): "read" | "edit" =>
+    i >= switched.lo && i < switched.hi ? switched.mode : switched.mode === "read" ? "edit" : "read";
+  const whole = switched.lo === 0 && switched.hi === Infinity;
+  useLayoutEffect(() => {
+    if (switched.mode === mode) return;
+    // A switch back before the last one finished: the blocks it reached
+    // switch back at once.
+    const range = whole && blocks.length > SWITCH_AT_ONCE ? rowsInView(articleRef.current, blocks.length) : null;
+    setSwitched(range ? { mode, lo: range[0], hi: range[1] } : { mode, lo: 0, hi: Infinity });
+  }, [mode, switched.mode, whole, blocks.length]);
+  useEffect(() => {
+    if (whole) return;
+    const count = blocks.length;
+    // After the paint: a frame, then the next rows.
+    let timer = 0;
+    const frame = requestAnimationFrame(() => {
+      timer = window.setTimeout(() =>
+        setSwitched((s) => {
+          const up = Math.min(s.lo, s.hi < count ? SWITCH_ROWS / 2 : SWITCH_ROWS);
+          const hi = s.hi + (SWITCH_ROWS - up);
+          return { mode: s.mode, lo: s.lo - up, hi: hi >= count ? Infinity : hi };
+        }),
+      );
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [switched, whole, blocks.length]);
+
   const masthead = hasMasthead(blocks);
   // A leading kicker renders above the title, still through BlockView.
   const leadKicker =
@@ -1142,109 +1163,52 @@ export function Reader({
         : " clear-right"
       : "";
 
-  // One block of the reading column. On a first open the reveal wrapper is a
-  // plain div (reveal.tsx); otherwise nothing wraps, so the layout is the same.
+  // One block of the reading column (BlockRow): what it shows, drawn for
+  // reading or for editing as the switch has reached it.
   function renderBlock(block: BlockData, i: number) {
-    const kind: RevealKind = TEXT_TYPES.has(block.type) ? "text" : "object";
-    let node: React.ReactNode;
-    if (block.type === "PAGE" && pages && documentId) {
-      node = (
-        <div className={wrapClear(block.id).trim()}>
-          <PageBlock
-            documentId={documentId}
-            notebookId={pages.notebookId}
-            blockId={block.id}
-            text={block.text}
-            marks={pages.marksByBlock[block.id] ?? []}
-            size={pages.sizeByBlock[block.id] ?? null}
-            canEdit={pages.canEdit && mode === "read"}
-            hint={i === firstPageIndex}
-          />
-          {i === lastPageIndex && (
-            <ConversionStrip
-              documentId={documentId}
-              conversion={pages.conversion}
-              hasText={hasTextBlocks}
-              canEdit={pages.canEdit}
-            />
-          )}
-        </div>
-      );
-    } else if (mode === "edit") {
-      node = (
-        <div className={`group/block${wrapClear(block.id)}`}>
-          {TEXT_TYPES.has(block.type) ? (
-            <EditableBlock
-              block={block}
-              text={effectiveText(block)}
-              kind={effectiveKind(block)}
-              spans={effectiveStyles(block)}
-              restoreSelectionRef={restoreSelectionRef}
-              pendingFocusRef={pendingFocusRef}
-              heldTypingRef={heldTypingRef}
-              onSave={onSaveText}
-              onFocusBlock={setFocusedBlockId}
-            />
-          ) : (
-            <BlockView block={block} highlights={[]} documentId={documentId} />
-          )}
-          <div className="relative -my-1.5 h-3">
-            <button
-              onMouseDown={keep}
-              data-track="insert-paragraph"
-              onClick={() =>
-                void onInsertBlock(block.id).then((id) => {
-                  if (id) pendingFocusRef.current = id;
-                })
-              }
-              aria-label={t("panes.insertParagraphHere")}
-              data-tip={t("panes.insertParagraphHere")}
-              className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-card px-2.5 py-0.5 text-[11px] font-semibold text-sand-600 opacity-0 shadow-soft transition-opacity hover:bg-clay-100 hover:text-clay-800 hover:opacity-100 focus-visible:opacity-100 group-hover/block:opacity-60"
-            >
-              <PlusIcon size={10} />
-              {t("panes.paragraphLower")}
-            </button>
-          </div>
-        </div>
-      );
-    } else if (WRAP_FLOW_TYPES.has(block.type)) {
-      // The wrapper holds the bookmark beside the block; the block keeps its
-      // own margins, which collapse through it, so spacing does not change.
-      node = (
-        <div className="group/block relative">
-          {documentId && <BlockBookmark documentId={documentId} blockId={block.id} text={block.text} />}
-          {blockNode(block)}
-          {translationOf(block)}
-        </div>
-      );
-    } else {
-      // The wrapper carries the clear and holds the bookmark; the block keeps
-      // its own margins, which collapse through it, so spacing does not change.
-      node = (
-        <div className={`group/block relative ${wrapClear(block.id).trim()}`}>
-          {documentId && <BlockBookmark documentId={documentId} blockId={block.id} text={block.text} />}
-          {blockNode(block)}
-          {translationOf(block)}
-        </div>
-      );
-    }
-    // The left-off mark: reading mode only, outside the block's hover group,
-    // so pointing at it leaves the grip hidden. The wrapper has no padding or
-    // border, so the block's margins collapse through it as before.
-    if (mode === "read" && block.id === leftOffBlockId) {
-      node = (
-        <div className="relative">
-          <LeftOffMark />
-          {node}
-        </div>
-      );
-    }
-    const gap = gapById.get(block.id);
+    const look = lookOf(i);
+    const read = look === "read";
+    const edit = !read && TEXT_TYPES.has(block.type);
     return (
-      <Reveal key={block.id} reveal={blockReveal} id={block.id} order={i} kind={kind}>
-        {gap !== undefined && documentId && <FigurePlace documentId={documentId} label={gap} render={figureRender} />}
-        {node}
-      </Reveal>
+      <BlockRow
+        key={block.id}
+        block={block}
+        index={i}
+        look={look}
+        documentId={documentId}
+        clear={wrapClear(block.id)}
+        reveal={read ? reveal : inactiveReveal}
+        gap={gapById.get(block.id)}
+        figureRender={figureRender}
+        leftOff={read && block.id === leftOffBlockId}
+        highlights={read ? highlightsByBlock[block.id] : undefined}
+        translation={read ? translations?.[block.id] : undefined}
+        core={read && collapse ? collapse.cores[block.id] : undefined}
+        showsCore={read && collapse ? collapse.on !== collapse.flipped.has(block.id) : false}
+        coreHighlights={read && collapse ? highlightsByBlock[coreKey(block.id)] : undefined}
+        text={edit ? effectiveText(block) : ""}
+        kind={edit ? effectiveKind(block) : "paragraph"}
+        spans={edit ? effectiveStyles(block) : NO_SPANS}
+        page={
+          block.type === "PAGE" && pages
+            ? {
+                notebookId: pages.notebookId,
+                marks: pages.marksByBlock[block.id] ?? NO_MARKS,
+                size: pages.sizeByBlock[block.id] ?? null,
+                canEdit: pages.canEdit,
+                reading: mode === "read",
+                first: i === firstPageIndex,
+                last: i === lastPageIndex,
+                conversion: pages.conversion,
+                hasText: hasTextBlocks,
+              }
+            : null
+        }
+        actions={rowActions}
+        restoreSelectionRef={restoreSelectionRef}
+        pendingFocusRef={pendingFocusRef}
+        heldTypingRef={heldTypingRef}
+      />
     );
   }
 
@@ -1561,6 +1525,288 @@ const KIND_CLASS: Record<Kind, string> = {
   list: "my-4 pl-5",
   numbered: "my-4 pl-5",
 };
+
+// The switch between reading and edit mode (Reader): a document of up to
+// SWITCH_AT_ONCE blocks switches whole; a longer one switches the rows in
+// view and VIEW_MARGIN rows either side, then SWITCH_ROWS rows a frame.
+const SWITCH_AT_ONCE = 120;
+const VIEW_MARGIN = 20;
+const SWITCH_ROWS = 80;
+const NO_SPANS: StyleSpan[] = [];
+const NO_MARKS: PageMark[] = [];
+const NO_HIGHLIGHTS: Highlight[] = [];
+const keepSelection = (e: React.MouseEvent) => e.preventDefault();
+
+/** The rows in the window and VIEW_MARGIN rows either side, as [lo, hi) in
+    block order, with the row that holds the caret; null with no rows. */
+function rowsInView(article: HTMLElement | null, count: number): [number, number] | null {
+  const rows = article?.querySelectorAll<HTMLElement>("[data-row]");
+  if (!article || !rows || rows.length === 0) return null;
+  // The rows run down the column in block order: the first row that passes
+  // a test, by halves.
+  const firstWhere = (from: number, test: (r: DOMRect) => boolean) => {
+    let a = from;
+    let b = rows.length;
+    while (a < b) {
+      const m = (a + b) >> 1;
+      if (test(rows[m].getBoundingClientRect())) b = m;
+      else a = m + 1;
+    }
+    return a;
+  };
+  const first = firstWhere(0, (r) => r.bottom >= 0);
+  const under = firstWhere(first, (r) => r.top > window.innerHeight);
+  const row = (el: HTMLElement) => Number(el.dataset.row);
+  let lo = first < rows.length ? row(rows[first]) - VIEW_MARGIN : count;
+  let hi = (under < rows.length ? row(rows[under]) : count) + VIEW_MARGIN;
+  const caret = document.activeElement?.closest<HTMLElement>("[data-row]");
+  if (caret && article.contains(caret)) {
+    lo = Math.min(lo, row(caret));
+    hi = Math.max(hi, row(caret) + 1);
+  }
+  return [Math.max(0, lo), hi >= count ? Infinity : hi];
+}
+
+/** What a row's editable and buttons do: the same functions for the
+    article's life (Reader's rowActions). */
+type RowActions = {
+  save: (blockId: string, text: string) => Promise<void>;
+  insert: (afterBlockId: string) => Promise<string | null>;
+  flip: (blockId: string) => void;
+  focus: (blockId: string) => void;
+};
+
+/** A handwritten document's page row (SPEC.md §16). */
+type RowPage = {
+  notebookId: string;
+  marks: PageMark[];
+  size: PageSize | null;
+  canEdit: boolean;
+  /** Reading mode: Circle & ask works on the page. */
+  reading: boolean;
+  /** The first page carries the Circle & ask hint. */
+  first: boolean;
+  /** The conversion strip stands under the last page. */
+  last: boolean;
+  conversion: ConversionInfo;
+  hasText: boolean;
+};
+
+type BlockRowProps = {
+  block: BlockData;
+  index: number;
+  /** Drawn for reading or for editing: the switch reaches the row in turn. */
+  look: "read" | "edit";
+  documentId: string | undefined;
+  /** The note wrap's clear class, or "". */
+  clear: string;
+  reveal: RevealContext;
+  /** A caption left without its figure: the figure's place above it. */
+  gap: string | undefined;
+  figureRender: FigureRenderInfo;
+  leftOff: boolean;
+  highlights: Highlight[] | undefined;
+  translation: string | undefined;
+  core: string | undefined;
+  showsCore: boolean;
+  coreHighlights: Highlight[] | undefined;
+  /** Editing: the text, the kind, and the styles the editable shows. */
+  text: string;
+  kind: Kind;
+  spans: StyleSpan[];
+  page: RowPage | null;
+  actions: RowActions;
+  restoreSelectionRef: React.MutableRefObject<{ blockId: string; start: number; end: number } | null>;
+  pendingFocusRef: React.MutableRefObject<string | null>;
+  heldTypingRef: React.MutableRefObject<{ text: string; stop: () => void } | null>;
+};
+
+/** Two objects with the same fields, each the same value. */
+function sameFields<T extends object>(a: T, b: T): boolean {
+  const keys = Object.keys(a) as (keyof T)[];
+  return keys.length === Object.keys(b).length && keys.every((k) => Object.is(a[k], b[k]));
+}
+
+/** Two lists of marks that draw the same: the reader builds them anew on
+    every draw (reader-interactions.tsx). */
+function sameHighlights(a: Highlight[] | undefined, b: Highlight[] | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((h, i) => sameFields(h, b[i]));
+}
+
+/** A row shows the same: a refresh brings every block anew, most of them
+    unchanged. */
+function sameRow(a: BlockRowProps, b: BlockRowProps): boolean {
+  for (const key of Object.keys(a) as (keyof BlockRowProps)[]) {
+    if (key === "highlights" || key === "coreHighlights") {
+      if (!sameHighlights(a[key], b[key])) return false;
+    } else if (key === "block") {
+      if (a.block !== b.block && !sameFields(a.block, b.block)) return false;
+    } else if (key === "page") {
+      if (a.page !== b.page && !(a.page && b.page && sameFields(a.page, b.page))) return false;
+    } else if (!Object.is(a[key], b[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// One block of the reading column, drawn again only when what it shows
+// changes: the reader draws the column on every press, and a long document
+// holds more than a thousand blocks. On a first open the reveal wrapper is a
+// plain div (reveal.tsx); otherwise nothing wraps, so the layout is the same.
+// data-row is the row's place in the column (rowsInView).
+const BlockRow = memo(function BlockRow({
+  block,
+  index,
+  look,
+  documentId,
+  clear,
+  reveal,
+  gap,
+  figureRender,
+  leftOff,
+  highlights,
+  translation,
+  core,
+  showsCore,
+  coreHighlights,
+  text,
+  kind,
+  spans,
+  page,
+  actions,
+  restoreSelectionRef,
+  pendingFocusRef,
+  heldTypingRef,
+}: BlockRowProps) {
+  const t = useT();
+  const lang = useLang();
+  // The left-off mark's wrapper is the row's outer box when it has one.
+  const row = leftOff ? undefined : index;
+  let node: React.ReactNode;
+  if (block.type === "PAGE" && page && documentId) {
+    node = (
+      <div data-row={row} className={clear.trim()}>
+        <PageBlock
+          documentId={documentId}
+          notebookId={page.notebookId}
+          blockId={block.id}
+          text={block.text}
+          marks={page.marks}
+          size={page.size}
+          canEdit={page.canEdit && page.reading}
+          hint={page.first}
+        />
+        {page.last && (
+          <ConversionStrip
+            documentId={documentId}
+            conversion={page.conversion}
+            hasText={page.hasText}
+            canEdit={page.canEdit}
+          />
+        )}
+      </div>
+    );
+  } else if (look === "edit") {
+    node = (
+      <div data-row={row} className={`group/block${clear}`}>
+        {TEXT_TYPES.has(block.type) ? (
+          <EditableBlock
+            block={block}
+            text={text}
+            kind={kind}
+            spans={spans}
+            restoreSelectionRef={restoreSelectionRef}
+            pendingFocusRef={pendingFocusRef}
+            heldTypingRef={heldTypingRef}
+            onSave={actions.save}
+            onFocusBlock={actions.focus}
+          />
+        ) : (
+          <BlockView block={block} highlights={NO_HIGHLIGHTS} documentId={documentId} />
+        )}
+        <div className="relative -my-1.5 h-3">
+          <button
+            onMouseDown={keepSelection}
+            data-track="insert-paragraph"
+            onClick={() =>
+              void actions.insert(block.id).then((id) => {
+                if (id) pendingFocusRef.current = id;
+              })
+            }
+            aria-label={t("panes.insertParagraphHere")}
+            data-tip={t("panes.insertParagraphHere")}
+            className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-card px-2.5 py-0.5 text-[11px] font-semibold text-sand-600 opacity-0 shadow-soft transition-opacity hover:bg-clay-100 hover:text-clay-800 hover:opacity-100 focus-visible:opacity-100 group-hover/block:opacity-60"
+          >
+            <PlusIcon size={10} />
+            {t("panes.paragraphLower")}
+          </button>
+        </div>
+      </div>
+    );
+  } else {
+    // Collapse (SPEC.md §28): a block with a core shows the core in its place
+    // until the reader opens it; a block read whole shows as it is, with the
+    // chip that folds it again under it. Reading mode only, like translations.
+    // A block shows its core when the article is collapsed, unless its own
+    // button flipped it — and the other way round.
+    const view = <BlockView block={block} highlights={highlights} documentId={documentId} />;
+    const toggle = core !== undefined && (
+      <CoreToggle showsCore={showsCore} onToggle={() => actions.flip(block.id)} />
+    );
+    const body =
+      core === undefined ? (
+        view
+      ) : showsCore ? (
+        <>
+          <CoreBlock
+            block={block}
+            core={core}
+            highlights={coreHighlights ?? NO_HIGHLIGHTS}
+            annotated={(highlights ?? NO_HIGHLIGHTS).some((h) => h.kind === "anchor" && !h.leaving)}
+          />
+          {toggle}
+        </>
+      ) : (
+        <>
+          {view}
+          {toggle}
+        </>
+      );
+    // The wrapper holds the bookmark beside the block, and carries the clear
+    // when the block does not flow around the card; the block keeps its own
+    // margins, which collapse through it, so spacing does not change.
+    node = (
+      <div
+        data-row={row}
+        className={WRAP_FLOW_TYPES.has(block.type) ? "group/block relative" : `group/block relative ${clear.trim()}`}
+      >
+        {documentId && <BlockBookmark documentId={documentId} blockId={block.id} text={block.text} />}
+        {body}
+        {translation ? <TranslationLine text={translation} lang={lang} /> : null}
+      </div>
+    );
+  }
+  // The left-off mark: reading mode only, outside the block's hover group,
+  // so pointing at it leaves the grip hidden. The wrapper has no padding or
+  // border, so the block's margins collapse through it as before.
+  if (leftOff) {
+    node = (
+      <div data-row={index} className="relative">
+        <LeftOffMark />
+        {node}
+      </div>
+    );
+  }
+  return (
+    <Reveal reveal={reveal} id={block.id} order={index} kind={TEXT_TYPES.has(block.type) ? "text" : "object"}>
+      {gap !== undefined && documentId && <FigurePlace documentId={documentId} label={gap} render={figureRender} />}
+      {node}
+    </Reveal>
+  );
+}, sameRow);
 
 // One seamlessly editable block. Decorations (bold, italic, edited color) are
 // visible WHILE editing: the initial content is decorated HTML the browser owns.

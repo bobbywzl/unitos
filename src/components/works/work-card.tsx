@@ -1,8 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { LoadingDots } from "@/components/thinking";
 import { TierMark } from "@/components/tier-mark";
 import { Instruments } from "@/components/works/instruments";
 
@@ -73,7 +74,7 @@ export function WorkCard({
             {t("works.byOwner", { name: work.shared.ownerName })}
           </span>
         )}
-        <span aria-hidden className="mx-auto mt-4 size-2 rounded-full bg-sage-500" />
+        <CoverDot />
         <span className="mt-auto flex flex-wrap justify-center gap-1.5">
           <span className="rounded-full bg-sand-200 px-3 py-1 text-xs font-semibold text-sand-700">
             {t(work.sectionCount === 1 ? "works.sectionCountOne" : "works.sectionCountOther", {
@@ -198,5 +199,18 @@ export function WorkCard({
         )}
       </div>
     </li>
+  );
+}
+
+/** The dot on the cover, and three dots in a wave while the project opens:
+    the press answers at once, and the project's page lands a second later. */
+function CoverDot() {
+  const { pending } = useLinkStatus();
+  return pending ? (
+    <span className="mx-auto mt-4 flex h-2 items-center text-sage-500">
+      <LoadingDots />
+    </span>
+  ) : (
+    <span aria-hidden className="mx-auto mt-4 size-2 rounded-full bg-sage-500" />
   );
 }

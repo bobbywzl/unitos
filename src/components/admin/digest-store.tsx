@@ -3,13 +3,15 @@ import type { DigestDocument, DigestNote } from "@/lib/digest/types";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
 import { DigestRebuild } from "@/components/admin/digest-rebuild";
+import { Fold } from "@/components/admin/fold";
 
 // The digest store, per user: every corpus → every document → its annotations,
 // distillations, extractions, summaries — plus the corpus's notes. Document
 // text stays out of the page; the "Exact text" link serves it as the assistant
-// reads it. Server-rendered; <details> does the folding. Each account is one
-// scroller: its header stays pinned while its corpora scroll under it, and the
-// page scrolls from account to account.
+// reads it. Server-rendered; <details> does the folding, and a folded
+// document or layer is drawn the first time it opens (fold.tsx). Each account
+// is one scroller: its header stays pinned while its corpora scroll under it,
+// and the page scrolls from account to account.
 
 function fmtChars(n: number): string {
   return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : String(n);
@@ -65,12 +67,16 @@ function NoteCard({ note, t }: { note: DigestNote; t: TFunc }) {
 function LayerList({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
   if (count === 0) return null;
   return (
-    <details className="mt-2">
-      <summary className="cursor-pointer text-xs font-semibold text-sand-700 hover:text-clay-800">
-        {title} ({count})
-      </summary>
+    <Fold
+      className="mt-2"
+      summary={
+        <summary className="cursor-pointer text-xs font-semibold text-sand-700 hover:text-clay-800">
+          {title} ({count})
+        </summary>
+      }
+    >
       <div className="mt-2 space-y-2">{children}</div>
-    </details>
+    </Fold>
   );
 }
 
@@ -84,23 +90,27 @@ function DocumentCard({ doc, t }: { doc: DigestDocument; t: TFunc }) {
       : t("admin.videoMetaUpload", { status: doc.video.transcriptStatus.toLowerCase() })
     : (doc.sourceUrl ?? "PDF");
   return (
-    <details className="rounded-xl bg-card p-3 shadow-soft">
-      <summary className="cursor-pointer">
-        <span className="text-sm font-semibold text-sand-800">{doc.title}</span>
-        <span className="ml-2 text-xs text-sand-500">{meta}</span>
-        <span className="mt-1 flex flex-wrap gap-1.5">
-          <Chip>{t("admin.countChars", { n: fmtChars(doc.chars) })}</Chip>
-          <Chip>{t("admin.countAnnotations", { n: doc.annotations.length })}</Chip>
-          <Chip>{t("admin.countDistillations", { n: doc.distillations.length })}</Chip>
-          <Chip>{t("admin.countExtractions", { n: doc.extractions.length })}</Chip>
-          <Chip>{t("admin.countSummaries", { n: doc.summaries.length })}</Chip>
-          {doc.salience.length > 0 && (
-            <Chip>{t("admin.countSalient", { n: doc.salience.length })}</Chip>
-          )}
-          {doc.links.length > 0 && <Chip>{t("admin.countLinks", { n: doc.links.length })}</Chip>}
-          {doc.edits.length > 0 && <Chip>{t("admin.countEdits", { n: doc.edits.length })}</Chip>}
-        </span>
-      </summary>
+    <Fold
+      className="rounded-xl bg-card p-3 shadow-soft"
+      summary={
+        <summary className="cursor-pointer">
+          <span className="text-sm font-semibold text-sand-800">{doc.title}</span>
+          <span className="ml-2 text-xs text-sand-500">{meta}</span>
+          <span className="mt-1 flex flex-wrap gap-1.5">
+            <Chip>{t("admin.countChars", { n: fmtChars(doc.chars) })}</Chip>
+            <Chip>{t("admin.countAnnotations", { n: doc.annotations.length })}</Chip>
+            <Chip>{t("admin.countDistillations", { n: doc.distillations.length })}</Chip>
+            <Chip>{t("admin.countExtractions", { n: doc.extractions.length })}</Chip>
+            <Chip>{t("admin.countSummaries", { n: doc.summaries.length })}</Chip>
+            {doc.salience.length > 0 && (
+              <Chip>{t("admin.countSalient", { n: doc.salience.length })}</Chip>
+            )}
+            {doc.links.length > 0 && <Chip>{t("admin.countLinks", { n: doc.links.length })}</Chip>}
+            {doc.edits.length > 0 && <Chip>{t("admin.countEdits", { n: doc.edits.length })}</Chip>}
+          </span>
+        </summary>
+      }
+    >
       <p className="mt-2 font-mono text-[10px] text-sand-500">
         {t("admin.documentId", { id: doc.id })}
       </p>
@@ -175,14 +185,20 @@ function DocumentCard({ doc, t }: { doc: DigestDocument; t: TFunc }) {
           </p>
         ))}
       </LayerList>
-    </details>
+    </Fold>
   );
 }
 
+// A corpus out of view is not styled or laid out until it scrolls near
+// (content-visibility): the page holds every document of every corpus, and
+// styling and laying out all of them took 700 ms on each visit.
 function CorpusCard({ row, t }: { row: DigestRow; t: TFunc }) {
   const { parts, counts } = row;
   return (
-    <details className="rounded-2xl bg-card p-4 shadow-soft" open>
+    <details
+      className="rounded-2xl bg-card p-4 shadow-soft [contain-intrinsic-size:auto_400px] [content-visibility:auto]"
+      open
+    >
       <summary className="cursor-pointer">
         <span className="text-base font-semibold text-sand-800">{parts.corpusTitle}</span>
         <span className="ml-2 text-xs text-sand-500">
