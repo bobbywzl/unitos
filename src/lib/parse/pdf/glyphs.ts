@@ -4,7 +4,7 @@
 // math, the TeX math family).
 
 import type { Glyph } from "@/lib/parse/pdf/drawing";
-import { isBbm, katexSizeGlyph, mathGlyph, openTypeGlyphs } from "@/lib/parse/pdf/math-fonts";
+import { isBbm, mathGlyph, openTypeGlyphs, sizeFontGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Flags } from "@/lib/parse/pdf/types";
 
 export const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
@@ -243,6 +243,7 @@ export type MathVariant = "bold" | "bf" | "sf" | "tt";
 type UnicodeFont =
   | { kind: "katex"; face: string; style: string }
   | { kind: "opentype"; name: string }
+  | { kind: "size"; name: string }
   | { kind: "tex"; italic: boolean; bullets: boolean; unread: boolean; blackboard: boolean }
   | null;
 
@@ -263,6 +264,11 @@ type UnicodeFont =
 const UNICODE_TEX_RE =
   /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MTEX|MnSymbol|EURM|OpenSymbol|MathDesign-.+-MathDesignSymbol[AB]-)/;
 const ITALIC_MATH_RE = /Italic|MI(B|\d)*$|txmia|MathMI|^EURM/;
+// STIX's first fonts set a formula's sized delimiters, big operators, and
+// the pieces of tall delimiters in five size fonts: each glyph reads by the
+// size font tables, its box its own (OpenStax's f(x) with its tall
+// parentheses read as a picture).
+const STIX_SIZE_RE = /^STIXSize(One|Two|Three|Four|Five)Sym-Regular$/;
 
 // OpenType math fonts by name (Latin Modern's Type 1 math fonts are TeX's
 // own families; MathDesign's are 8-bit TeX encodings).
@@ -277,15 +283,17 @@ function unicodeFont(base: string): UnicodeFont {
       ? { kind: "katex", face: katex[1], style: katex[2] }
       : OPENTYPE_MATH_RE.test(base)
         ? { kind: "opentype", name: base }
-        : UNICODE_TEX_RE.test(base)
-          ? {
-              kind: "tex",
-              italic: ITALIC_MATH_RE.test(base),
-              bullets: /^OpenSymbol/.test(base),
-              unread: /^MTEX|MathDesignSymbol/.test(base),
-              blackboard: /MathDesignSymbolA/.test(base),
-            }
-          : null;
+        : STIX_SIZE_RE.test(base)
+          ? { kind: "size", name: base }
+          : UNICODE_TEX_RE.test(base)
+            ? {
+                kind: "tex",
+                italic: ITALIC_MATH_RE.test(base),
+                bullets: /^OpenSymbol/.test(base),
+                unread: /^MTEX|MathDesignSymbol/.test(base),
+                blackboard: /MathDesignSymbolA/.test(base),
+              }
+            : null;
     fontKinds.set(base, kind);
   }
   return kind;
@@ -442,7 +450,7 @@ function katexChar(char: string, face: string, style: string): Tex | null {
     case "Typewriter":
       return ascii !== null ? { family: "ot1", code: ascii, variant: face === "Typewriter" ? "tt" : "sf" } : texOf(char, ["ot1"]);
     default: {
-      const sized = /^Size\d$/.test(face) ? katexSizeGlyph(`${face}-${style}`, char) : null;
+      const sized = /^Size\d$/.test(face) ? sizeFontGlyph(`${face}-${style}`, char) : null;
       return sized ? { family: sized.family, code: sized.code, box: sized.box } : null;
     }
   }
@@ -544,6 +552,7 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
     if (first === second && more.length === 0 && /\p{L}/u.test(first)) g.unicode = first;
     let tex: Tex | null | undefined;
     if (font.kind === "katex") tex = katexChar(g.unicode, font.face, font.style);
+    else if (font.kind === "size") tex = sizeFontGlyph(font.name, g.unicode);
     else if (font.kind === "tex") {
       tex = font.blackboard && g.code >= 0x41 && g.code <= 0x5a ? { family: "msb", code: g.code } : font.unread ? null : texWorldChar(g.unicode, font.italic, font.bullets);
     }
@@ -564,7 +573,10 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   // fonts set no digit, its digits from the text's font. Such a glyph may
   // join the math beside it (math/zones.ts). Where a math font sets them,
   // the text's are prose: a theorem's italic words, and a table's "53.4"
-  // before its gain set in math (arXiv 2411.19946).
+  // before its gain set in math (arXiv 2411.19946). A page with no glyph of
+  // a math font has no formula to take them: its italic letters and its
+  // digits are prose.
+  if (!glyphs.some((g) => (g.family !== null && g.family !== "ot1") || isUnreadMath(g))) return glyphs;
   const latin = glyphs.some((g) => g.family === "oml" && /^[A-Za-z]$/.test(mathGlyph("oml", g.code)?.unicode ?? ""));
   const digits = glyphs.some((g) => g.family !== null && /^[0-9]$/.test(g.unicode));
   for (const g of glyphs) {
@@ -575,12 +587,14 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
 }
 
 /** A glyph of a math font read by its character that no table reads (a
-    big operator, a sized delimiter, a piece of one: texWorldChar): it is
-    math, and the formula it stands in fails the check. Read as text, it
+    big operator, a sized delimiter, a piece of one: texWorldChar), or a
+    glyph of a size font the tables lack: it is math, and the formula it
+    stands in fails the check. Read as text, it
     cut its formula in two, and each half passed (Springer's matrices read
     "−1 1 0" as −11 0). OpenSymbol's bullets are no math. */
 export function isUnreadMath(g: Glyph): boolean {
   const font = unicodeFont(g.base);
+  if (font?.kind === "size") return g.unicode.trim() !== "";
   return font?.kind === "tex" && g.unicode.trim() !== "" && !(font.bullets && /^[•–—…‰·]$/.test(g.unicode));
 }
 

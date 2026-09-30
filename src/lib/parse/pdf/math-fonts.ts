@@ -947,10 +947,11 @@ export function mathGlyph(family: MathFamily, code: number): MathGlyph | null {
 // its box (height and depth in em) as its own font draws it.
 export type TexCode = { family: MathFamily; code: number; box: [number, number] };
 
-// KaTeX's size fonts (\big to \Bigg, big operators, the pieces of tall
-// delimiters): [character, family, code, height, depth]. KaTeX stands each
-// glyph on the baseline; TeX's extension font hangs its own from it.
-const KATEX_SIZES: Record<string, [string, MathFamily, number, number, number][]> = {
+// The size fonts of KaTeX and of STIX's first fonts (\big to \Bigg, big
+// operators, wide accents, the pieces of tall delimiters): [character,
+// family, code, height, depth]. Each stands its glyphs on the baseline;
+// TeX's extension font hangs its own from it.
+const SIZE_FONTS: Record<string, [string, MathFamily, number, number, number][]> = {
   "Size1-Regular": [
     ["(", "omx", 0, 0.85, 0.35],
     [")", "omx", 1, 0.85, 0.35],
@@ -1090,6 +1091,128 @@ const KATEX_SIZES: Record<string, [string, MathFamily, number, number, number][]
     ["⎷", "omx", 116, 0.915, 0.885],
     ["⟨", "omx", 42, 1.75, 1.25],
     ["⟩", "omx", 43, 1.75, 1.25],
+  ],
+  "STIXSizeOneSym-Regular": [
+    ["(", "omx", 0, 1.066, 0.164],
+    [")", "omx", 1, 1.066, 0.164],
+    ["/", "omx", 14, 1.066, 0.164],
+    ["[", "omx", 2, 1.066, 0.164],
+    ["\\", "omx", 15, 1.066, 0.164],
+    ["]", "omx", 3, 1.066, 0.164],
+    ["{", "omx", 8, 1.066, 0.164],
+    ["}", "omx", 9, 1.066, 0.164],
+    ["ˆ", "omx", 98, 0.767, -0.554],
+    ["˜", "omx", 101, 0.75, -0.598],
+    ["̂", "omx", 98, 0.767, -0.554],
+    ["̃", "omx", 101, 0.75, -0.598],
+    ["∏", "omx", 89, 1.5, -0.049],
+    ["∐", "omx", 97, 1.5, -0.049],
+    ["∑", "omx", 88, 1.499, -0.049],
+    ["√", "omx", 113, 1.552, 0.295],
+    ["⋀", "omx", 94, 1.5, -0.049],
+    ["⋁", "omx", 95, 1.5, -0.049],
+    ["⋂", "omx", 92, 1.51, -0.049],
+    ["⋃", "omx", 91, 1.5, -0.039],
+    ["⌈", "omx", 6, 1.066, 0.164],
+    ["⌉", "omx", 7, 1.066, 0.164],
+    ["⌊", "omx", 4, 1.066, 0.164],
+    ["⌋", "omx", 5, 1.066, 0.164],
+    ["⎛", "omx", 48, 0.7, 0.305],
+    ["⎜", "omx", 66, 0.705, 0.305],
+    ["⎝", "omx", 64, 0.705, 0.3],
+    ["⎞", "omx", 49, 0.7, 0.305],
+    ["⎟", "omx", 67, 0.705, 0.305],
+    ["⎠", "omx", 65, 0.705, 0.3],
+    ["⎡", "omx", 50, 0.682, 0.323],
+    ["⎢", "omx", 54, 0.687, 0.323],
+    ["⎣", "omx", 52, 0.687, 0.318],
+    ["⎤", "omx", 51, 0.682, 0.323],
+    ["⎥", "omx", 55, 0.687, 0.323],
+    ["⎦", "omx", 53, 0.687, 0.318],
+    ["⎧", "omx", 56, 0.7, 0.305],
+    ["⎨", "omx", 60, 0.705, 0.305],
+    ["⎩", "omx", 58, 0.705, 0.3],
+    ["⎪", "omx", 62, 0.705, 0.305],
+    ["⎫", "omx", 57, 0.7, 0.305],
+    ["⎬", "omx", 61, 0.705, 0.305],
+    ["⎭", "omx", 59, 0.705, 0.3],
+    ["⎷", "omx", 116, 1.51, 0.345],
+    ["⟨", "omx", 10, 1.066, 0.164],
+    ["⟩", "omx", 11, 1.066, 0.164],
+    ["⨀", "omx", 75, 1.5, -0.049],
+    ["⨁", "omx", 77, 1.5, -0.049],
+    ["⨂", "omx", 79, 1.5, -0.049],
+    ["⨄", "omx", 93, 1.5, -0.039],
+    ["⨆", "omx", 71, 1.5, -0.049],
+  ],
+  "STIXSizeTwoSym-Regular": [
+    ["(", "omx", 16, 1.566, 0.279],
+    [")", "omx", 17, 1.566, 0.279],
+    ["/", "omx", 46, 1.566, 0.279],
+    ["[", "omx", 104, 1.566, 0.279],
+    ["\\", "omx", 47, 1.566, 0.279],
+    ["]", "omx", 105, 1.566, 0.279],
+    ["{", "omx", 110, 1.566, 0.279],
+    ["}", "omx", 111, 1.566, 0.279],
+    ["ˆ", "omx", 99, 0.777, -0.564],
+    ["˜", "omx", 102, 0.76, -0.608],
+    ["̂", "omx", 99, 0.777, -0.564],
+    ["̃", "omx", 102, 0.76, -0.608],
+    ["√", "omx", 114, 2.056, 0.404],
+    ["⌈", "omx", 108, 1.566, 0.279],
+    ["⌉", "omx", 109, 1.566, 0.279],
+    ["⌊", "omx", 106, 1.566, 0.279],
+    ["⌋", "omx", 107, 1.566, 0.279],
+    ["⟨", "omx", 68, 1.566, 0.279],
+    ["⟩", "omx", 69, 1.566, 0.279],
+  ],
+  "STIXSizeThreeSym-Regular": [
+    ["(", "omx", 18, 2.066, 0.394],
+    [")", "omx", 19, 2.066, 0.394],
+    ["/", "omx", 30, 2.066, 0.394],
+    ["[", "omx", 20, 2.066, 0.394],
+    ["\\", "omx", 31, 2.066, 0.394],
+    ["]", "omx", 21, 2.066, 0.394],
+    ["{", "omx", 26, 2.066, 0.394],
+    ["}", "omx", 27, 2.066, 0.394],
+    ["ˆ", "omx", 100, 0.777, -0.564],
+    ["˜", "omx", 103, 0.774, -0.608],
+    ["̂", "omx", 100, 0.777, -0.564],
+    ["̃", "omx", 103, 0.774, -0.608],
+    ["√", "omx", 115, 2.565, 0.51],
+    ["⌈", "omx", 24, 2.066, 0.394],
+    ["⌉", "omx", 25, 2.066, 0.394],
+    ["⌊", "omx", 22, 2.066, 0.394],
+    ["⌋", "omx", 23, 2.066, 0.394],
+    ["⟨", "omx", 28, 2.066, 0.394],
+    ["⟩", "omx", 29, 2.066, 0.394],
+  ],
+  "STIXSizeFourSym-Regular": [
+    ["(", "omx", 32, 2.566, 0.509],
+    [")", "omx", 33, 2.566, 0.509],
+    ["/", "omx", 44, 2.566, 0.509],
+    ["[", "omx", 34, 2.566, 0.509],
+    ["\\", "omx", 45, 2.566, 0.509],
+    ["]", "omx", 35, 2.566, 0.509],
+    ["{", "omx", 40, 2.566, 0.509],
+    ["}", "omx", 41, 2.566, 0.509],
+    ["ˆ", "omx", 100, 0.796, -0.573],
+    ["˜", "omx", 103, 0.771, -0.608],
+    ["̂", "omx", 100, 0.796, -0.573],
+    ["̃", "omx", 103, 0.771, -0.608],
+    ["√", "omx", 113, 1.51, 0.345],
+    ["⌈", "omx", 38, 2.566, 0.509],
+    ["⌉", "omx", 39, 2.566, 0.509],
+    ["⌊", "omx", 36, 2.566, 0.509],
+    ["⌋", "omx", 37, 2.566, 0.509],
+    ["⟨", "omx", 42, 2.566, 0.509],
+    ["⟩", "omx", 43, 2.566, 0.509],
+  ],
+  "STIXSizeFiveSym-Regular": [
+    ["ˆ", "omx", 100, 0.816, -0.572],
+    ["˜", "omx", 103, 0.78, -0.617],
+    ["̂", "omx", 100, 0.816, -0.572],
+    ["̃", "omx", 103, 0.78, -0.617],
   ],
 };
 
@@ -1666,8 +1789,8 @@ const OPENTYPE: Record<string, [string, number, number, number, number, MathFami
   ],
 };
 
-const KATEX_BY_CHAR = new Map(
-  Object.entries(KATEX_SIZES).map(([font, rows]) => [
+const SIZE_BY_CHAR = new Map(
+  Object.entries(SIZE_FONTS).map(([font, rows]) => [
     font,
     new Map(rows.map(([char, family, code, height, depth]) => [char, { family, code, box: [height, depth] } as TexCode])),
   ]),
@@ -1684,9 +1807,10 @@ const OPENTYPE_BY_CHAR = new Map(
   }),
 );
 
-/** A glyph of KaTeX's size font ("Size2-Regular") as TeX's. */
-export function katexSizeGlyph(font: string, char: string): TexCode | null {
-  return KATEX_BY_CHAR.get(font)?.get(char) ?? null;
+/** A glyph of a size font (KaTeX's "Size2-Regular", STIX's
+    "STIXSizeTwoSym-Regular") as TeX's. */
+export function sizeFontGlyph(font: string, char: string): TexCode | null {
+  return SIZE_BY_CHAR.get(font)?.get(char) ?? null;
 }
 
 export type OpenTypeGlyph = TexCode & { gid: number; advance: number };

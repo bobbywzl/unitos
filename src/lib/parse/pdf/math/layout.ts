@@ -61,6 +61,7 @@ const JOIN: [string, string, string][] = [
   ["\\triangleright", "\\triangleleft", "\\bowtie"],
 ];
 const BIG = ["", "\\big", "\\Big", "\\bigg", "\\Bigg"];
+const SIZED_RE = /^\\(left|right|[bB]igg?)/;
 const FENCE_ENV: Record<string, string> = { "(": "pmatrix", "[": "bmatrix", "\\{": "Bmatrix", "|": "vmatrix", "\\|": "Vmatrix" };
 
 // The formula being read: display or inline, and the size of the text it
@@ -262,12 +263,17 @@ function assemblePieces(atoms: Atom[]): Atom[] {
   // Bar columns pair up as open and close, each kind with its own: |x|
   // drawn tall, and a norm around it (‖∏|f|^p‖ paired ‖ with the first |,
   // arXiv 2506.08494 (2.12)).
+  // Only bars of one row pair: two rows' evaluation bars ("|_{t=0}" in each
+  // row of an aligned display) are no absolute value.
   const bars = fences.filter((a) => a.cls === "bar").sort(byX);
   for (const tex of ["|", "\\|"]) {
     const kind = bars.filter((b) => b.tex === tex);
-    for (let i = 0; i + 1 < kind.length; i += 2) {
-      kind[i].cls = "open";
-      kind[i + 1].cls = "close";
+    for (let i = 0; i + 1 < kind.length; ) {
+      if (Math.min(kind[i].top, kind[i + 1].top) > Math.max(kind[i].bottom, kind[i + 1].bottom)) {
+        kind[i].cls = "open";
+        kind[i + 1].cls = "close";
+        i += 2;
+      } else i++;
     }
   }
   for (const b of bars) if (b.cls === "bar") b.cls = "ord";
@@ -585,11 +591,25 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
       // the bar. Parts set smaller than the formula make a text-style one.
       // Parts set smaller than the text the formula sits in make a
       // text-style fraction (or one in a script): its own size is a step up.
+      // Parts at the size of the glyphs beside the bar, on its axis, make a
+      // fraction in a script set at the script's size (MathJax's
+      // e^{-\frac{1}{2}…} in OpenStax's f(x)): its own size is theirs, and
+      // \tfrac keeps its parts at that size.
       const part = Math.max(maxSize(above), maxSize(below));
-      const size = part >= style.size * 0.95 ? part : Math.min(style.size, part / 0.7);
+      const script = pool.some(
+        (a) =>
+          !above.includes(a) &&
+          !below.includes(a) &&
+          a.x2 > r.x1 - part &&
+          a.x1 < r.x2 + part &&
+          Math.abs(a.size - part) < 0.05 * part &&
+          Math.abs(a.yb - (y - 0.25 * part)) < 0.1 * part,
+      );
+      const size = part >= style.size * 0.95 || script ? part : Math.min(style.size, part / 0.7);
+      const frac = script && part < style.size * 0.95 ? "\\tfrac" : "\\frac";
       const extra: Partial<Atom> = { x1: r.x1, x2: r.x2 };
       if (depth === 0) extra.fracPart = part;
-      nodes.push(node([...above, ...below], `\\frac{${num}}{${den}}`, y - 0.25 * size, size, extra));
+      nodes.push(node([...above, ...below], `${frac}{${num}}{${den}}`, y - 0.25 * size, size, extra));
       continue;
     }
     if (above.length && !below.length) {
@@ -758,7 +778,9 @@ function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
   return rows;
 }
 
-// Columns: gaps of 0.9 em or more open in every row that splits two cells.
+// Columns: gaps of 0.9 em or more open in every row that splits two cells,
+// or of 9.5 pt: TeX sets an array's columns 10 pt apart at any text size
+// (a 12 pt paper's bmatrix read each row as one cell).
 function columnCuts(rows: Atom[][], em: number): number[] {
   const all = rows.flat();
   if (all.length === 0) return [];
@@ -772,14 +794,17 @@ function columnCuts(rows: Atom[][], em: number): number[] {
       rows.filter((r) => r.some((a) => a.x2 <= x) && r.some((a) => a.x1 >= x)).length >= 2;
     if (open && start === null) start = x;
     if (!open && start !== null) {
-      if (x - start >= 0.9 * em) cuts.push((start + x) / 2);
+      if (x - start >= Math.min(0.9 * em, 9.5)) cuts.push((start + x) / 2);
       start = null;
     }
   }
   return cuts;
 }
 
+// A cell of cases or a matrix is set in text style: a fraction whose parts
+// are the text's size there is \dfrac (arXiv 2502.02648 (14)).
 function cells(rows: Atom[][], cuts: number[]): string {
+  const cell = (a: Atom): Atom => ({ ...a, tex: a.fracPart !== undefined && a.fracPart >= style.size * 0.9 ? a.tex.replace(/^\\frac/, "\\dfrac") : a.tex });
   return rows
     .map((r) => {
       const parts: Atom[][] = [[]];
@@ -788,7 +813,7 @@ function cells(rows: Atom[][], cuts: number[]): string {
         parts[parts.length - 1].push(a);
       }
       while (parts.length < cuts.length + 1) parts.push([]);
-      return parts.map((p) => linear(p.map((a) => ({ ...a })))).join(" & ");
+      return parts.map((p) => linear(p.map(cell))).join(" & ");
     })
     .join(" \\\\ ");
 }
@@ -797,22 +822,58 @@ function cells(rows: Atom[][], cuts: number[]): string {
 // first: a matrix, a binomial, or (a left brace with no closer) cases.
 function fencedGroups(atoms: Atom[], em: number): Atom[] {
   let out = [...atoms];
+  // An opening delimiter whose group stacks nothing (tall parentheses
+  // around a fraction) holds no group around it back: the cases of arXiv
+  // 2502.02648 (14) waited on the parentheses in their second row, and
+  // were a crop.
+  const plain = new Set<Atom>();
   for (;;) {
     const fences = out.filter((a) => isTall(a, em) && a.fam === "omx").sort(byX);
     let made: Atom | null = null;
+    let marked = false;
     for (let i = 0; i < fences.length && !made; i++) {
       const open = fences[i];
-      if (open.cls !== "open") continue;
-      const close = fences.slice(i + 1).find((d) => d.cls === "close");
-      const inner = fences.slice(i + 1).find((d) => d.cls === "open");
-      if (inner && close && inner.x1 < close.x1) continue; // innermost first
+      if (open.cls !== "open" || plain.has(open)) continue;
+      // Its closing delimiter: the first no opening one between them takes.
+      let depth = 0;
+      const close = fences.slice(i + 1).find((d) => (d.cls === "open" ? (depth++, false) : d.cls === "close" && depth-- === 0));
+      const inner = fences.slice(i + 1).find((d) => d.cls === "open" && !plain.has(d) && (!close || d.x1 < close.x1));
+      if (inner) continue; // innermost first
+      const stacks = (yes: boolean) => {
+        if (!yes) {
+          plain.add(open);
+          marked = true;
+        }
+        return yes;
+      };
       const right = close ? close.x1 + 0.1 : Infinity;
-      const content = out.filter((a) => a !== open && a !== close && a.x1 >= open.x2 - 0.1 && a.x2 <= right && a.top <= open.top + 0.2 * em && a.bottom >= open.bottom - 0.2 * em);
-      if (content.length === 0) continue;
+      let content = out.filter((a) => a !== open && a !== close && a.x1 >= open.x2 - 0.1 && a.x2 <= right && a.top <= open.top + 0.2 * em && a.bottom >= open.bottom - 0.2 * em);
+      if (!close) {
+        // What follows cases on the formula's baseline, past every row's end
+        // and on no row's baseline (the sentence's period), is the
+        // formula's, not a row's: arXiv 2502.02648 (25) read "γ < 1_{.}".
+        const base = (open.top + open.bottom) / 2 - 0.25 * em;
+        for (;;) {
+          const last = [...content].sort((p, q) => q.x2 - p.x2)[0];
+          const rest = content.filter((a) => a !== last);
+          if (!last || rest.length === 0 || Math.abs(last.yb - base) > 0.2 * em) break;
+          if (rest.some((a) => a.x2 > last.x1 + 0.1 * em || Math.abs(a.yb - last.yb) < 0.1 * em)) break;
+          content = rest;
+        }
+      }
+      // Cases take no cases set after them on the line: two side by side
+      // ("β = {…} and β' = {…}", arXiv 2410.04586 p. 18) read as one inside
+      // the other.
+      if (!stacks(content.length > 0 && (Boolean(close) || !content.some((a) => a.tex.startsWith("\\begin{cases}"))))) continue;
+      // A tall delimiter or a big operator inside hangs from its origin: its
+      // row is the one its middle stands on (linearAt places it so too).
+      for (const a of content) {
+        if (hangingFamily(a.fam) && (a.cls === "op" || a.entry?.size || a.entry?.piece || a.cls === "open" || a.cls === "close")) a.yb = (a.top + a.bottom) / 2 - 0.25 * Math.min(em, a.size);
+      }
       const stackSize = maxSize(content);
       const mains = content.filter((a) => a.size >= stackSize * 0.95 && a.fam !== "omx");
       const lines = rowLines(mains, stackSize);
-      if (lines.length < 2) continue;
+      if (!stacks(lines.length >= 2)) continue;
       // A matrix whose rows are labeled beside it, a label in a column left
       // of its bracket on each row's baseline (a Markov chain's states):
       // KaTeX has no \bordermatrix, and read with the formula the middle
@@ -827,8 +888,10 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       const axis = (open.top + open.bottom) / 2;
       let tex: string;
       if (!close && open.tex === "\\{") tex = `\\begin{cases} ${cells(rows, cuts)} \\end{cases}`;
-      else if (!close) continue;
-      else if (open.tex === "(" && close.tex === ")" && rows.length === 2 && cuts.length === 0) {
+      else if (!close) {
+        stacks(false);
+        continue;
+      } else if (open.tex === "(" && close.tex === ")" && rows.length === 2 && cuts.length === 0) {
         tex = `\\binom{${linear(rows[0].map((a) => ({ ...a })))}}{${linear(rows[1].map((a) => ({ ...a })))}}`;
       } else {
         const env = FENCE_ENV[open.tex] ?? "matrix";
@@ -838,7 +901,7 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       out = out.filter((a) => a !== open && a !== close && !content.includes(a));
       out.push(made);
     }
-    if (!made) return out;
+    if (!made && !marked) return out;
   }
 }
 
@@ -851,13 +914,33 @@ function alignedRows(atoms: Atom[], em: number): string | null {
   const rows = splitRows(atoms, lines);
   // Rows that are no more than a big operator's limits are no rows.
   if (rows.some((r) => !r.some((a) => a.size >= em * 0.95))) return null;
-  const firstRel = (r: Atom[]) => [...r].sort(byX).find((a) => a.cls === "rel");
+  // Nor is a short row just right of a tall delimiter or a fraction of
+  // another row that reaches over and under its baseline: it is that
+  // one's script, which MathJax sets at its base's size in a script
+  // (OpenStax's e^{…(\frac{x-μ}{σ})^2}).
+  const hangs = (r: Atom[]) => {
+    const s = [...r].sort(byX);
+    const first = s[0];
+    return (
+      s[s.length - 1].x2 - first.x1 < 2 * em &&
+      atoms.some((b) => !r.includes(b) && b.top > first.yb && b.bottom < first.yb && first.x1 >= b.x2 - 0.1 * em && first.x1 - b.x2 < 0.3 * em)
+    );
+  };
+  if (rows.some(hangs)) return null;
+  // A grid of four columns or more, a gap open down every row between
+  // each two, is a matrix with no delimiters (a Betti table's "0: 1 . .").
+  const cuts = columnCuts(rows, em);
+  if (cuts.length >= 3) return `\\begin{matrix} ${cells(rows, cuts)} \\end{matrix}`;
+  // Each row's first relation at its size (a limit's arrow is none).
+  const isRel = (a: Atom) => a.cls === "rel" && a.size >= em * 0.95;
+  const firstRel = (r: Atom[]) => [...r].sort(byX).find(isRel);
   const rels = rows.map(firstRel).filter((a): a is Atom => a !== undefined);
-  const aligned = rels.length === rows.length && rels.every((a) => Math.abs(a.x1 - rels[0].x1) < 0.3 * em);
+  // Their left edges, or their centers (eqnarray centers "=" over "⟶").
+  const aligned = rels.length === rows.length && rels.every((a) => Math.abs(a.x1 - rels[0].x1) < 0.3 * em || Math.abs(cx(a) - cx(rels[0])) < 0.3 * em);
   if (aligned) {
     const body = rows.map((r) => {
       const s = [...r].sort(byX);
-      const k = s.findIndex((a) => a.cls === "rel");
+      const k = s.findIndex(isRel);
       return `${linear(s.slice(0, k).map((a) => ({ ...a })))} &${linear(s.slice(k).map((a) => ({ ...a })))}`;
     });
     return `\\begin{aligned} ${body.join(" \\\\ ")} \\end{aligned}`;
@@ -1000,7 +1083,9 @@ function linearAt(input: Atom[]): string {
   // Tall delimiters pair up as \left … \right (an editor redraws them to
   // fit); one alone keeps its drawn size (\bigl( up to \Biggl(): a lone
   // \left does not parse.
-  const tall = atoms.filter((a) => isTall(a, em)).sort(byX);
+  // A delimiter a level up sized already (a script's tall parentheses are
+  // tall for the formula too) keeps its size.
+  const tall = atoms.filter((a) => isTall(a, em) && !SIZED_RE.test(a.tex)).sort(byX);
   const stack: Atom[] = [];
   const lone: Atom[] = [];
   for (const d of tall) {
@@ -1306,7 +1391,22 @@ function drawnRadicals(atoms: Atom[], rules: Rule[], paths: Box[], used: Set<Box
     );
     if (!sign || !entry) continue;
     used.add(sign);
-    out.push({ fam: "oms", code: 0x70, entry, tex: "", cls: "radical", size: em, x1: sign.x1, x2: r.x1, yb: sign.y1, top, bottom: sign.y1, upright: false });
+    // A sign drawn in strokes (the tick, the stroke down, the stroke up to
+    // the rule: OpenStax's √(2·π)): each stroke that ends where the one
+    // after it starts is the sign's.
+    let x1 = sign.x1;
+    let bottom = sign.y1;
+    for (let more = true; more; ) {
+      more = false;
+      for (const p of paths) {
+        if (used.has(p) || Math.abs(p.x2 - x1) > 0.05 * em || p.y1 < bottom - 0.05 * em || p.y2 > top) continue;
+        used.add(p);
+        x1 = p.x1;
+        bottom = Math.min(bottom, p.y1);
+        more = true;
+      }
+    }
+    out.push({ fam: "oms", code: 0x70, entry, tex: "", cls: "radical", size: em, x1, x2: r.x1, yb: bottom, top, bottom, upright: false });
   }
   return out;
 }

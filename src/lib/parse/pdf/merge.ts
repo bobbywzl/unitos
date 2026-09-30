@@ -221,13 +221,13 @@ function liftFloatsOffParagraphBreaks(segments: Segment[]): Segment[] {
     if (out[b].page === out[b - 1].page) continue;
     // The page's last paragraph, past the figures, tables, and whole
     // captions set after it on its page (a caption that ends mid-sentence
-    // goes on over the page), and past a line under it set smaller (a
+    // goes on over the page), and past a short line under it set smaller (a
     // license line at the page's foot: IEEE Access p. 1).
     let a = b - 1;
     let footLine = false;
     for (; a > 0 && out[a - 1].page === out[a].page; a--) {
       if (isPageFloat(out[a]) && (out[a].type !== "PARAGRAPH" || /[.!?:)]$/.test(out[a].text.trim()))) continue;
-      if (out[a].type !== "PARAGRAPH" || !isLabel(out[a], out[a - 1])) break;
+      if (out[a].type !== "PARAGRAPH" || out[a - 1].type !== "PARAGRAPH" || out[a].text.length >= 200 || !isLabel(out[a], out[a - 1])) break;
       footLine = true;
     }
     const prev = out[a];

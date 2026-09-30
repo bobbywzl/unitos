@@ -26,6 +26,10 @@ same symbol in TeX's fonts. What that needs besides the tables above:
 - KaTeX's size fonts, whose glyphs stand on the baseline where TeX's
   extension font hangs its own: each glyph's code and box from KaTeX's
   metrics (node_modules/katex/src/fontMetricsData.js);
+- the size fonts of STIX's first fonts (STIXSizeOneSym to STIXSizeFiveSym,
+  OpenStax's books), whose glyphs stand on the baseline too: each glyph's
+  code, and its box from its outline, read from .bench/fonts/stix/ (STIX
+  v1.1; Debian and Ubuntu: fonts-stix);
 - each OpenType math font's size variants and assembly parts of its
   delimiters, big operators, and radicals, which the PDF maps to the one
   character "(" or "∑": each glyph's advance, box, and TeX code, from the
@@ -570,6 +574,53 @@ def katex_sizes():
     return out
 
 
+# STIX's first size fonts, smallest first.
+STIX_SIZES = ["One", "Two", "Three", "Four", "Five"]
+
+
+def stix_sizes():
+    """The size fonts of STIX's first fonts: each glyph's TeX code and its
+    box from its outline. A delimiter's and a radical's TeX size is the one
+    nearest its height; the big operators of the first font are the display
+    forms."""
+    delims = delimiter_codes()
+    operators = operator_codes()
+    out = {}
+    for n, word in enumerate(STIX_SIZES, start=1):
+        font = f"STIXSize{word}Sym-Regular"
+        path = ROOT / f".bench/fonts/stix/{font}.otf"
+        if not path.exists():
+            raise SystemExit(f"{font}.otf not found: put STIX v1.1's size fonts in .bench/fonts/stix/ (Debian and Ubuntu: fonts-stix)")
+        f = TTFont(path)
+        upm = f["head"].unitsPerEm
+        glyphs = f.getGlyphSet()
+        rows = []
+        for cp, g in sorted(f.getBestCmap().items()):
+            ch = chr(cp)
+            pen = BoundsPen(glyphs)
+            glyphs[g].draw(pen)
+            if not pen.bounds:
+                continue
+            height, depth = round(pen.bounds[3] / upm, 3), round(-pen.bounds[1] / upm, 3)
+            if ch in delims:
+                family, code = "omx", delims[ch][size_of(height + depth) - 1]
+            elif ch in operators and n == 1:
+                family, code = operators[ch][0], operators[ch][2]
+            elif ch == "√":
+                family, code = "omx", 0x6F + size_of(height + depth)
+            elif ch in PIECE_CHARS:
+                family, code = "omx", PIECE_CHARS[ch]
+            elif ch in "ˆ\u0302":
+                family, code = "omx", 0x61 + min(n, 3)
+            elif ch in "˜\u0303":
+                family, code = "omx", 0x64 + min(n, 3)
+            else:
+                continue
+            rows.append([ch, family, code, height, depth])
+        out[font] = rows
+    return out
+
+
 def opentype(path):
     """An OpenType math font's delimiters, big operators, and radicals: each
     size variant, script-style form, and assembly part the font draws, as
@@ -773,10 +824,11 @@ export function mathGlyph(family: MathFamily, code: number): MathGlyph | null {{
 // its box (height and depth in em) as its own font draws it.
 export type TexCode = {{ family: MathFamily; code: number; box: [number, number] }};
 
-// KaTeX's size fonts (\\big to \\Bigg, big operators, the pieces of tall
-// delimiters): [character, family, code, height, depth]. KaTeX stands each
-// glyph on the baseline; TeX's extension font hangs its own from it.
-const KATEX_SIZES: Record<string, [string, MathFamily, number, number, number][]> = {{
+// The size fonts of KaTeX and of STIX's first fonts (\\big to \\Bigg, big
+// operators, wide accents, the pieces of tall delimiters): [character,
+// family, code, height, depth]. Each stands its glyphs on the baseline;
+// TeX's extension font hangs its own from it.
+const SIZE_FONTS: Record<string, [string, MathFamily, number, number, number][]> = {{
 {chr(10).join(size_lines)}
 }};
 
@@ -790,8 +842,8 @@ const OPENTYPE: Record<string, [string, number, number, number, number, MathFami
 {chr(10).join(font_lines)}
 }};
 
-const KATEX_BY_CHAR = new Map(
-  Object.entries(KATEX_SIZES).map(([font, rows]) => [
+const SIZE_BY_CHAR = new Map(
+  Object.entries(SIZE_FONTS).map(([font, rows]) => [
     font,
     new Map(rows.map(([char, family, code, height, depth]) => [char, {{ family, code, box: [height, depth] }} as TexCode])),
   ]),
@@ -808,9 +860,10 @@ const OPENTYPE_BY_CHAR = new Map(
   }}),
 );
 
-/** A glyph of KaTeX's size font ("Size2-Regular") as TeX's. */
-export function katexSizeGlyph(font: string, char: string): TexCode | null {{
-  return KATEX_BY_CHAR.get(font)?.get(char) ?? null;
+/** A glyph of a size font (KaTeX's "Size2-Regular", STIX's
+    "STIXSizeTwoSym-Regular") as TeX's. */
+export function sizeFontGlyph(font: string, char: string): TexCode | null {{
+  return SIZE_BY_CHAR.get(font)?.get(char) ?? null;
 }}
 
 export type OpenTypeGlyph = TexCode & {{ gid: number; advance: number }};
@@ -845,7 +898,7 @@ export function isBbm(letters: {{ char: string; advance: number }}[]): boolean {
 """
     )
     print(f"{OUT}: " + ", ".join(f"{family} {len(entries)}" for family, entries in table.items()))
-    print("  KaTeX sizes: " + ", ".join(f"{font} {len(rows)}" for font, rows in sizes.items()))
+    print("  size fonts: " + ", ".join(f"{font} {len(rows)}" for font, rows in sizes.items()))
     print("  OpenType: " + ", ".join(f"{font} {len(rows)}" for font, rows in fonts.items()))
     print(f"  bbm: {len(bbm)} letters at {len(BBM_SIZES)} sizes")
 
@@ -853,4 +906,4 @@ export function isBbm(letters: {{ char: string; advance: number }}[]): boolean {
 if __name__ == "__main__":
     table = build()
     virtual(table)
-    write(table, katex_sizes(), opentype_fonts(), bbm_widths())
+    write(table, {**katex_sizes(), **stix_sizes()}, opentype_fonts(), bbm_widths())

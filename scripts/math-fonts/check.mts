@@ -9,8 +9,11 @@
 //      pdfTeX's Unicode map, read as their characters in parsePdf's text;
 //   4. displays that once passed the check wrong: each EQUATION on their
 //      pages reads as one of the page's formulas (a crop or words pass);
-//      so does each formula of invented pages of the same shape.
-// Needs pdflatex. The exit code is 1 when a check fails.
+//      so does each formula of invented pages of the same shape;
+//   5. what round 4 fixed, on invented pages of each shape: each read
+//      wrong, or as a crop or words, before its fix.
+// Needs pdflatex, and mf for bbm's fonts (.bench/fonts/bbm/). The exit code
+// is 1 when a check fails.
 //
 //   npx tsx scripts/math-fonts/check.mts [--verbose]
 import { execFileSync } from "node:child_process";
@@ -21,8 +24,9 @@ import katex from "katex";
 import { getDocumentProxy } from "unpdf";
 import { PDF_CMAPS } from "@/lib/pdf-runtime";
 import { parsePdf } from "@/lib/parse/pdf";
-import { readDrawing, type Glyph } from "@/lib/parse/pdf/drawing";
-import type { MathFamily } from "@/lib/parse/pdf/glyphs";
+import { readDrawing, type Glyph, type Rule } from "@/lib/parse/pdf/drawing";
+import { unicodeMath, type MathFamily } from "@/lib/parse/pdf/glyphs";
+import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { mathGlyph, type MathGlyph } from "@/lib/parse/pdf/math-fonts";
 
 const verbose = process.argv.includes("--verbose");
@@ -84,11 +88,13 @@ function canon(tex: string, spaced = false): string {
 // page (or each whose LaTeX pick matches) reads as one of the right
 // formulas, its \tag aside; a crop or words pass.
 // inline: the case reads the blocks' inline formulas, not their EQUATIONs;
-// spaced: the spaces they write count.
-type DisplayCase = { page: number; pick?: RegExp; right: string[]; inline?: boolean; spaced?: boolean };
+// spaced: the spaces they write count; found: the page must hold one that
+// reads as one of them (a crop or words fail).
+type DisplayCase = { page: number; pick?: RegExp; right: string[]; inline?: boolean; spaced?: boolean; found?: boolean };
 
 function wrongDisplays(blocks: { type: string; text: string; page?: number; math?: { latex: string }[] }[], cases: DisplayCase[]): string[] {
   const out: string[] = [];
+  const hit = new Set<DisplayCase>();
   for (const b of blocks) {
     const formulas = [
       ...(b.type === "EQUATION" ? [{ latex: b.text.replace(/\s*\\tag\*?\{[^}]*\}\s*$/, ""), inline: false }] : []),
@@ -97,10 +103,12 @@ function wrongDisplays(blocks: { type: string; text: string; page?: number; math
     for (const f of formulas) {
       for (const c of cases) {
         if (c.page !== b.page || Boolean(c.inline) !== f.inline || (c.pick && !c.pick.test(f.latex))) continue;
-        if (!c.right.some((r) => canon(r, c.spaced) === canon(f.latex, c.spaced))) out.push(`p. ${b.page}: ${f.latex}`);
+        if (c.right.some((r) => canon(r, c.spaced) === canon(f.latex, c.spaced))) hit.add(c);
+        else out.push(`p. ${b.page}: ${f.latex}`);
       }
     }
   }
+  for (const c of cases) if (c.found && !hit.has(c)) out.push(`p. ${c.page}: none reads ${c.right[0]}`);
   return out;
 }
 
@@ -376,6 +384,159 @@ try {
   for (const w of wrong) console.log(`WRONG DISPLAY ${w}`);
   console.log(`displays that once passed wrong: ${wrong.length === 0 ? "none reads wrong" : `${wrong.length} read wrong`}`);
   if (wrong.length > 0) failed = true;
+
+  // 5: what round 4 fixed. Each page sets its case between two lines of
+  // words, so the page has a column to center a display in.
+  const fixed: string[] = [];
+  const fill = `${around} ${around}`;
+  const wide = String.raw`\bigwedge_{i,j\in N}\Big(\bigwedge_{(a,b)\in E}\big((x^{s}_{i,a}\wedge x^{s}_{j,b}\wedge z^{s}_{i})\implies y^{s}_{i,j}\big)\wedge\bigwedge_{(a,b)\notin E}\big((x^{s}_{i,a}\wedge x^{s}_{j,b}\wedge z^{s}_{j})\implies\neg y^{s}_{i,j}\big)\Big)`;
+  const brace = String.raw`v(T_k)=3\left\{\sup_{\beta\in B_1^{(k)}\cup B_0^{(k)}}L(\beta)-\sup_{\beta\in B_0^{(k)}}L(\beta)\right\}.`;
+  const flags = String.raw`\bigwedge_{p,q\in P}\left(\neg\mathrm{sw}^{1}_{p,q}\wedge\neg\mathrm{sw}^{2}_{p,q}\wedge\neg\mathrm{sw}^{3}_{p,q}\right)`;
+  const pages: { tex: string; cases: Omit<DisplayCase, "page">[] }[] = [
+    // A display too wide for its label sets the label on a row of its own
+    // under it, reaching under the formula's end: read as the formula's
+    // stray glyph, it made the display a crop.
+    { tex: `${fill}\\begin{equation}${wide}\\end{equation}${fill}`, cases: [{ found: true, right: [wide] }] },
+    // An inline fraction whose parts stand off the line, after the line's
+    // last word: both parts were lost.
+    { tex: String.raw`${fill} The map $z = \dfrac{x-\mu}{\sigma}$\\ sends each value to its score. ${fill}`, cases: [{ inline: true, found: true, pick: /mu/, right: [String.raw`z=\dfrac{x-\mu}{\sigma}`] }] },
+    // eqnarray's second row opens with a stacked arrow centered under the
+    // first row's "=": two rows of one display, aligned there.
+    {
+      tex: String.raw`${fill}\begin{eqnarray} g(y+h_n)-g(y) &=& \frac{u^T}{\sqrt{n}}v_n-\frac{1}{2}u^TKu+o(1)\nonumber\\ &\stackrel{P}{\longrightarrow}& N\left(-\frac{1}{2}u^TKu,u^TKu\right).\end{eqnarray}${fill}`,
+      cases: [{ found: true, right: [String.raw`\begin{aligned} g(y+h_n)-g(y) &= \frac{u^T}{\sqrt{n}}v_n-\frac{1}{2}u^TKu+o(1) \\ &\xrightarrow{P} N\left(-\frac{1}{2}u^TKu,u^TKu\right). \end{aligned}`] }],
+    },
+    // A first row whose limit holds an arrow before the row's "=": the rows
+    // align at "=" and "≥", not at the limit's arrow.
+    {
+      tex: String.raw`${fill}\begin{align*} \lim_{n\to\infty} m(g_n) &= \sup_n\{m_0(\phi):\phi\in S\}\\ &\ge \sup\{m_0(\psi):\psi\in S\} = m(g). \end{align*}${fill}`,
+      cases: [{ found: true, right: [String.raw`\begin{aligned} \lim_{n\to\infty} m(g_n) &= \sup_n\{m_0(\phi):\phi\in S\} \\ &\ge \sup\{m_0(\psi):\psi\in S\} = m(g). \end{aligned}`] }],
+    },
+    // A matrix with its rows named beside it: KaTeX has no \bordermatrix,
+    // and the middle row's name read as a factor ("P = B(…)"). No
+    // EQUATION reads it.
+    { tex: String.raw`${fill}\[ P = \begin{matrix} A\\ B\\ C\end{matrix}\begin{pmatrix} .5 & .25 & .25\\ .5 & 0 & .5\\ .25 & .25 & .5\end{pmatrix} \]${fill}`, cases: [{ right: [] }] },
+    // A fraction's bar that runs past its parts by a tenth of an em, as
+    // LibreOffice draws it: read without its bar, the parts stood as two rows.
+    {
+      tex: String.raw`${fill} The ratio $\dfrac{x}{\mskip2mu -x+1\mskip2mu}$\\ tends to $-1$ as $x$ grows. ${fill}`,
+      cases: [{ inline: true, found: true, pick: /x\+1/, right: [String.raw`\dfrac{x}{-x+1}`] }],
+    },
+    // A citation after a formula is the sentence's.
+    { tex: String.raw`The bound holds for $\gamma > 1$ [57] and fails for the smaller values. ${fill}`, cases: [{ inline: true, found: true, pick: /gamma/, right: [String.raw`\gamma>1`] }] },
+    // Upright names with scripts inside a display: read as words, they
+    // made it a crop.
+    { tex: `${fill}\\begin{equation}${flags}\\end{equation}${fill}`, cases: [{ found: true, right: [flags] }] },
+    // A tall brace in pieces over limits with scripts: its top pieces stood
+    // on a line of their own, and read as two crops of a lone brace.
+    { tex: `${fill}\\[ ${brace} \\]${fill}`, cases: [{ found: true, right: [brace] }] },
+    // A proposition's list item: short lines of words between its displays
+    // are sentences, never displays.
+    {
+      tex: String.raw`${fill}\begin{proposition} Assume the following:\begin{enumerate}\item[(a)] A local expansion: for $M_n = o(1)$,\[ \sup_{h\in B_n}|\bar g(\eta+h)-q(\eta,h)| \quad=\quad o_P(1) \]where $B_n=\{h\in\mathbb{R}^n:\|h\|_3\le M_n\}$ and\[ q(\eta,h) \quad=\quad \bar g(\eta)+h^T\nabla_\eta\bar g(\eta)+\frac{1}{2}h^T\nabla^2_{\eta\eta}\bar g(\eta)h. \]Further, $\|n^{-1/2}\nabla_\eta\bar g(\eta)\|_2$ and $\|\nabla^2_{\eta\eta}\bar g(\eta)\|_2$ are $O_P(1)$.\end{enumerate}\end{proposition}${fill}`,
+      cases: [
+        {
+          right: [
+            String.raw`\sup_{h\in B_n}|\bar g(\eta+h)-q(\eta,h)|=o_P(1)`,
+            String.raw`q(\eta,h)=\bar g(\eta)+h^T\nabla_\eta\bar g(\eta)+\frac{1}{2}h^T\nabla^2_{\eta\eta}\bar g(\eta)h.`,
+          ],
+        },
+      ],
+    },
+  ];
+  const fixParse = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "fixed", `${packages}\n\\newtheorem{proposition}{Proposition}`, pages.map((p) => p.tex)))));
+  fixed.push(...wrongDisplays(fixParse.blocks, pages.flatMap((p, i) => p.cases.map((c) => ({ ...c, page: i + 1 })))));
+  // A text italic's letters that a page's math takes (Times with mathptmx,
+  // as MathDesign's Utopia and MathTime's Times): a lone letter between
+  // upright words is a formula, a letter 0.44 em from a relation is the
+  // relation's, and a letter with its scripts is one formula; an italic
+  // phrase's letter ("E. coli") and a page with no math keep their words.
+  const italicPages = [
+    String.raw`In any tree $t$, she takes a strategy $s$ such that $t \in A$ holds, and $u(l) > u(t_j)$ for each lottery $l \in L(t_i)$, so that $\max_{l\in L(t)} u(l)$ is reached at $t_k$. The bacterium \textit{E. coli} grows in it.`,
+    String.raw`Plan \textit{B} is the fallback when the first plan fails, and the team keeps it ready for the whole season.`,
+    // A fraction in the text font's digits, its parts off the line: they were lost.
+    String.raw`Braces around the fraction give the result $-\dfrac{1}{2}$ and the whole fraction is negative.`,
+  ];
+  // Each as the parse writes it: a found case picks its formula by its text.
+  const italicRight = ["t", "s", String.raw`t\in A`, String.raw`u(l)>u(t_{j})`, String.raw`l\in L(t_{i})`, String.raw`\max_{l\in L(t)}u(l)`, String.raw`t_{k}`];
+  const italicParse = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "italic", `${packages}\n\\usepackage{mathptmx}`, italicPages))));
+  fixed.push(
+    ...wrongDisplays(italicParse.blocks, [
+      { page: 1, inline: true, right: italicRight },
+      ...italicRight.map((r) => ({ page: 1, inline: true, found: true, pick: new RegExp(`^${r.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")}$`), right: [r] })),
+      { page: 2, inline: true, right: [] },
+      { page: 3, inline: true, found: true, right: [String.raw`-\dfrac{1}{2}`, String.raw`\dfrac{1}{2}`] },
+    ]),
+  );
+  // bbm's blackboard letters, a Metafont font pdfTeX embeds as an unnamed
+  // Type 3 font: 𝕜 and ℕ read as \mathrm{k} and \mathrm{N}.
+  const bbmSource = join(import.meta.dirname, "..", "..", ".bench", "fonts", "bbm");
+  if (existsSync(join(bbmSource, "bbm10.mf"))) {
+    const bbm = String.raw`\newfam\bbmfam \font\tenbbm=bbm10 \font\sevenbbm=bbm7 \font\fivebbm=bbm5 \textfont\bbmfam=\tenbbm \scriptfont\bbmfam=\sevenbbm \scriptscriptfont\bbmfam=\fivebbm \def\mathbbm#1{{\fam\bbmfam #1}}`;
+    const env = process.env.MFINPUTS;
+    process.env.MFINPUTS = `${bbmSource}:`;
+    try {
+      const page = String.raw`Let $\mathbbm{k}$ be a field and $M$ a module over $\mathbbm{k}[x]$ graded by $\mathbbm{N}$. ${fill}\[ \dim_{\mathbbm{k}} M_n = \sum_{i\in\mathbbm{N}} \beta_{i,n}(M) \]${fill}`;
+      const parsed = await parsePdf(new Uint8Array(readFileSync(typeset(dir, "bbm", `${packages}\n${bbm}`, [page]))));
+      fixed.push(
+        ...wrongDisplays(parsed.blocks, [
+          { page: 1, found: true, right: [String.raw`\dim_{\Bbbk}M_n=\sum_{i\in\mathbb{N}}\beta_{i,n}(M)`] },
+          { page: 1, inline: true, right: [String.raw`\Bbbk`, "M", String.raw`\Bbbk[x]`, String.raw`\mathbb{N}`] },
+        ]),
+      );
+    } finally {
+      if (env === undefined) delete process.env.MFINPUTS;
+      else process.env.MFINPUTS = env;
+    }
+  } else console.log("fixes: .bench/fonts/bbm/ not there, bbm skipped");
+  // A formula MathJax sets in STIX's first fonts (OpenStax's books), drawn
+  // here glyph by glyph: parentheses built of the size font's pieces, an
+  // exponent's fractions and its own exponent at the exponent's size, and
+  // a radical drawn as three strokes and a rule. It was a crop.
+  const at = (unicode: string, x: number, y: number, w: number, size: number, font: string): Glyph => ({
+    font,
+    base: font === "piece" ? "STIXSizeOneSym-Regular" : `STIXGeneral-${font}`,
+    family: null,
+    code: 0,
+    unicode,
+    x,
+    y,
+    w,
+    size,
+    mode: 0,
+  });
+  const drawn = unicodeMath([
+    ...[["g", 72, "Italic"], ["(", 77, "Regular"], ["y", 80.5, "Italic"], [")", 85, "Regular"], ["=", 90, "Regular"]].map(([u, x, f]) => at(u as string, x as number, 429, 4.4, 10, f as string)),
+    at("1", 114.2, 432.5, 5, 10, "Regular"),
+    ...[["τ", 98, "Italic"], ["⋅", 106, "Regular"], ["3", 116.7, "Regular"], ["⋅", 124.4, "Regular"], ["π", 130.1, "Italic"]].map(([u, x, f]) => at(u as string, x as number, 421.5, 5, 10, f as string)),
+    at("⋅", 146.9, 429, 2.9, 10, "Regular"),
+    at("e", 155.1, 429, 4.4, 10, "Regular"),
+    at("−", 160.2, 437.9, 5.5, 8, "Regular"),
+    at("1", 166.7, 440.9, 4, 8, "Regular"),
+    at("3", 166.7, 433.1, 4, 8, "Regular"),
+    at("⋅", 173.6, 437.9, 2.3, 8, "Regular"),
+    at("⎛", 178.1, 441.9, 2.8, 6.3, "piece"),
+    at("⎝", 178.1, 435.7, 2.8, 6.3, "piece"),
+    at("y", 181.4, 442.6, 3.6, 8, "Italic"),
+    at("−", 186.8, 442.6, 5.5, 8, "Regular"),
+    at("ν", 194.3, 442.6, 4, 8, "Italic"),
+    at("τ", 187.8, 435, 4, 8, "Italic"),
+    at("⎞", 199.2, 441.9, 2.8, 6.3, "piece"),
+    at("⎠", 199.2, 435.7, 2.8, 6.3, "piece"),
+    at("2", 202.3, 445.3, 4, 8, "Regular"),
+  ]);
+  const bar = (x1: number, x2: number, y: number, thickness: number): Rule => ({ dir: "h", x1, x2, y1: y, y2: y, thickness });
+  const strokes = [
+    { x1: 112.2, y1: 425.6, x2: 113.1, y2: 427.3 },
+    { x1: 113.1, y1: 421.3, x2: 114.4, y2: 427.3 },
+    { x1: 114.4, y1: 421.3, x2: 116.7, y2: 429.9 },
+  ];
+  const stix = layoutLatex(drawn, [bar(97.3, 136.1, 431.5, 0.6), bar(116.7, 135.9, 429.9, 0.2), bar(166.1, 171.4, 440, 0.5), bar(180.6, 199.2, 440, 0.5)], { display: true, size: 10 }, strokes);
+  const stixRight = String.raw`g(y)=\frac{1}{\tau\cdot\sqrt{3\cdot\pi}}\cdot\mathrm{e}^{-\tfrac{1}{3}\cdot\left(\tfrac{y-\nu}{\tau}\right)^{2}}`;
+  if (!stix.check.ok || canon(stix.latex) !== canon(stixRight)) fixed.push(`STIX: ${stix.latex || "(no reading)"} ${JSON.stringify(stix.check)}`);
+  for (const w of fixed) console.log(`NOT FIXED ${w}`);
+  console.log(`round 4's fixes: ${fixed.length === 0 ? "each reads right" : `${fixed.length} read wrong`}`);
+  if (fixed.length > 0) failed = true;
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
