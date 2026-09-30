@@ -491,6 +491,9 @@ const TASK_BOX = /^([☐☑☒]) /;
 const ROMAN_NUMERAL = /^(x{0,3})(ix|iv|v?i{0,3})$/;
 
 type ListType = "bulletList" | "orderedList" | "taskList";
+/** Whose bullets a list's lines print: a PDF's, a Word file's, or none (a
+    web page's and a text file's "-" is any bullet). */
+type Bullets = "pdf" | "word" | null;
 /** A counter's style and number. */
 type Count = { counter: ListCounter; value: number };
 
@@ -599,9 +602,10 @@ function listLine(line: Source): ListLine {
 }
 
 /** A printed bullet as the page editor draws it: a small hollow or square
-    one is Google Docs' own (○ ■), any other as printed but "•", which is
-    any bullet (the parse writes it where the page draws one the text does
-    not hold, and for a Word file's round one): the level's own. */
+    one is Google Docs' own (○ ■), any other as printed. A PDF's "•" is any
+    bullet (the parse writes it where the page draws one the text does not
+    hold): the level's own. A Word file's "•" is Word's round bullet, as
+    printed: Docs' own disc (●) drew larger and heavier than Word's. */
 const BULLET_GLYPHS: Record<string, string> = { "◦": "○", "▪": "■" };
 
 /** Each marker's level at its line's depth, in reading order. A bullet the
@@ -612,13 +616,15 @@ const BULLET_GLYPHS: Record<string, string> = { "◦": "○", "▪": "■" };
     under "1.": "%0.%1"), else prints them ("1.2" at the top: "1.%0"). A
     counter whose words the page cannot draw (lib/docs/schema.ts
     formatParts) is no marker. */
-function levelsOfLines(lines: ListLine[], printed: boolean): void {
+function levelsOfLines(lines: ListLine[], printed: Bullets): void {
   const open: ListLine[] = [];
   for (const line of lines) {
     const prev = open[line.depth];
     open[line.depth] = line;
     open.length = line.depth + 1;
-    if (printed && line.type === "bulletList" && line.bullet && line.bullet !== "•") line.level = { bullet: BULLET_GLYPHS[line.bullet] ?? line.bullet };
+    if (printed && line.type === "bulletList" && line.bullet && (line.bullet !== "•" || printed === "word")) {
+      line.level = { bullet: BULLET_GLYPHS[line.bullet] ?? line.bullet };
+    }
     let count = line.count;
     if (!count) continue;
     const k = Math.min(line.depth, 8);
@@ -1325,8 +1331,8 @@ class Converter {
 
   /** A PDF's and a Word file's bullets are as printed; a web page's and a
       text file's "-" is any bullet. */
-  private get printed(): boolean {
-    return this.input.kind === "docx" || this.input.kind === "pdf";
+  private get printed(): Bullets {
+    return this.input.kind === "docx" ? "word" : this.input.kind === "pdf" ? "pdf" : null;
   }
 
   private table(block: ParsedBlock, index: number, starts: PageStart[]) {

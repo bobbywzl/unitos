@@ -48,10 +48,13 @@ export const DOCS_FONTS: DocsFont[] = [
 ];
 
 // Faces an import names that the menu does not list: TeX's Computer Modern,
-// drawn by the computer's own copy or KaTeX's (the page editor loads KaTeX's
-// fonts for its equations), a serif for the letters KaTeX's lacks (ß, ø).
+// drawn in KaTeX's copy, the face of the page editor's equations, so a
+// formula and its words take one weight whatever fonts the computer has.
+// The computer's Latin Modern or CMU Serif drew the words about a fifth
+// lighter than KaTeX's formulas beside them, and an operator name read bold.
+// A letter KaTeX's copy lacks (é, ü) takes the computer's copy, else a serif.
 const DRAWN_FONTS: DocsFont[] = [
-  { name: "Computer Modern", fallback: "'Latin Modern Roman', 'CMU Serif', KaTeX_Main, serif", web: false, weights: W2 },
+  { name: "Computer Modern", fallback: "KaTeX_Main, 'Latin Modern Roman', 'CMU Serif', serif", web: false, weights: W2 },
 ];
 
 const BY_NAME = new Map([...DOCS_FONTS, ...DRAWN_FONTS].map((f) => [f.name.toLowerCase(), f]));
