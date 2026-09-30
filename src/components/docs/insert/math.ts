@@ -99,8 +99,9 @@ class MathView implements NodeView {
 // they did, and a line with room for the formula has room for its mark.
 // The page keeps its spaces (white-space: break-spaces), so a space after
 // the mark takes room at a line's end too, and the formula takes that room
-// as well. A character's room is its width in the widest of the page
-// editor's text fonts, in em, rounded up.
+// as well; so does a space right after a formula, which opened the next
+// line a space in. A character's room is its width in the widest of the
+// page editor's text fonts, in em, rounded up.
 const ROOM: ReadonlyMap<string, number> = new Map([
   [".", 0.35], [",", 0.35], [";", 0.35], [":", 0.35], ["!", 0.4], ["?", 0.6],
   [")", 0.4], ["]", 0.4], ["}", 0.65], ["’", 0.35], ["'", 0.3], ["”", 0.55], ['"', 0.5], ["»", 0.65],
@@ -150,6 +151,8 @@ function blockTails(block: PMNode): Tail[] {
     // The space may open the next run ("." in italics, then " Hint").
     const after = marks < text.length ? text[marks] : block.maybeChild(index + 2)?.text?.[0];
     if (after === " ") room += SPACE_ROOM;
+    // A space right after the formula is its tail's one mark.
+    if (marks === 0 && text[0] === " ") marks = 1;
     if (marks > 0) tails.push({ at: offset, size: child.nodeSize, marks, room: Math.round(room * 100) / 100 });
   });
   tailsOf.set(block, tails);

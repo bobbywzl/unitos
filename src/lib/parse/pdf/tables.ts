@@ -306,63 +306,135 @@ export function tableSegment(
 // a sentence).
 const TABLE_CAPTION_RE = /^(?:table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+)\s*[.:|–—-]/i;
 
-/** A table's caption joins its table: the paragraph right before it on its
-    page that opens with a table's label, or with none there the one right
-    after it, is the table's <caption>, and the table's text opens with the
-    caption's line, as a Word table's does (lib/parse/docx.ts). The import
-    draws it as the table's caption above the table, and the benchmark reads
-    it as the table's (the captions stood apart as paragraphs: real-mmwr-7301
-    p. 3's import read no caption). Runs after the joins across pages: a
-    table continued on the next page joins its rows first. */
+/** A table's caption joins its table: a paragraph that opens with a
+    table's label, right over the table on its first page or right under it
+    on its last, is the table's <caption>, and the table's text opens with
+    the caption's line, as a Word table's does (lib/parse/docx.ts). A
+    caption under its table keeps its side (BELOW_CAPTION): the import draws
+    it under the table. A caption between two tables is the table's on the
+    side the document sets its captions, the side its captions take where a
+    table stands on one side of them only: CVPR sets a caption under its
+    table, IEEE over it (arXiv 2411.19946 p. 6 read each caption over the
+    table after it). A sub-table's caption ("(a) Number of patches.") joins
+    its grid the same way, on a page whose table caption joined its table.
+    The benchmark reads a caption as its table's (the captions stood apart
+    as paragraphs: real-mmwr-7301 p. 3's import read no caption). Runs
+    after the joins across pages: a table continued on the next page joins
+    its rows first. */
 export function attachTableCaptions(segments: Segment[]): Segment[] {
   const taken = new Set<Segment>();
+  // The table right under (below) or right over a caption at k, on the
+  // caption's page: the one a caption under a table or over it would join.
+  const tableBy = (k: number, below: boolean): Segment | undefined => {
+    let j = k;
+    do j += below ? -1 : 1;
+    while (segments[j] && taken.has(segments[j]));
+    const table = segments[j];
+    if (table?.type !== "TABLE" || !table.html) return undefined;
+    const page = below ? (table.breaks?.at(-1)?.page ?? firstPageOf(table)) : firstPageOf(table);
+    return page === segments[k].page ? table : undefined;
+  };
+  // A table's caption so far, when it is its link alone (ruled.ts): the
+  // caption's words join it.
+  const linkOnly = (table: Segment) => /^<table[^>]*><caption[^>]*>/.test(table.html ?? "") && LINK_LINE_RE.test(table.text.slice(0, table.text.indexOf("\n")));
+  const open = (table: Segment | undefined): table is Segment => table !== undefined && (!table.html?.includes("<caption") || linkOnly(table));
+  const labeled = segments.flatMap((s, k) => (isCaption(s) ? [k] : []));
+  let over = 0;
+  let under = 0;
+  for (const k of labeled) {
+    const [below, above] = [tableBy(k, true), tableBy(k, false)];
+    if (below && !above) under++;
+    if (above && !below) over++;
+  }
+  const side = under > over ? "below" : over > under ? "above" : null;
+  // Captions on the document's side first, then the other side's captions
+  // of the tables none took; with no side, the table a caption stands
+  // nearer to.
+  const join = (captions: number[]) => {
+    for (const k of captions) {
+      if (taken.has(segments[k])) continue;
+      const [below, above] = [tableBy(k, true), tableBy(k, false)];
+      const table = side === "below" ? below : side === "above" ? above : below && above ? nearer(segments[k], below, above) : (below ?? above);
+      if (open(table)) captionOf(table, segments[k], table === below, taken);
+    }
+    if (!side) return;
+    for (const k of captions) {
+      const table = taken.has(segments[k]) ? undefined : tableBy(k, side === "above");
+      if (open(table)) captionOf(table, segments[k], side === "above", taken);
+    }
+  };
+  join(labeled);
+  const pages = new Set([...taken].map((s) => s.page));
+  join(segments.flatMap((s, k) => (pages.has(s.page) && isSubCaption(s) ? [k] : [])));
+  // A table with no caption takes one the paragraph over it kept as its
+  // last line.
   segments.forEach((table, i) => {
-    // A caption that is the table's link alone (ruled.ts) takes the
-    // caption's words before it.
-    const linkOnly = /^<table[^>]*><caption>/.test(table.html ?? "") && LINK_LINE_RE.test(table.text.slice(0, table.text.indexOf("\n")));
-    if (table.type !== "TABLE" || !table.html || (table.html.includes("<caption>") && !linkOnly)) return;
-    const first = firstPageOf(table);
-    const last = table.breaks?.at(-1)?.page ?? first;
     const before = segments[i - 1];
-    const after = segments[i + 1];
-    const caption =
-      before && !taken.has(before) && isCaption(before) && before.page === first ? before
-      : after && !taken.has(after) && isCaption(after) && after.page === last ? after
-      : null;
-    const kept = !caption && before && !taken.has(before) ? captionLine(before, first) : null;
-    if (!caption && !kept) return;
-    if (caption) taken.add(caption);
-    // The caption is one line of the table's text: its breaks are spaces.
-    const own = caption ? { text: caption.text, runs: caption.runs ?? [] } : kept;
-    if (!own) return;
-    const text = own.text.replace(/[\t\n]/g, " ");
-    const words = wordsHtml(text, own.runs, mathSpans(text, own.runs), 0, text.length);
-    // The caption's words keep the face and the size the page sets them in:
-    // the import draws the caption at that size when it is under 9 pt
-    // (arXiv 2503.22874 sets its captions in 8 pt under a 9 pt body).
-    const size = sizeOf(own.runs) ?? caption?.lineSize;
-    const face = spansFromRuns(text, own.runs).font?.family;
-    const look = [
-      size && Number.isFinite(size) && size > 0 && size <= 72 ? `font-size:${Math.round(size * 2) / 2}pt` : "",
-      face && FACE_RE.test(face) ? `font-family:${face}` : "",
-    ].filter(Boolean);
-    const sized = look.length > 0 ? `<span style="${look.join(";")}">${words}</span>` : words;
-    if (linkOnly) {
-      table.html = table.html.replace(/^(<table[^>]*><caption>)/, `$1${sized} `);
-      table.text = `${text} ${table.text}`;
-      table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
-    } else captionTable(table, text, sized);
+    if (table.type !== "TABLE" || !table.html || !open(table) || !before || taken.has(before)) return;
+    const kept = captionLine(before, firstPageOf(table));
+    if (kept) captionOf(table, kept, false, taken);
   });
   return segments.filter((s) => !taken.has(s));
+}
+
+/** A caption set under its table: the table's <caption> opens with this. */
+export const BELOW_CAPTION = '<caption style="caption-side: bottom">';
+
+// Of two tables, the one a caption between them stands nearer to on the
+// page: the one under it, where their places are not known.
+function nearer(caption: Segment, below: Segment, above: Segment): Segment {
+  const [a, b, c] = [below.box, above.box, caption.box];
+  if (!a || !b || !c || firstPageOf(below) !== caption.page) return above;
+  const [up, down] = [a.y1 - c.y2, c.y1 - b.y2];
+  return up >= -2 && down >= -2 && up < down ? below : above;
+}
+
+// A sub-table's caption: a letter in parentheses, then its words ("(a)
+// Number of patches. Ablation on …").
+const SUB_CAPTION_RE = /^\([a-h]\)\s+\S/;
+function isSubCaption(s: Segment): boolean {
+  return s.type === "PARAGRAPH" && !s.footnote && s.text.length <= 600 && SUB_CAPTION_RE.test(s.text.trim());
+}
+
+// A caption's words join its table: a paragraph (taken off the segments)
+// or a line a paragraph kept. below: the caption stands under the table.
+function captionOf(table: Segment, caption: Segment | { text: string; runs: Run[] }, below: boolean, taken: Set<Segment>) {
+  if ("type" in caption) taken.add(caption);
+  // The caption is one line of the table's text: its breaks are spaces.
+  const runs = caption.runs ?? [];
+  const text = caption.text.replace(/[\t\n]/g, " ");
+  const math = mathSpans(text, runs);
+  const words = wordsHtml(text, runs, math, 0, text.length);
+  // The caption's words keep the face and the size the page sets them in:
+  // the import draws the caption at that size when it is under 9 pt
+  // (arXiv 2503.22874 sets its captions in 8 pt under a 9 pt body).
+  const size = sizeOf(runs) ?? ("type" in caption ? caption.lineSize : undefined);
+  const face = spansFromRuns(text, runs).font?.family;
+  const look = [
+    size && Number.isFinite(size) && size > 0 && size <= 72 ? `font-size:${Math.round(size * 2) / 2}pt` : "",
+    face && FACE_RE.test(face) ? `font-family:${face}` : "",
+  ].filter(Boolean);
+  const sized = look.length > 0 ? `<span style="${look.join(";")}">${words}</span>` : words;
+  const html = table.html ?? "";
+  if (/^<table[^>]*><caption/.test(html)) {
+    // The link a table's caption held alone (ruled.ts): the words go before
+    // it, on the words' side.
+    table.html = html.replace(/^(<table[^>]*>)<caption[^>]*>/, `$1${below ? BELOW_CAPTION : "<caption>"}${sized} `);
+    table.text = `${text} ${table.text}`;
+    table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
+  } else captionTable(table, text, sized, below);
+  // The caption's formulas, where the table's text opens with them.
+  if (math.length > 0) table.math = math;
 }
 
 // A link alone on its line: a URL or a DOI.
 export const LINK_LINE_RE = /^(?:https?:\/\/|doi:\s*|www\.)\S+$/i;
 
 /** The table's caption: its text opens with the caption's line, its html
-    with the caption (the words' html, then the line's gap). */
-export function captionTable(table: Segment, text: string, html: string) {
-  table.html = table.html?.replace(/^<table[^>]*>/, (open) => `${open}<caption>${html}<span class="cell-gap">\n</span></caption>`);
+    with the caption (the words' html, then the line's gap). below: the
+    caption stands under the table (BELOW_CAPTION). */
+export function captionTable(table: Segment, text: string, html: string, below = false) {
+  table.html = table.html?.replace(/^<table[^>]*>/, (open) => `${open}${below ? BELOW_CAPTION : "<caption>"}${html}<span class="cell-gap">\n</span></caption>`);
   table.text = `${text}\n${table.text}`;
   table.breaks = table.breaks?.map((b) => ({ ...b, offset: b.offset + text.length + 1 }));
 }

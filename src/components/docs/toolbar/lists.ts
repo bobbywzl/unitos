@@ -304,7 +304,7 @@ export function listSheet(root: string): string {
     ...Array.from(
       { length: 9 },
       (_, k) =>
-        `${root} ${"li ".repeat(k)}:is(:is(ul, ol):not([data-type="taskList"]), ${tasks}) { padding-left: calc(var(--docs-indent-${k + 1}, ${DEPTH_PT * (k + 1)}pt) - var(--docs-indent-${k}, ${DEPTH_PT * k}pt)); }`,
+        `${root} ${"li ".repeat(k)}:is(ul, ol):not([data-type="taskList"]), ${root} ${"li ".repeat(k)}${tasks} { padding-left: calc(var(--docs-indent-${k + 1}, ${DEPTH_PT * (k + 1)}pt) - var(--docs-indent-${k}, ${DEPTH_PT * k}pt)); }`,
     ),
   ].join("\n");
 }

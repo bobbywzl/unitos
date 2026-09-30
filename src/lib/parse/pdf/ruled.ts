@@ -665,12 +665,13 @@ export function placeTables(lines: Line[]): Line[] {
 // rule runs between two of its lines), the body rows by the rhythm.
 export function tableFromRegion(region: TableRegion, page: number): Segment {
   // The table's own link under its last rule (linkUnder) is its caption's
-  // line, the caption's words joining it (attachTableCaptions).
+  // line, under the table, the caption's words joining it
+  // (attachTableCaptions).
   const link = region.items.filter((it) => centerOf(it).y < region.box.y1 - 1);
   if (link.length === 0) return tableOfRegion(region, page);
   const table = tableOfRegion({ ...region, items: region.items.filter((it) => !link.includes(it)) }, page);
   const text = buildLines(link, page).map((l) => l.text.trim()).join(" ");
-  if (table.html) captionTable(table, text, escapeHtml(text));
+  if (table.html) captionTable(table, text, escapeHtml(text), true);
   return table;
 }
 

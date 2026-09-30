@@ -1189,8 +1189,9 @@ class Converter {
     const attrs: Record<string, unknown> = { level: Math.min(6, Math.max(1, headingLevel(block.html))), blockId: newBlockId(), ...borderAttrs(block) };
     if (align) attrs.textAlign = align;
     // A run-in lead ("1.2.3. Two examples." and its paragraph's words on
-    // its line) is drawn as its paragraph's opening words (css/import.css).
-    if (tokensOf(block.html).includes("run-in")) attrs.runIn = true;
+    // its line) is drawn as its paragraph's opening words (css/import.css),
+    // at the page's indent: the first line's indent is the lead's.
+    if (tokensOf(block.html).includes("run-in")) Object.assign(attrs, { runIn: true }, indentAttrs(block.indent));
     // The page's own space after the heading, where it measured one.
     else if (block.spaceAfter !== undefined) attrs.spaceAfter = block.spaceAfter;
     this.place(index, [content.length > 0 ? { type: "heading", attrs, content } : { type: "heading", attrs }]);
@@ -1269,10 +1270,12 @@ class Converter {
     }
   }
 
-  /** The lines as lists, each outermost list in its format and, but a
-      checklist, at its page's depths (depthIndents). A list with no marker
-      on any line draws none at every level, so a line moved a level in or
-      out stays unmarked. */
+  /** The lines as lists, each outermost list in its format and at its
+      page's depths (depthIndents), a checklist too: its box where the page
+      sets it and its wraps back at the depth's left (a checklist drew every
+      line's box 18 pt in and its words hanging 36 pt in). A list with no
+      marker on any line draws none at every level, so a line moved a level
+      in or out stays unmarked. */
   private lists(lines: ListLine[]): RichNode[] {
     const tops: Top[] = [];
     const nodes = listsAt(lines, 0, 0, tops).nodes;
@@ -1280,7 +1283,7 @@ class Converter {
     const unmarked = lines.every((l) => l.unmarked);
     for (const top of tops) {
       const seen = unmarked ? Array.from({ length: 9 }, () => ({ bullet: "" })) : top.seen;
-      const attrs = { ...listFormat(top.node.type, seen), ...(listIndents && top.node.type !== "taskList" ? { listIndents } : {}) };
+      const attrs = { ...listFormat(top.node.type, seen), ...(listIndents ? { listIndents } : {}) };
       if (Object.keys(attrs).length > 0) top.node.attrs = { ...top.node.attrs, ...attrs };
     }
     return nodes;
