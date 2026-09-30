@@ -1133,7 +1133,10 @@ async function checkFixture(f: Fixture): Promise<Report> {
     let example = "";
     for (const r of rows) {
       const place = r.cell ? `, table ${r.cell.table}, row ${r.cell.row}, column ${r.cell.column}` : "";
-      const page = typeof r.page === "number" ? `, p. ${f.pageLabels?.[r.page - 1] || r.page}` : "";
+      // A page the PDF leaves unnumbered among numbered ones (an empty
+      // label) is named by no number, in the margin and in the prefix.
+      const label = typeof r.page === "number" ? f.pageLabels?.[r.page - 1] : undefined;
+      const page = typeof r.page === "number" && label !== "" ? `, p. ${label ?? r.page}` : "";
       const tag = renderBlockLines([r], pageName).split("\n")[0];
       if (tag !== `[block ${r.id}] (${r.type}${place}${page})`) tagOff.push(tag);
       else if (r.cell && page && !example) example = tag;

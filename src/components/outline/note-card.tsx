@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { memo, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NoteView, SourceChip } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
@@ -213,6 +213,26 @@ function openStagedCards() {
   if (stagedCards.length > 0) stagedFrame = requestAnimationFrame(openStagedCards);
 }
 
+// A folded card forgets that it was open, so the next Expand all opens it
+// in its turn again: all together, a moment after the fold has shown.
+let foldedCards: (() => void)[] = [];
+let foldedTimer = 0;
+
+function forgetLater(forget: () => void): () => void {
+  foldedCards.push(forget);
+  if (!foldedTimer) {
+    foldedTimer = window.setTimeout(() => {
+      foldedTimer = 0;
+      const now = foldedCards;
+      foldedCards = [];
+      for (const f of now) f();
+    }, 300);
+  }
+  return () => {
+    foldedCards = foldedCards.filter((f) => f !== forget);
+  };
+}
+
 function stageCard(distance: number, open: () => void): () => void {
   const card = { distance, open };
   stagedCards.push(card);
@@ -228,11 +248,9 @@ function stageCard(distance: number, open: () => void): () => void {
     turn comes. */
 function useStagedOpen(open: boolean, staged: boolean, ref: React.RefObject<HTMLElement | null>): boolean {
   const [shown, setShown] = useState(open);
-  // A folded card forgets that it was open after the fold has shown, so the
-  // next Expand all opens it in its turn again.
   useEffect(() => {
     if (open || !shown) return;
-    startTransition(() => setShown(false));
+    return forgetLater(() => setShown(false));
   }, [open, shown]);
   const waiting = open && !shown;
   useLayoutEffect(() => {
