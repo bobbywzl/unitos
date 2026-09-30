@@ -249,11 +249,14 @@ function appendToCell(target: TableCell, part: { text: string; runs: Run[] }) {
   target.runs = builder.runs;
 }
 
-// Fragmented figure text, not a real table: mostly tiny cells.
+// Fragmented figure text, not a real table: mostly tiny cells. Rows that
+// fill every column, three or more, are a table's, however short their
+// cells (Grinstead–Snell's Table 3.3: "0 1", "1 1", "2 2").
 function isFragmented(rows: TableRow[]): boolean {
   const flat = rows.flatMap((r) => r.cells.map((c) => c.text.trim()).filter((t) => t.length > 0));
   const shortCells = flat.filter((c) => c.length <= 2).length;
-  return flat.length > 0 && shortCells / flat.length > 0.6;
+  const full = rows.filter((r) => r.cells.every((c) => c.text.trim().length > 0)).length;
+  return flat.length > 0 && shortCells / flat.length > 0.6 && !(full >= 3 && full * 5 >= rows.length * 4);
 }
 
 // The TABLE segment for rows of cells, the first headerRows of them header
@@ -798,6 +801,21 @@ function besideMarks(line: Line, above: Line | undefined): boolean {
   );
 }
 
+// A row set tight: a short line of one cell whose words stand an em apart or
+// more, a number among them (Grinstead–Snell's Table 6.2: "HHH 1" under "X
+// Y", its columns closer than a cell's gap). Its parts count as its cells.
+function tightCells(line: Line): number {
+  const items = line.items.filter((it) => it.str.trim().length > 0);
+  if (line.cells.length !== 1 || line.text.length > 40 || items.length < 2) return line.cells.length;
+  const parts = [items[0].str];
+  items.slice(1).forEach((it, k) => {
+    if (it.x - (items[k].x + items[k].w) >= line.size) parts.push(it.str);
+    else parts[parts.length - 1] += ` ${it.str}`;
+  });
+  const words = line.text.split(/\s+/).filter((w) => /\p{L}{2}/u.test(w)).length;
+  return parts.length >= 2 && words <= 4 && parts.some((p) => NUMERIC_CELL_RE.test(p.trim())) ? parts.length : 1;
+}
+
 // Table runs, computed before segmentation. A run grows forward over
 // multi-cell lines and the single-cell lines that continue a wrapped cell
 // (aligned with a column, or indented past the first column, or a first-column
@@ -810,7 +828,7 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
   // on the sentence of the line above it, and its other cells are marks
   // alone (the W-9's Part I beside its SSN boxes: "… However, for a" |
   // "resident alien, … For other  –  –").
-  const cells = lines.map((line, k) => (besideMarks(line, lines[k - 1]) ? 1 : line.cells.length));
+  const cells = lines.map((line, k) => (besideMarks(line, lines[k - 1]) ? 1 : Math.max(line.cells.length, tightCells(line))));
   let runId = 0;
   let i = 0;
   while (i < lines.length) {
@@ -963,6 +981,17 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     let absorbed = 0;
     while (first > 0 && absorbed < 3) {
       const prev = lines[first - 1];
+      // A head of short cells right over the run's columns, one in each
+      // (Grinstead–Snell's "n  n!" over its factorials): the run's first row.
+      if (absorbed === 0 && prev.cells.length >= 2 && runOf[first - 1] === -1 && prev.size <= ctx.bodySize * 1.15 && prev.y - lines[first].y <= prev.size * ctx.leading * 2.2) {
+        const separators = runSeparators(members.map((k) => lines[k]));
+        const heads = cellsBySeparators(prev, separators);
+        if (separators.length > 0 && heads.every((c) => c.text.trim().length > 0 && c.text.length <= 24)) {
+          first--;
+          members.unshift(first);
+        }
+        break;
+      }
       if (prev.cells.length !== 1 || runOf[first - 1] !== -1 || bulleted(prev) || leadIn(prev.text)) break;
       if (prev.size > ctx.bodySize * 1.15) break;
       const gap = prev.y - lines[first].y;
