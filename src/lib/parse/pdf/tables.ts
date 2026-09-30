@@ -669,6 +669,11 @@ function isGroupLabel(line: Line, left: number): boolean {
 // One table out of a run of gap-aligned lines. Columns come from the coverage
 // scan; rows from the run's rhythm (rowStartsOf).
 export function tableFromRun(run: Line[], leading: number): Segment {
+  // Prose side by side parts at the gutters every line leaves open, heads
+  // or not.
+  const start = sideBySide.get(run[0]);
+  const gutters = start === undefined ? [] : columnSeparators(run);
+  if (start !== undefined && gutters.length > 0) return columnsProse(run, gutters, columnAt(start + 1, gutters), Number.isFinite(start));
   const separators = runSeparators(run);
   const columnCount = separators.length + 1;
   const page = run[0].page;
@@ -680,8 +685,6 @@ export function tableFromRun(run: Line[], leading: number): Segment {
     const { text, runs } = joinGroup(run);
     return { type: "PARAGRAPH", text, page, runs, ...geom(run) };
   }
-  const start = sideBySide.get(run[0]);
-  if (start !== undefined) return columnsProse(run, separators, columnAt(start + 1, separators));
   const cellsOf = run.map((line) => cellsBySeparators(line, separators));
   const rows = rowsOf(cellsOf, rowStartsOf(run, cellsOf, leading), columnCount);
   if (isFragmented(rows)) {
@@ -819,8 +822,9 @@ const sideBySide = new WeakMap<Line, number>();
 
 // Prose side by side is no table: one paragraph, column by column, the
 // column its reading starts at first, a line break between two columns (as
-// a contents list in two columns reads, contents.ts).
-function columnsProse(run: Line[], separators: number[], lead: number): Segment {
+// a contents list in two columns reads, contents.ts). labels: the other
+// columns are a picture's labels beside the paragraph, a line each.
+function columnsProse(run: Line[], separators: number[], lead: number, labels: boolean): Segment {
   const columns = Array.from({ length: separators.length + 1 }, (_, c) => c);
   const builder = new TextBuilder();
   for (const c of [lead, ...columns.filter((c) => c !== lead)]) {
@@ -830,7 +834,8 @@ function columnsProse(run: Line[], separators: number[], lead: number): Segment 
       const cell = cellOfItems(items, line.size);
       return [{ ...line, cells: [cell], text: cell.text, runs: cell.runs, items, x: cell.x, xEnd: Math.max(...items.map((it) => it.x + it.w)) }];
     });
-    if (parts.length > 0) builder.append(joinGroup(parts, true), "\n");
+    if (labels && c !== lead) for (const part of parts) builder.append({ text: part.text, runs: part.runs }, "\n");
+    else if (parts.length > 0) builder.append(joinGroup(parts, true), "\n");
   }
   return { type: "PARAGRAPH", text: builder.text, page: run[0].page, runs: builder.runs, ...geom(run) };
 }

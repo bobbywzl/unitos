@@ -450,6 +450,11 @@ function styleLooks(input: ImportInput): Partial<Record<DocStyle, NamedStyle>> {
     bold: font.bold === true,
     italic: font.italic === true,
   });
+  // A Word file's lines at the spacing most of its paragraphs' letters
+  // take: Docs' 1.15 drew a single-spaced file's lines, and its table
+  // rows, a tenth taller than Word draws them.
+  const lines = input.kind === "docx" ? bodyLineSpacing(input.blocks) : null;
+  if (lines !== null) looks.normal = { ...(looks.normal ?? DEFAULT_STYLES.normal), lineSpacing: lines };
   if (input.titleFont) looks.title = lookOf("title", input.titleFont);
   const tally = new Map<DocStyle, Map<string, { font: TextFont; n: number }>>();
   for (const b of input.blocks) {
@@ -474,6 +479,14 @@ function styleLooks(input: ImportInput): Partial<Record<DocStyle, NamedStyle>> {
     looks[style] = { ...lookOf(style, looksOf[0].font), bold, italic, ...(spaced ? { spaceBefore: 0 } : {}) };
   }
   return looks;
+}
+
+/** The line spacing most of a Word file's paragraph letters take
+    (ParsedBlock.lineSpacing), or null when none says. */
+function bodyLineSpacing(blocks: ParsedBlock[]): number | null {
+  const counts = new Map<number, number>();
+  for (const b of blocks) if (b.type === "PARAGRAPH" && b.lineSpacing !== undefined) counts.set(b.lineSpacing, (counts.get(b.lineSpacing) ?? 0) + b.text.length);
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 
 /** A block's inline formulas (ParsedBlock.math) as inline equations, each in
@@ -1218,6 +1231,11 @@ class Converter {
     if (align) attrs.textAlign = align;
     if (role === "meta") attrs.docStyle = "subtitle";
     else if (role !== "kicker" && this.spaceAfter(block) > 0) attrs.spaceAfter = this.spaceAfter(block);
+    // A Word paragraph set at another spacing than Normal text keeps its own.
+    const normalLines = this.looks.normal?.lineSpacing;
+    if (this.input.kind === "docx" && block.lineSpacing !== undefined && normalLines !== undefined && Math.abs(block.lineSpacing - normalLines) >= 0.01) {
+      attrs.lineSpacing = block.lineSpacing;
+    }
     const kind = INDENT_TOKENS.find((k) => tokens.includes(k));
     const indent = block.indent ?? (kind ? INDENTS[kind] : undefined);
     // A bar at a side stands in its indent, its padding from the words:

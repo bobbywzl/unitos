@@ -558,6 +558,12 @@ function spaceBetween(above: ParaProps, below: ParaProps): number {
   return (same && above.contextual ? 0 : above.after) + (same && below.contextual ? 0 : below.before);
 }
 
+/** A paragraph's line spacing as a multiple of single spacing (w:line in
+    240ths under the auto rule); none under an exact or at-least rule. */
+function lineMultiple(props: ParaProps): number | undefined {
+  return props.line.rule === "auto" ? Math.round((props.line.value / 240) * 100) / 100 : undefined;
+}
+
 /** A blank paragraph's height in twips: one line at its mark's size (half
     points) and its line spacing. */
 function blankTwips(props: ParaProps, size: number): number {
@@ -1579,6 +1585,8 @@ class DocxReader {
     const first = inset && Math.abs(props.first) < 100_000 ? points(props.first) : 0;
     const right = props.right > 0 && props.right < 100_000 ? points(props.right) : 0;
     if (left || first || right) block.indent = { left, first, ...(right ? { right } : {}) };
+    const lines = lineMultiple(props);
+    if (lines !== undefined) block.lineSpacing = lines;
     this.spaced(block, props, { props, blank: 0 });
     return block;
   }
