@@ -6,6 +6,7 @@
 // makes its segments.
 
 import { TOC_ENTRY_RE, TOC_LABEL_RE, TOC_TAIL_RE, isContentsEntry, readContentsEntries, twoColumnList } from "@/lib/parse/pdf/contents";
+import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { readHeading } from "@/lib/parse/pdf/headings";
 import { closeLists, joinMarkerCells, readAlgorithm, readList, readReferences } from "@/lib/parse/pdf/lists";
@@ -300,17 +301,42 @@ function withDrawnSeparators(
     // A ruled table taken out of the flow is one line with no cells: its
     // own rules fall between it and the line under it.
     if (above.cells.length === 0 || below.cells.length === 0) continue;
-    // A chart's axis between its labels: small words on both sides.
-    if (Math.min(above.size, below.size) < ctx.bodySize * 0.9 || Math.max([...above.text].length, [...below.text].length) < 30) continue;
     const size = Math.max(above.size, below.size);
     const left = Math.min(above.x, below.x);
     const right = Math.max(above.xEnd, below.xEnd);
+    // A chart's axis between its labels: small words on both sides. A rule
+    // across the whole column may stand between short lines (a billing code
+    // over the next document's agency line: the Federal Register p. 1),
+    // unless it frames smaller type with a rule of its extent on the small
+    // lines' other side (a listing's box: synth-paper-tex); a shorter one
+    // wants a line of prose beside it.
+    const column = lineColumn(above) ?? lineColumn(below);
+    const across = column !== undefined && rule.x1 <= column[0] + size && rule.x2 >= column[1] - size;
+    const small = (l: Line) => l.size < ctx.bodySize * 0.9;
+    const plain = Math.min(above.size, below.size) >= ctx.bodySize * 0.9 && Math.max([...above.text].length, [...below.text].length) >= 30;
+    const boxed = ctx.drawing.rules.some((r) => {
+      if (r === rule || r.dir !== "h" || Math.abs(r.x1 - rule.x1) > size || Math.abs(r.x2 - rule.x2) > size) return false;
+      const [lo, hi] = [Math.min(y, (r.y1 + r.y2) / 2), Math.max(y, (r.y1 + r.y2) / 2)];
+      const inside = lines.filter((l) => l.y > lo && l.y < hi && l.x < rule.x2 && l.xEnd > rule.x1);
+      return inside.length > 0 && inside.every(small);
+    });
+    if (size < ctx.bodySize * 0.9 || (!plain && (!across || boxed))) continue;
+    // A rule over the page's notes: every line under it, across its extent,
+    // is set smaller than the line over it (a first page's notes and its
+    // number under their rule: 2609.29669 p. 1).
+    if (lines.every((l) => l.y >= y || l.xEnd <= rule.x1 || l.x >= rule.x2 || l.size < above.size * 0.95)) continue;
     if (rule.x2 - rule.x1 < Math.max(size * 10, (right - left) * 0.5) || rule.x2 < left || rule.x1 > right) continue;
     if (above.yMin - y < size * 0.4 || y - below.yMax < size * 0.85) continue;
+    // A float's frame: another rule across most of this one, within three
+    // lines. A ruled table's own rules frame nothing (a table over the rule:
+    // synth-gdocs-docx), nor do a heading's side marks (the Earth Observer
+    // p. 11).
+    const tables = lines.flatMap((l) => (l.table ? [l.table.box] : []));
     const framed = ctx.drawing.rules.some((r) => {
       const d = Math.abs((r.y1 + r.y2) / 2 - y);
+      const inTable = tables.some((b) => r.y1 >= b.y1 - 1 && r.y2 <= b.y2 + 1 && r.x1 >= b.x1 - 1 && r.x2 <= b.x2 + 1);
       // A double rule's second stroke is the same separator.
-      return r.dir === "h" && d > size * 0.5 && d < size * ctx.leading * 3 && r.x1 < rule.x2 && r.x2 > rule.x1;
+      return r.dir === "h" && !inTable && d > size * 0.5 && d < size * ctx.leading * 3 && Math.min(r.x2, rule.x2) - Math.max(r.x1, rule.x1) >= (rule.x2 - rule.x1) * 0.5;
     });
     const corner = ctx.drawing.rules.some(
       (r) => r.dir === "v" && [r.y1, r.y2].some((end) => Math.abs(end - y) <= 2) && [rule.x1, rule.x2].some((x) => Math.abs((r.x1 + r.x2) / 2 - x) <= 2),

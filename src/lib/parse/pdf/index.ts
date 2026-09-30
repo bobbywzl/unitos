@@ -913,10 +913,12 @@ const FRONT_PART_RE =
 // in the page's order, all of them stood between the Title and its
 // authors, PLOS's masthead with 292 pt of space after it. Lines over the
 // title that are more than a masthead (a 10-K cover's check boxes, a
-// court's notice) stay as they are, and so do words at the body's size
-// under it. Lines beside the title, stacked with no paragraph gap, are one
-// paragraph (joinBeside); a side column runs down the page, and lines that
-// end a few lines under the title's foot are no side column.
+// court's notice, more than four blocks: the Federal Register's page opens
+// with the end of the rule before and this one's agency and docket lines)
+// stay as they are, and so do words at the body's size under it. Lines
+// beside the title, stacked with no paragraph gap, are one paragraph
+// (joinBeside); a side column runs down the page, and lines that end a few
+// lines under the title's foot are no side column.
 function mastheadOf(segments: Segment[], title: Segment, running: Set<string>, bodySize: number): { segments: Segment[]; side: Segment[] } {
   const at = segments.indexOf(title);
   const tb = title.box;
@@ -928,7 +930,7 @@ function mastheadOf(segments: Segment[], title: Segment, running: Set<string>, b
   const deep = under.some((s) => s.box!.y1 < tb.y1 - bodySize * 6);
   const side = deep && under.every((s) => (s.lineSize ?? bodySize) < bodySize * 0.95) ? under : [];
   const over = before.filter((s) => !drop.has(s) && s.type !== "FIGURE" && s.type !== "SEPARATOR" && s.box !== undefined && s.box.y1 >= tb.y2 - 2);
-  if (over.every((s) => (s.type === "PARAGRAPH" || s.type === "HEADING") && [...s.text].length <= 150)) {
+  if (over.length <= 4 && over.every((s) => (s.type === "PARAGRAPH" || s.type === "HEADING") && [...s.text].length <= 150)) {
     for (const s of before) if (s.type === "SEPARATOR") drop.add(s);
     for (const s of over) {
       const align = s.type === "HEADING" ? s.align : (/\b(center|right)\b/.exec(s.html ?? "")?.[1] as Segment["align"]);
