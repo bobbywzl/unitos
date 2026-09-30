@@ -818,7 +818,7 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   if (body.length > 0) {
     built.push(...body);
     const cellsOf = body.map((line) => cellsBySeparators(line, separators));
-    const starts = (drawn.length > 0 ? ruledRowStarts(body, cellsOf, [...full, ...pieceEnds(drawn, region.box)]) : null) ?? regionRowStarts(body, cellsOf);
+    const starts = oneRow(body, cellsOf, region, drawn) ? [0] : ((drawn.length > 0 ? ruledRowStarts(body, cellsOf, [...full, ...pieceEnds(drawn, region.box)]) : null) ?? regionRowStarts(body, cellsOf));
     const bodyRows = rowsOf(cellsOf, starts, columnCount);
     spanValues(bodyRows, body, starts, separators, ruledAt);
     rows.push(...spanCenteredLabels(bodyRows, starts.map((k) => body[k].y), full));
@@ -1046,6 +1046,21 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
     if (!wrap) starts.push(k);
   }
   return starts;
+}
+
+// A band ruled over and under, its columns ruled from rule to rule, is one
+// row when it holds two lines and no amounts: a form's field whose label
+// and prompt each take two lines (the W-9's "Sign / Here" beside
+// "Signature of / U.S. person", p. 1).
+function oneRow(body: Line[], cellsOf: Cell[][], region: TableRegion, drawn: Rule[]): boolean {
+  const b = region.box;
+  return (
+    body.length === 2 &&
+    region.rules.length === 0 &&
+    drawn.length > 0 &&
+    drawn.every((r) => r.y1 <= b.y1 + 2 && r.y2 >= b.y2 - 2) &&
+    !cellsOf.flat().some((c) => NUMERIC_CELL_RE.test(c.text.trim()))
+  );
 }
 
 // Where a column rule drawn row by row breaks, inside the table: a row's

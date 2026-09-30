@@ -81,6 +81,11 @@
   margin-top: 6px;
   font-size: 0.8rem;
 }
+/* A caption's formula at its words' size (insert/figure.ts), as an inline
+   equation in the page (css/insert.css): KaTeX's own sheet sets 1.21em. */
+.docs-prose .docs-figure-caption .docs-caption-math .katex {
+  font-size: 1em;
+}
 .docs-prose .docs-figure-crop .docs-figure-empty {
   padding: 18px 0;
   border-radius: 10px;

@@ -112,7 +112,7 @@ function formulaHtml(latex: string): string {
 function captionContent(caption: string, styles: CaptionStyle[], math: CaptionMath[]) {
   return captionParts(caption, styles, math).map((part, k) => {
     const drawn = part.latex ? formulaHtml(part.latex) : "";
-    if (drawn) return h("span", { key: k, className: "docs-math", dangerouslySetInnerHTML: { __html: drawn } });
+    if (drawn) return h("span", { key: k, className: "docs-caption-math", dangerouslySetInnerHTML: { __html: drawn } });
     return part.styles.reduce<ReturnType<typeof h> | string>((inner, style) => {
       const [tag, attrs] = CAPTION_TAGS[style];
       return h(tag, { key: k, ...(attrs.style ? { style: { fontVariant: "small-caps" } } : {}) }, inner);
