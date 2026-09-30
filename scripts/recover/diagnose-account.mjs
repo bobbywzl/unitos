@@ -4,13 +4,28 @@
 //
 // Every query runs in one READ ONLY transaction, so the script cannot change
 // the database. days (default 14) is how far back the history and click
-// sections look.
+// sections look. It also writes the account's project digests to
+// ./digest-<email>.json: a digest (NotebookDigest.parts) holds each note's
+// and annotation's text and quotes as of its last build, so it can be the
+// last copy of a deleted annotation. Opening /admin/digest or using the
+// assistant in the project rebuilds it.
+//
+// The report tells three cases apart:
+//   - Deleted: projects, sections, notes, or annotations gone (Reset account,
+//     project delete, section delete, document delete). Only a backup brings
+//     them back (restore-account.mjs).
+//   - Unanchored: the notes and annotations are there, but their quotes are
+//     orphaned (a re-parse gave the document new blocks and the quote was not
+//     found again). Orphaned annotations paint no mark in the text.
+//   - Out of the tray: notes with no document (Note.documentId null) show on
+//     the notes full page and in no document's notes tray.
 //
 // The report:
-//   1. The account: id, created, last seen. A createdAt newer than the
-//      account's projects means an admin Reset account ran (lib/account-reset.ts
-//      stamps createdAt anew).
-//   2. Each project the account owns: sections, notes, annotations, documents.
+//   1. The account: id, created, last seen, active time, trial end, sessions.
+//      A createdAt newer than the account's projects, activeSeconds 0, and no
+//      session mean an admin Reset account ran (lib/account-reset.ts).
+//   2. Each project the account owns: sections, notes, annotations, documents,
+//      notes with no document.
 //   3. The project history (NotebookEvent): note, section, and document
 //      removals, with who did them.
 //   4. Quotes that lost their document (Source.documentId null, the document
@@ -21,7 +36,10 @@
 //   6. Clicks on delete, remove, reset, and merge controls in the account's
 //      projects, by any account.
 //   7. The notes the account wrote anywhere, by status.
+//   8. Each document in the account's projects: parser version, blocks, and
+//      the account's quotes in it, found and orphaned.
 
+import { writeFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 
 const email = process.argv[2]?.trim().toLowerCase();
@@ -45,8 +63,9 @@ try {
       await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
 
       const users = await tx.$queryRaw`
-        SELECT "id", "email", "name", "tier", "createdAt", "lastSeenAt"
-        FROM "User" WHERE lower("email") = ${email}`;
+        SELECT u."id", u."email", u."name", u."tier", u."createdAt", u."lastSeenAt", u."activeSeconds",
+          u."trialEndsAt", (SELECT count(*)::int FROM "Session" s WHERE s."userId" = u."id") AS "sessions"
+        FROM "User" u WHERE lower(u."email") = ${email}`;
       table("Account", users);
       if (users.length === 0) {
         console.log("No account with this email.");
@@ -61,7 +80,9 @@ try {
              WHERE s."notebookId" = n."id" AND NOT s."hidden") AS "notes",
           (SELECT count(*)::int FROM "Note" x JOIN "Section" s ON s."id" = x."sectionId"
              WHERE s."notebookId" = n."id" AND s."hidden") AS "hiddenNotes",
-          (SELECT count(*)::int FROM "NotebookDocument" d WHERE d."notebookId" = n."id") AS "documents"
+          (SELECT count(*)::int FROM "NotebookDocument" d WHERE d."notebookId" = n."id") AS "documents",
+          (SELECT count(*)::int FROM "Note" x JOIN "Section" s ON s."id" = x."sectionId"
+             WHERE s."notebookId" = n."id" AND NOT s."hidden" AND x."documentId" IS NULL) AS "notesWithNoDocument"
         FROM "Notebook" n WHERE n."userId" = ${userId}
         ORDER BY n."createdAt"`;
       table("Projects the account owns (hiddenNotes = annotations and assistant conversations)", projects);
@@ -135,6 +156,33 @@ try {
         WHERE x."createdById" = ${userId}
         GROUP BY x."status", s."hidden"`;
       table("Notes the account wrote, in any project", written);
+
+      const documents = await tx.$queryRaw`
+        SELECT d."id", left(d."title", 40) AS "title", n."title" AS "project", d."parserVersion",
+          d."sourceUrl" IS NOT NULL AS "fromUrl", d."createdAt",
+          (SELECT count(*)::int FROM "Block" b WHERE b."documentId" = d."id") AS "blocks",
+          (SELECT count(*)::int FROM "Source" src JOIN "Note" x ON x."id" = src."noteId"
+             JOIN "Section" s ON s."id" = x."sectionId"
+             WHERE src."documentId" = d."id" AND s."notebookId" = n."id" AND NOT src."orphaned") AS "quotesFound",
+          (SELECT count(*)::int FROM "Source" src JOIN "Note" x ON x."id" = src."noteId"
+             JOIN "Section" s ON s."id" = x."sectionId"
+             WHERE src."documentId" = d."id" AND s."notebookId" = n."id" AND src."orphaned") AS "quotesOrphaned"
+        FROM "NotebookDocument" nd
+        JOIN "Notebook" n ON n."id" = nd."notebookId" AND n."userId" = ${userId}
+        JOIN "Document" d ON d."id" = nd."documentId"
+        ORDER BY n."title", d."createdAt"`;
+      table("Documents in the account's projects, with the account's quotes in each", documents);
+
+      const digests = await tx.$queryRaw`
+        SELECT g."notebookId", n."title" AS "project", g."builtAt", g."counts", g."parts"
+        FROM "NotebookDigest" g JOIN "Notebook" n ON n."id" = g."notebookId"
+        WHERE n."userId" = ${userId}`;
+      const file = `digest-${email.replace(/[^a-z0-9.@_-]/g, "_")}.json`;
+      writeFileSync(file, JSON.stringify(digests, null, 2));
+      table(
+        `Project digests, saved whole to ./${file}`,
+        digests.map((g) => ({ project: g.project, builtAt: g.builtAt, counts: JSON.stringify(g.counts) })),
+      );
 
       const edits = await tx.$queryRaw`
         SELECT count(*)::int AS "noteEdits", max("createdAt") AS "lastEdit"
