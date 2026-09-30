@@ -660,13 +660,17 @@ function runSeparators(run: Line[]): number[] {
   // A group's label among rows of three cells or more, from the table's left
   // edge (and a value at its end), crosses the gutters the rows leave open:
   // the rows alone part the columns (arXiv 2609.29669's "§3.1 Policy /
-  // manipulation suites" joined Table 3's Benchmark and Year columns). A
-  // row of marks alone is no row ("*  *  *  *  *" between the Federal
-  // Register's paragraphs, p. 4).
+  // manipulation suites" joined Table 3's Benchmark and Year columns), when
+  // they part more columns than all the lines do (a first column's wrapped
+  // words at the edge are no labels: arXiv 2303.01056's Table 1). A row of
+  // marks alone is no row ("*  *  *  *  *" between the Federal Register's
+  // paragraphs, p. 4).
   const body = run.slice(first);
+  const heads = run.slice(0, first);
+  const all = columnSeparators(body, heads);
   const rows = body.filter((l) => !isGroupLabel(l, left));
-  const scan = rows.filter((l) => l.cells.length >= 3 && /[\p{L}\p{N}]/u.test(l.text)).length >= 2 ? rows : body;
-  return withoutSignColumns(run, columnSeparators(scan, run.slice(0, first)));
+  const rowed = rows.filter((l) => l.cells.length >= 3 && /[\p{L}\p{N}]/u.test(l.text)).length >= 2 ? columnSeparators(rows, heads) : [];
+  return withoutSignColumns(run, rowed.length > all.length ? rowed : all);
 }
 
 // A group's label: one phrase from the table's left edge, short of a
@@ -901,11 +905,12 @@ function firstCellOnly(line: Line) {
   line.xEnd = Math.max(...line.items.map((it) => it.x + it.w));
 }
 
-// A row set tight: a short line of one cell whose words stand an em apart or
-// more, a number among them (Grinstead–Snell's Table 6.2: "HHH 1" under "X
-// Y", its columns closer than a cell's gap). Its parts count as its cells. A
-// list's item is no row ("-  DIAMETER 1200 MM" on a scan: NASA SP-4408
-// p. 467).
+// A row set tight: a short line of one cell whose short words stand an em
+// apart or more, a number after them (Grinstead–Snell's Table 6.2: "HHH 1"
+// under "X Y", its columns closer than a cell's gap). Its parts count as its
+// cells. A list's item is no row ("-  DIAMETER 1200 MM" on a scan: NASA
+// SP-4408 p. 467), and neither is a numbered heading ("3 基于代码特征的代码生成
+// 方法" under arXiv 2303.01056's Table 1).
 function tightCells(line: Line): number {
   const items = line.items.filter((it) => it.str.trim().length > 0);
   if (line.cells.length !== 1 || line.text.length > 40 || items.length < 2 || readMarker(line)?.family === "bullet") return line.cells.length;
@@ -915,7 +920,8 @@ function tightCells(line: Line): number {
     else parts[parts.length - 1] += ` ${it.str}`;
   });
   const words = line.text.split(/\s+/).filter((w) => /\p{L}{2}/u.test(w)).length;
-  return parts.length >= 2 && words <= 4 && parts.some((p) => NUMERIC_CELL_RE.test(p.trim())) ? parts.length : 1;
+  const numeric = (p: string) => NUMERIC_CELL_RE.test(p.trim());
+  return parts.length >= 2 && words <= 4 && parts.slice(1).some(numeric) && parts.every((p) => numeric(p) || p.trim().length <= 12) ? parts.length : 1;
 }
 
 // A line of prose is one cell, whatever its gaps: a cell that opens with a

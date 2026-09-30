@@ -796,16 +796,20 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   const open = (a: number, b: number) => !body.some((l) => l.items.some((it) => it.x < Math.max(a, b) && it.x + it.w > Math.min(a, b)));
   // A group's label over its rows, a phrase from the table's left edge (and
   // a value at its end), crosses the gutters the rows leave open: the scan
-  // reads the rows of three phrases or more where two or more hold them
-  // (2609.29669's "§3.1 Policy / manipulation suites" over "CALVIN [101] |
-  // 2021 | RA-L …" joined its Benchmark and Year columns).
+  // reads the rows of three phrases or more where two or more hold them,
+  // when they part more columns than all the lines do (2609.29669's "§3.1
+  // Policy / manipulation suites" over "CALVIN [101] | 2021 | RA-L …"
+  // joined its Benchmark and Year columns).
+  const heads = headGroups.at(-1) ?? [];
+  const lined = body.length >= 2 ? body : phrased;
   const rowsOnly = body.filter((l) => phrasesOf(l).length >= 3 || l.x > region.box.x1 + l.size * 2);
-  const scan = rowsOnly.filter((l) => phrasesOf(l).length >= 3).length >= 2 ? rowsOnly : body.length >= 2 ? body : phrased;
+  const byRows = rowsOnly.filter((l) => phrasesOf(l).length >= 3).length >= 2;
+  const scan = byRows && columnSeparators(rowsOnly, heads).length > columnSeparators(lined, heads).length ? rowsOnly : lined;
   const scanned = withoutSignColumns(
     scan,
     [
       ...ruledAt,
-      ...columnSeparators(scan, headGroups.at(-1) ?? []).filter((x) => !ruledAt.some((d) => open(x, d))),
+      ...columnSeparators(scan, heads).filter((x) => !ruledAt.some((d) => open(x, d))),
     ].sort((a, b) => a - b),
   );
   const separators = [...scanned, ...headSeparators(headGroups.at(-1) ?? [], body, scanned, region.box)].sort((a, b) => a - b);
