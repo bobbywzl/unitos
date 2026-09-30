@@ -359,3 +359,9 @@ textarea.docs-field {
     animation: none;
   }
 }
+
+/* View > Full screen (docs-editor.tsx): the page alone; the vertical ruler
+   goes with the title row, the toolbar, and the ruler. */
+.docs-shell[data-full-screen] .docs-vruler {
+  display: none;
+}

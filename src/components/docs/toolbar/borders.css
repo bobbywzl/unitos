@@ -1,0 +1,95 @@
+/* Borders and shading (SPEC.md §29; toolbar/borders.ts, extensions.ts).
+
+   Paragraphs with the same borders and shading, one after another, draw one
+   box, as Google Docs and Word draw them: the top line over the first, the
+   bottom line under the last, the line between (if any) under each but the
+   last, and one background with no gaps; inside the box each paragraph
+   keeps its space before and after (--docs-box-inner-*). */
+.docs-prose .docs-box-first,
+.docs-prose .docs-box-mid {
+  border-bottom: var(--docs-box-between, 0 none) !important;
+  margin-bottom: 0 !important;
+  padding-bottom: var(--docs-box-inner-after, 0pt) !important;
+}
+.docs-prose .docs-box-mid,
+.docs-prose .docs-box-last {
+  border-top: 0 none !important;
+  margin-top: 0 !important;
+  padding-top: var(--docs-box-inner-before, 0pt) !important;
+}
+
+/* On a light background in dark mode the words keep the light theme's ink
+   and links, as on a page with a color. */
+.dark .docs-prose [data-shading-light] {
+  --docs-ink: #000000;
+  --docs-link: #1155cc;
+  --docs-grid: #000000;
+  color: var(--docs-ink);
+}
+
+/* The dialog: the positions as a row of toggles, each a square of lines
+   with its own lines drawn solid. Its menus (the line's color, width, and
+   dash, the background) open over it: a menu stands under a dialog
+   elsewhere (css/toolbar.css). */
+body:has(> .docs-tb-backdrop .docs-borders-dialog) > .docs-menu {
+  z-index: 71;
+}
+.docs-borders-dialog {
+  width: 380px;
+}
+.docs-borders-positions {
+  display: flex;
+  gap: 6px;
+}
+.docs-borders-position {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: var(--docs-muted);
+  cursor: pointer;
+}
+.docs-borders-position:hover {
+  background: var(--docs-hover);
+}
+.docs-borders-position[aria-pressed="true"] {
+  background: var(--clay-200);
+  color: var(--docs-on-fg);
+}
+.docs-borders-position:focus-visible {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: 1px;
+}
+.docs-borders-lines {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.docs-borders-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.docs-borders-row .docs-tb-field {
+  width: 88px;
+}
+.docs-borders-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--docs-sep);
+  border-radius: 50%;
+}
+.docs-borders-preview {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--docs-field-bg);
+}
+.docs-borders-preview p {
+  margin: 0;
+  color: var(--docs-ink);
+  font: 400 11pt/1.4 Arial, Arimo, "Liberation Sans", Helvetica, sans-serif;
+}

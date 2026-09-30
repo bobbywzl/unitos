@@ -355,6 +355,8 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
           }))
         : undefined,
     border: paragraphBorders(a),
+    // Borders and shading's background (toolbar/borders.ts): "#rrggbb <padding pt>".
+    shading: paragraphShading(a),
     keepNext: a.keepWithNext === true || undefined,
     keepLines: a.keepLinesTogether === true || undefined,
     widowControl: a.preventSingleLines !== false,
@@ -365,13 +367,20 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
 }
 
 /** A paragraph's borders as Word's (w:pBdr): each side as a cell's side,
-    with the room between the line and the words (an import's Word file). */
+    with the room between the line and the words (an import's Word file,
+    or Borders and shading), and the line between the paragraphs of a box. */
 function paragraphBorders(a: Record<string, unknown>): IParagraphOptions["border"] {
-  const sides = (["top", "right", "bottom", "left"] as const).flatMap((name) => {
+  const sides = (["top", "right", "bottom", "left", "between"] as const).flatMap((name) => {
     const value = a[`border${name[0].toUpperCase()}${name.slice(1)}`];
     return typeof value === "string" ? [[name, { ...side(value), space: Number(value.split(" ")[3] ?? 0) || 0 }] as const] : [];
   });
   return sides.length > 0 ? Object.fromEntries(sides) : undefined;
+}
+
+/** A paragraph's background as Word's shading (w:shd). */
+function paragraphShading(a: Record<string, unknown>): IParagraphOptions["shading"] {
+  const fill = typeof a.shading === "string" ? wordColor(a.shading.split(" ")[0]) : undefined;
+  return fill ? { type: ShadingType.CLEAR, color: "auto", fill } : undefined;
 }
 
 // ── Lists ───────────────────────────────────────────────────────────────────

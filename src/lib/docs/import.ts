@@ -43,7 +43,7 @@ import type { Region } from "@/lib/video/types";
 //              and centered, display large, meta the Subtitle, quote inside
 //              a blockquote, center and right the alignment; its indent the
 //              paragraph's indents at the page's measure, and a Word
-//              paragraph's borders its borders
+//              paragraph's borders and shading its borders and shading
 //   HEADING    a heading of its level; one that repeats the title is the Title
 //   LIST       lists from the marker lines, nested two spaces a level, the
 //              markers drawn by the list (a Markdown task line a checklist
@@ -190,10 +190,12 @@ function listIndentsAttr(indents: Indent[] | undefined): string | null {
   return pairs.length > 0 && pairs.length === Math.min(9, indents?.length ?? 0) ? JSON.stringify(pairs) : null;
 }
 
-/** A paragraph's borders as the page editor's (a Word file's rule under a
-    heading, its bar beside a quote), each side as the parse writes it. */
-const BORDER_ATTRS = { top: "borderTop", right: "borderRight", bottom: "borderBottom", left: "borderLeft" } as const;
+/** A paragraph's borders and shading as the page editor's (a Word file's
+    rule under a heading, its bar beside a quote, its box with a line
+    between and a background), each as the parse writes it. */
+const BORDER_ATTRS = { top: "borderTop", right: "borderRight", bottom: "borderBottom", left: "borderLeft", between: "borderBetween" } as const;
 const BORDER_VALUE = /^(\d{1,2}(?:\.\d{1,2})?) (?:solid|dotted|dashed) #[0-9a-fA-F]{6}(?: (\d{1,2}(?:\.\d{1,2})?))?$/;
+const SHADING_VALUE = /^#[0-9a-fA-F]{6}(?: \d{1,2}(?:\.\d{1,2})?)?$/;
 
 function borderAttrs(block: ParsedBlock): Record<string, string> {
   const out: Record<string, string> = {};
@@ -201,6 +203,7 @@ function borderAttrs(block: ParsedBlock): Record<string, string> {
     const value = block.borders?.[side];
     if (value && BORDER_VALUE.test(value)) out[name] = value;
   }
+  if (block.shading && SHADING_VALUE.test(block.shading)) out.shading = block.shading;
   return out;
 }
 

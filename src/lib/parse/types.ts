@@ -144,10 +144,14 @@ export type ParsedBlock = {
   listIndents?: Indent[];
   itemSpace?: number;
   // Word paragraphs: the borders the paragraph's style and its own
-  // properties draw (w:pBdr: a rule under a heading, a bar beside a quote),
-  // each side as the page editor stores a paragraph's: "<width pt>
-  // <solid|dotted|dashed> #rrggbb <padding pt>".
-  borders?: { top?: string; right?: string; bottom?: string; left?: string };
+  // properties draw (w:pBdr: a rule under a heading, a bar beside a quote,
+  // a box), each side as the page editor stores a paragraph's: "<width pt>
+  // <solid|dotted|dashed> #rrggbb <padding pt>". between: the line between
+  // two paragraphs of one box (w:between).
+  borders?: { top?: string; right?: string; bottom?: string; left?: string; between?: string };
+  // Word paragraphs: the background (w:shd) as the page editor stores a
+  // paragraph's shading: "#rrggbb <padding pt>".
+  shading?: string;
   // PDF FIGUREs: the crop of a display equation that failed the glyph check.
   // Its text is the display's glyphs as the text layer reads them (often
   // garbled), so the import shows it with no caption.

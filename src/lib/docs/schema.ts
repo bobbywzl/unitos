@@ -182,6 +182,8 @@ function safeColor(value: unknown): string | null {
 // add the room between the line and the words ("2.5 solid #2e75b6 14").
 const BORDER_SIDE = /^\d{1,2}(\.\d{1,2})? (solid|dotted|dashed) #[0-9a-fA-F]{6}( \d{1,2}(\.\d{1,2})?)?$/;
 const DASHES = new Set(["solid", "dotted", "dashed"]);
+// A paragraph's shading: "#rrggbb <padding pt>".
+const SHADING = /^#[0-9a-fA-F]{6}( \d{1,2}(\.\d{1,2})?)?$/;
 /** The highest page number a page start or a figure may name. */
 const MAX_PAGE = 100_000;
 
@@ -382,12 +384,17 @@ function cleanAttr(name: string, value: unknown): unknown {
     case "backgroundColor":
     case "borderColor":
       return safeColor(value);
-    // A table cell's and a paragraph's sides, and an image's border dash.
+    // A table cell's and a paragraph's sides, a paragraph's line between it
+    // and the next of its box, and an image's border dash.
     case "borderTop":
     case "borderRight":
     case "borderBottom":
     case "borderLeft":
+    case "borderBetween":
       return typeof value === "string" && BORDER_SIDE.test(value) ? value : null;
+    // A paragraph's background (Borders and shading): its color and padding.
+    case "shading":
+      return typeof value === "string" && SHADING.test(value) ? value : null;
     case "borderDash":
       return typeof value === "string" && DASHES.has(value) ? value : null;
     case "dropdownOptions":

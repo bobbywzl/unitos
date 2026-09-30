@@ -27,7 +27,7 @@ import { showTranslations } from "@/components/docs/layer/reading";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageBanner, PageCanvas, PageRuler } from "@/components/docs/areas/page";
 import { StatusPopup } from "@/components/docs/page/status-popup";
-import { useSaveState } from "@/components/docs/page/store";
+import { PAGE_EVENT, useSaveState } from "@/components/docs/page/store";
 import { TypingLayer } from "@/components/docs/areas/typing";
 import { VersionHistory, VersionHistoryButton } from "@/components/docs/versions/version-history";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
@@ -388,6 +388,9 @@ export function DocsEditor({
   const mode: DocsMode = locked ? "viewing" : chosenMode;
   const [zoom, setZoom] = useState<Zoom>(100);
   const [headerHidden, setHeaderHidden] = useState(false);
+  // View > Full screen: the title row, the toolbar, and the rulers hide,
+  // as in Google Docs; Esc brings them back.
+  const [fullScreen, setFullScreen] = useState(false);
   // The header or footer being edited: the toolbar formats its text.
   const [hfEditor, setHfEditor] = useState<Editor | null>(null);
 
@@ -557,6 +560,30 @@ export function DocsEditor({
     };
   }, [editor]);
 
+  // Full screen from its command (page/commands.ts); an Esc no one else
+  // took brings the header back.
+  useEffect(() => {
+    if (!editor) return;
+    const dom = editor.view.dom;
+    const on = () => {
+      setFullScreen(true);
+      toast(t("docsPage.fullScreenHint"), editor);
+    };
+    dom.addEventListener(PAGE_EVENT.fullScreen, on);
+    return () => dom.removeEventListener(PAGE_EVENT.fullScreen, on);
+  }, [editor, t]);
+  useEffect(() => {
+    if (!fullScreen) return;
+    // The page cancels every Esc it gets (ProseMirror), so an open menu or
+    // dialog, not the cancel, says the key was someone else's.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.isComposing || document.querySelector("[data-docs-menu], [role='dialog']")) return;
+      setFullScreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullScreen]);
+
   const insertImage = useCallback(
     (source: { file: File } | { url: string }) => {
       if (editor) insertImageFrom(editor, source);
@@ -661,9 +688,9 @@ export function DocsEditor({
   }
 
   return (
-    <div className="docs-shell" data-docs-editor data-docs-mode={mode} data-import={imported?.kind}>
+    <div className="docs-shell" data-docs-editor data-docs-mode={mode} data-import={imported?.kind} data-full-screen={fullScreen || undefined}>
       <div className="docs-header" data-edit-control data-away={away || undefined}>
-        {!headerHidden && (
+        {!headerHidden && !fullScreen && (
           <div className="docs-title-row @container">
             <DocIcon size={26} className="docs-title-icon" />
             <TitleField
@@ -681,7 +708,8 @@ export function DocsEditor({
             <VersionHistoryButton editor={editor} />
           </div>
         )}
-        {chrome}
+        {/* Hidden, not taken away, in full screen: the toolbar's keys still answer. */}
+        <div style={{ display: fullScreen ? "none" : "contents" }}>{chrome}</div>
       </div>
       <PageBanner.Provider value={banner}>{pages}</PageBanner.Provider>
       <CollapsedView editor={editor} collapse={collapse} highlightsByBlock={highlightsByBlock} editing={editing} />

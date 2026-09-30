@@ -56,6 +56,12 @@ const BLOCK_ATTRS: Record<string, TKey> = {
   indentLeft: "docsSuggest.indent",
   indentRight: "docsSuggest.indent",
   indentFirstLine: "docsSuggest.indent",
+  borderTop: "docs.bordersAndShading",
+  borderBottom: "docs.bordersAndShading",
+  borderLeft: "docs.bordersAndShading",
+  borderRight: "docs.bordersAndShading",
+  borderBetween: "docs.bordersAndShading",
+  shading: "docs.bordersAndShading",
 };
 const LISTS: Record<string, TKey> = {
   bulletList: "docs.bulletedList",
