@@ -598,7 +598,8 @@ export async function replaceImage(editor: Editor, pos: number, source: ImageSou
   try {
     const src = "file" in source ? (await uploadImage(source.file)).url : source.url;
     const node = editor.state.doc.nodeAt(pos);
-    if (node) setImageAttrs(editor.view, pos, { ...RESET_ATTRS, src, width: imageAttrs(node).width });
+    // A replaced chart is a plain image: its data no longer draws it.
+    if (node) setImageAttrs(editor.view, pos, { ...RESET_ATTRS, src, width: imageAttrs(node).width, chart: null });
   } catch (err) {
     toast(err instanceof Error ? err.message : "", editor);
   }

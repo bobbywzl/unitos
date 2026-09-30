@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { AddIcon, CloseIcon } from "@/components/docs/icons";
 import { onInsert, type InsertContext } from "@/components/docs/insert/context";
-import { imageAttrs, isChartImage } from "@/components/docs/insert/image";
+import { imageAttrs, isChartImage, setImageAttrs } from "@/components/docs/insert/image";
 import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { insertImage } from "@/components/docs/typing/paste";
 import {
@@ -140,7 +140,7 @@ export function ChartHost({ editor, ctx }: { editor: Editor; ctx: InsertContext 
           if (spec) setOpen({ draft: draftOf(spec), pos: event.pos, after: null });
           return;
         }
-        const table = event.fromTable === false ? null : tableAround(editor.state);
+        const table = tableAround(editor.state);
         const read = table ? chartFromRows(rowsOf(table.node), (n) => t("docsInsert.chartSeries", { n })) : null;
         const spec = read ?? sample(t);
         setOpen({
@@ -200,7 +200,7 @@ function ChartDialog({ editor, open, onClose }: { editor: Editor; open: Open; on
         if (node && node.type.name === "image") {
           const { width } = imageAttrs(node);
           const height = width ? { height: Math.round((width * CHART_HEIGHT) / CHART_WIDTH) } : {};
-          editor.view.dispatch(editor.state.tr.setNodeMarkup(open.pos, undefined, { ...node.attrs, src: url, alt, chart, ...height }));
+          setImageAttrs(editor.view, open.pos, { src: url, alt, chart, ...height });
         }
       } else {
         insertImage(editor, { src: url, alt, width: CHART_WIDTH, height: CHART_HEIGHT, chart }, open.after ?? undefined);

@@ -54,8 +54,8 @@ type InsertEvent =
   | { type: "dropdown-dialog"; dropdownId: string | null }
   | { type: "toc-options"; pos: number }
   // Insert > Chart: a new chart of `kind` (from the table the caret is in,
-  // if any, with `fromTable`), or the chart image at `pos` to edit.
-  | { type: "chart"; kind?: ChartType; pos?: number; fromTable?: boolean }
+  // if any), or the chart image at `pos` to edit.
+  | { type: "chart"; kind?: ChartType; pos?: number }
   | { type: "clipboard-blocked" };
 
 type Handler = (event: InsertEvent) => void;

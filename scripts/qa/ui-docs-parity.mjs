@@ -4,12 +4,12 @@
 // shading; FULLSCREEN is View > Full screen; IMAGENOTE is an image dragged
 // from the page onto a note in the notes tray (a person's mouse drag, which
 // the browser runs as its own drag); SPELLING is Add to dictionary, Ignore
-// all, and Tools > Spelling and grammar > Personal dictionary. Each check
-// prints PASS or FAIL with its evidence; each case leaves a screenshot
-// (light theme, 1440×900; the dark case in dark).
+// all, and Tools > Spelling and grammar > Personal dictionary; CHART is
+// Insert > Chart. Each check prints PASS or FAIL with its evidence; each
+// case leaves a screenshot (light theme, 1440×900; the dark case in dark).
 //
 // Usage:
-//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING] [--label after] [--keep]
+//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART] [--label after] [--keep]
 // With no group named, every group runs. Env: BASE (default
 // http://localhost:3111), SHOT_DIR (default <tmp>/ui-docs-parity), CHROME
 // (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3492), DATABASE_URL
@@ -706,6 +706,207 @@ GROUPS.SPELLING = async () => {
   await sleep(600);
   spans = await unchecked(page);
   check(G, spans.includes("Qqqqzzz") && spans.includes("Wexcombe") && !spans.includes("Unitos"), "after a reload the dictionary and the ignored words hold", JSON.stringify(spans));
+  check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
+  await close();
+};
+
+// ── Insert > Chart ──────────────────────────────────────────────────────────
+
+/** The chart images of the page: their data, address, size, and alt text. */
+async function charts(page) {
+  return page.evaluate(() => {
+    const out = [];
+    window.__docsEditor.state.doc.descendants((node, pos) => {
+      if (node.type.name !== "image" || !node.attrs.chart) return true;
+      out.push({ pos, chart: JSON.parse(node.attrs.chart), src: node.attrs.src, alt: node.attrs.alt, width: node.attrs.width, height: node.attrs.height, suggested: node.marks.some((m) => m.type.name === "insertion") });
+      return false;
+    });
+    return out;
+  });
+}
+const chartDialog = (page) => page.locator(".docs-chart-dialog");
+/** The dialog's data as it stands: labels, series names, and values. */
+async function dialogData(page) {
+  const d = chartDialog(page);
+  return {
+    labels: await d.locator('[data-track="docs:chart:label"]').evaluateAll((els) => els.map((e) => e.value)),
+    series: await d.locator('[data-track="docs:chart:series"]').evaluateAll((els) => els.map((e) => e.value)),
+    values: await d.locator('[data-track="docs:chart:value"]').evaluateAll((els) => els.map((e) => e.value)),
+    type: await d.locator('[aria-pressed="true"][data-track^="docs:chart:type:"]').getAttribute("data-track"),
+  };
+}
+/** The caret in the table's cell that holds `text`, as a person puts it
+    there: a click, again while the page is still coming to life. */
+async function caretInCell(page, text) {
+  for (let i = 0; i < 4; i++) {
+    const at = await page.evaluate((text) => {
+      const td = [...document.querySelectorAll(".docs-prose td, .docs-prose th")].find((c) => c.textContent.trim() === text);
+      const r = td.getBoundingClientRect();
+      return { x: r.left + 20, y: r.top + r.height / 2 };
+    }, text);
+    await page.mouse.click(at.x, at.y);
+    const inside = await until(() => page.evaluate((text) => window.__docsEditor.state.selection.$from.parent.textContent === text, text), 1500, 100);
+    if (inside) return true;
+    await sleep(500);
+  }
+  return false;
+}
+
+GROUPS.CHART = async () => {
+  const G = "CHART";
+  const cell = (text) => ({ type: "tableCell", attrs: {}, content: [paragraph(text)] });
+  const table = { type: "table", content: [["Station", "Spring", "Autumn"], ["East", "12", "18"], ["North", "30", "26"], ["West", "21", "24"]].map((r) => ({ type: "tableRow", content: r.map(cell) })) };
+  const id = await richDocument("Chart", [paragraph("Birds counted at the three stations."), table, paragraph("The north station counted the most.")]);
+  const { page, errors, close } = await newPage();
+  await openEditor(page, id, "the most");
+
+  // 1. Search the menus has the four charts (read, not run).
+  await caretInCell(page, "North");
+  await page.keyboard.press("Alt+/");
+  await sleep(300);
+  await page.keyboard.type("chart", { delay: 40 });
+  await sleep(500);
+  const rows = await page.evaluate(() => [...document.querySelectorAll("[data-docs-menu] [role='option']")].map((e) => e.textContent));
+  await page.keyboard.press("Escape");
+  check(G, ["Column chart", "Bar chart", "Line chart", "Pie chart"].every((name) => rows.some((r) => r.startsWith(name))), "Search the menus finds the column, bar, line, and pie charts", JSON.stringify(rows));
+  await sleep(300);
+
+  // 2. The table's right-click menu offers Chart from this table.
+  await caretInCell(page, "West");
+  const cellAt = await page.evaluate(() => {
+    const td = [...document.querySelectorAll(".docs-prose td")].find((c) => c.textContent.trim() === "West");
+    const r = td.getBoundingClientRect();
+    return { x: r.left + 20, y: r.top + r.height / 2 };
+  });
+  await page.mouse.click(cellAt.x, cellAt.y, { button: "right" });
+  const fromMenu = page.locator(".docs-context-menu [role='menuitem']", { hasText: "Chart from this table" }).first();
+  const inMenu = await fromMenu.waitFor({ state: "visible", timeout: 5000 }).then(() => true, () => false);
+  await shot(page, "chart-2-table-menu");
+  if (inMenu) await fromMenu.click();
+  const opened = await chartDialog(page).waitFor({ state: "visible", timeout: 5000 }).then(() => true, () => false);
+  const menuData = opened ? await dialogData(page) : null;
+  check(G, inMenu && opened && menuData?.labels.join() === "East,North,West", "a table's right-click menu offers Chart from this table, with the table's data", JSON.stringify(menuData));
+  if (opened) {
+    await page.keyboard.press("Escape");
+    await chartDialog(page).waitFor({ state: "hidden", timeout: 5000 }).catch(() => {});
+  }
+
+  // 3. From the table the caret is in: the dialog takes its words and numbers.
+  await caretInCell(page, "North");
+  await searchMenus(page, "column chart");
+  await chartDialog(page).waitFor({ state: "visible", timeout: 10_000 });
+  const data = await dialogData(page);
+  check(G, data.labels.join() === "East,North,West" && data.series.join() === "Spring,Autumn" && data.values.join() === "12,18,30,26,21,24" && data.type === "docs:chart:type:column", "from a table: the labels, the series, and the values are the table's", JSON.stringify(data));
+  await shot(page, "chart-3-dialog-from-table");
+
+  // 4. Insert: a chart image under the table that keeps its data.
+  await chartDialog(page).locator('[data-track="docs:chart:insert"]').click();
+  await chartDialog(page).waitFor({ state: "hidden", timeout: 20_000 });
+  await page.waitForFunction(() => [...document.querySelectorAll(".docs-prose figure.docs-img img")].some((i) => i.complete && i.naturalWidth > 0), null, { timeout: 20_000 }).catch(() => {});
+  let found = await charts(page);
+  const order = await page.evaluate(() => {
+    const out = [];
+    window.__docsEditor.state.doc.forEach((n) => out.push(n.type.name));
+    return out.join(" ");
+  });
+  const painted = await page.evaluate(() => document.querySelector(".docs-prose figure.docs-img img")?.naturalWidth ?? 0);
+  const one = found[0];
+  check(G, found.length === 1 && /^\/api\/images\//.test(one.src) && one.width === 600 && one.height === 371 && one.alt === "Column chart" && one.chart.series[0].values.join() === "12,30,21", "Insert puts the chart in the page as an image that keeps its data", JSON.stringify(one));
+  check(G, /^paragraph table image/.test(order) && painted === 1200, "the chart lands under the table and its picture loads", `${order}; naturalWidth ${painted}`);
+  await page.mouse.click(10, 880);
+  await shot(page, "chart-4-in-page");
+
+  // 5. Undo takes it out in one step; Redo puts it back.
+  await clickIn(page, "Birds counted");
+  await page.keyboard.press("Control+z");
+  await sleep(300);
+  const undone = (await charts(page)).length;
+  await page.keyboard.press("Control+y");
+  await sleep(300);
+  check(G, undone === 0 && (await charts(page)).length === 1, "Undo takes the chart out in one step, Redo puts it back", `after undo ${undone}`);
+
+  // 6. The image's bar and its right-click menu offer Edit chart on a chart.
+  const img = await page.locator(".docs-prose figure.docs-img img").first().boundingBox();
+  await page.mouse.click(img.x + img.width / 2, img.y + img.height / 2);
+  const barButton = page.locator('.docs-img-toolbar [aria-label="Edit chart"]');
+  const offered = await barButton.waitFor({ state: "visible", timeout: 5000 }).then(() => true, () => false);
+  if (offered) await barButton.click();
+  const fromBar = await chartDialog(page).waitFor({ state: "visible", timeout: 5000 }).then(() => true, () => false);
+  await shot(page, "chart-6-bar-button");
+  check(G, offered && fromBar, "the image's bar offers Edit chart on a chart, and it opens the chart's data");
+  if (fromBar) {
+    await page.keyboard.press("Escape");
+    await chartDialog(page).waitFor({ state: "hidden", timeout: 5000 }).catch(() => {});
+  }
+  await page.mouse.click(img.x + img.width / 2, img.y + img.height / 2, { button: "right" });
+  const editRow = await page.locator(".docs-context-menu [role='menuitem']", { hasText: "Edit chart" }).first().waitFor({ state: "visible", timeout: 5000 }).then(() => true, () => false);
+  await page.keyboard.press("Escape");
+  await sleep(300);
+  check(G, editRow, "a chart's right-click menu offers Edit chart");
+
+  // 7. A double-click edits it: another type, a chart title, a changed value.
+  await page.mouse.dblclick(img.x + img.width / 2, img.y + img.height / 2);
+  await chartDialog(page).waitFor({ state: "visible", timeout: 10_000 });
+  const title = await chartDialog(page).locator("h2").textContent();
+  await chartDialog(page).locator('[data-track="docs:chart:type:pie"]').click();
+  await chartDialog(page).locator('[data-track="docs:chart:title"]').fill("Spring counts");
+  await chartDialog(page).locator('[data-track="docs:chart:value"]').nth(2).fill("35");
+  await shot(page, "chart-7-edit");
+  await chartDialog(page).locator('[data-track="docs:chart:insert"]').click();
+  await chartDialog(page).waitFor({ state: "hidden", timeout: 20_000 });
+  await sleep(500);
+  found = await charts(page);
+  const edited = found[0];
+  check(G, title === "Edit chart" && found.length === 1 && edited.chart.type === "pie" && edited.chart.title === "Spring counts" && edited.chart.series[0].values.join() === "12,35,21" && edited.src !== one.src && edited.alt === "Pie chart: Spring counts", "a double-click opens Edit chart, and Update draws the chart again in its place", `${title}; ${JSON.stringify(edited)}`);
+
+  // 8. Saved, and the same after a reload.
+  const ok = await saved(page);
+  await openEditor(page, id, "the most");
+  const reloaded = await charts(page);
+  check(G, Boolean(ok) && reloaded.length === 1 && reloaded[0].chart.type === "pie" && reloaded[0].chart.title === "Spring counts", "saved, and after a reload the chart keeps its data", JSON.stringify(reloaded[0]?.chart ?? null));
+
+  // 9. Outside a table: the dialog starts from three rows to type over.
+  await clickIn(page, "The north");
+  await page.keyboard.press("End");
+  await searchMenus(page, "bar chart");
+  await chartDialog(page).waitFor({ state: "visible", timeout: 10_000 });
+  const fresh = await dialogData(page);
+  check(G, fresh.labels.join() === "Item 1,Item 2,Item 3" && fresh.series.join() === "Series 1" && fresh.type === "docs:chart:type:bar", "outside a table the dialog starts from three rows to type over", JSON.stringify(fresh));
+  await chartDialog(page).locator('[data-track="docs:chart:add-row"]').click();
+  await chartDialog(page).locator('[data-track="docs:chart:label"]').nth(3).fill("Item 4");
+  await chartDialog(page).locator('[data-track="docs:chart:value"]').nth(3).fill("8");
+  await chartDialog(page).locator('[data-track="docs:chart:insert"]').click();
+  await chartDialog(page).waitFor({ state: "hidden", timeout: 20_000 });
+  await sleep(500);
+  found = await charts(page);
+  check(G, found.length === 2 && found[1].chart.type === "bar" && found[1].chart.labels.length === 4 && found[1].chart.series[0].values[3] === 8, "a row added in the dialog is in the chart", JSON.stringify(found[1]?.chart ?? null));
+
+  // 10. The Word download holds both charts as pictures.
+  await saved(page);
+  const docx = await page.request.get(`${BASE}/api/documents/${id}/export?format=docx`);
+  const media = docx.ok() ? Object.keys(unzipSync(new Uint8Array(await docx.body()))).filter((name) => name.startsWith("word/media/")) : [];
+  check(G, media.length >= 2, "the Word download holds the charts as pictures", `HTTP ${docx.status()}; ${media.join(", ")}`);
+
+  // 11. In Suggesting a new chart is a suggestion.
+  await setMode(page, "suggesting");
+  await clickIn(page, "Birds counted");
+  await page.keyboard.press("End");
+  await searchMenus(page, "line chart");
+  await chartDialog(page).waitFor({ state: "visible", timeout: 10_000 });
+  await chartDialog(page).locator('[data-track="docs:chart:insert"]').click();
+  await chartDialog(page).waitFor({ state: "hidden", timeout: 20_000 });
+  await sleep(500);
+  found = await charts(page);
+  const line = found.find((c) => c.chart.type === "line");
+  check(G, Boolean(line?.suggested), "in Suggesting a new chart is a suggestion", JSON.stringify(found.map((c) => [c.chart.type, c.suggested])));
+  await shot(page, "chart-11-suggested");
+
+  // 12. In Viewing a double-click opens nothing.
+  await setMode(page, "viewing");
+  const pie = await page.locator(".docs-prose figure.docs-img img").first().boundingBox();
+  await page.mouse.dblclick(pie.x + pie.width / 2, pie.y + pie.height / 2);
+  await sleep(600);
+  check(G, (await chartDialog(page).count()) === 0, "in Viewing a double-click on a chart opens nothing");
   check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
   await close();
 };
