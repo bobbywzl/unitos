@@ -282,7 +282,7 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   // A title the parse takes from a later page is scored with that page.
   const pdfPath = path.replace(/\.docx$/i, ".pdf");
   const shown = pages && pages[0] > 1 && existsSync(pdfPath) ? laterTitle(pdfTextOf(pdfPath, pages), pdfTextOf(pdfPath, [1, 1])) : undefined;
-  const docs = { parse: fromParse(parsed, pages, shown), import: parsed.richText ? fromImport(parsed.richText, pages, ref ? printedNotes(ref.blocks) : undefined, shown, parsed.media) : { blocks: [] } };
+  const docs = { parse: fromParse(parsed, pages, shown), import: parsed.richText ? fromImport(parsed.richText, pages, ref ? printedNotes(ref.blocks) : undefined, shown, parsed.media, /\.docx$/i.test(path) ? "docx" : "pdf") : { blocks: [] } };
   if (parsed.richText) placeCrops(docs.parse, docs.import);
   result.docs = docs;
   result.formulas = { parse: formulasByPage(flatten(docs.parse)), ...(parsed.richText ? { import: formulasByPage(flatten(docs.import)) } : {}) };

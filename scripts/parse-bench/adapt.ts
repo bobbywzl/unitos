@@ -728,6 +728,7 @@ class ImportReader {
     private readonly shown?: TitleShown,
     printed: PrintedNote[] = [],
     private readonly media = new Map<string, string>(),
+    private readonly kind?: "pdf" | "docx",
   ) {
     this.inRange = inRangeOf(pages);
     this.unmarked = printed.filter((note) => note.label === "" && note.words.length > 0).map((note) => note.words);
@@ -1105,7 +1106,9 @@ class ImportReader {
     const run = first?.content?.find((c) => c.type === "text");
     const cells = {
       size: typeof node.attrs?.cellSize === "number" ? node.attrs.cellSize : (sizeInPt(run?.marks?.find((m) => m.type === "textStyle")?.attrs?.fontSize) ?? this.styles.normal.size),
-      lineSpacing: typeof first?.attrs?.lineSpacing === "number" ? first.attrs.lineSpacing : this.styles.normal.lineSpacing,
+      // A PDF's table cell sets its lines 1.04 × 1.15 apart (css/import.css), a
+      // Word file's the Normal text's; a cell's own line spacing wins.
+      lineSpacing: typeof first?.attrs?.lineSpacing === "number" ? first.attrs.lineSpacing : this.kind === "pdf" ? 1.04 : this.styles.normal.lineSpacing,
       ...(typeof node.attrs?.cellPadding === "string" ? { padding: node.attrs.cellPadding } : {}),
       ...(minHeights.some((h) => h > 0) ? { minHeights } : {}),
     };
@@ -1141,8 +1144,8 @@ class ImportReader {
 /** An import's rich text as the reference model, cut to the scored pages.
     `printed`: the reference's footnotes, whose marks the import's take;
     `media`: a Word figure's html by its media id (richTextFromImport's
-    figures). */
-export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[], shown?: TitleShown, media?: Map<string, string>): Doc {
+    figures); `kind`: the file the import came from. */
+export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[], shown?: TitleShown, media?: Map<string, string>, kind?: "pdf" | "docx"): Doc {
   const headings = new Set<string>();
   const visit = (node: RichNode) => {
     if (node.type === "heading") headings.add(wordsOf(textOf(node)).map((w) => w.w).join(" "));
@@ -1151,7 +1154,7 @@ export function fromImport(doc: RichNode, pages?: Pages, printed?: PrintedNote[]
   visit(doc);
   headings.delete("");
   const styles = readStyles({ attrs: doc.attrs ?? {} });
-  const reader = new ImportReader(pages, styles, printed ? printedLabels(doc, printed) : undefined, headings, shown, printed, media);
+  const reader = new ImportReader(pages, styles, printed ? printedLabels(doc, printed) : undefined, headings, shown, printed, media, kind);
   for (const node of doc.content ?? []) reader.node(node, false);
   reader.settle();
   const blocks = reader.blocks;

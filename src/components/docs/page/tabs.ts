@@ -41,6 +41,15 @@ export function editTabStops(editor: Editor, change: (stops: TabStop[]) => TabSt
   editor.commands.focus();
 }
 
+type Rect = { left: number; top: number; bottom: number };
+
+/** Two places on one line: they share half the shorter one's height. A
+    formula or a superscript stands higher or lower than the words around
+    it, so the tops alone do not tell a line. */
+function sameLine(a: Rect, b: Rect): boolean {
+  return Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) >= Math.min(a.bottom - a.top, b.bottom - b.top) / 2;
+}
+
 /** Each tab's tab-size in px, by its document position, in the paragraphs
     with stops of their own. Every length is in CSS px at 100%, from the text
     column's left edge. */
@@ -65,25 +74,31 @@ export function tabSizes(view: EditorView): Map<number, number> {
     const origin = x(el.getBoundingClientRect().left) + (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.borderLeftWidth) || 0);
     // A tab narrower than half a character jumps to the stop after.
     const least = (parseFloat(cs.fontSize) || 15) * 0.4;
-    const tabs: { pos: number; left: number; right: number; top: number }[] = [];
+    const tabs: { pos: number; start: Rect }[] = [];
     node.descendants((child, offset) => {
       if (!child.isText || !child.text) return false;
       for (let i = child.text.indexOf("\t"); i >= 0; i = child.text.indexOf("\t", i + 1)) {
         const at = pos + 1 + offset + i;
-        const start = view.coordsAtPos(at, 1);
-        tabs.push({ pos: at, left: x(start.left), right: x(view.coordsAtPos(at + 1, -1).left), top: start.top });
+        tabs.push({ pos: at, start: view.coordsAtPos(at, 1) });
       }
       return false;
     });
-    const end = view.coordsAtPos(pos + node.nodeSize - 1, -1);
+    const endPos = pos + node.nodeSize - 1;
     let cursor = 0;
     tabs.forEach((tab, i) => {
       const next = tabs[i + 1];
-      const lineStart = i === 0 || tabs[i - 1].top !== tab.top;
-      if (lineStart) cursor = tab.left;
-      // The words after the tab, up to the next tab or the line's end.
-      const upTo = next && next.top === tab.top ? next.left : end.top === tab.top ? x(end.left) : tab.right;
-      const words = Math.max(0, upTo - tab.right);
+      const lineStart = i === 0 || !sameLine(tabs[i - 1].start, tab.start);
+      if (lineStart) cursor = x(tab.start.left);
+      // The words after the tab, up to the next tab or the paragraph's end,
+      // measured where they stand: on the tab's line, or on the next once
+      // they wrapped (a tab sent to a right stop took their room).
+      const to = next ? next.pos : endPos;
+      let words = 0;
+      if (to > tab.pos + 1) {
+        const a = view.coordsAtPos(tab.pos + 1, 1);
+        const b = view.coordsAtPos(to, -1);
+        if (sameLine(a, b)) words = Math.max(0, x(b.left) - x(a.left));
+      }
       let stopAt = (Math.floor((cursor + least) / DEFAULT_STEP) + 1) * DEFAULT_STEP;
       for (const stop of stops) {
         const at = stop.pt * PX_PER_PT;
@@ -91,7 +106,9 @@ export function tabSizes(view: EditorView): Map<number, number> {
         stopAt = Math.max(cursor + least, stop.align === "left" ? at : stop.align === "center" ? at - words / 2 : at - words);
         break;
       }
-      sizes.set(tab.pos, Math.round((stopAt - origin) * 100) / 100);
+      // Rounded down: words to a right stop at the column's edge end on it,
+      // never a hair past it, which would wrap them.
+      sizes.set(tab.pos, Math.floor((stopAt - origin) * 100) / 100);
       cursor = stopAt + words;
     });
     return false;
