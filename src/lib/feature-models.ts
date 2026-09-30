@@ -10,6 +10,7 @@ import {
   GIST_MODEL,
   GLM_5_3,
   GLM_5_3_FLASH,
+  KIMI_K3,
   MERGE_MODEL,
   PARSE_MODEL,
   SKELETON_MODEL,
@@ -25,6 +26,7 @@ import {
 import { isGlmModel, resolveModelId } from "@/lib/models";
 import { modelCall, modelConfigured, modelKeyName, type Effort, type ModelCall } from "@/lib/model-call";
 import { probeChatModel } from "@/lib/model-update";
+import { currentLang } from "@/lib/i18n/server";
 
 // The model per feature (SPEC.md §2). Each feature has a default, the
 // constant in lib/derive/config.ts, and may have a FeatureModel row: the id
@@ -219,6 +221,11 @@ export function forgetFeatureModels(): void {
     fallback when the default's client has no key. A role's default id still
     resolves to the role's current id in the client. */
 export async function featureModelId(feature: Feature): Promise<string> {
+  // A reader who set Chinese: every feature runs on Kimi K3 — the parse,
+  // the assistant, and every tool — when Kimi K3 has its key. KIMI_K3 is
+  // the kimi role's default id, so the bimonthly model update still moves
+  // it. A call outside a request (cron) reads English and keeps its model.
+  if ((await currentLang()) === "zh" && modelConfigured(KIMI_K3)) return KIMI_K3;
   const row = (await rows())[feature];
   if (row) return row;
   const id = FEATURE_DEFAULTS[feature];
