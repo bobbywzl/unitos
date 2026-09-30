@@ -82,6 +82,16 @@
 .docs-prose ::selection {
   background: var(--docs-selection);
 }
+/* An underlined tab's line (page/tabs.ts): Chromium draws no underline under
+   a tab. It stands where the words' underline does, in their color, and
+   prints. */
+.docs-prose .docs-tab-line {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 calc(100% - 0.19em);
+  background-size: 100% 1px;
+  print-color-adjust: exact;
+}
 .docs-prose p,
 .docs-prose h1,
 .docs-prose h2,

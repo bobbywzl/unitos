@@ -1,5 +1,7 @@
 import type { Editor } from "@tiptap/core";
-import type { EditorView } from "@tiptap/pm/view";
+import type { Node as PMNode } from "@tiptap/pm/model";
+import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
+import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { PX_PER_PT } from "@/components/docs/page/geometry";
 
 // Tab stops (SPEC.md §29), Google Docs': a paragraph's own stops — left,
@@ -95,4 +97,62 @@ export function tabSizes(view: EditorView): Map<number, number> {
     return false;
   });
   return sizes;
+}
+
+// An underlined tab draws its line, as Word draws one: a form's blank to
+// fill in ("Name:" and the line after it to its stop). Chromium draws no
+// underline under a tab, so the tab's span carries a class that draws it
+// (docs.css .docs-tab-line). The set is kept as the text changes: each
+// transaction reads again only the paragraphs its steps touched.
+
+const tabLinesKey = new PluginKey<DecorationSet>("docsTabLines");
+
+/** The underlined tabs in the paragraphs from `from` to `to`. */
+function tabLines(doc: PMNode, from: number, to: number): Decoration[] {
+  const out: Decoration[] = [];
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isText) return true;
+    const text = node.text ?? "";
+    if (!text.includes("\t") || !node.marks.some((m) => m.type.name === "underline")) return false;
+    for (let i = text.indexOf("\t"); i >= 0; i = text.indexOf("\t", i + 1)) out.push(Decoration.inline(pos + i, pos + i + 1, { class: "docs-tab-line" }));
+    return false;
+  });
+  return out;
+}
+
+/** The part of the new document a transaction's steps touched, widened to
+    whole paragraphs; null when it touched none. */
+function touched(tr: Transaction): [number, number] | null {
+  let from = Infinity;
+  let to = -Infinity;
+  tr.steps.forEach((step, i) => {
+    const range = step as unknown as { from?: unknown; to?: unknown };
+    if (typeof range.from !== "number" || typeof range.to !== "number") return;
+    const rest = tr.mapping.slice(i);
+    from = Math.min(from, rest.map(range.from, -1));
+    to = Math.max(to, rest.map(range.to, 1));
+  });
+  if (from > to) return null;
+  const size = tr.doc.content.size;
+  const $from = tr.doc.resolve(Math.max(0, Math.min(size, from)));
+  const $to = tr.doc.resolve(Math.max(0, Math.min(size, to)));
+  return [$from.depth > 0 ? $from.before(1) : $from.pos, $to.depth > 0 ? $to.after(1) : $to.pos];
+}
+
+/** The underlined tabs' lines (the page editor's pages, ext/page.ts). */
+export function tabLinesPlugin(): Plugin<DecorationSet> {
+  return new Plugin<DecorationSet>({
+    key: tabLinesKey,
+    state: {
+      init: (_, state) => DecorationSet.create(state.doc, tabLines(state.doc, 0, state.doc.content.size)),
+      apply: (tr, set) => {
+        if (!tr.docChanged) return set;
+        const range = touched(tr);
+        const mapped = set.map(tr.mapping, tr.doc);
+        if (!range) return mapped;
+        return mapped.remove(mapped.find(range[0], range[1])).add(tr.doc, tabLines(tr.doc, range[0], range[1]));
+      },
+    },
+    props: { decorations: (state) => tabLinesKey.getState(state) },
+  });
 }

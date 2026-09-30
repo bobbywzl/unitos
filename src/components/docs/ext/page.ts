@@ -10,7 +10,7 @@ import {
   type SpacerKind,
   type SpacerPlan,
 } from "@/components/docs/page/paginate";
-import { tabSizes } from "@/components/docs/page/tabs";
+import { tabLinesPlugin, tabSizes } from "@/components/docs/page/tabs";
 
 // The page editor's page extensions (SPEC.md §29): pagination, tab stops,
 // the pageless headings that fold, Docs' caret, and the selection while the
@@ -383,6 +383,7 @@ const Pagination = Extension.create({
         },
         props: { decorations: (state) => tabsKey.getState(state) },
       }),
+      tabLinesPlugin(),
     ];
   },
 });

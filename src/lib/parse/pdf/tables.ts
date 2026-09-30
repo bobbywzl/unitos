@@ -931,7 +931,7 @@ function tightCells(line: Line): number {
 // arXiv 2506.06352 p. 29). A row's cells hold word spaces of a third of an
 // em beside any column gap the line did not part ("CALVIN [101]").
 function proseLine(line: Line): boolean {
-  if (line.cells.slice(1).some((c) => /^[,;:.)\]!?](?!\d)/.test(c.text.trim()))) return true;
+  if (line.cells.slice(1).some((c) => /^[,;:.)\]!?](?!\s?\d)/.test(c.text.trim()))) return true;
   const items = line.items.filter((it) => it.str.trim().length > 0);
   const gaps = items.slice(1).map((it, k) => it.x - (items[k].x + items[k].w)).sort((a, b) => b - a);
   const spaces = gaps.slice(line.cells.length - 1).filter((g) => g > line.size * 0.15);
