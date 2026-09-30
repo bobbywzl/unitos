@@ -218,7 +218,8 @@
    It stays a heading: the outline and the paragraph index list it. */
 .docs-prose :is(h1, h2, h3, h4, h5, h6)[data-run-in] {
   float: left;
-  margin: 0 0.3em calc(1px - 1lh) 0;
+  margin: 0 0.3em 0 0;
+  margin-bottom: calc(1px - 1lh);
   padding-top: 0;
   padding-bottom: 0;
 }

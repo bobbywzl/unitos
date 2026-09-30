@@ -140,11 +140,12 @@ type Atom = { start: number; end: number; node: RichNode };
     reads as one wall of words. A PDF's paragraphs take the page's own
     (ParsedBlock.spaceAfter). */
 const PARAGRAPH_SPACE_PT = 10;
-/** The space over and under a PDF's display equation where the parse
-    measured none, in points: about amsbook and amsart's 6 pt skip. A PDF's
-    and a Word file's displays draw no space of their own (css/import.css):
-    the page editor's margin and KaTeX's 1 em stacked on the page's space
-    after a paragraph set each display far from the words it belongs to. */
+/** The space over and under a display equation where the page gives
+    none, in points (a Word file's display that sets none, a PDF whose
+    displays the parse measured none of). A PDF's and a Word file's displays
+    draw no space of their own (css/import.css): the page editor's margin
+    and KaTeX's 1 em stacked on the page's space after a paragraph set each
+    display far from the words it belongs to. */
 const DISPLAY_SPACE_PT = 4;
 /** A PDF's display space as the parse measures it: from the line box over
     the display to its glyphs, and from its glyphs to the line box under it
@@ -831,12 +832,13 @@ class Converter {
       space over the display. And the block right under each display. */
   private readonly overDisplay = new Set<ParsedBlock>();
   private readonly underDisplay = new Map<ParsedBlock, ParsedBlock>();
+  /** A PDF's most common space over and under its displays, for a display
+      whose own the parse did not measure (at a page's top or foot); null
+      where it measured none. */
+  private readonly displaySpacing: { over: number | null; under: number | null };
 
   constructor(private readonly input: ImportInput) {
     this.looks = styleLooks(input);
-    const counts = new Map<number, number>();
-    for (const b of input.blocks) if (b.type === "PARAGRAPH" && b.spaceAfter !== undefined) counts.set(b.spaceAfter, (counts.get(b.spaceAfter) ?? 0) + 1);
-    this.spacing = [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null;
     this.paged = input.kind === "pdf" && input.blocks.some((b) => typeof b.page === "number");
     this.pageSetup = pageSetupFor(input);
     const { pageless, width, margins } = this.pageSetup;
@@ -851,6 +853,12 @@ class Converter {
       if (above?.type === "EQUATION") this.underDisplay.set(above, block);
       above = block;
     });
+    // A space over a display is to its glyphs: no paragraph's space.
+    this.spacing = mostCommon(input.blocks.filter((b) => b.type === "PARAGRAPH" && !this.overDisplay.has(b)).map((b) => b.spaceAfter));
+    this.displaySpacing = {
+      over: mostCommon([...this.overDisplay].map((b) => b.spaceAfter)),
+      under: mostCommon(input.blocks.filter((b) => b.type === "EQUATION").map((b) => b.spaceAfter)),
+    };
   }
 
   /** Each reference (ParsedBlock.footnoteRefs) becomes the page editor's
@@ -1058,13 +1066,17 @@ class Converter {
   }
 
   /** The space after a block in points: the page's (ParsedBlock.spaceAfter;
-      over a PDF's display, to its glyphs: displayGap), over a PDF's or a
-      Word file's display TeX's skip, the page's most common for a block it
-      measured none for, or Docs' "Add space after paragraph" where the
-      parse measures no spacing. */
+      over a PDF's display, to its glyphs: displayGap, else the page's most
+      common over its displays), over a Word file's display TeX's skip, the
+      page's most common for a block it measured none for, or Docs' "Add
+      space after paragraph" where the parse measures no spacing. */
   private spaceAfter(block: ParsedBlock): number {
     const over = this.overDisplay.has(block);
-    if (block.spaceAfter !== undefined) return over && this.input.kind === "pdf" ? this.displayGap(block.spaceAfter, block, DISPLAY_OVER_EM) : block.spaceAfter;
+    if (over && this.input.kind === "pdf") {
+      const space = block.spaceAfter ?? this.displaySpacing.over;
+      return space === null ? DISPLAY_SPACE_PT : this.displayGap(space, block, DISPLAY_OVER_EM);
+    }
+    if (block.spaceAfter !== undefined) return block.spaceAfter;
     if (over && this.pageDisplays) return DISPLAY_SPACE_PT;
     return this.spacing ?? PARAGRAPH_SPACE_PT;
   }
@@ -1465,8 +1477,8 @@ class Converter {
     if (tokensOf(block.html).includes("leqno")) attrs.leqno = true;
     // The space under a PDF's or a Word file's display: the page's (a
     // PDF's to its glyphs), else TeX's skip.
-    const measured =
-      block.spaceAfter !== undefined && this.input.kind === "pdf" ? this.displayGap(block.spaceAfter, this.underDisplay.get(block), DISPLAY_UNDER_EM) : block.spaceAfter;
+    const space = this.input.kind === "pdf" ? (block.spaceAfter ?? this.displaySpacing.under) : null;
+    const measured = space !== null ? this.displayGap(space, this.underDisplay.get(block), DISPLAY_UNDER_EM) : block.spaceAfter;
     const after = this.pageDisplays ? (measured ?? DISPLAY_SPACE_PT) : 0;
     if (after > 0) attrs.spaceAfter = after;
     this.place(index, [{ type: "blockMath", attrs }]);
@@ -1557,6 +1569,14 @@ class Converter {
       size: { nodes, json: new TextEncoder().encode(JSON.stringify(richText)).length, rows },
     };
   }
+}
+
+/** The value most blocks take (the smaller of two as common), or null when
+    none has one. */
+function mostCommon(values: (number | undefined)[]): number | null {
+  const counts = new Map<number, number>();
+  for (const v of values) if (v !== undefined) counts.set(v, (counts.get(v) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null;
 }
 
 /** A table's text size in points, when every word of it carries one (the
