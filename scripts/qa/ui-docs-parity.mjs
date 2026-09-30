@@ -6,12 +6,13 @@
 // the browser runs as its own drag); SPELLING is Add to dictionary, Ignore
 // all, and Tools > Spelling and grammar > Personal dictionary; CHART is
 // Insert > Chart; DRAWING is Insert > Drawing; COMPARE is Tools > Compare
-// documents; ODDEVEN is Headers & footers > Different odd & even. Each check
-// prints PASS or FAIL with its evidence; each case leaves a screenshot
-// (light theme, 1440×900; the dark case in dark).
+// documents; ODDEVEN is Headers & footers > Different odd & even; WATERMARK
+// is Insert > Watermark. Each check prints PASS or FAIL with its evidence;
+// each case leaves a screenshot (light theme, 1440×900; the dark case in
+// dark).
 //
 // Usage:
-//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE ODDEVEN] [--label after] [--keep]
+//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE ODDEVEN WATERMARK] [--label after] [--keep]
 // With no group named, every group runs. Env: BASE (default
 // http://localhost:3111), SHOT_DIR (default <tmp>/ui-docs-parity), CHROME
 // (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3492), DATABASE_URL
@@ -21,7 +22,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { PrismaClient } from "@prisma/client";
 import { strFromU8, unzipSync } from "fflate";
 import { chromium } from "playwright-core";
@@ -1317,6 +1318,169 @@ GROUPS.ODDEVEN = async () => {
   await sleep(1200);
   const off = await drawnHeaders(page);
   check(G, wasOn && off.every(([h]) => h === "Field report"), "Header format shows Different odd & even; off, every page draws the one header", JSON.stringify(off));
+  check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
+  await close();
+};
+
+// ── Insert > Watermark ──────────────────────────────────────────────────────
+
+/** Each page's watermark: its kind, words, and look; null for none. */
+const watermarks = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll("[data-docs-page-sheet]")].map((sheet) => {
+      const mark = sheet.querySelector(".docs-watermark");
+      if (!mark) return null;
+      const span = mark.querySelector("span");
+      const img = mark.querySelector("img");
+      const style = getComputedStyle(span ?? img);
+      return {
+        kind: mark.getAttribute("data-watermark"),
+        text: span?.textContent ?? null,
+        transform: style.transform,
+        opacity: Number(style.opacity),
+        zoom: img ? style.zoom : null,
+      };
+    }),
+  );
+
+/** The stored watermark, once `ok` says it is the one wanted. */
+const storedWatermark = (id, ok) =>
+  until(async () => {
+    const w = (await api(`/api/documents/${id}/rich-text`)).body.pageSetup?.watermark ?? null;
+    return ok(w) ? { w } : null;
+  }, 15_000);
+
+/** The Word download's files, and the header that holds the watermark. */
+async function watermarkDocx(page, id) {
+  const res = await page.request.get(`${BASE}/api/documents/${id}/export?format=docx`);
+  const files = res.ok() ? unzipSync(new Uint8Array(await res.body())) : {};
+  const header = Object.keys(files)
+    .filter((n) => /^word\/header\d*\.xml$/.test(n))
+    .map((n) => strFromU8(files[n]))
+    .find((x) => /behindDoc="1"/.test(x));
+  return { status: res.status(), files, header: header ?? "" };
+}
+
+/** A logo as a PNG file, 360 × 240: a circle and a square. */
+function logoFile() {
+  const canvas = createCanvas(360, 240);
+  const g = canvas.getContext("2d");
+  g.fillStyle = "#1f6f5c";
+  g.beginPath();
+  g.arc(120, 120, 100, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#c2410c";
+  g.fillRect(170, 40, 170, 160);
+  const file = join(SHOT, "watermark-logo.png");
+  writeFileSync(file, canvas.toBuffer("image/png"));
+  return file;
+}
+
+/** Insert > Watermark from Search the menus: the rows it listed. */
+async function openWatermark(page) {
+  await clickIn(page, "Page 1 opens");
+  const rows = await searchMenus(page, "watermark");
+  await page.waitForSelector(".docs-wm-dialog", { timeout: 10_000 });
+  await sleep(300);
+  return rows;
+}
+
+async function watermarkOk(page) {
+  await page.locator('[data-track="docs:watermark:ok"]').click();
+  await page.waitForSelector(".docs-wm-dialog", { state: "detached", timeout: 20_000 });
+  await sleep(800);
+}
+
+GROUPS.WATERMARK = async () => {
+  const G = "WATERMARK";
+  const LINE = "The survey covered the north field, the river bank, and the ridge.";
+  const content = [paragraph(`Page 1 opens here. ${LINE}`), paragraph(LINE), { type: "pageBreak" }, paragraph(`Page 2 opens here. ${LINE}`), paragraph(LINE)];
+  const id = await richDocument("Watermark", content);
+  const { page, errors, close } = await newPage();
+  await openEditor(page, id, "Page 2");
+
+  // 1. Insert > Watermark, Text: DRAFT on every page, diagonal, half seen.
+  const rows = await openWatermark(page);
+  await page.locator('[data-track="docs:watermark:text"]').fill("DRAFT");
+  await sleep(300);
+  const previewed = await page.evaluate(() => document.querySelector(".docs-wm-preview .docs-watermark span")?.textContent ?? null);
+  await shot(page, "watermark-1-text");
+  await watermarkOk(page);
+  const drawn = await watermarks(page);
+  check(G, rows.some((r) => r.startsWith("Watermark")) && previewed === "DRAFT" && drawn.length === 2 && drawn.every((w) => w?.kind === "text" && w.text === "DRAFT" && /^matrix\(0\.707/.test(w.transform) && Math.abs(w.opacity - 0.5) < 0.01), "Insert > Watermark: DRAFT on both pages, diagonal, half seen", `${JSON.stringify(rows)}; ${JSON.stringify(drawn)}`);
+
+  // 2. Saved with the words' image for the Word download; a press on the
+  //    watermark's place reaches the text; the same after a reload.
+  const hit = await page.evaluate(() => {
+    const r = document.querySelector("[data-docs-page-sheet] .docs-watermark span").getBoundingClientRect();
+    return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest(".docs-watermark") ? "watermark" : "text";
+  });
+  const first = await storedWatermark(id, (w) => w?.kind === "text" && Boolean(w.image?.src));
+  await openEditor(page, id, "Page 2");
+  const reloaded = await watermarks(page);
+  check(G, hit === "text" && /^\/api\/images\//.test(first?.w.image.src ?? "") && first.w.image.width > 100 && reloaded.every((w) => w?.text === "DRAFT"), "saved with the words' image; a press there reaches the text; after a reload both pages draw it", `${hit}; ${JSON.stringify(first?.w.image)}; ${JSON.stringify(reloaded)}`);
+
+  // 3. The Word download draws the words behind the text, centered on the page.
+  const word = await watermarkDocx(page, id);
+  check(G, word.status === 200 && /<wp:positionH relativeFrom="page"><wp:align>center<\/wp:align>/.test(word.header) && /<wp:positionV relativeFrom="page"><wp:align>center<\/wp:align>/.test(word.header) && /<wp:wrapNone\/>/.test(word.header), "the Word download draws the words behind the text, centered on the page", `HTTP ${word.status}; header ${word.header.length} chars`);
+
+  // 4. Horizontal at 30%: the pages draw it flat and lighter, and the words' image is drawn again.
+  await openWatermark(page);
+  await page.locator('[data-track="docs:watermark:horizontal"]').check();
+  await page.locator('[data-track="docs:watermark:opacity"]').focus();
+  for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowLeft");
+  await watermarkOk(page);
+  const flat = await watermarks(page);
+  const second = await storedWatermark(id, (w) => w?.kind === "text" && w.diagonal === false && w.opacity === 0.3 && Boolean(w.image?.src) && w.image.src !== first?.w.image.src);
+  check(G, flat.every((w) => w?.transform === "none" && Math.abs(w.opacity - 0.3) < 0.01) && Boolean(second), "Horizontal at 30%: both pages draw it flat and lighter; the words' image is drawn again", JSON.stringify(flat));
+
+  // 5. Image: a logo at 50%, faded, on both pages.
+  await openWatermark(page);
+  await page.locator('[data-track="docs:watermark:tab-image"]').click();
+  await page.setInputFiles('[data-track="docs:watermark:file"]', logoFile());
+  await page.waitForFunction(() => document.querySelector(".docs-wm-preview img"), null, { timeout: 20_000 });
+  await page.locator('[data-track="docs:watermark:scale"]').selectOption("0.5");
+  await sleep(300);
+  await shot(page, "watermark-2-image");
+  await watermarkOk(page);
+  const images = await watermarks(page);
+  const third = await storedWatermark(id, (w) => w?.kind === "image" && w.scale === 0.5);
+  check(G, images.every((w) => w?.kind === "image" && Math.abs(w.opacity - 0.3) < 0.01 && w.zoom === "0.5") && third?.w.faded === true, "Image: the logo at 50%, faded, on both pages", JSON.stringify(images));
+  await page.evaluate(() => document.querySelector("[data-docs-page-sheet]").scrollIntoView({ block: "center" }));
+  await sleep(400);
+  await shot(page, "watermark-3-pages");
+
+  // 6. The Word download takes the logo at half its size, faded.
+  const word2 = await watermarkDocx(page, id);
+  const media = Object.keys(word2.files).find((n) => n.startsWith("word/media/") && n.endsWith(".png"));
+  let alpha = -1;
+  if (media) {
+    const img = await loadImage(Buffer.from(word2.files[media]));
+    const canvas = createCanvas(img.width, img.height);
+    const g = canvas.getContext("2d");
+    g.drawImage(img, 0, 0);
+    alpha = g.getImageData(120, 120, 1, 1).data[3];
+  }
+  check(G, /<wp:extent cx="1714500" cy="1143000"\/>/.test(word2.header) && alpha > 60 && alpha < 95, "the Word download takes the logo at half its size, faded", `extent ${/<wp:extent [^>]*>/.exec(word2.header)?.[0]}; alpha ${alpha}`);
+
+  // 7. Pageless shows none; back in pages, both pages draw it.
+  await clickIn(page, "Page 1 opens");
+  await searchMenus(page, "switch to pageless");
+  await sleep(1000);
+  const pageless = await page.evaluate(() => document.querySelectorAll(".docs-watermark").length);
+  await clickIn(page, "Page 1 opens");
+  await searchMenus(page, "switch to pages");
+  await sleep(1000);
+  const back = await page.evaluate(() => document.querySelectorAll("[data-docs-page-sheet] .docs-watermark").length);
+  check(G, pageless === 0 && back === 2, "pageless shows no watermark; back in pages, both pages draw it", `${pageless} → ${back}`);
+
+  // 8. Remove watermark: no page draws one, and it is saved.
+  await openWatermark(page);
+  await page.locator('[data-track="docs:watermark:remove"]').click();
+  await sleep(800);
+  const removed = await page.evaluate(() => document.querySelectorAll(".docs-watermark").length);
+  const cleared = await storedWatermark(id, (w) => w === null);
+  check(G, removed === 0 && Boolean(cleared), "Remove watermark: no page draws one; saved", `${removed}`);
   check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
   await close();
 };
