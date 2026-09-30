@@ -112,6 +112,7 @@ const OP = {
 } as const;
 const STROKES = new Set<number>([OP.stroke, OP.closeStroke, OP.fillStroke, OP.eoFillStroke, OP.closeFillStroke, OP.closeEOFillStroke]);
 const FILLS = new Set<number>([OP.fill, OP.eoFill, OP.fillStroke, OP.eoFillStroke, OP.closeFillStroke, OP.closeEOFillStroke]);
+const EVEN_ODD = new Set<number>([OP.eoFill, OP.eoFillStroke, OP.closeEOFillStroke]);
 // Path codes inside constructPath's data (pdf.js DrawOPS).
 const MOVE_TO = 0;
 const LINE_TO = 1;
@@ -530,7 +531,13 @@ function readPath(args: unknown[] | null, state: State, rules: Rule[], fills: Fi
     }
   }
   const scale = Math.hypot(ctm[0], ctm[1]);
-  for (const sub of subpaths) {
+  // What the fill paints of each subpath: its box, or the bands around the
+  // holes cut out of it (paintedBoxes).
+  const painted = paintedBoxes(
+    subpaths.map((sub) => (fill && !sub.curved ? filledBox(sub.points) : null)),
+    EVEN_ODD.has(op),
+  );
+  for (const [k, sub] of subpaths.entries()) {
     if (sub.curved) continue;
     const pts = sub.points;
     if (stroke) {
@@ -550,18 +557,71 @@ function readPath(args: unknown[] | null, state: State, rules: Rule[], fills: Fi
         }
       }
     }
-    if (fill && pts.length >= 4 && pts.length <= 5) {
-      const box = boxOf(pts);
-      const onEdge = (v: number, a: number, b: number) => Math.abs(v - a) < 0.1 || Math.abs(v - b) < 0.1;
-      // A sliver 2 pt thin or less that fills its box is a rule, whatever its
-      // corners: OpenStax draws a grid's lines as pieces with one corner cut
-      // 0.75 pt in (its Tables 6.3 and 6.4 read as one cell, or as paragraphs).
-      const area = Math.abs(pts.reduce((sum, [x, y], k) => sum + x * pts[(k + 1) % pts.length][1] - pts[(k + 1) % pts.length][0] * y, 0)) / 2;
-      const sliver = Math.min(box.x2 - box.x1, box.y2 - box.y1) <= 2 && area >= (box.x2 - box.x1) * (box.y2 - box.y1) * 0.8;
-      if (!sliver && !pts.every(([x, y]) => onEdge(x, box.x1, box.x2) && onEdge(y, box.y1, box.y2))) continue;
-      addFilledBox(box, state.clip, rules, fills, paint(state));
-    }
+    for (const box of painted[k]) addFilledBox(box, state.clip, rules, fills, paint(state));
   }
+}
+
+// A subpath the fill paints as a box: a rectangle, or a sliver 2 pt thin or
+// less that fills its box, whatever its corners (OpenStax draws a grid's
+// lines as pieces with one corner cut 0.75 pt in: its Tables 6.3 and 6.4
+// read as one cell, or as paragraphs). turn: the sign of its area, the way
+// it winds.
+type FilledBox = { box: Box; turn: number };
+function filledBox(pts: [number, number][]): FilledBox | null {
+  if (pts.length < 4 || pts.length > 5) return null;
+  const box = boxOf(pts);
+  const onEdge = (v: number, a: number, b: number) => Math.abs(v - a) < 0.1 || Math.abs(v - b) < 0.1;
+  const area = pts.reduce((sum, [x, y], k) => sum + x * pts[(k + 1) % pts.length][1] - pts[(k + 1) % pts.length][0] * y, 0) / 2;
+  const sliver = Math.min(box.x2 - box.x1, box.y2 - box.y1) <= 2 && Math.abs(area) >= (box.x2 - box.x1) * (box.y2 - box.y1) * 0.8;
+  if (!sliver && !pts.every(([x, y]) => onEdge(x, box.x1, box.x2) && onEdge(y, box.y1, box.y2))) return null;
+  return { box, turn: Math.sign(area) };
+}
+
+// What a path's filled boxes paint, subpath by subpath. A box inside other
+// boxes of the path is a hole when the fill rule leaves it empty: inside an
+// odd count of them under the even-odd rule, or its turn and theirs summing
+// to zero under the nonzero rule. A hole paints nothing, and the box right
+// around it paints only the bands around the hole. OpenStax draws each
+// table's border so: a box with a box 0.75 pt smaller cut out of it, filled
+// even-odd, whose hole read as a black box under every cell of the table.
+// A path of more than 1,000 boxes (a chart's marks) is read box by box: the
+// search looks at every pair.
+function paintedBoxes(boxes: (FilledBox | null)[], evenOdd: boolean): Box[][] {
+  const drawn = boxes.filter((b) => b !== null);
+  if (drawn.length < 2 || drawn.length > 1000) return boxes.map((b) => (b ? [b.box] : []));
+  const area = (b: Box) => (b.x2 - b.x1) * (b.y2 - b.y1);
+  const inside = (a: Box, b: Box) => a.x1 >= b.x1 - 0.01 && a.x2 <= b.x2 + 0.01 && a.y1 >= b.y1 - 0.01 && a.y2 <= b.y2 + 0.01 && area(a) < area(b);
+  const around = new Map(drawn.map((b) => [b, drawn.filter((o) => inside(b.box, o.box))]));
+  const holes = new Set(
+    drawn.filter((b) => {
+      const out = around.get(b) ?? [];
+      return b.turn !== 0 && (evenOdd ? out.length % 2 === 1 : out.reduce((sum, o) => sum + o.turn, b.turn) === 0);
+    }),
+  );
+  return boxes.map((b) => {
+    if (!b || holes.has(b)) return [];
+    const depth = around.get(b)?.length ?? 0;
+    const own = [...holes].filter((h) => around.get(h)?.length === depth + 1 && around.get(h)?.includes(b));
+    return own.length > 0 ? bands(b.box, own.map((h) => h.box)) : [b.box];
+  });
+}
+
+// A box less the holes cut out of it, as boxes: the rows between the holes'
+// lower and upper edges, each less the holes across it. A frame's sides are
+// four bands: under its hole, over it, and one on each side of it.
+function bands(box: Box, holes: Box[]): Box[] {
+  const ys = [...new Set([box.y1, box.y2, ...holes.flatMap((h) => [h.y1, h.y2])])].sort((a, b) => a - b);
+  const out: Box[] = [];
+  for (let k = 0; k + 1 < ys.length; k++) {
+    const [y1, y2] = [ys[k], ys[k + 1]];
+    let x = box.x1;
+    for (const h of holes.filter((h) => h.y1 <= y1 && h.y2 >= y2).sort((a, b) => a.x1 - b.x1)) {
+      if (h.x1 > x) out.push({ x1: x, y1, x2: h.x1, y2 });
+      x = Math.max(x, h.x2);
+    }
+    if (box.x2 > x) out.push({ x1: x, y1, x2: box.x2, y2 });
+  }
+  return out.filter((b) => b.x2 - b.x1 > 0.01 && b.y2 - b.y1 > 0.01);
 }
 
 // The fill color as it shows over white: a see-through fill (a highlight

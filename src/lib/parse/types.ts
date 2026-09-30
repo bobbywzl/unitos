@@ -431,7 +431,11 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     a crop, and TeX's bold and sans letters in Times text are formulas.
 //     Word: each paragraph's line spacing, its tab stops, and captions at
 //     their own size.
+// 25: a box a filled path's fill rule cuts out of another box (even-odd,
+//     or turns summing to zero) is a hole and paints nothing: a table's
+//     border drawn as a ring no longer reads as a black box under every
+//     cell (SPEC.md §31 step 1).
 // Slides and sheets (SPEC.md §27) parse with their own parsers
 // (lib/parse/slides.ts, lib/parse/sheets.ts) and re-parse only on request:
 // they carry no version of their own.
-export const PARSER_VERSION = 24;
+export const PARSER_VERSION = 25;
