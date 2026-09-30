@@ -6,11 +6,12 @@
 // the browser runs as its own drag); SPELLING is Add to dictionary, Ignore
 // all, and Tools > Spelling and grammar > Personal dictionary; CHART is
 // Insert > Chart; DRAWING is Insert > Drawing; COMPARE is Tools > Compare
-// documents. Each check prints PASS or FAIL with its evidence; each case
-// leaves a screenshot (light theme, 1440×900; the dark case in dark).
+// documents; ODDEVEN is Headers & footers > Different odd & even. Each check
+// prints PASS or FAIL with its evidence; each case leaves a screenshot
+// (light theme, 1440×900; the dark case in dark).
 //
 // Usage:
-//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE] [--label after] [--keep]
+//   node scripts/qa/ui-docs-parity.mjs [BORDERS FULLSCREEN IMAGENOTE SPELLING CHART DRAWING COMPARE ODDEVEN] [--label after] [--keep]
 // With no group named, every group runs. Env: BASE (default
 // http://localhost:3111), SHOT_DIR (default <tmp>/ui-docs-parity), CHROME
 // (default /opt/pw-browsers/chromium), FIXTURE_PORT (default 3492), DATABASE_URL
@@ -1186,6 +1187,136 @@ GROUPS.COMPARE = async () => {
   const firstLines = ["The survey covered the north field and the river bank.", "We counted 30 birds at the north station.", "The east bank is unstable after the flood.", "Walk the fence line.", "Count the birds at dawn.", "Photograph the nests.", "Station", "Birds", "North", "30", "Next visit: the first week of the month."];
   check(G, JSON.stringify(rejected) === JSON.stringify(firstLines) && JSON.stringify(accepted) === JSON.stringify(secondLines), "Reject all gives the first draft's words, Accept all the second draft's", `${JSON.stringify(rejected)} | ${JSON.stringify(accepted)}`);
   ctx.documents.push(compId);
+  check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
+  await close();
+};
+
+// ── Headers & footers: Different odd & even ────────────────────────────────
+
+/** Each page's drawn header and footer, [header, footer] per page. */
+const drawnHeaders = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll("[data-docs-page-sheet]")].map((sheet) =>
+      ["header", "footer"].map((area) => {
+        const hf = [...sheet.querySelectorAll(".docs-hf")].find((el) => (el.getAttribute("data-hf-slot") ?? "").toLowerCase().endsWith(area));
+        return hf?.textContent.trim() ?? "";
+      }),
+    ),
+  );
+
+/** A double-click in the top margin of the page whose text starts with
+    `words`: the header bar's label. */
+async function editHeaderAbove(page, words) {
+  await page.evaluate((w) => [...document.querySelectorAll(".docs-prose p")].find((e) => e.textContent.startsWith(w)).scrollIntoView({ block: "center" }), words);
+  await sleep(400);
+  const at = await page.evaluate((w) => {
+    const r = [...document.querySelectorAll(".docs-prose p")].find((e) => e.textContent.startsWith(w)).getBoundingClientRect();
+    return { x: r.left + 100, y: r.top - 50 };
+  }, words);
+  await page.mouse.dblclick(at.x, at.y);
+  await page.waitForSelector(".docs-hf-bar", { timeout: 10_000 });
+  await sleep(400);
+  return page.locator(".docs-hf-label").textContent();
+}
+
+/** Options in the header bar, then the item named `name`. */
+async function headerOption(page, name) {
+  await page.locator(".docs-hf-options").click();
+  await page.locator("[data-docs-menu] [role='menuitem']", { hasText: name }).click();
+  await page.waitForSelector('[role="dialog"]', { timeout: 10_000 });
+  await sleep(300);
+}
+
+GROUPS.ODDEVEN = async () => {
+  const G = "ODDEVEN";
+  const content = [];
+  for (let p = 1; p <= 3; p++) {
+    content.push(paragraph(`Page ${p} opens here.`));
+    if (p < 3) content.push({ type: "pageBreak" });
+  }
+  const id = await richDocument("Odd and even", content);
+  const header = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Field report" }] }] };
+  const stored = (await api(`/api/documents/${id}/rich-text`)).body.pageSetup;
+  const base = { pageless: false, width: 612, height: 792, margins: { top: 72, right: 72, bottom: 72, left: 72 }, color: "#ffffff" };
+  const patched = await api(`/api/documents/${id}/rich-text`, "PATCH", { pageSetup: { ...base, ...(stored ?? {}), header } });
+  if (patched.status !== 200) throw new Error(`page setup: HTTP ${patched.status}`);
+  const { page, errors, close } = await newPage();
+  await openEditor(page, id, "Page 3");
+  await sleep(800);
+  const before = await drawnHeaders(page);
+  check(G, before.length === 3 && before.every(([h]) => h === "Field report"), "every page draws the one header", JSON.stringify(before));
+
+  // 1. On page 2, the bar's Different odd & even gives the even pages a header of their own.
+  const plain = await editHeaderAbove(page, "Page 2");
+  await page.locator('[data-track="docs:hf:odd-even"]').check();
+  await page.waitForFunction(() => document.querySelector(".docs-hf-label")?.textContent === "Even page header", null, { timeout: 10_000 }).catch(() => {});
+  const evenLabel = await page.locator(".docs-hf-label").textContent();
+  await page.locator(".docs-hf-edit").click();
+  await page.keyboard.type("Even pages");
+  await sleep(300);
+  await shot(page, "oddeven-1-even-header");
+  await page.keyboard.press("Escape");
+  await sleep(900);
+  const drawn = await drawnHeaders(page);
+  check(G, plain === "Header" && evenLabel === "Even page header" && JSON.stringify(drawn.map(([h]) => h)) === JSON.stringify(["Field report", "Even pages", "Field report"]), "Different odd & even: page 2 takes the even pages' header, pages 1 and 3 keep theirs", `${plain} → ${evenLabel}; ${JSON.stringify(drawn)}`);
+  const oddLabel = await editHeaderAbove(page, "Page 3");
+  await page.keyboard.press("Escape");
+  await sleep(500);
+  check(G, oddLabel === "Odd page header", "an odd page's header says so", oddLabel ?? "");
+
+  // 2. Saved, and the same after a reload.
+  const setup = await until(async () => {
+    const s = (await api(`/api/documents/${id}/rich-text`)).body.pageSetup;
+    return s?.differentOddEven && JSON.stringify(s.evenHeader ?? "").includes("Even pages") ? s : null;
+  }, 15_000);
+  await openEditor(page, id, "Page 3");
+  await sleep(800);
+  const reloaded = await drawnHeaders(page);
+  check(G, Boolean(setup) && JSON.stringify(reloaded.map(([h]) => h)) === JSON.stringify(["Field report", "Even pages", "Field report"]), "saved; after a reload the pages draw the same", JSON.stringify(reloaded));
+
+  // 3. Page numbers go on the odd and the even pages alike.
+  await editHeaderAbove(page, "Page 1");
+  await headerOption(page, "Page numbers");
+  await page.locator('[role="dialog"] label', { hasText: "Footer" }).locator("input").check();
+  await page.locator('[role="dialog"] button[type="submit"]').click();
+  await sleep(1200);
+  const numbered = await drawnHeaders(page);
+  check(G, JSON.stringify(numbered.map(([, f]) => f)) === JSON.stringify(["1", "2", "3"]), "Page numbers go in the odd and the even footers alike", JSON.stringify(numbered));
+  await page.evaluate(() => [...document.querySelectorAll(".docs-prose p")].find((e) => e.textContent.startsWith("Page 2")).scrollIntoView({ block: "center" }));
+  await sleep(500);
+  await shot(page, "oddeven-3-pages");
+
+  // 4. The Word download keeps them: odd and even headers on, the even pages' own header and footer.
+  await until(async () => {
+    const s = (await api(`/api/documents/${id}/rich-text`)).body.pageSetup;
+    return s?.footer && s.evenFooter ? s : null;
+  }, 15_000);
+  const docx = await page.request.get(`${BASE}/api/documents/${id}/export?format=docx`);
+  const files = docx.ok() ? unzipSync(new Uint8Array(await docx.body())) : {};
+  const text = (name) => (files[name] ? strFromU8(files[name]) : "");
+  const settings = text("word/settings.xml");
+  const body = text("word/document.xml");
+  const headers = Object.keys(files).filter((n) => /^word\/header\d*\.xml$/.test(n)).map(text);
+  const footers = Object.keys(files).filter((n) => /^word\/footer\d*\.xml$/.test(n)).map(text);
+  const word = {
+    setting: /<w:evenAndOddHeaders\/>/.test(settings),
+    even: /w:headerReference w:type="even"/.test(body) && /w:footerReference w:type="even"/.test(body),
+    headers: headers.some((x) => x.includes("Even pages")) && headers.some((x) => x.includes("Field report")),
+    numbers: footers.filter((x) => /PAGE/.test(x)).length,
+  };
+  check(G, word.setting && word.even && word.headers && word.numbers >= 2, "the Word download keeps the even pages' header and footer", `HTTP ${docx.status()}; ${JSON.stringify(word)}`);
+
+  // 5. Header format's Different odd & even, off: every page draws the one header again.
+  await editHeaderAbove(page, "Page 1");
+  await headerOption(page, "Header format");
+  const box = page.locator('[data-track="docs:hf-format:odd-even"]');
+  const wasOn = await box.isChecked();
+  await shot(page, "oddeven-5-header-format");
+  await box.uncheck();
+  await page.locator('[role="dialog"] button[type="submit"]').click();
+  await sleep(1200);
+  const off = await drawnHeaders(page);
+  check(G, wasOn && off.every(([h]) => h === "Field report"), "Header format shows Different odd & even; off, every page draws the one header", JSON.stringify(off));
   check(G, errors.length === 0, "no page errors", errors.slice(0, 2).join(" | "));
   await close();
 };

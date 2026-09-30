@@ -910,7 +910,7 @@ export async function richTextDocx(
   const doc = tracked(stored);
   const styles = readStyles({ attrs: doc.attrs ?? {} });
   const shown = (hf: RichNode | null | undefined) => (setup.pageless ? null : hf);
-  const parts = [doc, shown(setup.header), shown(setup.footer), shown(setup.firstHeader), shown(setup.firstFooter)];
+  const parts = [doc, shown(setup.header), shown(setup.footer), shown(setup.firstHeader), shown(setup.firstFooter), shown(setup.evenHeader), shown(setup.evenFooter)];
   const images = parts.flatMap(imageNodes);
   const crop = figures.pdf ? pdfCrops(figures.pdf, Date.now() + FIGURE_RENDER_MS) : null;
   const [imageRows, figureRows] = await Promise.all([
@@ -981,6 +981,8 @@ export async function richTextDocx(
   const header = shown(setup.header);
   const footer = shown(setup.footer);
   const first = setup.differentFirst && !setup.pageless;
+  // Different odd & even: Word's even pages take their own (w:evenAndOddHeaders).
+  const even = setup.differentOddEven === true && !setup.pageless;
   const landscape = setup.width > setup.height;
   const file = new DocxDocument({
     title,
@@ -1012,6 +1014,7 @@ export async function richTextDocx(
     footnotes,
     comments: { children: placed },
     background: setup.color.toLowerCase() === "#ffffff" ? undefined : { color: setup.color.slice(1) },
+    evenAndOddHeaderAndFooters: even || undefined,
     sections: [
       {
         properties: {
@@ -1037,10 +1040,12 @@ export async function richTextDocx(
         headers: {
           default: header ? new Header(part(header)) : undefined,
           first: first ? new Header(part(setup.firstHeader)) : undefined,
+          even: even ? new Header(part(setup.evenHeader)) : undefined,
         },
         footers: {
           default: footer ? new Footer(part(footer)) : undefined,
           first: first ? new Footer(part(setup.firstFooter)) : undefined,
+          even: even ? new Footer(part(setup.evenFooter)) : undefined,
         },
         children: body,
       },

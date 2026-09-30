@@ -707,6 +707,11 @@ export type PageSetup = {
   differentFirst?: boolean;
   firstHeader?: RichNode | null;
   firstFooter?: RichNode | null;
+  /** Different odd & even: the even-numbered pages show evenHeader and
+      evenFooter; the first page's own, if any, wins. */
+  differentOddEven?: boolean;
+  evenHeader?: RichNode | null;
+  evenFooter?: RichNode | null;
   /** The first page's number; absent = 1. */
   pageNumberStart?: number;
 };
@@ -738,6 +743,9 @@ export const pageSetupSchema = z.object({
   differentFirst: z.boolean().optional(),
   firstHeader: richDocSchema.nullable().optional(),
   firstFooter: richDocSchema.nullable().optional(),
+  differentOddEven: z.boolean().optional(),
+  evenHeader: richDocSchema.nullable().optional(),
+  evenFooter: richDocSchema.nullable().optional(),
   pageNumberStart: z.number().int().min(0).max(999).optional(),
 });
 
