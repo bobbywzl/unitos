@@ -67,12 +67,15 @@ function zonesOf(glyphs: Glyph[], size: number): Glyph[][] {
     cur = [];
     // A citation a word space after a formula's operand ("γ > 1 [57]",
     // arXiv 2502.02648) is the sentence's, and so is what follows it; an
-    // interval stands after a relation ("x ∈ [0, 1]").
+    // interval stands after a relation ("x ∈ [0, 1]"). A zero-width glyph
+    // before the bracket is a piece of a relation drawn in parts, no
+    // operand (↦'s bar, whose text reads "7": "F: ℝ ↦ [0, 1]").
     const citation = z.findIndex(
       (g, n) =>
         n > 0 &&
         (g.family === "ot1" || g.family === null) &&
         g.unicode === "[" &&
+        z[n - 1].w > 0 &&
         gapOf(z[n - 1], g) > 0.2 * size &&
         /[\p{L}\p{N})\]}′']/u.test(z[n - 1].unicode) &&
         /^\[\d+(?:\s*[,–-]\s*\d+)*\]/.test(z.slice(n, n + 24).map((h) => h.unicode).join("")),
