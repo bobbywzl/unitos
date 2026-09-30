@@ -279,7 +279,9 @@ function readRuleLine(lines: Line[], i: number): Step | null {
 // lines on both sides are prose, set apart from the rule, and the rule spans
 // most of their width. A float's frame is not either: the rules over and
 // under an algorithm's caption or a table's header row lie within three
-// lines of each other, and a separator stands alone.
+// lines of each other, and a separator stands alone. Nor is a box's edge: a
+// rule drawn down from its end meets it at a corner (the frame around the
+// Earth Observer p. 13's meeting story and its photos).
 function withDrawnSeparators(
   segments: Segment[],
   starts: { line: number; at: number }[],
@@ -310,7 +312,10 @@ function withDrawnSeparators(
       // A double rule's second stroke is the same separator.
       return r.dir === "h" && d > size * 0.5 && d < size * ctx.leading * 3 && r.x1 < rule.x2 && r.x2 > rule.x1;
     });
-    if (framed) continue;
+    const corner = ctx.drawing.rules.some(
+      (r) => r.dir === "v" && [r.y1, r.y2].some((end) => Math.abs(end - y) <= 2) && [rule.x1, rule.x2].some((x) => Math.abs((r.x1 + r.x2) / 2 - x) <= 2),
+    );
+    if (framed || corner) continue;
     at.add(start.at);
   }
   if (at.size === 0) return segments;
