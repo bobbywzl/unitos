@@ -639,15 +639,18 @@ export function rowsOf(cellsOf: Cell[][], rowStarts: number[], columnCount: numb
 // statement's years, "As of December 31, 2023" over its assets and
 // liabilities): they part no gutter (the 10-K's OI&E statement read two
 // years as one column, p. 78). A line in the first column starts at the
-// table's left edge, or is a row of numbers that starts left of the first
-// gutter every line leaves open: a column of numbers set flush right starts
-// its short ones further in (Grinstead–Snell's Table 3.3 read its rows over
-// "10" as heads, and the table as a paragraph). A head of years is no such
-// row ("2023  2024  Effect": the 10-K, p. 39).
+// table's left edge, or is a row of numbers, as many cells as a row at the
+// edge, that starts left of the first gutter every line leaves open: a
+// column of numbers set flush right starts its short ones further in
+// (Grinstead–Snell's Table 3.3 read its rows over "10" as heads, and the
+// table as a paragraph). A head of years is no such row ("2023  2024 …"
+// over "Risk category - interest rate  $ 296 …": the 10-K, p. 47).
 function runSeparators(run: Line[]): number[] {
   const left = Math.min(...run.map((l) => l.x));
   const gutter = columnSeparators(run)[0];
-  const numbered = (l: Line) => gutter !== undefined && l.x < gutter && l.cells.every((c) => NUMERIC_CELL_RE.test(c.text.trim()));
+  const edge = run.find((l) => l.x <= left + 3);
+  const numbered = (l: Line) =>
+    gutter !== undefined && l.x < gutter && l.cells.length === edge?.cells.length && l.cells.every((c) => NUMERIC_CELL_RE.test(c.text.trim()));
   const first = Math.max(0, run.findIndex((l) => l.x <= left + 3 || numbered(l)));
   // A group's label among rows of three cells or more, from the table's left
   // edge (and a value at its end), crosses the gutters the rows leave open:
@@ -1053,8 +1056,22 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
     // "2N" over "at b =" over "5"). A cell's raised citation marks stand as
     // close over their words ("[26, 29]" in arXiv 2303.01056's Table 1).
     const part = (line: Line) => line.text.replace(/\s/g, "").length <= 3;
-    if (members.some((k, n) => n > 0 && lines[members[n - 1]].y - lines[k].y < lines[k].size * 0.7 && (part(lines[members[n - 1]]) || part(lines[k])))) {
+    const close = (k: number, n: number) => n > 0 && lines[members[n - 1]].y - lines[k].y < lines[k].size * 0.7;
+    if (members.some((k, n) => close(k, n) && (part(lines[members[n - 1]]) || part(lines[k])))) {
       i++;
+      continue;
+    }
+    // Text boxes side by side interleave their lines: most lines stand
+    // closer than a row's height to the line before them, their words
+    // beside its words, never under them (a slide's three captions under its
+    // drawing, NASA AGU 2023 p. 39). The boxes read one after another.
+    const beside = (a: Line, b: Line) => a.items.every((p) => b.items.every((q) => p.x + p.w <= q.x + 1 || q.x + q.w <= p.x + 1));
+    const interleaved = members.filter((k, n) => close(k, n) && beside(lines[members[n - 1]], lines[k])).length;
+    if (members.length >= 4 && interleaved * 2 > members.length - 1) {
+      sideBySide.set(lines[i], -Infinity);
+      for (const k of members) runOf[k] = runId;
+      runId++;
+      i = j;
       continue;
     }
     // One multi-cell line alone is a "Label: text" paragraph, unless the
