@@ -163,6 +163,16 @@ registerDocsCommands([
     run: (editor) => fireDocs(editor, PAGE_EVENT.pageCount),
     enabled: (editor) => store(editor)?.get().editing != null,
   },
+  {
+    // Insert > Watermark: words or an image behind the text of every page
+    // (page/watermark-dialog.tsx).
+    id: "page:watermark",
+    label: "docsPage.watermark",
+    menu: "insert",
+    keywords: ["watermark", "draft", "confidential", "stamp", "background text", "background image", "page elements", "水印"],
+    run: (editor) => store(editor)?.set({ dialog: "watermark" }),
+    enabled: paged,
+  },
   ...NUMBER_PRESETS.map(([area, onFirst, label]) => ({
     id: `page:numbers-${area}-${onFirst ? "all" : "not-first"}`,
     label,

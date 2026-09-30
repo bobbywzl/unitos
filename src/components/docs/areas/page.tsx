@@ -26,6 +26,8 @@ import { CompareDialog } from "@/components/docs/page/compare-dialog";
 import { CopyDialog } from "@/components/docs/page/make-copy";
 import { PageSetupDialog, readPageDefault } from "@/components/docs/page/setup-dialog";
 import { PAGE_EVENT, pageStore, usePageState, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
+import { WatermarkMark } from "@/components/docs/page/watermark";
+import { WatermarkDialog } from "@/components/docs/page/watermark-dialog";
 import { DEFAULT_PAGE_SETUP } from "@/lib/docs/schema";
 import { translatorFor } from "@/lib/i18n/dictionaries";
 
@@ -529,6 +531,7 @@ export function PageCanvas({
                     data-white={white || undefined}
                     style={{ top: i * frame.pitch, height: frame.height, "--docs-sheet-i": i } as React.CSSProperties}
                   >
+                    {setup.watermark && !compact && <WatermarkMark mark={setup.watermark} frame={frame} />}
                     {(["header", "footer"] as const).map((a) => {
                       const slot = slotFor(setup, a, i);
                       const doc = setup[slot];
@@ -574,6 +577,7 @@ export function PageCanvas({
       {dialog === "headerFormat" && <HeaderFormatDialog store={store} onClose={closeDialog} />}
       {dialog === "copy" && <CopyDialog editor={editor} onClose={closeDialog} />}
       {dialog === "compare" && <CompareDialog editor={editor} onClose={closeDialog} />}
+      {dialog === "watermark" && <WatermarkDialog store={store} onClose={closeDialog} />}
     </>
   );
 }

@@ -189,10 +189,16 @@ function DocumentCard({ doc, t }: { doc: DigestDocument; t: TFunc }) {
   );
 }
 
+// A corpus out of view is not styled or laid out until it scrolls near
+// (content-visibility): the page holds every document of every corpus, and
+// styling and laying out all of them took 700 ms on each visit.
 function CorpusCard({ row, t }: { row: DigestRow; t: TFunc }) {
   const { parts, counts } = row;
   return (
-    <details className="rounded-2xl bg-card p-4 shadow-soft" open>
+    <details
+      className="rounded-2xl bg-card p-4 shadow-soft [contain-intrinsic-size:auto_400px] [content-visibility:auto]"
+      open
+    >
       <summary className="cursor-pointer">
         <span className="text-base font-semibold text-sand-800">{parts.corpusTitle}</span>
         <span className="ml-2 text-xs text-sand-500">

@@ -16,6 +16,8 @@ import {
   Header,
   HeadingLevel,
   HeightRule,
+  HorizontalPositionAlign,
+  HorizontalPositionRelativeFrom,
   ImageRun,
   InsertedTextRun,
   InternalHyperlink,
@@ -34,7 +36,10 @@ import {
   TableCell,
   TableRow,
   TextRun,
+  TextWrappingType,
   VerticalAlignTable,
+  VerticalPositionAlign,
+  VerticalPositionRelativeFrom,
   WidthType,
   type IBorderOptions,
   type ILevelsOptions,
@@ -66,6 +71,7 @@ import {
   type RichMark,
   type RichNode,
 } from "@/lib/docs/schema";
+import { FADED_OPACITY, watermarkImageSize } from "@/lib/docs/watermark";
 import { CROP_PAD, CROP_PAGE_WIDTH, WHOLE_PAGE_WIDTH } from "@/lib/figure-crop";
 import { cropPageRegion, renderPdfPage } from "@/lib/handwritten/pages";
 import { serverT } from "@/lib/i18n/server";
@@ -775,19 +781,21 @@ async function imageBytes(src: string): Promise<Uint8Array | null> {
 }
 
 /** Image bytes as Word takes them: cut by `crop` (the part of each side, top
-    right bottom left), and a format Word reads (anything else, an svg too,
-    is redrawn as a PNG). */
-async function picture(bytes: Uint8Array, crop: number[] = [0, 0, 0, 0]): Promise<Picture | null> {
+    right bottom left), at `opacity`, and a format Word reads (anything else,
+    an svg too, is redrawn as a PNG). */
+async function picture(bytes: Uint8Array, crop: number[] = [0, 0, 0, 0], opacity = 1): Promise<Picture | null> {
   const { createCanvas, loadImage } = await import("@napi-rs/canvas");
   const image = await loadImage(Buffer.from(bytes)).catch(() => null);
   if (!image || !(image.width > 0 && image.height > 0)) return null;
   const [top, right, bottom, left] = crop;
   const type = WORD_TYPES[sniffImage(bytes) ?? ""];
-  if (type && top + right + bottom + left === 0) return { data: bytes, type, width: image.width, height: image.height };
+  if (type && top + right + bottom + left === 0 && opacity === 1) return { data: bytes, type, width: image.width, height: image.height };
   const width = Math.max(1, Math.round(image.width * (1 - left - right)));
   const height = Math.max(1, Math.round(image.height * (1 - top - bottom)));
   const canvas = createCanvas(width, height);
-  canvas.getContext("2d").drawImage(image, image.width * left, image.height * top, width, height, 0, 0, width, height);
+  const g = canvas.getContext("2d");
+  g.globalAlpha = opacity;
+  g.drawImage(image, image.width * left, image.height * top, width, height, 0, 0, width, height);
   return { data: canvas.toBuffer("image/png"), type: "png", width, height };
 }
 
@@ -797,6 +805,47 @@ async function pictureOf(node: RichNode): Promise<Picture | null> {
   if (!bytes) return null;
   const crop = ["cropTop", "cropRight", "cropBottom", "cropLeft"].map((key) => Math.min(0.95, Math.max(0, num(node.attrs?.[key]) ?? 0)));
   return picture(bytes, crop);
+}
+
+// ── The watermark ───────────────────────────────────────────────────────────
+
+/** The watermark's image and its size in px (SPEC.md §29). */
+type WatermarkPicture = { picture: Picture; width: number; height: number };
+
+/** The watermark as Word takes it: a text watermark is the image the dialog
+    drew of its words; an image watermark is its image, faded when Faded is
+    on, fitting the text area (Auto) or at a share of its own size. Null in
+    pageless, which shows none, and when the image cannot be read. */
+async function watermarkPicture(setup: PageSetup): Promise<WatermarkPicture | null> {
+  const mark = setup.pageless ? null : setup.watermark;
+  if (!mark) return null;
+  if (mark.kind === "text") {
+    const bytes = mark.image ? await imageBytes(mark.image.src) : null;
+    const drawn = bytes ? await picture(bytes) : null;
+    return drawn && mark.image ? { picture: drawn, width: mark.image.width, height: mark.image.height } : null;
+  }
+  const bytes = await imageBytes(mark.src);
+  const drawn = bytes ? await picture(bytes, undefined, mark.faded ? FADED_OPACITY : 1) : null;
+  if (!drawn) return null;
+  const m = setup.margins;
+  const room = { width: (setup.width - m.left - m.right) * PX_PER_PT, height: (setup.height - m.top - m.bottom) * PX_PER_PT };
+  return { picture: drawn, ...watermarkImageSize(mark.scale, drawn, room) };
+}
+
+/** The watermark's run: behind the text, centered on the page. */
+function watermarkRun(mark: WatermarkPicture): ImageRun {
+  return new ImageRun({
+    type: mark.picture.type,
+    data: mark.picture.data,
+    transformation: { width: Math.round(mark.width), height: Math.round(mark.height) },
+    floating: {
+      horizontalPosition: { relative: HorizontalPositionRelativeFrom.PAGE, align: HorizontalPositionAlign.CENTER },
+      verticalPosition: { relative: VerticalPositionRelativeFrom.PAGE, align: VerticalPositionAlign.CENTER },
+      behindDocument: true,
+      allowOverlap: true,
+      wrap: { type: TextWrappingType.NONE },
+    },
+  });
 }
 
 function imageNodes(node: RichNode | null | undefined): RichNode[] {
@@ -944,9 +993,10 @@ export async function richTextDocx(
   const parts = [doc, shown(setup.header), shown(setup.footer), shown(setup.firstHeader), shown(setup.firstFooter), shown(setup.evenHeader), shown(setup.evenFooter)];
   const images = parts.flatMap(imageNodes);
   const crop = figures.pdf ? pdfCrops(figures.pdf, Date.now() + FIGURE_RENDER_MS) : null;
-  const [imageRows, figureRows] = await Promise.all([
+  const [imageRows, figureRows, mark] = await Promise.all([
     Promise.all(images.map(async (node) => [node, await pictureOf(node)] as const)),
     Promise.all(figureNodes(doc).map(async (node) => [node, await figurePictures(node, figures, crop)] as const)),
+    watermarkPicture(setup),
   ]);
   const ctx: Ctx = {
     doc,
@@ -1009,6 +1059,16 @@ export async function richTextDocx(
     const children = blocks(hf?.content, ctx);
     return { children: children.length > 0 ? children : [new Paragraph({})] };
   };
+  // The watermark rides in every header, in its first paragraph, as Word
+  // keeps its own; a document with no header gets one for it.
+  const headerPart = (hf: RichNode | null | undefined) => {
+    const { children } = part(hf);
+    if (!mark) return { children };
+    const first = children.find((c): c is Paragraph => c instanceof Paragraph);
+    if (!first) return { children: [new Paragraph({ children: [watermarkRun(mark)] }), ...children] };
+    first.addChildElement(watermarkRun(mark));
+    return { children };
+  };
   const header = shown(setup.header);
   const footer = shown(setup.footer);
   const first = setup.differentFirst && !setup.pageless;
@@ -1069,9 +1129,9 @@ export async function richTextDocx(
           },
         },
         headers: {
-          default: header ? new Header(part(header)) : undefined,
-          first: first ? new Header(part(setup.firstHeader)) : undefined,
-          even: even ? new Header(part(setup.evenHeader)) : undefined,
+          default: header || mark ? new Header(headerPart(header)) : undefined,
+          first: first ? new Header(headerPart(setup.firstHeader)) : undefined,
+          even: even ? new Header(headerPart(setup.evenHeader)) : undefined,
         },
         footers: {
           default: footer ? new Footer(part(footer)) : undefined,
