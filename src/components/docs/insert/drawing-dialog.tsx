@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/core";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
 import { RedoIcon, UndoIcon } from "@/components/docs/icons";
 import { onInsert, type InsertContext } from "@/components/docs/insert/context";
@@ -32,7 +32,7 @@ import "./drawing.css";
 // on a white canvas; a shape picked with Select moves, a rectangle or an
 // oval resizes by its corners and a line by its ends, and the line color,
 // the fill, the line weight, and the text size set the picked shape and the
-// next ones. Save and close stores the picture cut to what is drawn as an
+// next ones. Save and close stores the drawing, cut to what is drawn, as an
 // image that keeps the shapes (lib/docs/drawing.ts); a double-click on it
 // opens them again.
 
@@ -148,8 +148,8 @@ function tooSmall(s: Shape): boolean {
 
 const pointsIn = (shapes: Shape[]) => shapes.reduce((n, s) => n + (s.kind === "scribble" ? s.points.length : 0), 0);
 
-/** The picture as a PNG at twice its size; null when the browser cannot draw it. */
-async function pictureFile(svg: string, width: number, height: number): Promise<File | null> {
+/** The drawing as a PNG at twice its size; null when the browser cannot draw it. */
+async function drawingFile(svg: string, width: number, height: number): Promise<File | null> {
   try {
     const img = new Image();
     img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -217,50 +217,60 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<Drag | null>(null);
   const before = useRef<Shape[] | null>(null);
-  const shapesRef = useRef(shapes);
-  shapesRef.current = shapes;
+  // What the handlers read and write: the shapes as the last change left
+  // them, and the text box being typed in. A render only shows them.
+  const live = useRef<Shape[]>(open.shapes);
+  const editingRef = useRef<number | null>(null);
+  const show = (next: Shape[]) => {
+    live.current = next;
+    setShapes(next);
+  };
+  const startEditing = (index: number | null) => {
+    editingRef.current = index;
+    setEditing(index);
+  };
 
   /** A change the reader made: one step for Undo. */
-  const commit = useCallback((next: Shape[], from: Shape[] = shapesRef.current) => {
+  const commit = (next: Shape[], from: Shape[] = live.current) => {
     setPast((p) => [...p.slice(-99), from]);
     setFuture([]);
-    setShapes(next);
-  }, []);
+    show(next);
+  };
   const undo = () => {
     if (past.length === 0) return;
-    setFuture([shapes, ...future]);
-    setShapes(past[past.length - 1]);
+    const current = live.current;
+    setFuture([current, ...future]);
     setPast(past.slice(0, -1));
+    show(past[past.length - 1]);
     setPicked(null);
   };
   const redo = () => {
     if (future.length === 0) return;
-    setPast([...past, shapes]);
-    setShapes(future[0]);
+    const current = live.current;
+    setPast([...past, current]);
     setFuture(future.slice(1));
+    show(future[0]);
     setPicked(null);
   };
   const remove = () => {
     if (picked === null) return;
-    commit(shapesRef.current.filter((_, i) => i !== picked));
+    commit(live.current.filter((_, i) => i !== picked));
     setPicked(null);
   };
 
   /** The text box being typed in is done: kept with words, gone without.
       The ref ends it once, though the press and the blur both end it. */
-  const editingRef = useRef<number | null>(null);
-  editingRef.current = editing;
   const endText = () => {
     const index = editingRef.current;
     if (index === null) return;
     editingRef.current = null;
-    const s = shapesRef.current[index];
+    const s = live.current[index];
     const kept = Boolean(s && s.kind === "text" && s.text.trim());
-    const next = kept ? shapesRef.current : shapesRef.current.filter((_, i) => i !== index);
-    commit(next, before.current ?? shapesRef.current);
+    const next = kept ? live.current : live.current.filter((_, i) => i !== index);
+    commit(next, before.current ?? live.current);
     before.current = null;
     setPicked(kept ? index : null);
-    setEditing(null);
+    startEditing(null);
   };
 
   // The keys, before the dialog's Escape: Escape ends the text box or drops
@@ -305,12 +315,15 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
 
   const onDown = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (e.button !== 0) return;
+    // The press keeps the focus where it is: a new text box takes it, and
+    // a drag selects nothing on the page behind.
+    e.preventDefault();
     if (editing !== null) {
       endText();
       return;
     }
     const p = point(e);
-    const all = shapesRef.current;
+    const all = live.current;
     before.current = all;
     if (tool === "select") {
       const handle = picked !== null ? handlesOf(all[picked]).find((h) => Math.hypot(h.x - p.x, h.y - p.y) <= 8) : undefined;
@@ -324,20 +337,20 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
       return;
     } else if (tool === "text") {
       const s: Shape = { kind: "text", x: p.x, y: p.y - textSize * 0.6, text: "", color: stroke, size: textSize };
-      setShapes([...all, s]);
-      setEditing(all.length);
+      show([...all, s]);
+      startEditing(all.length);
       setPicked(null);
       return;
     } else if (tool === "scribble") {
       if (pointsIn(all) >= MAX_DRAWING_POINTS) return;
-      setShapes([...all, { kind: "scribble", points: [[p.x, p.y]], stroke, width: weight }]);
+      show([...all, { kind: "scribble", points: [[p.x, p.y]], stroke, width: weight }]);
       drag.current = { type: "scribble", index: all.length };
     } else {
       const s: Shape =
         tool === "line" || tool === "arrow"
           ? { kind: tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y, stroke, width: weight }
           : { kind: tool, x: p.x, y: p.y, w: 0, h: 0, stroke, fill, width: weight };
-      setShapes([...all, s]);
+      show([...all, s]);
       drag.current = { type: "create", index: all.length, from: p };
     }
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -347,8 +360,8 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
     const d = drag.current;
     if (!d) return;
     const p = point(e);
-    setShapes((all) =>
-      all.map((s, i) => {
+    show(
+      live.current.map((s, i) => {
         if (i !== d.index) return s;
         if (d.type === "move") return moved(d.orig, p.x - d.from.x, p.y - d.from.y);
         if (d.type === "scribble" && s.kind === "scribble") {
@@ -381,13 +394,13 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
     const d = drag.current;
     drag.current = null;
     if (!d) return;
-    const all = shapesRef.current;
+    const all = live.current;
     const from = before.current ?? all;
     before.current = null;
     if (d.type === "create" || d.type === "scribble") {
       const s = all[d.index];
       if (!s || (d.type === "create" && tooSmall(s))) {
-        setShapes(from);
+        show(from);
         return;
       }
       commit(all, from);
@@ -404,9 +417,9 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
   /** A style control: it sets the picked shape, and the next ones. */
   const restyle = (patch: (s: Shape) => Shape | null) => {
     if (picked === null) return;
-    const s = shapesRef.current[picked];
+    const s = live.current[picked];
     const next = s ? patch(s) : null;
-    if (next) commit(shapesRef.current.map((x, i) => (i === picked ? next : x)));
+    if (next) commit(live.current.map((x, i) => (i === picked ? next : x)));
   };
   const pickStroke = (c: string) => {
     setStroke(c);
@@ -425,32 +438,33 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
     restyle((s) => (s.kind === "text" ? { ...s, size } : null));
   };
 
-  const shown = useMemo(() => shapes.map((s, i) => (i === editing ? "" : shapeSvg(s))).join(""), [shapes, editing]);
+  // Each shape in a group that names its kind (the canvas's; the stored SVG has none).
+  const shown = useMemo(() => shapes.map((s, i) => (i === editing ? "" : `<g data-shape="${s.kind}">${shapeSvg(s)}</g>`)).join(""), [shapes, editing]);
   const typing = editing !== null ? shapes[editing] : null;
   const pickedShape = picked !== null ? shapes[picked] : null;
   const drawn = shapes.some((s) => s.kind !== "text" || s.text.trim());
 
   async function save() {
     if (busy) return;
-    const drawing: Drawing = { v: 1, shapes: shapesRef.current.filter((s) => s.kind !== "text" || s.text.trim()) };
-    const picture = drawingSvg(drawing);
-    if (!picture) return;
+    const drawing: Drawing = { v: 1, shapes: live.current.filter((s) => s.kind !== "text" || s.text.trim()) };
+    const svg = drawingSvg(drawing);
+    if (!svg) return;
     setBusy(true);
     setError(null);
     try {
-      const file = await pictureFile(picture.svg, picture.width, picture.height);
+      const file = await drawingFile(svg.svg, svg.width, svg.height);
       if (!file) throw new Error(t("common.requestFailed"));
       const { url } = await uploadImage(file);
-      const width = Math.min(picture.width, MAX_PLACED_WIDTH);
-      const height = Math.round((picture.height * width) / picture.width);
+      const width = Math.min(svg.width, MAX_PLACED_WIDTH);
+      const height = Math.round((svg.height * width) / svg.width);
       const data = JSON.stringify(drawing);
       if (open.pos !== null) {
         const node = editor.state.doc.nodeAt(open.pos);
         if (node && node.type.name === "image") {
-          // The reader's own width stays; the height follows the new picture.
+          // The reader's own width stays; the height follows the new image.
           const kept = imageAttrs(node).width;
           const w = kept ? Math.min(kept, MAX_PLACED_WIDTH) : width;
-          setImageAttrs(editor.view, open.pos, { src: url, alt: t("docsInsert.drawing"), drawing: data, width: w, height: Math.round((picture.height * w) / picture.width) });
+          setImageAttrs(editor.view, open.pos, { src: url, alt: t("docsInsert.drawing"), drawing: data, width: w, height: Math.round((svg.height * w) / svg.width) });
         }
       } else {
         insertImage(editor, { src: url, alt: t("docsInsert.drawing"), width, height, drawing: data });
@@ -595,10 +609,10 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
           onPointerCancel={onUp}
           onDoubleClick={(e) => {
             // A double-click on a text box types in it again.
-            const hit = shapeAt(shapesRef.current, point(e));
-            if (hit !== null && shapesRef.current[hit].kind === "text") {
-              before.current = shapesRef.current;
-              setEditing(hit);
+            const hit = shapeAt(live.current, point(e));
+            if (hit !== null && live.current[hit].kind === "text") {
+              before.current = live.current;
+              startEditing(hit);
               setPicked(null);
             }
           }}
@@ -634,7 +648,7 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
             }}
             onChange={(e) => {
               const value = e.target.value.slice(0, 2000);
-              setShapes((all) => all.map((s, i) => (i === editing && s.kind === "text" ? { ...s, text: value } : s)));
+              show(live.current.map((s, i) => (i === editing && s.kind === "text" ? { ...s, text: value } : s)));
             }}
             onBlur={endText}
           />

@@ -14,7 +14,7 @@
 }
 .docs-drawing-styles {
   margin: 8px 0 12px;
-  gap: 6px;
+  gap: 4px;
 }
 .docs-drawing-tool {
   display: inline-flex;
@@ -43,7 +43,7 @@
   background: var(--docs-sep);
 }
 .docs-drawing-label {
-  margin: 0 2px 0 8px;
+  margin: 0 2px 0 6px;
   color: var(--docs-muted);
   font: 600 12px/16px var(--docs-ui-font);
 }
@@ -51,8 +51,8 @@
   margin-left: 0;
 }
 .docs-drawing-swatch {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border: 1px solid var(--docs-sep);
   border-radius: 50%;
   cursor: pointer;
@@ -68,9 +68,9 @@
 .docs-drawing-weight,
 .docs-drawing-size {
   display: inline-flex;
-  min-width: 30px;
+  min-width: 26px;
   height: 26px;
-  padding: 0 6px;
+  padding: 0 4px;
   align-items: center;
   justify-content: center;
   border-radius: 8px;

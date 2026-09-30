@@ -7,6 +7,7 @@ import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { AtMenuHost } from "@/components/docs/insert/at-menu";
 import { ChartHost } from "@/components/docs/insert/chart-dialog";
 import { ChipCardsHost } from "@/components/docs/insert/chip-cards";
+import { DrawingHost } from "@/components/docs/insert/drawing-dialog";
 import "@/components/docs/insert/commands";
 import { ClipboardDialogHost, ContextMenuHost } from "@/components/docs/insert/context-menu";
 import { setInsertContext, type InsertContext } from "@/components/docs/insert/context";
@@ -55,6 +56,7 @@ export function InsertLayer({ editor, documentId, notebookId, documents, pageSet
       <SpecialCharsHost editor={editor} />
       <TocOptionsHost editor={editor} />
       <ChartHost editor={editor} ctx={ctx} />
+      <DrawingHost editor={editor} ctx={ctx} />
       <ClipboardDialogHost editor={editor} />
       <PlaceFromAddress editor={editor} />
     </>

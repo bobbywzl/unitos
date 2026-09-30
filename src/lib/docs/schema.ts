@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseChart } from "@/lib/docs/chart";
+import { parseDrawing } from "@/lib/docs/drawing";
 import { regionSchema } from "@/lib/video/types";
 
 // A document's rich text (SPEC.md §29): Tiptap (ProseMirror) JSON, of a blank
@@ -431,6 +432,11 @@ function cleanAttr(name: string, value: unknown): unknown {
     case "chart": {
       const chart = parseChart(value);
       return chart ? JSON.stringify(chart) : null;
+    }
+    // A drawing's shapes (Insert > Drawing): kept only when they keep every rule.
+    case "drawing": {
+      const drawing = parseDrawing(value);
+      return drawing ? JSON.stringify(drawing) : null;
     }
     // A PDF page: a figure's, a page start's, and the page a code block, an
     // equation, or a figure begins.

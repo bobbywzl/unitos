@@ -15,6 +15,7 @@ import {
   BreakTextIcon,
   ChartIcon,
   CropIcon,
+  DrawingIcon,
   ImageOptionsIcon,
   InFrontIcon,
   InLineIcon,
@@ -27,6 +28,7 @@ import {
   imageAttrs,
   imageViewAt,
   isChartImage,
+  isDrawingImage,
   replaceImage,
   resetImage,
   selectedImage,
@@ -151,6 +153,7 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
           )}
           <Sep />
           {isChartImage(hit.node) && button("docsInsert.editChart", <ChartIcon />, () => emitInsert(editor, { type: "chart", pos: hit.pos }))}
+          {isDrawingImage(hit.node) && button("docsInsert.editDrawing", <DrawingIcon />, () => emitInsert(editor, { type: "drawing", pos: hit.pos }))}
           {button("docsInsert.cropImage", <CropIcon />, () => imageViewAt(editor.view, hit.pos)?.startCrop())}
           <BorderButtons
             track="image"

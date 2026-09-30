@@ -472,7 +472,7 @@ export function caretUnderImage(tr: Transaction): boolean {
     selection, which it replaces), or in place of an empty line. */
 export function insertImage(
   editor: Editor,
-  attrs: { src: string; alt?: string; width?: number; height?: number; chart?: string },
+  attrs: { src: string; alt?: string; width?: number; height?: number; chart?: string; drawing?: string },
   pos?: number,
 ): void {
   editor

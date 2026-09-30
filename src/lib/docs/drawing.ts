@@ -2,11 +2,11 @@ import { z } from "zod";
 import { PAPER, escapeXml } from "@/lib/derive/visual-palette";
 
 // Insert > Drawing (SPEC.md §29): lines, arrows, rectangles, ovals, text
-// boxes, and scribbles drawn in a dialog. The drawing is an image (the
-// picture below, cut to what is drawn and stored as a PNG) that keeps its
-// shapes on the image (`drawing`, a JSON string), so a double-click edits
-// it. One place for the shapes' rules and the picture: the dialog draws with
-// it, and the save checks the shapes with it.
+// boxes, and scribbles drawn in a dialog. The drawing is an image (the SVG
+// below, cut to what is drawn and stored as a PNG) that keeps its shapes on
+// the image (`drawing`, a JSON string), so a double-click edits it. One
+// place for the shapes' rules and the SVG: the dialog draws with it, and the
+// save checks the shapes with it.
 
 /** The most shapes a drawing keeps, and the most points of all its scribbles. */
 export const MAX_DRAWING_SHAPES = 300;
@@ -51,7 +51,7 @@ export function parseDrawing(value: unknown): Drawing | null {
   return parsed.success ? parsed.data : null;
 }
 
-// ── The picture ─────────────────────────────────────────────────────────────
+// ── The SVG ─────────────────────────────────────────────────────────────────
 
 export const DRAWING_FONT = "Arial, Helvetica, 'Liberation Sans', sans-serif";
 /** A text box's line height over its size. */
@@ -59,7 +59,7 @@ export const TEXT_LEADING = 1.25;
 /** The room around what is drawn, in px. */
 const PAD = 8;
 
-/** A width for `line` at `size` px: the picture has no fonts to measure. */
+/** A width for `line` at `size` px: the SVG has no fonts to measure. */
 export const textWidth = (line: string, size: number) => line.length * size * 0.56;
 
 /** The corners of an arrow's head at (x2, y2). */
