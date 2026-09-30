@@ -111,6 +111,9 @@ export type ImportInput = {
   /** The title's lines where the writer broke it (a PDF's): the Title
       keeps the break. */
   titleLines?: string[];
+  /** The PDF's page the title stands on, when words of an earlier page
+      come before it: the Title opens that page. */
+  titlePage?: number;
 };
 
 export type ImportResult = {
@@ -892,14 +895,16 @@ class Converter {
     const { blocks } = this.input;
     const title = this.input.titleFromOriginal ? (this.input.title ?? "").replace(/\s+/g, " ").trim() : "";
     // A heading among the first blocks that repeats the title is the Title,
-    // where it stands; else the Title comes first, after the kicker.
-    const first = this.input.firstPage ?? 1;
+    // where it stands; else the Title opens its page (titleOn), after the
+    // kicker: a scan's archive notice or a deck's first slide stands before it.
+    const first = this.titleOn;
     const repeat = title
       ? blocks
           .slice(0, TITLE_REACH)
           .findIndex((b) => b.type === "HEADING" && sameWords(b.text, title) && (!this.paged || (b.page ?? first) <= first))
       : -1;
-    let lead = 0;
+    const on = this.paged ? blocks.findIndex((b) => (b.page ?? first) >= first) : 0;
+    let lead = on < 0 ? blocks.length : on;
     while (lead < blocks.length && blocks[lead].type === "PARAGRAPH" && tokensOf(blocks[lead].html).includes("kicker")) lead++;
     blocks.forEach((block, i) => {
       if (i === lead && title && repeat < 0) this.title(title, blocks);
@@ -908,6 +913,12 @@ class Converter {
     if (blocks.length <= lead && title && repeat < 0) this.title(title, blocks);
     this.closeQuote();
     return this.finish();
+  }
+
+  /** The PDF's page the Title stands on: the import's first, or the later
+      page its title stands on (titlePage). */
+  private get titleOn(): number {
+    return Math.max(this.input.firstPage ?? 1, this.input.titlePage ?? 1);
   }
 
   // ── Page starts ──
@@ -1073,8 +1084,8 @@ class Converter {
   // ── Blocks ──
 
   private title(title: string, blocks: ParsedBlock[]) {
-    // A PDF's title stands on the import's first page.
-    const first = this.input.firstPage ?? 1;
+    // A PDF's Title stands on its page (titleOn).
+    const first = this.titleOn;
     const starts: PageStart[] = this.paged && this.page < first ? [{ offset: 0, page: first }] : [];
     if (starts.length > 0) this.page = first;
     const meta = blocks.slice(0, TITLE_REACH).find((b) => b.type === "PARAGRAPH" && tokensOf(b.html).includes("meta"));
@@ -1084,10 +1095,10 @@ class Converter {
       (meta !== undefined && alignOf(tokensOf(meta.html)) === "center") ||
       (heading !== undefined && alignOf(tokensOf(heading.html)) === "center");
     const attrs: Record<string, unknown> = { docStyle: "title" };
-    // The parse's alignment when it read the title's look on the page (a
-    // title it read and set flush left stays so); else the page's centered
-    // masthead, byline, or first heading centers it.
-    const align = this.input.titleAlign ?? (this.input.titleFont ? null : centered ? "center" : null);
+    // The parse's alignment when it read the title on the page (a PDF's
+    // title, a title whose look it read: set flush left, it stays so); else
+    // the page's centered masthead, byline, or first heading centers it.
+    const align = this.input.titleAlign ?? (this.input.titleFont || this.paged ? null : centered ? "center" : null);
     if (align) attrs.textAlign = align;
     // The writer's line breaks stay in the Title (two centered lines), when
     // its lines are the title's words.
@@ -1196,6 +1207,14 @@ class Converter {
     }
     this.carry(waiting);
     if (lines.length === 0) return;
+    // A capital's initial under a line with no marker at its depth is an
+    // entry's words, no marker (a bibliography's "H. rept. 106-371.", "J.
+    // Smith"): a lettered list opens at its first letter.
+    lines.forEach((l, k) => {
+      const above = lines.slice(0, k).reverse().find((p) => p.indent <= l.indent);
+      const initial = l.count?.after === "." && !l.count.before && (l.count.counter === "upper-alpha" || l.letter?.counter === "upper-alpha") && l.count.value > 1;
+      if (initial && above?.indent === l.indent && above.unmarked) lines[k] = { ...l, type: null, unmarked: true, count: undefined, letter: undefined, words: l.whole };
+    });
     // A contents list: its class, or lines that link to headings, whatever
     // their markers ("1 Introduction", "2.1 Background").
     const contents =

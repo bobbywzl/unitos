@@ -215,7 +215,8 @@ function liftFloatsOffParagraphBreaks(segments: Segment[]): Segment[] {
   // A display's crop stands where the sentence puts it.
   const isPageFloat = (s: Segment) =>
     (s.type === "FIGURE" && !s.mathCrop) || s.type === "TABLE" || (s.type === "PARAGRAPH" && CAPTION_RE.test(s.text));
-  // Floats a lift set after a paragraph's joined part: they stay after it.
+  // Floats a lift set after a paragraph's joined part: a join past them
+  // would set them past the next page's start, so the halves stay apart.
   const following = new Set<Segment>();
   for (let b = 1; b < out.length; b++) {
     if (out[b].page === out[b - 1].page) continue;
@@ -245,9 +246,10 @@ function liftFloatsOffParagraphBreaks(segments: Segment[]): Segment[] {
     // A references entry's end at the page's top goes with the list after it.
     const lift = listBreak && hangingTail(tail, out[k + 1]) ? 2 : 1;
     if (lift === 1 && (listBreak ? tail.type !== "LIST" || Boolean(tail.tocEntries) : tail.type !== "PARAGRAPH" || !/^[a-z($€£0-9"'“]/.test(tail.text))) continue;
+    if (out.slice(a + 1, b).some((s) => following.has(s))) continue;
     for (const s of out.slice(b, k)) following.add(s);
     const joined = out.splice(k, lift);
-    const floats = out.slice(a + 1, b).some((s) => following.has(s)) ? [] : out.splice(a + 1, b - a - 1);
+    const floats = out.splice(a + 1, b - a - 1);
     out.splice(a, 0, ...floats);
     out.splice(a + floats.length + 1, 0, ...joined);
   }

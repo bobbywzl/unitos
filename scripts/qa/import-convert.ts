@@ -79,6 +79,7 @@ type Fixture = {
   bodyFont?: TextFont;
   titleFont?: TextFont;
   titleAlign?: "center" | "right";
+  titlePage?: number;
   parseMs: number;
 };
 type Converted = Awaited<ReturnType<typeof richTextFromImport>>;
@@ -782,6 +783,7 @@ async function checkFixture(f: Fixture): Promise<Report> {
         bodyFont: f.bodyFont,
         titleFont: f.titleFont,
         titleAlign: f.titleAlign,
+        titlePage: f.titlePage,
       }),
     );
   } catch (err) {
@@ -1623,6 +1625,7 @@ async function pdfFixture(name: string, bytes: Uint8Array): Promise<Fixture> {
     bodyFont?: TextFont;
     titleFont?: TextFont;
     titleAlign?: "center" | "right";
+    titlePage?: number;
   } = await parsePdf(new Uint8Array(bytes), { pages: chosenPages });
   const parseMs = performance.now() - t0;
   return {
@@ -1638,6 +1641,7 @@ async function pdfFixture(name: string, bytes: Uint8Array): Promise<Fixture> {
     bodyFont: parsed.bodyFont,
     titleFont: parsed.titleFont,
     titleAlign: parsed.titleAlign,
+    titlePage: parsed.titlePage,
     parseMs,
   };
 }

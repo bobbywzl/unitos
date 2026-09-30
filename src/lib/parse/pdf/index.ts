@@ -629,12 +629,16 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   if (bodyFont) parsed.bodyFont = bodyFont;
   if (titleFont) parsed.titleFont = titleFont;
   if (titleSegment?.align) parsed.titleAlign = titleSegment.align;
+  // The import's Title opens the page the title stands on, where words of
+  // an earlier page come first (a scan's archive notice, a deck's first slide).
+  const titleOn = titleSegment ? chosen[firstPageOf(titleSegment)] : undefined;
+  if (titleOn !== undefined && blocks.some((b) => (b.page ?? titleOn) < titleOn)) parsed.titlePage = titleOn;
   const titleLines = titleSegment?.text.split(/\s*\n\s*/).map((line) => line.trim()).filter(Boolean) ?? [];
   if (titleLines.length > 1) parsed.titleLines = titleLines;
   return parsed;
 }
 
-type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign" | "titleLines">;
+type PdfParse = Pick<ParsedDocument, "title" | "blocks" | "pageSize" | "pageLabels" | "bodyFont" | "titleFont" | "titleAlign" | "titleLines" | "titlePage">;
 
 // The drawn glyphs no item took that start at a text item's origin, in one
 // font on its baseline, while they spell the item's letters (spaces aside);

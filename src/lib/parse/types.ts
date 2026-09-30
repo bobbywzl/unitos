@@ -214,6 +214,10 @@ export type ParsedDocument = {
   // two centered lines), when it has more than one. `title` stays one line:
   // it is the document's name.
   titleLines?: string[];
+  // PDF parses: the PDF's page the title stands on, when words of an
+  // earlier page come before it (an archive's notice page, a deck's first
+  // slide). The import's Title opens that page.
+  titlePage?: number;
 };
 
 /** Document.references as stored Json → typed entries. Defensive: bad rows drop. */

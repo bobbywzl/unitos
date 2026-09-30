@@ -349,7 +349,8 @@ export function readDrawing(
         const trm = multiply(state.tm, state.ctm);
         const size = Math.abs(fontSize) * Math.hypot(trm[2], trm[3]);
         // What shows: the page box, and in it the clip in effect. A glyph
-        // whose box falls outside it is hidden.
+        // whose box falls outside it is hidden, and so is one whose middle
+        // is off the page box (a scan's OCR read the paper's edge as "—").
         const shown = state.clip ? intersect(state.clip, view) : view;
         const color = paint(state);
         let x = 0; // the advance in text space, before the horizontal scale
@@ -384,7 +385,11 @@ export function readDrawing(
               Math.max(px, ex) <= shown.x1 - 0.5 ||
               Math.min(px, ex) >= shown.x2 + 0.5 ||
               py + size * 0.75 <= shown.y1 - 0.5 ||
-              py - size * 0.25 >= shown.y2 + 0.5
+              py - size * 0.25 >= shown.y2 + 0.5 ||
+              (px + ex) / 2 < view.x1 ||
+              (px + ex) / 2 > view.x2 ||
+              py + size * 0.25 < view.y1 ||
+              py + size * 0.25 > view.y2
             ) {
               glyph.hidden = true;
             }

@@ -57,8 +57,9 @@ const BASELINE_PRIVATE = join(ROOT, ".bench", "baseline-private.json");
 // ── Parsing, once per file ──────────────────────────────────────────────────
 
 /** The page's look the parse keeps and the add passes the converter (lib/parse/ingest.ts pageLook): the
-    body's font, the title's font and alignment, and the title's lines where the writer broke it. */
-type Look = Pick<ParsedDocument, "bodyFont" | "titleFont" | "titleAlign" | "titleLines">;
+    body's font, the title's font and alignment, the title's lines where the writer broke it, and the page
+    the title stands on. */
+type Look = Pick<ParsedDocument, "bodyFont" | "titleFont" | "titleAlign" | "titleLines" | "titlePage">;
 /** The size guard (lib/parse/ingest.ts IMPORT_MAX_ROWS, IMPORT_MAX_JSON_BYTES): past either, the add keeps a
     block document, and the page editor never shows the import. */
 const GUARD = { rows: 1_500, json: 1_500_000 };
@@ -125,7 +126,7 @@ function parseFile(path: string): Promise<Parsed> {
       // The add's converter call (lib/parse/ingest.ts ingestPdf, ingestDocx,
       // convertImport). A converter that throws costs the import's score,
       // not the parse's.
-      const look: Look = { bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign, titleLines: parsed.titleLines };
+      const look: Look = { bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign, titleLines: parsed.titleLines, titlePage: parsed.titlePage };
       try {
         const { richText, size, pageSetup } = richTextFromImport({
           kind: word ? "docx" : "pdf",
