@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NoteView, SourceChip } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
@@ -127,6 +127,114 @@ export function NoteCard({
   /** The onboarding nudge's target: the first note of the tray. */
   nudge?: boolean;
 }) {
+  // The card is drawn again only when what it shows changes: a selection, a
+  // collapse, or a press on one card of a board leaves the other cards alone
+  // (a notes full page of 135 notes took 200 ms to draw them all on a click).
+  const commands = useCommands(actions);
+  return (
+    <NoteCardBody
+      note={note}
+      commands={commands}
+      notebookId={actions.notebookId}
+      focusedPending={actions.focusedPendingId === note.id}
+      floating={actions.floating?.id === note.id}
+      selected={actions.selected.has(note.id)}
+      merging={actions.merging.has(note.id)}
+      collapsedInView={actions.isCollapsed(note.id)}
+      editRequest={actions.editRequest?.id === note.id ? actions.editRequest : null}
+      draggableHandle={Boolean(handle)}
+      listeners={handle?.listeners}
+      variant={variant}
+      search={search}
+      nudge={nudge}
+    />
+  );
+}
+
+/** What a card runs on the outline: the commands of its buttons and drops. */
+type NoteCommands = Pick<
+  OutlineActions,
+  | "attachSource"
+  | "attachAnnotationSources"
+  | "mergeNotes"
+  | "toggleCollapsed"
+  | "saveNote"
+  | "stopMerge"
+  | "setPinned"
+  | "toggleSelect"
+  | "dockNote"
+  | "acceptNote"
+  | "rejectNote"
+  | "deleteNote"
+>;
+
+/** The outline's commands as one object for the card's life, each calling
+    the latest outline's own: a new outline on every change would draw every
+    card again. They run from events and effects, never while drawing. */
+function useCommands(actions: OutlineActions): NoteCommands {
+  const latest = useRef(actions);
+  useLayoutEffect(() => {
+    latest.current = actions;
+  });
+  return useMemo<NoteCommands>(
+    () => ({
+      attachSource: (...args) => latest.current.attachSource(...args),
+      attachAnnotationSources: (...args) => latest.current.attachAnnotationSources(...args),
+      mergeNotes: (...args) => latest.current.mergeNotes(...args),
+      toggleCollapsed: (...args) => latest.current.toggleCollapsed(...args),
+      saveNote: (...args) => latest.current.saveNote(...args),
+      stopMerge: (...args) => latest.current.stopMerge(...args),
+      setPinned: (...args) => latest.current.setPinned(...args),
+      toggleSelect: (...args) => latest.current.toggleSelect(...args),
+      dockNote: (...args) => latest.current.dockNote(...args),
+      acceptNote: (...args) => latest.current.acceptNote(...args),
+      rejectNote: (...args) => latest.current.rejectNote(...args),
+      deleteNote: (...args) => latest.current.deleteNote(...args),
+    }),
+    [],
+  );
+}
+
+const NoteCardBody = memo(function NoteCardBody({
+  note,
+  commands,
+  notebookId,
+  focusedPending,
+  floating,
+  selected: isSelected,
+  merging,
+  collapsedInView,
+  editRequest,
+  draggableHandle,
+  listeners,
+  variant,
+  search,
+  nudge,
+}: {
+  note: NoteView;
+  commands: NoteCommands;
+  notebookId: string;
+  /** The keyboard queue's pending note. */
+  focusedPending: boolean;
+  /** This note is out in the floating card (floating-note-editor.tsx). */
+  floating: boolean;
+  /** Selected on the ticker. */
+  selected: boolean;
+  /** The AI is writing the note that takes this one and the merged notes'
+      place (the ticker's Merge with AI). The card blooms as the merge
+      starts and settles as the text lands (globals.css .note-absorb /
+      .note-merging / .note-merged). */
+  merging: boolean;
+  /** The notes view folds this note to one line. */
+  collapsedInView: boolean;
+  /** Open the editor: the keyboard queue's `e`, or the floating card docking. */
+  editRequest: { id: string; draft?: string } | null;
+  draggableHandle: boolean;
+  listeners: HandleProps["listeners"];
+  variant: Variant;
+  search?: string;
+  nudge?: boolean;
+}) {
   const t = useT();
   const router = useRouter();
   const { canEdit, premium, shared, people } = useCollab();
@@ -142,21 +250,13 @@ export function NoteCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const mergeTarget = useMergeTarget();
   const pending = note.status === "PENDING";
-  const focused = pending && actions.focusedPendingId === note.id;
+  const focused = pending && focusedPending;
   const tray = variant === "tray";
   const pane = variant === "pane";
-  // This note is out in the floating card (floating-note-editor.tsx).
-  const floating = actions.floating?.id === note.id;
   // The ticker: accepted notes can be selected for bulk delete, merge, pin, and compare.
   const selectable = note.status === "ACCEPTED" && canEdit && !pane;
-  const isSelected = actions.selected.has(note.id);
   // The dragged card covers this one: the ring says a hold here merges them.
   const isMergeTarget = mergeTarget === note.id && note.status === "ACCEPTED";
-  // The AI is writing the note that takes this one and the merged notes'
-  // place (the ticker's Merge with AI). The card blooms as the merge starts
-  // and settles as the text lands (globals.css .note-absorb / .note-merging /
-  // .note-merged).
-  const merging = actions.merging.has(note.id);
   // The note's title and body (SPEC.md §6, lib/note-title.ts).
   const parts = useMemo(() => splitNote(note.content), [note.content]);
   // The search the note was found by: the note shows whole, and the words
@@ -179,18 +279,18 @@ export function NoteCard({
       if (drag.kind === "quote") {
         if (!drag.quote) return;
         await addToNote(quoteMarkdown(drag.quote.text));
-        await actions.attachSource(note.id, drag.quote);
+        await commands.attachSource(note.id, drag.quote);
         return;
       }
       if (drag.kind === "annotation") {
         if (!drag.reference) return;
-        await addToNote(await referenceMarkdownForDrop(actions.notebookId, drag.reference, t));
+        await addToNote(await referenceMarkdownForDrop(notebookId, drag.reference, t));
         // The quote it landed points back to the reader: the annotation's
         // anchors become sources of the note.
-        if (drag.reference.quote) await actions.attachAnnotationSources(note.id, drag.reference.annotationId);
+        if (drag.reference.quote) await commands.attachAnnotationSources(note.id, drag.reference.annotationId);
         return;
       }
-      await actions.mergeNotes(note.id, drag.ids, "join");
+      await commands.mergeNotes(note.id, drag.ids, "join");
     } catch (err) {
       setDropError(err instanceof Error ? err.message : t("common.requestFailed"));
     }
@@ -226,16 +326,12 @@ export function NoteCard({
   // accepted, a compare pane exists to show the note whole, and a search shows
   // every note it found whole.
   const foldable = note.status === "ACCEPTED" && !pane;
-  const collapsed = foldable && !searching && actions.isCollapsed(note.id);
+  const collapsed = foldable && !searching && collapsedInView;
   // The collapsed row's line (SPEC.md §6): the note's title; without one,
   // the gist, its first words until the gist arrives. The floating
   // placeholder shows the same line.
-  const gist = useGist(
-    note.id,
-    note.gist,
-    markdownPreview(note.content),
-    (collapsed || floating) && !parts.title,
-  );
+  const preview = useMemo(() => markdownPreview(note.content), [note.content]);
+  const gist = useGist(note.id, note.gist, preview, (collapsed || floating) && !parts.title);
   const line = parts.title || gist;
   // The source the card jumps to: the reader opens on the document and
   // flashes the quote — the exact position the note came from.
@@ -246,11 +342,11 @@ export function NoteCard({
   useEffect(() => {
     if (!collapsed) return;
     const onOpen = (e: Event) => {
-      if ((e as CustomEvent<{ noteId: string }>).detail.noteId === note.id) actions.toggleCollapsed(note.id);
+      if ((e as CustomEvent<{ noteId: string }>).detail.noteId === note.id) commands.toggleCollapsed(note.id);
     };
     window.addEventListener("dissect:open-note", onOpen);
     return () => window.removeEventListener("dissect:open-note", onOpen);
-  }, [collapsed, note.id, actions]);
+  }, [collapsed, note.id, commands]);
 
   // Auto-save while the editor is open (SPEC.md §6); Cancel restores the
   // content from before this edit.
@@ -268,10 +364,10 @@ export function NoteCard({
   // Keyboard queue: `e` on the focused pending note opens the editor; the
   // floating card docking reopens it on the card's draft. Adjust-during-render;
   // each request is a new object.
-  if (actions.editRequest && actions.editRequest.id === note.id && handledEdit !== actions.editRequest) {
-    setHandledEdit(actions.editRequest);
+  if (editRequest && handledEdit !== editRequest) {
+    setHandledEdit(editRequest);
     if (!floating) {
-      setDraft(actions.editRequest.draft ?? editDraft(note.content));
+      setDraft(editRequest.draft ?? editDraft(note.content));
       setEditing(true);
     }
   }
@@ -322,7 +418,7 @@ export function NoteCard({
     }
     markSaved(trimmed);
     setEditing(false);
-    await actions.saveNote(note.id, trimmed);
+    await commands.saveNote(note.id, trimmed);
     confirmSaved(trimmed);
   }
 
@@ -340,7 +436,7 @@ export function NoteCard({
       editBody(base ? `${base}\n\n${markdown}\n` : `${markdown}\n`);
       return;
     }
-    await actions.saveNote(note.id, appendToBody(note.content, markdown));
+    await commands.saveNote(note.id, appendToBody(note.content, markdown));
   }
   const noteDrop = useNoteDrop({
     premium,
@@ -354,7 +450,7 @@ export function NoteCard({
     // editor the text takes the drop itself, at the caret.
     onQuote: async (drag) => {
       await addToNote(quoteMarkdown(drag.text));
-      await actions.attachSource(note.id, drag);
+      await commands.attachSource(note.id, drag);
     },
   });
   const dropRing = noteDrop.over ? " outline-2 outline-dashed outline-clay-400" : "";
@@ -378,7 +474,7 @@ export function NoteCard({
   // quote — the link between note and quote works both ways.
   function jumpTo(source: SourceChip) {
     window.getSelection()?.removeAllRanges();
-    router.push(`/n/${actions.notebookId}?doc=${source.documentId}&src=${source.id}`);
+    router.push(`/n/${notebookId}?doc=${source.documentId}&src=${source.id}`);
     // Already on that document with ?src set: the push changes nothing, so
     // flash the mark directly.
     window.dispatchEvent(
@@ -391,10 +487,10 @@ export function NoteCard({
   // since the editor's fields, its bar, and its buttons keep their press.
   // Never while the AI is merging into it, never while it floats, and never
   // for a viewer.
-  const draggable = Boolean(handle) && canEdit && !merging && !floating;
+  const draggable = draggableHandle && canEdit && !merging && !floating;
   const dragProps = draggable
     ? {
-        ...(handle?.listeners ?? {}),
+        ...(listeners ?? {}),
         // The browser's own drag of a link or a picture in the note would
         // take the hold.
         onDragStart: (e: React.DragEvent) => e.preventDefault(),
@@ -409,7 +505,7 @@ export function NoteCard({
     <div className="flex min-h-[18px] items-center gap-1.5">
       {foldable && !editing && !merging && (
         <button
-          onClick={() => actions.toggleCollapsed(note.id)}
+          onClick={() => commands.toggleCollapsed(note.id)}
           data-track="note-collapse"
           aria-expanded={!collapsed}
           aria-label={collapseLabel}
@@ -428,13 +524,13 @@ export function NoteCard({
         <ThinkingIndicator
           label={t("outline.merging")}
           className="min-w-0 flex-1 text-[11px]"
-          onStop={() => actions.stopMerge(note.id)}
+          onStop={() => commands.stopMerge(note.id)}
           stopTitle={t("outline.mergeStopTitle")}
         />
       )}
       {collapsed && !merging && (
         <button
-          onClick={() => actions.toggleCollapsed(note.id)}
+          onClick={() => commands.toggleCollapsed(note.id)}
           data-track="note-collapse"
           data-tip={t("outline.expandNote")}
           className={`note-merging-under min-w-0 flex-1 overflow-hidden text-left text-[13px] leading-[18px] whitespace-nowrap hover:text-clay-800 ${
@@ -492,7 +588,7 @@ export function NoteCard({
         )}
         {note.pinned && !merging && (
           <button
-            onClick={() => canEdit && void actions.setPinned(note.id, false)}
+            onClick={() => canEdit && void commands.setPinned(note.id, false)}
             data-track="note-unpin"
             data-tip={canEdit ? t("outline.unpin") : t("outline.pinnedLabel")}
             aria-label={canEdit ? t("outline.unpin") : t("outline.pinnedLabel")}
@@ -503,7 +599,7 @@ export function NoteCard({
         )}
         {selectable && !editing && !merging && (
           <button
-            onClick={() => actions.toggleSelect(note.id)}
+            onClick={() => commands.toggleSelect(note.id)}
             data-track="note-select"
             role="checkbox"
             aria-checked={isSelected}
@@ -531,7 +627,7 @@ export function NoteCard({
         <div className="flex items-center gap-2">
           <span className="text-sand-600">{t("outline.floatingLabel")}</span>
           <button
-            onClick={() => actions.dockNote(true)}
+            onClick={() => commands.dockNote(true)}
             data-track="note-dock"
             data-tip={t("outline.dockBackTitle")}
             className="ml-auto shrink-0 text-xs text-sand-600 hover:text-clay-700"
@@ -592,8 +688,8 @@ export function NoteCard({
             if (e.key === "Escape") cancel();
           }}
           full={!tray}
-          moreHref={tray ? `/n/${actions.notebookId}/notes` : undefined}
-          onQuoteDrop={(drag) => actions.attachSource(note.id, drag)}
+          moreHref={tray ? `/n/${notebookId}/notes` : undefined}
+          onQuoteDrop={(drag) => commands.attachSource(note.id, drag)}
           title={
             <NoteTitleField
               value={edit.title}
@@ -700,12 +796,12 @@ export function NoteCard({
               breaks
               highlight={hit}
               sources={note.sources}
-              notebookId={actions.notebookId}
+              notebookId={notebookId}
               onAnnotationReference={annotationSide ? annotationSide.open : undefined}
               onToggleTask={
                 canEdit
                   ? (line, checked) =>
-                      void actions.saveNote(note.id, setTaskChecked(note.content, line + lineOffset, checked))
+                      void commands.saveNote(note.id, setTaskChecked(note.content, line + lineOffset, checked))
                   : undefined
               }
             >
@@ -730,7 +826,7 @@ export function NoteCard({
         // source, and a quote in the note carries its own.
         <div className={`${tray ? "mt-3" : "mt-2.5"} flex flex-wrap items-center gap-2`}>
           <button
-            onClick={() => void actions.acceptNote(note.id)}
+            onClick={() => void commands.acceptNote(note.id)}
             data-track="note-accept"
             className={`rounded-full bg-sage-600 px-3.5 py-1.5 text-xs font-semibold text-sage-fg hover:bg-sage-700 ${tray ? "" : "ml-auto"}`}
             data-tip={t("outline.acceptTitle")}
@@ -738,7 +834,7 @@ export function NoteCard({
             {t("common.accept")}
           </button>
           <button
-            onClick={() => void actions.rejectNote(note.id)}
+            onClick={() => void commands.rejectNote(note.id)}
             data-track="note-reject"
             className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             data-tip={t("outline.rejectTitle")}
@@ -772,7 +868,7 @@ export function NoteCard({
           {canEdit && (
             <button
               onClick={() => {
-                if (confirm(t("outline.confirmDeleteNote"))) void actions.deleteNote(note.id);
+                if (confirm(t("outline.confirmDeleteNote"))) void commands.deleteNote(note.id);
               }}
               data-track="note-delete"
               data-tip={t("outline.deleteNoteTitle")}
@@ -788,9 +884,9 @@ export function NoteCard({
           noteId={note.id}
           content={note.content}
           updatedAt={note.updatedAt}
-          onRestore={canEdit ? (content) => actions.saveNote(note.id, content) : undefined}
+          onRestore={canEdit ? (content) => commands.saveNote(note.id, content) : undefined}
         />
       )}
     </div>
   );
-}
+});

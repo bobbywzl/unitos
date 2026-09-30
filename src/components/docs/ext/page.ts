@@ -559,7 +559,11 @@ const DocsCaret = Extension.create({
             (tr.getMeta(blurredKey) as boolean | undefined) ?? (blurred && !tr.selectionSet && !tr.docChanged),
         },
         props: {
-          attributes: { class: "docs-own-caret" },
+          // A range, not a caret: a menu open over the page grays it
+          // (css/page.css). A caret takes no gray, so a menu opened over it
+          // restyles nothing; the gray restyles every line of the page.
+          attributes: (state): Record<string, string> =>
+            state.selection.empty ? { class: "docs-own-caret" } : { class: "docs-own-caret", "data-range": "" },
           decorations: (state) =>
             blurredKey.getState(state) && !state.selection.empty
               ? DecorationSet.create(

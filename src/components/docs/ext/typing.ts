@@ -1,11 +1,4 @@
 import { Extension, type AnyExtension } from "@tiptap/core";
-import {
-  HardBreakNode,
-  InvisibleCharacter,
-  InvisibleCharacters,
-  ParagraphNode,
-  SpaceCharacter,
-} from "@tiptap/extension-invisible-characters";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { insertContext } from "@/components/docs/insert/context";
 import { isMac } from "@/components/docs/keys";
@@ -30,6 +23,7 @@ import {
   tab,
 } from "@/components/docs/typing/keys";
 import { markStylePlugin, TYPING_RESTORE_META, validMarkStyle } from "@/components/docs/typing/mark-style";
+import { NonPrinting } from "@/components/docs/typing/non-printing";
 import { armPlainPaste, imageFiles, insertImageFiles, notePaste, pastedHtml, plainTextSlice, uploadsPlugin } from "@/components/docs/typing/paste";
 import { spellingExceptions } from "@/components/docs/typing/spelling";
 import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
@@ -292,18 +286,6 @@ const DocsTyping = Extension.create({
     });
     return [plugin, findPlugin(), tracePlugin(), repeatPlugin(), markStylePlugin(), urlChipPlugin(editor), uploadsPlugin(), spellingExceptions()];
   },
-});
-
-/** Non-printing characters (Ctrl+Shift+P): ¶ at a paragraph's end, ↵ at a
-    line break, → for a tab, · for a space. Hidden until asked for. */
-const NonPrinting = InvisibleCharacters.configure({
-  visible: false,
-  builders: [
-    new SpaceCharacter(),
-    new InvisibleCharacter({ type: "tab", predicate: (ch) => ch === "\t" }),
-    new ParagraphNode(),
-    new HardBreakNode(),
-  ],
 });
 
 export const typingExtensions: AnyExtension[] = [DocsTyping, NonPrinting, ListToggles];
