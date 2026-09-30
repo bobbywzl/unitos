@@ -1031,7 +1031,6 @@ export function Reader({
     // A switch back before the last one finished: the blocks it reached
     // switch back at once.
     const range = whole && blocks.length > SWITCH_AT_ONCE ? rowsInView(articleRef.current, blocks.length) : null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the view is measured before the paint
     setSwitched(range ? { mode, lo: range[0], hi: range[1] } : { mode, lo: 0, hi: Infinity });
   }, [mode, switched.mode, whole, blocks.length]);
   useEffect(() => {
