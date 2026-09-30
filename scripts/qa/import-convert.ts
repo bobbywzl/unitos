@@ -734,7 +734,17 @@ function lookChecks(f: Fixture, doc: RichNode, check: (ok: boolean, name: string
     const key = norm((node.content ?? []).map((c) => c.text ?? "").join("")).slice(0, 40);
     after.set(key, [...(after.get(key) ?? []), Number(node.attrs?.spaceAfter ?? 0)]);
   }
-  const spaced = f.blocks.filter((b) => b.type === "PARAGRAPH" && b.spaceAfter !== undefined && b.text.length < 200_000 && !tokensOf(b).some((t) => ["kicker", "meta", "quote"].includes(t)) && !b.footnote && !(b.math ?? []).length);
+  // A PDF's paragraph right over a display equation (linked footnotes
+  // aside) takes the space to the display as the page editor draws it
+  // (lib/docs/import.ts displayGap), not its own.
+  const overDisplay = new Set<ParsedBlock>();
+  let above: ParsedBlock | null = null;
+  for (const b of f.kind === "pdf" ? f.blocks : []) {
+    if (footnotesLinked.includes(b)) continue;
+    if (b.type === "EQUATION" && above) overDisplay.add(above);
+    above = b;
+  }
+  const spaced = f.blocks.filter((b) => b.type === "PARAGRAPH" && b.spaceAfter !== undefined && b.text.length < 200_000 && !tokensOf(b).some((t) => ["kicker", "meta", "quote"].includes(t)) && !b.footnote && !(b.math ?? []).length && !overDisplay.has(b));
   const off = spaced.filter((b) => {
     const values = after.get(norm(b.text).slice(0, 40));
     return values !== undefined && values.length === 1 && values[0] !== b.spaceAfter;
