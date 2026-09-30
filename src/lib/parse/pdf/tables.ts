@@ -639,14 +639,15 @@ export function rowsOf(cellsOf: Cell[][], rowStarts: number[], columnCount: numb
 // statement's years, "As of December 31, 2023" over its assets and
 // liabilities): they part no gutter (the 10-K's OI&E statement read two
 // years as one column, p. 78). A line in the first column starts at the
-// table's left edge, or opens with a number left of the first gutter every
-// line leaves open: a column of numbers set flush right starts its short
-// ones further in (Grinstead–Snell's Table 3.3 read its rows over "10" as
-// heads, and the table as a paragraph).
+// table's left edge, or is a row of numbers that starts left of the first
+// gutter every line leaves open: a column of numbers set flush right starts
+// its short ones further in (Grinstead–Snell's Table 3.3 read its rows over
+// "10" as heads, and the table as a paragraph). A head of years is no such
+// row ("2023  2024  Effect": the 10-K, p. 39).
 function runSeparators(run: Line[]): number[] {
   const left = Math.min(...run.map((l) => l.x));
   const gutter = columnSeparators(run)[0];
-  const numbered = (l: Line) => gutter !== undefined && l.x < gutter && NUMERIC_CELL_RE.test(l.cells[0]?.text.trim() ?? "");
+  const numbered = (l: Line) => gutter !== undefined && l.x < gutter && l.cells.every((c) => NUMERIC_CELL_RE.test(c.text.trim()));
   const first = Math.max(0, run.findIndex((l) => l.x <= left + 3 || numbered(l)));
   // A group's label among rows of three cells or more, from the table's left
   // edge (and a value at its end), crosses the gutters the rows leave open:
@@ -660,10 +661,11 @@ function runSeparators(run: Line[]): number[] {
   return withoutSignColumns(run, columnSeparators(scan, run.slice(0, first)));
 }
 
-// A group's label: one phrase from the table's left edge, and at most a
-// short value in a cell after it.
+// A group's label: one phrase from the table's left edge, short of a
+// sentence, and at most a short value in a cell after it. A note under the
+// table is none.
 function isGroupLabel(line: Line, left: number): boolean {
-  return line.x <= left + 3 && line.cells.length <= 2 && (line.cells.length === 1 || line.cells[1].text.trim().length <= 12);
+  return line.x <= left + 3 && line.cells.length <= 2 && !proseCell(line.cells[0].text) && (line.cells.length === 1 || line.cells[1].text.trim().length <= 12);
 }
 
 // One table out of a run of gap-aligned lines. Columns come from the coverage

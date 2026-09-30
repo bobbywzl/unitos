@@ -3368,7 +3368,7 @@
         "left": 0,
         "first": 16
       },
-      "spaceAfter": 6
+      "spaceAfter": 9
     },
     {
       "kind": "paragraph",
@@ -3634,7 +3634,7 @@
           ]
         }
       ],
-      "itemSpace": 0,
+      "itemSpace": 2,
       "spaceAfter": 6
     },
     {
@@ -3649,7 +3649,8 @@
       "indentPt": {
         "left": 0,
         "first": 16
-      }
+      },
+      "spaceAfter": 6
     },
     {
       "kind": "paragraph",

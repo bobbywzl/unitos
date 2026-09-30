@@ -701,7 +701,11 @@
     {
      "text": " is approximately valid."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 10
+   }
   },
   {
    "kind": "paragraph",

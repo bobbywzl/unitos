@@ -1634,6 +1634,20 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     "layout: a space after the page leaves before the next block is right; one far past the next ink is wrong",
     farSpace(far.page, inkUnder(120), far.f, far.placed).wrong === 0 && farSpace(near2.page, inkUnder(20), near2.f, near2.placed).wrong === 1,
   );
+  // The space down to a picture: right where the candidate's next block is the figure that shows it.
+  const overPicture = (figure: boolean) => {
+    const doc: Doc = {
+      blocks: [
+        { kind: "paragraph", spans: [{ text: "The masthead of the report" }], spaceAfter: 120 },
+        ...(figure ? [{ kind: "figure" as const, at: { page: 1, region: region(72, 230, 300, 400) } }] : []),
+        { kind: "paragraph", spans: [{ text: "The first words under it" }] },
+      ],
+    };
+    const f = flatten(doc);
+    const page = pdfOf([line(100, 72, 300, "The masthead of the report"), line(420, 72, 300, "The first words under it")]);
+    return farSpace(page, inkUnder(120), f, linesOfUnits(page, f)).wrong;
+  };
+  check("layout: a space after down to the figure the candidate sets next is the page's; past a picture it lost it is not", overPicture(true) === 0 && overPicture(false) === 1);
 
   // A grid of numbers read as a paragraph, and as a table.
   const grid = [0, 1, 2, 3].map((r) => line(100 + 12 * r, 72, 200, `${r} ${[1, 1, 2, 6][r]}`, [{ left: 72, right: 80, text: String(r) }, { left: 180, right: 200, text: String([1, 1, 2, 6][r]) }]));
@@ -1644,6 +1658,10 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     "layout: a grid of numbers read as a paragraph is prose; read as a table it is not",
     gridProse(gridPage, asProse).prose === 1 && gridProse(gridPage, asTable).prose === 0 && gridProse(gridPage, asTable).grids === 1,
   );
+  // Numbers in columns 5 pt apart, a little over a word space ("40,000 45,050"): a grid all the same.
+  const close = [0, 1, 2].map((r) => line(100 + 12 * r, 72, 150, `${40 + r},000 ${45 + r},050 .${r}25`, [{ left: 72, right: 96, text: `${40 + r},000` }, { left: 101, right: 125, text: `${45 + r},050` }, { left: 130, right: 150, text: `.${r}25` }]));
+  const closeText = close.map((l) => l.text).join(" ");
+  check("layout: numbers in columns 5 pt apart are a grid", gridProse(pdfOf(close), flatten({ blocks: [{ kind: "paragraph", spans: [{ text: closeText }] }] })).prose === 1);
   // A table of contents: a section's number and its page, a title between them, is no grid.
   const contents = [1, 2, 3].map((r) => line(100 + 12 * r, 72, 200, `1.${r} Part ${r} ${r + 4}`, [{ left: 72, right: 84, text: `1.${r}` }, { left: 100, right: 130, text: "Part" }, { left: 133, right: 138, text: String(r) }, { left: 190, right: 200, text: String(r + 4) }]));
   const contentsPage = pdfOf(contents);

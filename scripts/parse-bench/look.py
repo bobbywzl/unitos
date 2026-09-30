@@ -32,6 +32,16 @@ def letters(t):
     return re.sub(r"[^a-z0-9]", "", t.lower())
 
 
+def most(spans, key):
+    """The value most of the spans' characters take (a line's baseline and size, not a sub- or superscript's)."""
+    pairs = sorted((key(s), len(s["text"].strip())) for s in spans)
+    total, seen = sum(w for _, w in pairs), 0
+    for value, w in pairs:
+        seen += w
+        if 2 * seen >= total:
+            return value
+
+
 def page_lines(pno):
     """Visual lines: PyMuPDF lines joined when they share a baseline and nearly touch."""
     raw = []
@@ -44,8 +54,8 @@ def page_lines(pno):
                 "page": pno,
                 "x0": min(s["bbox"][0] for s in spans),
                 "x1": max(s["bbox"][2] for s in spans),
-                "y": statistics.median(s["origin"][1] for s in spans),
-                "size": statistics.median(s["size"] for s in spans),
+                "y": most(spans, lambda s: s["origin"][1]),
+                "size": most(spans, lambda s: s["size"]),
                 "text": "".join(s["text"] for s in l["spans"]),
             })
     raw.sort(key=lambda r: (round(r["y"]), r["x0"]))

@@ -498,8 +498,9 @@ export type FarSpace = { blocks: number; wrong: number; score: number | null; fo
 
 /** Space after a block over 48 pt with no block following closely: a
     paragraph or a list the candidate gives 48 pt or more of space under it,
-    unless the page leaves that blank (within a quarter, 12 pt at least)
-    under its last line, in its column, down to the candidate's next block.
+    unless the page leaves that blank (within a quarter of the larger, 12
+    pt at least) under its last line, in its column, down to the
+    candidate's next block (its first line, or the crop of a figure).
     Measured to a block far down the column (past a figure the candidate
     lost, across a sidebar, to the notes at the page's foot), the space is a
     blank half a page tall in the page editor. The page's ink (poppler's
@@ -523,11 +524,15 @@ export function farSpace(pdf: PdfText, ink: PageInk, cand: Flat, placed: number[
     const next = ink.bands(last.page, box).find((band) => band.bottom - band.top >= 0.5);
     const space = block.spaceAfter ?? 0;
     const shown = next ? next.top - last.bottom : null;
-    // The blank is the page's own where the candidate's next block starts right under it (a title page's gap).
-    const after = cand.blocks.findIndex((_, k) => k > b && cand.unitsOf[k].some((u) => placed[u].length > 0));
-    const first = after >= 0 ? cand.unitsOf[after].flatMap((u) => placed[u]).map((i) => pdf.lines[i])[0] : undefined;
-    const follows = next !== undefined && first !== undefined && first.page === last.page && first.top >= next.top - 3 && first.top <= next.bottom + 3;
-    if (shown !== null && follows && Math.abs(shown - space) <= Math.max(12, 0.25 * space)) return;
+    // The blank is the page's own where the candidate's next block starts right under it (a title page's gap):
+    // its first line at the next ink, or a figure whose crop holds the next ink's top.
+    const after = cand.blocks.findIndex((x, k) => k > b && (x.at !== undefined || cand.unitsOf[k].some((u) => placed[u].length > 0)));
+    const crop = after >= 0 && cand.blocks[after].at ? boxOf(pdf, cand.blocks[after].at) : null;
+    const first = after >= 0 && !crop ? cand.unitsOf[after].flatMap((u) => placed[u]).map((i) => pdf.lines[i])[0] : undefined;
+    const follows =
+      next !== undefined &&
+      (crop ? crop.page === last.page && crop.y1 <= next.top + 3 && crop.y2 >= next.top : first !== undefined && first.page === last.page && first.top >= next.top - 3 && first.top <= next.bottom + 3);
+    if (shown !== null && follows && Math.abs(shown - space) <= Math.max(12, 0.25 * Math.max(space, shown))) return;
     wrong++;
     found.push({ page: last.page, space: Math.round(space), shown: shown === null ? null : Math.round(shown), text: cand.units[cand.unitsOf[b][0]].text.slice(0, 80) });
   });
@@ -647,20 +652,21 @@ export function proofBoxes(pdf: PdfText, ink: PageInk, cand: Flat, placed: numbe
 
 export type GridProse = { grids: number; prose: number; score: number | null; found: { page: number; text: string }[] };
 
-/** A number as a table's cell prints it: "120", "0.25", "1,024", "(565)", "−3", "12%", "$ 5". */
-const NUMBER_RE = /^[−–+($]?\d[\d,.]*\)?%?$/u;
+/** A number as a table's cell prints it: "120", "0.25", ".922", "1,024", "(565)", "−3", "-3", "12%", "$ 5". */
+const NUMBER_RE = /^[-−–+($]?\.?\d[\d,.]*\)?%?$/u;
 
 /** Grids of numbers the candidate reads as prose: three rows of the page or
     more, one under the next, each split by wide gaps (6 pt or more between
-    two words) into cells, two side by side and half of all or more
-    numbers, the number cells ending at the same places (within 3 pt, two
-    columns or more): a table set without rules (a factorial's values
-    beside n). The candidate's reading of a grid: the longest run of its
-    words (in reading order, across units) that repeats the grid's words
-    row by row, half of them or more; the grid is read as prose when most
-    of that run stands in paragraphs or list items, not in a table's cells.
-    A grid whose words the candidate holds in no such run is not judged.
-    The score is the share of the page's grids read as a table. */
+    two words, 4 pt between two numbers) into cells, two side by side and
+    half of all or more numbers, the number cells ending at the same places
+    (within 3 pt, two columns or more): a table set without rules (a
+    factorial's values beside n). The candidate's reading of a grid: the
+    longest run of its words (in reading order, across units) that repeats
+    the grid's words row by row, half of them or more; the grid is read as
+    prose when most of that run stands in paragraphs or list items, not in
+    a table's cells. A grid whose words the candidate holds in no such run
+    is not judged. The score is the share of the page's grids read as a
+    table. */
 export function gridProse(pdf: PdfText, cand: Flat): GridProse {
   // The candidate's word pairs, each at the places it starts.
   let pairs: Map<string, number[]> | null = null;
@@ -693,12 +699,14 @@ export function gridProse(pdf: PdfText, cand: Flat): GridProse {
   const pages = [...new Set(pdf.lines.map((l) => l.page))];
   for (const page of pages) {
     const rows = rowsOf(pdf.lines.filter((l) => l.page === page));
-    // A row's cells: its words split where the gap passes 6 pt.
+    // A row's cells: its words split where the gap passes 6 pt, or 4 pt between two numbers (a column
+    // of numbers set a little over a word space apart).
     const cellsOf = (row: Line[]) => {
       const words = row.flatMap((l) => l.words ?? []).sort((a, c) => a.left - c.left);
       const cells: { right: number; text: string[] }[] = [];
       words.forEach((w, k) => {
-        if (k === 0 || w.left - words[k - 1].right >= 6) cells.push({ right: w.right, text: [w.text] });
+        const gap = k === 0 ? Infinity : w.left - words[k - 1].right;
+        if (gap >= 6 || (gap >= 4 && NUMBER_RE.test(w.text) && NUMBER_RE.test(words[k - 1].text))) cells.push({ right: w.right, text: [w.text] });
         else Object.assign(cells[cells.length - 1], { right: w.right, text: [...cells[cells.length - 1].text, w.text] });
       });
       return cells;

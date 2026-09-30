@@ -90,7 +90,7 @@
     }
    ],
    "align": "center",
-   "spaceAfter": 9
+   "spaceAfter": 11
   },
   {
    "kind": "paragraph",
@@ -104,7 +104,7 @@
     "left": 0,
     "first": 11
    },
-   "spaceAfter": 3
+   "spaceAfter": 4
   },
   {
    "kind": "paragraph",
