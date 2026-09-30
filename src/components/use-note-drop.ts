@@ -2,8 +2,15 @@
 
 import { useRef, useState } from "react";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { droppedImageUrls, imageFileFrom, mayCarryPageImage } from "@/lib/image-drop";
-import { refuseImage, uploadImage, type ImageRefusal } from "@/lib/images";
+import {
+  droppedImageUrls,
+  hasPageImageDrag,
+  imageFileFrom,
+  mayCarryPageImage,
+  readPageImageDrag,
+  type PageImageDrag,
+} from "@/lib/image-drop";
+import { imageUrl, refuseImage, storedImageId, uploadImage, type ImageRefusal } from "@/lib/images";
 import { hasDroppedLinks, readDroppedLinks, type DroppedLink } from "@/lib/note-links";
 import { hasQuoteDrag, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 
@@ -20,6 +27,8 @@ import { hasQuoteDrag, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 // note. A surface that takes no links (a paragraph) lets a link travel on.
 // A surface that takes pictures dragged from another page (the article)
 // stores each the browser may read, and keeps the address of any other.
+// An image dragged from the page editor (lib/image-drop.ts) lands on every
+// surface as a stored image: one stored already keeps its address.
 
 const REFUSAL_KEY: Record<ImageRefusal, Parameters<TFunc>[0]> = {
   "not-image": "panes.dropImageOnly",
@@ -65,6 +74,7 @@ export function useNoteDrop({
   const kindOf = (e: React.DragEvent): DropKind => {
     if (!enabled) return null;
     if (hasFiles(e)) return "images";
+    if (hasPageImageDrag(e.dataTransfer)) return "images";
     if (onQuote && hasQuoteDrag(e.dataTransfer)) return "quote";
     if (pageImages && mayCarryPageImage(e.dataTransfer)) return "images";
     if (onLinks && hasDroppedLinks(e.dataTransfer)) return "links";
@@ -76,6 +86,8 @@ export function useNoteDrop({
     if (!kind) return;
     e.preventDefault();
     e.stopPropagation();
+    // The page keeps its image: the drop is a copy.
+    if (hasPageImageDrag(e.dataTransfer)) e.dataTransfer.dropEffect = "copy";
     setOver(kind);
   }
 
@@ -111,6 +123,14 @@ export function useNoteDrop({
       } catch (err) {
         onError(err instanceof Error ? err.message : t("common.requestFailed"));
       }
+      return;
+    }
+    const pageImage = readPageImageDrag(e.dataTransfer);
+    if (pageImage) {
+      e.preventDefault();
+      e.stopPropagation();
+      setOver(null);
+      await take(async () => [await storePageImage(pageImage)]);
       return;
     }
     const files = [...(e.dataTransfer?.files ?? [])];
@@ -161,6 +181,19 @@ export function useNoteDrop({
       }
       return images;
     });
+  }
+
+  /** An image dragged from the page editor as a stored image: a stored one
+      as it is, any other read and stored now, under the tier's rules. An
+      image the browser may not read (another site's) cannot be copied. */
+  async function storePageImage({ src, alt }: PageImageDrag): Promise<DroppedImage> {
+    const id = storedImageId(src);
+    if (id) return { id, url: imageUrl(id), name: alt };
+    const file = await imageFileFrom(src);
+    if (!file) throw new Error(t("panes.imageNotCopied"));
+    const refusal = refuseImage(file, premium);
+    if (refusal) throw new Error(t(REFUSAL_KEY[refusal]));
+    return { ...(await uploadImage(file)), name: alt || file.name };
   }
 
   async function take(store: () => Promise<DroppedImage[]>) {
