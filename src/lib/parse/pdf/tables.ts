@@ -639,14 +639,15 @@ export function rowsOf(cellsOf: Cell[][], rowStarts: number[], columnCount: numb
 // statement's years, "As of December 31, 2023" over its assets and
 // liabilities): they part no gutter (the 10-K's OI&E statement read two
 // years as one column, p. 78). A line in the first column starts at the
-// table's left edge, or left of the first gutter every line leaves open:
-// a column of numbers set flush right starts its short ones further in
-// (Grinstead–Snell's Table 3.3 read its rows over "10" as heads, and the
-// table as a paragraph).
+// table's left edge, or opens with a number left of the first gutter every
+// line leaves open: a column of numbers set flush right starts its short
+// ones further in (Grinstead–Snell's Table 3.3 read its rows over "10" as
+// heads, and the table as a paragraph).
 function runSeparators(run: Line[]): number[] {
   const left = Math.min(...run.map((l) => l.x));
   const gutter = columnSeparators(run)[0];
-  const first = Math.max(0, run.findIndex((l) => l.x <= left + 3 || (gutter !== undefined && l.x < gutter)));
+  const numbered = (l: Line) => gutter !== undefined && l.x < gutter && NUMERIC_CELL_RE.test(l.cells[0]?.text.trim() ?? "");
+  const first = Math.max(0, run.findIndex((l) => l.x <= left + 3 || numbered(l)));
   // A group's label among rows of three cells or more, from the table's left
   // edge (and a value at its end), crosses the gutters the rows leave open:
   // the rows alone part the columns (arXiv 2609.29669's "§3.1 Policy /

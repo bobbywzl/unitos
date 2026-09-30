@@ -136,6 +136,9 @@ export type ParsedBlock = {
   // blank line, a Word paragraph's space after); absent where a figure, a
   // table, or the page's end follows. The import's space after.
   spaceAfter?: number;
+  // Word paragraphs: the line spacing Word sets (w:spacing w:line under
+  // the auto rule), as a multiple of single spacing, as Docs sets one.
+  lineSpacing?: number;
   // PDF paragraphs: the indent the page sets; absent where every line starts
   // at the column's edge. The html's indent token names its kind.
   indent?: Indent;
