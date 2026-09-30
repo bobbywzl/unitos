@@ -33,6 +33,11 @@ function oneOf<T extends string>(value: unknown, list: readonly T[], fallback: T
   return list.includes(value as T) ? (value as T) : fallback;
 }
 
+/** A chart (Insert > Chart): an image that keeps its data. */
+export function isChartImage(node: PMNode): boolean {
+  return node.type.name === "image" && typeof node.attrs.chart === "string" && node.attrs.chart.length > 0;
+}
+
 /** An image's attributes, every value checked. */
 export function imageAttrs(node: PMNode) {
   const a = node.attrs;
@@ -163,7 +168,10 @@ class ImageView implements NodeView {
     this.frame.addEventListener("dblclick", (e) => {
       if (!this.editor.isEditable) return;
       e.preventDefault();
-      this.startCrop();
+      // A chart opens its data (insert/chart-dialog.tsx); any other image crops.
+      const pos = this.getPos();
+      if (isChartImage(this.node) && pos !== undefined) emitInsert(this.editor, { type: "chart", pos });
+      else this.startCrop();
     });
     this.box.addEventListener("mousedown", (e) => this.onBoxDown(e));
     this.render();
@@ -590,7 +598,8 @@ export async function replaceImage(editor: Editor, pos: number, source: ImageSou
   try {
     const src = "file" in source ? (await uploadImage(source.file)).url : source.url;
     const node = editor.state.doc.nodeAt(pos);
-    if (node) setImageAttrs(editor.view, pos, { ...RESET_ATTRS, src, width: imageAttrs(node).width });
+    // A replaced chart is a plain image: its data no longer draws it.
+    if (node) setImageAttrs(editor.view, pos, { ...RESET_ATTRS, src, width: imageAttrs(node).width, chart: null });
   } catch (err) {
     toast(err instanceof Error ? err.message : "", editor);
   }
@@ -697,6 +706,8 @@ export const DocsImage = Extension.create({
           transparency: data("transparency", n, 0),
           brightness: data("brightness", n, 0),
           contrast: data("contrast", n, 0),
+          // A chart's data (lib/docs/chart.ts), a JSON string; null for an image.
+          chart: data("chart", s, null),
         },
       },
     ];

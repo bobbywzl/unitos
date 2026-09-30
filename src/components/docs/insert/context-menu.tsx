@@ -25,6 +25,7 @@ import {
   AltTextIcon,
   ArrowDownIcon,
   ArrowUpIcon,
+  ChartIcon,
   CopyIcon,
   CropIcon,
   CutIcon,
@@ -45,7 +46,7 @@ import {
   TextFormatIcon,
   UnpinIcon,
 } from "@/components/docs/insert/icons";
-import { imageViewAt, resetImage, selectedImage } from "@/components/docs/insert/image";
+import { imageViewAt, isChartImage, resetImage, selectedImage } from "@/components/docs/insert/image";
 import { openLinkHref } from "@/components/docs/insert/links";
 import { distributeRows, pinnedCount, tableRectOf } from "@/components/docs/insert/table";
 import { refreshTocs } from "@/components/docs/insert/toc";
@@ -287,6 +288,7 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
     const pos = image.pos;
     return [
       ...out,
+      ...(isChartImage(image.node) ? [item("docsInsert.editChart", <ChartIcon />, () => emitInsert(editor, { type: "chart", pos }))] : []),
       item("docsInsert.cropImage", <CropIcon />, () => imageViewAt(editor.view, pos)?.startCrop()),
       item("docsInsert.replaceImage", <ResetIcon />, () => emitInsert(editor, { type: "image-replace" })),
       item("docsInsert.imageOptions", <ImageOptionsIcon />, () => emitInsert(editor, { type: "image-options" })),
@@ -347,6 +349,8 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
       item("docsInsert.distributeRows", <DistributeRowsIcon />, () => distributeRows(editor)),
       item("docsInsert.distributeColumns", <DistributeColumnsIcon />, () => chain().distributeColumns().run()),
       item("docsInsert.tableOptions", <ImageOptionsIcon />, () => emitInsert(editor, { type: "table-options" })),
+      // Insert > Chart from the table's words and numbers (insert/chart-dialog.tsx).
+      item("docsInsert.chartFromTable", <ChartIcon />, () => emitInsert(editor, { type: "chart", kind: "column" })),
       "sep",
     );
   }

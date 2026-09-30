@@ -62,6 +62,7 @@ const BLOCK_ATTRS: Record<string, TKey> = {
   borderRight: "docs.bordersAndShading",
   borderBetween: "docs.bordersAndShading",
   shading: "docs.bordersAndShading",
+  chart: "docsInsert.chart",
 };
 const LISTS: Record<string, TKey> = {
   bulletList: "docs.bulletedList",

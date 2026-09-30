@@ -7,8 +7,9 @@ import { buildingBlock, type BuildingBlock } from "@/components/docs/insert/buil
 import { emitInsert, insertContext, type PickerKind } from "@/components/docs/insert/context";
 import { insertFootnote } from "@/components/docs/insert/footnotes";
 import { selectAllMatching } from "@/components/docs/insert/format-match";
-import { imageViewAt, resetImage, selectedImage } from "@/components/docs/insert/image";
+import { imageViewAt, isChartImage, resetImage, selectedImage } from "@/components/docs/insert/image";
 import { distributeRows, tableRectOf } from "@/components/docs/insert/table";
+import type { ChartType } from "@/lib/docs/chart";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // This area's items of Google Docs' Insert and Format menus (SPEC.md §29),
@@ -27,6 +28,10 @@ const insert = (id: string, label: TKey, keywords: string[], run: Run, shortcut?
 });
 
 const picker = (kind: PickerKind): Run => (editor) => emitInsert(editor, { type: "picker", kind });
+
+/** Insert > Chart: the chart dialog with the type chosen (insert/chart-dialog.tsx). */
+const chart = (kind: ChartType, label: TKey, keywords: string[]) =>
+  insert(`chart-${kind}`, label, ["chart", "graph", "plot", "from table", "图表", ...keywords], (editor) => emitInsert(editor, { type: "chart", kind }));
 
 const block = (kind: BuildingBlock, label: TKey, keywords: string[]) =>
   insert(`block-${kind}`, label, ["building blocks", "template", ...keywords], (editor) => {
@@ -58,6 +63,10 @@ const table = (id: string, label: TKey, keywords: string[], run: Run, enabled?: 
 
 registerDocsCommands([
   insert("table", "docsInsert.itemTable", ["table", "grid", "表格"], picker("table")),
+  chart("column", "docsInsert.chartColumn", ["column", "vertical bars", "柱形图"]),
+  chart("bar", "docsInsert.chartBar", ["bar", "horizontal bars", "条形图"]),
+  chart("line", "docsInsert.chartLine", ["line", "trend", "折线图"]),
+  chart("pie", "docsInsert.chartPie", ["pie", "share", "饼图"]),
   insert("special-characters", "docsInsert.itemSpecialCharacters", ["symbol", "character", "omega", "arrow", "符号"], (editor) =>
     emitInsert(editor, { type: "special-characters" }),
   ),
@@ -89,6 +98,13 @@ registerDocsCommands([
   ),
   image("crop-image", "docsInsert.cropImage", ["crop", "image"], (editor, pos) => imageViewAt(editor.view, pos)?.startCrop()),
   image("reset-image", "docsInsert.resetImage", ["reset", "image"], resetImage),
+  {
+    ...image("edit-chart", "docsInsert.editChart", ["chart", "graph", "data", "图表"], (editor, pos) => emitInsert(editor, { type: "chart", pos })),
+    enabled: (editor) => {
+      const hit = selectedImage(editor.state);
+      return editor.isEditable && hit !== null && isChartImage(hit.node);
+    },
+  },
   image("replace-image", "docsInsert.replaceImage", ["replace", "image"], (editor) => emitInsert(editor, { type: "image-replace" })),
   table("table-options", "docsInsert.tableOptions", ["table properties", "border", "cell", "column width", "row height"], (editor) =>
     emitInsert(editor, { type: "table-options" }),

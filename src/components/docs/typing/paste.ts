@@ -470,7 +470,11 @@ export function caretUnderImage(tr: Transaction): boolean {
 
 /** An image on its own line after the paragraph at `pos` (else the
     selection, which it replaces), or in place of an empty line. */
-export function insertImage(editor: Editor, attrs: { src: string; alt?: string }, pos?: number): void {
+export function insertImage(
+  editor: Editor,
+  attrs: { src: string; alt?: string; width?: number; height?: number; chart?: string },
+  pos?: number,
+): void {
   editor
     .chain()
     .focus()

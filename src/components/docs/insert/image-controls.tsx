@@ -8,11 +8,12 @@ import { MenuItem } from "@/components/docs/menu";
 import { PX_PER_PT } from "@/components/docs/page/geometry";
 import { DropBtn, Sep } from "@/components/docs/toolbar/controls";
 import { BorderButtons } from "@/components/docs/insert/colors";
-import { onInsert, type InsertContext } from "@/components/docs/insert/context";
+import { emitInsert, onInsert, type InsertContext } from "@/components/docs/insert/context";
 import {
   AltTextIcon,
   BehindTextIcon,
   BreakTextIcon,
+  ChartIcon,
   CropIcon,
   ImageOptionsIcon,
   InFrontIcon,
@@ -25,6 +26,7 @@ import {
 import {
   imageAttrs,
   imageViewAt,
+  isChartImage,
   replaceImage,
   resetImage,
   selectedImage,
@@ -148,6 +150,7 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
             </DropBtn>
           )}
           <Sep />
+          {isChartImage(hit.node) && button("docsInsert.editChart", <ChartIcon />, () => emitInsert(editor, { type: "chart", pos: hit.pos }))}
           {button("docsInsert.cropImage", <CropIcon />, () => imageViewAt(editor.view, hit.pos)?.startCrop())}
           <BorderButtons
             track="image"

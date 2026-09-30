@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseChart } from "@/lib/docs/chart";
 import { regionSchema } from "@/lib/video/types";
 
 // A document's rich text (SPEC.md §29): Tiptap (ProseMirror) JSON, of a blank
@@ -426,6 +427,11 @@ function cleanAttr(name: string, value: unknown): unknown {
     }
     case "region":
       return safeRegion(value);
+    // A chart's data (Insert > Chart): kept only when it keeps every rule.
+    case "chart": {
+      const chart = parseChart(value);
+      return chart ? JSON.stringify(chart) : null;
+    }
     // A PDF page: a figure's, a page start's, and the page a code block, an
     // equation, or a figure begins.
     case "page":
